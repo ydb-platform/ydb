@@ -90,20 +90,6 @@ public:
     static constexpr bool EnableProcesses = true;
 };
 
-class TCompConveyorPolicy {
-public:
-    static const inline TString Name = "Comp";
-    static constexpr bool EnableProcesses = false;
-};
-
-class TInsertConveyorPolicy {
-public:
-    static const inline TString Name = "Isrt";
-    static constexpr bool EnableProcesses = false;
-};
-
 using TScanServiceOperator = TServiceOperatorImpl<TScanConveyorPolicy>;
-using TCompServiceOperator = TServiceOperatorImpl<TCompConveyorPolicy>;
-using TInsertServiceOperator = TServiceOperatorImpl<TInsertConveyorPolicy>;
 
 }   // namespace NKikimr::NConveyor

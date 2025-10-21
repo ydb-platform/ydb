@@ -78,6 +78,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/uuid/uuid.h>
 #include <yql/essentials/public/udf/arrow/block_reader.h>
@@ -88,6 +89,7 @@ constexpr auto PG_ERROR = ERROR;
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
+#include <library/cpp/string_utils/base64/base64.h>
 #include <util/string/split.h>
 #include <util/system/getpid.h>
 
@@ -1599,7 +1601,7 @@ private:
         TListValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx,
             const std::string_view& name, TUnboxedValueVector&& args, const TVector<NPg::TTypeDesc>& argDesc,
             const NPg::TTypeDesc& retTypeDesc, const NPg::TProcDesc& procDesc, const FmgrInfo* fInfo,
-            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& holderFactory)
+            const TStructType* structType, const TVector<NPg::TTypeDesc>& structTypeDesc, const THolderFactory& /*holderFactory*/)
             : TCustomListValue(memInfo)
             , CompCtx(compCtx)
             , Name(name)
@@ -1610,7 +1612,6 @@ private:
             , FInfo(fInfo)
             , StructType(structType)
             , StructTypeDesc(structTypeDesc)
-            , HolderFactory(holderFactory)
         {
         }
 
@@ -1628,7 +1629,6 @@ private:
         const FmgrInfo* FInfo;
         const TStructType* StructType;
         const TVector<NPg::TTypeDesc>& StructTypeDesc;
-        const THolderFactory& HolderFactory;
     };
 
 public:
@@ -2237,7 +2237,7 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<N
         return NUdf::TUnboxedValuePod(res);
     }
     case NUdf::EDataSlot::Timestamp64: {
-        auto res = (i64)DatumGetInt64(ScalarDatumFromPod(value)) - PgTimestampShift;
+        auto res = SafeSub((i64)DatumGetInt64(ScalarDatumFromPod(value)), PgTimestampShift);
         if (res < NUdf::MIN_TIMESTAMP64 || res > NUdf::MAX_TIMESTAMP64) {
             return NUdf::TUnboxedValuePod();
         }
@@ -3336,7 +3336,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto execFunc = FindExec(id);
                 YQL_ENSURE(execFunc);
                 auto kernel = MakePgKernel(argTypes, returnType, execFunc, id);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), std::move(argNodes), argTypes, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), std::move(argNodes), argTypes, returnType, *kernel, kernel);
             }
 
             if (name == "PgCast") {
@@ -3398,7 +3398,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 ui32 sourceId = AS_TYPE(TPgType, AS_TYPE(TBlockType, inputType)->GetItemType())->GetTypeId();
                 auto kernel = MakeFromPgKernel(inputType, returnType, sourceId);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), { arg }, { inputType }, returnType, *kernel, kernel);
             }
 
             if (name == "ToPg") {
@@ -3495,7 +3495,7 @@ TComputationNodeFactory GetPgFactory() {
                 auto returnType = callable.GetType()->GetReturnType();
                 auto targetId = AS_TYPE(TPgType, AS_TYPE(TBlockType, returnType)->GetItemType())->GetTypeId();
                 auto kernel = MakeToPgKernel(inputType, returnType, *sourceDataSlot);
-                return new TBlockFuncNode(ctx.Mutables, callable.GetType()->GetName(), { arg }, { inputType }, *kernel, kernel);
+                return new TBlockFuncNode(ctx.Mutables, ToDatumValidateMode(ctx.ValidateMode), callable.GetType()->GetName(), {arg}, {inputType}, returnType, *kernel, kernel);
             }
 
             if (name == "PgArray") {
@@ -3941,9 +3941,35 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         return NUdf::TUnboxedValuePod();
     }
 
+    const bool needDecode = (cmd == BeginListSymbol);
+
+    if (needDecode) {
+        cmd = buf.Read();
+    }
+
     CHECK_EXPECTED(cmd, StringMarker);
-    auto s = buf.ReadYtString();
-    return PgValueFromString(s, type->GetTypeId());
+    const i32 length = buf.ReadVarI32();
+    CHECK_STRING_LENGTH(length);
+    TTempBuf tmpBuf(length);
+    buf.ReadMany(tmpBuf.Data(), length);
+
+    NUdf::TUnboxedValue result;
+    if (needDecode) {
+        TString decoded = Base64Decode(TStringBuf(tmpBuf.Data(), length));
+        result = PgValueFromString(decoded, type->GetTypeId());
+    } else {
+        result = PgValueFromString(TStringBuf(tmpBuf.Data(), length), type->GetTypeId());
+    }
+
+    if (needDecode) {
+        cmd = buf.Read();
+        if (cmd == ListItemSeparatorSymbol) {
+            cmd = buf.Read();
+        }
+
+        CHECK_EXPECTED(cmd, EndListSymbol);
+    }
+    return result;
 }
 
 void SkipSkiffPg(TPgType* type, NCommon::TInputBuf& buf) {

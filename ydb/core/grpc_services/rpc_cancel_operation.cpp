@@ -35,6 +35,10 @@ class TCancelOperationRPC: public TRpcOperationRequestActor<TCancelOperationRPC,
             return "[CancelIndexBuild]";
         case TOperationId::SCRIPT_EXECUTION:
             return "[CancelScriptExecution]";
+        case TOperationId::INCREMENTAL_BACKUP:
+            return "[CancelIncrementalBackup]";
+        case TOperationId::RESTORE:
+            return "[CancelBackupCollectionRestore]";
         default:
             return "[Untagged]";
         }
@@ -108,6 +112,12 @@ public:
             case TOperationId::SCRIPT_EXECUTION:
                 SendCancelScriptExecutionOperation();
                 break;
+
+            case TOperationId::INCREMENTAL_BACKUP:
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental backup yet");
+
+            case TOperationId::RESTORE:
+                return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Cancel isn't supported for incremental restore yet");
 
             default:
                 return Reply(StatusIds::UNSUPPORTED, TIssuesIds::DEFAULT_ERROR, "Unknown operation kind");

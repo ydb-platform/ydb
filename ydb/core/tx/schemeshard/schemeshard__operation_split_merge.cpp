@@ -1,5 +1,6 @@
-#include "schemeshard__operation_part.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
 #include <ydb/core/base/subdomain.h>
@@ -244,6 +245,7 @@ public:
 
         // Replace all Src datashard(s) with Dst datashard(s)
         TVector<TTableShardInfo> newPartitioning;
+        TVector<TShardIdx> newShardsIdx;
         THashSet<TShardIdx> allSrcShardIdxs;
         for (const auto& txShard : txState->Shards) {
             if (txShard.Operation == TTxState::TransferData)
@@ -280,6 +282,7 @@ public:
                     }
 
                     newPartitioning.push_back(dst);
+                    newShardsIdx.push_back(dst.ShardIdx);
                 }
 
                 dstAdded = true;
@@ -293,6 +296,9 @@ public:
         // Delete the whole old partitioning and persist the whole new partitioning as the indexes have changed
         context.SS->PersistTablePartitioningDeletion(db, tableId, tableInfo);
         context.SS->SetPartitioning(tableId, tableInfo, std::move(newPartitioning));
+        if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+        }
         context.SS->PersistTablePartitioning(db, tableId, tableInfo);
         context.SS->PersistTablePartitionStats(db, tableId, tableInfo);
 
@@ -796,7 +802,7 @@ public:
             << ", opId: " << OperationId
             << ", at schemeshard: " << ssId
             << ", request: " << info.ShortDebugString());
-        
+
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         auto setResultError = [&](NKikimrScheme::EStatus status, const TString& error) {

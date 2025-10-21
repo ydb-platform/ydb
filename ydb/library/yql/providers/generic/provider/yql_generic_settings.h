@@ -11,11 +11,7 @@ namespace NYql {
         using TConstPtr = std::shared_ptr<const TGenericSettings>;
 
     private:
-#ifdef YQL_BETTER_CONF_SETTING_API
         static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
-#else
-        static constexpr bool Static = false;
-#endif
     public:
 
         NCommon::TConfSetting<bool, Static> UsePredicatePushdown;
@@ -46,6 +42,7 @@ namespace NYql {
         TString MakeStructuredToken(const TGenericClusterConfig& clusterConfig, const TCredentials::TPtr& credentials) const;
 
     public:
+        TDuration DescribeTableTimeout; 
         THashMap<TString, TString> Tokens;
         THashMap<TString, TGenericClusterConfig> ClusterNamesToClusterConfigs; // cluster name -> cluster config
         THashMap<TString, TVector<TString>> DatabaseIdsToClusterNames;         // database id -> cluster name

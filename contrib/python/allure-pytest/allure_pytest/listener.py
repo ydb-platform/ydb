@@ -19,6 +19,7 @@ from allure_commons.types import LabelType, AttachmentType, ParameterMode
 from allure_pytest.utils import allure_description, allure_description_html
 from allure_pytest.utils import allure_labels, allure_links, pytest_markers
 from allure_pytest.utils import allure_full_name, allure_package, allure_name
+from allure_pytest.utils import allure_title_path
 from allure_pytest.utils import allure_suite_labels
 from allure_pytest.utils import get_status, get_status_details
 from allure_pytest.utils import get_outcome_status, get_outcome_status_details
@@ -109,6 +110,7 @@ class AllureListener:
         test_result.name = allure_name(item, params, param_id)
         full_name = allure_full_name(item)
         test_result.fullName = full_name
+        test_result.titlePath = [*allure_title_path(item)]
         test_result.testCaseId = md5(full_name)
         test_result.description = allure_description(item)
         test_result.descriptionHtml = allure_description_html(item)

@@ -170,7 +170,7 @@ class Nodes(object):
 
     def _download_sky(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
-        tmp_path = url.split(":")[-1]
+        tmp_path = f'/tmp/sky_download_{url.split(":")[-1]}'
         script = (
             f'sky get -wu -d {tmp_path} {url} && '
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
@@ -182,7 +182,7 @@ class Nodes(object):
     def _download_script(self, script, remote_path):
         user_script = script[len('script:'):]
         self._logger.info(f"download by script '{user_script}' to '{remote_path}'")
-        tmp_path = f'tmp_{random.randint(0, 100500)}'
+        tmp_path = f'/tmp/script_download_{random.randint(0, 100500)}'
         full_script = (
             f'mkdir -p {tmp_path} && cd {tmp_path} && '
             f'( {user_script} ) && cd - && '
@@ -218,12 +218,13 @@ class Nodes(object):
             local_path += '/'
         if directory:
             remote_path += '/'
+
+        original_remote_path = remote_path
         if compressed_path is not None:
             self._logger.info('compressing %s to %s' % (local_path, compressed_path))
             if not os.path.isfile(compressed_path) or os.stat(local_path).st_mtime != os.stat(compressed_path).st_mtime:
                 subprocess.check_call(['zstd', '-5f', local_path, '-o', compressed_path, '-T0'])
             local_path = compressed_path
-            original_remote_path = remote_path
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))

@@ -75,6 +75,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "CounterID"
                                                         ],
@@ -110,15 +111,12 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/row/hits",
                                                                         "ReadColumns": [
-                                                                            "CounterID",
-                                                                            "URL"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                            "URL"
                                                                         ],
                                                                         "Scan": "Parallel",
                                                                         "Table": "clickbench/plans/row/hits"

@@ -1,11 +1,14 @@
 """
 Executes verify-table-integrity.py as a unit test.
 """
+# std imports
 import os
 import sys
 import subprocess
 
+# 3rd party
 import pytest
+
 
 @pytest.mark.skipif(sys.version_info[:2] != (3, 12), reason='Test only with a single version of python')
 def test_verify_table_integrity():

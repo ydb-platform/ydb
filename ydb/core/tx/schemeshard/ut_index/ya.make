@@ -16,13 +16,13 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/public/lib/deprecated/kicli
 )
 
 SRCS(
     ut_async_index.cpp
     ut_unique_index.cpp
     ut_vector_index.cpp
+    ut_fulltext_index.cpp
 )
 
 YQL_LAST_ABI_VERSION()

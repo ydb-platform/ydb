@@ -52,7 +52,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         hist.RecordValue(100);
         hist.RecordValue(1000);
 
-        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max());
+        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), 1000); // Should return max recorded value
     }
 
     Y_UNIT_TEST(ShouldHandleZeroValues) {
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(44.4), 4);  // ~44% of 9 values = 4th value (3)
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(55.5), 8);  // ~55% of 9 values = 5th value (4)
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(77.7), 16); // ~77% of 9 values = 7th value (8)
-        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max()); // 100% of 9 values = 9th value (20)
+        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), 20); // 100% of 9 values = 9th value (20)
     }
 
     Y_UNIT_TEST(ShouldHandleLargeHistogram) {
@@ -190,7 +190,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(50.0), 68);   // 50% of 135 = 67.5, so 68th value (67), bucket 67, upper bound 68
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(95.0), 256);  // 95% of 135 = 128.25, so 129th value (200), bucket 128, upper bound 256
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(99.0), 8192); // 99% of 135 = 133.65, so 134th value (6000), bucket 133, upper bound 8192
-        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max()); // Last value (10000)
+        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), 10000); // Last value (10000)
     }
 
     Y_UNIT_TEST(ShouldHandleBucketBoundaries) {
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(57.1), 4);  // ~57% of 7 = 4th value (3), bucket 3, upper bound 4
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(71.4), 8);  // ~71% of 7 = 5th value (4), bucket 4, upper bound 8
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(85.7), 16); // ~86% of 7 = 6th value (8), bucket 5, upper bound 16
-        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max()); // 7th value (16)
+        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), 16); // 7th value (16)
     }
 
     Y_UNIT_TEST(ShouldHandleVerySmallPercentiles) {
@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         hist.RecordValue(17);  // Above maxValue, should go to [16,∞)
 
         UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(33.3), 16); // 33% of 3 = 1st value (15)
-        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max()); // Last bucket
+        UNIT_ASSERT_VALUES_EQUAL(hist.GetValueAtPercentile(100.0), 17); // Last value (17)
     }
 
     Y_UNIT_TEST(ShouldHandleRepeatedValues) {
@@ -399,7 +399,7 @@ Y_UNIT_TEST_SUITE(THistogramTest) {
         // Test corner case: exactly at maxValue
         THistogram hist2(128, 8192);
         hist2.RecordValue(8192); // Should go to overflow bucket
-        UNIT_ASSERT_VALUES_EQUAL(hist2.GetValueAtPercentile(100.0), std::numeric_limits<uint64_t>::max());
+        UNIT_ASSERT_VALUES_EQUAL(hist2.GetValueAtPercentile(100.0), 8192);
 
         // Test edge case: just below maxValue
         THistogram hist3(128, 8192);

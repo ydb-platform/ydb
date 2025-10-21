@@ -6,6 +6,7 @@ import ydb.apps.dstool.lib.grouptool as grouptool
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 import sys
+import ydb.public.api.protos.draft.ydb_bridge_pb2 as ydb_bridge
 
 description = 'Create workload to stress failure model'
 
@@ -23,20 +24,12 @@ def add_options(p):
     p.add_argument('--kill-signal', type=str, default='KILL', help='Kill signal to send to restart node')
     p.add_argument('--sleep-before-rounds', type=float, default=1, help='Seconds to sleep before rounds')
     p.add_argument('--no-fail-model-check', action='store_true', help='Do not check VDisk states before taking action')
-
-
-def fetch_start_time_map(base_config):
-    start_time_map = {}
-    for node_id in {pdisk.NodeId for pdisk in base_config.PDisk}:
-        r = common.fetch_json_info('sysinfo', [node_id])
-        if len(r) != 1:
-            return None
-        k, v = r.popitem()
-        assert k == node_id
-        if 'StartTime' not in v:
-            return None
-        start_time_map[node_id] = int(v['StartTime'])
-    return start_time_map
+    p.add_argument('--enable-soft-switch-piles', action='store_true', help='Enable soft switch pile with PROMOTED')
+    p.add_argument('--enable-hard-switch-piles', action='store_true', help='Enable hard switch pile with setting PRIMARY')
+    p.add_argument('--enable-disconnect-piles', action='store_true', help='Enable disconnect pile')
+    p.add_argument('--fixed-pile-for-disconnect', type=int, help='Pile to disconnect')
+    p.add_argument('--weight-restarts', type=float, default=1.0, help='weight for restart action')
+    p.add_argument('--weight-kill-tablets', type=float, default=1.0, help='weight for kill tablets action')
 
 
 def make_pdisk_key_config(pdisk_keys, node_id):
@@ -74,6 +67,17 @@ def do(args):
 
     config_retries = None
 
+    if args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles:
+        base_config = common.fetch_base_config()
+        pile_name_to_node_id = common.build_pile_to_node_id_map(base_config)
+        piles_count = len(pile_name_to_node_id)
+        node_id_to_endpoints = common.fetch_node_to_endpoint_map()
+        pile_names = list(sorted(pile_name_to_node_id.keys()))
+        pile_id_to_endpoints = {
+            idx: [node_id_to_endpoints[node_id] for node_id in pile_name_to_node_id[pile_name]]
+            for idx, pile_name in enumerate(pile_names)
+        }
+
     while True:
         common.flush_cache()
 
@@ -81,8 +85,6 @@ def do(args):
             base_config = common.fetch_base_config()
             vslot_map = common.build_vslot_map(base_config)
             node_fqdn_map = common.build_node_fqdn_map(base_config)
-            if args.enable_pdisk_encryption_keys_changes or not args.disable_restarts:
-                start_time_map = fetch_start_time_map(base_config)
         except Exception:
             if config_retries is None:
                 config_retries = 3
@@ -92,7 +94,21 @@ def do(args):
                 config_retries -= 1
             continue
 
-        tablets = common.fetch_json_info('tabletinfo') if args.enable_kill_tablets or args.enable_kill_blob_depot else {}
+        if args.enable_kill_tablets or args.enable_kill_blob_depot:
+            tablets = {
+                int(tablet['TabletId']) : tablet
+                for tablet in common.fetch('viewer/json/tabletinfo', dict(enums=1)).get('TabletStateInfo', [])
+            }
+        else:
+            tablets = {}
+        sysinfo = {
+            int(node['NodeId']): node
+            for node in common.fetch('viewer/json/sysinfo', dict(fields_required=-1, enums=1), cache=False).get('SystemStateInfo', [])
+        }
+        start_time_map = {
+            int(node['NodeId']): int(node['StartTime'])
+            for node in sysinfo.values()
+        }
 
         config_retries = None
 
@@ -171,11 +187,10 @@ def do(args):
             return True
 
         def do_restart(node_id):
-            host = node_fqdn_map[node_id]
+            node = sysinfo[node_id]
             if args.enable_pdisk_encryption_keys_changes:
                 update_pdisk_key_config(node_fqdn_map, pdisk_keys, node_id)
-            subprocess.call(['ssh', host, 'sudo', 'killall', '-%s' % args.kill_signal, 'kikimr'])
-            subprocess.call(['ssh', host, 'sudo', 'killall', '-%s' % args.kill_signal, 'ydbd'])
+            subprocess.call(['ssh', node['Host'], 'sudo', 'kill', '-%s' % args.kill_signal, node['PID']])
             if args.enable_pdisk_encryption_keys_changes:
                 remove_old_pdisk_keys(pdisk_keys, pdisk_key_versions, node_id)
 
@@ -275,6 +290,22 @@ def do(args):
                 print('Killing tablet %d of type %s' % (tablet_id, item['Type']))
                 common.fetch('tablets', dict(RestartTabletID=tablet_id), fmt='raw', cache=False)
 
+        def do_soft_switch_pile(pile_id):
+            print(f"Switching primary pile to {pile_id} with PROMOTED")
+            common.promote_pile(pile_id)
+
+        def do_hard_switch_pile(pile_id, all_piles):
+            print(f"Switching primary pile to {pile_id} with setting PRIMARY")
+            common.set_primary_pile(pile_id, [x for x in all_piles if x != pile_id])
+
+        def do_disconnect_pile(pile_id, pile_id_to_endpoints):
+            print(f"Disconnecting pile {pile_id}")
+            common.disconnect_pile(pile_id, pile_id_to_endpoints)
+
+        def do_connect_pile(pile_id, pile_id_to_hosts):
+            print(f"Connecting pile {pile_id}")
+            common.connect_pile(pile_id, pile_id_to_hosts)
+
         ################################################################################################################
 
         now = datetime.now(timezone.utc)
@@ -284,9 +315,9 @@ def do(args):
         possible_actions = []
 
         if args.enable_kill_tablets:
-            possible_actions.append(('kill tablet', (do_kill_tablet,)))
+            possible_actions.append((args.weight_kill_tablets, 'kill tablet', (do_kill_tablet,)))
         if args.enable_kill_blob_depot:
-            possible_actions.append(('kill blob depot', (do_kill_blob_depot,)))
+            possible_actions.append((1.0, 'kill blob depot', (do_kill_blob_depot,)))
 
         evicts = []
         wipes = []
@@ -329,19 +360,19 @@ def do(args):
             action[0](*action[1:])
 
         if evicts:
-            possible_actions.append(('evict', (pick, evicts)))
+            possible_actions.append((1.0, 'evict', (pick, evicts)))
         if wipes:
-            possible_actions.append(('wipe', (pick, wipes)))
+            possible_actions.append((1.0, 'wipe', (pick, wipes)))
         if readonlies:
-            possible_actions.append(('readonly', (pick, readonlies)))
+            possible_actions.append((1.0, 'readonly', (pick, readonlies)))
         if unreadonlies:
-            possible_actions.append(('un-readonly', (pick, unreadonlies)))
+            possible_actions.append((1.0, 'un-readonly', (pick, unreadonlies)))
         if pdisk_restarts:
-            possible_actions.append(('restart-pdisk', (pick, pdisk_restarts)))
+            possible_actions.append((1.0, 'restart-pdisk', (pick, pdisk_restarts)))
         if make_pdisks_readonly:
-            possible_actions.append(('make-pdisks-readonly', (pick, make_pdisks_readonly)))
+            possible_actions.append((1.0, 'make-pdisks-readonly', (pick, make_pdisks_readonly)))
         if make_pdisks_not_readonly:
-            possible_actions.append(('make-pdisks-not-readonly', (pick, make_pdisks_not_readonly)))
+            possible_actions.append((1.0, 'make-pdisks-not-readonly', (pick, make_pdisks_not_readonly)))
 
         restarts = []
 
@@ -353,12 +384,47 @@ def do(args):
                 nodes_to_restart = nodes_to_restart[:node_count//2]
                 for node_id in nodes_to_restart:
                     if args.enable_pdisk_encryption_keys_changes:
-                        possible_actions.append(('add new pdisk key to node with id: %d' % node_id, (do_add_pdisk_key, node_id)))
+                        possible_actions.append((1.0, 'add new pdisk key to node with id: %d' % node_id, (do_add_pdisk_key, node_id)))
                     if not args.disable_restarts:
                         restarts.append(('restart node with id: %d' % node_id, (do_restart, node_id)))
 
         if restarts:
-            possible_actions.append(('restart', (pick, restarts)))
+            possible_actions.append((args.weight_restarts, 'restart', (pick, restarts)))
+
+        has_pile_operations = args.enable_soft_switch_piles or args.enable_hard_switch_piles or args.enable_disconnect_piles
+        if has_pile_operations:
+            piles_info = common.get_piles_info()
+            print(piles_info)
+
+            primary_pile = None
+            synchronized_piles = []
+            promoted_piles = []
+            non_synchronized_piles = []
+            disconnected_piles = []
+            for idx, pile_state in enumerate(piles_info.per_pile_state):
+                if pile_state.state == ydb_bridge.PileState.PRIMARY:
+                    primary_pile = idx
+                elif pile_state.state == ydb_bridge.PileState.SYNCHRONIZED:
+                    synchronized_piles.append(idx)
+                elif pile_state.state == ydb_bridge.PileState.PROMOTED:
+                    promoted_piles.append(idx)
+                elif pile_state.state == ydb_bridge.PileState.DISCONNECTED:
+                    disconnected_piles.append(idx)
+                else:
+                    non_synchronized_piles.append(idx)
+
+            can_soft_switch = (piles_count == len(synchronized_piles) + int(primary_pile is not None))
+            can_hard_switch = (len(synchronized_piles) + len(promoted_piles) > 0)
+
+            if args.enable_soft_switch_piles and can_soft_switch:
+                possible_actions.append((1.0, 'soft-switch-pile', (do_soft_switch_pile, random.choice(synchronized_piles))))
+            if args.enable_hard_switch_piles and can_hard_switch:
+                possible_actions.append((1.0, 'hard-switch-pile', (do_hard_switch_pile, random.choice(promoted_piles + synchronized_piles), [primary_pile] + promoted_piles + synchronized_piles)))
+            if len(disconnected_piles) > 0:
+                possible_actions.append((1.0, 'connect-pile', (do_connect_pile, random.choice(disconnected_piles), pile_id_to_endpoints)))
+            if args.enable_disconnect_piles and len(synchronized_piles) > 0:
+                pile_to_disconnect = args.fixed_pile_for_disconnect if args.fixed_pile_for_disconnect is not None else random.choice([primary_pile] + synchronized_piles)
+                possible_actions.append((1.0, 'disconnect-pile', (do_disconnect_pile, pile_to_disconnect, pile_id_to_endpoints)))
 
         if not possible_actions:
             common.print_if_not_quiet(args, 'Waiting for the next round...', file=sys.stdout)
@@ -367,7 +433,7 @@ def do(args):
 
         ################################################################################################################
 
-        action_name, action = random.choice(possible_actions)
+        (_, action_name, action), = random.choices(possible_actions, weights=[w for w, _, _ in possible_actions])
         print('%s %s' % (action_name, datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S')))
 
         try:

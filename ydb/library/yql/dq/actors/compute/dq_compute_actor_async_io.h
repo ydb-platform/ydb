@@ -55,6 +55,8 @@ enum class EResumeSource : ui32 {
     CADataSent,
     CAPendingOutput,
     CATaskRunnerCreated,
+    CAWatermarkInject,
+    CAWakeupCallback,
 
     Last,
 };
@@ -274,6 +276,7 @@ public:
         const NKikimr::NMiniKQL::TStructType* PayloadType;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        const THashMap<TString, TString>& SecureParams;
         size_t MaxKeysInRequest;
     };
 
@@ -291,6 +294,7 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         IRandomProvider *const RandomProvider;
         NWilson::TTraceId TraceId;
+        ::NMonitoring::TDynamicCounterPtr TaskCounters;
     };
 
     struct TInputTransformArguments {

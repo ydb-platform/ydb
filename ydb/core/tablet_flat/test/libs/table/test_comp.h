@@ -164,6 +164,16 @@ namespace NTest {
             return Failed = 0, EScan::Feed;
         }
 
+        EScan Feed(ELockMode mode, ui64 txId) override
+        {
+            if (!IsLocked) {
+                Writer->AddKeyLock(mode, txId);
+                IsLocked = true;
+            }
+
+            return Failed = 0, EScan::Feed;
+        }
+
         EScan EndDeltas() override
         {
             return Failed = 0, EScan::Feed;
@@ -183,11 +193,12 @@ namespace NTest {
         EScan EndKey() override
         {
             Writer->EndKey();
+            IsLocked = false;
 
             return Failed = 0, EScan::Feed;
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) override
+        TAutoPtr<IDestructable> Finish(EStatus) override
         {
             Y_TABLET_ERROR("IScan::Finish(...) shouldn't be called in test env");
         }
@@ -206,6 +217,7 @@ namespace NTest {
         TVector<ui32> Tags;
         TAutoPtr<TPartWriter> Writer;
         TRowVersionRanges::TSnapshot RemovedRowVersions;
+        bool IsLocked = false;
     };
 
 }

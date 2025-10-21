@@ -221,10 +221,12 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None):
+    def __init__(self, name, storage_units=None, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None, shared_database_path=None):
         self.name = name
         self.overridden_configs = overridden_configs
-        self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
+        self.storage_units = tuple()
+        if storage_units:
+            self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
         self.compute_units = tuple()
         if compute_units:
             self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
@@ -232,6 +234,7 @@ class Tenant(object):
         self.plan_resolution = plan_resolution
         self.coordinators = coordinators
         self.mediators = mediators
+        self.shared_database_path = shared_database_path
 
 
 class HostConfig(object):
@@ -272,6 +275,7 @@ def normalize_domain(domain_name):
 
 class ClusterDetailsProvider(object):
     def __init__(self, template, host_info_provider, validator=None, database=None, use_new_style_cfg=False):
+
         if not validator:
             validator = validation.default_validator()
 
@@ -449,7 +453,7 @@ class ClusterDetailsProvider(object):
         if self._hosts is not None:
             return self._hosts
         futures = []
-        for node_id, host_description in enumerate(self.__cluster_description.get("hosts"), 1):
+        for node_id, host_description in enumerate(self.__cluster_description.get("hosts", []), 1):
             futures.append(self._thread_pool.submit(self.__collect_host_info, node_id, host_description))
 
         r = []

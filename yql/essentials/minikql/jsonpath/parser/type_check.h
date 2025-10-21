@@ -4,7 +4,7 @@
 
 namespace NYql::NJsonPath {
 
-class TJsonPathTypeChecker : public IAstNodeVisitor {
+class TJsonPathTypeChecker: public IAstNodeVisitor {
 public:
     TJsonPathTypeChecker(TIssues& Issues);
 
@@ -53,8 +53,7 @@ public:
     void Error(const TAstNodePtr node, const TStringBuf message);
 
 private:
-    TIssues& Issues;
+    TIssues& Issues_;
 };
 
-}
-
+} // namespace NYql::NJsonPath

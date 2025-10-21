@@ -219,7 +219,7 @@ public:
         } catch (const std::exception& ex) {
             try {
                 // don't generate core if parent died before child
-                Cerr << ex.what() << Endl;
+                Cerr << FormatCurrentException() << Endl;
                 Cerr << "Command " << LastCommand << Endl;
                 Cerr << "Version " << LastVersion << Endl;
                 Cerr << "TaskId " << LastTaskId << Endl;
@@ -377,9 +377,9 @@ public:
                 if (batch.IsOOB()) {
                     LoadRopeFromPipe(input, batch.Payload);
                 }
-                NDq::TDqDataSerializer dataSerializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
-                    (NDqProto::EDataTransportVersion)batch.Proto.GetTransportVersion());
-                dataSerializer.Deserialize(std::move(batch), source->GetInputType(), buffer);
+                NDq::TDqDataSerializer dataDeserializer(Runner->GetTypeEnv(), Runner->GetHolderFactory(),
+                                                        (NDqProto::EDataTransportVersion)batch.Proto.GetTransportVersion(), NDq::FromProto(batch.Proto.GetValuePackerVersion()));
+                dataDeserializer.Deserialize(std::move(batch), source->GetInputType(), buffer);
 
                 source->Push(std::move(buffer), request.GetSpace());
                 break;
@@ -624,7 +624,8 @@ public:
                 NDq::TDqDataSerializer dataSerializer(
                     Runner->GetTypeEnv(),
                     Runner->GetHolderFactory(),
-                    DataTransportVersion);
+                    DataTransportVersion,
+                    PackerVersion);
                 NDq::TDqSerializedBatch serialized = dataSerializer.Serialize(batch, outputType);
                 bool isOOB = serialized.IsOOB();
                 *response.MutableData() = std::move(serialized.Proto);
@@ -676,6 +677,7 @@ public:
             DontCollectDumps();
         }
         DataTransportVersion = DqConfiguration->GetDataTransportVersion();
+        PackerVersion = NDq::FromProto(DqConfiguration->GetValuePackerVersion());
         // TODO: Maybe use taskParams from task.GetTask().GetParameters()
         THashMap<TString, TString> taskParams;
         for (const auto& x: taskMeta.GetTaskParams()) {
@@ -805,6 +807,7 @@ private:
     TTaskCounters PrevStat;
     TDqConfiguration::TPtr DqConfiguration = MakeIntrusive<TDqConfiguration>();
     NDqProto::EDataTransportVersion DataTransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_VERSION_UNSPECIFIED;
+    NKikimr::NMiniKQL::EValuePackerVersion PackerVersion = NKikimr::NMiniKQL::EValuePackerVersion::V0;
     TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> FunctionRegistry;
     NDq::TDqTaskRunnerContext Ctx;
     const NKikimr::NMiniKQL::TUdfModuleRemappings EmptyRemappings;

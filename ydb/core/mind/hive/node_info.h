@@ -99,6 +99,8 @@ public:
     TString Name;
     ui64 DrainSeqNo = 0;
     std::optional<TLastScheduledTablet> LastScheduledTablet; // remembered for a limited time
+    TBridgePileId BridgePileId;
+    THiveDrain* DrainActor = nullptr;
 
     TNodeInfo(TNodeId nodeId, THive& hive);
     TNodeInfo(const TNodeInfo&) = delete;
@@ -161,6 +163,10 @@ public:
 
     bool IsRegistered() const {
         return VolatileState == EVolatileState::Connecting || VolatileState == EVolatileState::Connected;
+    }
+
+    TNodeId GetId() const {
+        return Id;
     }
 
     bool MatchesFilter(const TNodeFilter& filter, TTabletDebugState* debugState = nullptr) const;
@@ -273,8 +279,8 @@ public:
         return TStringBuilder() << ServicedDomains;
     }
 
-    TSubDomainKey GetServicedDomain() const {
-        return ServicedDomains.empty() ? TSubDomainKey() : ServicedDomains.front();
+    const TSubDomainKey& GetServicedDomain() const {
+        return ServicedDomains.empty() ? InvalidSubDomainKey : ServicedDomains.front();
     }
 
     void UpdateResourceTotalUsage(const NKikimrHive::TEvTabletMetrics& metrics, NIceDb::TNiceDb& db);

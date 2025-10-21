@@ -1,0 +1,7 @@
+#pragma once
+
+#ifdef USE_PYTHON3_PREV
+#include <contrib/tools/python3_prev/Include/bytesobject.h>
+#else
+#include <contrib/tools/python/src/Include/bytesobject.h>
+#endif

@@ -97,6 +97,12 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 small = delta.HasSmall() ? delta.GetSmall() : family.Small;
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
+        auto cacheMode = delta.HasCacheMode() ? ECacheMode(delta.GetCacheMode()) : family.CacheMode;
+        Y_ENSURE(ui32(cacheMode) <= 1, "Invalid cache mode value");
+        if (family.CacheMode != cacheMode) {
+            ChangeTableSetting(table, tableInfo.PendingCacheModeChange, true);
+        }
+
         Y_ENSURE(ui32(cache) <= 2, "Invalid pages cache policy value");
         if (family.Cache != cache && cache == ECache::Ever) {
             ChangeTableSetting(table, tableInfo.PendingCacheEnable, true);
@@ -105,7 +111,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
         changes |= ChangeTableSetting(table, family.Large, large);
-
+        changes |= ChangeTableSetting(table, family.CacheMode, cacheMode);
     } else if (action == TAlterRecord::AddColumnToFamily) {
         changes |= AddColumnToFamily(table, delta.GetColumnId(), delta.GetFamilyId());
     } else if (action == TAlterRecord::SetRoom) {

@@ -9,6 +9,8 @@
 
 #include <yt/yt/core/yson/protobuf_interop.h>
 
+#include <yt/yt/core/ytree/convert.h>
+
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/concurrency/scheduler.h>
@@ -130,6 +132,27 @@ struct TRowValueTypesChecker
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+template <NYTree::CYsonStructDerived T>
+void ToUnversionedValue(
+    TUnversionedValue* unversionedValue,
+    T value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    ToUnversionedValue(unversionedValue, NYson::ConvertToYsonString(value), rowBuffer, id, flags);
+}
+
+template <NYTree::CYsonStructDerived T>
+void FromUnversionedValue(
+    T* value,
+    TUnversionedValue unversionedValue)
+{
+    NYson::TYsonString ysonStringValue;
+    FromUnversionedValue(&ysonStringValue, unversionedValue);
+    *value = ConvertTo<T>(ysonStringValue);
+}
 
 template <class T>
     requires TEnumTraits<T>::IsEnum
@@ -424,7 +447,7 @@ void FromUnversionedValue(
 
 void MapToUnversionedValueImpl(
     TUnversionedValue* unversionedValue,
-    const std::function<bool(TString*, TUnversionedValue*)> producer,
+    const std::function<bool(std::string*, TUnversionedValue*)> producer,
     const TRowBufferPtr& rowBuffer,
     int id,
     EValueFlags flags);
@@ -440,7 +463,7 @@ void ToUnversionedValue(
     auto it = map.begin();
     MapToUnversionedValueImpl(
         unversionedValue,
-        [&] (TString* itemKey, TUnversionedValue* itemValue) mutable -> bool {
+        [&] (std::string* itemKey, TUnversionedValue* itemValue) mutable -> bool {
             if (it == map.end()) {
                 return false;
             }
@@ -467,7 +490,7 @@ void FromUnversionedValue(
 {
     map->clear();
     UnversionedValueToMapImpl(
-        [&] (TString key) {
+        [&] (std::string key) {
             auto pair = map->emplace(FromString<TKey>(std::move(key)), TValue());
             return &pair.first->second;
         },
@@ -547,6 +570,35 @@ T FromUnversionedValue(TUnversionedValue unversionedValue)
     T value;
     FromUnversionedValue(&value, unversionedValue);
     return value;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class T>
+TUnversionedValue ToUnversionedCompositeValue(
+    T&& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    TUnversionedValue unversionedValue;
+    ToUnversionedCompositeValue(&unversionedValue, std::forward<T>(value), rowBuffer, id, flags);
+    return unversionedValue;
+}
+
+template <class T>
+void ToUnversionedCompositeValue(
+    TUnversionedValue* unversionedValue,
+    const std::optional<T>& value,
+    const TRowBufferPtr& rowBuffer,
+    int id,
+    EValueFlags flags)
+{
+    if (value) {
+        ToUnversionedCompositeValue(unversionedValue, *value, rowBuffer, id, flags);
+    } else {
+        *unversionedValue = MakeUnversionedSentinelValue(EValueType::Null, id, flags);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

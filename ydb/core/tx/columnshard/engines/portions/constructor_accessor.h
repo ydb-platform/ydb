@@ -4,12 +4,14 @@
 #include "data_accessor.h"
 #include "index_chunk.h"
 
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+
 #include <ydb/library/accessor/accessor.h>
 
 namespace NKikimr::NOlap {
 
-class TPortionAccessorConstructor {
+class TPortionAccessorConstructor: public TPortionMetaBase {
 private:
     bool Constructed = false;
     std::unique_ptr<TPortionInfoConstructor> PortionInfo;
@@ -35,18 +37,23 @@ private:
     bool NeedBlobIdxsSort = false;
 
     TPortionAccessorConstructor(TPortionDataAccessor&& accessor)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(true, true)) {
+        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(true)) {
+        BlobIds = accessor.ExtractBlobIds();
         Indexes = accessor.ExtractIndexes();
         Records = accessor.ExtractRecords();
     }
 
     TPortionAccessorConstructor(
         const TPortionDataAccessor& accessor, const bool withBlobs, const bool withMetadata, const bool withMetadataBlobs)
-        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata, withMetadataBlobs)) {
+        : PortionInfo(accessor.GetPortionInfo().BuildConstructor(withMetadata)) {
+        if (!withMetadata) {
+            AFL_VERIFY(!withMetadataBlobs);
+        }
         if (withBlobs) {
             AFL_VERIFY(withMetadataBlobs && withMetadata);
             Indexes = accessor.GetIndexesVerified();
             Records = accessor.GetRecordsVerified();
+            BlobIds = accessor.GetBlobIds();
         }
     }
 
@@ -103,7 +110,7 @@ private:
                 recordsCountCurrent = 0;
             } else {
                 AFL_VERIFY(i.GetChunkIdx() == chunkIdx + 1)("chunkIdx", chunkIdx)("i.GetChunkIdx()", i.GetChunkIdx())("entity", entityId)(
-                                                  "details", debugString());
+                                                "details", debugString());
                 chunkIdx = i.GetChunkIdx();
             }
             recordsCountCurrent += GetRecordsCount(i);
@@ -138,30 +145,72 @@ private:
     }
 
 public:
-    TPortionAccessorConstructor(std::unique_ptr<TPortionInfoConstructor>&& portionInfo)
-        : PortionInfo(std::move(portionInfo))
-    {
+    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
+        AFL_VERIFY(blobId.IsValid());
+        TBlobRangeLink16::TLinkId idx = 0;
+        for (auto&& i : BlobIds) {
+            if (i == blobId) {
+                return idx;
+            }
+            ++idx;
+        }
+        BlobIds.emplace_back(blobId);
+        return idx;
+    }
 
+    TPortionAccessorConstructor(std::unique_ptr<TPortionInfoConstructor>&& portionInfo)
+        : PortionInfo(std::move(portionInfo)) {
     }
 
     ui64 GetTotalBlobsSize() const {
+        return GetColumnBlobBytes() + GetIndexBlobBytes();
+    }
+
+    NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
+        return NPortion::TPortionInfoForCompaction(
+            GetTotalBlobsSize(), PortionInfo->GetMeta().GetFirstAndLastPK().GetFirst(), PortionInfo->GetMeta().GetFirstAndLastPK().GetLast());
+    }
+
+    ui64 GetColumnBlobBytes() const {
         AFL_VERIFY(Records.size());
-        ui64 size = 0;
+        ui64 result = 0;
         for (auto&& r : Records) {
-            size += r.GetBlobRange().GetSize();
+            result += r.GetBlobRange().GetSize();
         }
+        return result;
+    }
+
+    ui64 GetColumnRawBytes() const {
+        AFL_VERIFY(Records.size());
+        ui64 result = 0;
+        for (auto&& r : Records) {
+            result += r.GetMeta().GetRawBytes();
+        }
+        return result;
+    }
+
+    ui64 GetIndexBlobBytes() const {
+        ui64 result = 0;
         for (auto&& r : Indexes) {
-            size += r.GetDataSize();
+            result += r.GetDataSize();
         }
-        return size;
+        return result;
+    }
+
+    ui64 GetIndexRawBytes() const {
+        ui64 result = 0;
+        for (auto&& r : Indexes) {
+            result += r.GetRawBytes();
+        }
+        return result;
     }
 
     static TPortionAccessorConstructor BuildForRewriteBlobs(const TPortionInfo& portion) {
-        return TPortionAccessorConstructor(portion.BuildConstructor(true, false));
+        return TPortionAccessorConstructor(portion.BuildConstructor(true));
     }
 
-    static TPortionDataAccessor BuildForLoading(
-        const TPortionInfo::TConstPtr& portion, std::vector<TColumnChunkLoadContextV1>&& records, std::vector<TIndexChunkLoadContext>&& indexes);
+    static std::shared_ptr<TPortionDataAccessor> BuildForLoading(
+        const TPortionInfo::TConstPtr& portion, TColumnChunkLoadContextV2::TBuildInfo&& records, std::vector<TIndexChunkLoadContext>&& indexes);
 
     const std::vector<TColumnRecord>& GetRecords() const {
         return Records;
@@ -209,28 +258,12 @@ public:
         return TBlobRange();
     }
 
-    TPortionDataAccessor Build(const bool needChunksNormalization);
-
-    TBlobRangeLink16::TLinkId RegisterBlobId(const TUnifiedBlobId& blobId) {
-        return PortionInfo->MetaConstructor.RegisterBlobId(blobId);
-    }
-
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return PortionInfo->MetaConstructor.RestoreBlobRange(linkRange);
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return PortionInfo->MetaConstructor.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return PortionInfo->MetaConstructor.GetBlobIdsCount();
-    }
+    std::shared_ptr<TPortionDataAccessor> Build(const bool needChunksNormalization);
 
     TPortionAccessorConstructor(TPortionAccessorConstructor&&) noexcept = default;
     TPortionAccessorConstructor& operator=(TPortionAccessorConstructor&&) noexcept = default;
 
-    void LoadRecord(TColumnChunkLoadContextV1&& loadContext);
+    void AddBuildInfo(TColumnChunkLoadContextV2::TBuildInfo&& buildInfo);
     void LoadIndex(TIndexChunkLoadContext&& loadContext);
 
     const TColumnRecord& AppendOneChunkColumn(TColumnRecord&& record) {
@@ -254,7 +287,7 @@ public:
     }
 
     bool HaveBlobsData() {
-        return PortionInfo->HaveBlobsData() || Records.size() || Indexes.size();
+        return GetBlobIdsCount() || Records.size() || Indexes.size();
     }
 
     void ClearRecords() {

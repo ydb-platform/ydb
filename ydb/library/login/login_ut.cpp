@@ -30,6 +30,32 @@ Y_UNIT_TEST_SUITE(Login) {
         UNIT_ASSERT(response3.User == request1.User);
     }
 
+    Y_UNIT_TEST(TestNameIsNotAllowed1) {
+        TLoginProvider provider;
+        TLoginProvider::TCreateUserRequest request;
+        request.User = "_USER_";
+        request.Password = "password";
+        UNIT_ASSERT(provider.CreateUser(request).Error == "Name is not allowed");
+
+        request.User = "";
+        UNIT_ASSERT(provider.CreateUser(request).Error == "Name is not allowed");
+
+        request.User = "user";
+        UNIT_ASSERT(!provider.CreateUser(request).Error);
+    }
+
+    Y_UNIT_TEST(TestDefaultGroupNamesAreAllowed) {
+        static const TVector<TString> DEFAULT_GROUP_NAMES = {
+            "ADMINS", "DATABASE-ADMINS", "ACCESS-ADMINS", "DDL-ADMINS",
+            "DATA-WRITERS", "DATA-READERS", "METADATA-READERS", "USERS"
+        };
+        TLoginProvider provider;
+        for (const auto& name : DEFAULT_GROUP_NAMES) {
+            const auto response = provider.CreateGroup({.Group = name, .Options = {.StrongCheckName = false}});
+            UNIT_ASSERT(!response.Error);
+        }
+    }
+
     Y_UNIT_TEST(TestFailedLogin1) {
         TLoginProvider provider;
         provider.RotateKeys();
@@ -178,6 +204,14 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(!response1.Error);
         }
         {
+            auto response1 = provider.CreateGroup({.Group = "_ADMINS_", .Options = {.StrongCheckName = false}});
+            UNIT_ASSERT(!response1.Error);
+        }
+        {
+            auto response1 = provider.CreateGroup({.Group = "_ADMINS_", .Options = {.StrongCheckName = true}});
+            UNIT_ASSERT(response1.Error == "Name is not allowed");
+        }
+        {
             auto response1 = provider.AddGroupMembership({.Group = "group1", .Member = "group2"});
             UNIT_ASSERT(!response1.Error);
         }
@@ -222,13 +256,14 @@ Y_UNIT_TEST_SUITE(Login) {
             UNIT_ASSERT(!response1.Error);
 
             auto sids = provider.Sids;
-            UNIT_ASSERT(sids.size() == 6);
+            UNIT_ASSERT(sids.size() == 7);
             UNIT_ASSERT(sids.count("user1") == 1);
             UNIT_ASSERT(sids.count("group1") == 1);
             UNIT_ASSERT(sids.count("group2") == 1);
             UNIT_ASSERT(sids.count("group33") == 1);
             UNIT_ASSERT(sids.count("group4") == 1);
             UNIT_ASSERT(sids.count("group5") == 1);
+            UNIT_ASSERT(sids.count("_ADMINS_") == 1);
 
             auto groups = provider.GetGroupsMembership("user1");
             UNIT_ASSERT(groups.size() == 5);
@@ -792,5 +827,21 @@ Y_UNIT_TEST_SUITE(Login) {
             auto loginResponse = provider.LoginUser(loginRequest);
             UNIT_ASSERT(!loginResponse.Error);
         }
+    }
+
+    Y_UNIT_TEST(NotIgnoreCheckErrors) {
+        TLoginProvider provider(TPasswordComplexity(), TAccountLockout::TInitializer(), [] () {return true;}, {});
+        provider.RotateKeys();
+
+        TLoginProvider::TPasswordCheckResult checkResult;
+        checkResult.FillUnavailableKey();
+        auto response = provider.LoginUser(TLoginProvider::TLoginUserRequest{}, checkResult);
+        UNIT_ASSERT_EQUAL(response.Status, checkResult.Status);
+        UNIT_ASSERT_EQUAL(response.Error, checkResult.Error);
+
+        checkResult.FillInvalidUser("bad user");
+        response = provider.LoginUser(TLoginProvider::TLoginUserRequest{}, checkResult);
+        UNIT_ASSERT_EQUAL(response.Status, checkResult.Status);
+        UNIT_ASSERT_EQUAL(response.Error, checkResult.Error);
     }
 }

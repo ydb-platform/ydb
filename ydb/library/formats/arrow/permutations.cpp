@@ -114,10 +114,6 @@ std::shared_ptr<arrow::Array> CopyRecords(const std::shared_ptr<arrow::Array>& s
     return result;
 }
 
-ui64 TShardedRecordBatch::GetMemorySize() const {
-    return NArrow::GetTableMemorySize(RecordBatch);
-}
-
 TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::RecordBatch>& batch) {
     AFL_VERIFY(batch);
     RecordBatch = TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batch->schema(), { batch }));
@@ -128,11 +124,36 @@ TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& ba
     AFL_VERIFY(RecordBatch);
 }
 
+TShardedRecordBatch::TShardedRecordBatch(std::shared_ptr<arrow::Table>&& batch)
+    : RecordBatch(std::move(batch)) {
+    AFL_VERIFY(RecordBatch);
+}
+
 TShardedRecordBatch::TShardedRecordBatch(const std::shared_ptr<arrow::Table>& batch, std::vector<std::vector<ui32>>&& splittedByShards)
     : RecordBatch(batch)
     , SplittedByShards(std::move(splittedByShards)) {
     AFL_VERIFY(RecordBatch);
     AFL_VERIFY(SplittedByShards.size());
+}
+
+std::shared_ptr<arrow::Table> TShardedRecordBatch::ExtractRecordBatch() {
+    AFL_VERIFY(!!RecordBatch);
+    return std::move(RecordBatch);
+}
+
+std::shared_ptr<arrow::Schema> TShardedRecordBatch::GetResultSchema() const {
+    AFL_VERIFY(RecordBatch);
+    return RecordBatch->schema();
+}
+
+ui64 TShardedRecordBatch::GetRecordsCount() const {
+    AFL_VERIFY(RecordBatch);
+    return RecordBatch->num_rows();
+}
+
+const std::shared_ptr<arrow::Table>& TShardedRecordBatch::GetRecordBatch() const {
+    AFL_VERIFY(RecordBatch);
+    return RecordBatch;
 }
 
 std::vector<std::shared_ptr<arrow::Table>> TShardingSplitIndex::Apply(const std::shared_ptr<arrow::Table>& input) {

@@ -14,23 +14,8 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
         with self.lock:
             return f"Inserted: {self.inserted}"
 
-    def _loop(self):
+    def agent_work(self, agent_key):
         table_path = self.get_table_path(self.table_name)
-        create_sql = f"""
-            CREATE TABLE `{table_path}` (
-                pk Uint64,
-                {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
-                {", ".join(["null_pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
-                {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
-                {", ".join(["null_col_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
-                PRIMARY KEY(
-                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])},
-                {", ".join(["null_pk_" + cleanup_type_name(type_name) for type_name in null_types.keys()])}
-                )
-            )
-        """
-
-        self.client.query(create_sql, True,)
         inflight = 10
         i = 0
         sum = 0
@@ -39,6 +24,7 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
             insert_sql = f"""
                 INSERT INTO `{table_path}` (
                 pk,
+                agent_key,
                 {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])},
                 {", ".join(["null_pk_" + cleanup_type_name(type_name) for type_name in null_types.keys()])},
                 {", ".join(["col_" + cleanup_type_name(type_name) for type_name in non_pk_types.keys()])},
@@ -47,6 +33,7 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
                 VALUES
                 (
                 {i},
+                {agent_key},
                 {", ".join([format_sql_value(pk_types[type_name](value), type_name) for type_name in pk_types.keys()])},
                 {", ".join(['NULL' for type_name in null_types.keys()])},
                 {", ".join([format_sql_value(non_pk_types[type_name](value), type_name) for type_name in non_pk_types.keys()])},
@@ -61,7 +48,7 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
                 self.client.query(
                     f"""
                     DELETE FROM `{table_path}`
-                    WHERE pk == {i - inflight} AND null_pk_Int64 IS NULL
+                    WHERE pk == {i - inflight} AND null_pk_Int64 IS NULL AND agent_key == {agent_key}
                 """,
                     False,
                 )
@@ -69,7 +56,7 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
 
                 actual = self.client.query(
                     f"""
-                    SELECT COUNT(*) as cnt, SUM(pk) as sum FROM `{table_path}`
+                    SELECT COUNT(*) as cnt, SUM(pk) as sum FROM `{table_path}` WHERE agent_key == {agent_key}
                 """,
                     False,
                 )[0].rows[0]
@@ -80,5 +67,28 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
             with self.lock:
                 self.inserted += 1
 
+    def _loop(self):
+        table_path = self.get_table_path(self.table_name)
+        create_sql = f"""
+            CREATE TABLE `{table_path}` (
+                pk Uint64,
+                agent_key Uint64,
+                {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
+                {", ".join(["null_pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
+                {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
+                {", ".join(["null_col_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
+                PRIMARY KEY(
+                agent_key,
+                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])},
+                {", ".join(["null_pk_" + cleanup_type_name(type_name) for type_name in null_types.keys()])}
+                )
+            )
+        """
+
+        self.client.query(create_sql, True,)
+
+        for i in range(50):
+            yield lambda: self.agent_work(i)
+
     def get_workload_thread_funcs(self):
-        return [self._loop]
+        return self._loop()

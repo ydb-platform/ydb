@@ -15,7 +15,8 @@ private:
         TCustomScheme(const TString& pattern, const TString& url)
             : Pattern(pattern)
             , TargetUrlHolder(url)
-            , TargetUrlSubst(pattern.data()) {
+            , TargetUrlSubst(pattern.data())
+        {
             if (0 == TargetUrlSubst.ParseReplacement(TargetUrlHolder.data())) {
                 ythrow yexception() << "Bad url replacement: " << TargetUrlHolder;
             }
@@ -26,7 +27,7 @@ private:
     };
 
 private:
-    TVector<TCustomScheme> CustomSchemes;
+    TVector<TCustomScheme> CustomSchemes_;
 };
 
-}
+} // namespace NYql

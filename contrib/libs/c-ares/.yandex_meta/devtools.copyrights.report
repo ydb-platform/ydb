@@ -537,6 +537,7 @@ BELONGS ya.make
         include/ares_dns.h [3:4]
         src/lib/ares_close_sockets.c [3:4]
         src/lib/ares_config-android.h [1:2]
+        src/lib/ares_config-freebsd-x86_64.h [1:2]
         src/lib/ares_config-linux.h [1:2]
         src/lib/ares_config-osx.h [1:2]
         src/lib/ares_conn.c [3:4]

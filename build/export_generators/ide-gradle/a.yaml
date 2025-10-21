@@ -1,6 +1,20 @@
 service: ya_make
 title: ya ide gradle export testing
 
+arcanum:
+  review:
+    auto_assign: true
+    groups:
+      - name: ya_ide_gradle_developer
+        roles: ["ya_ide_gradle:developer"]
+
+    rules:
+      - reviewers:
+        - name: ya_ide_gradle_developer
+          ship: 1
+          assign: 1
+          ignore_self_ship: false
+
 ci:
   secret: sec-01hmxvzfvzwhj0k6qe9vh9w9yw
   runtime:

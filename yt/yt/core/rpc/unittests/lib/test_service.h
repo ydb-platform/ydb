@@ -36,6 +36,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, LatchedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, NoReply);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, FlakyCall);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, DelayedCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequireCoolFeature);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, RequestBytesThrottledCall);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, StreamingEcho,

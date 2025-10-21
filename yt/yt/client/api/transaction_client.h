@@ -31,6 +31,7 @@ struct TTransactionStartOptions
     std::optional<TDuration> PingPeriod;
     bool Ping = true;
     bool PingAncestors = true;
+    std::optional<std::string> PingerAddress;
 
     NYTree::IAttributeDictionaryPtr Attributes;
 
@@ -66,10 +67,10 @@ struct TTransactionStartOptions
 struct TTransactionAttachOptions
     : public TPrerequisiteAttachOptions
 {
-    //! If non-empty, assumes that the transaction is sticky and specifies address of the transaction manager.
+    //! If non-null, assumes that the transaction is sticky and specifies address of the transaction manager.
     //! Throws if the transaction is not sticky actually.
     //! Only supported by RPC proxy client for now. Ignored by other clients.
-    TString StickyAddress;
+    std::optional<std::string> StickyAddress;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

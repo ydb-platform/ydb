@@ -1,6 +1,26 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
 """
-User name to file name conversion.
-This was taken from the UFO 3 spec.
+Convert user-provided internal UFO names to spec-compliant filenames.
+
+This module implements the algorithm for converting between a "user name" -
+something that a user can choose arbitrarily inside a font editor - and a file
+name suitable for use in a wide range of operating systems and filesystems.
+
+The `UFO 3 specification <http://unifiedfontobject.org/versions/ufo3/conventions/>`_
+provides an example of an algorithm for such conversion, which avoids illegal
+characters, reserved file names, ambiguity between upper- and lower-case
+characters, and clashes with existing files.
+
+This code was originally copied from
+`ufoLib <https://github.com/unified-font-object/ufoLib/blob/8747da7/Lib/ufoLib/filenames.py>`_
+by Tal Leming and is copyright (c) 2005-2016, The RoboFab Developers:
+
+-	Erik van Blokland
+-	Tal Leming
+-	Just van Rossum
 """
 
 # Restrictions are taken mostly from
@@ -11,7 +31,7 @@ This was taken from the UFO 3 spec.
 #    inclusive.
 # 3. Various characters that (mostly) Windows and POSIX-y filesystems don't
 #    allow, plus "(" and ")", as per the specification.
-illegalCharacters = {
+illegalCharacters: set[str] = {
     "\x00",
     "\x01",
     "\x02",
@@ -60,7 +80,7 @@ illegalCharacters = {
     "|",
     "\x7f",
 }
-reservedFileNames = {
+reservedFileNames: set[str] = {
     "aux",
     "clock$",
     "com1",
@@ -85,61 +105,79 @@ reservedFileNames = {
     "nul",
     "prn",
 }
-maxFileNameLength = 255
+maxFileNameLength: int = 255
 
 
 class NameTranslationError(Exception):
     pass
 
 
-def userNameToFileName(userName: str, existing=(), prefix="", suffix=""):
-    """
-    `existing` should be a set-like object.
+def userNameToFileName(
+    userName: str, existing: Iterable[str] = (), prefix: str = "", suffix: str = ""
+) -> str:
+    """Converts from a user name to a file name.
 
-    >>> userNameToFileName("a") == "a"
-    True
-    >>> userNameToFileName("A") == "A_"
-    True
-    >>> userNameToFileName("AE") == "A_E_"
-    True
-    >>> userNameToFileName("Ae") == "A_e"
-    True
-    >>> userNameToFileName("ae") == "ae"
-    True
-    >>> userNameToFileName("aE") == "aE_"
-    True
-    >>> userNameToFileName("a.alt") == "a.alt"
-    True
-    >>> userNameToFileName("A.alt") == "A_.alt"
-    True
-    >>> userNameToFileName("A.Alt") == "A_.A_lt"
-    True
-    >>> userNameToFileName("A.aLt") == "A_.aL_t"
-    True
-    >>> userNameToFileName(u"A.alT") == "A_.alT_"
-    True
-    >>> userNameToFileName("T_H") == "T__H_"
-    True
-    >>> userNameToFileName("T_h") == "T__h"
-    True
-    >>> userNameToFileName("t_h") == "t_h"
-    True
-    >>> userNameToFileName("F_F_I") == "F__F__I_"
-    True
-    >>> userNameToFileName("f_f_i") == "f_f_i"
-    True
-    >>> userNameToFileName("Aacute_V.swash") == "A_acute_V_.swash"
-    True
-    >>> userNameToFileName(".notdef") == "_notdef"
-    True
-    >>> userNameToFileName("con") == "_con"
-    True
-    >>> userNameToFileName("CON") == "C_O_N_"
-    True
-    >>> userNameToFileName("con.alt") == "_con.alt"
-    True
-    >>> userNameToFileName("alt.con") == "alt._con"
-    True
+    Takes care to avoid illegal characters, reserved file names, ambiguity between
+    upper- and lower-case characters, and clashes with existing files.
+
+    Args:
+            userName (str): The input file name.
+            existing: A case-insensitive list of all existing file names.
+            prefix: Prefix to be prepended to the file name.
+            suffix: Suffix to be appended to the file name.
+
+    Returns:
+            A suitable filename.
+
+    Raises:
+            NameTranslationError: If no suitable name could be generated.
+
+    Examples::
+
+            >>> userNameToFileName("a") == "a"
+            True
+            >>> userNameToFileName("A") == "A_"
+            True
+            >>> userNameToFileName("AE") == "A_E_"
+            True
+            >>> userNameToFileName("Ae") == "A_e"
+            True
+            >>> userNameToFileName("ae") == "ae"
+            True
+            >>> userNameToFileName("aE") == "aE_"
+            True
+            >>> userNameToFileName("a.alt") == "a.alt"
+            True
+            >>> userNameToFileName("A.alt") == "A_.alt"
+            True
+            >>> userNameToFileName("A.Alt") == "A_.A_lt"
+            True
+            >>> userNameToFileName("A.aLt") == "A_.aL_t"
+            True
+            >>> userNameToFileName(u"A.alT") == "A_.alT_"
+            True
+            >>> userNameToFileName("T_H") == "T__H_"
+            True
+            >>> userNameToFileName("T_h") == "T__h"
+            True
+            >>> userNameToFileName("t_h") == "t_h"
+            True
+            >>> userNameToFileName("F_F_I") == "F__F__I_"
+            True
+            >>> userNameToFileName("f_f_i") == "f_f_i"
+            True
+            >>> userNameToFileName("Aacute_V.swash") == "A_acute_V_.swash"
+            True
+            >>> userNameToFileName(".notdef") == "_notdef"
+            True
+            >>> userNameToFileName("con") == "_con"
+            True
+            >>> userNameToFileName("CON") == "C_O_N_"
+            True
+            >>> userNameToFileName("con.alt") == "_con.alt"
+            True
+            >>> userNameToFileName("alt.con") == "alt._con"
+            True
     """
     # the incoming name must be a string
     if not isinstance(userName, str):
@@ -180,34 +218,45 @@ def userNameToFileName(userName: str, existing=(), prefix="", suffix=""):
     return fullName
 
 
-def handleClash1(userName, existing=[], prefix="", suffix=""):
-    """
-    existing should be a case-insensitive list
-    of all existing file names.
+def handleClash1(
+    userName: str, existing: Iterable[str] = [], prefix: str = "", suffix: str = ""
+) -> str:
+    """A helper function that resolves collisions with existing names when choosing a filename.
 
-    >>> prefix = ("0" * 5) + "."
-    >>> suffix = "." + ("0" * 10)
-    >>> existing = ["a" * 5]
+    This function attempts to append an unused integer counter to the filename.
 
-    >>> e = list(existing)
-    >>> handleClash1(userName="A" * 5, existing=e,
-    ...		prefix=prefix, suffix=suffix) == (
-    ... 	'00000.AAAAA000000000000001.0000000000')
-    True
+        Args:
+                userName (str): The input file name.
+                existing: A case-insensitive list of all existing file names.
+                prefix: Prefix to be prepended to the file name.
+                suffix: Suffix to be appended to the file name.
 
-    >>> e = list(existing)
-    >>> e.append(prefix + "aaaaa" + "1".zfill(15) + suffix)
-    >>> handleClash1(userName="A" * 5, existing=e,
-    ...		prefix=prefix, suffix=suffix) == (
-    ... 	'00000.AAAAA000000000000002.0000000000')
-    True
+        Returns:
+                A suitable filename.
 
-    >>> e = list(existing)
-    >>> e.append(prefix + "AAAAA" + "2".zfill(15) + suffix)
-    >>> handleClash1(userName="A" * 5, existing=e,
-    ...		prefix=prefix, suffix=suffix) == (
-    ... 	'00000.AAAAA000000000000001.0000000000')
-    True
+        >>> prefix = ("0" * 5) + "."
+        >>> suffix = "." + ("0" * 10)
+        >>> existing = ["a" * 5]
+
+        >>> e = list(existing)
+        >>> handleClash1(userName="A" * 5, existing=e,
+        ...		prefix=prefix, suffix=suffix) == (
+        ... 	'00000.AAAAA000000000000001.0000000000')
+        True
+
+        >>> e = list(existing)
+        >>> e.append(prefix + "aaaaa" + "1".zfill(15) + suffix)
+        >>> handleClash1(userName="A" * 5, existing=e,
+        ...		prefix=prefix, suffix=suffix) == (
+        ... 	'00000.AAAAA000000000000002.0000000000')
+        True
+
+        >>> e = list(existing)
+        >>> e.append(prefix + "AAAAA" + "2".zfill(15) + suffix)
+        >>> handleClash1(userName="A" * 5, existing=e,
+        ...		prefix=prefix, suffix=suffix) == (
+        ... 	'00000.AAAAA000000000000001.0000000000')
+        True
     """
     # if the prefix length + user name length + suffix length + 15 is at
     # or past the maximum length, silce 15 characters off of the user name
@@ -237,31 +286,47 @@ def handleClash1(userName, existing=[], prefix="", suffix=""):
     return finalName
 
 
-def handleClash2(existing=[], prefix="", suffix=""):
-    """
-    existing should be a case-insensitive list
-    of all existing file names.
+def handleClash2(
+    existing: Iterable[str] = [], prefix: str = "", suffix: str = ""
+) -> str:
+    """A helper function that resolves collisions with existing names when choosing a filename.
 
-    >>> prefix = ("0" * 5) + "."
-    >>> suffix = "." + ("0" * 10)
-    >>> existing = [prefix + str(i) + suffix for i in range(100)]
+    This function is a fallback to :func:`handleClash1`. It attempts to append an unused integer counter to the filename.
 
-    >>> e = list(existing)
-    >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
-    ... 	'00000.100.0000000000')
-    True
+        Args:
+                userName (str): The input file name.
+                existing: A case-insensitive list of all existing file names.
+                prefix: Prefix to be prepended to the file name.
+                suffix: Suffix to be appended to the file name.
 
-    >>> e = list(existing)
-    >>> e.remove(prefix + "1" + suffix)
-    >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
-    ... 	'00000.1.0000000000')
-    True
+        Returns:
+                A suitable filename.
 
-    >>> e = list(existing)
-    >>> e.remove(prefix + "2" + suffix)
-    >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
-    ... 	'00000.2.0000000000')
-    True
+        Raises:
+                NameTranslationError: If no suitable name could be generated.
+
+        Examples::
+
+          >>> prefix = ("0" * 5) + "."
+          >>> suffix = "." + ("0" * 10)
+          >>> existing = [prefix + str(i) + suffix for i in range(100)]
+
+          >>> e = list(existing)
+          >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
+          ... 	'00000.100.0000000000')
+          True
+
+          >>> e = list(existing)
+          >>> e.remove(prefix + "1" + suffix)
+          >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
+          ... 	'00000.1.0000000000')
+          True
+
+          >>> e = list(existing)
+          >>> e.remove(prefix + "2" + suffix)
+          >>> handleClash2(existing=e, prefix=prefix, suffix=suffix) == (
+          ... 	'00000.2.0000000000')
+          True
     """
     # calculate the longest possible string
     maxLength = maxFileNameLength - len(prefix) - len(suffix)

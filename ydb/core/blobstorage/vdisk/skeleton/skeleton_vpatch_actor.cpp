@@ -501,8 +501,9 @@ namespace NKikimr::NPrivate {
                     (ReceivedXorDiffs, ReceivedXorDiffCount),
                     (ExpectedXorDiffs, WaitedXorDiffCount));
             ui64 cookie = OriginalBlobId.Hash();
+            // TODO(alexvru): checksumming here
             std::unique_ptr<IEventBase> put = std::make_unique<TEvBlobStorage::TEvVPut>(TLogoBlobID(PatchedBlobId, PatchedPartId),
-                    Buffer, VDiskId, false, &cookie, Deadline, NKikimrBlobStorage::AsyncBlob);
+                    Buffer, VDiskId, false, &cookie, Deadline, NKikimrBlobStorage::AsyncBlob, false);
             AddMark("Send vPut");
             Send(LeaderId, put.release());
         }

@@ -138,3 +138,17 @@ SELECT Math::Mod(-1, 7);        -- 6
 SELECT Math::Rem(-1, 7);        -- -1
 ```
 
+## SwapBytes {#swap-bytes}
+
+#### Signature
+
+* `Math::SwapBytes(T{Flags:AutoMap}) -> T`
+
+Reverses the bytes in the given integer value. Supported types: Uint8, Uint16, Uint32, Uint64.
+
+#### Examples
+
+```yql
+-- 0x0001 -> 0x0100
+SELECT Math::SwapBytes(Uint16("1")); -- 256
+```

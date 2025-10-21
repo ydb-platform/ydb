@@ -19,20 +19,20 @@ using namespace NSQLTranslation;
 using namespace NSQLTranslationV1;
 using namespace NSQLv1Generated;
 
-class TRuleFreqTranslation : public TSqlTranslation
-{
+class TRuleFreqTranslation: public TSqlTranslation {
 public:
     TRuleFreqTranslation(TContext& ctx)
         : TSqlTranslation(ctx, ctx.Settings.Mode)
-    {}
+    {
+    }
 };
 
 class TRuleFreqVisitor {
 public:
     TRuleFreqVisitor(TContext& ctx)
-        : Translation(ctx)
+        : Translation_(ctx)
     {
-        KeywordNames = NSQLReflect::LoadLexerGrammar().KeywordNames;
+        KeywordNames_ = NSQLReflect::LoadLexerGrammar().KeywordNames;
     }
 
     void Visit(const NProtoBuf::Message& msg) {
@@ -40,8 +40,8 @@ public:
         if (descr == TToken::GetDescriptor()) {
             const auto& token = dynamic_cast<const TToken&>(msg);
             auto upper = to_upper(token.GetValue());
-            if (KeywordNames.contains(upper)) {
-                Freqs[std::make_pair("KEYWORD", upper)] += 1;
+            if (KeywordNames_.contains(upper)) {
+                Freqs_[std::make_pair("KEYWORD", upper)] += 1;
             }
             return;
         } else if (descr == TRule_use_stmt::GetDescriptor()) {
@@ -75,15 +75,14 @@ public:
                 continue;
             }
 
-
-            Freqs[std::make_pair(fullName, fieldFullName)] += 1;
+            Freqs_[std::make_pair(fullName, fieldFullName)] += 1;
         }
 
         VisitAllFields(msg, descr);
     }
 
     const THashMap<std::pair<TString, TString>, ui64>& GetFreqs() const {
-        return Freqs;
+        return Freqs_;
     }
 
 private:
@@ -93,57 +92,62 @@ private:
             const auto& val = cluster.GetBlock2().GetAlt1().GetRule_pure_column_or_named1();
             if (val.Alt_case() == TRule_pure_column_or_named::kAltPureColumnOrNamed2) {
                 const auto& id = val.GetAlt_pure_column_or_named2().GetRule_an_id1();
-                Freqs[std::make_pair("USE", Id(id, Translation))] += 1;
+                Freqs_[std::make_pair("USE", Id(id, Translation_))] += 1;
             }
         }
     }
 
     void VisitPragmaStmt(const TRule_pragma_stmt& msg) {
-        const TString prefix = OptIdPrefixAsStr(msg.GetRule_opt_id_prefix_or_type2(), Translation);
-        const TString pragma(Id(msg.GetRule_an_id3(), Translation));
-        Freqs[std::make_pair("PRAGMA", prefix.empty() ? pragma : (prefix + "." + pragma))] += 1;
+        const TString prefix = OptIdPrefixAsStr(msg.GetRule_opt_id_prefix_or_type2(), Translation_);
+        const TString pragma(Id(msg.GetRule_an_id3(), Translation_));
+        Freqs_[std::make_pair("PRAGMA", prefix.empty() ? pragma : (prefix + "." + pragma))] += 1;
     }
 
     void VisitHint(const TRule_table_hint& msg, const TString& parent) {
         switch (msg.Alt_case()) {
-        case TRule_table_hint::kAltTableHint1: {
-            const auto& alt = msg.GetAlt_table_hint1();
-            const TString id = Id(alt.GetRule_an_id_hint1(), Translation);
-            Freqs[std::make_pair(parent, id)] += 1;
-            break;
-        }
-        case TRule_table_hint::kAltTableHint2: {
-            const auto& alt = msg.GetAlt_table_hint2();
-            Freqs[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-            break;
-        }
-        case TRule_table_hint::kAltTableHint3: {
-            const auto& alt = msg.GetAlt_table_hint3();
-            Freqs[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
-            break;
-        }
-        case TRule_table_hint::ALT_NOT_SET:
-            return;
+            case TRule_table_hint::kAltTableHint1: {
+                const auto& alt = msg.GetAlt_table_hint1();
+                const TString id = Id(alt.GetRule_an_id_hint1(), Translation_);
+                Freqs_[std::make_pair(parent, id)] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint2: {
+                const auto& alt = msg.GetAlt_table_hint2();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint3: {
+                const auto& alt = msg.GetAlt_table_hint3();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::kAltTableHint4: {
+                const auto& alt = msg.GetAlt_table_hint4();
+                Freqs_[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+                break;
+            }
+            case TRule_table_hint::ALT_NOT_SET:
+                return;
         }
     }
 
     void VisitHints(const TRule_table_hints& msg, const TString& parent) {
         auto& block = msg.GetBlock2();
         switch (block.Alt_case()) {
-        case TRule_table_hints::TBlock2::kAlt1: {
-            VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
-            break;
-        }
-        case TRule_table_hints::TBlock2::kAlt2: {
-            VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
-            for (const auto& x : block.GetAlt2().GetBlock3()) {
-                VisitHint(x.GetRule_table_hint2(), parent);
+            case TRule_table_hints::TBlock2::kAlt1: {
+                VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
+                break;
             }
+            case TRule_table_hints::TBlock2::kAlt2: {
+                VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
+                for (const auto& x : block.GetAlt2().GetBlock3()) {
+                    VisitHint(x.GetRule_table_hint2(), parent);
+                }
 
-            break;
-        }
-        case TRule_table_hints::TBlock2::ALT_NOT_SET:
-            return;
+                break;
+            }
+            case TRule_table_hints::TBlock2::ALT_NOT_SET:
+                return;
         }
     }
 
@@ -162,7 +166,7 @@ private:
         }
     }
 
-    template<typename TUnaryCasualExprRule>
+    template <typename TUnaryCasualExprRule>
     void VisitUnaryCasualSubexpr(const TUnaryCasualExprRule& msg) {
         const auto& block = msg.GetBlock1();
         TString func;
@@ -171,9 +175,9 @@ private:
             case TUnaryCasualExprRule::TBlock1::kAlt1: {
                 const auto& alt = block.GetAlt1();
                 if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
-                    func = Id(alt.GetRule_id_expr1(), Translation);
+                    func = Id(alt.GetRule_id_expr1(), Translation_);
                 } else {
-                    func = Id(alt.GetRule_id_expr_in1(), Translation);
+                    func = Id(alt.GetRule_id_expr_in1(), Translation_);
                 }
                 break;
             }
@@ -189,13 +193,13 @@ private:
                     }
                 }
 
-                Freqs[std::make_pair("MODULE", module)] += 1;
+                Freqs_[std::make_pair("MODULE", module)] += 1;
                 auto lowerModule = to_lower(module);
                 if (lowerModule.Contains("javascript") || lowerModule.Contains("python")) {
                     return;
                 }
 
-                Freqs[std::make_pair("MODULE_FUNC", module + "::" + func)] += 1;
+                Freqs_[std::make_pair("MODULE_FUNC", module + "::" + func)] += 1;
                 return;
             }
             case TUnaryCasualExprRule::TBlock1::ALT_NOT_SET:
@@ -206,7 +210,7 @@ private:
         const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
         if (suffixIsEmpty) {
             if (auto simpleType = LookupSimpleType(func, true, false); simpleType) {
-                Freqs[std::make_pair("TYPE", func)] += 1;
+                Freqs_[std::make_pair("TYPE", func)] += 1;
             }
         }
 
@@ -219,7 +223,7 @@ private:
                 }
                 case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
                     // invoke_expr
-                    Freqs[std::make_pair("FUNC", func)] += 1;
+                    Freqs_[std::make_pair("FUNC", func)] += 1;
                     return;
                 }
                 case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt3: {
@@ -233,7 +237,7 @@ private:
     }
 
     void VisitSimpleType(const TRule_type_name_simple& msg) {
-        Freqs[std::make_pair("TYPE", Id(msg.GetRule_an_id_pure1(), Translation))] += 1;
+        Freqs_[std::make_pair("TYPE", Id(msg.GetRule_an_id_pure1(), Translation_))] += 1;
     }
 
     bool ParseUdf(const TRule_atom_expr& msg, TString& module, TString& func) {
@@ -242,16 +246,16 @@ private:
         }
 
         const auto& alt = msg.GetAlt_atom_expr7();
-        module = Id(alt.GetRule_an_id_or_type1(), Translation);
+        module = Id(alt.GetRule_an_id_or_type1(), Translation_);
         switch (alt.GetBlock3().Alt_case()) {
-        case TRule_atom_expr::TAlt7::TBlock3::kAlt1:
-            func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation);
-            break;
-        case TRule_atom_expr::TAlt7::TBlock3::kAlt2: {
-            return false;
-        }
-        case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
-            Y_ABORT("Unsigned number: you should change implementation according to grammar changes");
+            case TRule_atom_expr::TAlt7::TBlock3::kAlt1:
+                func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
+                break;
+            case TRule_atom_expr::TAlt7::TBlock3::kAlt2: {
+                return false;
+            }
+            case TRule_atom_expr::TAlt7::TBlock3::ALT_NOT_SET:
+                Y_ABORT("Unsigned number: you should change implementation according to grammar changes");
         }
 
         return true;
@@ -263,16 +267,16 @@ private:
         }
 
         const auto& alt = msg.GetAlt_in_atom_expr6();
-        module = Id(alt.GetRule_an_id_or_type1(), Translation);
+        module = Id(alt.GetRule_an_id_or_type1(), Translation_);
         switch (alt.GetBlock3().Alt_case()) {
-        case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
-            func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation);
-            break;
-        case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
-            return false;
-        }
-        case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt1:
+                func = Id(alt.GetBlock3().GetAlt1().GetRule_id_or_type1(), Translation_);
+                break;
+            case TRule_in_atom_expr::TAlt6::TBlock3::kAlt2: {
+                return false;
+            }
+            case TRule_in_atom_expr::TAlt6::TBlock3::ALT_NOT_SET:
+                Y_ABORT("You should change implementation according to grammar changes");
         }
 
         return true;
@@ -290,10 +294,49 @@ private:
         }
     }
 
-    THashMap<std::pair<TString, TString>, ui64> Freqs;
-    TRuleFreqTranslation Translation;
-    THashSet<TString> KeywordNames;
+    THashMap<std::pair<TString, TString>, ui64> Freqs_;
+    TRuleFreqTranslation Translation_;
+    THashSet<TString> KeywordNames_;
 };
+
+bool GetParseTree(
+    const TString& query,
+    NSQLTranslation::TTranslationSettings& settings,
+    NYql::TIssues& issues,
+    NSQLTranslationV1::TLexers& lexers,
+    NSQLTranslationV1::TParsers& parsers,
+    google::protobuf::Message*& message,
+    bool isAmbiguityError = false)
+{
+    if (!ParseTranslationSettings(query, settings, issues)) {
+        return false;
+    }
+
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
+    auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
+        Y_UNUSED(token);
+    };
+
+    if (!lexer->Tokenize(query, "", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        return false;
+    }
+
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(isAmbiguityError);
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(isAmbiguityError);
+    message = NSQLTranslationV1::SqlAST(
+        parsers,
+        query,
+        /* queryName = */ "",
+        issues,
+        NSQLTranslation::SQL_MAX_PARSER_ERRORS,
+        settings.AnsiLexer,
+        /* antlr4Parser = */ true,
+        settings.Arena);
+
+    return static_cast<bool>(message);
+}
 
 SIMPLE_UDF(TObfuscate, TOptional<char*>(TAutoMap<char*>)) {
     using namespace NSQLFormat;
@@ -325,38 +368,23 @@ using TRuleFreqResult = TListType<TTuple<char*, char*, ui64>>;
 SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
     try {
         const TString query(args[0].AsStringRef());
-        NYql::TIssues issues;
+
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
-        if (!ParseTranslationSettings(query, settings, issues)) {
-            return {};
-        }
 
+        NYql::TIssues issues;
         NSQLTranslationV1::TLexers lexers;
-        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-        auto lexer = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true);
-        auto onNextToken = [&](NSQLTranslation::TParsedToken&& token) {
-            Y_UNUSED(token);
-        };
-
-        if (!lexer->Tokenize(query, "", onNextToken, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
-            return {};
-        }
-
         NSQLTranslationV1::TParsers parsers;
-        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-        auto msg = NSQLTranslationV1::SqlAST(parsers, query, "", issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-            settings.AnsiLexer, true, &arena);
-        if (!msg) {
+
+        google::protobuf::Message* tree;
+        if (!GetParseTree(query, settings, issues, lexers, parsers, tree)) {
             return {};
         }
 
         TContext ctx(lexers, parsers, settings, {}, issues, query);
         TRuleFreqVisitor visitor(ctx);
-        visitor.Visit(*msg);
+        visitor.Visit(*tree);
 
         auto listBuilder = valueBuilder->NewListBuilder();
         for (const auto& [key, f] : visitor.GetFreqs()) {
@@ -374,10 +402,31 @@ SIMPLE_UDF(TRuleFreq, TOptional<TRuleFreqResult>(TAutoMap<char*>)) {
     }
 }
 
+SIMPLE_UDF(TTestSyntax, TOptional<char*>(TAutoMap<char*>))
+try {
+    const TString query(args[0].AsStringRef());
+
+    google::protobuf::Arena arena;
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &arena;
+
+    NYql::TIssues issues;
+    NSQLTranslationV1::TLexers lexers;
+    NSQLTranslationV1::TParsers parsers;
+
+    google::protobuf::Message* tree;
+    if (!GetParseTree(query, settings, issues, lexers, parsers, tree, /*isAmbiguityError=*/true)) {
+        return valueBuilder->NewString(issues.ToString());
+    }
+
+    return {};
+} catch (const yexception& e) {
+    return valueBuilder->NewString(TString(e.what()));
+}
+
 SIMPLE_MODULE(TYqlLangModule,
-    TObfuscate,
-    TRuleFreq
-);
+              TObfuscate,
+              TRuleFreq,
+              TTestSyntax);
 
 REGISTER_MODULES(TYqlLangModule);
-

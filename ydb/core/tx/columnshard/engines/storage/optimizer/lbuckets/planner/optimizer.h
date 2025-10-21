@@ -595,10 +595,10 @@ public:
             sb << "{"
                << "oldest="
                << "(" << oldestPortion->IndexKeyStart().DebugString() << ":" << oldestPortion->IndexKeyEnd().DebugString() << ":"
-               << oldestPortion->RecordSnapshotMax().GetPlanStep() << ":" << oldestPortion->GetMeta().GetProduced() << ");"
+               << oldestPortion->RecordSnapshotMax().GetPlanStep() << ":" << oldestPortion->GetProduced() << ");"
                << "youngest="
                << "(" << youngestPortion->IndexKeyStart().DebugString() << ":" << youngestPortion->IndexKeyEnd().DebugString() << ":"
-               << youngestPortion->RecordSnapshotMax().GetPlanStep() << ":" << youngestPortion->GetMeta().GetProduced() << ");"
+               << youngestPortion->RecordSnapshotMax().GetPlanStep() << ":" << youngestPortion->GetProduced() << ");"
                << "}";
             return sb;
         } else {
@@ -1187,7 +1187,7 @@ public:
             if (itFrom == Buckets.end()) {
                 const TDuration freshness = now - TInstant::MilliSeconds(portion->RecordSnapshotMax().GetPlanStep());
                 if (Y_LIKELY(!NYDBTest::TControllers::GetColumnShardController()->NeedForceCompactionBacketsConstruction())) {
-                    if (freshness < GetCommonFreshnessCheckDuration() || portion->GetMeta().GetProduced() == NPortion::EProduced::INSERTED) {
+                    if (freshness < GetCommonFreshnessCheckDuration() || portion->GetProduced() == NPortion::EProduced::INSERTED) {
                         AddOther(portion, now);
                         return;
                     }
@@ -1280,8 +1280,8 @@ public:
     }
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
-        : TBase(pathId)
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::optional<ui64>& nodePortionsCountLimit)
+        : TBase(pathId, nodePortionsCountLimit)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)
         , StoragesManager(storagesManager) {

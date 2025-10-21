@@ -26,6 +26,8 @@ struct TTestEnvSettings {
     bool AlterObjectEnabled = false;
     bool EnableSparsedColumns = false;
     bool EnableOlapCompression = false;
+    bool EnableTableCacheModes = false;
+    TMaybe<bool> EnableRealSystemViewPaths;
     NKikimrProto::TAuthConfig AuthConfig = {};
 };
 
@@ -36,6 +38,10 @@ public:
 
 public:
     TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 4, const TTestEnvSettings& settings = {});
+
+    TTestEnv(const TTestEnvSettings& settings) : TTestEnv(1, 4, settings)
+    {
+    }
 
     ~TTestEnv();
 

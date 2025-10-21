@@ -141,7 +141,7 @@ public:
     bool AssignPlanInterval(TOperation::TPtr op);
     ui64 OutdatedReadSetStep() const;
     ui64 OutdatedCleanupStep() const;
-    ui64 AllowedDataStep() const { return Max(LastPlannedTx.Step + 1, TAppData::TimeProvider->Now().MilliSeconds()); }
+    ui64 AllowedDataStep() const;
     ui64 AllowedSchemaStep() const { return LastPlannedTx.Step + 1; }
     ui64 VacantSchemaStep() const { return KeepSchemaStep + 1; }
 
@@ -172,6 +172,7 @@ public:
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }
+    bool HasRotateCdcStream() const { return SchemaTx && SchemaTx->IsRotateCdcStream(); }
     bool HasCreateIncrementalRestoreSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalRestoreSrc(); }
     bool HasCreateIncrementalBackupSrc() const { return SchemaTx && SchemaTx->IsCreateIncrementalBackupSrc(); }
 

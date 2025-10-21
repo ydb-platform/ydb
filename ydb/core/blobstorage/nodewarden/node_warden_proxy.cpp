@@ -1,9 +1,10 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
-#include <ydb/core/blobstorage/dsproxy/bridge/bridge.h>
+#include <ydb/core/blobstorage/bridge/proxy/bridge_proxy.h>
 #include <ydb/core/blob_depot/agent/agent.h>
 
 using namespace NKikimr;
@@ -20,8 +21,6 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
-
     std::unique_ptr<IActor> proxy;
     TActorSystem *as = TActivationContext::ActorSystem();
 
@@ -30,6 +29,11 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     auto getCounters = [&](const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
+
+    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy",
+        (GroupId, groupId),
+        (HasGroupInfo, static_cast<bool>(group.Info)),
+        (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt));
 
     if (EnableProxyMock) {
         // create mock proxy
@@ -97,7 +101,12 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
             }
         }));
+
+        Y_DEBUG_ABORT_UNLESS(!EjectedGroups.contains(groupId));
     }
+
+    // subscribe for group information changes through distconf cache
+    Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
 
     group.ProxyId = as->Register(proxy.release(), TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
@@ -197,6 +206,23 @@ void TNodeWarden::Handle(NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate::
     const ui32 groupId = record.GetGroupID();
     if (const auto it = Groups.find(groupId); it != Groups.end() && it->second.ProxyId) {
         TActivationContext::Send(ev->Forward(WhiteboardId));
+    }
+}
+
+void TNodeWarden::Handle(TEvNodeWardenQueryCacheResult::TPtr ev) {
+    auto& msg = *ev->Get();
+    ui32 groupId;
+    if (msg.Key.StartsWith("G") && TryIntFromString<16>(msg.Key.substr(1), groupId) && msg.GenerationValue) {
+        auto& [generation, value] = *msg.GenerationValue;
+        NKikimrBlobStorage::TGroupInfo groupInfo;
+        const bool success = groupInfo.ParseFromString(value);
+        Y_DEBUG_ABORT_UNLESS(success);
+        if (success) {
+            Y_DEBUG_ABORT_UNLESS(groupInfo.GetGroupGeneration() == generation);
+            ApplyGroupInfo(groupId, generation, &groupInfo, false, false);
+        } else {
+            Y_DEBUG_ABORT("failed to parse group configuration");
+        }
     }
 }
 

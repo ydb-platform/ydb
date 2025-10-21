@@ -161,7 +161,7 @@ struct TTMStorage {
 
 static_assert(sizeof(TTMStorage) == 16, "TTMStorage size must be equal to TUnboxedValuePod size");
 
-template<typename TStorage>
+template <typename TStorage>
 bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builder) {
     i64 newMonth = months + storage.Month;
     storage.Year += (newMonth - 1) / 12;
@@ -170,8 +170,12 @@ bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builde
         storage.Year--;
         newMonth += 12;
     }
-    if (storage.Year == 0) {
-        storage.Year += months > 0 ? 1 : -1;
+    // The minimal year value for TTMStorage is 1970, but the
+    // check below makes coverity happy.
+    if constexpr (!std::is_same_v<TStorage, TTMStorage>) {
+        if (storage.Year == 0) {
+            storage.Year += months > 0 ? 1 : -1;
+        }
     }
     storage.Month = newMonth;
     bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
@@ -180,11 +184,15 @@ bool DoAddMonths(TStorage& storage, i64 months, const NUdf::IDateBuilder& builde
     return storage.Validate(builder);
 }
 
-template<typename TStorage>
+template <typename TStorage>
 bool DoAddYears(TStorage& storage, i64 years, const NUdf::IDateBuilder& builder) {
     storage.Year += years;
-    if (storage.Year == 0) {
-        storage.Year += years > 0 ? 1 : -1;
+    // The minimal year value for TTMStorage is 1970, but the
+    // check below makes coverity happy.
+    if constexpr (!std::is_same_v<TStorage, TTMStorage>) {
+        if (storage.Year == 0) {
+            storage.Year += years > 0 ? 1 : -1;
+        }
     }
     if (storage.Month == 2 && storage.Day == 29) {
         bool isLeap = NKikimr::NMiniKQL::IsLeapYear(storage.Year);
@@ -199,4 +207,4 @@ TInstant DoAddMonths(TInstant current, i64 months, const NUdf::IDateBuilder& bui
 
 TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& builder);
 
-}
+} // namespace NYql::DateTime

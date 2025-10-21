@@ -172,8 +172,8 @@ public:
 
     i64 UseAndFill(ui64 tokens) {
         TGuard<Lock> g(BucketMutex);
-        UseNoLock(tokens);
         FillBucket();
+        UseNoLock(tokens);
         return Bucket;
     }
 
@@ -198,7 +198,7 @@ public:
             return 0;
         }
 
-        ui32 usec = (-Bucket * 1000000) / (*InflowTokensPerSecond);
+        ui32 usec = (-Bucket * 1000000) / AtomicGet(*InflowTokensPerSecond);
         return usec;
     }
 
@@ -211,7 +211,7 @@ public:
         if (Bucket >= 0) {
             return 0;
         }
-        ui32 usec = (-Bucket * 1000000) / (*InflowTokensPerSecond);
+        ui32 usec = (-Bucket * 1000000) / AtomicGet(*InflowTokensPerSecond);
         return usec;
     }
 
@@ -232,14 +232,16 @@ private:
         TTime now = Timer::Now();
 
         ui64 elapsed = Timer::Duration(LastAdd, now);
-        if (*InflowTokensPerSecond * elapsed >= Timer::Resolution) {
-            ui64 inflow = *InflowTokensPerSecond * elapsed / Timer::Resolution;
+        ui64 delta = AtomicGet(*InflowTokensPerSecond) * elapsed;
+        if (delta >= Timer::Resolution) {
+            ui64 inflow = delta / Timer::Resolution;
             if (AggregateInflow) {
                 *AggregateInflow += inflow;
             }
             Bucket += inflow;
-            if (Bucket > *BucketTokensCapacity) {
-                Bucket = *BucketTokensCapacity;
+            i64 capacity = AtomicGet(*BucketTokensCapacity);
+            if (Bucket > capacity) {
+                Bucket = capacity;
             }
 
             LastAdd = now;
@@ -260,8 +262,9 @@ private:
 
     void AddNoLock(ui64 tokens) {
         Bucket += tokens;
-        if (Bucket > *BucketTokensCapacity) {
-            Bucket = *BucketTokensCapacity;
+        i64 capacity = AtomicGet(*BucketTokensCapacity);
+        if (Bucket > capacity) {
+            Bucket = capacity;
         }
     }
 

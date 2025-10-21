@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
+#include <ydb/library/testlib/helpers.h>
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/testing/unittest/tests_data.h>
@@ -18,40 +19,6 @@
 #include <library/cpp/yson/writer.h>
 #include <library/cpp/threading/future/async.h>
 
-
-#define Y_UNIT_TEST_TWIN(N, OPT)                                                                                   \
-    template <bool OPT>                                                                                            \
-    struct TTestCase##N : public TCurrentTestCase {                                                                \
-        TTestCase##N() : TCurrentTestCase() {                                                                      \
-            if constexpr (OPT) { Name_ = #N "+" #OPT; } else { Name_ = #N "-" #OPT; }                              \
-        }                                                                                                          \
-        static THolder<NUnitTest::TBaseTestCase> CreateOn()  { return ::MakeHolder<TTestCase##N<true>>();  }       \
-        static THolder<NUnitTest::TBaseTestCase> CreateOff() { return ::MakeHolder<TTestCase##N<false>>(); }       \
-        void Execute_(NUnitTest::TTestContext&) override;                                                          \
-    };                                                                                                             \
-    struct TTestRegistration##N {                                                                                  \
-        TTestRegistration##N() {                                                                                   \
-            TCurrentTest::AddTest(TTestCase##N<true>::CreateOn);                                                   \
-            TCurrentTest::AddTest(TTestCase##N<false>::CreateOff);                                                 \
-        }                                                                                                          \
-    };                                                                                                             \
-    static TTestRegistration##N testRegistration##N;                                                               \
-    template <bool OPT>                                                                                            \
-    void TTestCase##N<OPT>::Execute_(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED)
-
-#define Y_UNIT_TEST_QUAD(N, OPT1, OPT2)                                                                                              \
-    template<bool OPT1, bool OPT2> void N(NUnitTest::TTestContext&);                                                                 \
-    struct TTestRegistration##N {                                                                                                    \
-        TTestRegistration##N() {                                                                                                     \
-            TCurrentTest::AddTest(#N "-" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, false>), false); \
-            TCurrentTest::AddTest(#N "+" #OPT1 "-" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, false>), false);  \
-            TCurrentTest::AddTest(#N "-" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<false, true>), false);  \
-            TCurrentTest::AddTest(#N "+" #OPT1 "+" #OPT2, static_cast<void (*)(NUnitTest::TTestContext&)>(&N<true, true>), false);   \
-        }                                                                                                                            \
-    };                                                                                                                               \
-    static TTestRegistration##N testRegistration##N;                                                                                 \
-    template<bool OPT1, bool OPT2>                                                                                                   \
-    void N(NUnitTest::TTestContext&)
 
 template <bool ForceVersionV1>
 TString MakeQuery(const TString& tmpl) {
@@ -73,7 +40,39 @@ extern const TString EXPECTED_EIGHTSHARD_VALUE1;
 
 TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 
+struct TTestLogSettings {
+    NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
+    std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
+
+    TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
+};
+
 struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
+private:
+    void InitDefaultConfig() {
+        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
+        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
+        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
+        exchangerSettings->SetStartDelayMs(10);
+        exchangerSettings->SetMaxDelayMs(10);
+        FeatureFlags.SetEnableSparsedColumns(true);
+        FeatureFlags.SetEnableWritePortionsOnInsert(true);
+        FeatureFlags.SetEnableParameterizedDecimal(true);
+        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
+        FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
+
+        if (!AppConfig.MutableColumnShardConfig()->HasReaderClassName()) {
+            SetColumnShardReaderClassName("SIMPLE");
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasDisabledOnSchemeShard()) {
+            AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        }
+        if (!AppConfig.MutableColumnShardConfig()->HasMaxInFlightIntervalsOnRequest()) {
+            AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
+        }
+    }
+public:
     NKikimrConfig::TAppConfig AppConfig;
     NKikimrPQ::TPQConfig PQConfig;
     TVector<NKikimrKqp::TKqpSetting> KqpSettings;
@@ -83,32 +82,31 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     bool WithSampleTables = true;
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
+    bool EnableScriptExecutionBackgroundChecks = true;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TMaybe<NFake::TStorage> Storage = Nothing();
+    bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
+    NKqp::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NKqp::TDescribeSchemaSecretsServiceFactory>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
     NKikimrConfig::TImmediateControlsConfig Controls;
+    TMaybe<NYdbGrpc::TServerOptions> GrpcServerOptions;
+    bool EnableStorageProxy = false;
+    TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+    std::optional<TTestLogSettings> LogSettings;
 
-    TKikimrSettings()
-    {
-        auto* tableServiceConfig = AppConfig.MutableTableServiceConfig();
-        auto* infoExchangerRetrySettings = tableServiceConfig->MutableResourceManager()->MutableInfoExchangerSettings();
-        auto* exchangerSettings = infoExchangerRetrySettings->MutableExchangerSettings();
-        exchangerSettings->SetStartDelayMs(10);
-        exchangerSettings->SetMaxDelayMs(10);
-        AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
-        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
-        FeatureFlags.SetEnableSparsedColumns(true);
-        FeatureFlags.SetEnableWritePortionsOnInsert(true);
-        FeatureFlags.SetEnableParameterizedDecimal(true);
-        FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
-        FeatureFlags.SetEnableFollowerStats(true);
-        FeatureFlags.SetEnableColumnStore(true);
+    TKikimrSettings() {
+        InitDefaultConfig();
     }
 
-    TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
+    explicit TKikimrSettings(const NKikimrConfig::TAppConfig& value)
+        : AppConfig(value)
+    {
+        InitDefaultConfig();
+    }
+
     TKikimrSettings& SetFeatureFlags(const NKikimrConfig::TFeatureFlags& value) { FeatureFlags = value; return *this; }
     TKikimrSettings& SetPQConfig(const NKikimrPQ::TPQConfig& value) { PQConfig = value; return *this; };
     TKikimrSettings& SetKqpSettings(const TVector<NKikimrKqp::TKqpSetting>& value) { KqpSettings = value; return *this; }
@@ -119,7 +117,9 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetKeepSnapshotTimeout(TDuration value) { KeepSnapshotTimeout = value; return *this; }
     TKikimrSettings& SetLogStream(IOutputStream* follower) { LogStream = follower; return *this; };
     TKikimrSettings& SetStorage(const NFake::TStorage& storage) { Storage = storage; return *this; };
+    TKikimrSettings& SetInitFederatedQuerySetupFactory(bool value) { InitFederatedQuerySetupFactory = value; return *this; };
     TKikimrSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; };
+    TKikimrSettings& SetDescribeSchemaSecretsServiceFactory(NKqp::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
@@ -133,6 +133,10 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
         return *this;
     }
+    TKikimrSettings& SetGrpcServerOptions(const NYdbGrpc::TServerOptions& grpcServerOptions) { GrpcServerOptions = grpcServerOptions; return *this; };
+    TKikimrSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; };
+    TKikimrSettings& SetCheckpointPeriod(TDuration value) { CheckpointPeriod = value; return *this; };
+    TKikimrSettings& SetLogSettings(TTestLogSettings value) { LogSettings = value; return *this; };
 };
 
 class TKikimrRunner {
@@ -164,7 +168,9 @@ public:
             ThreadPool.Stop();
         }
 
-        UNIT_ASSERT_C(WaitHttpGatewayFinalization(CountersRoot), "Failed to finalize http gateway before destruction");
+        if (!WaitHttpGatewayFinalization(CountersRoot)) {
+            Cerr << "Failed to finalize http gateway before destruction" << Endl;
+        }
 
         Server.Reset();
         Client.Reset();
@@ -210,7 +216,7 @@ private:
     void Initialize(const TKikimrSettings& settings);
     void WaitForKqpProxyInit();
     void CreateSampleTables();
-    void SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
+    bool SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service);
 
 private:
     THolder<Tests::TServerSettings> ServerSettings;
@@ -228,8 +234,7 @@ private:
 inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings = {},
     const NKikimrConfig::TAppConfig& appConfig = {})
 {
-    auto settings = TKikimrSettings()
-        .SetAppConfig(appConfig)
+    auto settings = TKikimrSettings(appConfig)
         .SetKqpSettings(kqpSettings)
         .SetEnableScriptExecutionOperations(true);
 
@@ -253,6 +258,7 @@ enum class EIndexTypeSql {
     GlobalSync,
     GlobalAsync,
     GlobalVectorKMeansTree,
+    GlobalFulltext
 };
 
 inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
@@ -264,6 +270,7 @@ inline constexpr TStringBuf IndexTypeSqlString(EIndexTypeSql type) {
     case EIndexTypeSql::GlobalAsync:
         return "GLOBAL ASYNC";
     case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
+    case NKqp::EIndexTypeSql::GlobalFulltext:
         return "GLOBAL";
     }
 }
@@ -277,28 +284,8 @@ inline NYdb::NTable::EIndexType IndexTypeSqlToIndexType(EIndexTypeSql type) {
         return NYdb::NTable::EIndexType::GlobalAsync;
     case EIndexTypeSql::GlobalVectorKMeansTree:
         return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
-    }
-}
-
-inline constexpr TStringBuf IndexSubtypeSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "USING vector_kmeans_tree";
-    }
-}
-
-inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
-    switch (type) {
-    case EIndexTypeSql::Global:
-    case EIndexTypeSql::GlobalSync:
-    case EIndexTypeSql::GlobalAsync:
-        return "";
-    case NKqp::EIndexTypeSql::GlobalVectorKMeansTree:
-        return "WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)";
+    case EIndexTypeSql::GlobalFulltext:
+        Y_ABORT("Fulltext index isn't supported by sdk");
     }
 }
 
@@ -434,6 +421,8 @@ public:
     }
 
     void CreateDatabase(const TString& databaseName);
+    Tests::TServer& GetServer() const;
+    Tests::TClient& GetClient() const;
 
 private:
     TPortManager PortManager;
@@ -449,6 +438,8 @@ private:
 
     TEnvSettings EnvSettings;
 };
+
+void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TString& name);
 
 } // namespace NKqp
 } // namespace NKikimr

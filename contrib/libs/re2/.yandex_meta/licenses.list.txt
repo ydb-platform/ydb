@@ -30,10 +30,6 @@
 // license that can be found in the LICENSE file.
 
 
-====================BSD-3-Clause====================
-under the BSD-style license found in the LICENSE file.
-
-
 ====================COPYRIGHT====================
  * The authors of this software are Rob Pike and Ken Thompson.
  *              Copyright (c) 2002 by Lucent Technologies.

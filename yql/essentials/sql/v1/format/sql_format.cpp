@@ -1,5 +1,7 @@
 #include "sql_format.h"
 
+#include <yql/essentials/sql/v1/proto_parser/parse_tree.h>
+
 #include <yql/essentials/parser/lexer_common/lexer.h>
 #include <yql/essentials/core/sql_types/simple_types.h>
 
@@ -14,16 +16,15 @@
 #include <util/string/subst.h>
 #include <util/generic/hash_set.h>
 
-
 namespace NSQLFormat {
 
 namespace {
 
 using namespace NSQLv1Generated;
+using namespace NSQLTranslationV1;
 
 using NSQLTranslation::TParsedToken;
 using NSQLTranslation::TParsedTokenList;
-using NSQLTranslationV1::IsProbablyKeyword;
 using TTokenIterator = TParsedTokenList::const_iterator;
 
 TTokenIterator SkipWS(TTokenIterator curr, TTokenIterator end) {
@@ -52,8 +53,7 @@ void SkipForValidate(
     TTokenIterator& out,
     const TParsedTokenList& query,
     const TParsedTokenList& formattedQuery,
-    i32& parenthesesBalance
-) {
+    i32& parenthesesBalance) {
     in = SkipWS(in, query.end());
     out = SkipWS(out, formattedQuery.end());
 
@@ -64,8 +64,7 @@ void SkipForValidate(
             out != formattedQuery.end() && out->Name == addedToken &&
             (in == query.end() || in->Name != addedToken) &&
             (beforeTokens.empty() || (inSkippedComments != query.end() && IsIn(beforeTokens, inSkippedComments->Name))) &&
-            (afterTokens.empty() || (in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)))
-        ) {
+            (afterTokens.empty() || (in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)))) {
             out = SkipWS(++out, formattedQuery.end());
             if (addedToken == "LPAREN") {
                 ++parenthesesBalance;
@@ -83,15 +82,15 @@ void SkipForValidate(
         if (
             in != query.end() && in->Name == deletedToken &&
             (out == formattedQuery.end() || out->Name != deletedToken) &&
-            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)
-        ) {
+            in != query.begin() && IsIn(afterTokens, SkipWSOrCommentBackward(in - 1, query.begin())->Name)) {
             in = SkipWS(++in, query.end());
             return true;
         }
         return false;
     };
 
-    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {}
+    while (skipDeletedToken("SEMICOLON", {"AS", "BEGIN", "LBRACE_CURLY", "SEMICOLON"})) {
+    }
 }
 
 TParsedToken TransformTokenForValidate(TParsedToken token) {
@@ -200,16 +199,18 @@ void VisitAllFieldsImpl(T* obj, const NProtoBuf::Descriptor* descr, const NProto
 }
 
 class TObfuscatingVisitor {
-friend struct TStaticData;
+    friend struct TStaticData;
+
 public:
     TObfuscatingVisitor()
-        : StaticData(TStaticData::GetInstance())
-    {}
+        : StaticData_(TStaticData::GetInstance())
+    {
+    }
 
     TString Process(const NProtoBuf::Message& msg) {
-        Scopes.push_back(EScope::Default);
+        Scopes_.push_back(EScope::Default);
         Visit(msg);
-        return SB;
+        return Sb_;
     }
 
 private:
@@ -219,68 +220,68 @@ private:
             return;
         }
 
-        if (!First) {
-            SB << ' ';
+        if (!First_) {
+            Sb_ << ' ';
         } else {
-            First = false;
+            First_ = false;
         }
 
-        if (str == "$" && FuncCall) {
-            FuncCall = false;
+        if (str == "$" && FuncCall_) {
+            FuncCall_ = false;
         }
 
-        if (Scopes.back() == EScope::Identifier && !FuncCall) {
+        if (Scopes_.back() == EScope::Identifier && !FuncCall_) {
             if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
-                SB << "id";
+                Sb_ << "id";
             } else {
-                SB << str;
+                Sb_ << str;
             }
-        } else if (NextToken) {
-            SB << *NextToken;
-            NextToken = Nothing();
+        } else if (NextToken_) {
+            Sb_ << *NextToken_;
+            NextToken_ = Nothing();
         } else {
-            SB << str;
+            Sb_ << str;
         }
     }
 
     void VisitPragmaValue(const TRule_pragma_value& msg) {
         switch (msg.Alt_case()) {
-        case TRule_pragma_value::kAltPragmaValue1: {
-            NextToken = "0";
-            break;
-        }
-        case TRule_pragma_value::kAltPragmaValue3: {
-            NextToken = "'str'";
-            break;
-        }
-        case TRule_pragma_value::kAltPragmaValue4: {
-            NextToken = "false";
-            break;
-        }
-        default:;
+            case TRule_pragma_value::kAltPragmaValue1: {
+                NextToken_ = "0";
+                break;
+            }
+            case TRule_pragma_value::kAltPragmaValue3: {
+                NextToken_ = "'str'";
+                break;
+            }
+            case TRule_pragma_value::kAltPragmaValue4: {
+                NextToken_ = "false";
+                break;
+            }
+            default:;
         }
         VisitAllFields(TRule_pragma_value::GetDescriptor(), msg);
     }
 
     void VisitLiteralValue(const TRule_literal_value& msg) {
         switch (msg.Alt_case()) {
-        case TRule_literal_value::kAltLiteralValue1: {
-            NextToken = "0";
-            break;
-        }
-        case TRule_literal_value::kAltLiteralValue2: {
-            NextToken = "0.0";
-            break;
-        }
-        case TRule_literal_value::kAltLiteralValue3: {
-            NextToken = "'str'";
-            break;
-        }
-        case TRule_literal_value::kAltLiteralValue9: {
-            NextToken = "false";
-            break;
-        }
-        default:;
+            case TRule_literal_value::kAltLiteralValue1: {
+                NextToken_ = "0";
+                break;
+            }
+            case TRule_literal_value::kAltLiteralValue2: {
+                NextToken_ = "0.0";
+                break;
+            }
+            case TRule_literal_value::kAltLiteralValue3: {
+                NextToken_ = "'str'";
+                break;
+            }
+            case TRule_literal_value::kAltLiteralValue9: {
+                NextToken_ = "false";
+                break;
+            }
+            default:;
         }
 
         VisitAllFields(TRule_literal_value::GetDescriptor(), msg);
@@ -288,51 +289,51 @@ private:
 
     void VisitAtomExpr(const TRule_atom_expr& msg) {
         switch (msg.Alt_case()) {
-        case TRule_atom_expr::kAltAtomExpr7: {
-            FuncCall = true;
-            break;
-        }
-        default:;
+            case TRule_atom_expr::kAltAtomExpr7: {
+                FuncCall_ = true;
+                break;
+            }
+            default:;
         }
 
         VisitAllFields(TRule_atom_expr::GetDescriptor(), msg);
-        FuncCall = false;
+        FuncCall_ = false;
     }
 
     void VisitInAtomExpr(const TRule_in_atom_expr& msg) {
         switch (msg.Alt_case()) {
-        case TRule_in_atom_expr::kAltInAtomExpr6: {
-            FuncCall = true;
-            break;
-        }
-        default:;
+            case TRule_in_atom_expr::kAltInAtomExpr6: {
+                FuncCall_ = true;
+                break;
+            }
+            default:;
         }
 
         VisitAllFields(TRule_in_atom_expr::GetDescriptor(), msg);
-        FuncCall = false;
+        FuncCall_ = false;
     }
 
     void VisitUnaryCasualSubexpr(const TRule_unary_casual_subexpr& msg) {
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
             switch (b.GetBlock1().Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
-                invoke = true;
-                break;
-            }
-            default:;
+                case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
+                    invoke = true;
+                    break;
+                }
+                default:;
             }
 
             break;
         }
 
         if (invoke) {
-            FuncCall = true;
+            FuncCall_ = true;
         }
 
         Visit(msg.GetBlock1());
         if (invoke) {
-            FuncCall = false;
+            FuncCall_ = false;
         }
 
         Visit(msg.GetRule_unary_subexpr_suffix2());
@@ -342,23 +343,23 @@ private:
         bool invoke = false;
         for (auto& b : msg.GetRule_unary_subexpr_suffix2().GetBlock1()) {
             switch (b.GetBlock1().Alt_case()) {
-            case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
-                invoke = true;
-                break;
-            }
-            default:;
+                case TRule_unary_subexpr_suffix::TBlock1::TBlock1::kAlt2: {
+                    invoke = true;
+                    break;
+                }
+                default:;
             }
 
             break;
         }
 
         if (invoke) {
-            FuncCall = true;
+            FuncCall_ = true;
         }
 
         Visit(msg.GetBlock1());
         if (invoke) {
-            FuncCall = false;
+            FuncCall_ = false;
         }
 
         Visit(msg.GetRule_unary_subexpr_suffix2());
@@ -366,12 +367,12 @@ private:
 
     void Visit(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
-        auto scopePtr = StaticData.ScopeDispatch.FindPtr(descr);
+        auto scopePtr = StaticData_.ScopeDispatch.FindPtr(descr);
         if (scopePtr) {
-            Scopes.push_back(*scopePtr);
+            Scopes_.push_back(*scopePtr);
         }
 
-        auto funcPtr = StaticData.ObfuscatingVisitDispatch.FindPtr(descr);
+        auto funcPtr = StaticData_.ObfuscatingVisitDispatch.FindPtr(descr);
         if (funcPtr) {
             (*funcPtr)(*this, msg);
         } else {
@@ -379,7 +380,7 @@ private:
         }
 
         if (scopePtr) {
-            Scopes.pop_back();
+            Scopes_.pop_back();
         }
     }
 
@@ -387,48 +388,49 @@ private:
         VisitAllFieldsImpl<TObfuscatingVisitor, &TObfuscatingVisitor::Visit>(this, descr, msg);
     }
 
-    const TStaticData& StaticData;
-    TStringBuilder SB;
-    bool First = true;
-    TMaybe<TString> NextToken;
-    TVector<EScope> Scopes;
-    bool FuncCall = false;
+    const TStaticData& StaticData_;
+    TStringBuilder Sb_;
+    bool First_ = true;
+    TMaybe<TString> NextToken_;
+    TVector<EScope> Scopes_;
+    bool FuncCall_ = false;
 };
 
 class TPrettyVisitor {
-friend struct TStaticData;
+    friend struct TStaticData;
+
 public:
     TPrettyVisitor(const TParsedTokenList& parsedTokens, const TParsedTokenList& comments, bool ansiLexer)
-        : StaticData(TStaticData::GetInstance())
-        , ParsedTokens(parsedTokens)
-        , Comments(comments)
-        , AnsiLexer(ansiLexer)
+        : StaticData_(TStaticData::GetInstance())
+        , ParsedTokens_(parsedTokens)
+        , Comments_(comments)
+        , AnsiLexer_(ansiLexer)
     {
     }
 
     TString Process(const NProtoBuf::Message& msg, bool& addLineBefore, bool& addLineAfter, TMaybe<ui32>& stmtCoreAltCase) {
-        Scopes.push_back(EScope::Default);
-        MarkedTokens.reserve(ParsedTokens.size());
+        Scopes_.push_back(EScope::Default);
+        MarkedTokens_.reserve(ParsedTokens_.size());
         MarkTokens(msg);
-        Y_ENSURE(MarkTokenStack.empty());
-        Y_ENSURE(TokenIndex == ParsedTokens.size());
+        Y_ENSURE(MarkTokenStack_.empty());
+        Y_ENSURE(TokenIndex_ == ParsedTokens_.size());
 
-        TokenIndex = 0;
+        TokenIndex_ = 0;
         Visit(msg);
-        Y_ENSURE(TokenIndex == ParsedTokens.size());
-        Y_ENSURE(MarkTokenStack.empty());
+        Y_ENSURE(TokenIndex_ == ParsedTokens_.size());
+        Y_ENSURE(MarkTokenStack_.empty());
 
-        for (; LastComment < Comments.size(); ++LastComment) {
-            const auto text = Comments[LastComment].Content;
+        for (; LastComment_ < Comments_.size(); ++LastComment_) {
+            const auto text = Comments_[LastComment_].Content;
             AddComment(text);
         }
 
-        ui32 lines = OutLine - (OutColumn == 0 ? 1 : 0);
-        addLineBefore = AddLine.GetOrElse(true) || lines > 1;
-        addLineAfter = AddLine.GetOrElse(true) || lines - CommentLines > 1;
-        stmtCoreAltCase = StmtCoreAltCase;
+        ui32 lines = OutLine_ - (OutColumn_ == 0 ? 1 : 0);
+        addLineBefore = AddLine_.GetOrElse(true) || lines > 1;
+        addLineAfter = AddLine_.GetOrElse(true) || lines - CommentLines_ > 1;
+        stmtCoreAltCase = StmtCoreAltCase_;
 
-        return SB;
+        return Sb_;
     }
 
 private:
@@ -449,52 +451,52 @@ private:
 
     void Out(char c, bool useIndent = true) {
         if (c == '\n' || c == '\r') {
-            SB << c;
-            if (!(c == '\n' && !SB.empty() && SB.back() == '\r')) {
+            Sb_ << c;
+            if (!(c == '\n' && !Sb_.empty() && Sb_.back() == '\r')) {
                 // do not increase OutLine if \n is preceded by \r
                 // this way we handle \r, \n, or \r\n as single new line
-                ++OutLine;
+                ++OutLine_;
             }
-            OutColumn = 0;
+            OutColumn_ = 0;
         } else {
-            if (!OutColumn && useIndent) {
-                ui32 indent = (CurrentIndent >= 0) ? CurrentIndent : 0;
+            if (!OutColumn_ && useIndent) {
+                ui32 indent = (CurrentIndent_ >= 0) ? CurrentIndent_ : 0;
                 for (ui32 i = 0; i < indent; ++i) {
-                    SB << ' ';
+                    Sb_ << ' ';
                 }
             }
 
-            SB << c;
-            ++OutColumn;
+            Sb_ << c;
+            ++OutColumn_;
         }
     }
 
     void NewLine() {
-        if (TokenIndex >= ParsedTokens.size() || ParsedTokens[TokenIndex].Line > LastLine) {
+        if (TokenIndex_ >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_].Line > LastLine_) {
             WriteComments(true);
         }
 
-        if (OutColumn) {
+        if (OutColumn_) {
             Out('\n');
         }
     }
 
     void AddComment(TStringBuf text) {
-        if (!AfterComment && OutLine > BlockFirstLine && OutColumn == 0) {
+        if (!AfterComment_ && OutLine_ > BlockFirstLine_ && OutColumn_ == 0) {
             Out('\n');
         }
-        AfterComment = true;
+        AfterComment_ = true;
 
-        if (!SB.empty() && SB.back() != ' ' && SB.back() != '\n') {
+        if (!Sb_.empty() && Sb_.back() != ' ' && Sb_.back() != '\n') {
             Out(' ');
         }
 
-        if (OutColumn == 0) {
-            ++CommentLines;
+        if (OutColumn_ == 0) {
+            ++CommentLines_;
         }
 
         if (!text.StartsWith("--")) {
-            CommentLines += CountIf(text, [](auto c) { return c == '\n'; });
+            CommentLines_ += CountIf(text, [](auto c) { return c == '\n'; });
         }
 
         Out(text);
@@ -504,23 +506,22 @@ private:
         }
 
         if (!text.StartsWith("--") &&
-            TokenIndex < ParsedTokens.size() &&
-            Comments[LastComment].Line < ParsedTokens[TokenIndex].Line &&
-            (LastComment + 1 >= Comments.size() || Comments[LastComment].Line < Comments[LastComment + 1].Line)
-        ) {
+            TokenIndex_ < ParsedTokens_.size() &&
+            Comments_[LastComment_].Line < ParsedTokens_[TokenIndex_].Line &&
+            (LastComment_ + 1 >= Comments_.size() || Comments_[LastComment_].Line < Comments_[LastComment_ + 1].Line)) {
             Out('\n');
         }
     }
 
     void MarkTokens(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
-        auto scopePtr = StaticData.ScopeDispatch.FindPtr(descr);
+        auto scopePtr = StaticData_.ScopeDispatch.FindPtr(descr);
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
-                ++InsideType;
+                ++InsideType_;
             }
 
-            Scopes.push_back(*scopePtr);
+            Scopes_.push_back(*scopePtr);
         }
 
         bool suppressExpr = false;
@@ -528,19 +529,19 @@ private:
             const auto& token = dynamic_cast<const TToken&>(msg);
             MarkToken(token);
         } else if (descr == TRule_sql_stmt_core::GetDescriptor()) {
-            if (AddLine.Empty()) {
+            if (AddLine_.Empty()) {
                 const auto& rule = dynamic_cast<const TRule_sql_stmt_core&>(msg);
-                AddLine = !IsSimpleStatement(rule).GetOrElse(false);
-                StmtCoreAltCase = rule.Alt_case();
+                AddLine_ = !IsSimpleStatement(rule).GetOrElse(false);
+                StmtCoreAltCase_ = rule.Alt_case();
             }
         } else if (descr == TRule_lambda_body::GetDescriptor()) {
-            Y_ENSURE(TokenIndex >= 1);
-            auto prevIndex = TokenIndex - 1;
-            Y_ENSURE(prevIndex < ParsedTokens.size());
-            Y_ENSURE(ParsedTokens[prevIndex].Content == "{");
-            MarkedTokens[prevIndex].OpeningBracket = false;
-            ForceExpandedColumn = ParsedTokens[prevIndex].LinePos;
-            ForceExpandedLine = ParsedTokens[prevIndex].Line;
+            Y_ENSURE(TokenIndex_ >= 1);
+            auto prevIndex = TokenIndex_ - 1;
+            Y_ENSURE(prevIndex < ParsedTokens_.size());
+            Y_ENSURE(ParsedTokens_[prevIndex].Content == "{");
+            MarkedTokens_[prevIndex].OpeningBracket = false;
+            ForceExpandedColumn_ = ParsedTokens_[prevIndex].LinePos;
+            ForceExpandedLine_ = ParsedTokens_[prevIndex].Line;
         } else if (descr == TRule_in_atom_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_in_atom_expr&>(msg);
             if (value.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
@@ -558,48 +559,56 @@ private:
                                       details.HasBlock3() || details.HasBlock4();
             if (needsNewline) {
                 auto& paren = value.GetToken1();
-                ForceExpandedColumn = paren.GetColumn();
-                ForceExpandedLine = paren.GetLine();
+                ForceExpandedColumn_ = paren.GetColumn();
+                ForceExpandedLine_ = paren.GetLine();
             }
             suppressExpr = true;
         } else if (descr == TRule_exists_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_exists_expr&>(msg);
             auto& paren = value.GetToken2();
-            ForceExpandedColumn = paren.GetColumn();
-            ForceExpandedLine = paren.GetLine();
+            ForceExpandedColumn_ = paren.GetColumn();
+            ForceExpandedLine_ = paren.GetLine();
             suppressExpr = true;
+        } else if (descr == TRule_smart_parenthesis::GetDescriptor()) {
+            const auto& value = dynamic_cast<const TRule_smart_parenthesis&>(msg);
+            if (IsSelect(value)) {
+                auto& paren = value.GetToken1();
+                ForceExpandedColumn_ = paren.GetColumn();
+                ForceExpandedLine_ = paren.GetLine();
+                suppressExpr = true;
+            }
         } else if (descr == TRule_case_expr::GetDescriptor()) {
             const auto& value = dynamic_cast<const TRule_case_expr&>(msg);
             auto& token = value.GetToken1();
-            ForceExpandedColumn = token.GetColumn();
-            ForceExpandedLine = token.GetLine();
+            ForceExpandedColumn_ = token.GetColumn();
+            ForceExpandedLine_ = token.GetLine();
         }
 
         const bool expr = (descr == TRule_expr::GetDescriptor() || descr == TRule_in_expr::GetDescriptor() || descr == TRule_type_name_composite::GetDescriptor());
         if (expr) {
-            ++InsideExpr;
+            ++InsideExpr_;
         }
 
-        ui64 prevInsideExpr = InsideExpr;
+        ui64 prevInsideExpr = InsideExpr_;
         if (suppressExpr) {
-            InsideExpr = 0;
+            InsideExpr_ = 0;
         }
 
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::MarkTokens>(this, descr, msg);
         if (suppressExpr) {
-            InsideExpr = prevInsideExpr;
+            InsideExpr_ = prevInsideExpr;
         }
 
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
-                --InsideType;
+                --InsideType_;
             }
 
-            Scopes.pop_back();
+            Scopes_.pop_back();
         }
 
         if (expr) {
-            --InsideExpr;
+            --InsideExpr_;
         }
     }
 
@@ -609,11 +618,11 @@ private:
             return;
         }
 
-        MarkedTokens.emplace_back();
-        if (str == "(" || str == "[" || str == "{" || str == "<|" || (InsideType && str == "<")) {
-            MarkTokenStack.push_back(TokenIndex);
-            auto& info = MarkedTokens[TokenIndex];
-            info.OpeningBracket = (InsideExpr > 0);
+        MarkedTokens_.emplace_back();
+        if (str == "(" || str == "[" || str == "{" || str == "<|" || (InsideType_ && str == "<")) {
+            MarkTokenStack_.push_back(TokenIndex_);
+            auto& info = MarkedTokens_[TokenIndex_];
+            info.OpeningBracket = (InsideExpr_ > 0);
         } else if (str == ")") {
             PopBracket("(");
         } else if (str == "]") {
@@ -622,53 +631,53 @@ private:
             PopBracket("{");
         } else if (str == "|>") {
             PopBracket("<|");
-        } else if (InsideType && str == ">") {
+        } else if (InsideType_ && str == ">") {
             PopBracket("<");
         }
 
-        TokenIndex++;
+        TokenIndex_++;
     }
 
     void PopBracket(const TString& expected) {
-        Y_ENSURE(!MarkTokenStack.empty());
-        Y_ENSURE(MarkTokenStack.back() < ParsedTokens.size());
-        auto& openToken = ParsedTokens[MarkTokenStack.back()];
+        Y_ENSURE(!MarkTokenStack_.empty());
+        Y_ENSURE(MarkTokenStack_.back() < ParsedTokens_.size());
+        auto& openToken = ParsedTokens_[MarkTokenStack_.back()];
         Y_ENSURE(openToken.Content == expected);
-        auto& openInfo = MarkedTokens[MarkTokenStack.back()];
-        auto& closeInfo = MarkedTokens[TokenIndex];
-        const bool forcedExpansion = openToken.Line == ForceExpandedLine && openToken.LinePos <= ForceExpandedColumn;
+        auto& openInfo = MarkedTokens_[MarkTokenStack_.back()];
+        auto& closeInfo = MarkedTokens_[TokenIndex_];
+        const bool forcedExpansion = openToken.Line == ForceExpandedLine_ && openToken.LinePos <= ForceExpandedColumn_;
 
         if (openInfo.OpeningBracket) {
-            openInfo.ClosingBracketIndex = TokenIndex;
+            openInfo.ClosingBracketIndex = TokenIndex_;
             openInfo.BracketForcedExpansion = forcedExpansion;
             closeInfo.BracketForcedExpansion = forcedExpansion;
             closeInfo.ClosingBracket = true;
         }
 
-        MarkTokenStack.pop_back();
+        MarkTokenStack_.pop_back();
     }
 
     void Visit(const NProtoBuf::Message& msg) {
         const NProtoBuf::Descriptor* descr = msg.GetDescriptor();
-        //Cerr << descr->name() << "\n";
-        auto scopePtr = StaticData.ScopeDispatch.FindPtr(descr);
+        // Cerr << descr->name() << "\n";
+        auto scopePtr = StaticData_.ScopeDispatch.FindPtr(descr);
         if (descr == TRule_invoke_expr::GetDescriptor()) {
-            AfterInvokeExpr = true;
+            AfterInvokeExpr_ = true;
         }
 
         if (descr == TRule_unary_op::GetDescriptor()) {
-            AfterUnaryOp = true;
+            AfterUnaryOp_ = true;
         }
 
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
-                ++InsideType;
+                ++InsideType_;
             }
 
-            Scopes.push_back(*scopePtr);
+            Scopes_.push_back(*scopePtr);
         }
 
-        auto funcPtr = StaticData.PrettyVisitDispatch.FindPtr(descr);
+        auto funcPtr = StaticData_.PrettyVisitDispatch.FindPtr(descr);
         if (funcPtr) {
             (*funcPtr)(*this, msg);
         } else {
@@ -677,30 +686,38 @@ private:
 
         if (scopePtr) {
             if (*scopePtr == EScope::TypeName) {
-                --InsideType;
+                --InsideType_;
             }
 
-            Scopes.pop_back();
+            Scopes_.pop_back();
         }
     }
 
     TMaybe<bool> IsSimpleStatement(const TRule_sql_stmt_core& msg) {
         switch (msg.Alt_case()) {
-            case TRule_sql_stmt_core::kAltSqlStmtCore1: // pragma
-            case TRule_sql_stmt_core::kAltSqlStmtCore5: // drop table
-            case TRule_sql_stmt_core::kAltSqlStmtCore6: // use
-            case TRule_sql_stmt_core::kAltSqlStmtCore8: // commit
+            case TRule_sql_stmt_core::kAltSqlStmtCore1:  // pragma
+            case TRule_sql_stmt_core::kAltSqlStmtCore5:  // drop table
+            case TRule_sql_stmt_core::kAltSqlStmtCore6:  // use
+            case TRule_sql_stmt_core::kAltSqlStmtCore8:  // commit
             case TRule_sql_stmt_core::kAltSqlStmtCore11: // rollback
             case TRule_sql_stmt_core::kAltSqlStmtCore12: // declare
             case TRule_sql_stmt_core::kAltSqlStmtCore13: // import
             case TRule_sql_stmt_core::kAltSqlStmtCore14: // export
             case TRule_sql_stmt_core::kAltSqlStmtCore32: // drop external data source
             case TRule_sql_stmt_core::kAltSqlStmtCore34: // drop replication
+            case TRule_sql_stmt_core::kAltSqlStmtCore47: // drop resource pool
+            case TRule_sql_stmt_core::kAltSqlStmtCore54: // drop resource pool classifier
             case TRule_sql_stmt_core::kAltSqlStmtCore60: // drop transfer
+            case TRule_sql_stmt_core::kAltSqlStmtCore65: // drop streaming query
                 return true;
             case TRule_sql_stmt_core::kAltSqlStmtCore3: { // named nodes
                 const auto& stmt = msg.GetAlt_sql_stmt_core3().GetRule_named_nodes_stmt1();
-                if (stmt.GetBlock3().HasAlt1()) {
+
+                const bool isSelect = ((stmt.GetBlock3().HasAlt1() &&
+                                        IsSelect(stmt.GetBlock3().GetAlt1().GetRule_expr1())) ||
+                                       (stmt.GetBlock3().HasAlt2()));
+
+                if (!isSelect) {
                     return true;
                 }
                 break;
@@ -736,7 +753,7 @@ private:
                 Visit(m);
                 printOne = false;
             } else {
-                ++TokenIndex;
+                ++TokenIndex_;
             }
         }
         if (printOne) {
@@ -748,10 +765,10 @@ private:
         switch (msg.Alt_case()) {
             case TRule_value_constructor::kAltValueConstructor1: {
                 auto& ctor = msg.GetAlt_value_constructor1();
-                Scopes.push_back(EScope::TypeName);
+                Scopes_.push_back(EScope::TypeName);
                 Visit(ctor.GetToken1());
-                Scopes.pop_back();
-                AfterInvokeExpr = true;
+                Scopes_.pop_back();
+                AfterInvokeExpr_ = true;
                 Visit(ctor.GetToken2());
                 Visit(ctor.GetRule_expr3());
                 Visit(ctor.GetToken4());
@@ -763,10 +780,10 @@ private:
             }
             case TRule_value_constructor::kAltValueConstructor2: {
                 auto& ctor = msg.GetAlt_value_constructor2();
-                Scopes.push_back(EScope::TypeName);
+                Scopes_.push_back(EScope::TypeName);
                 Visit(ctor.GetToken1());
-                Scopes.pop_back();
-                AfterInvokeExpr = true;
+                Scopes_.pop_back();
+                AfterInvokeExpr_ = true;
                 Visit(ctor.GetToken2());
                 Visit(ctor.GetRule_expr3());
                 Visit(ctor.GetToken4());
@@ -776,10 +793,10 @@ private:
             }
             case TRule_value_constructor::kAltValueConstructor3: {
                 auto& ctor = msg.GetAlt_value_constructor3();
-                Scopes.push_back(EScope::TypeName);
+                Scopes_.push_back(EScope::TypeName);
                 Visit(ctor.GetToken1());
-                Scopes.pop_back();
-                AfterInvokeExpr = true;
+                Scopes_.pop_back();
+                AfterInvokeExpr_ = true;
                 Visit(ctor.GetToken2());
                 Visit(ctor.GetRule_expr3());
                 Visit(ctor.GetToken4());
@@ -815,12 +832,12 @@ private:
         if (prefix.HasBlock1()) {
             Visit(prefix.GetBlock1().GetRule_an_id_or_type1());
             VisitKeyword(prefix.GetBlock1().GetToken2());
-            AfterDot = true;
+            AfterDot_ = true;
         }
 
         Visit(msg.GetRule_an_id3());
         if (msg.GetBlock4().HasAlt2()) {
-            AfterInvokeExpr = true;
+            AfterInvokeExpr_ = true;
             const auto& alt2 = msg.GetBlock4().GetAlt2();
             VisitKeyword(alt2.GetToken1());
             Visit(alt2.GetRule_pragma_value2());
@@ -833,21 +850,79 @@ private:
 
     void VisitSelect(const TRule_select_stmt& msg) {
         NewLine();
+        Visit(msg.GetRule_select_stmt_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_stmt_intersect2());
+        }
+    }
+
+    void VisitSelectIntersect(const TRule_select_stmt_intersect& msg) {
+        NewLine();
         Visit(msg.GetRule_select_kind_parenthesis1());
         for (const auto& block : msg.GetBlock2()) {
             NewLine();
-            Visit(block.GetRule_select_op1());
+            Visit(block.GetRule_intersect_op1());
             NewLine();
             Visit(block.GetRule_select_kind_parenthesis2());
         }
     }
 
+    void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
+        if (!IsSelect(msg)) {
+            return VisitAllFields(msg.GetDescriptor(), msg);
+        }
+
+        Y_ENSURE(msg.GetBlock2().HasAlt1());
+
+        Visit(msg.GetToken1());
+        PushCurrentIndent();
+        NewLine();
+        Visit(msg.GetBlock2().GetAlt1().GetRule_select_subexpr1());
+        NewLine();
+        PopCurrentIndent();
+        Visit(msg.GetToken3());
+    }
+
+    void VisitSelectSubExpr(const TRule_select_subexpr& msg) {
+        Visit(msg.GetRule_select_subexpr_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_subexpr_intersect2());
+        }
+    }
+
+    void VisitSelectSubExprIntersect(const TRule_select_subexpr_intersect& msg) {
+        Visit(msg.GetRule_select_or_expr1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_intersect_op1());
+            NewLine();
+            Visit(block.GetRule_select_or_expr2());
+        }
+    }
+
     void VisitSelectUnparenthesized(const TRule_select_unparenthesized_stmt& msg) {
+        NewLine();
+        Visit(msg.GetRule_select_unparenthesized_stmt_intersect1());
+        for (const auto& block : msg.GetBlock2()) {
+            NewLine();
+            Visit(block.GetRule_union_op1());
+            NewLine();
+            Visit(block.GetRule_select_stmt_intersect2());
+        }
+    }
+
+    void VisitSelectUnparenthesizedIntersect(const TRule_select_unparenthesized_stmt_intersect& msg) {
         NewLine();
         Visit(msg.GetRule_select_kind_partial1());
         for (const auto& block : msg.GetBlock2()) {
             NewLine();
-            Visit(block.GetRule_select_op1());
+            Visit(block.GetRule_intersect_op1());
             NewLine();
             Visit(block.GetRule_select_kind_parenthesis2());
         }
@@ -857,33 +932,17 @@ private:
         NewLine();
         Visit(msg.GetRule_bind_parameter_list1());
         Visit(msg.GetToken2());
-        ExprLineIndent = CurrentIndent;
+        ExprLineIndent_ = CurrentIndent_;
 
         switch (msg.GetBlock3().Alt_case()) {
-        case TRule_named_nodes_stmt::TBlock3::kAlt1: {
-            const auto& alt = msg.GetBlock3().GetAlt1();
-            Visit(alt);
-            break;
-        }
-
-        case TRule_named_nodes_stmt::TBlock3::kAlt2: {
-            const auto& alt = msg.GetBlock3().GetAlt2();
-            const auto& subselect = alt.GetRule_subselect_stmt1();
-            switch (subselect.GetBlock1().Alt_case()) {
-            case TRule_subselect_stmt::TBlock1::kAlt1: {
-                const auto& alt = subselect.GetBlock1().GetAlt1();
-                Visit(alt.GetToken1());
-                NewLine();
-                PushCurrentIndent();
-                Visit(alt.GetRule_select_stmt2());
-                PopCurrentIndent();
-                NewLine();
-                Visit(alt.GetToken3());
+            case TRule_named_nodes_stmt::TBlock3::kAlt1: {
+                const auto& alt = msg.GetBlock3().GetAlt1();
+                Visit(alt);
                 break;
             }
 
-            case TRule_subselect_stmt::TBlock1::kAlt2: {
-                const auto& alt = subselect.GetBlock1().GetAlt2();
+            case TRule_named_nodes_stmt::TBlock3::kAlt2: {
+                const auto& alt = msg.GetBlock3().GetAlt2();
                 Out(" (");
                 NewLine();
                 PushCurrentIndent();
@@ -896,16 +955,9 @@ private:
 
             default:
                 ythrow yexception() << "Alt is not supported";
-            }
-
-            break;
         }
 
-        default:
-            ythrow yexception() << "Alt is not supported";
-        }
-
-        ExprLineIndent = 0;
+        ExprLineIndent_ = 0;
     }
 
     void VisitAlterDatabase(const TRule_alter_database_stmt& msg) {
@@ -994,6 +1046,24 @@ private:
         VisitAllFields(TRule_show_create_table_stmt::GetDescriptor(), msg);
     }
 
+    void VisitCreateSecret(const TRule_create_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_create_secret_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterSecret(const TRule_alter_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_alter_secret_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropSecret(const TRule_drop_secret_stmt& msg) {
+        PosFromToken(msg.GetToken1());
+        NewLine();
+        VisitAllFields(TRule_drop_secret_stmt::GetDescriptor(), msg);
+    }
+
     void VisitIntoTable(const TRule_into_table_stmt& msg) {
         NewLine();
         VisitAllFields(TRule_into_table_stmt::GetDescriptor(), msg);
@@ -1009,103 +1079,106 @@ private:
         Visit(msg.GetToken2());
         Visit(msg.GetRule_simple_table_ref3());
         switch (msg.GetBlock4().Alt_case()) {
-        case TRule_update_stmt_TBlock4::kAlt1: {
-            const auto& alt = msg.GetBlock4().GetAlt1();
-            NewLine();
-            Visit(alt.GetToken1());
-            const auto& choice = alt.GetRule_set_clause_choice2();
-            NewLine();
-
-            switch (choice.Alt_case()) {
-            case TRule_set_clause_choice::kAltSetClauseChoice1: {
-                const auto& clauses = choice.GetAlt_set_clause_choice1().GetRule_set_clause_list1();
+            case TRule_update_stmt_TBlock4::kAlt1: {
+                const auto& alt = msg.GetBlock4().GetAlt1();
                 NewLine();
-                PushCurrentIndent();
-                Visit(clauses.GetRule_set_clause1());
-                for (auto& block : clauses.GetBlock2()) {
-                    Visit(block.GetToken1());
-                    NewLine();
-                    Visit(block.GetRule_set_clause2());
+                Visit(alt.GetToken1());
+                const auto& choice = alt.GetRule_set_clause_choice2();
+                NewLine();
+
+                switch (choice.Alt_case()) {
+                    case TRule_set_clause_choice::kAltSetClauseChoice1: {
+                        const auto& clauses = choice.GetAlt_set_clause_choice1().GetRule_set_clause_list1();
+                        NewLine();
+                        PushCurrentIndent();
+                        Visit(clauses.GetRule_set_clause1());
+                        for (auto& block : clauses.GetBlock2()) {
+                            Visit(block.GetToken1());
+                            NewLine();
+                            Visit(block.GetRule_set_clause2());
+                        }
+
+                        PopCurrentIndent();
+                        NewLine();
+                        break;
+                    }
+                    case TRule_set_clause_choice::kAltSetClauseChoice2: {
+                        const auto& multiColumn = choice.GetAlt_set_clause_choice2().GetRule_multiple_column_assignment1();
+                        const auto& targets = multiColumn.GetRule_set_target_list1();
+                        Visit(targets.GetToken1());
+                        NewLine();
+                        PushCurrentIndent();
+                        Visit(targets.GetRule_set_target2());
+                        for (auto& block : targets.GetBlock3()) {
+                            Visit(block.GetToken1());
+                            NewLine();
+                            Visit(block.GetRule_set_target2());
+                        }
+
+                        NewLine();
+                        PopCurrentIndent();
+                        Visit(targets.GetToken4());
+                        Visit(multiColumn.GetToken2());
+
+                        const auto& parenthesis = multiColumn.GetRule_smart_parenthesis3();
+
+                        const auto* tuple_or_expr = GetTupleOrExpr(parenthesis);
+                        if (!tuple_or_expr) {
+                            Visit(parenthesis);
+                            break;
+                        }
+
+                        const bool isHeadNamed = tuple_or_expr->HasBlock2();
+                        const bool isTailNamed = AnyOf(tuple_or_expr->GetBlock3(), [](const auto& block) {
+                            return block.GetRule_named_expr2().HasBlock2();
+                        });
+                        if (isHeadNamed || isTailNamed) {
+                            Visit(parenthesis);
+                            break;
+                        }
+
+                        Visit(parenthesis.GetToken1());
+                        PushCurrentIndent();
+                        NewLine();
+
+                        Visit(tuple_or_expr->GetRule_expr1());
+                        for (auto& block : tuple_or_expr->GetBlock3()) {
+                            Visit(block.GetToken1());
+                            NewLine();
+                            Visit(block.GetRule_named_expr2().GetRule_expr1());
+                        }
+                        if (tuple_or_expr->HasBlock4()) {
+                            Visit(tuple_or_expr->GetBlock4().GetToken1());
+                        }
+
+                        NewLine();
+                        PopCurrentIndent();
+                        Visit(parenthesis.GetToken3());
+
+                        break;
+                    }
+                    default:
+                        ythrow yexception() << "Alt is not supported";
                 }
 
                 PopCurrentIndent();
-                NewLine();
+                if (alt.HasBlock3()) {
+                    NewLine();
+                    Visit(alt.GetBlock3());
+                }
+
+                PopCurrentIndent();
                 break;
             }
-            case TRule_set_clause_choice::kAltSetClauseChoice2: {
-                const auto& multiColumn = choice.GetAlt_set_clause_choice2().GetRule_multiple_column_assignment1();
-                const auto& targets = multiColumn.GetRule_set_target_list1();
-                Visit(targets.GetToken1());
+            case TRule_update_stmt_TBlock4::kAlt2: {
+                const auto& alt = msg.GetBlock4().GetAlt2();
                 NewLine();
-                PushCurrentIndent();
-                Visit(targets.GetRule_set_target2());
-                for (auto& block : targets.GetBlock3()) {
-                    Visit(block.GetToken1());
-                    NewLine();
-                    Visit(block.GetRule_set_target2());
-                }
-
-                NewLine();
-                PopCurrentIndent();
-                Visit(targets.GetToken4());
-                Visit(multiColumn.GetToken2());
-                Visit(multiColumn.GetToken3());
-                NewLine();
-                const auto& simpleValues = multiColumn.GetRule_simple_values_source4();
-                switch (simpleValues.Alt_case()) {
-                case TRule_simple_values_source::kAltSimpleValuesSource1: {
-                    const auto& exprs = simpleValues.GetAlt_simple_values_source1().GetRule_expr_list1();
-                    NewLine();
-                    PushCurrentIndent();
-                    Visit(exprs.GetRule_expr1());
-                    for (const auto& block : exprs.GetBlock2()) {
-                        Visit(block.GetToken1());
-                        NewLine();
-                        Visit(block.GetRule_expr2());
-                    }
-
-                    PopCurrentIndent();
-                    NewLine();
-                    break;
-                }
-                case TRule_simple_values_source::kAltSimpleValuesSource2: {
-                    NewLine();
-                    PushCurrentIndent();
-                    Visit(simpleValues.GetAlt_simple_values_source2());
-                    PopCurrentIndent();
-                    NewLine();
-                    break;
-                }
-                default:
-                    ythrow yexception() << "Alt is not supported";
-                }
-
-                NewLine();
-                Visit(multiColumn.GetToken5());
+                Visit(alt.GetToken1());
+                Visit(alt.GetRule_into_values_source2());
                 break;
             }
             default:
                 ythrow yexception() << "Alt is not supported";
-            }
-
-            PopCurrentIndent();
-            if (alt.HasBlock3()) {
-                NewLine();
-                Visit(alt.GetBlock3());
-            }
-
-            PopCurrentIndent();
-            break;
-        }
-        case TRule_update_stmt_TBlock4::kAlt2: {
-            const auto& alt = msg.GetBlock4().GetAlt2();
-            NewLine();
-            Visit(alt.GetToken1());
-            Visit(alt.GetRule_into_values_source2());
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
         }
     }
 
@@ -1116,20 +1189,20 @@ private:
         Visit(msg.GetRule_simple_table_ref4());
         if (msg.HasBlock5()) {
             switch (msg.GetBlock5().Alt_case()) {
-            case TRule_delete_stmt_TBlock5::kAlt1: {
-                const auto& alt = msg.GetBlock5().GetAlt1();
-                NewLine();
-                Visit(alt);
-                break;
-            }
-            case TRule_delete_stmt_TBlock5::kAlt2: {
-                const auto& alt = msg.GetBlock5().GetAlt2();
-                NewLine();
-                Visit(alt);
-                break;
-            }
-            default:
-                ythrow yexception() << "Alt is not supported";
+                case TRule_delete_stmt_TBlock5::kAlt1: {
+                    const auto& alt = msg.GetBlock5().GetAlt1();
+                    NewLine();
+                    Visit(alt);
+                    break;
+                }
+                case TRule_delete_stmt_TBlock5::kAlt2: {
+                    const auto& alt = msg.GetBlock5().GetAlt2();
+                    NewLine();
+                    Visit(alt);
+                    break;
+                }
+                default:
+                    ythrow yexception() << "Alt is not supported";
             }
         }
     }
@@ -1213,35 +1286,35 @@ private:
     void VisitDo(const TRule_do_stmt& msg) {
         VisitKeyword(msg.GetToken1());
         switch (msg.GetBlock2().Alt_case()) {
-        case TRule_do_stmt_TBlock2::kAlt1: { // CALL
-            PushCurrentIndent();
-            NewLine();
-            const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
-            Visit(alt.GetBlock1());
-            AfterInvokeExpr = true;
-            Visit(alt.GetToken2());
-            if (alt.HasBlock3()) {
-                Visit(alt.GetBlock3());
+            case TRule_do_stmt_TBlock2::kAlt1: { // CALL
+                PushCurrentIndent();
+                NewLine();
+                const auto& alt = msg.GetBlock2().GetAlt1().GetRule_call_action1();
+                Visit(alt.GetBlock1());
+                AfterInvokeExpr_ = true;
+                Visit(alt.GetToken2());
+                if (alt.HasBlock3()) {
+                    Visit(alt.GetBlock3());
+                }
+                Visit(alt.GetToken4());
+                PopCurrentIndent();
+                NewLine();
+                break;
             }
-            Visit(alt.GetToken4());
-            PopCurrentIndent();
-            NewLine();
-            break;
-        }
-        case TRule_do_stmt_TBlock2::kAlt2: { // INLINE
-            const auto& alt = msg.GetBlock2().GetAlt2().GetRule_inline_action1();
-            VisitKeyword(alt.GetToken1());
-            PushCurrentIndent();
-            NewLine();
-            Visit(alt.GetRule_define_action_or_subquery_body2());
-            PopCurrentIndent();
-            NewLine();
-            VisitKeyword(alt.GetToken3());
-            VisitKeyword(alt.GetToken4());
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+            case TRule_do_stmt_TBlock2::kAlt2: { // INLINE
+                const auto& alt = msg.GetBlock2().GetAlt2().GetRule_inline_action1();
+                VisitKeyword(alt.GetToken1());
+                PushCurrentIndent();
+                NewLine();
+                Visit(alt.GetRule_define_action_or_subquery_body2());
+                PopCurrentIndent();
+                NewLine();
+                VisitKeyword(alt.GetToken3());
+                VisitKeyword(alt.GetToken4());
+                break;
+            }
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
     }
 
@@ -1250,7 +1323,7 @@ private:
         VisitKeyword(msg.GetToken1());
         VisitKeyword(msg.GetToken2());
         Visit(msg.GetRule_bind_parameter3());
-        AfterInvokeExpr = true;
+        AfterInvokeExpr_ = true;
         Visit(msg.GetToken4());
         if (msg.HasBlock5()) {
             Visit(msg.GetBlock5());
@@ -1521,26 +1594,26 @@ private:
         NewLine();
         PushCurrentIndent();
         switch (msg.GetBlock3().Alt_case()) {
-        case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
-            Visit(msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetRule_alter_backup_collection_action1());
-            for (const auto& action : msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetBlock2()) {
-                Visit(action.GetToken1()); // comma
-                NewLine();
-                Visit(action.GetRule_alter_backup_collection_action2());
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt1: {
+                Visit(msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetRule_alter_backup_collection_action1());
+                for (const auto& action : msg.GetBlock3().GetAlt1().GetRule_alter_backup_collection_actions1().GetBlock2()) {
+                    Visit(action.GetToken1()); // comma
+                    NewLine();
+                    Visit(action.GetRule_alter_backup_collection_action2());
+                }
+                break;
             }
-            break;
-        }
-        case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
-            Visit(msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetRule_alter_backup_collection_entry1());
-            for (const auto& entry : msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetBlock2()) {
-                Visit(entry.GetToken1()); // comma
-                NewLine();
-                Visit(entry.GetRule_alter_backup_collection_entry2());
+            case TRule_alter_backup_collection_stmt_TBlock3::kAlt2: {
+                Visit(msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetRule_alter_backup_collection_entry1());
+                for (const auto& entry : msg.GetBlock3().GetAlt2().GetRule_alter_backup_collection_entries1().GetBlock2()) {
+                    Visit(entry.GetToken1()); // comma
+                    NewLine();
+                    Visit(entry.GetRule_alter_backup_collection_entry2());
+                }
+                break;
             }
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
 
         PopCurrentIndent();
@@ -1583,25 +1656,61 @@ private:
         VisitAllFields(TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), msg);
     }
 
+    void VisitStreamingQuerySettings(const TRule_streaming_query_settings& msg) {
+        VisitKeyword(msg.GetToken1());
+        NewLine();
+        PushCurrentIndent();
+
+        Visit(msg.GetRule_streaming_query_setting2());
+        for (const auto& setting : msg.GetBlock3()) {
+            Visit(setting.GetToken1());
+            NewLine();
+            Visit(setting.GetRule_streaming_query_setting2());
+        }
+
+        if (msg.HasBlock4()) {
+            TokenIndex_++;
+        }
+
+        PopCurrentIndent();
+        NewLine();
+        VisitKeyword(msg.GetToken5());
+    }
+
+    void VisitCreateStreamingQuery(const TRule_create_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_create_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitAlterStreamingQuery(const TRule_alter_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_alter_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
+    void VisitDropStreamingQuery(const TRule_drop_streaming_query_stmt& msg) {
+        NewLine();
+        VisitAllFields(TRule_drop_streaming_query_stmt::GetDescriptor(), msg);
+    }
+
     void VisitAllFields(const NProtoBuf::Descriptor* descr, const NProtoBuf::Message& msg) {
         VisitAllFieldsImpl<TPrettyVisitor, &TPrettyVisitor::Visit>(this, descr, msg);
     }
 
     void WriteComments(bool completeLine) {
-        while (LastComment < Comments.size()) {
-            const auto& c = Comments[LastComment];
-            if (c.Line > LastLine || !completeLine && c.Line == LastLine && c.LinePos > LastColumn) {
+        while (LastComment_ < Comments_.size()) {
+            const auto& c = Comments_[LastComment_];
+            if (c.Line > LastLine_ || !completeLine && c.Line == LastLine_ && c.LinePos > LastColumn_) {
                 break;
             }
 
             AddComment(c.Content);
-            ++LastComment;
+            ++LastComment_;
         }
     }
 
     void PosFromToken(const TToken& token) {
-        LastLine = token.GetLine();
-        LastColumn = token.GetColumn();
+        LastLine_ = token.GetLine();
+        LastColumn_ = token.GetColumn();
         WriteComments(false);
     }
 
@@ -1621,68 +1730,69 @@ private:
             return;
         }
 
-        //Cerr << str << "\n";
-        auto currentScope = Scopes.back();
-        if (!SkipSpaceAfterUnaryOp && !InMultiTokenOp) {
-            if (AfterLess && str == ">") {
+        // Cerr << str << "\n";
+        auto currentScope = Scopes_.back();
+        if (!SkipSpaceAfterUnaryOp_ && !InMultiTokenOp_) {
+            if (AfterLess_ && str == ">") {
                 Out(' ');
-            } else if (AfterDigits && str == ".") {
+            } else if (AfterDigits_ && str == ".") {
                 Out(' ');
-            } else if (OutColumn && (currentScope == EScope::DoubleQuestion || str != "?")
-                && str != ":" && str != "." && str != "," && str != ";" && str != ")" && str != "]"
-                && str != "}" && str != "|>" && str != "::" && !AfterNamespace && !AfterBracket
-                && !AfterInvokeExpr && !AfterDollarOrAt && !AfterDot && (!AfterQuestion || str != "?")
-                && (!InsideType || (str != "<" && str != ">" && str != "<>"))
-                && (!InsideType || !AfterLess)
-                && (!AfterKeyExpr || str != "[")
-                ) {
+            } else if (OutColumn_ &&
+                       (currentScope == EScope::DoubleQuestion || str != "?") &&
+                       str != ":" && str != "." && str != "," && str != ";" && str != ")" &&
+                       str != "]" && str != "}" && str != "|>" && str != "::" &&
+                       !AfterNamespace_ && !AfterBracket_ && !AfterInvokeExpr_ &&
+                       !AfterDollarOrAt_ && !AfterDot_ && (!AfterQuestion_ || str != "?") &&
+                       (!InsideType_ || (str != "<" && str != ">" && str != "<>")) &&
+                       (!InsideType_ || !AfterLess_) && (!AfterKeyExpr_ || str != "["))
+            {
                 Out(' ');
             }
         }
 
-        SkipSpaceAfterUnaryOp = false;
-        if (AfterUnaryOp) {
+        SkipSpaceAfterUnaryOp_ = false;
+        if (AfterUnaryOp_) {
             if (str == "+" || str == "-" || str == "~") {
-                SkipSpaceAfterUnaryOp = true;
+                SkipSpaceAfterUnaryOp_ = true;
             }
 
-            AfterUnaryOp = false;
+            AfterUnaryOp_ = false;
         }
 
-        AfterInvokeExpr = false;
-        AfterNamespace = (str == "::");
-        AfterBracket = (str == "(" || str == "[" || str == "{" || str == "<|");
-        AfterDot = (str == ".");
-        AfterDigits = !str.empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
-        AfterQuestion = (str == "?");
-        AfterLess = (str == "<");
-        AfterKeyExpr = false;
-        AfterComment = false;
+        AfterInvokeExpr_ = false;
+        AfterNamespace_ = (str == "::");
+        AfterBracket_ = (str == "(" || str == "[" || str == "{" || str == "<|");
+        AfterDot_ = (str == ".");
+        AfterDigits_ = !str.empty() && AllOf(str, [](char c) { return c >= '0' && c <= '9'; });
+        AfterQuestion_ = (str == "?");
+        AfterLess_ = (str == "<");
+        AfterKeyExpr_ = false;
+        AfterComment_ = false;
 
         if (forceKeyword) {
             str = to_upper(str);
         } else if (currentScope == EScope::Default) {
-            if (auto p = StaticData.Keywords.find(to_upper(str));  p != StaticData.Keywords.end()) {
+            if (auto p = StaticData_.Keywords.find(to_upper(str)); p != StaticData_.Keywords.end()) {
                 str = *p;
             }
         }
 
-        AfterDollarOrAt = (str == "$" || str == "@");
+        AfterDollarOrAt_ = (str == "$" || str == "@");
 
-        const auto& markedInfo = MarkedTokens[TokenIndex];
+        const auto& markedInfo = MarkedTokens_[TokenIndex_];
         if (markedInfo.ClosingBracket) {
-            Y_ENSURE(!MarkTokenStack.empty());
-            auto beginTokenIndex = MarkTokenStack.back();
-            if (markedInfo.BracketForcedExpansion || ParsedTokens[beginTokenIndex].Line != ParsedTokens[TokenIndex].Line) {
+            Y_ENSURE(!MarkTokenStack_.empty());
+            auto beginTokenIndex = MarkTokenStack_.back();
+            if (markedInfo.BracketForcedExpansion || ParsedTokens_[beginTokenIndex].Line != ParsedTokens_[TokenIndex_].Line) {
                 // multiline
                 PopCurrentIndent();
                 NewLine();
             }
 
-            MarkTokenStack.pop_back();
+            MarkTokenStack_.pop_back();
         }
 
-        if (InCondExpr) {
+        if (InCondExpr_) {
             if (str == "=") {
                 str = "==";
             } else if (str == "<>") {
@@ -1690,7 +1800,7 @@ private:
             }
         }
 
-        if (!AnsiLexer && ParsedTokens[TokenIndex].Name == "STRING_VALUE") {
+        if (!AnsiLexer_ && ParsedTokens_[TokenIndex_].Name == "STRING_VALUE") {
             TStringBuf checkStr = str;
             if (checkStr.SkipPrefix("\"") && checkStr.ChopSuffix("\"") && !checkStr.Contains("'")) {
                 str = TStringBuilder() << '\'' << checkStr << '\'';
@@ -1699,7 +1809,7 @@ private:
 
         Out(str);
 
-        if (TokenIndex + 1 >= ParsedTokens.size() || ParsedTokens[TokenIndex + 1].Line > LastLine) {
+        if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
             WriteComments(true);
         }
 
@@ -1708,58 +1818,57 @@ private:
         }
 
         if (markedInfo.OpeningBracket) {
-            MarkTokenStack.push_back(TokenIndex);
-            if (markedInfo.BracketForcedExpansion || ParsedTokens[TokenIndex].Line != ParsedTokens[markedInfo.ClosingBracketIndex].Line) {
+            MarkTokenStack_.push_back(TokenIndex_);
+            if (markedInfo.BracketForcedExpansion || ParsedTokens_[TokenIndex_].Line != ParsedTokens_[markedInfo.ClosingBracketIndex].Line) {
                 // multiline
                 PushCurrentIndent();
                 NewLine();
             }
         }
 
-        if (str == "," && !MarkTokenStack.empty()) {
+        if (str == "," && !MarkTokenStack_.empty()) {
             const bool addNewline =
-                (TokenIndex + 1 < ParsedTokens.size() && ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 1].Line)
-             || (TokenIndex > 0 && ParsedTokens[TokenIndex - 1].Line != ParsedTokens[TokenIndex].Line);
+                (TokenIndex_ + 1 < ParsedTokens_.size() && ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + 1].Line) || (TokenIndex_ > 0 && ParsedTokens_[TokenIndex_ - 1].Line != ParsedTokens_[TokenIndex_].Line);
             // add line for trailing comma
             if (addNewline) {
                 NewLine();
             }
         }
 
-        TokenIndex++;
+        TokenIndex_++;
     }
 
     void VisitIntoValuesSource(const TRule_into_values_source& msg) {
         switch (msg.Alt_case()) {
-        case TRule_into_values_source::kAltIntoValuesSource1: {
-            const auto& alt = msg.GetAlt_into_values_source1();
-            if (alt.HasBlock1()) {
-                const auto& columns = alt.GetBlock1().GetRule_pure_column_list1();
-                Visit(columns.GetToken1());
-                NewLine();
-                PushCurrentIndent();
-                Visit(columns.GetRule_an_id2());
-                for (const auto& block : columns.GetBlock3()) {
-                    Visit(block.GetToken1());
+            case TRule_into_values_source::kAltIntoValuesSource1: {
+                const auto& alt = msg.GetAlt_into_values_source1();
+                if (alt.HasBlock1()) {
+                    const auto& columns = alt.GetBlock1().GetRule_pure_column_list1();
+                    Visit(columns.GetToken1());
                     NewLine();
-                    Visit(block.GetRule_an_id2());
+                    PushCurrentIndent();
+                    Visit(columns.GetRule_an_id2());
+                    for (const auto& block : columns.GetBlock3()) {
+                        Visit(block.GetToken1());
+                        NewLine();
+                        Visit(block.GetRule_an_id2());
+                    }
+
+                    PopCurrentIndent();
+                    NewLine();
+                    Visit(columns.GetToken4());
+                    NewLine();
                 }
 
-                PopCurrentIndent();
-                NewLine();
-                Visit(columns.GetToken4());
-                NewLine();
+                Visit(alt.GetRule_values_source2());
+                break;
             }
-
-            Visit(alt.GetRule_values_source2());
-            break;
-        }
-        case TRule_into_values_source::kAltIntoValuesSource2: {
-            VisitAllFields(TRule_into_values_source::GetDescriptor(), msg);
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+            case TRule_into_values_source::kAltIntoValuesSource2: {
+                VisitAllFields(TRule_into_values_source::GetDescriptor(), msg);
+                break;
+            }
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
     }
 
@@ -2108,35 +2217,35 @@ private:
 
     void VisitSingleSource(const TRule_single_source& msg) {
         switch (msg.Alt_case()) {
-        case TRule_single_source::kAltSingleSource1: {
-            const auto& alt = msg.GetAlt_single_source1();
-            Visit(alt);
-            break;
-        }
-        case TRule_single_source::kAltSingleSource2: {
-            const auto& alt = msg.GetAlt_single_source2();
-            Visit(alt.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(alt.GetRule_select_stmt2());
-            PopCurrentIndent();
-            NewLine();
-            Visit(alt.GetToken3());
-            break;
-        }
-        case TRule_single_source::kAltSingleSource3: {
-            const auto& alt = msg.GetAlt_single_source3();
-            Visit(alt.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(alt.GetRule_values_stmt2());
-            PopCurrentIndent();
-            NewLine();
-            Visit(alt.GetToken3());
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+            case TRule_single_source::kAltSingleSource1: {
+                const auto& alt = msg.GetAlt_single_source1();
+                Visit(alt);
+                break;
+            }
+            case TRule_single_source::kAltSingleSource2: {
+                const auto& alt = msg.GetAlt_single_source2();
+                Visit(alt.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(alt.GetRule_select_stmt2());
+                PopCurrentIndent();
+                NewLine();
+                Visit(alt.GetToken3());
+                break;
+            }
+            case TRule_single_source::kAltSingleSource3: {
+                const auto& alt = msg.GetAlt_single_source3();
+                Visit(alt.GetToken1());
+                NewLine();
+                PushCurrentIndent();
+                Visit(alt.GetRule_values_stmt2());
+                PopCurrentIndent();
+                NewLine();
+                Visit(alt.GetToken3());
+                break;
+            }
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
     }
 
@@ -2265,35 +2374,35 @@ private:
 
     void VisitFlattenByArg(const TRule_flatten_by_arg& msg) {
         switch (msg.Alt_case()) {
-        case TRule_flatten_by_arg::kAltFlattenByArg1: {
-            const auto& alt = msg.GetAlt_flatten_by_arg1();
-            Visit(alt);
-            break;
-        }
-        case TRule_flatten_by_arg::kAltFlattenByArg2: {
-            const auto& alt = msg.GetAlt_flatten_by_arg2();
-            Visit(alt.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            const auto& exprs = alt.GetRule_named_expr_list2();
-            Visit(exprs.GetRule_named_expr1());
-            for (const auto& block : exprs.GetBlock2()) {
-                Visit(block.GetToken1());
+            case TRule_flatten_by_arg::kAltFlattenByArg1: {
+                const auto& alt = msg.GetAlt_flatten_by_arg1();
+                Visit(alt);
+                break;
+            }
+            case TRule_flatten_by_arg::kAltFlattenByArg2: {
+                const auto& alt = msg.GetAlt_flatten_by_arg2();
+                Visit(alt.GetToken1());
                 NewLine();
-                Visit(block.GetRule_named_expr2());
-            }
+                PushCurrentIndent();
+                const auto& exprs = alt.GetRule_named_expr_list2();
+                Visit(exprs.GetRule_named_expr1());
+                for (const auto& block : exprs.GetBlock2()) {
+                    Visit(block.GetToken1());
+                    NewLine();
+                    Visit(block.GetRule_named_expr2());
+                }
 
-            if (alt.HasBlock3()) {
-                Visit(alt.GetBlock3());
-            }
+                if (alt.HasBlock3()) {
+                    Visit(alt.GetBlock3());
+                }
 
-            NewLine();
-            PopCurrentIndent();
-            Visit(alt.GetToken4());
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+                NewLine();
+                PopCurrentIndent();
+                Visit(alt.GetToken4());
+                break;
+            }
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
     }
 
@@ -2326,42 +2435,42 @@ private:
 
         const auto& block3 = msg.GetBlock3();
         switch (block3.Alt_case()) {
-        case TRule_table_ref::TBlock3::kAlt1: {
-            const auto& alt = block3.GetAlt1();
-            const auto& key = alt.GetRule_table_key1();
-            Visit(key.GetRule_id_table_or_type1());
-            Visit(key.GetBlock2());
+            case TRule_table_ref::TBlock3::kAlt1: {
+                const auto& alt = block3.GetAlt1();
+                const auto& key = alt.GetRule_table_key1();
+                Visit(key.GetRule_id_table_or_type1());
+                Visit(key.GetBlock2());
 
-            break;
-        }
-        case TRule_table_ref::TBlock3::kAlt2: {
-            const auto& alt = block3.GetAlt2();
-            Visit(alt.GetRule_an_id_expr1());
-            AfterInvokeExpr = true;
-            Visit(alt.GetToken2());
-            if (alt.HasBlock3()) {
-                Visit(alt.GetBlock3());
+                break;
             }
+            case TRule_table_ref::TBlock3::kAlt2: {
+                const auto& alt = block3.GetAlt2();
+                Visit(alt.GetRule_an_id_expr1());
+                AfterInvokeExpr_ = true;
+                Visit(alt.GetToken2());
+                if (alt.HasBlock3()) {
+                    Visit(alt.GetBlock3());
+                }
 
-            Visit(alt.GetToken4());
-            break;
-        }
-        case TRule_table_ref::TBlock3::kAlt3: {
-            const auto& alt = block3.GetAlt3();
-            Visit(alt.GetRule_bind_parameter1());
-            if (alt.HasBlock2()) {
-                AfterInvokeExpr = true;
-                Visit(alt.GetBlock2());
+                Visit(alt.GetToken4());
+                break;
             }
+            case TRule_table_ref::TBlock3::kAlt3: {
+                const auto& alt = block3.GetAlt3();
+                Visit(alt.GetRule_bind_parameter1());
+                if (alt.HasBlock2()) {
+                    AfterInvokeExpr_ = true;
+                    Visit(alt.GetBlock2());
+                }
 
-            if (alt.HasBlock3()) {
-                Visit(alt.GetBlock3());
+                if (alt.HasBlock3()) {
+                    Visit(alt.GetBlock3());
+                }
+
+                break;
             }
-
-            break;
-        }
-        default:
-            ythrow yexception() << "Alt is not supported";
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
 
         if (msg.HasBlock4()) {
@@ -2486,30 +2595,15 @@ private:
         }
 
         Visit(msg.GetToken3());
-        ExprLineIndent = CurrentIndent;
+        ExprLineIndent_ = CurrentIndent_;
 
         Visit(msg.GetRule_expr4());
 
         SkipSemicolons(msg.GetBlock5(), /* printOne = */ true);
-        ExprLineIndent = 0;
+        ExprLineIndent_ = 0;
 
         PopCurrentIndent();
         NewLine();
-    }
-
-    void VisitInAtomExpr(const TRule_in_atom_expr& msg) {
-        if (msg.Alt_case() == TRule_in_atom_expr::kAltInAtomExpr7) {
-            const auto& alt = msg.GetAlt_in_atom_expr7();
-            Visit(alt.GetToken1());
-            NewLine();
-            PushCurrentIndent();
-            Visit(alt.GetRule_select_stmt2());
-            NewLine();
-            PopCurrentIndent();
-            Visit(alt.GetToken3());
-        } else {
-            VisitAllFields(TRule_in_atom_expr::GetDescriptor(), msg);
-        }
     }
 
     void VisitSelectKindParenthesis(const TRule_select_kind_parenthesis& msg) {
@@ -2529,7 +2623,7 @@ private:
 
     void VisitCastExpr(const TRule_cast_expr& msg) {
         Visit(msg.GetToken1());
-        AfterInvokeExpr = true;
+        AfterInvokeExpr_ = true;
         Visit(msg.GetToken2());
         Visit(msg.GetRule_expr3());
         Visit(msg.GetToken4());
@@ -2539,7 +2633,7 @@ private:
 
     void VisitBitCastExpr(const TRule_bitcast_expr& msg) {
         Visit(msg.GetToken1());
-        AfterInvokeExpr = true;
+        AfterInvokeExpr_ = true;
         Visit(msg.GetToken2());
         Visit(msg.GetRule_expr3());
         Visit(msg.GetToken4());
@@ -2556,7 +2650,7 @@ private:
     }
 
     void VisitKeyExpr(const TRule_key_expr& msg) {
-        AfterKeyExpr = true;
+        AfterKeyExpr_ = true;
         VisitAllFields(TRule_key_expr::GetDescriptor(), msg);
     }
 
@@ -2697,9 +2791,9 @@ private:
     void VisitCondExpr(const TRule_cond_expr& msg) {
         if (msg.Alt_case() == TRule_cond_expr::kAltCondExpr5) {
             for (const auto& block : msg.GetAlt_cond_expr5().GetBlock1()) {
-                InCondExpr = true;
+                InCondExpr_ = true;
                 Visit(block.GetBlock1());
-                InCondExpr = false;
+                InCondExpr_ = false;
                 Visit(block.GetRule_eq_subexpr2());
             }
         } else {
@@ -2738,43 +2832,43 @@ private:
         if (msg.HasBlock3()) {
             const auto& b = msg.GetBlock3();
             switch (b.Alt_case()) {
-            case TRule_neq_subexpr_TBlock3::kAlt1: {
-                const auto& alt = b.GetAlt1();
-                const bool hasFirstNewline = LastLine != ParsedTokens[TokenIndex].Line;
-                // 2 is `??` size in tokens
-                const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + 2].Line;
-                const ui32 currentOutLine = OutLine;
+                case TRule_neq_subexpr_TBlock3::kAlt1: {
+                    const auto& alt = b.GetAlt1();
+                    const bool hasFirstNewline = LastLine_ != ParsedTokens_[TokenIndex_].Line;
+                    // 2 is `??` size in tokens
+                    const bool hasSecondNewline = ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + 2].Line;
+                    const ui32 currentOutLine = OutLine_;
 
-                if (currentOutLine != OutLine || (hasFirstNewline && hasSecondNewline)) {
-                    NewLine();
-                    if (!pushedIndent) {
-                        PushCurrentIndent();
-                        pushedIndent = true;
+                    if (currentOutLine != OutLine_ || (hasFirstNewline && hasSecondNewline)) {
+                        NewLine();
+                        if (!pushedIndent) {
+                            PushCurrentIndent();
+                            pushedIndent = true;
+                        }
                     }
-                }
 
-                Visit(alt.GetRule_double_question1());
-                if (hasFirstNewline || hasSecondNewline) {
-                    NewLine();
-                    if (!pushedIndent) {
-                        PushCurrentIndent();
-                        pushedIndent = true;
+                    Visit(alt.GetRule_double_question1());
+                    if (hasFirstNewline || hasSecondNewline) {
+                        NewLine();
+                        if (!pushedIndent) {
+                            PushCurrentIndent();
+                            pushedIndent = true;
+                        }
                     }
-                }
 
-                VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
-                if (pushedIndent && top) {
-                    PopCurrentIndent();
-                    pushedIndent = false;
-                }
+                    VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                    if (pushedIndent && top) {
+                        PopCurrentIndent();
+                        pushedIndent = false;
+                    }
 
-                break;
-            }
-            case TRule_neq_subexpr_TBlock3::kAlt2:
-                Visit(b.GetAlt2());
-                break;
-            default:
-                ythrow yexception() << "Alt is not supported";
+                    break;
+                }
+                case TRule_neq_subexpr_TBlock3::kAlt2:
+                    Visit(b.GetAlt2());
+                    break;
+                default:
+                    ythrow yexception() << "Alt is not supported";
             }
         }
     }
@@ -2803,34 +2897,34 @@ private:
 
     ui32 BinaryOpTokenSize(const TRule_neq_subexpr::TBlock2::TBlock1& block) {
         switch (block.Alt_case()) {
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt1:
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt3:
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt5:
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt6:
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt7:
-            return 1;
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt2:
-            return 2;
-        case TRule_neq_subexpr::TBlock2::TBlock1::kAlt4:
-            return 3;
-        default:
-            ythrow yexception() << "Alt is not supported";
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt1:
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt3:
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt5:
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt6:
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt7:
+                return 1;
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt2:
+                return 2;
+            case TRule_neq_subexpr::TBlock2::TBlock1::kAlt4:
+                return 3;
+            default:
+                ythrow yexception() << "Alt is not supported";
         }
     }
 
     void VisitShiftRight(const TRule_shift_right& msg) {
         VisitToken(msg.GetToken1());
-        InMultiTokenOp = true;
+        InMultiTokenOp_ = true;
         VisitToken(msg.GetToken2());
-        InMultiTokenOp = false;
+        InMultiTokenOp_ = false;
     }
 
     void VisitRotRight(const TRule_rot_right& msg) {
         VisitToken(msg.GetToken1());
-        InMultiTokenOp = true;
+        InMultiTokenOp_ = true;
         VisitToken(msg.GetToken2());
         VisitToken(msg.GetToken3());
-        InMultiTokenOp = false;
+        InMultiTokenOp_ = false;
     }
 
     template <typename TExpr, typename TGetOp, typename TGetExpr, typename TIter>
@@ -2841,13 +2935,13 @@ private:
         for (; begin != end; ++begin) {
             const auto op = getOp(*begin);
             const auto opSize = BinaryOpTokenSize(op);
-            const bool hasFirstNewline = LastLine != ParsedTokens[TokenIndex].Line;
-            const bool hasSecondNewline = ParsedTokens[TokenIndex].Line != ParsedTokens[TokenIndex + opSize].Line;
-            const ui32 currentOutLine = OutLine;
+            const bool hasFirstNewline = LastLine_ != ParsedTokens_[TokenIndex_].Line;
+            const bool hasSecondNewline = ParsedTokens_[TokenIndex_].Line != ParsedTokens_[TokenIndex_ + opSize].Line;
+            const ui32 currentOutLine = OutLine_;
 
-            if (currentOutLine != OutLine || hasFirstNewline || hasSecondNewline) {
+            if (currentOutLine != OutLine_ || hasFirstNewline || hasSecondNewline) {
                 NewLine();
-                if (!pushedIndent && CurrentIndent == ExprLineIndent) {
+                if (!pushedIndent && CurrentIndent_ == ExprLineIndent_) {
                     PushCurrentIndent();
                     pushedIndent = true;
                 }
@@ -2868,58 +2962,58 @@ private:
     }
 
     void PushCurrentIndent() {
-        CurrentIndent += OneIndent;
+        CurrentIndent_ += OneIndent;
 
-        BlockFirstLine = OutLine;
-        if (OutColumn > 0) {
-            ++BlockFirstLine;
+        BlockFirstLine_ = OutLine_;
+        if (OutColumn_ > 0) {
+            ++BlockFirstLine_;
         }
     }
 
     void PopCurrentIndent() {
-        CurrentIndent -= OneIndent;
+        CurrentIndent_ -= OneIndent;
     }
 
 private:
-    const TStaticData& StaticData;
-    const TParsedTokenList& ParsedTokens;
-    const TParsedTokenList& Comments;
-    const bool AnsiLexer;
-    TStringBuilder SB;
-    ui32 OutColumn = 0;
-    ui32 OutLine = 1;
-    ui32 LastLine = 0;
-    ui32 LastColumn = 0;
-    ui32 LastComment = 0;
-    ui32 CommentLines = 0;
-    i32 CurrentIndent = 0;
-    TVector<EScope> Scopes;
-    TMaybe<bool> AddLine;
-    TMaybe<ui32> StmtCoreAltCase;
-    ui64 InsideType = 0;
-    bool AfterNamespace = false;
-    bool AfterBracket = false;
-    bool AfterInvokeExpr = false;
-    bool AfterUnaryOp = false;
-    bool SkipSpaceAfterUnaryOp = false;
-    bool AfterDollarOrAt = false;
-    bool AfterDot = false;
-    bool AfterDigits = false;
-    bool AfterQuestion = false;
-    bool AfterLess = false;
-    bool AfterKeyExpr = false;
-    bool AfterComment = false;
-    bool InMultiTokenOp = false;
-    bool InCondExpr = false;
-    ui32 ForceExpandedLine = 0;
-    ui32 ForceExpandedColumn = 0;
-    ui32 BlockFirstLine = 1;
-    i32 ExprLineIndent = 0;
+    const TStaticData& StaticData_;
+    const TParsedTokenList& ParsedTokens_;
+    const TParsedTokenList& Comments_;
+    const bool AnsiLexer_;
+    TStringBuilder Sb_;
+    ui32 OutColumn_ = 0;
+    ui32 OutLine_ = 1;
+    ui32 LastLine_ = 0;
+    ui32 LastColumn_ = 0;
+    ui32 LastComment_ = 0;
+    ui32 CommentLines_ = 0;
+    i32 CurrentIndent_ = 0;
+    TVector<EScope> Scopes_;
+    TMaybe<bool> AddLine_;
+    TMaybe<ui32> StmtCoreAltCase_;
+    ui64 InsideType_ = 0;
+    bool AfterNamespace_ = false;
+    bool AfterBracket_ = false;
+    bool AfterInvokeExpr_ = false;
+    bool AfterUnaryOp_ = false;
+    bool SkipSpaceAfterUnaryOp_ = false;
+    bool AfterDollarOrAt_ = false;
+    bool AfterDot_ = false;
+    bool AfterDigits_ = false;
+    bool AfterQuestion_ = false;
+    bool AfterLess_ = false;
+    bool AfterKeyExpr_ = false;
+    bool AfterComment_ = false;
+    bool InMultiTokenOp_ = false;
+    bool InCondExpr_ = false;
+    ui32 ForceExpandedLine_ = 0;
+    ui32 ForceExpandedColumn_ = 0;
+    ui32 BlockFirstLine_ = 1;
+    i32 ExprLineIndent_ = 0;
 
-    ui32 TokenIndex = 0;
-    TMarkTokenStack MarkTokenStack;
-    TVector<TTokenInfo> MarkedTokens;
-    ui64 InsideExpr = 0;
+    ui32 TokenIndex_ = 0;
+    TMarkTokenStack MarkTokenStack_;
+    TVector<TTokenInfo> MarkedTokens_;
+    ui64 InsideExpr_ = 0;
 };
 
 template <typename T>
@@ -2939,150 +3033,161 @@ TObfuscatingFunctor MakeObfuscatingFunctor(void (TObfuscatingVisitor::*memberPtr
 TStaticData::TStaticData()
     : Keywords(GetKeywords())
     , ScopeDispatch({
-        {TRule_type_name::GetDescriptor(), EScope::TypeName},
-        {TRule_type_name_composite::GetDescriptor(), EScope::TypeName},
-        {TRule_double_question::GetDescriptor(), EScope::DoubleQuestion},
-        {TRule_id::GetDescriptor(), EScope::Identifier},
-        {TRule_id_or_type::GetDescriptor(), EScope::Identifier},
-        {TRule_id_schema::GetDescriptor(), EScope::Identifier},
-        {TRule_id_expr::GetDescriptor(), EScope::Identifier},
-        {TRule_id_expr_in::GetDescriptor(), EScope::Identifier},
-        {TRule_id_window::GetDescriptor(), EScope::Identifier},
-        {TRule_id_table::GetDescriptor(), EScope::Identifier},
-        {TRule_id_without::GetDescriptor(), EScope::Identifier},
-        {TRule_id_hint::GetDescriptor(), EScope::Identifier},
-        {TRule_identifier::GetDescriptor(), EScope::Identifier},
-        {TRule_id_table_or_type::GetDescriptor(), EScope::Identifier},
-        {TRule_bind_parameter::GetDescriptor(), EScope::Identifier},
-        {TRule_an_id_as_compat::GetDescriptor(), EScope::Identifier},
-        })
+          {TRule_type_name::GetDescriptor(), EScope::TypeName},
+          {TRule_type_name_composite::GetDescriptor(), EScope::TypeName},
+          {TRule_double_question::GetDescriptor(), EScope::DoubleQuestion},
+          {TRule_id::GetDescriptor(), EScope::Identifier},
+          {TRule_id_or_type::GetDescriptor(), EScope::Identifier},
+          {TRule_id_schema::GetDescriptor(), EScope::Identifier},
+          {TRule_id_expr::GetDescriptor(), EScope::Identifier},
+          {TRule_id_expr_in::GetDescriptor(), EScope::Identifier},
+          {TRule_id_window::GetDescriptor(), EScope::Identifier},
+          {TRule_id_table::GetDescriptor(), EScope::Identifier},
+          {TRule_id_without::GetDescriptor(), EScope::Identifier},
+          {TRule_id_hint::GetDescriptor(), EScope::Identifier},
+          {TRule_identifier::GetDescriptor(), EScope::Identifier},
+          {TRule_id_table_or_type::GetDescriptor(), EScope::Identifier},
+          {TRule_bind_parameter::GetDescriptor(), EScope::Identifier},
+          {TRule_an_id_as_compat::GetDescriptor(), EScope::Identifier},
+      })
     , PrettyVisitDispatch({
-        {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
-        {TRule_value_constructor::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValueConstructor)},
-        {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
-        {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
-        {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
-        {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
-        {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
-        {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
-        {TRule_row_pattern_recognition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRowPatternRecognitionClause)},
-        {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
-        {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
-        {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
-        {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
-        {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
-        {TRule_table_hints::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableHints)},
-        {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
-        {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},
-        {TRule_select_kind_partial::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindPartial)},
-        {TRule_flatten_by_arg::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenByArg)},
-        {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
-        {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
-        {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
-        {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
-        {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
-        {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},
-        {TRule_window_partition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowParitionClause)},
-        {TRule_lambda_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitLambdaBody)},
-        {TRule_in_atom_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitInAtomExpr)},
-        {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
-        {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
-        {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
-        {TRule_ext_order_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExtOrderByClause)},
-        {TRule_key_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKeyExpr)},
-        {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
-        {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
-        {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
-        {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
-        {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
-        {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},
+          {TToken::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitToken)},
+          {TRule_value_constructor::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValueConstructor)},
+          {TRule_into_values_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoValuesSource)},
+          {TRule_select_kind::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKind)},
+          {TRule_process_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitProcessCore)},
+          {TRule_reduce_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitReduceCore)},
+          {TRule_sort_specification_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSortSpecificationList)},
+          {TRule_select_core::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectCore)},
+          {TRule_row_pattern_recognition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRowPatternRecognitionClause)},
+          {TRule_join_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinSource)},
+          {TRule_join_constraint::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitJoinConstraint)},
+          {TRule_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSingleSource)},
+          {TRule_flatten_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenSource)},
+          {TRule_named_single_source::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedSingleSource)},
+          {TRule_table_hints::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableHints)},
+          {TRule_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSimpleTableRef)},
+          {TRule_into_simple_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoSimpleTableRef)},
+          {TRule_select_kind_partial::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindPartial)},
+          {TRule_flatten_by_arg::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFlattenByArg)},
+          {TRule_without_column_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithoutColumnList)},
+          {TRule_table_ref::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableRef)},
+          {TRule_grouping_element_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupingElementList)},
+          {TRule_group_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGroupByClause)},
+          {TRule_window_definition_list::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowDefinitionList)},
+          {TRule_window_specification::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowSpecification)},
+          {TRule_window_partition_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWindowParitionClause)},
+          {TRule_lambda_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitLambdaBody)},
+          {TRule_select_kind_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectKindParenthesis)},
+          {TRule_cast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCastExpr)},
+          {TRule_bitcast_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitCastExpr)},
+          {TRule_ext_order_by_clause::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExtOrderByClause)},
+          {TRule_key_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitKeyExpr)},
+          {TRule_define_action_or_subquery_body::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDefineActionOrSubqueryBody)},
+          {TRule_exists_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExistsExpr)},
+          {TRule_case_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCaseExpr)},
+          {TRule_with_table_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitWithTableSettingsExpr)},
+          {TRule_table_setting_value::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTableSettingValue)},
+          {TRule_ttl_tier_action::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitTtlTierAction)},
 
-        {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
-        {TRule_cond_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCondExpr)},
-        {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},
-        {TRule_and_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAndSubexpr)},
-        {TRule_eq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitEqSubexpr)},
-        {TRule_neq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNeqSubexpr)},
-        {TRule_bit_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitSubexpr)},
-        {TRule_add_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAddSubexpr)},
-        {TRule_mul_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitMulSubexpr)},
+          {TRule_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExpr)},
+          {TRule_cond_expr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCondExpr)},
+          {TRule_or_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitOrSubexpr)},
+          {TRule_and_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAndSubexpr)},
+          {TRule_eq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitEqSubexpr)},
+          {TRule_neq_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNeqSubexpr)},
+          {TRule_bit_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBitSubexpr)},
+          {TRule_add_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAddSubexpr)},
+          {TRule_mul_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitMulSubexpr)},
 
-        {TRule_rot_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRotRight)},
-        {TRule_shift_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShiftRight)},
+          {TRule_rot_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRotRight)},
+          {TRule_shift_right::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShiftRight)},
 
-        {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
-        {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
-        {TRule_select_unparenthesized_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesized)},
-        {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
-        {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
-        {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
-        {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
-        {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
-        {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},
-        {TRule_update_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpdate)},
-        {TRule_delete_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDelete)},
-        {TRule_rollback_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRollback)},
-        {TRule_declare_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDeclare)},
-        {TRule_import_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitImport)},
-        {TRule_export_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExport)},
-        {TRule_alter_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTable)},
-        {TRule_alter_external_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalTable)},
-        {TRule_do_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDo)},
-        {TRule_define_action_or_subquery_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAction)},
-        {TRule_if_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIf)},
-        {TRule_for_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFor)},
-        {TRule_values_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValues)},
-        {TRule_create_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateUser)},
-        {TRule_alter_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterUser)},
-        {TRule_create_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateGroup)},
-        {TRule_alter_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterGroup)},
-        {TRule_drop_role_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropRole)},
-        {TRule_upsert_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpsertObject)},
-        {TRule_create_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateObject)},
-        {TRule_alter_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterObject)},
-        {TRule_drop_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropObject)},
-        {TRule_create_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateExternalDataSource)},
-        {TRule_alter_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalDataSource)},
-        {TRule_drop_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropExternalDataSource)},
-        {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
-        {TRule_alter_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterAsyncReplication)},
-        {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
-        {TRule_create_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTransfer)},
-        {TRule_alter_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTransfer)},
-        {TRule_drop_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTransfer)},
-        {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
-        {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
-        {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
-        {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
-        {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
-        {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
-        {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
-        {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
-        {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
-        {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
-        {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
-        {TRule_create_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateBackupCollection)},
-        {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
-        {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},
-        {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)},
-        {TRule_create_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePoolClassifier)},
-        {TRule_alter_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePoolClassifier)},
-        {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)},
-        {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
-        {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
-        {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
-        {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
-        {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
-        })
+          {TRule_pragma_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitPragma)},
+          {TRule_select_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelect)},
+          {TRule_select_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectIntersect)},
+          {TRule_smart_parenthesis::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSmartParenthesis)},
+          {TRule_select_subexpr::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectSubExpr)},
+          {TRule_select_subexpr_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectSubExprIntersect)},
+          {TRule_select_unparenthesized_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesized)},
+          {TRule_select_unparenthesized_stmt_intersect::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitSelectUnparenthesizedIntersect)},
+          {TRule_named_nodes_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitNamedNodes)},
+          {TRule_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTable)},
+          {TRule_drop_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTable)},
+          {TRule_use_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUse)},
+          {TRule_into_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIntoTable)},
+          {TRule_commit_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCommit)},
+          {TRule_update_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpdate)},
+          {TRule_delete_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDelete)},
+          {TRule_rollback_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRollback)},
+          {TRule_declare_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDeclare)},
+          {TRule_import_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitImport)},
+          {TRule_export_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitExport)},
+          {TRule_alter_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTable)},
+          {TRule_alter_external_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalTable)},
+          {TRule_do_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDo)},
+          {TRule_define_action_or_subquery_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAction)},
+          {TRule_if_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitIf)},
+          {TRule_for_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitFor)},
+          {TRule_values_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitValues)},
+          {TRule_create_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateUser)},
+          {TRule_alter_user_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterUser)},
+          {TRule_create_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateGroup)},
+          {TRule_alter_group_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterGroup)},
+          {TRule_drop_role_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropRole)},
+          {TRule_upsert_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitUpsertObject)},
+          {TRule_create_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateObject)},
+          {TRule_alter_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterObject)},
+          {TRule_drop_object_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropObject)},
+          {TRule_create_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateExternalDataSource)},
+          {TRule_alter_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterExternalDataSource)},
+          {TRule_drop_external_data_source_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropExternalDataSource)},
+          {TRule_create_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateAsyncReplication)},
+          {TRule_alter_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterAsyncReplication)},
+          {TRule_drop_replication_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropAsyncReplication)},
+          {TRule_create_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTransfer)},
+          {TRule_alter_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTransfer)},
+          {TRule_drop_transfer_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTransfer)},
+          {TRule_create_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateTopic)},
+          {TRule_alter_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTopic)},
+          {TRule_drop_topic_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropTopic)},
+          {TRule_grant_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitGrantPermissions)},
+          {TRule_revoke_permissions_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRevokePermissions)},
+          {TRule_alter_table_store_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterTableStore)},
+          {TRule_create_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateView)},
+          {TRule_drop_view_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropView)},
+          {TRule_create_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePool)},
+          {TRule_alter_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePool)},
+          {TRule_drop_resource_pool_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePool)},
+          {TRule_create_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateBackupCollection)},
+          {TRule_alter_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterBackupCollection)},
+          {TRule_drop_backup_collection_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropBackupCollection)},
+          {TRule_analyze_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAnalyze)},
+          {TRule_create_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateResourcePoolClassifier)},
+          {TRule_alter_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterResourcePoolClassifier)},
+          {TRule_drop_resource_pool_classifier_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropResourcePoolClassifier)},
+          {TRule_backup_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitBackup)},
+          {TRule_restore_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitRestore)},
+          {TRule_alter_sequence_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSequence)},
+          {TRule_alter_database_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterDatabase)},
+          {TRule_show_create_table_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitShowCreateTable)},
+          {TRule_streaming_query_settings::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitStreamingQuerySettings)},
+          {TRule_create_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateStreamingQuery)},
+          {TRule_alter_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterStreamingQuery)},
+          {TRule_drop_streaming_query_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropStreamingQuery)},
+          {TRule_create_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitCreateSecret)},
+          {TRule_alter_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitAlterSecret)},
+          {TRule_drop_secret_stmt::GetDescriptor(), MakePrettyFunctor(&TPrettyVisitor::VisitDropSecret)},
+      })
     , ObfuscatingVisitDispatch({
-        {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
-        {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
-        {TRule_pragma_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitPragmaValue)},
-        {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
-        {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
-        {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},
-        {TRule_in_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInUnaryCasualSubexpr)},
-        })
+          {TToken::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitToken)},
+          {TRule_literal_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitLiteralValue)},
+          {TRule_pragma_value::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitPragmaValue)},
+          {TRule_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitAtomExpr)},
+          {TRule_in_atom_expr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInAtomExpr)},
+          {TRule_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitUnaryCasualSubexpr)},
+          {TRule_in_unary_casual_subexpr::GetDescriptor(), MakeObfuscatingFunctor(&TObfuscatingVisitor::VisitInUnaryCasualSubexpr)},
+      })
 {
     // ensure that all statements have a visitor
     auto coreDescr = TRule_sql_stmt_core::GetDescriptor();
@@ -3105,19 +3210,20 @@ TStaticData::TStaticData()
     }
 }
 
-class TSqlFormatter : public NSQLFormat::ISqlFormatter {
+class TSqlFormatter: public NSQLFormat::ISqlFormatter {
 public:
     TSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
-        const NSQLTranslationV1::TParsers& parsers,
-        const NSQLTranslation::TTranslationSettings& settings)
-        : Lexers(lexers)
-        , Parsers(parsers)
-        , Settings(settings)
-    {}
+                  const NSQLTranslationV1::TParsers& parsers,
+                  const NSQLTranslation::TTranslationSettings& settings)
+        : Lexers_(lexers)
+        , Parsers_(parsers)
+        , Settings_(settings)
+    {
+    }
 
     bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues, EFormatMode mode) override {
         formattedQuery = (mode == EFormatMode::Obfuscate) ? "" : query;
-        auto parsedSettings = Settings;
+        auto parsedSettings = Settings_;
         if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
             return false;
         }
@@ -3127,7 +3233,7 @@ public:
         }
 
         if (mode == EFormatMode::Obfuscate) {
-            auto message = NSQLTranslationV1::SqlAST(Parsers, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, query, parsedSettings.File, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 return false;
             }
@@ -3136,7 +3242,7 @@ public:
             return Format(visitor.Process(*message), formattedQuery, issues, EFormatMode::Pretty);
         }
 
-        auto lexer = NSQLTranslationV1::MakeLexer(Lexers, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
+        auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser);
         TVector<TString> statements;
         if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File)) {
             return false;
@@ -3162,7 +3268,7 @@ public:
             }
 
             NYql::TIssues parserIssues;
-            auto message = NSQLTranslationV1::SqlAST(Parsers, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
+            auto message = NSQLTranslationV1::SqlAST(Parsers_, currentQuery, parsedSettings.File, parserIssues, NSQLTranslation::SQL_MAX_PARSER_ERRORS, parsedSettings.AnsiLexer, parsedSettings.Antlr4Parser, parsedSettings.Arena);
             if (!message) {
                 finalFormattedQuery << currentQuery;
                 if (!currentQuery.EndsWith("\n")) {
@@ -3210,21 +3316,21 @@ public:
     }
 
 private:
-    const NSQLTranslationV1::TLexers Lexers;
-    const NSQLTranslationV1::TParsers Parsers;
-    const NSQLTranslation::TTranslationSettings Settings;
+    const NSQLTranslationV1::TLexers Lexers_;
+    const NSQLTranslationV1::TParsers Parsers_;
+    const NSQLTranslation::TTranslationSettings Settings_;
 };
 
-}
+} // namespace
 
 ISqlFormatter::TPtr MakeSqlFormatter(const NSQLTranslationV1::TLexers& lexers,
-    const NSQLTranslationV1::TParsers& parsers,
-    const NSQLTranslation::TTranslationSettings& settings) {
+                                     const NSQLTranslationV1::TParsers& parsers,
+                                     const NSQLTranslation::TTranslationSettings& settings) {
     return ISqlFormatter::TPtr(new TSqlFormatter(lexers, parsers, settings));
 }
 
 TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
-    const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
+                    const TString& query, const NSQLTranslation::TTranslationSettings& settings) {
     auto parsedSettings = settings;
     NYql::TIssues issues;
     if (!NSQLTranslation::ParseTranslationSettings(query, parsedSettings, issues)) {
@@ -3255,8 +3361,8 @@ TString MutateQuery(const NSQLTranslationV1::TLexers& lexers,
 }
 
 bool SqlFormatSimple(const NSQLTranslationV1::TLexers& lexers,
-    const NSQLTranslationV1::TParsers& parsers,
-    const TString& query, TString& formattedQuery, TString& error) {
+                     const NSQLTranslationV1::TParsers& parsers,
+                     const TString& query, TString& formattedQuery, TString& error) {
     try {
         google::protobuf::Arena arena;
         NSQLTranslation::TTranslationSettings settings;
@@ -3299,7 +3405,7 @@ THashSet<TString> GetKeywords() {
         SubstGlobal(after, " ", "");
         SubstGlobal(after, "'", "");
         if (after == before) {
-            //Cerr << before << "\n";
+            // Cerr << before << "\n";
             res.insert(before);
         }
     }

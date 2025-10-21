@@ -60,7 +60,7 @@ public:
 
 class TFakeExternalStorage {
 private:
-    YDB_ACCESSOR_DEF(TString, SecretKey);
+    TString SecretKey;
     mutable TMutex Mutex;
     mutable TMap<TString, TFakeBucketStorage> BucketStorages;
     TEvListObjectsResponse::TResult BuildListObjectsResult(const TEvListObjectsRequest::TRequest& request) const;
@@ -72,6 +72,11 @@ private:
 public:
     TFakeExternalStorage() = default;
 
+    void Clear() {
+        TGuard<TMutex> g(Mutex);
+        BucketStorages.clear();
+    }
+
     static i64 GetWritesCount() {
         return TFakeBucketStorage::GetWritesCount();
     }
@@ -82,6 +87,16 @@ public:
 
     static void ResetWriteCounters() {
         return TFakeBucketStorage::ResetWriteCounters();
+    }
+
+    void SetSecretKey(const TString& secretKey) {
+        TGuard<TMutex> g(Mutex);
+        SecretKey = secretKey;
+    }
+
+    TString GetSecretKey() const {
+        TGuard<TMutex> g(Mutex);
+        return SecretKey;
     }
 
     const TFakeBucketStorage& GetBucket(const TString& bucketId) const {

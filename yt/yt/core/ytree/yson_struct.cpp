@@ -181,10 +181,10 @@ void TYsonStructBase::Postprocess(const std::function<NYPath::TYPath()>& pathGet
     Meta_->PostprocessStruct(this, pathGetter);
 }
 
-void TYsonStructBase::SetDefaults()
+void TYsonStructBase::SetDefaults(bool dontSetLiteMembers)
 {
     YT_VERIFY(Meta_);
-    Meta_->SetDefaultsOfInitializedStruct(this);
+    Meta_->SetDefaultsOfInitializedStruct(this, dontSetLiteMembers);
 }
 
 void TYsonStructBase::SaveParameter(const std::string& key, IYsonConsumer* consumer) const
@@ -215,9 +215,9 @@ std::vector<std::string> TYsonStructBase::GetAllParameterAliases(const std::stri
     return result;
 }
 
-void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
+void TYsonStructBase::WriteSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
-    return Meta_->WriteSchema(this, consumer);
+    return Meta_->WriteSchema(this, consumer, options);
 }
 
 bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const
@@ -236,7 +236,7 @@ void TYsonStruct::InitializeRefCounted()
 {
     TYsonStructRegistry::Get()->OnFinalCtorCalled();
     if (!TYsonStructRegistry::InitializationInProgress()) {
-        SetDefaults();
+        SetDefaults(/*dontSetLiteMembers*/ true);
     }
 }
 

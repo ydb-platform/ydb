@@ -17,7 +17,7 @@ using namespace NActors;
 using namespace NExportScan;
 using namespace NTable;
 
-class TExportScan: private NActors::IActorCallback, public NTable::IScan {
+class TExportScan: private NActors::IActorCallback, public IActorExceptionHandler, public NTable::IScan {
     enum EStateBits {
         ES_REGISTERED = 0, // Actor is registered
         ES_INITIALIZED, // Seek(...) was called
@@ -217,16 +217,26 @@ public:
         return MaybeSendBuffer();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
         auto outcome = EExportOutcome::Success;
-        if (abort != EAbort::None) {
-            outcome = EExportOutcome::Aborted;
+        if (status != EStatus::Done) {
+            outcome = status == EStatus::Exception
+                ? EExportOutcome::Error
+                : EExportOutcome::Aborted;
         } else if (!Success) {
             outcome = EExportOutcome::Error;
         }
 
         PassAway();
         return new TExportScanProduct(outcome, Error, Stats->BytesRead, Stats->Rows);
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void PassAway() override {

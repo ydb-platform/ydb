@@ -54,7 +54,7 @@ TDqPqReadActorBase::TDqPqReadActorBase(
     NActors::TActorId selfId,
     const TTxId& txId,
     NPq::NProto::TDqPqTopicSource&& sourceParams,
-    NPq::NProto::TDqReadTaskParams&& readParams,
+    TVector<NPq::NProto::TDqReadTaskParams>&& readParams,
     const NActors::TActorId& computeActorId)
     : InputIndex(inputIndex)
     , TxId(txId)

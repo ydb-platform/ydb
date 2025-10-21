@@ -27,3 +27,4 @@ Command / Subcommand | Brief Description
 [admin cluster config fetch](./fetch.md) | Fetch the current dynamic configuration (aliases: `get`, `dump`)
 [admin cluster config generate](./generate.md) | Generate dynamic configuration from the static startup configuration
 [admin cluster config replace](./replace.md) | Replace the dynamic configuration
+admin cluster config vesion | Show configuration version on nodes (V1/V2)

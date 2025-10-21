@@ -27,7 +27,7 @@ TSimpleSerializationStat::TSimpleSerializationStat(const ui64 bytes, const ui64 
     : SerializedBytes(bytes)
     , RecordsCount(recordsCount)
     , RawBytes(rawBytes) {
-    Y_ABORT_UNLESS(SerializedBytes);
+//    Y_ABORT_UNLESS(SerializedBytes);
     Y_ABORT_UNLESS(RecordsCount);
     //    Y_ABORT_UNLESS(RawBytes);
 }
@@ -45,7 +45,7 @@ std::vector<i64> TSimpleSerializationStat::SplitRecords(
 }
 
 std::vector<i64> TBatchSerializationStat::SplitRecordsForBlobSize(const i64 recordsCount, const ui64 blobSize) const {
-    if (!SerializedBytesPerRecord) {
+    if (!SerializedBytesPerRecord || blobSize < SerializedBytesPerRecord) {
         return { recordsCount };
     }
     const ui32 recordsCountPerBlob = blobSize / SerializedBytesPerRecord;

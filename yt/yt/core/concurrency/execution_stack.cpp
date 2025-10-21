@@ -30,28 +30,19 @@ constinit const auto Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Stack sizes.
-#if defined(_asan_enabled_) || defined(_msan_enabled_)
-    static constexpr size_t SmallExecutionStackSize = 2_MB;
-    static constexpr size_t LargeExecutionStackSize = 64_MB;
-#else
-    static constexpr size_t SmallExecutionStackSize = 256_KB;
-    static constexpr size_t LargeExecutionStackSize = 8_MB;
-#endif
-
-////////////////////////////////////////////////////////////////////////////////
-
 TExecutionStackBase::TExecutionStackBase(size_t size)
     : Stack_(nullptr)
     , Size_(RoundUpToPage(size))
 {
     auto cookie = GetRefCountedTypeCookie<TExecutionStack>();
+    TRefCountedTrackerFacade::AllocateInstance(cookie);
     TRefCountedTrackerFacade::AllocateSpace(cookie, Size_);
 }
 
 TExecutionStackBase::~TExecutionStackBase()
 {
     auto cookie = GetRefCountedTypeCookie<TExecutionStack>();
+    TRefCountedTrackerFacade::FreeInstance(cookie);
     TRefCountedTrackerFacade::FreeSpace(cookie, Size_);
 }
 
@@ -176,13 +167,28 @@ public:
     { }
 };
 
+// Stack sizes.
+#if defined(_asan_enabled_) || defined(_msan_enabled_)
+    static constexpr size_t SmallExecutionStackSize = 2_MB;
+    static constexpr size_t LargeExecutionStackSize = 64_MB;
+    static constexpr size_t HugeExecutionStackSize = 64_MB;
+#else
+    static constexpr size_t SmallExecutionStackSize = 256_KB;
+    static constexpr size_t LargeExecutionStackSize = 8_MB;
+    static constexpr size_t HugeExecutionStackSize = 64_MB;
+#endif
+
 std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind)
 {
     switch (kind) {
-        case EExecutionStackKind::Small:
-            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::Small, SmallExecutionStackSize>>().Allocate();
-        case EExecutionStackKind::Large:
-            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::Large, LargeExecutionStackSize>>().Allocate();
+#define XX(kind) \
+        case EExecutionStackKind::kind: \
+            return ObjectPool<TPooledExecutionStack<EExecutionStackKind::kind, kind ## ExecutionStackSize>>().Allocate();
+
+        XX(Small)
+        XX(Large)
+        XX(Huge)
+#undef XX
         default:
             YT_ABORT();
     }

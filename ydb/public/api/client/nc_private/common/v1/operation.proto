@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package nebius.common.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "OperationProto";
+option java_package = "ai.nebius.common.v1";
+
+message Operation {
+  // ID of the operation.
+  string id = 1;
+
+  // Human-readable description of the operation. 0-256 characters long.
+  string description = 2;
+
+  // Creation timestamp.
+  google.protobuf.Timestamp created_at = 3;
+
+  // ID of the user or service account who initiated the operation.
+  string created_by = 4;
+
+  // The time when the operation has finished.
+  google.protobuf.Timestamp finished_at = 5;
+
+  // The request that generated this operation.
+  google.protobuf.Any request = 6;
+
+  // Request header is a container for all the values of a particular header of a request
+  // as there is no such thing as map<string, repeated string>
+  message RequestHeader {
+    // The values of a particular header from a request
+    repeated string values = 1;
+  }
+
+  // The request headers that are essential for the request that generated the operation.
+  // For instance, `x-resetmask`. Without these headers the request might have been processed
+  // differently if repeated.
+  // All the header names *must* be converted to lower case.
+  // Validator is based on:
+  // https://httpwg.org/specs/rfc9110.html#considerations.for.new.field.names
+  map<string, RequestHeader> request_headers = 11; // [(buf.validate.field).map.keys.string = {pattern: "^[a-z][-a-z\\.]*$"}];
+
+  // ID of the resource that this operation creates, updates, deletes or otherwise changes.
+  //
+  // If the operation affects multiple resources or does not affect any API resources at all
+  // (e.g. a routine maintenance operation visible to the user), the [resource_id] must be empty.
+  string resource_id = 7;
+
+  // Additional information about the progress of an operation, e.g., a progress percentage.
+  // MAY be absent while the operation is running, MUST be absent after the operation has completed.
+  //
+  // Format of message inside [progress_data] is service-dependent and MUST be documented by the
+  // service, IF it is used.
+  google.protobuf.Any progress_data = 9;
+
+  // The status of this operation. Set when this operation is completed.
+  // See https://github.com/grpc/grpc/blob/master/src/proto/grpc/status/status.proto.
+  //
+  // [status.code] is https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto:
+  // - If [status.code] == OK, the operation has completed successfully.
+  // - If [status.code] != OK, the operation has failed or has been cancelled.
+  //   - [status.message] will contain a user-readable and actionable error message.
+  //   - [status.details] will contain additional diagnostic information in the form of
+  //     [ServiceError] from nebius/common/v1/error.proto
+  // - [status.code] must belong to an Operation-compatible subset of GRPC codes:
+  //   OK, CANCELLED, PERMISSION_DENIED, RESOURCE_EXHAUSTED, FAILED_PRECONDITION, ABORTED, INTERNAL
+  google.rpc.Status status = 10 [(field_behavior) = MEANINGFUL_EMPTY_VALUE];
+}

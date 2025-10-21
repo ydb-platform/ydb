@@ -57,13 +57,13 @@ Y_UNIT_TEST_SUITE(BsControllerTest) {
             NKikimrBlobStorage::TConfigRequest request;
             auto *cmd = request.AddCommand()->MutableUpdateSettings();
             if (useSelfHealLocalPolicy.has_value()) {
-                cmd->SetUseSelfHealLocalPolicy(*useSelfHealLocalPolicy);
+                cmd->AddUseSelfHealLocalPolicy(*useSelfHealLocalPolicy);
             }
             if (tryToRelocateBrokenDisksLocallyFirst.has_value()) {
-                cmd->SetTryToRelocateBrokenDisksLocallyFirst(*tryToRelocateBrokenDisksLocallyFirst);
+                cmd->AddTryToRelocateBrokenDisksLocallyFirst(*tryToRelocateBrokenDisksLocallyFirst);
             }
-            cmd->SetGroupReserveMin(additionalSlots);
-            cmd->SetEnableDonorMode(true);
+            cmd->AddGroupReserveMin(additionalSlots);
+            cmd->AddEnableDonorMode(true);
             auto response = Env.Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
         }

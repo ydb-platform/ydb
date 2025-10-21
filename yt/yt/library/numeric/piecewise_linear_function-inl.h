@@ -1130,6 +1130,25 @@ bool operator==(const TPiecewiseLinearFunction<TValue>& lhs, const TPiecewiseLin
     return lhs.Segments() == rhs.Segments();
 }
 
+template <class TValue>
+void FormatValue(TStringBuilderBase* builder, const TPiecewiseLinearFunction<TValue>& func, TStringBuf spec)
+{
+    builder->AppendChar('[');
+    const auto& segments = func.Segments();
+    if (!segments.empty()) {
+        FormatValue(builder, segments[0].LeftBound(), spec);
+        builder->AppendString(": ");
+        FormatValue(builder, segments[0].LeftValue(), spec);
+        for (size_t index = 1; index < segments.size(); index++) {
+            builder->AppendString(", ");
+            FormatValue(builder, segments[index].RightBound(), spec);
+            builder->AppendString(": ");
+            FormatValue(builder, segments[index].RightValue(), spec);
+        }
+    }
+    builder->AppendChar(']');
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

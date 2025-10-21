@@ -540,8 +540,8 @@ bool TDqComputeActorChannels::CanSendChannelData(const ui64 channelId) const {
     return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState;
 }
 
-bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
-    TOutputChannelState& outputChannel = OutCh(channelId);
+bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) const {
+    const TOutputChannelState& outputChannel = OutCh(channelId);
     return outputChannel.Finished && !SupportCheckpoints;
 }
 
@@ -580,7 +580,6 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     outputChannel.InFlight.emplace(
         seqNo,
         TOutputChannelState::TInFlightMessage(
-            seqNo,
             std::move(channelData),
             finished
         )
@@ -650,7 +649,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     return true;
 }
 
-bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) {
+bool TDqComputeActorChannels::CheckInFlight(const TString& prefix) const {
     for (auto& inputChannel: InputChannelsMap) {
         if (!inputChannel.second.InFlight.empty()) {
             if (inputChannel.second.Finished) {
@@ -725,6 +724,7 @@ const TDqComputeActorChannels::TOutputChannelStats* TDqComputeActorChannels::Get
 
 void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
     TInputChannelState& inputChannel = InCh(channelId);
+    inputChannel.PollRequest.reset();
     SendChannelDataAck(inputChannel, freeSpace);
 }
 
@@ -737,12 +737,8 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", finished: " << inputChannel.Finished);
 
-    inputChannel.InFlight.emplace(
-        inputChannel.LastRecvSeqNo,
-        TInputChannelState::TInFlightMessage(
-            inputChannel.LastRecvSeqNo,
+    inputChannel.InFlight[inputChannel.LastRecvSeqNo] = TInputChannelState::TInFlightMessage(
             freeSpace
-        )
     );
 
     auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();

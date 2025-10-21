@@ -317,7 +317,7 @@ namespace NActors {
     ////////////////////////////////////////////////////////////////////////////////
     TAutoPtr<TLogBackend> CreateSysLogBackend(const TString& ident,
                                               bool logPError, bool logCons);
-    TAutoPtr<TLogBackend> CreateStderrBackend();
+    TAutoPtr<TLogBackend> CreateStderrBackend(bool useColors = false);
     TAutoPtr<TLogBackend> CreateFileBackend(const TString& fileName);
     TAutoPtr<TLogBackend> CreateNullBackend();
     TAutoPtr<TLogBackend> CreateCompositeLogBackend(TVector<TAutoPtr<TLogBackend>>&& underlyingBackends);
@@ -604,7 +604,7 @@ namespace NActors {
             return *this;
         }
 
-        ~TVerifyFormattedRecordWriter();
+        [[noreturn]] ~TVerifyFormattedRecordWriter();
     };
 
     class TEnsureFormattedRecordWriter: public TFormatedStreamWriter {
@@ -621,12 +621,12 @@ namespace NActors {
             return *this;
         }
 
-        ~TEnsureFormattedRecordWriter() noexcept(false);
+        [[noreturn]] ~TEnsureFormattedRecordWriter() noexcept(false);
     };
 }
 
-#define AFL_VERIFY(condition) if (condition); else NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
-#define AFL_ENSURE(condition) if (condition); else NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_VERIFY(condition) if (condition); else [[unlikely]] NActors::TVerifyFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
+#define AFL_ENSURE(condition) if (condition); else [[unlikely]] NActors::TEnsureFormattedRecordWriter(#condition)("fline", TStringBuilder() << TStringBuf(__FILE__).RAfter(LOCSLASH_C) << ":" << __LINE__)
 
 #ifndef NDEBUG
 /// Assert that depend on NDEBUG macro and outputs message like printf

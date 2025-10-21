@@ -1,5 +1,5 @@
-#include "schemeshard_impl.h"
 #include "schemeshard__stats_impl.h"
+#include "schemeshard_impl.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
@@ -298,20 +298,18 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TPartitionStats newAggrStats;
     bool updateSubdomainInfo = false;
 
-    if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
-        TMaybe<ui32> nodeId;
-        if (rec.HasNodeId()) {
-            nodeId = rec.GetNodeId();
-        }
-        TMaybe<ui64> startTime;
-        if (rec.HasStartTime()) {
-            startTime = rec.GetStartTime();
-        }
-
-        PendingMessages.emplace_back(
-            Self->SysPartitionStatsCollector,
-            Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx).Release());
+    TMaybe<ui32> nodeId;
+    if (rec.HasNodeId()) {
+        nodeId = rec.GetNodeId();
     }
+    TMaybe<ui64> startTime;
+    if (rec.HasStartTime()) {
+        startTime = rec.GetStartTime();
+    }
+
+    PendingMessages.emplace_back(
+        Self->SysPartitionStatsCollector,
+        Self->BuildStatsForCollector(pathId, shardIdx, datashardId, followerId, nodeId, startTime, newStats, ctx).Release());
 
     // Skip statistics from follower
     if (followerId) {
@@ -468,8 +466,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     TString reason;
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason)) {
         // We would like to split by size and do this no matter how many partitions there are
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by size " << reason);
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Want to split tablet " << datashardId << " by size: " << reason);
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -477,12 +475,12 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex, reason)) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by load " << reason);
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Want to split tablet " << datashardId << " by load: " << reason);
         collectKeySample = true;
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId);
+            "Do not want to split tablet " << datashardId << ": " << reason);
         return true;
     }
 
@@ -501,20 +499,20 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     if (newStats.HasBorrowedData) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Postpone split tablet " << datashardId << " because it has borrow parts, enqueue compact them first");
         Self->EnqueueBorrowedCompaction(shardIdx);
         return true;
     }
 
     if (path.IsLocked()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Postpone split tablet " << datashardId << " because it is locked by " << path.LockedBy());
         return true;
     }
 
     // Request histograms from the datashard
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
         "Requesting full tablet stats " << datashardId << " to split it");
     auto request = new TEvDataShard::TEvGetTableStats(pathId.LocalPathId);
     request->Record.SetCollectKeySample(collectKeySample);

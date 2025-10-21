@@ -44,9 +44,12 @@ public:
         TNodeInfo& node = Self->GetNode(Local.NodeId());
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToStop;
         THashSet<std::pair<TTabletId, TFollowerId>> tabletsToBoot;
+        const bool isLockedTabletsSendMetrics = Self->CurrentConfig.GetLockedTabletsSendMetrics();
         for (const auto& t : node.Tablets) {
             for (TTabletInfo* tablet : t.second) {
-                tabletsToStop.insert(tablet->GetFullTabletId());
+                if (!(isLockedTabletsSendMetrics && tablet->IsLeader() && tablet->AsLeader().IsLockedToActor())) {
+                    tabletsToStop.insert(tablet->GetFullTabletId());
+                }
             }
         }
         auto foundTablet = [&](TTabletInfo* tablet, const TString& state) {

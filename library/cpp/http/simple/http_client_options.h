@@ -61,10 +61,30 @@ public:
         return MaxRedirectCount_;
     }
 
+    TSelf& UseKeepAlive(bool useKeepAlive) {
+        UseKeepAlive_ = useKeepAlive;
+        return *this;
+    }
+
+    bool UseKeepAlive() const noexcept {
+        return UseKeepAlive_;
+    }
+
+    TSelf& UseConnectionPool(bool useConnectionPool) {
+        UseConnectionPool_ = useConnectionPool;
+        return *this;
+    }
+
+    bool UseConnectionPool() const noexcept {
+        return UseConnectionPool_;
+    }
+
 private:
     TString Host_;
     ui16 Port_;
     TDuration SocketTimeout_ = TDuration::Seconds(5);
     TDuration ConnectTimeout_ = TDuration::Seconds(30);
     int MaxRedirectCount_ = INT_MAX;
+    bool UseKeepAlive_ = true;
+    bool UseConnectionPool_ = false;
 };

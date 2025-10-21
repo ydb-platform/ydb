@@ -3,6 +3,8 @@
 #include "executor.h"
 #include "log.h"
 
+#include <ydb/core/ymq/actor/cloud_events/cloud_events.h>
+
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/helpers.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -33,6 +35,9 @@ public:
         for (const auto& key : Request().tagkeys()) {
             TagKeys_.push_back(key);
         }
+
+        SourceAddress_ = Request().GetSourceAddress();
+        IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
 private:
@@ -65,19 +70,51 @@ private:
         }
 
         TExecutorBuilder builder(SelfId(), RequestId_);
-        builder
-            .User(UserName_)
-            .Queue(GetQueueName())
-            .TablesFormat(TablesFormat())
-            .QueueLeader(QueueLeader_)
-            .QueryId(TAG_QUEUE_ID)
-            .Counters(QueueCounters_)
-            .RetryOnTimeout()
-            .Params()
-                .Utf8("NAME", GetQueueName())
-                .Utf8("USER_NAME", UserName_)
-                .Utf8("TAGS", TagsToJson(tags))
-                .Utf8("OLD_TAGS", oldTags);
+        if (IsCloudEventsEnabled) {
+            const auto& cloudEvCfg = Cfg().GetCloudEventsConfig();
+            TString database = (cloudEvCfg.HasTenantMode() && cloudEvCfg.GetTenantMode()? Cfg().GetRoot() : "");
+
+            auto evId = NCloudEvents::TEventIdGenerator::Generate();
+            auto createdAt = TInstant::Now().MilliSeconds();
+
+            builder
+                .User(UserName_)
+                .Queue(GetQueueName())
+                .TablesFormat(TablesFormat())
+                .QueueLeader(QueueLeader_)
+                .QueryId(TAG_QUEUE_ID)
+                .Counters(QueueCounters_)
+                .RetryOnTimeout()
+                .Params()
+                    .Utf8("NAME", GetQueueName())
+                    .Utf8("USER_NAME", UserName_)
+                    .Utf8("TAGS", TagsToJson(tags))
+                    .Utf8("OLD_TAGS", oldTags)
+                    .Uint64("CLOUD_EVENT_ID", evId)
+                    .Uint64("CLOUD_EVENT_NOW", createdAt)
+                    .Utf8("CLOUD_EVENT_TYPE", "UpdateMessageQueue")
+                    .Utf8("CLOUD_EVENT_CLOUD_ID", UserName_)
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+                    .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
+                    .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+                    .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
+        } else {
+            builder
+                .User(UserName_)
+                .Queue(GetQueueName())
+                .TablesFormat(TablesFormat())
+                .QueueLeader(QueueLeader_)
+                .QueryId(TAG_QUEUE_ID)
+                .Counters(QueueCounters_)
+                .RetryOnTimeout()
+                .Params()
+                    .Utf8("NAME", GetQueueName())
+                    .Utf8("USER_NAME", UserName_)
+                    .Utf8("TAGS", TagsToJson(tags))
+                    .Utf8("OLD_TAGS", oldTags);
+        }
 
         builder.Start();
     }
@@ -90,6 +127,14 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvWakeup, HandleWakeup);
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
+        }
+    }
+
+    TString GetFullCloudEventsTablePath() const {
+        if (!Cfg().GetRoot().empty()) {
+            return TStringBuilder() << Cfg().GetRoot() << "/" << NCloudEvents::TProcessor::EventTableName;
+        } else {
+            return TString(NCloudEvents::TProcessor::EventTableName);
         }
     }
 
@@ -122,6 +167,9 @@ private:
 
 private:
     TVector<TString> TagKeys_;
+    bool IsCloudEventsEnabled;
+    TString CustomQueueName_ = "";
+    TString SourceAddress_ = "";
 };
 
 IActor* CreateUntagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

@@ -31,7 +31,7 @@
 
 KEEP     BSL-1.0              1bc23f67ca27c295e38b46190cdce22f
 BELONGS ya.make
-FILE_INCLUDE LICENSE_1_0.txt found in files: include/pfr.hpp at line 4, include/pfr/config.hpp at line 5, include/pfr/core.hpp at line 4, include/pfr/core_name.hpp at line 4, include/pfr/detail/cast_to_layout_compatible.hpp at line 4, include/pfr/detail/config.hpp at line 5, include/pfr/detail/core.hpp at line 4, include/pfr/detail/core14_classic.hpp at line 4, include/pfr/detail/core14_loophole.hpp at line 5, include/pfr/detail/core17.hpp at line 4, include/pfr/detail/core17_generated.hpp at line 5, include/pfr/detail/core_name.hpp at line 4, include/pfr/detail/core_name14_disabled.hpp at line 4, include/pfr/detail/core_name20_static.hpp at line 4, include/pfr/detail/detectors.hpp at line 4, include/pfr/detail/fake_object.hpp at line 4, include/pfr/detail/fields_count.hpp at line 4, include/pfr/detail/for_each_field_impl.hpp at line 4, include/pfr/detail/functional.hpp at line 4, include/pfr/detail/io.hpp at line 4, include/pfr/detail/make_flat_tuple_of_references.hpp at line 4, include/pfr/detail/make_integer_sequence.hpp at line 5, include/pfr/detail/offset_based_getter.hpp at line 5, include/pfr/detail/possible_reflectable.hpp at line 4, include/pfr/detail/rvalue_t.hpp at line 4, include/pfr/detail/sequence_tuple.hpp at line 4, include/pfr/detail/size_array.hpp at line 4, include/pfr/detail/size_t_.hpp at line 4, include/pfr/detail/stdarray.hpp at line 4, include/pfr/detail/stdtuple.hpp at line 4, include/pfr/detail/tie_from_structure_tuple.hpp at line 5, include/pfr/detail/unsafe_declval.hpp at line 4, include/pfr/functions_for.hpp at line 4, include/pfr/functors.hpp at line 4, include/pfr/io.hpp at line 4, include/pfr/io_fields.hpp at line 4, include/pfr/ops.hpp at line 4, include/pfr/ops_fields.hpp at line 4, include/pfr/traits.hpp at line 4, include/pfr/traits_fwd.hpp at line 4, include/pfr/tuple_size.hpp at line 4
+FILE_INCLUDE LICENSE_1_0.txt found in files: include/pfr.hpp at line 4, include/pfr/config.hpp at line 5, include/pfr/core.hpp at line 4, include/pfr/core_name.hpp at line 4, include/pfr/detail/config.hpp at line 5, include/pfr/detail/core.hpp at line 4, include/pfr/detail/core14_classic.hpp at line 4, include/pfr/detail/core14_loophole.hpp at line 5, include/pfr/detail/core17.hpp at line 4, include/pfr/detail/core17_generated.hpp at line 5, include/pfr/detail/core_name.hpp at line 4, include/pfr/detail/core_name14_disabled.hpp at line 4, include/pfr/detail/core_name20_static.hpp at line 4, include/pfr/detail/detectors.hpp at line 4, include/pfr/detail/fake_object.hpp at line 5, include/pfr/detail/fields_count.hpp at line 4, include/pfr/detail/for_each_field.hpp at line 4, include/pfr/detail/for_each_field_impl.hpp at line 4, include/pfr/detail/functional.hpp at line 4, include/pfr/detail/io.hpp at line 4, include/pfr/detail/make_flat_tuple_of_references.hpp at line 4, include/pfr/detail/make_integer_sequence.hpp at line 5, include/pfr/detail/offset_based_getter.hpp at line 5, include/pfr/detail/possible_reflectable.hpp at line 4, include/pfr/detail/rvalue_t.hpp at line 4, include/pfr/detail/sequence_tuple.hpp at line 4, include/pfr/detail/size_array.hpp at line 4, include/pfr/detail/size_t_.hpp at line 4, include/pfr/detail/stdarray.hpp at line 4, include/pfr/detail/stdtuple.hpp at line 4, include/pfr/detail/tie_from_structure_tuple.hpp at line 5, include/pfr/detail/unsafe_declval.hpp at line 4, include/pfr/functions_for.hpp at line 4, include/pfr/functors.hpp at line 4, include/pfr/io.hpp at line 4, include/pfr/io_fields.hpp at line 4, include/pfr/ops.hpp at line 4, include/pfr/ops_fields.hpp at line 4, include/pfr/traits.hpp at line 4, include/pfr/traits_fwd.hpp at line 4, include/pfr/tuple_size.hpp at line 4
     License text:
         // Distributed under the Boost Software License, Version 1.0. (See accompanying
         // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -45,7 +45,6 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/pfr.hpp at line 4, include/
         include/pfr/config.hpp [4:5]
         include/pfr/core.hpp [3:4]
         include/pfr/core_name.hpp [3:4]
-        include/pfr/detail/cast_to_layout_compatible.hpp [3:4]
         include/pfr/detail/config.hpp [4:5]
         include/pfr/detail/core.hpp [3:4]
         include/pfr/detail/core14_classic.hpp [3:4]
@@ -56,8 +55,9 @@ FILE_INCLUDE LICENSE_1_0.txt found in files: include/pfr.hpp at line 4, include/
         include/pfr/detail/core_name14_disabled.hpp [3:4]
         include/pfr/detail/core_name20_static.hpp [3:4]
         include/pfr/detail/detectors.hpp [3:4]
-        include/pfr/detail/fake_object.hpp [3:4]
+        include/pfr/detail/fake_object.hpp [4:5]
         include/pfr/detail/fields_count.hpp [3:4]
+        include/pfr/detail/for_each_field.hpp [3:4]
         include/pfr/detail/for_each_field_impl.hpp [3:4]
         include/pfr/detail/functional.hpp [3:4]
         include/pfr/detail/io.hpp [3:4]
@@ -104,7 +104,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        include/pfr/detail/functional.hpp [126:126]
+        include/pfr/detail/functional.hpp [128:128]
 
 KEEP     BSL-1.0              946bc271e5e8c30479a080d5b8ef3415
 BELONGS ya.make
@@ -130,4 +130,4 @@ BELONGS ya.make
         Match type      : TEXT
         Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
     Files with this license:
-        include/pfr/detail/functional.hpp [129:130]
+        include/pfr/detail/functional.hpp [131:132]

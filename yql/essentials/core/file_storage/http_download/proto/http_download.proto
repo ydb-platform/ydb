@@ -1,5 +1,14 @@
 package NYql;
 
 message THttpDownloaderConfig {
+    optional uint32 MaxRedirects = 2 [default = 10];
     optional uint32 SocketTimeoutMs = 3 [default = 300000];
+    optional uint32 MaxRetries = 4 [default = 3];
+
+    optional uint32 MinDelayMs = 5 [default = 1000];
+    optional uint32 MinLongDelayMs = 6 [default = 5000];
+    optional double Scale = 7 [default = 2];
+    optional uint32 MaxDelayMs = 8 [default = 60000];
+    optional uint32 MaxTotalDelayTimeMs = 9 [default = 180000];
+    
 }

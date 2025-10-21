@@ -5,9 +5,9 @@
 #include <yql/essentials/public/issue/yql_issue_id.h>
 
 #ifdef _win_
-#ifdef GetMessage
-#undef GetMessage
-#endif
+    #ifdef GetMessage
+        #undef GetMessage
+    #endif
 #endif
 
 namespace NYql {
@@ -50,4 +50,4 @@ inline TIssue YqlIssue(const TPosition& position, EYqlIssueCode id) {
 
 void CheckFatalIssues(TIssues& issues);
 
-}
+} // namespace NYql

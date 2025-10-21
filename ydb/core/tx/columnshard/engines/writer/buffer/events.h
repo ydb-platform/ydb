@@ -9,34 +9,6 @@
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/testlib/common/events_scheduling.h>
 
-namespace NKikimr::NColumnShard::NWriting {
-
-class TEvAddInsertedDataToBuffer
-    : public NActors::TEventLocal<TEvAddInsertedDataToBuffer, NColumnShard::TEvPrivate::EEv::EvWritingAddDataToBuffer> {
-private:
-    YDB_READONLY_DEF(std::shared_ptr<NEvWrite::TWriteData>, WriteData);
-    YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
-    YDB_ACCESSOR_DEF(std::vector<NArrow::TSerializedBatch>, BlobsToWrite);
-
-public:
-    explicit TEvAddInsertedDataToBuffer(const std::shared_ptr<NEvWrite::TWriteData>& writeData, std::vector<NArrow::TSerializedBatch>&& blobs,
-        const std::shared_ptr<arrow::RecordBatch>& recordBatch)
-        : WriteData(writeData)
-        , RecordBatch(recordBatch)
-        , BlobsToWrite(blobs) {
-    }
-};
-
-class TEvFlushBuffer: public NActors::TEventLocal<TEvFlushBuffer, NColumnShard::TEvPrivate::EEv::EvWritingFlushBuffer> {
-private:
-    static inline NActors::NTests::TGlobalScheduledEvents::TRegistrator TestScheduledEventRegistrator =
-        (ui32)NColumnShard::TEvPrivate::EEv::EvWritingFlushBuffer;
-
-public:
-};
-
-}   // namespace NKikimr::NColumnShard::NWriting
-
 namespace NKikimr::NOlap::NWritingPortions {
 
 class TEvAddInsertedDataToBuffer

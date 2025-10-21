@@ -29,6 +29,8 @@ items:
     href: balancing-prefer-local.md
   - name: Предпочитать конкретную зону доступности
     href: balancing-prefer-location.md
+  - name: Предпочитать пайл c конкретным состоянием
+    href: balancing-prefer-pile.md
 - name: Выполнение повторных запросов
   href: retry.md
 - name: Установить размер пула сессий
@@ -41,6 +43,8 @@ items:
   href: tx-control.md
 - name: Настройка TTL
   href: ttl.md
+- name: Векторный поиск
+  href: vector-search.md
 - name: Координация
   items:
   - name: Распределённая блокировка

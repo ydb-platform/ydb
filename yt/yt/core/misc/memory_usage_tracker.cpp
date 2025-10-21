@@ -163,7 +163,7 @@ TErrorOr<TMemoryUsageTrackerGuard> TMemoryUsageTrackerGuard::TryAcquire(
     guard.Size_ = size;
     guard.AcquiredSize_ = size;
     guard.Granularity_ = granularity;
-    return std::move(guard);
+    return guard;
 }
 
 void TMemoryUsageTrackerGuard::Release()
@@ -258,7 +258,7 @@ TMemoryUsageTrackerGuard TMemoryUsageTrackerGuard::TransferMemory(i64 size)
     guard.Size_ = size;
     guard.AcquiredSize_ = acquiredDelta;
     guard.Granularity_ = Granularity_;
-    return std::move(guard);
+    return guard;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -371,17 +371,6 @@ TErrorOr<TSharedRef> TryTrackMemory(
         return reference;
     }
     return tracker->TryTrack(std::move(reference), keepExistingTracking);
-}
-
-TSharedRef TrackMemory(
-    const IMemoryUsageTrackerPtr& tracker,
-    TSharedRef reference,
-    bool keepExistingTracking)
-{
-    if (!tracker || !reference) {
-        return reference;
-    }
-    return tracker->Track(std::move(reference), keepExistingTracking);
 }
 
 TSharedRefArray TrackMemory(

@@ -40,8 +40,6 @@ config:
       body: 3
       data_center: '3'
       rack: '3'
-  table_service_config:
-    sql_version: 1
   actor_system_config:
     use_auto_config: true
     cpu_count: 8

@@ -201,8 +201,6 @@ static bool operator == (const TStructField& lhs, const TStructField& rhs)
 class TLogicalTypeParser
 {
 public:
-    TLogicalTypeParser() = default;
-
     TLogicalTypePtr ParseTypeAndValidate(TStringBuf typeString)
     {
         *this = {};
@@ -396,7 +394,10 @@ private:
             Identifier_ = Str_.SubString(start, Index_ - start);
             QuotedIdentifier_ = false;
         } else if (CurrentCharacter() == '\'') {
-            THROW_ERROR_EXCEPTION_UNLESS(allowQuotedIdentifier, "Unexpected literal string");
+            if (!allowQuotedIdentifier) {
+                THROW_ERROR_EXCEPTION("Unexpected literal string")
+                    << TErrorAttribute("type_string", Str_);
+            }
             // Skip '.
             Step();
 
@@ -422,7 +423,8 @@ private:
             }
 
             if (!identifierClosed) {
-                THROW_ERROR_EXCEPTION("Invalid enclosure: %Qv", Str_.SubStr(start, Index_ - start));
+                THROW_ERROR_EXCEPTION("Encountered invalid enclosure %Qv", Str_.SubStr(start, Index_ - start))
+                    << TErrorAttribute("type_string", Str_);
             }
 
             UnescapedIdentifierHolder_ = UnescapeC(Str_.SubStr(start, Index_ - start));
@@ -432,7 +434,8 @@ private:
         }
 
         if (Identifier_.empty()) {
-            THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter());
+            THROW_ERROR_EXCEPTION("Unexpected character %qv, expected '_' or alphanumeric", CurrentCharacter())
+                << TErrorAttribute("type_string", Str_);
         }
 
         ConsumeWhitespaces();
@@ -527,7 +530,7 @@ private:
             Step();
             ConsumeWhitespaces();
         } else {
-            THROW_ERROR_EXCEPTION("Expected %Qv", character);
+            THROW_ERROR_EXCEPTION("Expected %qv", character);
         }
     }
 
@@ -568,9 +571,10 @@ TString ToString(const TLogicalType& logicalType)
             } else {
                 destination->append(',');
             }
+            auto escapedName = EscapeCAndSingleQuotes(field.Name);
             destination
                 ->append('\'')
-                .append(EscapeCAndSingleQuotes(field.Name))
+                .append(escapedName)
                 .append('\'')
                 .append(':')
                 .append(ToString(*field.Type));
@@ -634,10 +638,11 @@ TString ToString(const TLogicalType& logicalType)
 
         case ELogicalMetatype::Tagged: {
             const auto& taggedType = logicalType.AsTaggedTypeRef();
+            auto escapedTag = EscapeCAndSingleQuotes(taggedType.GetTag());
             return TString("Tagged<")
                 .append(ToString(*taggedType.GetElement()))
                 .append(",'")
-                .append(EscapeCAndSingleQuotes(taggedType.GetTag()))
+                .append(escapedTag)
                 .append("'>");
         }
     }
@@ -1937,19 +1942,15 @@ bool IsComparable(const TLogicalTypePtr& type)
 
 bool IsTzType(const TLogicalTypePtr& logicalType)
 {
-    switch (logicalType->GetMetatype()) {
-        case ELogicalMetatype::Simple:
-            switch (logicalType->AsSimpleTypeRef().GetElement()) {
-                case ESimpleLogicalValueType::TzDate:
-                case ESimpleLogicalValueType::TzDatetime:
-                case ESimpleLogicalValueType::TzTimestamp:
-                case ESimpleLogicalValueType::TzDate32:
-                case ESimpleLogicalValueType::TzDatetime64:
-                case ESimpleLogicalValueType::TzTimestamp64:
-                    return true;
-                default:
-                    return false;
-            }
+    auto simpleType = CastToV1Type(logicalType).first;
+    switch (simpleType) {
+        case ESimpleLogicalValueType::TzDate:
+        case ESimpleLogicalValueType::TzDatetime:
+        case ESimpleLogicalValueType::TzTimestamp:
+        case ESimpleLogicalValueType::TzDate32:
+        case ESimpleLogicalValueType::TzDatetime64:
+        case ESimpleLogicalValueType::TzTimestamp64:
+            return true;
         default:
             return false;
     }
@@ -1964,46 +1965,46 @@ using TV3TypeName = std::variant<ESimpleLogicalValueType, ELogicalMetatype, TV3V
 
 static const std::pair<ESimpleLogicalValueType, TString> V3SimpleLogicalValueTypeEncoding[] =
 {
-    {ESimpleLogicalValueType::Null,         "null"},
-    {ESimpleLogicalValueType::Int64,        "int64"},
-    {ESimpleLogicalValueType::Uint64,       "uint64"},
-    {ESimpleLogicalValueType::Double,       "double"},
-    {ESimpleLogicalValueType::Float,        "float"},
-    {ESimpleLogicalValueType::Boolean,      "bool"},  // NB. diff
-    {ESimpleLogicalValueType::String,       "string"},
-    {ESimpleLogicalValueType::Any,          "yson"}, // NB. diff
-    {ESimpleLogicalValueType::Json,         "json"},
-    {ESimpleLogicalValueType::Int8,         "int8"},
-    {ESimpleLogicalValueType::Uint8,       "uint8"},
+    {ESimpleLogicalValueType::Null,             "null"},
+    {ESimpleLogicalValueType::Int64,            "int64"},
+    {ESimpleLogicalValueType::Uint64,           "uint64"},
+    {ESimpleLogicalValueType::Double,           "double"},
+    {ESimpleLogicalValueType::Float,            "float"},
+    {ESimpleLogicalValueType::Boolean,          "bool"},  // NB. diff
+    {ESimpleLogicalValueType::String,           "string"},
+    {ESimpleLogicalValueType::Any,              "yson"}, // NB. diff
+    {ESimpleLogicalValueType::Json,             "json"},
+    {ESimpleLogicalValueType::Int8,             "int8"},
+    {ESimpleLogicalValueType::Uint8,            "uint8"},
 
-    {ESimpleLogicalValueType::Int16,       "int16"},
-    {ESimpleLogicalValueType::Uint16,      "uint16"},
+    {ESimpleLogicalValueType::Int16,            "int16"},
+    {ESimpleLogicalValueType::Uint16,           "uint16"},
 
-    {ESimpleLogicalValueType::Int32,       "int32"},
-    {ESimpleLogicalValueType::Uint32,      "uint32"},
+    {ESimpleLogicalValueType::Int32,            "int32"},
+    {ESimpleLogicalValueType::Uint32,           "uint32"},
 
-    {ESimpleLogicalValueType::Utf8,        "utf8"},
+    {ESimpleLogicalValueType::Utf8,             "utf8"},
 
-    {ESimpleLogicalValueType::Date,        "date"},
-    {ESimpleLogicalValueType::Datetime,    "datetime"},
-    {ESimpleLogicalValueType::Timestamp,   "timestamp"},
-    {ESimpleLogicalValueType::Interval,    "interval"},
+    {ESimpleLogicalValueType::Date,             "date"},
+    {ESimpleLogicalValueType::Datetime,         "datetime"},
+    {ESimpleLogicalValueType::Timestamp,        "timestamp"},
+    {ESimpleLogicalValueType::Interval,         "interval"},
 
-    {ESimpleLogicalValueType::Void,        "void"},
+    {ESimpleLogicalValueType::Void,             "void"},
 
-    {ESimpleLogicalValueType::Uuid,        "uuid"},
+    {ESimpleLogicalValueType::Uuid,             "uuid"},
 
-    {ESimpleLogicalValueType::Date32,      "date32"},
-    {ESimpleLogicalValueType::Datetime64,  "datetime64"},
-    {ESimpleLogicalValueType::Timestamp64, "timestamp64"},
-    {ESimpleLogicalValueType::Interval64,  "interval64"},
+    {ESimpleLogicalValueType::Date32,           "date32"},
+    {ESimpleLogicalValueType::Datetime64,       "datetime64"},
+    {ESimpleLogicalValueType::Timestamp64,      "timestamp64"},
+    {ESimpleLogicalValueType::Interval64,       "interval64"},
 
-    {ESimpleLogicalValueType::TzDate,      "tz_date"},
-    {ESimpleLogicalValueType::TzDatetime,  "tz_datetime"},
-    {ESimpleLogicalValueType::TzTimestamp, "tz_timestamp"},
-    {ESimpleLogicalValueType::TzDate32,      "tz_date32"},
-    {ESimpleLogicalValueType::TzDatetime64,  "tz_datetime64"},
-    {ESimpleLogicalValueType::TzTimestamp64, "tz_timestamp64"},
+    {ESimpleLogicalValueType::TzDate,           "tz_date"},
+    {ESimpleLogicalValueType::TzDatetime,       "tz_datetime"},
+    {ESimpleLogicalValueType::TzTimestamp,      "tz_timestamp"},
+    {ESimpleLogicalValueType::TzDate32,         "tz_date32"},
+    {ESimpleLogicalValueType::TzDatetime64,     "tz_datetime64"},
+    {ESimpleLogicalValueType::TzTimestamp64,    "tz_timestamp64"},
 };
 static_assert(std::size(V3SimpleLogicalValueTypeEncoding) == TEnumTraits<ESimpleLogicalValueType>::GetDomainSize());
 

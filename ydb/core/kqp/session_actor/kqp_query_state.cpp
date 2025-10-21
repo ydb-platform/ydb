@@ -201,6 +201,17 @@ bool TKqpQueryState::TryGetFromCache(
     TIntrusivePtr<TKqpCounters>& counters,
     const TActorId& sender)
 {
+    if (QueryPhysicalGraph) {
+        YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+
+        auto preparedQuery = std::make_unique<NKikimrKqp::TPreparedQuery>(QueryPhysicalGraph->GetPreparedQuery());
+        const auto compileResult = TKqpCompileResult::Make("", Ydb::StatusIds::SUCCESS, {}, ExtractMostHeavyReadType(preparedQuery->GetPhysicalQuery().GetQueryPlan()));
+        compileResult->PreparedQuery = std::make_shared<TPreparedQueryHolder>(preparedQuery.release(), AppData()->FunctionRegistry);
+        YQL_ENSURE(SaveAndCheckCompileResult(compileResult));
+
+        return true;
+    }
+
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -208,6 +219,8 @@ bool TKqpQueryState::TryGetFromCache(
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
     bool keepInCache = false;
@@ -267,6 +280,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     bool keepInCache = false;
     bool perStatementResult = HasImplicitTx();
@@ -316,6 +331,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileRequest(s
 
 std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileRequest(std::shared_ptr<std::atomic<bool>> cookie, const TGUCSettings::TPtr& gUCSettingsPtr) {
     YQL_ENSURE(CompileResult);
+    YQL_ENSURE(!QueryPhysicalGraph);
     TMaybe<TKqpQueryId> query;
     TMaybe<TString> uid;
 
@@ -323,6 +339,8 @@ std::unique_ptr<TEvKqp::TEvRecompileRequest> TKqpQueryState::BuildReCompileReque
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
 
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
@@ -369,6 +387,8 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     settings.DocumentApiRestricted = IsDocumentApiRestricted_;
     settings.IsInternalCall = IsInternalCall();
     settings.Syntax = GetSyntax();
+    settings.RuntimeParameterSizeLimit = RuntimeParameterSizeLimit;
+    settings.RuntimeParameterSizeLimitSatisfied = RuntimeParameterSizeLimitSatisfied;
     TGUCSettings gUCSettings = gUCSettingsPtr ? *gUCSettingsPtr : TGUCSettings();
 
     switch (GetAction()) {
@@ -404,7 +424,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
     return std::make_unique<TEvKqp::TEvCompileRequest>(UserToken, ClientAddress, uid, std::move(query), false,
         false, perStatementResult, compileDeadline, DbCounters, gUCSettingsPtr, ApplicationName, std::move(cookie),
         UserRequestContext, std::move(Orbit), TempTablesState, GetCollectDiagnostics(), statementAst,
-        false, SplittedCtx.get(), SplittedExprs.at(NextSplittedExpr));
+        false, SplittedCtx, SplittedExprs.at(NextSplittedExpr));
 }
 
 bool TKqpQueryState::ProcessingLastStatementPart() {
@@ -435,8 +455,8 @@ bool TKqpQueryState::PrepareNextStatementPart() {
     return true;
 }
 
-void TKqpQueryState::AddOffsetsToTransaction() {
-    YQL_ENSURE(HasTopicOperations());
+void TKqpQueryState::FillTopicOperations() {
+    YQL_ENSURE(HasTopicOperations() || HasKafkaApiOperations());
 
     const auto& operations = GetTopicOperationsFromRequest();
 
@@ -465,6 +485,14 @@ void TKqpQueryState::AddOffsetsToTransaction() {
             }
         }
     }
+
+    const auto& kafkaOperations = GetKafkaApiOperationsFromRequest();
+    for (auto& partitionInTx : kafkaOperations.GetPartitionsInTxn()) {
+        TopicOperations.AddKafkaApiWriteOperation(partitionInTx.GetTopicPath(), partitionInTx.GetPartitionId(), {kafkaOperations.GetProducerId(), kafkaOperations.GetProducerEpoch()});
+    }
+    for (auto& offsetInTxn : kafkaOperations.GetOffsetsInTxn()) {
+        TopicOperations.AddKafkaApiReadOperation(offsetInTxn.GetTopicPath(), offsetInTxn.GetPartitionId(), offsetInTxn.GetConsumerName(), offsetInTxn.GetOffset());
+    }
 }
 
 bool TKqpQueryState::TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message) {
@@ -479,7 +507,7 @@ bool TKqpQueryState::TryMergeTopicOffsets(const NTopic::TTopicOperations &operat
 
 std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeCacheNavigate() {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-    navigate->DatabaseName = CanonizePath(GetDatabase());
+    navigate->DatabaseName = GetDatabase();
 
     const auto& operations = GetTopicOperationsFromRequest();
     TMaybe<TString> consumer;

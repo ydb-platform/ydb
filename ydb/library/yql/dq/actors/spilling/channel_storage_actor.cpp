@@ -88,8 +88,7 @@ protected:
     }
 
     void SendInternal(const TActorId& recipient, IEventBase* ev, TEventFlags flags = IEventHandle::FlagTrackDelivery) {
-        bool isSent = Send(recipient, ev, flags);
-        Y_ABORT_UNLESS(isSent, "Event was not sent");
+        Send(recipient, ev, flags);
     }
 
 private:

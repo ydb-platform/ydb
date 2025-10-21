@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 // Copyright (c) 2022 Denis Mikhailov
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
@@ -8,8 +8,10 @@
 #define PFR_CONFIG_HPP
 #pragma once
 
-#if __cplusplus >= 201402L || (defined(_MSC_VER) && defined(_MSVC_LANG) && _MSC_VER > 1900)
+#if !defined(PFR_USE_MODULES) && (__cplusplus >= 201402L || (defined(_MSC_VER) && defined(_MSVC_LANG) && _MSC_VER > 1900))
 #include <type_traits> // to get non standard platform macro definitions (__GLIBCXX__ for example)
+#elif defined(PFR_USE_MODULES)
+#include <version>
 #endif
 
 /// \file pfr/config.hpp
@@ -70,8 +72,10 @@
 #endif
 
 #ifndef PFR_USE_STD_MAKE_INTEGRAL_SEQUENCE
+#   if defined(PFR_USE_MODULES)
+#       define PFR_USE_STD_MAKE_INTEGRAL_SEQUENCE 1
 // Assume that libstdc++ since GCC-7.3 does not have linear instantiation depth in std::make_integral_sequence
-#   if defined( __GLIBCXX__) && __GLIBCXX__ >= 20180101
+#   elif defined( __GLIBCXX__) && __GLIBCXX__ >= 20180101
 #       define PFR_USE_STD_MAKE_INTEGRAL_SEQUENCE 1
 #   elif defined(_MSC_VER)
 #       define PFR_USE_STD_MAKE_INTEGRAL_SEQUENCE 1
@@ -113,7 +117,7 @@
 
 
 #ifndef PFR_CORE_NAME_PARSING
-#   if defined(_MSC_VER)
+#   if defined(_MSC_VER) && !defined(__clang__)
 #       define PFR_CORE_NAME_PARSING (sizeof("auto __cdecl pfr::detail::name_of_field_impl<") - 1, sizeof(">(void) noexcept") - 1, backward("->"))
 #   elif defined(__clang__)
 #       define PFR_CORE_NAME_PARSING (sizeof("auto pfr::detail::name_of_field_impl() [MsvcWorkaround = ") - 1, sizeof("}]") - 1, backward("."))
@@ -144,5 +148,17 @@
 #endif
 
 #undef PFR_NOT_SUPPORTED
+
+#ifdef PFR_INTERFACE_UNIT
+#   define PFR_BEGIN_MODULE_EXPORT export {
+#   define PFR_END_MODULE_EXPORT }
+#else
+#   define PFR_BEGIN_MODULE_EXPORT
+#   define PFR_END_MODULE_EXPORT
+#endif
+
+#if defined(PFR_USE_MODULES) && !defined(PFR_INTERFACE_UNIT)
+import pfr;
+#endif
 
 #endif // PFR_CONFIG_HPP

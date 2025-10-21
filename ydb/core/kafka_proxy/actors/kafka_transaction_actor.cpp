@@ -33,7 +33,7 @@ namespace NKafka {
         SendOkResponse<TAddPartitionsToTxnResponseData>(ev);
     }
 
-    // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but 
+    // Method does nothing. In Kafka it will add __consumer_offsets topic to transaction, but
     // in YDB Topics we store offsets in table and do not need this extra action.
     // Thus we can just ignore this request.
     void TTransactionActor::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext&) {
@@ -67,7 +67,7 @@ namespace NKafka {
         SendOkResponse<TTxnOffsetCommitResponseData>(ev);
     }
 
-    /* 
+    /*
     If abort, will send back ok.
     If commit, will do following sequence of calls and event handlers:
     1. Open KQP Session
@@ -87,6 +87,9 @@ namespace NKafka {
             return; // we just ignore second and subsequent requests
         } else if (txnAborted) {
             SendOkResponse<TEndTxnResponseData>(ev);
+            Die(ctx);
+        } else if (TxnExpired()) {
+            SendFailResponse<TEndTxnResponseData>(ev, EKafkaErrors::PRODUCER_FENCED, "Transaction exceeded its timeout: " + std::to_string(TxnTimeoutMs));
             Die(ctx);
         } else {
             CommitStarted = true;
@@ -137,7 +140,7 @@ namespace NKafka {
     }
 
     void TTransactionActor::StartKqpSession(const TActorContext& ctx) {
-        Kqp = std::make_unique<TKqpTxHelper>(DatabasePath);
+        Kqp = std::make_unique<TKqpTxHelper>(AppData(ctx)->TenantName);
         KAFKA_LOG_D("Sending create session request to KQP for database " << DatabasePath);
         Kqp->SendCreateSessionRequest(ctx);
     }
@@ -145,13 +148,13 @@ namespace NKafka {
     void TTransactionActor::SendToKqpValidationRequests(const TActorContext& ctx) {
         KAFKA_LOG_D("Sending select request to KQP for database " << DatabasePath);
         Kqp->SendYqlRequest(
-            GetYqlWithTablesNames(NKafkaTransactionSql::SELECT_FOR_VALIDATION), 
-            BuildSelectParams(), 
-            ++KqpCookie, 
+            GetYqlWithTablesNames(),
+            BuildSelectParams(),
+            ++KqpCookie,
             ctx,
             false
         );
-        
+
         LastSentToKqpRequest = EKafkaTxnKqpRequests::SELECT;
     }
 
@@ -159,10 +162,10 @@ namespace NKafka {
         auto request = BuildAddKafkaOperationsRequest(kqpTransactionId);
 
         Send(MakeKqpProxyID(SelfId().NodeId()), request.Release(), 0, ++KqpCookie);
-        
+
         LastSentToKqpRequest = EKafkaTxnKqpRequests::ADD_KAFKA_OPERATIONS_TO_TXN;
     }
-    
+
     // Response senders
     template<class ErrorResponseType, class EventType>
     void TTransactionActor::SendFailResponse(TAutoPtr<TEventHandle<EventType>>& evHandle, EKafkaErrors errorCode, const TString& errorMessage) {
@@ -194,10 +197,14 @@ namespace NKafka {
         TBase::Die(ctx);
     }
 
+    bool TTransactionActor::TxnExpired() {
+        return TAppData::TimeProvider->Now().MilliSeconds() - CreatedAt.MilliSeconds() > TxnTimeoutMs;
+    }
+
     template<class EventType>
     bool TTransactionActor::ProducerInRequestIsValid(TMessagePtr<EventType> kafkaRequest) {
-        return *kafkaRequest->TransactionalId == TransactionalId 
-            && kafkaRequest->ProducerId == ProducerInstanceId.Id 
+        return *kafkaRequest->TransactionalId == TransactionalId
+            && kafkaRequest->ProducerId == ProducerInstanceId.Id
             && kafkaRequest->ProducerEpoch == ProducerInstanceId.Epoch;
     }
 
@@ -205,38 +212,45 @@ namespace NKafka {
         return NPersQueue::GetFullTopicPath(DatabasePath, topicName);
     }
 
-    TString TTransactionActor::GetYqlWithTablesNames(const TString& templateStr) {
+    TString TTransactionActor::GetYqlWithTablesNames() {
+        const TString& templateStr = OffsetsToCommit.empty() ?  NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITHOUT_CONSUMERS : NKafkaTransactionSql::SELECT_FOR_VALIDATION_WITH_CONSUMERS;
+
         TString templateWithProducerStateTable = std::regex_replace(
             templateStr.c_str(),
-            std::regex("<producer_state_table_name>"), 
-            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str()
-        );
-        TString templateWithConsumerStateTable = std::regex_replace(
-            templateWithProducerStateTable.c_str(),
-            std::regex("<consumer_state_table_name>"), 
-            NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->GetStorageTablePath().c_str()
+            std::regex("<producer_state_table_name>"),
+            NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
         );
 
-        return templateWithConsumerStateTable;
+        if (!OffsetsToCommit.empty()) {
+            return std::regex_replace(
+                templateWithProducerStateTable.c_str(),
+                std::regex("<consumer_state_table_name>"),
+                NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant()->FormPathToResourceTable(ResourceDatabasePath).c_str()
+            );
+        }
+
+        return templateWithProducerStateTable;
     }
 
     NYdb::TParams TTransactionActor::BuildSelectParams() {
         NYdb::TParamsBuilder params;
         params.AddParam("$Database").Utf8(DatabasePath).Build();
         params.AddParam("$TransactionalId").Utf8(TransactionalId).Build();
-        
-        // select unique consumer group names
-        std::unordered_set<TString> uniqueConsumerGroups;
-        for (auto& [partition, commitDetails] : OffsetsToCommit) {
-            uniqueConsumerGroups.emplace(commitDetails.ConsumerName);
-        }
 
-        // add unique consumer group names to request as params
-        auto& consumerGroupsParamBuilder = params.AddParam("$ConsumerGroups").BeginList();
-        for (auto& consumerGroupName : uniqueConsumerGroups) {
-            consumerGroupsParamBuilder.AddListItem().Utf8(consumerGroupName);
+        if (!OffsetsToCommit.empty()) {
+            // select unique consumer group names
+            std::unordered_set<TString> uniqueConsumerGroups;
+            for (auto& [partition, commitDetails] : OffsetsToCommit) {
+                uniqueConsumerGroups.emplace(commitDetails.ConsumerName);
+            }
+
+            // add unique consumer group names to request as params
+            auto& consumerGroupsParamBuilder = params.AddParam("$ConsumerGroups").BeginList();
+            for (auto& consumerGroupName : uniqueConsumerGroups) {
+                consumerGroupsParamBuilder.AddListItem().Utf8(consumerGroupName);
+            }
+            consumerGroupsParamBuilder.EndList().Build();
         }
-        consumerGroupsParamBuilder.EndList().Build();
 
         return params.Build();
     }
@@ -276,8 +290,10 @@ namespace NKafka {
 
     void TTransactionActor::HandleSelectResponse(const NKqp::TEvKqp::TEvQueryResponse& response, const TActorContext& ctx) {
         // YDB should return exactly two result sets for two queries: to producer and consumer state tables
-        if (response.Record.GetResponse().GetYdbResults().size() != 2) {
-            TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected 2, got " << response.Record.GetResponse().GetYdbResults().size() << ".";
+        int resultsSize = response.Record.GetResponse().GetYdbResults().size();
+        int expectedResultsSize = OffsetsToCommit.empty() ? 1 : 2; // if there were no consumer in transactions we do not send request to consumer table
+        if (expectedResultsSize != resultsSize) {
+            TString error = TStringBuilder() << "KQP returned wrong number of result sets on SELECT query. Expected " << expectedResultsSize << ", got " << resultsSize << ".";
             KAFKA_LOG_W(error);
             SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::BROKER_NOT_AVAILABLE, error);
             Die(ctx);
@@ -302,13 +318,15 @@ namespace NKafka {
             return;
         }
 
-        // parse and validate consumers
-        std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
-        if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
-            KAFKA_LOG_W(error);
-            SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
-            Die(ctx);
-            return;
+        if (!OffsetsToCommit.empty()) {
+            // parse and validate consumers
+            std::unordered_map<TString, i32> consumerGenerationsByName = ParseConsumersGenerations(response);
+            if (auto error = GetErrorInConsumersStates(consumerGenerationsByName)) {
+                KAFKA_LOG_W(error);
+                SendFailResponse<TEndTxnResponseData>(EndTxnRequestPtr, EKafkaErrors::PRODUCER_FENCED, error->data());
+                Die(ctx);
+                return;
+            }
         }
 
         KAFKA_LOG_D("Validated producer and consumers states. Everything is alright, adding kafka operations to transaction.");
@@ -321,6 +339,7 @@ namespace NKafka {
         KAFKA_LOG_D("Successfully added kafka operations to transaction. Committing transaction.");
         Kqp->SetTxId(kqpTransactionId);
         Kqp->CommitTx(++KqpCookie, ctx);
+        LastSentToKqpRequest = EKafkaTxnKqpRequests::COMMIT;
     }
 
     void TTransactionActor::HandleCommitResponse(const TActorContext& ctx) {
@@ -348,14 +367,14 @@ namespace NKafka {
         // for this transactional id there is no rows
         if (parser.RowsCount() == 0) {
             return {};
-        } 
+        }
         // there are multiple rows for this transactional id. This is unexpected and should not happen
         else if (parser.RowsCount() > 1) {
             throw yexception() << "Request returned more than one row: " << resp.GetYdbResults().size();
         } else {
             parser.TryNextRow();
 
-            TProducerState result; 
+            TProducerState result;
 
             result.TransactionalId = parser.ColumnParser("transactional_id").GetUtf8();
             result.ProducerId = parser.ColumnParser("producer_id").GetInt64();
@@ -370,7 +389,7 @@ namespace NKafka {
             return "No producer state found. May be it has expired";
         } else if (producerState->TransactionalId != TransactionalId || producerState->ProducerId != ProducerInstanceId.Id || producerState->ProducerEpoch != ProducerInstanceId.Epoch) {
             return TStringBuilder() << "Producer state in producers_state table is different from the one in this actor. Producer state in table: "
-            << "transactionalId=" << producerState->TransactionalId 
+            << "transactionalId=" << producerState->TransactionalId
             << ", producerId=" << producerState->ProducerId
             << ", producerEpoch=" << producerState->ProducerEpoch;
         } else {
@@ -386,14 +405,14 @@ namespace NKafka {
     */
     std::unordered_map<TString, i32> TTransactionActor::ParseConsumersGenerations(const NKqp::TEvKqp::TEvQueryResponse& response) {
         std::unordered_map<TString, i32> generationByConsumerName;
-    
+
         NYdb::TResultSetParser parser(response.Record.GetResponse().GetYdbResults(NKafkaTransactionSql::CONSUMER_STATES_REQUEST_INDEX));
         while (parser.TryNextRow()) {
             TString consumerName = parser.ColumnParser("consumer_group").GetUtf8().c_str();
             i32 generation = IntegerCast<i32>(parser.ColumnParser("generation").GetUint64());
             generationByConsumerName.emplace(consumerName, generation);
         }
-    
+
         return generationByConsumerName;
     }
 

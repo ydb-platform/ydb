@@ -34,15 +34,16 @@ const NYson::ETokenType RangeSeparatorToken = NYson::ETokenType::Comma;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
 void ThrowUnexpectedToken(const TToken& token)
 {
     THROW_ERROR_EXCEPTION("Unexpected token %Qv",
         token);
 }
 
-TString ParseAttributes(const TString& str, const IAttributeDictionaryPtr& attributes)
+TStringBuf ParseAttributes(TStringBuf str, const IAttributeDictionaryPtr& attributes)
 {
-    int spaceCount = 0;
     {
         size_t index = 0;
         while (index < str.size() && IsSpace(str[index])) {
@@ -51,17 +52,16 @@ TString ParseAttributes(const TString& str, const IAttributeDictionaryPtr& attri
         if (index == str.size() || str[index] != TokenTypeToChar(NYson::ETokenType::LeftAngle)) {
             return str;
         }
-        spaceCount = index;
     }
 
-    NYson::TTokenizer tokenizer(TStringBuf(str).SubStr(spaceCount));
+    NYson::TTokenizer tokenizer(str);
     tokenizer.ParseNext();
     if (tokenizer.CurrentToken().GetType() != NYson::ETokenType::LeftAngle) {
         ThrowUnexpectedToken(tokenizer.CurrentToken());
     }
 
     int depth = 0;
-    int attrStartPosition = spaceCount + 1;
+    int attrStartPosition = tokenizer.GetPosition();
 
     while (true) {
         switch (tokenizer.CurrentToken().GetType()) {
@@ -84,7 +84,8 @@ TString ParseAttributes(const TString& str, const IAttributeDictionaryPtr& attri
         }
     }
 
-    int attrEndPosition = spaceCount + tokenizer.GetPosition() - 1;
+    int attrEndPosition = tokenizer.GetPosition() - 1;
+    YT_ASSERT(attrEndPosition >= attrStartPosition);
     int pathStartPosition = attrEndPosition + 1;
 
     TYsonString attrYson(
@@ -115,7 +116,7 @@ bool StartsWithRootDesignator(TStringBuf str)
     return true;
 }
 
-TString ParseCluster(TString str, const IAttributeDictionaryPtr& attributes)
+TStringBuf ParseCluster(TStringBuf str, const IAttributeDictionaryPtr& attributes)
 {
     if (str.empty()) {
         return str;
@@ -126,39 +127,28 @@ TString ParseCluster(TString str, const IAttributeDictionaryPtr& attributes)
     }
 
     auto clusterSeparatorIndex = str.find_first_of(':');
-    if (clusterSeparatorIndex == TString::npos) {
-        THROW_ERROR_EXCEPTION(
-            "Path %Qv does not start with a valid root-designator, cluster://path short-form assumed; "
-            "no \':\' separator symbol found to parse cluster",
+    if (clusterSeparatorIndex == TStringBuf::npos) {
+        THROW_ERROR_EXCEPTION("Path %Qv does not start with a valid root-designator",
             str);
     }
 
-    const auto clusterName = str.substr(0, clusterSeparatorIndex);
-
+    auto clusterName = str.substr(0, clusterSeparatorIndex);
     if (clusterName.empty()) {
-        THROW_ERROR_EXCEPTION(
-            "Path %Qv does not start with a valid root-designator, cluster://path short-form assumed; "
-            "cluster name cannot be empty",
+        THROW_ERROR_EXCEPTION("Cluster name in path %Qv cannot be empty",
             str);
     }
 
-    auto illegalSymbolIt = std::find_if_not(clusterName.begin(), clusterName.end(), &IsValidClusterSymbol);
+    auto illegalSymbolIt = std::ranges::find_if_not(clusterName, &IsValidClusterSymbol);
     if (illegalSymbolIt != clusterName.end()) {
-        THROW_ERROR_EXCEPTION(
-            "Path %Qv does not start with a valid root-designator, cluster://path short-form assumed; "
-            "cluster name contains illegal symbol %Qv",
+        THROW_ERROR_EXCEPTION("Possible cluster name in path %Qv contains illegal symbol %Qv",
             str,
             *illegalSymbolIt);
     }
 
     auto remainingString = str.substr(clusterSeparatorIndex + 1);
-
     if (!StartsWithRootDesignator(remainingString)) {
-        THROW_ERROR_EXCEPTION(
-            "Path %Qv does not start with a valid root-designator, cluster://path short-form assumed; "
-            "path %Qv after cluster-separator does not start with a valid root-designator",
-            str,
-            remainingString);
+        THROW_ERROR_EXCEPTION("Path %Qv does not start with a valid root-designator",
+            str);
     }
 
     attributes->Set("cluster", clusterName);
@@ -405,20 +395,22 @@ void ParseRowRanges(NYson::TTokenizer& tokenizer, IAttributeDictionary* attribut
     }
 }
 
+} // namespace
+
 ////////////////////////////////////////////////////////////////////////////////
 
-TRichYPath ParseRichYPathImpl(const TString& str)
+TRichYPath ParseRichYPathImpl(TStringBuf str)
 {
     auto attributes = CreateEphemeralAttributes();
 
     auto strWithoutAttributes = ParseAttributes(str, attributes);
-    strWithoutAttributes = ParseCluster(std::move(strWithoutAttributes), attributes);
+    strWithoutAttributes = ParseCluster(strWithoutAttributes, attributes);
     TTokenizer ypathTokenizer(strWithoutAttributes);
 
     while (ypathTokenizer.GetType() != ETokenType::EndOfStream && ypathTokenizer.GetType() != ETokenType::Range) {
         ypathTokenizer.Advance();
     }
-    auto path = TYPath(ypathTokenizer.GetPrefix());
+    TYPath path(ypathTokenizer.GetPrefix());
     auto rangeStr = ypathTokenizer.GetToken();
 
     if (ypathTokenizer.GetType() == ETokenType::Range) {

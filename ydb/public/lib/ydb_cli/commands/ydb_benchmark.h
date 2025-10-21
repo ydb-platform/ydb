@@ -11,11 +11,6 @@ namespace BenchmarkUtils {
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
-    enum class EQueryExecutor {
-        Scan /* "scan" */,
-        Generic /* "generic" */
-    };
-
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
 
@@ -26,15 +21,13 @@ private:
     TString PatchQuery(const TStringBuf& original) const;
     bool NeedRun(const TString& queryName) const;
 
-    template <typename TClient>
-    int RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
+    int RunBench(NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, TStringBuf queryName, const TStringBuf name) const;
     void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
     BenchmarkUtils::TQueryBenchmarkSettings GetBenchmarkSettings(bool withProgress) const;
 
 private:
-    template <typename TClient> class TIterationExecution;
-    EQueryExecutor QueryExecuterType = EQueryExecutor::Generic;
+    class TIterationExecution;
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;
@@ -49,7 +42,7 @@ private:
     TDuration RequestTimeout = TDuration::Zero();
     TInstant GlobalDeadline = TInstant::Max();
     NYdb::NRetry::TRetryOperationSettings RetrySettings;
-    ui32 Threads = 1;
+    ui32 Threads = 0;
 };
 
 }

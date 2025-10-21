@@ -77,11 +77,8 @@ private:
 
     TString UserName;
     TString PasswordFile;
-    TString Password;
-    // Password from separate option
-    TString PasswordFileOption;
-    TString PasswordOption;
-    bool DoNotAskForPassword = false;
+    std::optional<TString> Password;
+    bool PassEmptyPassword = false;
 
     const TClientSettings& Settings;
     TVector<TString> MisuseErrors;

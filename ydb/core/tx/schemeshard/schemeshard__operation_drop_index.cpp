@@ -1,13 +1,11 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include "schemeshard_impl.h"
-
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace {
 
@@ -466,13 +464,17 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         result.push_back(CreateDropTableIndexAtMainTable(NextPartId(nextId, result), mainTableIndexDropping));
     }
 
-    {
-        auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-        auto operation = indexDropping.MutableDrop();
-        operation->SetName(ToString(indexPath.Base()->Name));
+    AddDropIndex(result, nextId, indexPath);
 
-        result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
-    }
+    return result;
+}
+
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath) {
+    auto indexDropping = TransactionTemplate(indexPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
+    auto operation = indexDropping.MutableDrop();
+    operation->SetName(ToString(indexPath.Base()->Name));
+
+    result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
 
     for (const auto& [childName, childPathId] : indexPath.Base()->GetChildren()) {
         TPath child = indexPath.Child(childName);
@@ -488,11 +490,11 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
 
         result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
         if (auto reject = CascadeDropTableChildren(result, nextId, child)) {
-            return {reject};
+            return reject;
         }
     }
 
-    return result;
+    return nullptr;
 }
 
 }

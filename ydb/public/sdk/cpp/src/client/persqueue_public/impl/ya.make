@@ -24,13 +24,14 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
     ydb/public/api/grpc/draft
-    ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request
+    ydb/public/sdk/cpp/src/client/impl/internal/make_request
     ydb/public/sdk/cpp/src/client/common_client/impl
     ydb/public/sdk/cpp/src/client/driver
     ydb/public/sdk/cpp/src/client/topic/codecs
     ydb/public/sdk/cpp/src/client/topic/common
     ydb/public/sdk/cpp/src/client/topic/impl
-    
+    ydb/public/sdk/cpp/src/client/scheme
+
 )
 
 END()

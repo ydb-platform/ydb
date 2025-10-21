@@ -56,6 +56,7 @@ message TDqExternalAggrStats {
     TDqStatsAggr FirstMessageMs = 8;
     TDqStatsAggr LastMessageMs = 9;
     uint32 PartitionCount = 10;
+    uint32 FinishedPartitionCount = 11;
 }
 
 message TDqExternalStats {
@@ -69,6 +70,7 @@ message TDqExternalStats {
     uint64 FirstMessageMs = 8;
     uint64 LastMessageMs = 9;
     string PartitionId = 10;
+    bool Finished = 11;
 }
 
 message TDqAsyncInputBufferStats {
@@ -405,6 +407,7 @@ message TDqStageStats {
     uint32 TotalTasksCount = 5;
     uint32 FailedTasksCount = 6;
     uint32 FinishedTasksCount = 50;
+    repeated string Introspections = 52; // the human-readable reasons for choosing this exact number of tasks
 
     TDqStatsAggr CpuTimeUs = 8;
     TDqStatsAggr SourceCpuTimeUs = 25;

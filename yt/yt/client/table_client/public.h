@@ -154,12 +154,6 @@ DEFINE_ENUM(ETableSchemaMode,
     ((Strong)    (1))
 );
 
-// TODO(cherepashka): remove after corresponding compat in 25.1 will be removed.
-DEFINE_ENUM(ECompatOptimizeFor,
-    ((Lookup)  (0))
-    ((Scan)    (1))
-);
-
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EOptimizeFor, i32,
     ((Lookup)  (0))
     ((Scan)    (1))
@@ -200,6 +194,7 @@ YT_DEFINE_ERROR_ENUM(
     ((StringLikeValueLengthLimitExceeded)(326))
     ((NameTableUpdateFailed)             (327))
     ((InvalidTableChunkFormat)           (328))
+    ((UnableToSynchronizeReplicationCard)(329))
 );
 
 DEFINE_ENUM(EControlAttribute,
@@ -396,6 +391,8 @@ DECLARE_REFCOUNTED_STRUCT(TChunkReaderOptions)
 DECLARE_REFCOUNTED_STRUCT(TChunkWriterOptions)
 
 DECLARE_REFCOUNTED_STRUCT(TVersionedRowDigestConfig)
+
+DECLARE_REFCOUNTED_STRUCT(TMinHashDigestConfig)
 
 DECLARE_REFCOUNTED_STRUCT(TSchemalessBufferedDynamicTableWriterConfig)
 

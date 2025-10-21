@@ -4,7 +4,7 @@
 
 {% note info %}
 
-Данная инструкция предназначена для аварийных ситуаций, когда после перехода на конфигурацию V2 возникли непредвиденные проблемы и требуется откат на конфигурацию V1, например, для последующего отката на версию {{ ydb-full-name }} ниже v25-1. В штатном режиме работы эта процедура не требуется.
+Данная инструкция предназначена для аварийных ситуаций, когда после [перехода на конфигурацию V2](./migration-to-v2.md) возникли непредвиденные проблемы и требуется откат на конфигурацию V1, например, для последующего отката на версию {{ ydb-full-name }} ниже v25-1. В штатном режиме работы эта процедура не требуется.
 
 {% endnote %}
 
@@ -24,12 +24,12 @@
 1. Получить текущую конфигурацию кластера с помощью команды [ydb admin cluster config fetch](../../../reference/ydb-cli/commands/configuration/cluster/fetch.md):
 
     ```bash
-    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --for-v1-migration > config.yaml
+    ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch --v2-internal-state > config.yaml
     ```
 
     {% cut "Подробнее" %}
 
-    Аргумент `--for-v1-migration` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
+    Аргумент `--v2-internal-state` указывает, что будет получена полная конфигурация кластера, включая параметры настройки [State Storage](../../../reference/configuration/index.md#domains-state) и [статической группы](../../../reference/configuration/index.md#blob_storage_config).
 
     {% endcut %}
 
@@ -37,7 +37,7 @@
 
     ```yaml
     self_management_config:
-    enabled: false
+      enabled: false
     ```
 
     {% cut "Подробнее" %}

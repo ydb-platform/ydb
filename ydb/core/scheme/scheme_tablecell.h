@@ -1,7 +1,6 @@
 #pragma once
 
 #include "defs.h"
-#include "scheme_type_id.h"
 #include "scheme_type_order.h"
 #include "scheme_types_defs.h"
 
@@ -12,7 +11,6 @@
 #include <util/memory/pool.h>
 
 #include <bit>
-#include <deque>
 #include <type_traits>
 
 namespace NKikimr {
@@ -397,6 +395,62 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
             return 1;
     }
     return 0;
+}
+
+// Bool with NULL semantics.
+// Has operator<< for output to stream.
+enum class ETriBool {
+    False,
+    True,
+    Null,
+};
+
+inline ETriBool operator&&(ETriBool a, ETriBool b) {
+    if (a == ETriBool::False || b == ETriBool::False) {
+        return ETriBool::False;
+    }
+    if (a == ETriBool::Null || b == ETriBool::Null) {
+        return ETriBool::Null;
+    }
+    return ETriBool::True;
+}
+
+inline ETriBool operator||(ETriBool a, ETriBool b) {
+    if (a == ETriBool::True || b == ETriBool::True) {
+        return ETriBool::True;
+    }
+    if (a == ETriBool::Null || b == ETriBool::Null) {
+        return ETriBool::Null;
+    }
+    return ETriBool::False;
+}
+
+// Compare two TCell's for equality taking into account the NULL-value semantics.
+// If one of the cells is NULL, the result of comparison is NULL.
+// Else, the result is True when a == b and False when a != b.
+inline ETriBool TypedCellsEqualWithNullSemantics(const TCell& a, const TCell& b, const NScheme::TTypeInfoOrder& type) {
+    if (a.IsNull() || b.IsNull()) {
+        return ETriBool::Null;
+    }
+    int res = CompareTypedCells(a, b, type);
+    return res == 0 ? ETriBool::True : ETriBool::False;
+}
+
+// Compare two TCell vectors for equality taking into account the NULL-value semantics.
+// If there is no NULL fields from both sides, the result is True when all the fields are equal and False otherwise.
+// If all the fields that are NOT NULL are equal, but we have NULLs, the result is NULL.
+// If we have two NOT NULL fields that are not equal, the result is False.
+// See CompareWithNullSemantics test.
+template<class TTypeClass>
+inline ETriBool TypedCellVectorsEqualWithNullSemantics(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt) {
+    ETriBool result = ETriBool::True;
+    for (ui32 i = 0; i < cnt; ++i) {
+        result = result && TypedCellsEqualWithNullSemantics(a[i], b[i], type[i]);
+        if (result == ETriBool::False) {
+            break;
+        }
+    }
+    return result;
 }
 
 // TODO: use NYql ops when TCell and TUnboxedValuePod had merged

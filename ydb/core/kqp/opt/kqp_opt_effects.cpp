@@ -13,23 +13,9 @@ using TStatus = IGraphTransformer::TStatus;
 
 namespace {
 
-TCoAtomList BuildKeyColumnsList(const TKikimrTableDescription& table, TPositionHandle pos, TExprContext& ctx)
-{
-    TVector<TExprBase> columns;
-    for (const auto& name : table.Metadata->KeyColumnNames) {
-        columns.emplace_back(Build<TCoAtom>(ctx, pos)
-            .Value(name)
-            .Done());
-    }
-
-    return Build<TCoAtomList>(ctx, pos)
-        .Add(columns)
-        .Done();
-}
-
 TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
         const bool allowInconsistentWrites, const bool enableStreamWrite, bool isBatch,
-        const TStringBuf mode, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
+        const TStringBuf mode, const bool isIndexImplTable, const TVector<TCoNameValueTuple>& settings, const i64 order, TExprContext& ctx) {
     Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
 
     auto settingsNode = Build<TCoNameValueTupleList>(ctx, expr.Pos())
@@ -63,6 +49,9 @@ TDqStage RebuildPureStageWithSink(TExprBase expr, const TKqpTable& table,
                     .Mode(ctx.NewAtom(expr.Pos(), mode))
                     .Priority(ctx.NewAtom(expr.Pos(), ToString(order)))
                     .IsBatch(isBatch
+                        ? ctx.NewAtom(expr.Pos(), "true")
+                        : ctx.NewAtom(expr.Pos(), "false"))
+                    .IsIndexImplTable(isIndexImplTable
                         ? ctx.NewAtom(expr.Pos(), "true")
                         : ctx.NewAtom(expr.Pos(), "false"))
                     .Settings(settingsNode)
@@ -127,7 +116,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         stageInput = RebuildPureStageWithSink(
             node.Input(), table,
             /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
-            /* isBatch */ false, "fill_table", settings,
+            /* isBatch */ false, "fill_table", /* isIndexImplTable */ false, settings,
             priority, ctx);
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
             .Stage(stageInput.Cast().Ptr())
@@ -162,6 +151,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Mode(ctx.NewAtom(node.Pos(), "fill_table"))
             .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
             .IsBatch(ctx.NewAtom(node.Pos(), "false"))
+            .IsIndexImplTable(ctx.NewAtom(node.Pos(), "false"))
             .Settings(settingsNode)
             .Build()
         .Done();
@@ -212,6 +202,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
         && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalUpdate);
     const bool useStreamWrite = sinkEffect && (settings.AllowInconsistentWrites || useStreamWriteForConsistentSink);
+    const bool isIndexImplTable = table.Metadata->IsIndexImplTable;
 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
@@ -221,7 +212,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
-                node.IsBatch() == "true", settings.Mode, {}, priority, ctx);
+                node.IsBatch() == "true", settings.Mode, isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -245,9 +236,6 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto stage = dqUnion.Output().Stage();
-    auto program = stage.Program();
-    auto input = program.Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -267,6 +255,9 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
                 .Mode(ctx.NewAtom(node.Pos(), settings.Mode))
                 .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
                 .IsBatch(node.IsBatch())
+                .IsIndexImplTable(isIndexImplTable
+                    ? ctx.NewAtom(node.Pos(), "true")
+                    : ctx.NewAtom(node.Pos(), "false"))
                 .Settings()
                     .Build()
                 .Build()
@@ -354,17 +345,17 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
         && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalDelete);
     const bool useStreamWrite = sinkEffect && useStreamWriteForConsistentSink;
+    const bool isIndexImplTable = table.Metadata->IsIndexImplTable;
 
     const bool isOlap = (table.Metadata->Kind == EKikimrTableKind::Olap);
     const i64 priority = isOlap ? 0 : order;
 
     if (IsDqPureExpr(node.Input())) {
         if (sinkEffect) {
-            const auto keyColumns = BuildKeyColumnsList(table, node.Pos(), ctx);
             stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
-                "delete", {}, priority, ctx);
+                "delete", isIndexImplTable, {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
                 .Stage(stageInput.Cast().Ptr())
                 .SinkIndex().Build("0")
@@ -388,7 +379,6 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
-    auto input = dqUnion.Output().Stage().Program().Body();
 
     if (sinkEffect) {
         auto sink = Build<TDqSink>(ctx, node.Pos())
@@ -406,6 +396,9 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
                 .Mode(ctx.NewAtom(node.Pos(), "delete"))
                 .Priority(ctx.NewAtom(node.Pos(), ToString(priority)))
                 .IsBatch(node.IsBatch())
+                .IsIndexImplTable(isIndexImplTable
+                        ? ctx.NewAtom(node.Pos(), "true")
+                        : ctx.NewAtom(node.Pos(), "false"))
                 .Settings()
                     .Build()
                 .Build()
@@ -523,7 +516,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
                 ++order;
             }
 
-            if (input) {
+            if (input && !sinkEffect) {
                 inputArgs.push_back(inputArg);
                 inputs.push_back(input.Cast());
             }
@@ -532,20 +525,14 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects,
             TKqlExternalEffect externalEffect = maybeExt.Cast();
             TExprBase input = externalEffect.Input();
             auto maybeStage = input.Maybe<TDqStageBase>();
-            if (!maybeStage) {
-                return false;
-            }
+            YQL_ENSURE(maybeStage, "External effect should be a DQ stage");
             auto stage = maybeStage.Cast();
             const auto outputsList = stage.Outputs();
-            if (!outputsList) {
-                return false;
-            }
+            YQL_ENSURE(outputsList, "External effect DQ stage should have at least one output");
             TDqStageOutputsList outputs = outputsList.Cast();
             YQL_ENSURE(outputs.Size() == 1, "Multiple sinks are not supported yet");
             TDqOutputAnnotationBase output = outputs.Item(0);
-            if (!output.Maybe<TDqSink>()) {
-                return false;
-            }
+            YQL_ENSURE(TDqSink::Match(output.Raw()), "External effect DQ stage should have DQ sink as first output");
             newEffect = Build<TKqpSinkEffect>(ctx, effect.Pos())
                 .Stage(maybeStage.Cast().Ptr())
                 .SinkIndex().Build("0")

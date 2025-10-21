@@ -51,12 +51,9 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/base_write_write_group_by_script_script/Temp",
                                                         "ReadColumns": [
-                                                            "Group",
+                                                            "Group (-\u221e, +\u221e)",
                                                             "MinAmount",
                                                             "Value"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "Group (-\u221e, +\u221e)"
                                                         ],
                                                         "Scan": "Parallel",
                                                         "Table": "base_write_write_group_by_script_script/Temp"
@@ -143,6 +140,7 @@
                                                 "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "Group"
                                                         ],
@@ -175,12 +173,9 @@
                                                                                 "Name": "TableFullScan",
                                                                                 "Path": "/local/base_write_write_group_by_script_script/Input1",
                                                                                 "ReadColumns": [
-                                                                                    "Amount",
-                                                                                    "Group"
-                                                                                ],
-                                                                                "ReadRanges": [
                                                                                     "Group (-\u221e, +\u221e)",
-                                                                                    "Name (-\u221e, +\u221e)"
+                                                                                    "Name (-\u221e, +\u221e)",
+                                                                                    "Amount"
                                                                                 ],
                                                                                 "ReadRangesPointPrefixLen": "0",
                                                                                 "Scan": "Parallel",

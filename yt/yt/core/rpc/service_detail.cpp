@@ -30,6 +30,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <yt/yt/core/utilex/random.h>
+
 #include <library/cpp/yt/misc/tls.h>
 
 namespace NYT::NRpc {
@@ -377,7 +379,9 @@ public:
     {
         if (!Replied_) {
             // Prevent alerting.
-            RequestInfoSet_ = true;
+            SuppressMissingRequestInfoCheck();
+
+            TCurrentTraceContextGuard guard(TraceContext_);
             if (CanceledList_.IsFired()) {
                 if (TimedOutLatch_) {
                     Reply(TError(NYT::EErrorCode::Timeout, "Request timed out"));
@@ -430,6 +434,7 @@ public:
     void CheckAndRun(const TErrorOr<TLiteHandler>& handlerOrError)
     {
         if (!handlerOrError.IsOK()) {
+            TCurrentTraceContextGuard guard(TraceContext_);
             Reply(TError(handlerOrError));
             return;
         }
@@ -1003,7 +1008,7 @@ private:
             if (auto timeout = GetTimeout()) {
                 auto timeoutCookie = TDelayedExecutor::Submit(
                     BIND([replySent] {
-                        replySent.Cancel(TError());
+                        replySent.Cancel(TError(NYT::EErrorCode::Timeout, "Request timed out"));
                     }),
                     ArriveInstant_ + *timeout);
 
@@ -1134,6 +1139,8 @@ private:
             }
         }
         YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(Logger, LogLevel_, RuntimeInfo_->RequestLoggingAnchor, logMessage);
+
+        RequestInfoState_ = ERequestInfoState::Flushed;
     }
 
     void LogResponse() override
@@ -1191,6 +1198,7 @@ private:
         if (!RequestAttachmentsStream_) {
             auto parameters = FromProto<TStreamingParameters>(RequestHeader_->server_attachments_streaming_parameters());
             RequestAttachmentsStream_ =  New<TAttachmentsInputStream>(
+                RequestId_,
                 BIND(&TServiceContext::OnRequestAttachmentsStreamRead, MakeWeak(this)),
                 TDispatcher::Get()->GetCompressionPoolInvoker(),
                 parameters.ReadTimeout);
@@ -1212,6 +1220,7 @@ private:
         if (!ResponseAttachmentsStream_) {
             auto parameters = FromProto<TStreamingParameters>(RequestHeader_->server_attachments_streaming_parameters());
             ResponseAttachmentsStream_ = New<TAttachmentsOutputStream>(
+                RequestId_,
                 ResponseCodec_,
                 TDispatcher::Get()->GetCompressionPoolInvoker(),
                 BIND(&TServiceContext::OnPullResponseAttachmentsStream, MakeWeak(this)),
@@ -1384,6 +1393,7 @@ void TRequestQueue::Configure(const TMethodConfigPtr& config)
 {
     BytesThrottler_.Reconfigure(config->RequestBytesThrottler);
     WeightThrottler_.Reconfigure(config->RequestWeightThrottler);
+    TestingDelay_.store(config->Testing.RandomDelay.value_or(TDuration::Zero()));
 
     ScheduleRequestsFromQueue();
     SubscribeToThrottlers();
@@ -1531,15 +1541,37 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
     auto options = RuntimeInfo_->Descriptor.Options;
     options.SetHeavy(RuntimeInfo_->Heavy.load(std::memory_order::relaxed));
 
+    TDuration testingDelay;
+    if (auto maxDelay = TestingDelay_.load()) {
+        testingDelay = RandomDuration(maxDelay);
+    }
+
     if (options.Heavy) {
-        BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
-            return heavyHandler.Run(context, options);
-        })
-            .AsyncVia(TDispatcher::Get()->GetHeavyInvoker())
-            .Run()
-            .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+        auto callback = BIND([context, options, heavyHandler = RuntimeInfo_->Descriptor.HeavyHandler] {
+                return heavyHandler.Run(context, options);
+            })
+                .AsyncVia(TDispatcher::Get()->GetHeavyInvoker());
+
+        if (testingDelay) {
+            TDelayedExecutor::MakeDelayed(testingDelay)
+                .Apply(callback)
+                .Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+
+        } else {
+            callback.Run().Subscribe(BIND(&TServiceBase::TServiceContext::CheckAndRun, context));
+        }
     } else {
-        context->Run(RuntimeInfo_->Descriptor.LiteHandler);
+        if (testingDelay) {
+            TDelayedExecutor::Submit(
+                BIND(
+                    &TServiceBase::TServiceContext::Run,
+                    context,
+                    RuntimeInfo_->Descriptor.LiteHandler)
+                    .Via(GetCurrentInvoker()),
+                testingDelay);
+        } else {
+            context->Run(RuntimeInfo_->Descriptor.LiteHandler);
+        }
     }
 }
 
@@ -2282,7 +2314,7 @@ bool TServiceBase::TryCancelQueuedReply(TRequestId requestId)
     }
 
     if (queuedReply) {
-        queuedReply.Cancel(TError());
+        queuedReply.Cancel(TError(NYT::EErrorCode::Canceled, "Request canceled"));
         return true;
     } else {
         return false;

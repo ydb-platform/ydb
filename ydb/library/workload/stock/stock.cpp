@@ -12,10 +12,23 @@
 
 namespace {
 uint64_t getOrderId() {
-    static thread_local std::mt19937_64 generator;
-    generator.seed(Now().MicroSeconds() + std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    std::uniform_int_distribution<uint64_t> distribution(1, UINT64_MAX);
-    return distribution(generator);
+    static thread_local struct {
+        std::mt19937_64 gen;
+        bool initialized;
+    } generator = {std::mt19937_64{}, false};
+
+    if (!generator.initialized) {
+        // Создаем seed из комбинации времени, thread id и случайного числа
+        std::random_device rd;
+        uint64_t seed = rd() ^ 
+                       (std::hash<std::thread::id>{}(std::this_thread::get_id()) << 32) ^
+                       Now().MicroSeconds();
+        generator.gen.seed(seed);
+        generator.initialized = true;
+    }
+
+    std::uniform_int_distribution<uint64_t> dist(1, std::numeric_limits<uint64_t>::max());
+    return dist(generator.gen);
 }
 }
 

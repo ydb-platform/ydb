@@ -56,14 +56,12 @@ struct TPosition {
 class TTextWalker {
 public:
     TTextWalker(TPosition& position, bool utf8Aware)
-        : Position(position)
-        , Utf8Aware(utf8Aware)
-        , HaveCr(false)
-        , LfCount(0)
+        : Position_(position)
+        , Utf8Aware_(utf8Aware)
     {
     }
 
-    template<typename T>
+    template <typename T>
     TTextWalker& Advance(const T& buf) {
         for (char c : buf) {
             Advance(c);
@@ -74,10 +72,8 @@ public:
     TTextWalker& Advance(char c);
 
 private:
-    TPosition& Position;
-    const bool Utf8Aware;
-    bool HaveCr;
-    ui32 LfCount;
+    TPosition& Position_;
+    const bool Utf8Aware_;
 };
 
 struct TRange {
@@ -111,7 +107,8 @@ class TIssue;
 using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
     TVector<TIntrusivePtr<TIssue>> Children_;
-    TString Message;
+    TString Message_;
+
 public:
     TPosition Position;
     TPosition EndPosition;
@@ -122,47 +119,45 @@ public:
 
     template <typename T>
     explicit TIssue(const T& message)
-        : Message(message)
+        : Message_(message)
         , Position(TPosition())
         , EndPosition(TPosition())
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message_);
     }
 
     template <typename T>
     TIssue(TPosition position, const T& message)
-        : Message(message)
+        : Message_(message)
         , Position(position)
         , EndPosition(position)
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message_);
     }
 
     inline TRange Range() const {
-        return{ Position, EndPosition };
+        return {Position, EndPosition};
     }
 
     template <typename T>
     TIssue(TPosition position, TPosition endPosition, const T& message)
-        : Message(message)
+        : Message_(message)
         , Position(position)
         , EndPosition(endPosition)
     {
-        SanitizeNonAscii(Message);
+        SanitizeNonAscii(Message_);
     }
 
     inline bool operator==(const TIssue& other) const {
-        return Position == other.Position && Message == other.Message
-            && IssueCode == other.IssueCode;
+        return Position == other.Position && Message_ == other.Message_ && IssueCode == other.IssueCode;
     }
 
     ui64 Hash() const noexcept {
         return CombineHashes(
             CombineHashes(
                 (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)),
-                ComputeHash(Position.File)
-            ),
-            (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message)));
+                ComputeHash(Position.File)),
+            (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message_)));
     }
 
     TIssue& SetCode(TIssueCode id, ESeverity severity) {
@@ -172,8 +167,8 @@ public:
     }
 
     TIssue& SetMessage(const TString& msg) {
-        Message = msg;
-        SanitizeNonAscii(Message);
+        Message_ = msg;
+        SanitizeNonAscii(Message_);
         return *this;
     }
 
@@ -186,7 +181,7 @@ public:
     }
 
     const TString& GetMessage() const {
-        return Message;
+        return Message_;
     }
 
     TIssue& AddSubIssue(TIntrusivePtr<TIssue> issue) {
@@ -209,11 +204,11 @@ public:
 
     // Unsafe method. Doesn't call SanitizeNonAscii(Message)
     TString* MutableMessage() {
-        return &Message;
+        return &Message_;
     }
 
     TIssue& CopyWithoutSubIssues(const TIssue& src) {
-        Message = src.Message;
+        Message_ = src.Message_;
         IssueCode = src.IssueCode;
         Severity = src.Severity;
         Position = src.Position;
@@ -251,7 +246,8 @@ public:
         return *this;
     }
 
-    inline TIssues(TIssues&& rhs) : Issues_(std::move(rhs.Issues_))
+    inline TIssues(TIssues&& rhs)
+        : Issues_(std::move(rhs.Issues_))
     {
     }
 
@@ -260,7 +256,8 @@ public:
         return *this;
     }
 
-    template <typename ... Args> void AddIssue(Args&& ... args) {
+    template <typename... Args>
+    void AddIssue(Args&&... args) {
         Issues_.emplace_back(std::forward<Args>(args)...);
     }
 
@@ -271,7 +268,7 @@ public:
 
     inline void AddIssues(const TPosition& pos, const TIssues& errors) {
         Issues_.reserve(Issues_.size() + errors.Size());
-        for (const auto& e: errors) {
+        for (const auto& e : errors) {
             TIssue& issue = Issues_.emplace_back();
             *issue.MutableMessage() = e.GetMessage(); // No need to sanitize message, it has already been sanitized.
             issue.Position = pos;
@@ -309,10 +306,10 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
     void PrintWithProgramTo(
-            IOutputStream& out,
-            const TString& programFilename,
-            const TString& programText,
-            bool colorize = true) const;
+        IOutputStream& out,
+        const TString& programFilename,
+        const TString& programText,
+        bool colorize = true) const;
 
     inline TString ToString(bool oneLine = false) const {
         TStringStream out;
@@ -336,12 +333,14 @@ private:
     TVector<TIssue> Issues_;
 };
 
-class TErrorException : public yexception {
+class TErrorException: public yexception {
     const TIssueCode Code_;
+
 public:
     explicit TErrorException(TIssueCode code)
         : Code_(code)
-    {}
+    {
+    }
     TIssueCode GetCode() const {
         return Code_;
     }

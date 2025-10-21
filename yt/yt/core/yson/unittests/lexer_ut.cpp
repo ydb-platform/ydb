@@ -186,4 +186,4 @@ TEST_F(TStatelessLexerTest, IncorrectFinish)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NYTree
+} // namespace NYT::NYson

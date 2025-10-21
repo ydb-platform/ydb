@@ -4,7 +4,7 @@ namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
     AFL_VERIFY(Portions.size());
-    TCompactionTaskData result(NextLevel->GetLevelId());
+    TCompactionTaskData result(NextLevel->GetLevelId(), CompactAtLevel ? NextLevel->GetExpectedPortionSize() : std::optional<ui64>());
     for (auto&& i : Portions) {
         result.AddCurrentLevelPortion(
             i.GetPortion(), NextLevel->GetAffectedPortions(i.GetPortion()->IndexKeyStart(), i.GetPortion()->IndexKeyEnd()), true);
@@ -13,6 +13,7 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
             break;
         }
     }
+
     if (result.CanTakeMore()) {
         PredOptimization = TInstant::Now();
     } else {
@@ -21,12 +22,15 @@ TCompactionTaskData TZeroLevelPortions::DoGetOptimizationTask() const {
     return result;
 }
 
-ui64 TZeroLevelPortions::DoGetWeight() const {
+ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {
+    if (NYDBTest::TControllers::GetColumnShardController()->GetCompactionControl() == NYDBTest::EOptimizerCompactionWeightControl::Disable) {
+        return 0;
+    }
     if (!NextLevel || Portions.size() < PortionsCountAvailable || Portions.empty()) {
         return 0;
     }
     if (PredOptimization && TInstant::Now() - *PredOptimization < DurationToDrop) {
-        if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < ExpectedBlobsSize) {
+        if (GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) < std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())) {
             return 0;
         }
     }
@@ -58,7 +62,7 @@ ui64 TZeroLevelPortions::DoGetWeight() const {
 */
 
     const ui64 mb = (affectedRawBytes + GetPortionsInfo().GetRawBytes()) / 1000000 + 1;
-    return 1000.0 * GetPortionsInfo().GetCount() * GetPortionsInfo().GetCount() / mb;
+    return (highPriority ? HighPriorityContribution : 0) | ui64(1000.0 * GetPortionsInfo().GetCount() * GetPortionsInfo().GetCount() / mb);
 }
 
 TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
@@ -71,11 +75,13 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
     const TLevelCounters& levelCounters, const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop,
     const ui64 expectedBlobsSize, const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors,
-    const TString& defaultSelectorName)
+    const TString& defaultSelectorName, const ui64 highPriorityContribution, bool compactAtLevel)
     : TBase(levelIdx, nextLevel, overloadChecker, levelCounters, selectors, defaultSelectorName)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
-    , PortionsCountAvailable(portionsCountAvailable) {
+    , PortionsCountAvailable(portionsCountAvailable)
+    , HighPriorityContribution(highPriorityContribution)
+    , CompactAtLevel(compactAtLevel) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

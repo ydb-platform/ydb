@@ -81,9 +81,9 @@ public:
         if (size <= RemainingBytes()) {
             Advance(size);
         } else {
-            char Buffer[MaxGapSize];
+            const std::array<char, MaxGapSize> gap{};
             YT_VERIFY(size <= MaxGapSize);
-            Write(Buffer, size);
+            Write(gap.data(), size);
         }
         return position;
     }
@@ -119,7 +119,7 @@ public:
             /* enableRaw */ true)
     {
         for (int tableIndex = 0; tableIndex < description->GetTableCount(); ++tableIndex) {
-            if (auto fieldDescription = description->FindOtherColumnsField(tableIndex)) {
+            if (description->FindOtherColumnsField(tableIndex)) {
                 TableIndexToConverter_[tableIndex].emplace(
                     nameTable,
                     schemas[tableIndex],

@@ -287,11 +287,11 @@ void Deserialize(std::tuple<T...>& value, TYsonPullParserCursor* cursor, std::en
 }
 
 // For any associative container.
-template <template<typename...> class C, class... T, class K>
+template <NMpl::CAssociative TContainer>
 void Deserialize(
-    C<T...>& value,
+    TContainer& value,
     TYsonPullParserCursor* cursor,
-    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename C<T...>::value_type>::Type>(), void*>)
+    std::enable_if_t<ArePullParserDeserializable<typename NDetail::TRemoveConst<typename TContainer::value_type>::Type>(), void*>)
 {
     NDetail::DeserializeAssociative(value, cursor);
 }

@@ -403,6 +403,10 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }
                     else {
+                        if (res.Repeat()) {
+                            input->SetState(TExprNode::EState::ExecutionRequired);
+                            return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, false);
+                        }
                         return callback(res, input, output, ctx);
                     }
                 });

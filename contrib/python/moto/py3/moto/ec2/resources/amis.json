@@ -732,19 +732,20 @@
   },
   {
     "architecture": "x86_64",
-    "ami_id": "ami-0b301ce3ce347599c",
-    "image_location": "amazon/al2022-ami-2022.0.20220728.1-kernel-5.15-x86_64",
+    "ami_id": "ami-0b301ce3ce3475r4f",
+    "image_location": "amazon/al2022-ami-2022.0.20220728.1-kernel-6.0-x86_64",
     "image_type": "machine",
     "public": true,
     "owner_id": "137112412989",
     "platform": "Linux/UNIX",
     "state": "available",
-    "description": "Amazon Linux 2022 AMI 2022.0.20220728.1 x86_64 HVM kernel-5.15",
+    "description": "Test ami for product codes",
     "hypervisor": "xen",
-    "name": "al2022-ami-2022.0.20220728.1-kernel-5.15-x86_64",
+    "name": "product_codes_test",
     "root_device_name": "/dev/xvda",
     "root_device_type": "ebs",
     "sriov": "simple",
-    "virtualization_type": "hvm"
+    "virtualization_type": "hvm",
+    "product_codes": [ "code123", "code456" ]
   }
 ]

@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/object_client/public.h>
 
+#include <yt/yt/library/constrained/nonempty.h>
+
 #include <library/cpp/yt/compact_containers/compact_vector.h>
 #include <library/cpp/yt/compact_containers/compact_flat_map.h>
 
@@ -158,6 +160,8 @@ class TChunkReplica;
 using TChunkReplicaList = TCompactVector<TChunkReplica, TypicalReplicaCount>;
 using TChunkReplicaSlimList = TCompactVector<TChunkReplica, SlimTypicalReplicaCount>;
 
+using TPartitionTags = TNonEmpty<TCompactVector<int, 1>>;
+
 extern const std::string DefaultStoreAccountName;
 extern const std::string DefaultStoreMediumName;
 extern const std::string DefaultCacheMediumName;
@@ -196,7 +200,7 @@ DEFINE_ENUM(EChunkAvailabilityPolicy,
     ((Repairable)                   (2))
 );
 
-// Keep in sync with NChunkServer::ETableChunkFormat.
+// Keep in sync with SerializeChunkFormatAsTableChunkFormat.
 DEFINE_ENUM_WITH_UNDERLYING_TYPE(EChunkFormat, i8,
     // Sentinels.
     ((Unknown)                             (-1))

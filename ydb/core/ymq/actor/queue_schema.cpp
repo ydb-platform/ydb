@@ -1,4 +1,4 @@
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "executor.h"
 #include "log.h"
 #include "params.h"
@@ -43,7 +43,11 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
                                                      const bool enableQueueAttributesValidation,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResources,
-                                                     const TString& tagsJson)
+                                                     const TString& tagsJson,
+                                                     const TString& userSid,
+                                                     const TString& maskedToken,
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , Request_(req)
     , Sender_(sender)
@@ -57,6 +61,10 @@ TCreateQueueSchemaActorV2::TCreateQueueSchemaActorV2(const TQueuePath& path,
     , UserCounters_(std::move(userCounters))
     , QuoterResources_(std::move(quoterResources))
     , TagsJson_(tagsJson)
+    , UserSid_(userSid)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
+    , SourceAddress_(sourceAddress)
 {
     IsFifo_ = AsciiHasSuffixIgnoreCase(IsCloudMode_ ? CustomQueueName_ : QueuePath_.QueueName, ".fifo");
 
@@ -709,207 +717,266 @@ void TCreateQueueSchemaActorV2::HandleAddQuoterResource(NKesus::TEvKesus::TEvAdd
     }
 }
 
-static const char* const CommitQueueParamsQuery = R"__(
-    (
-        (let name                   (Parameter 'NAME              (DataType 'Utf8String)))
-        (let customName             (Parameter 'CUSTOMNAME        (DataType 'Utf8String)))
-        (let folderId               (Parameter 'FOLDERID          (DataType 'Utf8String)))
-        (let id                     (Parameter 'ID                (DataType 'String)))
-        (let fifo                   (Parameter 'FIFO              (DataType 'Bool)))
-        (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool)))
-        (let now                    (Parameter 'NOW               (DataType 'Uint64)))
-        (let createdTimestamp       (Parameter 'CREATED_TIMESTAMP (DataType 'Uint64)))
-        (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
-        (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
-        (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
-        (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32)))
-        (let queueIdNumber          (Parameter 'QUEUE_ID_NUMBER   (DataType 'Uint64)))
-        (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
-        (let maxSize                (Parameter 'MAX_SIZE          (DataType 'Uint64)))
-        (let delay                  (Parameter 'DELAY             (DataType 'Uint64)))
-        (let visibility             (Parameter 'VISIBILITY        (DataType 'Uint64)))
-        (let retention              (Parameter 'RETENTION         (DataType 'Uint64)))
-        (let receiveMessageWaitTime (Parameter 'RECEIVE_MESSAGE_WAIT_TIME (DataType 'Uint64)))
-        (let dlqArn                 (Parameter 'DLQ_TARGET_ARN    (DataType 'Utf8String)))
-        (let dlqName                (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
-        (let maxReceiveCount        (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
-        (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
-        (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
-        (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
+TString TCreateQueueSchemaActorV2::GenerateCommitQueueParamsQuery() {
+    bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
 
-        (let attrsTable '%1$s/Attributes)
-        (let stateTable '%1$s/State)
-        (let settingsTable '%2$s/.Settings)
-        (let queuesTable '%2$s/.Queues)
-        (let eventsTable '%2$s/.Events)
+    TString result =
+    R"__(
+        (
+            (let name                   (Parameter 'NAME              (DataType 'Utf8String)))
+            (let customName             (Parameter 'CUSTOMNAME        (DataType 'Utf8String)))
+            (let folderId               (Parameter 'FOLDERID          (DataType 'Utf8String)))
+            (let id                     (Parameter 'ID                (DataType 'String)))
+            (let fifo                   (Parameter 'FIFO              (DataType 'Bool)))
+            (let contentBasedDeduplication (Parameter 'CONTENT_BASED_DEDUPLICATION (DataType 'Bool)))
+            (let now                    (Parameter 'NOW               (DataType 'Uint64)))
+            (let createdTimestamp       (Parameter 'CREATED_TIMESTAMP (DataType 'Uint64)))
+            (let shards                 (Parameter 'SHARDS            (DataType 'Uint64)))
+            (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
+            (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
+            (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32)))
+            (let queueIdNumber          (Parameter 'QUEUE_ID_NUMBER   (DataType 'Uint64)))
+            (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+            (let maxSize                (Parameter 'MAX_SIZE          (DataType 'Uint64)))
+            (let delay                  (Parameter 'DELAY             (DataType 'Uint64)))
+            (let visibility             (Parameter 'VISIBILITY        (DataType 'Uint64)))
+            (let retention              (Parameter 'RETENTION         (DataType 'Uint64)))
+            (let receiveMessageWaitTime (Parameter 'RECEIVE_MESSAGE_WAIT_TIME (DataType 'Uint64)))
+            (let dlqArn                 (Parameter 'DLQ_TARGET_ARN    (DataType 'Utf8String)))
+            (let dlqName                (Parameter 'DLQ_TARGET_NAME   (DataType 'Utf8String)))
+            (let maxReceiveCount        (Parameter 'MAX_RECEIVE_COUNT (DataType 'Uint64)))
+            (let defaultMaxQueuesCount  (Parameter 'DEFAULT_MAX_QUEUES_COUNT (DataType 'Uint64)))
+            (let userName               (Parameter 'USER_NAME         (DataType 'Utf8String)))
+            (let tags                   (Parameter 'TAGS              (DataType 'Utf8String)))
+    )__";
 
-        (let maxQueuesCountSettingRow '(
-            '('Account userName)
-            '('Name (Utf8String '"MaxQueuesCount"))))
-        (let maxQueuesCountSettingSelect '(
-            'Value))
-        (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect))
-        (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0)))
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+                (let cloudEventsQueueName               (Parameter 'CUSTOMNAME (DataType 'Utf8String)))
+                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+                (let cloudEventsQueueTags               (Parameter 'TAGS (DataType 'Utf8String)))
+        )__";
 
-        (let queuesRange '(
-            '('Account userName userName)
-            '('QueueName (Utf8String '"") (Void))))
-        (let queues
-            (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState 'TablesFormat) '()) 'List))
-        (let overLimit
-            (LessOrEqual maxQueuesCountSetting (Length queues)))
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
 
-        (let queuesRow '(
-            '('Account userName)
-            '('QueueName name)))
+        result += R"__(
+                (let cloudEventsRow '(
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
 
-        (let eventsRow '(
-            '('Account userName)
-            '('QueueName name)
-            '('EventType (Uint64 '1))))
+                (let cloudEventsUpdate '(
+                    '('QueueName cloudEventsQueueName)
+                    '('Type cloudEventsType)
+                    '('CloudId cloudEventsCloudId)
+                    '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
+                    '('UserSID cloudEventsUserSID)
+                    '('MaskedToken cloudEventsMaskedToken)
+                    '('AuthType cloudEventsAuthType)
+                    '('PeerName cloudEventsPeerName)
+                    '('RequestId cloudEventsRequestId)
+                    '('Labels cloudEventsQueueTags)))
+        )__";
+    }
 
-        (let queuesSelect '(
-            'QueueState
-            'QueueId
-            'FifoQueue
-            'Shards
-            'Partitions
-            'Version
-            'TablesFormat))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
+    result +=
+    R"__(
+            (let attrsTable '%1$s/Attributes)
+            (let stateTable '%1$s/State)
+            (let settingsTable '%2$s/.Settings)
+            (let queuesTable '%2$s/.Queues)
+            (let eventsTable '%2$s/.Events)
 
-        (let existingQueuesWithSameNameAndFolderId
-            (If (Equal (Utf8String '"") customName)
-                (List (TypeOf queues))
-                (Filter queues (lambda '(item) (block '(
-                    (return (Coalesce
-                        (And
-                            (Equal (Member item 'CustomQueueName) customName)
-                            (Equal (Member item 'FolderId) folderId))
-                        (Bool 'false))))))
-                )
-            )
-        )
+            (let maxQueuesCountSettingRow '(
+                '('Account userName)
+                '('Name (Utf8String '"MaxQueuesCount"))))
+            (let maxQueuesCountSettingSelect '(
+                'Value))
+            (let maxQueuesCountSettingRead (SelectRow settingsTable maxQueuesCountSettingRow maxQueuesCountSettingSelect))
+            (let maxQueuesCountSetting (Coalesce (If (Exists maxQueuesCountSettingRead) (Cast (Member maxQueuesCountSettingRead 'Value) 'Uint64) defaultMaxQueuesCount) (Uint64 '0)))
 
-        (let existingResourceId (Coalesce
-            (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'QueueName)
-            (Utf8String '"")
-        ))
+            (let queuesRange '(
+                '('Account userName userName)
+                '('QueueName (Utf8String '"") (Void))))
+            (let queues
+                (Member (SelectRange queuesTable queuesRange '('QueueName 'CustomQueueName 'Version 'FolderId 'QueueState 'TablesFormat) '()) 'List))
+            (let overLimit
+                (LessOrEqual maxQueuesCountSetting (Length queues)))
 
-        (let queueExists
-            (Coalesce
-                (Or
-                    (Or
-                        (Equal (Uint64 '1) (Member queuesRead 'QueueState))
-                        (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+            (let queuesRow '(
+                '('Account userName)
+                '('QueueName name)))
+
+            (let eventsRow '(
+                '('Account userName)
+                '('QueueName name)
+                '('EventType (Uint64 '1))))
+
+            (let queuesSelect '(
+                'QueueState
+                'QueueId
+                'FifoQueue
+                'Shards
+                'Partitions
+                'Version
+                'TablesFormat))
+            (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
+
+            (let existingQueuesWithSameNameAndFolderId
+                (If (Equal (Utf8String '"") customName)
+                    (List (TypeOf queues))
+                    (Filter queues (lambda '(item) (block '(
+                        (return (Coalesce
+                            (And
+                                (Equal (Member item 'CustomQueueName) customName)
+                                (Equal (Member item 'FolderId) folderId))
+                            (Bool 'false))))))
                     )
-                    (NotEqual (Utf8String '"") existingResourceId)
                 )
-                (Bool 'false)))
-
-        (let currentVersion
-            (Coalesce
-                (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'Version)
-                (Member queuesRead 'Version)
-                (Uint64 '0)
             )
-        )
 
-        (let currentTablesFormat
-            (Coalesce
-                (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'TablesFormat)
-                (Member queuesRead 'TablesFormat)
-                tablesFormat
+            (let existingResourceId (Coalesce
+                (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'QueueName)
+                (Utf8String '"")
+            ))
+
+            (let queueExists
+                (Coalesce
+                    (Or
+                        (Or
+                            (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                            (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+                        )
+                        (NotEqual (Utf8String '"") existingResourceId)
+                    )
+                    (Bool 'false)))
+
+            (let currentVersion
+                (Coalesce
+                    (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'Version)
+                    (Member queuesRead 'Version)
+                    (Uint64 '0)
+                )
             )
+
+            (let currentTablesFormat
+                (Coalesce
+                    (Member (ToOptional existingQueuesWithSameNameAndFolderId) 'TablesFormat)
+                    (Member queuesRead 'TablesFormat)
+                    tablesFormat
+                )
+            )
+
+            (let queuesUpdate '(
+                '('QueueId id)
+                '('CustomQueueName customName)
+                '('FolderId folderId)
+                '('QueueState (Uint64 '3))
+                '('FifoQueue fifo)
+                '('DeadLetterQueue (Bool 'false))
+                '('CreatedTimestamp createdTimestamp)
+                '('Shards shards)
+                '('Partitions partitions)
+                '('Version queueIdNumber)
+                '('DlqName dlqName)
+                '('MasterTabletId masterTabletId)
+                '('TablesFormat tablesFormat)
+                '('Tags tags)))
+
+            (let eventsUpdate '(
+                '('CustomQueueName customName)
+                '('EventTimestamp now)
+                '('FolderId folderId)
+                '('Labels tags)))
+
+            (let attrRow '(%3$s))
+
+            (let attrUpdate '(
+                '('ContentBasedDeduplication contentBasedDeduplication)
+                '('DelaySeconds delay)
+                '('FifoQueue fifo)
+                '('MaximumMessageSize maxSize)
+                '('MessageRetentionPeriod retention)
+                '('ReceiveMessageWaitTime receiveMessageWaitTime)
+                '('MaxReceiveCount maxReceiveCount)
+                '('DlqArn dlqArn)
+                '('DlqName dlqName)
+                '('VisibilityTimeout visibility)))
+
+            (let willCommit
+                (And
+                    (Not queueExists)
+                    (Not overLimit)))
+
+            (let stateUpdate '(
+                            '('CleanupTimestamp now)
+                            '('CreatedTimestamp createdTimestamp)
+                            '('LastModifiedTimestamp now)
+                            '('InflyCount (Int64 '0))
+                            '('MessageCount (Int64 '0))
+                            '('RetentionBoundary (Uint64 '0))
+                            '('ReadOffset (Uint64 '0))
+                            '('WriteOffset (Uint64 '0))
+                            '('CleanupVersion (Uint64 '0))))
+
+            (let queueIdNumberAndShardHashes (AsList %4$s))
+
+            (return (Extend
+                (AsList
+                    (SetResult 'exists queueExists)
+                    (SetResult 'overLimit overLimit)
+                    (SetResult 'version currentVersion)
+                    (SetResult 'tablesFormat currentTablesFormat)
+                    (SetResult 'resourceId existingResourceId)
+                    (SetResult 'commited willCommit))
+
+                (ListIf queueExists (SetResult 'meta queuesRead))
+    )__";
+
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                (ListIf willCommit (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate))
+        )__";
+    }
+
+    result +=
+    R"__(
+                (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
+                (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
+                (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
+
+                (If (Not willCommit) (AsList (Void))
+                    (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
+                        (let shard (Cast shardOriginal 'Uint32))
+                        (let row '(%5$s))
+                        (let update '(
+                            '('CleanupTimestamp now)
+                            '('CreatedTimestamp createdTimestamp)
+                            '('LastModifiedTimestamp now)
+                            '('InflyCount (Int64 '0))
+                            '('MessageCount (Int64 '0))
+                            '('RetentionBoundary (Uint64 '0))
+                            '('ReadOffset (Uint64 '0))
+                            '('WriteOffset (Uint64 '0))
+                            '('CleanupVersion (Uint64 '0))))
+                        (return (UpdateRow stateTable row update)))))))
+            ))
         )
-
-        (let queuesUpdate '(
-            '('QueueId id)
-            '('CustomQueueName customName)
-            '('FolderId folderId)
-            '('QueueState (Uint64 '3))
-            '('FifoQueue fifo)
-            '('DeadLetterQueue (Bool 'false))
-            '('CreatedTimestamp createdTimestamp)
-            '('Shards shards)
-            '('Partitions partitions)
-            '('Version queueIdNumber)
-            '('DlqName dlqName)
-            '('MasterTabletId masterTabletId)
-            '('TablesFormat tablesFormat)
-            '('Tags tags)))
-
-        (let eventsUpdate '(
-            '('CustomQueueName customName)
-            '('EventTimestamp now)
-            '('FolderId folderId)
-            '('Labels tags)))
-
-        (let attrRow '(%3$s))
-
-        (let attrUpdate '(
-            '('ContentBasedDeduplication contentBasedDeduplication)
-            '('DelaySeconds delay)
-            '('FifoQueue fifo)
-            '('MaximumMessageSize maxSize)
-            '('MessageRetentionPeriod retention)
-            '('ReceiveMessageWaitTime receiveMessageWaitTime)
-            '('MaxReceiveCount maxReceiveCount)
-            '('DlqArn dlqArn)
-            '('DlqName dlqName)
-            '('VisibilityTimeout visibility)))
-
-        (let willCommit
-            (And
-                (Not queueExists)
-                (Not overLimit)))
-
-        (let stateUpdate '(
-                        '('CleanupTimestamp now)
-                        '('CreatedTimestamp createdTimestamp)
-                        '('LastModifiedTimestamp now)
-                        '('InflyCount (Int64 '0))
-                        '('MessageCount (Int64 '0))
-                        '('RetentionBoundary (Uint64 '0))
-                        '('ReadOffset (Uint64 '0))
-                        '('WriteOffset (Uint64 '0))
-                        '('CleanupVersion (Uint64 '0))))
-
-        (let queueIdNumberAndShardHashes (AsList %4$s))
-
-        (return (Extend
-            (AsList
-                (SetResult 'exists queueExists)
-                (SetResult 'overLimit overLimit)
-                (SetResult 'version currentVersion)
-                (SetResult 'tablesFormat currentTablesFormat)
-                (SetResult 'resourceId existingResourceId)
-                (SetResult 'commited willCommit))
-
-            (ListIf queueExists (SetResult 'meta queuesRead))
-
-            (ListIf willCommit (UpdateRow queuesTable queuesRow queuesUpdate))
-            (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
-            (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
-
-            (If (Not willCommit) (AsList (Void))
-                (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
-                    (let shard (Cast shardOriginal 'Uint32))
-                    (let row '(%5$s))
-                    (let update '(
-                        '('CleanupTimestamp now)
-                        '('CreatedTimestamp createdTimestamp)
-                        '('LastModifiedTimestamp now)
-                        '('InflyCount (Int64 '0))
-                        '('MessageCount (Int64 '0))
-                        '('RetentionBoundary (Uint64 '0))
-                        '('ReadOffset (Uint64 '0))
-                        '('WriteOffset (Uint64 '0))
-                        '('CleanupVersion (Uint64 '0))))
-                    (return (UpdateRow stateTable row update)))))))
-        ))
-    )
-)__";
+    )__";
+    return result;
+}
 
 TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
     if (tablesFormat == 1) {
@@ -948,6 +1015,7 @@ TString GetQueueIdAndShardHashesList(ui64 version, ui32 shards) {
 }
 
 void TCreateQueueSchemaActorV2::CommitNewVersion() {
+    bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     Become(&TCreateQueueSchemaActorV2::FinalizeAndCommit);
 
     TString queuePath;
@@ -958,7 +1026,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
     }
 
     TString query = Sprintf(
-        CommitQueueParamsQuery,
+        GenerateCommitQueueParamsQuery().c_str(),
         queuePath.c_str(),
         Cfg().GetRoot().c_str(),
         GetAttrTableKeys(TablesFormat_).c_str(),
@@ -970,32 +1038,70 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
     auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
     Y_ABORT_UNLESS(TablesFormat_ == 1 || LeaderTabletId_ != 0);
     TInstant createdTimestamp = Request_.HasCreatedTimestamp() ? TInstant::Seconds(Request_.GetCreatedTimestamp()) : QueueCreationTimestamp_;
-    TParameters(trans->MutableParams()->MutableProto())
-        .Utf8("NAME", QueuePath_.QueueName)
-        .Utf8("CUSTOMNAME", CustomQueueName_)
-        .Utf8("FOLDERID", FolderId_)
-        .String("ID", GeneratedQueueId_)
-        .Bool("FIFO", IsFifo_)
-        .Bool("CONTENT_BASED_DEDUPLICATION", *ValidatedAttributes_.ContentBasedDeduplication)
-        .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
-        .Uint64("CREATED_TIMESTAMP", createdTimestamp.MilliSeconds())
-        .Uint64("SHARDS", RequiredShardsCount_)
-        .Uint64("PARTITIONS", Request_.GetPartitions())
-        .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
-        .Uint32("TABLES_FORMAT", TablesFormat_)
-        .Uint64("QUEUE_ID_NUMBER", Version_)
-        .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(Version_))
-        .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
-        .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
-        .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))
-        .Uint64("RETENTION", SecondsToMs(*ValidatedAttributes_.MessageRetentionPeriod))
-        .Uint64("RECEIVE_MESSAGE_WAIT_TIME", SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds))
-        .Utf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn ? *ValidatedAttributes_.RedrivePolicy.TargetArn : "")
-        .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName :  "")
-        .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
-        .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
-        .Utf8("USER_NAME", QueuePath_.UserName)
-        .Utf8("TAGS", TagsJson_);
+    if (isCloudEventsEnabled) {
+        TParameters(trans->MutableParams()->MutableProto())
+            .Utf8("NAME", QueuePath_.QueueName)
+            .Utf8("CUSTOMNAME", CustomQueueName_)
+            .Utf8("FOLDERID", FolderId_)
+            .String("ID", GeneratedQueueId_)
+            .Bool("FIFO", IsFifo_)
+            .Bool("CONTENT_BASED_DEDUPLICATION", *ValidatedAttributes_.ContentBasedDeduplication)
+            .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
+            .Uint64("CREATED_TIMESTAMP", createdTimestamp.MilliSeconds())
+            .Uint64("SHARDS", RequiredShardsCount_)
+            .Uint64("PARTITIONS", Request_.GetPartitions())
+            .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
+            .Uint32("TABLES_FORMAT", TablesFormat_)
+            .Uint64("QUEUE_ID_NUMBER", Version_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(Version_))
+            .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
+            .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
+            .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))
+            .Uint64("RETENTION", SecondsToMs(*ValidatedAttributes_.MessageRetentionPeriod))
+            .Uint64("RECEIVE_MESSAGE_WAIT_TIME", SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds))
+            .Utf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn ? *ValidatedAttributes_.RedrivePolicy.TargetArn : "")
+            .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName :  "")
+            .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
+            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
+            .Utf8("USER_NAME", QueuePath_.UserName)
+            .Utf8("TAGS", TagsJson_)
+            .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
+            .Utf8("CLOUD_EVENT_TYPE", "CreateMessageQueue")
+            .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
+            .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+            .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
+            .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+            .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
+            .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+            .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
+    } else {
+        TParameters(trans->MutableParams()->MutableProto())
+            .Utf8("NAME", QueuePath_.QueueName)
+            .Utf8("CUSTOMNAME", CustomQueueName_)
+            .Utf8("FOLDERID", FolderId_)
+            .String("ID", GeneratedQueueId_)
+            .Bool("FIFO", IsFifo_)
+            .Bool("CONTENT_BASED_DEDUPLICATION", *ValidatedAttributes_.ContentBasedDeduplication)
+            .Uint64("NOW", QueueCreationTimestamp_.MilliSeconds())
+            .Uint64("CREATED_TIMESTAMP", createdTimestamp.MilliSeconds())
+            .Uint64("SHARDS", RequiredShardsCount_)
+            .Uint64("PARTITIONS", Request_.GetPartitions())
+            .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
+            .Uint32("TABLES_FORMAT", TablesFormat_)
+            .Uint64("QUEUE_ID_NUMBER", Version_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(Version_))
+            .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
+            .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
+            .Uint64("VISIBILITY", SecondsToMs(*ValidatedAttributes_.VisibilityTimeout))
+            .Uint64("RETENTION", SecondsToMs(*ValidatedAttributes_.MessageRetentionPeriod))
+            .Uint64("RECEIVE_MESSAGE_WAIT_TIME", SecondsToMs(*ValidatedAttributes_.ReceiveMessageWaitTimeSeconds))
+            .Utf8("DLQ_TARGET_ARN", ValidatedAttributes_.RedrivePolicy.TargetArn ? *ValidatedAttributes_.RedrivePolicy.TargetArn : "")
+            .Utf8("DLQ_TARGET_NAME", ValidatedAttributes_.RedrivePolicy.TargetQueueName ? *ValidatedAttributes_.RedrivePolicy.TargetQueueName :  "")
+            .Uint64("MAX_RECEIVE_COUNT", ValidatedAttributes_.RedrivePolicy.MaxReceiveCount ? *ValidatedAttributes_.RedrivePolicy.MaxReceiveCount : 0)
+            .Uint64("DEFAULT_MAX_QUEUES_COUNT", Cfg().GetAccountSettingsDefaults().GetMaxQueuesCount())
+            .Utf8("USER_NAME", QueuePath_.UserName)
+            .Utf8("TAGS", TagsJson_);
+    }
 
     Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
 }
@@ -1127,7 +1233,8 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
                 Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
-                                                           Version_, RequiredShardsCount_, IsFifo_));
+                                                           Version_, RequiredShardsCount_, IsFifo_,
+                                                           FolderId_, TagsJson_, UserSid_, MaskedToken_, AuthType_, SourceAddress_));
             }
 
         } else {
@@ -1156,7 +1263,13 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      ui32 tablesFormat,
                                                      const TActorId& sender,
                                                      const TString& requestId,
-                                                     TIntrusivePtr<TUserCounters> userCounters)
+                                                     TIntrusivePtr<TUserCounters> userCounters,
+                                                     const TString& folderId,
+                                                     const TString& tagsJson,
+                                                     const TString& userSid,
+                                                     const TString& maskedToken,
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1164,6 +1277,12 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , DeletionStep_(EDeleting::EraseQueueRecord)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
+    , TagsJson_(tagsJson)
+    , UserSid_(userSid)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
+    , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
 }
 
@@ -1175,7 +1294,13 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      TIntrusivePtr<TUserCounters> userCounters,
                                                      const ui64 advisedQueueVersion,
                                                      const ui64 advisedShardCount,
-                                                     const bool advisedIsFifoFlag)
+                                                     const bool advisedIsFifoFlag,
+                                                     const TString& folderId,
+                                                     const TString& tagsJson,
+                                                     const TString& userSid,
+                                                     const TString& maskedToken,
+                                                     const TString& authType,
+                                                     const TString& sourceAddress)
     : QueuePath_(path)
     , IsFifo_(isFifo)
     , TablesFormat_(tablesFormat)
@@ -1183,6 +1308,12 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
     , DeletionStep_(tablesFormat == 0 ? EDeleting::RemoveTables : EDeleting::RemoveQueueVersionDirectory)
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
+    , TagsJson_(tagsJson)
+    , UserSid_(userSid)
+    , MaskedToken_(maskedToken)
+    , AuthType_(authType)
+    , FolderId_(folderId)
+    , SourceAddress_(sourceAddress)
 {
     Y_ABORT_UNLESS(advisedQueueVersion > 0);
 
@@ -1216,151 +1347,213 @@ static TString GetVersionedQueueDir(const TString& baseQueueDir, const ui64 vers
     return TString::Join(baseQueueDir, "/v", ToString(version));
 }
 
-static const char* EraseQueueRecordQuery = R"__(
-    (
-        (let name               (Parameter 'NAME (DataType 'Utf8String)))
-        (let userName           (Parameter 'USER_NAME (DataType 'Utf8String)))
-        (let now                (Parameter 'NOW (DataType 'Uint64)))
-        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+TString TDeleteQueueSchemaActorV2::GenerateEraseQueueRecordQuery() {
+    bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
 
-        (let queuesTable '%2$s/.Queues)
-        (let removedQueuesTable '%2$s/.RemovedQueues)
-        (let eventsTable '%2$s/.Events)
-        (let stateTable '%3$s/State)
+    TString result =
+    R"__(
+        (
+            (let name               (Parameter 'NAME (DataType 'Utf8String)))
+            (let userName           (Parameter 'USER_NAME (DataType 'Utf8String)))
+            (let now                (Parameter 'NOW (DataType 'Uint64)))
+            (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+            (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
-        (let queuesRow '(
-            '('Account userName)
-            '('QueueName name)))
-        (let eventsRow '(
-            '('Account userName)
-            '('QueueName name)
-            '('EventType (Uint64 '0))))
+            (let queuesTable '%2$s/.Queues)
+            (let removedQueuesTable '%2$s/.RemovedQueues)
+            (let eventsTable '%2$s/.Events)
+            (let stateTable '%3$s/State)
 
-        (let queuesSelect '(
-            'QueueState
-            'Version
-            'FifoQueue
-            'Shards
-            'CustomQueueName
-            'CreatedTimestamp
-            'FolderId
-            'TablesFormat
-            'Tags))
-        (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
+            (let queuesRow '(
+                '('Account userName)
+                '('QueueName name)))
+            (let eventsRow '(
+                '('Account userName)
+                '('QueueName name)
+                '('EventType (Uint64 '0))))
 
-        (let currentVersion
-            (Coalesce
-                (Member queuesRead 'Version)
-                (Uint64 '0)
+            (let queuesSelect '(
+                'QueueState
+                'Version
+                'FifoQueue
+                'Shards
+                'CustomQueueName
+                'CreatedTimestamp
+                'FolderId
+                'TablesFormat
+                'Tags))
+            (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
+
+            (let currentVersion
+                (Coalesce
+                    (Member queuesRead 'Version)
+                    (Uint64 '0)
+                )
             )
-        )
 
-        (let queueCreateTs
-            (Coalesce
-                (Member queuesRead 'CreatedTimestamp)
-                (Uint64 '0)
+            (let queueCreateTs
+                (Coalesce
+                    (Member queuesRead 'CreatedTimestamp)
+                    (Uint64 '0)
+                )
             )
-        )
 
-        (let fifoQueue
-            (Coalesce
-                (Member queuesRead 'FifoQueue)
-                (Bool 'false)
+            (let fifoQueue
+                (Coalesce
+                    (Member queuesRead 'FifoQueue)
+                    (Bool 'false)
+                )
             )
-        )
 
-        (let shards
-            (Coalesce
-                (Member queuesRead 'Shards)
-                (Uint64 '0)
+            (let shards
+                (Coalesce
+                    (Member queuesRead 'Shards)
+                    (Uint64 '0)
+                )
             )
-        )
 
-        (let folderId
-            (Coalesce
-                (Member queuesRead 'FolderId)
-                (Utf8String '"")
+            (let folderId
+                (Coalesce
+                    (Member queuesRead 'FolderId)
+                    (Utf8String '"")
+                )
             )
-        )
 
-        (let customName
-            (Coalesce
-                (Member queuesRead 'CustomQueueName)
-                (Utf8String '"")
+            (let customName
+                (Coalesce
+                    (Member queuesRead 'CustomQueueName)
+                    (Utf8String '"")
+                )
             )
-        )
+    )__";
 
-        (let tablesFormat
-            (Coalesce
-                (Member queuesRead 'TablesFormat)
-                (Uint32 '0)
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                (let cloudEventsId                      (Parameter 'CLOUD_EVENT_ID (DataType 'Uint64)))
+                (let cloudEventsCreatedAt               (Parameter 'NOW (DataType 'Uint64)))
+                (let cloudEventsType                    (Parameter 'CLOUD_EVENT_TYPE (DataType 'Utf8String)))
+                (let cloudEventsCloudId                 (Parameter 'CLOUD_EVENT_CLOUD_ID (DataType 'Utf8String)))
+                (let cloudEventsFolderId                (Parameter 'CLOUD_EVENT_FOLDER_ID (DataType 'Utf8String)))
+                (let cloudEventsResourceId              (Parameter 'NAME (DataType 'Utf8String)))
+                (let cloudEventsUserSID                 (Parameter 'CLOUD_EVENT_USER_SID (DataType 'Utf8String)))
+                (let cloudEventsMaskedToken             (Parameter 'CLOUD_EVENT_USER_MASKED_TOKEN (DataType 'Utf8String)))
+                (let cloudEventsAuthType                (Parameter 'CLOUD_EVENT_AUTHTYPE (DataType 'Utf8String)))
+                (let cloudEventsPeerName                (Parameter 'CLOUD_EVENT_PEERNAME (DataType 'Utf8String)))
+                (let cloudEventsRequestId               (Parameter 'CLOUD_EVENT_REQUEST_ID (DataType 'Utf8String)))
+                (let cloudEventsQueueTags               (Parameter 'CLOUD_EVENT_LABELS (DataType 'Utf8String)))
+        )__";
+
+        result += TStringBuilder() << "(let cloudEventsTable '%2$s/" << NCloudEvents::TProcessor::EventTableName << ")";
+
+        result += R"__(
+                (let cloudEventsRow '(
+                    '('CreatedAt cloudEventsCreatedAt)
+                    '('Id cloudEventsId)))
+
+                (let cloudEventsUpdate '(
+                    '('QueueName customName)
+                    '('Type cloudEventsType)
+                    '('CloudId cloudEventsCloudId)
+                    '('FolderId cloudEventsFolderId)
+                    '('ResourceId cloudEventsResourceId)
+                    '('UserSID cloudEventsUserSID)
+                    '('MaskedToken cloudEventsMaskedToken)
+                    '('AuthType cloudEventsAuthType)
+                    '('PeerName cloudEventsPeerName)
+                    '('RequestId cloudEventsRequestId)
+                    '('Labels cloudEventsQueueTags)))
+        )__";
+    }
+
+    result +=
+    R"__(
+            (let tablesFormat
+                (Coalesce
+                    (Member queuesRead 'TablesFormat)
+                    (Uint32 '0)
+                )
             )
-        )
 
-        (let queueTags
-            (Coalesce
-                (Member queuesRead 'Tags)
-                (Utf8String '"{}")
+            (let queueTags
+                (Coalesce
+                    (Member queuesRead 'Tags)
+                    (Utf8String '"{}")
+                )
             )
-        )
 
-        (let removedQueueRow '(
-            '('RemoveTimestamp now)
-            '('QueueIdNumber currentVersion)))
+            (let removedQueueRow '(
+                '('RemoveTimestamp now)
+                '('QueueIdNumber currentVersion)))
 
-        (let removedQueueUpdate '(
-            '('Account userName)
-            '('QueueName name)
-            '('FifoQueue fifoQueue)
-            '('Shards (Cast shards 'Uint32))
-            '('CustomQueueName customName)
-            '('FolderId folderId)
-            '('TablesFormat tablesFormat)))
+            (let removedQueueUpdate '(
+                '('Account userName)
+                '('QueueName name)
+                '('FifoQueue fifoQueue)
+                '('Shards (Cast shards 'Uint32))
+                '('CustomQueueName customName)
+                '('FolderId folderId)
+                '('TablesFormat tablesFormat)))
 
-        (let eventTs (Max now (Add queueCreateTs (Uint64 '2))))
+            (let eventTs (Max now (Add queueCreateTs (Uint64 '2))))
 
-        (let queueExists
-            (Coalesce
-                (And
-                    (Equal currentVersion queueIdNumber)
-                    (Or
-                        (Equal (Uint64 '1) (Member queuesRead 'QueueState))
-                        (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+            (let queueExists
+                (Coalesce
+                    (And
+                        (Equal currentVersion queueIdNumber)
+                        (Or
+                            (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                            (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+                        )
                     )
+                    (Bool 'false)))
+
+            (let eventsUpdate '(
+                '('CustomQueueName customName)
+                '('EventTimestamp eventTs)
+                '('FolderId folderId)
+                '('Labels queueTags)))
+
+            (return (Extend
+                (AsList
+                    (SetResult 'exists queueExists)
+                    (SetResult 'version currentVersion)
+                    (SetResult 'fields queuesRead)
+    )__";
+
+    if (isCloudEventsEnabled) {
+        result +=
+        R"__(
+                    (If queueExists (UpdateRow cloudEventsTable cloudEventsRow cloudEventsUpdate) (Void))
+        )__";
+    }
+
+    result +=
+    R"__(
+                    (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
+                    (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
+                    (If queueExists (EraseRow queuesTable queuesRow) (Void))
                 )
-                (Bool 'false)))
 
-        (let eventsUpdate '(
-            '('CustomQueueName customName)
-            '('EventTimestamp eventTs)
-            '('FolderId folderId)
-            '('Labels queueTags)))
+                    (If queueExists
+                        (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
+                            (let shard (Cast shardOriginal 'Uint32))
 
-        (return (Extend
-            (AsList
-                (SetResult 'exists queueExists)
-                (SetResult 'version currentVersion)
-                (SetResult 'fields queuesRead)
-                (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
-                (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
-                (If queueExists (EraseRow queuesTable queuesRow) (Void))
-            )
+                            (let stateRow '(%4$s))
+                            (return (EraseRow stateTable stateRow))
+                        ))))
+                        (AsList (Void))
+                    )
+            ))
+        )
+    )__";
 
-                (If queueExists
-                    (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
-                        (let shard (Cast shardOriginal 'Uint32))
-
-                        (let stateRow '(%4$s))
-                        (return (EraseRow stateTable stateRow))
-                    ))))
-                    (AsList (Void))
-                )
-        ))
-    )
-)__";
+    return result;
+}
 
 void TDeleteQueueSchemaActorV2::NextAction() {
+    bool isCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
+
     switch (DeletionStep_) {
         case EDeleting::EraseQueueRecord: {
             TString queueStateDir = QueuePath_.GetVersionedQueuePath();
@@ -1369,7 +1562,7 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             }
 
             auto ev = MakeExecuteEvent(Sprintf(
-                EraseQueueRecordQuery,
+                GenerateEraseQueueRecordQuery().c_str(),
                 QueuePath_.GetUserPath().c_str(),
                 Cfg().GetRoot().c_str(),
                 queueStateDir.c_str(),
@@ -1377,12 +1570,31 @@ void TDeleteQueueSchemaActorV2::NextAction() {
             ));
             auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
             auto nowMs = TInstant::Now().MilliSeconds();
-            TParameters(trans->MutableParams()->MutableProto())
-                .Utf8("NAME", QueuePath_.QueueName)
-                .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
-                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
-                .Utf8("USER_NAME", QueuePath_.UserName)
-                .Uint64("NOW", nowMs);
+            if (isCloudEventsEnabled) {
+                TParameters(trans->MutableParams()->MutableProto())
+                    .Utf8("NAME", QueuePath_.QueueName)
+                    .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+                    .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
+                    .Utf8("USER_NAME", QueuePath_.UserName)
+                    .Uint64("NOW", nowMs)
+                    .Utf8("CLOUD_EVENT_LABELS", TagsJson_)
+                    .Uint64("CLOUD_EVENT_ID", NCloudEvents::TEventIdGenerator::Generate())
+                    .Utf8("CLOUD_EVENT_TYPE", "DeleteMessageQueue")
+                    .Utf8("CLOUD_EVENT_USER_SID", UserSid_)
+                    .Utf8("CLOUD_EVENT_CLOUD_ID", QueuePath_.UserName)
+                    .Utf8("CLOUD_EVENT_FOLDER_ID", FolderId_)
+                    .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
+                    .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
+            } else {
+                TParameters(trans->MutableParams()->MutableProto())
+                    .Utf8("NAME", QueuePath_.QueueName)
+                    .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+                    .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
+                    .Utf8("USER_NAME", QueuePath_.UserName)
+                    .Uint64("NOW", nowMs);
+            }
 
             Register(new TMiniKqlExecutionActor(SelfId(), RequestId_, std::move(ev), false, QueuePath_, GetTransactionCounters(UserCounters_)));
             break;

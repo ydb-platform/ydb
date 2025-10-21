@@ -20,7 +20,6 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
-    ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
 
     ydb/core/tx/schemeshard/ut_helpers
@@ -30,9 +29,12 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     autoscaling_ut.cpp
+    describe_ut.cpp
     balancing_ut.cpp
     commitoffset_ut.cpp
+    mirrorer_autoscaling_ut.cpp
     mirrorer_ut.cpp
+    topic_timestamp_ut.cpp
     topic_ut.cpp
 )
 

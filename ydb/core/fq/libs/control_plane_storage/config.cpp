@@ -54,7 +54,7 @@ TControlPlaneStorageConfig::TControlPlaneStorageConfig(const NConfig::TControlPl
         auto retryPeriod = GetDuration(retryPolicy.GetRetryPeriod(), TDuration::Hours(1));
         auto backoffPeriod = GetDuration(retryPolicy.GetBackoffPeriod(), TDuration::Zero());
         for (const auto statusCode: mapping.GetStatusCode()) {
-            RetryPolicies.emplace(statusCode, TRetryPolicyItem(retryCount, retryLimit, retryPeriod, backoffPeriod));
+            RetryPolicies.emplace(statusCode, NKikimr::NKqp::TRetryPolicyItem(retryCount, retryLimit, retryPeriod, backoffPeriod));
         }
     }
 

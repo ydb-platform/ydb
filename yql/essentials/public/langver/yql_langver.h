@@ -1,8 +1,11 @@
 #pragma once
 #include <util/generic/strbuf.h>
+#include <util/generic/string.h>
+#include <util/generic/maybe.h>
 #include <util/system/types.h>
 
 #include <array>
+#include <functional>
 
 namespace NYql {
 
@@ -22,7 +25,7 @@ constexpr inline ui32 GetMinorFromLangVersion(TLangVersion ver) {
     return ver % 100u;
 }
 
-constexpr inline bool IsAvalableLangVersion(TLangVersion ver, TLangVersion max) {
+constexpr inline bool IsAvailableLangVersion(TLangVersion ver, TLangVersion max) {
     if (ver == UnknownLangVersion || max == UnknownLangVersion) {
         return true;
     }
@@ -57,5 +60,16 @@ using TLangVersionBuffer = std::array<char, LangVersionBufferSize>;
 bool IsValidLangVersion(TLangVersion ver);
 bool ParseLangVersion(TStringBuf str, TLangVersion& result);
 bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf& result);
+TMaybe<TString> FormatLangVersion(TLangVersion ver);
+void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback);
 
-}
+enum class EBackportCompatibleFeaturesMode {
+    None,
+    Released,
+    All
+};
+
+bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
+                                          EBackportCompatibleFeaturesMode mode);
+
+} // namespace NYql

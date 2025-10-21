@@ -141,10 +141,11 @@ private:
     THashSet<ui64> CurrentLevelPortionIds;
     std::vector<TPortionsChain> Chains;
     std::optional<NArrow::TSimpleRow> StopSeparation;
+    std::optional<ui64> ExpectedPortionSize;
 
 public:
     ui64 GetTargetCompactionLevel() const {
-        if (MemoryUsage > ((ui64)1 << 30)) {
+        if (MemoryUsage > ((ui64)1 << 30) || MemoryUsage < ExpectedPortionSize.value_or(0)) {
             return TargetCompactionLevel.GetDec();
         } else {
             return TargetCompactionLevel;
@@ -270,12 +271,13 @@ public:
         if (Portions.size() <= 1) {
             return true;
         }
-        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 1000 &&
+        return MemoryUsage < (((ui64)512) << 20) && CurrentLevelPortionsInfo.GetCount() + TargetLevelPortionsInfo.GetCount() < 10000 &&
                Portions.size() < 10000;
     }
 
-    TCompactionTaskData(const ui64 targetCompactionLevel)
-        : TargetCompactionLevel(targetCompactionLevel) {
+    TCompactionTaskData(const ui64 targetCompactionLevel, const std::optional<ui64> expectedPortionSize = std::nullopt)
+        : TargetCompactionLevel(targetCompactionLevel)
+        , ExpectedPortionSize(expectedPortionSize) {
     }
 };
 
@@ -304,9 +306,13 @@ private:
     const std::optional<ui64> PortionBlobsSizeLimit;
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
             return true;
         }
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
             return true;
         }
         return false;
@@ -321,8 +327,9 @@ public:
 
 class IPortionsLevel {
 private:
-    virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
-    virtual ui64 DoGetWeight() const = 0;
+    virtual std::vector<TPortionInfo::TPtr> DoModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
+    virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
@@ -351,11 +358,13 @@ protected:
     mutable std::optional<TInstant> PredOptimization = TInstant::Now();
 
 public:
-    virtual bool IsAppropriatePortionToMove(const TPortionAccessorConstructor& /*info*/) const {
+    virtual ui64 GetExpectedPortionSize() const = 0;
+
+    virtual bool IsAppropriatePortionToMove(const TPortionInfoForCompaction& /*info*/) const {
         return false;
     }
 
-    virtual bool IsAppropriatePortionToStore(const TPortionAccessorConstructor& /*info*/) const {
+    virtual bool IsAppropriatePortionToStore(const TPortionInfoForCompaction& /*info*/) const {
         return false;
     }
 
@@ -391,7 +400,8 @@ public:
         return NextLevel;
     }
 
-    virtual ~IPortionsLevel() = default;
+    virtual ~IPortionsLevel() {
+    }
     IPortionsLevel(const ui64 levelId, const std::shared_ptr<IPortionsLevel>& nextLevel,
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TLevelCounters levelCounters,
         const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName)
@@ -411,14 +421,6 @@ public:
             ++idx;
         }
         AFL_VERIFY(DefaultPortionsSelector);
-    }
-
-    bool CanTakePortion(const TPortionInfo::TConstPtr& portion) const {
-        auto chain = GetAffectedPortions(portion->IndexKeyStart(), portion->IndexKeyEnd());
-        if (chain && chain->GetPortions().size()) {
-            return false;
-        }
-        return true;
     }
 
     virtual bool IsLocked(const std::shared_ptr<NDataLocks::TManager>& locksManager) const = 0;
@@ -457,7 +459,8 @@ public:
         return DoGetAffectedPortionBytes(from, to);
     }
 
-    void ModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
+    [[nodiscard]] std::vector<TPortionInfo::TPtr> ModifyPortions(
+        const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) {
         std::vector<TPortionInfo::TPtr> addSelective;
         std::vector<TPortionInfo::TPtr> removeSelective;
         for (ui32 idx = 0; idx < Selectors.size(); ++idx) {
@@ -488,8 +491,8 @@ public:
         return DoModifyPortions(addSelective, removeSelective);
     }
 
-    ui64 GetWeight() const {
-        return DoGetWeight();
+    ui64 GetWeight(bool highPriority = false) const {
+        return DoGetWeight(highPriority);
     }
 
     TInstant GetWeightExpirationInstant() const {

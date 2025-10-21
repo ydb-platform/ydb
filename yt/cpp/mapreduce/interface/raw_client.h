@@ -206,6 +206,11 @@ public:
         const TRichYPath& path,
         const TFileReaderOptions& options = {}) = 0;
 
+    virtual std::unique_ptr<IOutputStream> WriteFile(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TFileWriterOptions& options = {}) = 0;
+
     // File cache
 
     virtual TMaybe<TYPath> GetFileFromCache(
@@ -275,6 +280,12 @@ public:
         const TTransactionId& transactionId,
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transcationId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,

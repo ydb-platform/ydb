@@ -69,6 +69,7 @@ void TAggregatedSimpleCounters::AddSimpleCounter(
     fnAddCounter(maxName.data(), MaxSimpleCounters);
     fnAddCounter(sumName.data(), SumSimpleCounters);
 
+    CounterNames.push_back(name);
     HistSimpleCounters.emplace_back(std::move(percentileAggregate));
 }
 
@@ -176,6 +177,30 @@ void TAggregatedSimpleCounters::RecalcAll() {
     }
 }
 
+TVector<TTabletCounterValue> TAggregatedSimpleCounters::Find(const TString& name) const {
+    TVector<TTabletCounterValue> result;
+
+    for (ui32 i = 0; i < CounterNames.size(); ++i) {
+        if (!CounterNames[i].contains(name)) {
+            continue;
+        }
+
+        result.reserve(CountersByTabletId.size());
+        for (const auto& [tabletId, values] : CountersByTabletId) {
+            Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
+            result.push_back({
+                .Name = CounterNames[i],
+                .TabletId = tabletId,
+                .Value = values[i],
+            });
+        }
+
+        break;
+    }
+
+    return result;
+}
+
 /*
 ** class TAggregatedCumulativeCounters
  */
@@ -203,6 +228,7 @@ void TAggregatedCumulativeCounters::AddCumulativeCounter(
     };
     fnAddCounter(maxName.data(), MaxCumulativeCounters);
 
+    CounterNames.push_back(name);
     HistCumulativeCounters.emplace_back(std::move(percentileAggregate));
 }
 
@@ -292,6 +318,30 @@ void TAggregatedCumulativeCounters::RecalcAll() {
         *MaxCumulativeCounters[i].Get() = maxValues[i];
         ChangedCounters[i] = false;
     }
+}
+
+TVector<TTabletCounterValue> TAggregatedCumulativeCounters::Find(const TString& name) const {
+    TVector<TTabletCounterValue> result;
+
+    for (ui32 i = 0; i < CounterNames.size(); ++i) {
+        if (!CounterNames[i].contains(name)) {
+            continue;
+        }
+
+        result.reserve(CountersByTabletId.size());
+        for (const auto& [tabletId, values] : CountersByTabletId) {
+            Y_ABORT_UNLESS(i < values.size(), "inconsistent counter values, %u >= %lu", i, values.size());
+            result.push_back({
+                .Name = CounterNames[i],
+                .TabletId = tabletId,
+                .Value = values[i],
+            });
+        }
+
+        break;
+    }
+
+    return result;
 }
 
 /*

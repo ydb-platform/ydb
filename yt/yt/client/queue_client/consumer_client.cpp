@@ -496,7 +496,7 @@ private:
         YT_VERIFY(versionedRowset->GetRows().size() == partitionIndices.size());
 
         for (const auto& [index, versionedRow] : Enumerate(versionedRowset->GetRows())) {
-            if (versionedRow.GetWriteTimestampCount() < 1) {
+            if (!versionedRow || versionedRow.GetWriteTimestampCount() < 1) {
                 THROW_ERROR_EXCEPTION("Partition set changed during collection");
             }
             auto timestamp = versionedRow.WriteTimestamps()[0];

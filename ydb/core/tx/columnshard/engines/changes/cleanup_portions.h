@@ -64,12 +64,12 @@ public:
 
     void AddPortionToDrop(const TPortionInfo::TConstPtr& portion) {
         PortionsToDrop.emplace_back(portion);
-        PortionsToAccess->AddPortion(portion);
+        PortionsToAccess.emplace_back(portion);
     }
 
     void AddPortionToRemove(const TPortionInfo::TConstPtr& portion) {
         PortionsToRemove.AddPortion(portion);
-        PortionsToAccess->AddPortion(portion);
+        PortionsToAccess.emplace_back(portion);
     }
 
     virtual ui32 GetWritePortionsCount() const override {

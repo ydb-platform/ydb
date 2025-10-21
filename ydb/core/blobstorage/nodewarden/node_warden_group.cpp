@@ -1,5 +1,8 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "node_warden_events.h"
+
+#include <ydb/core/blobstorage/bridge/syncer/syncer.h>
 
 #include <ydb/core/blob_depot/agent/agent.h>
 
@@ -111,19 +114,17 @@ namespace NKikimr::NStorage {
         const auto [it, _] = Groups.try_emplace(groupId);
         TGroupRecord& group = it->second;
         group.MaxKnownGeneration = Max(group.MaxKnownGeneration, generation);
+        if (newGroup) {
+            const auto erasure = static_cast<TBlobStorageGroupType::EErasureSpecies>(newGroup->GetErasureSpecies());
+            Y_DEBUG_ABORT_UNLESS(!group.GType || group.GType->GetErasure() == erasure);
+            group.GType.emplace(erasure);
+        }
 
         // forget pending queries
         if (fromController) {
-            group.GetGroupRequestPending = false;
             group.ProposeRequestPending = false;
-        } else if (fromResolver) {
-            group.GetGroupRequestPending = false;
         }
-
-        if (group.GroupResolver && !group.GetGroupRequestPending) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
-            group.GroupResolver = {};
-        }
+        group.GetGroupRequestPending = false;
 
         // update group content and encryption stuff
         bool groupChanged = false; // did the 'Group' field change somehow?
@@ -194,6 +195,10 @@ namespace NKikimr::NStorage {
             // for group/proxy and ask BSC for group info
             group.Info.Reset();
             group.NodeLayoutInfo.Reset();
+            if (group.GroupResolver) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+                group.GroupResolver = {};
+            }
             RequestGroupConfig(groupId, group);
             if (group.ProxyId) {
                 Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(nullptr, nullptr));
@@ -259,6 +264,16 @@ namespace NKikimr::NStorage {
                 GroupPendingQueue.erase(it);
             }
         }
+
+        if (group.GroupResolver && group.Info) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
+            group.GroupResolver = {};
+        }
+
+        for (auto it = WorkingSyncers.lower_bound(TWorkingSyncer{.BridgeProxyGroupId = TGroupId::FromValue(groupId)});
+                it != WorkingSyncers.end() && it->BridgeProxyGroupId.GetRawId() == groupId; ++it) {
+            StartSyncerIfNeeded(const_cast<TWorkingSyncer&>(*it));
+        }
     }
 
     void TNodeWarden::RequestGroupConfig(ui32 groupId, TGroupRecord& group) {
@@ -272,6 +287,7 @@ namespace NKikimr::NStorage {
             SendToController(std::make_unique<TEvBlobStorage::TEvControllerGetGroup>(LocalNodeId, &groupId, &groupId + 1));
             group.GroupResolver = RegisterWithSameMailbox(CreateGroupResolverActor(groupId));
             group.GetGroupRequestPending = true;
+            Send(SelfId(), new TEvNodeWardenQueryCache(Sprintf("G%08" PRIx32, groupId), true));
         }
     }
 
@@ -289,6 +305,7 @@ namespace NKikimr::NStorage {
                         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, group.GroupResolver, {}, nullptr, 0));
                     }
                     Groups.erase(groupId);
+                    Send(SelfId(), new TEvNodeWardenUnsubscribeFromCache(Sprintf("G%08" PRIx32, groupId)));
 
                     // report group deletion to whiteboard
                     Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateDelete(groupId));
@@ -313,6 +330,172 @@ namespace NKikimr::NStorage {
         if (const auto it = Groups.find(ev->Cookie); it != Groups.end() &&
                 it->second.EncryptionParams.GetLifeCyclePhase() == TBlobStorageGroupInfo::ELCP_IN_TRANSITION) {
             RequestGroupConfig(it->first, it->second);
+        }
+    }
+
+    void TNodeWarden::ApplyWorkingSyncers(const NKikimrBlobStorage::TEvControllerNodeServiceSetUpdate& update) {
+        std::set<TWorkingSyncer> toStop = WorkingSyncers;
+
+        for (const auto& item : update.GetSyncers()) {
+            using T = std::decay_t<decltype(item)>;
+            const auto [it, inserted] = WorkingSyncers.emplace(TWorkingSyncer{
+                .BridgeProxyGroupId = TGroupId::FromProto(&item, &T::GetBridgeProxyGroupId),
+                .SourceGroupId = TGroupId::FromProto(&item, &T::GetSourceGroupId),
+                .TargetGroupId = TGroupId::FromProto(&item, &T::GetTargetGroupId),
+            });
+            auto& syncer = const_cast<TWorkingSyncer&>(*it);
+            syncer.PendingBridgeProxyGroupGeneration = item.GetBridgeProxyGroupGeneration();
+            StartSyncerIfNeeded(syncer);
+            toStop.erase(syncer);
+        }
+
+        for (const TWorkingSyncer& syncer : toStop) {
+            if (syncer.ActorId) {
+                STLOG(PRI_DEBUG, BS_NODE, NW65, "ApplyWorkingSyncers: stopping",
+                    (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
+                    (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
+                    (SourceGroupId, syncer.SourceGroupId),
+                    (TargetGroupId, syncer.TargetGroupId),
+                    (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
+                    (ActorId, syncer.ActorId));
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            }
+            WorkingSyncers.erase(syncer);
+        }
+    }
+
+    void TNodeWarden::StartSyncerIfNeeded(TWorkingSyncer& syncer) {
+        auto& group = Groups[syncer.BridgeProxyGroupId.GetRawId()];
+
+        const bool stopCurrent = syncer.BridgeProxyGroupGeneration < syncer.PendingBridgeProxyGroupGeneration
+            && syncer.ActorId;
+        const bool startNew = (stopCurrent || !syncer.ActorId)
+            && group.Info
+            && group.Info->GroupGeneration == syncer.PendingBridgeProxyGroupGeneration;
+
+        const ui32 prevBridgeProxyGroupGeneration = syncer.BridgeProxyGroupGeneration;
+        const TActorId prevActorId = syncer.ActorId;
+
+        if (stopCurrent) {
+            // we've got already running syncer, but group generation gets changed, we need to restart it
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, syncer.ActorId, {}, nullptr, 0));
+            syncer.ActorId = {};
+            ++syncer.NumStop;
+        }
+        if (startNew) {
+            syncer.BridgeProxyGroupGeneration = syncer.PendingBridgeProxyGroupGeneration;
+            syncer.SyncerDataStats = std::make_unique<NBridge::TSyncerDataStats>();
+
+            TBlobStorageGroupType sourceGroupType(TBlobStorageGroupType::ErasureNone);
+            if (const auto it = Groups.find(syncer.SourceGroupId.GetRawId()); it != Groups.end() && it->second.GType) {
+                sourceGroupType = *it->second.GType;
+            } else {
+                Y_DEBUG_ABORT("can't obtain source group type");
+            }
+
+            syncer.ActorId = Register(NBridge::CreateSyncerActor(group.Info, syncer.SourceGroupId, syncer.TargetGroupId,
+                syncer.SyncerDataStats, SyncRateQuoter, sourceGroupType));
+            syncer.Finished = false;
+            syncer.ErrorReason.reset();
+            ++syncer.NumStart;
+        }
+        if (stopCurrent || startNew) {
+            STLOG(PRI_DEBUG, BS_NODE, NW64, "StartSyncerIfNeeded",
+                (BridgeProxyGroupId, syncer.BridgeProxyGroupId),
+                (PrevBridgeProxyGroupGeneration, prevBridgeProxyGroupGeneration),
+                (BridgeProxyGroupGeneration, syncer.BridgeProxyGroupGeneration),
+                (SourceGroupId, syncer.SourceGroupId),
+                (TargetGroupId, syncer.TargetGroupId),
+                (PendingBridgeProxyGroupGeneration, syncer.PendingBridgeProxyGroupGeneration),
+                (PrevActorId, prevActorId),
+                (ActorId, syncer.ActorId),
+                (HasGroupInfo, static_cast<bool>(group.Info)),
+                (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt),
+                (StopCurrent, stopCurrent),
+                (StartNew, startNew));
+        }
+    }
+
+    void TNodeWarden::Handle(TEvNodeWardenNotifySyncerFinished::TPtr ev) {
+        auto& msg = *ev->Get();
+        const auto it = WorkingSyncers.find(TWorkingSyncer{
+            .BridgeProxyGroupId = msg.BridgeProxyGroupId,
+            .SourceGroupId = msg.SourceGroupId,
+            .TargetGroupId = msg.TargetGroupId,
+        });
+        if (it == WorkingSyncers.end()) {
+            return;
+        }
+        auto& syncer = const_cast<TWorkingSyncer&>(*it);
+        if (msg.BridgeProxyGroupGeneration != syncer.BridgeProxyGroupGeneration) {
+            return; // generation mismatch
+        }
+
+        syncer.Finished = true;
+        syncer.ErrorReason = std::move(msg.ErrorReason);
+        syncer.LastErrorReason = syncer.ErrorReason;
+        syncer.ActorId = {};
+        ++(syncer.ErrorReason ? syncer.NumFinishError : syncer.NumFinishOK);
+
+        auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+        FillInWorkingSyncer(&notify->Record, syncer, true);
+        SendToController(std::move(notify));
+    }
+
+    bool TNodeWarden::FillInWorkingSyncer(NKikimrBlobStorage::TEvControllerUpdateSyncerState *update,
+            TWorkingSyncer& syncer, bool forceProgress) {
+        auto *item = update->AddSyncers();
+        syncer.BridgeProxyGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetBridgeProxyGroupId);
+        item->SetBridgeProxyGroupGeneration(syncer.PendingBridgeProxyGroupGeneration);
+        syncer.SourceGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetSourceGroupId);
+        syncer.TargetGroupId.CopyToProto(item, &std::decay_t<decltype(*item)>::SetTargetGroupId);
+        if (syncer.Finished) {
+            item->SetFinished(true);
+        }
+        if (syncer.ErrorReason) {
+            item->SetErrorReason(*syncer.ErrorReason);
+        }
+
+        if (!syncer.SyncerDataStats) {
+            return false; // hasn't started yet (maybe waiting for correct group infos)
+        }
+
+        // report syncer progress
+        auto& stats = *syncer.SyncerDataStats;
+        auto res = false;
+
+#define ISSUE_METRIC(NAME) \
+        const ui64 current##NAME = stats.NAME; \
+        if (forceProgress || syncer.Reported##NAME != current##NAME) { \
+            item->Set##NAME(current##NAME); \
+            const_cast<TWorkingSyncer&>(syncer).Reported##NAME = current##NAME; \
+            res = true; \
+        }
+
+        ISSUE_METRIC(BytesDone)
+        ISSUE_METRIC(BytesTotal)
+        ISSUE_METRIC(BytesError)
+        ISSUE_METRIC(BlobsDone)
+        ISSUE_METRIC(BlobsTotal)
+        ISSUE_METRIC(BlobsError)
+
+#undef ISSUE_METRIC
+
+        return res;
+    }
+
+    void TNodeWarden::NotifySyncersProgress() {
+        auto notify = std::make_unique<TEvBlobStorage::TEvControllerUpdateSyncerState>();
+        bool doSend = false;
+        for (const TWorkingSyncer& syncer : WorkingSyncers) {
+            if (FillInWorkingSyncer(&notify->Record, const_cast<TWorkingSyncer&>(syncer), false)) {
+                doSend = true;
+            } else {
+                notify->Record.MutableSyncers()->RemoveLast();
+            }
+        }
+        if (doSend) {
+            SendToController(std::move(notify));
         }
     }
 

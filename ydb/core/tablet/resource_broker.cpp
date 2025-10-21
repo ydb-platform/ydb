@@ -1345,19 +1345,19 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetCpu(3);
 
     queue = config.AddQueues();
-    queue->SetName("queue_cs_indexation");
+    queue->SetName(NLocalDb::ColumnShardCompactionIndexationQueue);
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(3);
     queue->MutableLimit()->SetMemory(CSInsertCompactionMemoryLimit);
 
     queue = config.AddQueues();
-    queue->SetName("queue_cs_ttl");
+    queue->SetName(NLocalDb::ColumnShardCompactionTtlQueue);
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(3);
     queue->MutableLimit()->SetMemory(CSTTLCompactionMemoryLimit);
 
     queue = config.AddQueues();
-    queue->SetName("queue_cs_general");
+    queue->SetName(NLocalDb::ColumnShardCompactionGeneralQueue);
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(3);
     queue->MutableLimit()->SetMemory(CSGeneralCompactionMemoryLimit);
@@ -1369,7 +1369,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->MutableLimit()->SetMemory(CSScanMemoryLimit);
 
     queue = config.AddQueues();
-    queue->SetName("queue_cs_normalizer");
+    queue->SetName(NLocalDb::ColumnShardCompactionNormalizerQueue);
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(3);
     queue->MutableLimit()->SetMemory(CSScanMemoryLimit);
@@ -1430,6 +1430,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     queue->SetWeight(100);
     queue->MutableLimit()->SetCpu(1);
 
+    queue = config.AddQueues();
+    queue->SetName("queue_system_tablet_backup");
+    queue->SetWeight(100);
+    queue->MutableLimit()->SetCpu(1);
+
     auto task = config.AddTasks();
     task->SetName(NLocalDb::UnknownTaskName);
     task->SetQueueName(NLocalDb::DefaultQueueName);
@@ -1462,17 +1467,17 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 
     task = config.AddTasks();
     task->SetName("CS::TTL");
-    task->SetQueueName("queue_cs_ttl");
+    task->SetQueueName(NLocalDb::ColumnShardCompactionTtlQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
     task->SetName("CS::INDEXATION");
-    task->SetQueueName("queue_cs_indexation");
+    task->SetQueueName(NLocalDb::ColumnShardCompactionIndexationQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
     task->SetName("CS::GENERAL");
-    task->SetQueueName("queue_cs_general");
+    task->SetQueueName(NLocalDb::ColumnShardCompactionGeneralQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
@@ -1482,7 +1487,7 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
 
     task = config.AddTasks();
     task->SetName("CS::NORMALIZER");
-    task->SetQueueName("queue_cs_normalizer");
+    task->SetQueueName(NLocalDb::ColumnShardCompactionNormalizerQueue);
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
 
     task = config.AddTasks();
@@ -1559,6 +1564,11 @@ NKikimrResourceBroker::TResourceBrokerConfig MakeDefaultConfig()
     task->SetName("statistics_scan");
     task->SetQueueName("queue_statistics_scan");
     task->SetDefaultDuration(TDuration::Minutes(10).GetValue());
+
+    task = config.AddTasks();
+    task->SetName("system_tablet_backup");
+    task->SetQueueName("queue_system_tablet_backup");
+    task->SetDefaultDuration(TDuration::Minutes(1).GetValue());
 
     config.MutableResourceLimit()->SetCpu(TotalCPU);
     config.MutableResourceLimit()->SetMemory(TotalMemory);

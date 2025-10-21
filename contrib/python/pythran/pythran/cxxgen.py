@@ -28,6 +28,7 @@ Generator for C/C++.
 #
 
 from textwrap import dedent
+from pythran.config import cfg
 from pythran.tables import pythran_ward
 from pythran.spec import signatures_to_string
 from pythran.utils import quote_cxxstring
@@ -580,9 +581,7 @@ class PythonModule(object):
         self.functions.setdefault(name, []).append(func_descriptor)
 
     def add_global_var(self, name, init):
-        self.global_vars.append(name)
-        self.python_implems.append(Assign('static PyObject* ' + name,
-                                   'to_python({})'.format(init)))
+        self.global_vars.append((name, 'to_python({})'.format(init)))
 
     def __str__(self):
         """Generate (i.e. yield) the source code of the
@@ -591,9 +590,9 @@ class PythonModule(object):
         themethods = []
         theextraobjects = []
         theoverloads = []
-        for vname in self.global_vars:
+        for vname, vinit in self.global_vars:
             theextraobjects.append(
-                'PyModule_AddObject(theModule, "{0}", {0});'.format(vname))
+                'PyModule_AddObject(theModule, "{0}", {1});'.format(vname, vinit))
 
         for fname, overloads in self.functions.items():
             tryall = []
@@ -695,26 +694,19 @@ class PythonModule(object):
             '''.format(methods="".join(m + "," for m in themethods)))
 
         module = dedent('''
-            #if PY_MAJOR_VERSION >= 3
-              static struct PyModuleDef moduledef = {{
-                PyModuleDef_HEAD_INIT,
-                "{name}",            /* m_name */
-                {moduledoc},         /* m_doc */
-                -1,                  /* m_size */
-                Methods,             /* m_methods */
-                NULL,                /* m_reload */
-                NULL,                /* m_traverse */
-                NULL,                /* m_clear */
-                NULL,                /* m_free */
-              }};
-            #define PYTHRAN_RETURN return theModule
-            #define PYTHRAN_MODULE_INIT(s) PyInit_##s
-            #else
-            #define PYTHRAN_RETURN return
-            #define PYTHRAN_MODULE_INIT(s) init##s
-            #endif
+            static struct PyModuleDef moduledef = {{
+              PyModuleDef_HEAD_INIT,
+              "{name}",            /* m_name */
+              {moduledoc},         /* m_doc */
+              -1,                  /* m_size */
+              Methods,             /* m_methods */
+              NULL,                /* m_reload */
+              NULL,                /* m_traverse */
+              NULL,                /* m_clear */
+              NULL,                /* m_free */
+            }};
             PyMODINIT_FUNC
-            PYTHRAN_MODULE_INIT({name})(void)
+            PyInit_{name}(void)
             #ifndef _WIN32
             __attribute__ ((visibility("default")))
             #if defined(GNUC) && !defined(__clang__)
@@ -723,34 +715,32 @@ class PythonModule(object):
             #endif
             ;
             PyMODINIT_FUNC
-            PYTHRAN_MODULE_INIT({name})(void) {{
+            PyInit_{name}(void) {{
                 import_array();
                 {import_umath}
-                #if PY_MAJOR_VERSION >= 3
                 PyObject* theModule = PyModule_Create(&moduledef);
-                #else
-                PyObject* theModule = Py_InitModule3("{name}",
-                                                     Methods,
-                                                     {moduledoc}
-                );
-                #endif
                 if(! theModule)
-                    PYTHRAN_RETURN;
+                    return theModule;
+                {freethreading}
                 PyObject * theDoc = Py_BuildValue("(ss)",
                                                   "{version}",
                                                   "{hash}");
                 if(! theDoc)
-                    PYTHRAN_RETURN;
+                    return theModule;
                 PyModule_AddObject(theModule,
                                    "__pythran__",
                                    theDoc);
 
                 {extraobjects}
-                PYTHRAN_RETURN;
+                return theModule;
             }}
             '''.format(name=self.name,
                        import_umath="import_umath();" if self.ufuncs else "",
                        extraobjects='\n'.join(theextraobjects),
+                       freethreading="""
+                            #ifdef Py_GIL_DISABLED
+                                PyUnstable_Module_SetGIL(theModule, Py_MOD_GIL_NOT_USED);
+                            #endif""" if cfg.getboolean("backend", "freethreading_compatible") else "",
                        **self.metadata))
 
         body = (self.preamble +

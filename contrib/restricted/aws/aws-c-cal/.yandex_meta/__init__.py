@@ -42,6 +42,7 @@ aws_c_cal = CMakeNinjaNixProject(
     ],
     disable_includes=[
         "openssl/evp_errors.h",
+        "openssl/service_indicator.h",
     ],
     ignore_targets=["sha256_profile"],
     post_install=post_install,

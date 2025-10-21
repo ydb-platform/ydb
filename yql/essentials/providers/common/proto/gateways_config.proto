@@ -234,6 +234,7 @@ message TClickHouseClusterConfig {
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
     repeated string GroupAllowed = 14;
+    optional bool ForceUseBalancer = 15 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -652,8 +653,12 @@ message TMongoDbDataSourceOptions {
         READING_MODE_UNSPECIFIED = 0;
         // Returns each top level field of the document deserialized into the corresponding YQL type; if the type of some field is ambiguous / inconsistent across several documents it is returned serialized as an YQL Utf8 value
         TABLE = 1;
+        // Returns a key-value pair of ObjectID primary key and a YSON serialized document
+        YSON = 2;
+        // Returns a key-value pair of ObjectID primary key and a JSON serialized document
+        JSON = 3;
     };
-      
+
     // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
     enum EUnexpectedTypeDisplayMode {
         UNEXPECTED_UNSPECIFIED = 0;
@@ -667,7 +672,7 @@ message TMongoDbDataSourceOptions {
         UNSUPPORTED_OMIT = 1;
         UNSUPPORTED_AS_STRING = 2;
     };
-    
+
     optional EReadingMode reading_mode = 1;
     optional EUnexpectedTypeDisplayMode unexpected_type_display_mode = 2;
     optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
@@ -847,7 +852,7 @@ message TGenericGatewayConfig {
 
     //
     // The list of Connectors.
-    // 
+    //
     // When a request is served, firstly this list is checked.
     // If the list has a connector for a request's EGenericDataSourceKind it will
     // be applied to that request; otherwise, the "Default Connector" is used.
@@ -864,6 +869,9 @@ message TGenericGatewayConfig {
     // Expected format:
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 7;
+
+    // Defines timeout for calling the Connector API method `DescribeTable`
+    optional uint64 DescribeTableTimeoutSeconds = 9;
 
     repeated TAttr DefaultSettings = 6;
 
@@ -893,10 +901,36 @@ message TRevisionFilterConfig {
 
 ///////////////////////////// Ytflow /////////////////////////////
 
-message TYtflowGatewayConfig {
-    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway MtpQueue threads. The adaptive MtpQueue will be used for 0 value
+message TYtflowClusterConfig {
+    optional string Name = 1; // YQL short cluster name.
+    optional string RealName = 2; // Short cluster name.
+    optional string ProxyUrl = 3;
+    optional string Token = 4;
+
+    repeated TAttr Settings = 100;
 }
 
+message TYtflowGatewayConfig {
+    optional uint32 GatewayThreads = 1 [default = 1]; // Number of gateway threads. The adaptive thread pool will be used for 0 value
+    optional string YtflowWorkerBin = 2; // Path to ytflow worker executable.
+
+    repeated TYtflowClusterConfig ClusterMapping = 3;
+
+    repeated TAttr DefaultSettings = 102;
+}
+
+///////////////////////////// Fmr /////////////////////////////
+
+message TFmrConfig {
+    optional string Name = 1;
+    optional string CoordinatorUrl = 2;
+    repeated string AllowedGroups = 3;
+    optional bool EnableAuth = 4 [default = false];
+}
+
+message TFmrGatewayConfig {
+    repeated TFmrConfig FmrConfigurations = 1;
+}
 
 /////////////////////////////// Root ///////////////////////////////
 
@@ -925,4 +959,5 @@ message TGatewaysConfig {
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
     optional TYtflowGatewayConfig Ytflow = 24;
+    optional TFmrGatewayConfig Fmr = 25;
 }

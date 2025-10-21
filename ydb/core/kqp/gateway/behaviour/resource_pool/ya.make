@@ -6,7 +6,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/cms/console
     ydb/core/kqp/gateway/actors
     ydb/core/kqp/gateway/utils
     ydb/core/protos

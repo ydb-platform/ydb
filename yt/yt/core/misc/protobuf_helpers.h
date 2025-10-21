@@ -357,7 +357,7 @@ struct TProtobufExtensionDescriptor
 {
     const google::protobuf::Descriptor* MessageDescriptor;
     const int Tag;
-    const TString Name;
+    const std::string Name;
 };
 
 struct IProtobufExtensionRegistry
@@ -378,7 +378,7 @@ struct IProtobufExtensionRegistry
     virtual const TProtobufExtensionDescriptor* FindDescriptorByTag(int tag) = 0;
 
     //! Finds a descriptor by name.
-    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const TString& name) = 0;
+    virtual const TProtobufExtensionDescriptor* FindDescriptorByName(const std::string& name) = 0;
 
     //! Returns the singleton instance.
     static IProtobufExtensionRegistry* Get();
@@ -437,7 +437,7 @@ NYT::NProto::TExtensionSet FilterProtoExtensions(
 ////////////////////////////////////////////////////////////////////////////////
 
 THashSet<int> GetExtensionTagSet(const NYT::NProto::TExtensionSet& source);
-std::optional<TString> FindExtensionName(int tag);
+std::optional<std::string> FindExtensionName(int tag);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -483,24 +483,22 @@ google::protobuf::Timestamp GetProtoNow();
         : std::nullopt)
 
 #define YT_OPTIONAL_TO_PROTO(message, field, original) \
-    do {\
-        if (original.has_value()) {\
-            ToProto((message)->mutable_##field(), *original);\
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            ToProto(message_->mutable_##field(), *original_);\
         } else {\
-            (message)->clear_##field();\
+            message_->clear_##field();\
         }\
-    } while (false)
+    }((message), (original))
 
 #define YT_OPTIONAL_SET_PROTO(message, field, original) \
-    do {\
-        /* Avoid unnecessary computation if <original> is a return value of a call*/\
-        const auto& originalRef = (original);\
-        if (originalRef.has_value()) {\
-            (message)->set_##field(ToProto(*originalRef));\
+    [] (const auto& message_, const auto& original_) {\
+        if (original_.has_value()) {\
+            message_->set_##field(ToProto(*original_));\
         } else {\
-            (message)->clear_##field();\
+            message_->clear_##field();\
         }\
-    } while (false)
+    }((message), (original))
 
 // TODO(cherepashka): to remove after std::optional::and_then is here.
 //! This macro may be used to extract std::optional<T> from protobuf message field of type T and to apply some function to value if it is present.

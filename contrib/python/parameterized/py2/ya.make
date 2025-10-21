@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(g:feedback_platform g:python-contrib)
+SUBSCRIBER(g:python-contrib)
 
 VERSION(0.8.1)
 

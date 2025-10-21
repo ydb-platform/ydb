@@ -9,135 +9,138 @@ using namespace NKikimr::NUdf;
 using namespace NProtoBuf;
 
 namespace {
-    class TDynamicProtoValue: public TProtobufValue {
-    public:
-        TDynamicProtoValue(const TProtoInfo& info, TDynamicInfoRef dyn)
-            : TProtobufValue(info)
-            , Dynamic_(dyn)
-        {
-            Y_ASSERT(Dynamic_ != nullptr);
+class TDynamicProtoValue: public TProtobufValue {
+public:
+    TDynamicProtoValue(const TProtoInfo& info, TDynamicInfoRef dyn)
+        : TProtobufValue(info)
+        , Dynamic_(dyn)
+    {
+        Y_ASSERT(Dynamic_ != nullptr);
+    }
+
+    TAutoPtr<Message> Parse(const TStringBuf& data) const override {
+        return Dynamic_->Parse(data);
+    }
+
+private:
+    TDynamicInfoRef Dynamic_;
+};
+
+class TDynamicProtoSerialize: public TProtobufSerialize {
+public:
+    TDynamicProtoSerialize(const TProtoInfo& info, TDynamicInfoRef dyn)
+        : TProtobufSerialize(info)
+        , Dynamic_(dyn)
+    {
+        Y_ASSERT(Dynamic_ != nullptr);
+    }
+
+    TMaybe<TString> Serialize(const Message& proto) const override {
+        return Dynamic_->Serialize(proto);
+    }
+
+    TAutoPtr<Message> MakeProto() const override {
+        return Dynamic_->MakeProto();
+    }
+
+private:
+    TDynamicInfoRef Dynamic_;
+};
+
+class TDynamicProtoValueSafe: public TDynamicProtoValue {
+public:
+    TDynamicProtoValueSafe(const TProtoInfo& info, TDynamicInfoRef dyn)
+        : TDynamicProtoValue(info, dyn)
+    {
+    }
+
+    TAutoPtr<Message> Parse(const TStringBuf& data) const override {
+        try {
+            return TDynamicProtoValue::Parse(data);
+        } catch (const std::exception& e) {
+            return nullptr;
         }
+    }
+};
 
-        TAutoPtr<Message> Parse(const TStringBuf& data) const override {
-            return Dynamic_->Parse(data);
-        }
+class TProtobufModule: public IUdfModule {
+public:
+    TStringRef Name() const {
+        return TStringRef("Protobuf");
+    }
 
-    private:
-        TDynamicInfoRef Dynamic_;
-    };
+    void CleanupOnTerminate() const final {
+    }
 
-    class TDynamicProtoSerialize: public TProtobufSerialize {
-    public:
-        TDynamicProtoSerialize(const TProtoInfo& info, TDynamicInfoRef dyn)
-            : TProtobufSerialize(info)
-            , Dynamic_(dyn)
-        {
-            Y_ASSERT(Dynamic_ != nullptr);
-        }
+    void GetAllFunctions(IFunctionsSink& sink) const final {
+        sink.Add(TStringRef::Of("Parse"))->SetTypeAwareness();
+        sink.Add(TStringRef::Of("TryParse"))->SetTypeAwareness();
+        sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
+    }
 
-        TMaybe<TString> Serialize(const Message& proto) const override {
-            return Dynamic_->Serialize(proto);
-        }
+    void BuildFunctionTypeInfo(
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
+        Y_UNUSED(userType);
 
-        TAutoPtr<Message> MakeProto() const override {
-            return Dynamic_->MakeProto();
-        }
-    private:
-        TDynamicInfoRef Dynamic_;
-    };
+        try {
+            auto dyn = TDynamicInfo::Create(TStringBuf(typeConfig.Data(), typeConfig.Size()));
 
-    class TDynamicProtoValueSafe: public TDynamicProtoValue {
-    public:
-        TDynamicProtoValueSafe(const TProtoInfo& info, TDynamicInfoRef dyn)
-            : TDynamicProtoValue(info, dyn) {}
+            TProtoInfo typeInfo;
+            ProtoTypeBuild(dyn->Descriptor(),
+                           dyn->GetEnumFormat(),
+                           dyn->GetRecursionTraits(),
+                           dyn->GetOptionalLists(),
+                           builder, &typeInfo,
+                           EProtoStringYqlType::Bytes,
+                           dyn->GetSyntaxAware(),
+                           false,
+                           dyn->GetYtMode());
 
-        TAutoPtr<Message> Parse(const TStringBuf& data) const override {
-            try {
-                return TDynamicProtoValue::Parse(data);
-            } catch (const std::exception& e) {
-                return nullptr;
-            }
-        }
-    };
+            auto stringType = builder.SimpleType<char*>();
+            auto structType = typeInfo.StructType;
+            auto optionalStructType = builder.Optional()->Item(structType).Build();
 
-    class TProtobufModule: public IUdfModule {
-    public:
-        TStringRef Name() const {
-            return TStringRef("Protobuf");
-        }
+            if (TStringRef::Of("Serialize") == name) {
+                // function signature:
+                //    String Serialize(Protobuf value)
+                builder.Returns(stringType)
+                    .Args()
+                    ->Add(structType)
+                    .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                    .Done();
+                if ((flags & TFlags::TypesOnly) == 0) {
+                    builder.Implementation(new TDynamicProtoSerialize(typeInfo, dyn));
+                }
+            } else {
+                // function signature:
+                //    Protobuf Parse(String value)
+                builder.Returns((TStringRef::Of("TryParse") == name) ? optionalStructType : structType)
+                    .Args()
+                    ->Add(stringType)
+                    .Flags(ICallablePayload::TArgumentFlags::AutoMap)
+                    .Done();
 
-        void CleanupOnTerminate() const final {
-        }
-
-        void GetAllFunctions(IFunctionsSink& sink) const final {
-            sink.Add(TStringRef::Of("Parse"))->SetTypeAwareness();
-            sink.Add(TStringRef::Of("TryParse"))->SetTypeAwareness();
-            sink.Add(TStringRef::Of("Serialize"))->SetTypeAwareness();
-        }
-
-        void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final {
-            Y_UNUSED(userType);
-
-            try {
-                auto dyn = TDynamicInfo::Create(TStringBuf(typeConfig.Data(), typeConfig.Size()));
-
-                TProtoInfo typeInfo;
-                ProtoTypeBuild(dyn->Descriptor(),
-                               dyn->GetEnumFormat(),
-                               dyn->GetRecursionTraits(),
-                               dyn->GetOptionalLists(),
-                               builder, &typeInfo,
-                               EProtoStringYqlType::Bytes,
-                               dyn->GetSyntaxAware(),
-                               false,
-                               dyn->GetYtMode());
-
-                auto stringType = builder.SimpleType<char*>();
-                auto structType = typeInfo.StructType;
-                auto optionalStructType = builder.Optional()->Item(structType).Build();
-
-                if (TStringRef::Of("Serialize") == name) {
-                    // function signature:
-                    //    String Serialize(Protobuf value)
-                    builder.Returns(stringType)
-                        .Args()
-                        ->Add(structType)
-                        .Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                        .Done();
+                if (TStringRef::Of("Parse") == name) {
                     if ((flags & TFlags::TypesOnly) == 0) {
-                        builder.Implementation(new TDynamicProtoSerialize(typeInfo, dyn));
+                        builder.Implementation(new TDynamicProtoValue(typeInfo, dyn));
                     }
-                } else {
-                    // function signature:
-                    //    Protobuf Parse(String value)
-                    builder.Returns((TStringRef::Of("TryParse") == name) ? optionalStructType : structType)
-                        .Args()
-                        ->Add(stringType)
-                        .Flags(ICallablePayload::TArgumentFlags::AutoMap)
-                        .Done();
-
-                    if (TStringRef::Of("Parse") == name) {
-                        if ((flags & TFlags::TypesOnly) == 0) {
-                            builder.Implementation(new TDynamicProtoValue(typeInfo, dyn));
-                        }
-                    } else if (TStringRef::Of("TryParse") == name) {
-                        if ((flags & TFlags::TypesOnly) == 0) {
-                            builder.Implementation(new TDynamicProtoValueSafe(typeInfo, dyn));
-                        }
+                } else if (TStringRef::Of("TryParse") == name) {
+                    if ((flags & TFlags::TypesOnly) == 0) {
+                        builder.Implementation(new TDynamicProtoValueSafe(typeInfo, dyn));
                     }
                 }
-
-            } catch (const std::exception& e) {
-                builder.SetError(CurrentExceptionMessage());
             }
-        }
-    };
 
-}
+        } catch (const std::exception& e) {
+            builder.SetError(CurrentExceptionMessage());
+        }
+    }
+};
+
+} // namespace
 
 REGISTER_MODULES(TProtobufModule);

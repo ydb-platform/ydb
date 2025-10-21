@@ -9,21 +9,18 @@
 
 namespace NSQLComplete {
 
-    struct TNameSet {
-        TVector<TString> Pragmas;
-        TVector<TString> Types;
-        TVector<TString> Functions;
-        THashMap<EStatementKind, TVector<TString>> Hints;
-    };
+struct TNameSet {
+    TVector<TString> Pragmas;
+    TVector<TString> Types;
+    TVector<TString> Functions;
+    THashMap<EStatementKind, TVector<TString>> Hints;
+};
 
-    // TODO(YQL-19747): Migrate YDB CLI to TNameSet
-    using NameSet = TNameSet;
+TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
 
-    TNameSet Pruned(TNameSet names, const TFrequencyData& frequency);
+TNameSet LoadDefaultNameSet();
 
-    TNameSet LoadDefaultNameSet();
-
-    // TODO(YQL-19747): Mirate YDB CLI to LoadDefaultNameSet
-    TNameSet MakeDefaultNameSet();
+// TODO(YQL-19747): Mirate YDB CLI to LoadDefaultNameSet
+TNameSet MakeDefaultNameSet();
 
 } // namespace NSQLComplete

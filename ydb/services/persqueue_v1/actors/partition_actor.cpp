@@ -2,8 +2,8 @@
 #include "persqueue_utils.h"
 
 #include <limits>
-#include <ydb/core/persqueue/codecs/pqv1.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
@@ -26,7 +26,7 @@ TPartitionActor::TPartitionActor(
         const TString& session, const TPartitionId& partition, const ui32 generation, const ui32 step,
         const ui64 tabletID, const TTopicCounters& counters, bool commitsDisabled,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
-        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const std::set<NPQ::TPartitionGraph::Node*>& parents,
+        bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
         const std::unordered_set<ui64>& notCommitedToFinishParents
 )
     : ParentId(parentId)
@@ -65,7 +65,7 @@ TPartitionActor::TPartitionActor(
     , WaitDataCookie(0)
     , WaitForData(false)
     , LockCounted(false)
-    , Parents(parents)
+    , TopicHolder(topicHolder)
     , Counters(counters)
     , CommitsDisabled(commitsDisabled)
     , CommitCookie(1)
@@ -159,10 +159,21 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(PREWAIT_DATA, new TEvents::TEvWakeup());
 }
 
+const std::set<NPQ::TPartitionGraph::Node*>& TPartitionActor::GetParents() const {
+    const auto* partition = TopicHolder->PartitionGraph->GetPartition(Partition.Partition);
+    if (partition) {
+        return partition->AllParents;
+    }
+
+    static std::set<NPQ::TPartitionGraph::Node*> empty;
+    return empty;
+}
+
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!ClientHasAnyCommits && Parents.size() != 0) {
+    const auto& parents = GetParents();
+    if (!ClientHasAnyCommits && parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
-        for (auto& parent: Parents) {
+        for (auto& parent: parents) {
             TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
@@ -684,7 +695,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
 
 
         if (!StartReading) {
-            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits));
+            ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset));
         } else {
             InitStartReading(ctx);
         }
@@ -985,7 +996,7 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const 
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvGetStatus::TPtr&, const TActorContext& ctx) {
-    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, false));
+    ctx.Send(ParentId, new TEvPQProxy::TEvPartitionStatus(Partition, CommittedOffset, EndOffset, WriteTimestampEstimateMs, NodeId, TabletGeneration, ClientHasAnyCommits, ReadOffset, false));
 }
 
 void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActorContext& ctx) {
@@ -1263,7 +1274,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY,
-            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset" << ReadOffset);
+            PQ_LOG_PREFIX << " " << Partition << " wait data in partition inited, cookie " << WaitDataCookie << " from offset " << ReadOffset);
 
     NTabletPipe::SendData(ctx, PipeClient, event.Release());
 

@@ -1,4 +1,5 @@
 #include "kqp_compile_service.h"
+#include "helpers/kqp_compile_service_helpers.h"
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -11,6 +12,7 @@
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
 #include <ydb/library/aclib/aclib.h>
+
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
@@ -26,7 +28,6 @@ namespace NKqp {
 
 using namespace NKikimrConfig;
 using namespace NYql;
-
 
 struct TKqpCompileSettings {
     TKqpCompileSettings(bool keepInCache, bool isQueryActionPrepare, bool perStatementResult,
@@ -52,7 +53,7 @@ struct TKqpCompileRequest {
         const TIntrusivePtr<TUserRequestContext>& userRequestContext, NLWTrace::TOrbit orbit = {}, NWilson::TSpan span = {},
         TKqpTempTablesState::TConstPtr tempTablesState = {},
         TMaybe<TQueryAst> queryAst = {},
-        NYql::TExprContext* splitCtx = nullptr,
+        std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr)
         : Sender(sender)
         , Query(std::move(query))
@@ -70,8 +71,8 @@ struct TKqpCompileRequest {
         , TempTablesState(std::move(tempTablesState))
         , IntrestedInResult(std::move(intrestedInResult))
         , QueryAst(std::move(queryAst))
-        , SplitCtx(splitCtx)
-        , SplitExpr(splitExpr)
+        , SplitCtx(std::move(splitCtx))
+        , SplitExpr(std::move(splitExpr))
     {}
 
     TActorId Sender;
@@ -93,10 +94,12 @@ struct TKqpCompileRequest {
     std::shared_ptr<std::atomic<bool>> IntrestedInResult;
     TMaybe<TQueryAst> QueryAst;
 
-    NYql::TExprContext* SplitCtx;
+    std::shared_ptr<NYql::TExprContext> SplitCtx;
     NYql::TExprNode::TPtr SplitExpr;
 
     bool FindInCache = true;
+
+    TInstant CompileQueueEnqueuedAt = TInstant::Now();
 
     bool IsIntrestedInResult() const {
         return IntrestedInResult->load();
@@ -116,21 +119,22 @@ class TKqpRequestsQueue {
     using TRequestsIteratorSet = THashSet<TRequestsIterator, TRequestsIteratorHash>;
 
 public:
-    TKqpRequestsQueue(size_t maxSize)
-        : MaxSize(maxSize) {}
+    TKqpRequestsQueue(TIntrusivePtr<TKqpCounters> counters, size_t maxSize)
+        : Counters(counters)
+        , MaxSize(maxSize) {}
 
-    bool Enqueue(TKqpCompileRequest&& request) {
+    std::optional<TKqpCompileRequest> Enqueue(TKqpCompileRequest&& request) {
         if (Size() >= MaxSize) {
-            return false;
+            return request;
         }
 
         Queue.push_back(std::move(request));
         auto it = std::prev(Queue.end());
         QueryIndex[it->Query].insert(it);
-        return true;
+        return std::nullopt;
     }
 
-    TMaybe<TKqpCompileRequest> Dequeue() {
+    TMaybe<TKqpCompileRequest> Dequeue(const TInstant& now) {
         auto it = Queue.begin();
 
         while (it != Queue.end()) {
@@ -149,6 +153,7 @@ public:
             if (!ActiveRequests.contains(request.Query)) {
                 auto result = std::move(request);
 
+                Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
                 QueryIndex[result.Query].erase(curIt);
                 Queue.erase(curIt);
 
@@ -203,6 +208,7 @@ public:
     }
 
 private:
+    TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
@@ -229,7 +235,7 @@ public:
         , KqpSettings(kqpSettings)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
-        , RequestsQueue(TableServiceConfig.GetCompileRequestQueueSize())
+        , RequestsQueue(Counters, TableServiceConfig.GetCompileRequestQueueSize())
         , QueryReplayFactory(std::move(queryReplayFactory))
         , FederatedQuerySetup(federatedQuerySetup)
     {}
@@ -264,6 +270,8 @@ private:
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, HandleConfig);
             hFunc(TEvents::TEvUndelivered, HandleUndelivery);
 
+            hFunc(TEvKqp::TEvListQueryCacheQueriesRequest, Handle);
+
             CFunc(TEvents::TSystem::Wakeup, HandleTtlTimer);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:
@@ -276,98 +284,87 @@ private:
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Subscribed for config changes");
     }
 
+    void Handle(TEvKqp::TEvListQueryCacheQueriesRequest::TPtr& ev) {
+        auto snapshot = QueryCache->GetSnapshot();
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+            "Got query compile cache request, snapshot has " << snapshot.size() << " entries");
+        const auto& tenant = ev->Get()->Record.GetTenantName();
+        auto response = std::make_unique<TEvKqp::TEvListQueryCacheQueriesResponse>();
+        if (AppData()->TenantName != tenant or snapshot.empty()) {
+            response->Record.SetFinished(true);
+            Send(ev->Sender, response.release());
+            return;
+        }
+        auto request = ev->Get()->Record;
+
+        std::sort(snapshot.begin(), snapshot.end(), TKqpQueryCacheSnapshot::TUidComparator{});
+
+        auto startIt = snapshot.begin();
+        auto endIt = snapshot.end();
+
+        if (request.HasQueryIdStart() and not request.GetQueryIdStart().empty()) {
+            auto QueryIdStart = ev->Get()->Record.GetQueryIdStart();
+            if (request.GetQueryIdStartInclusive()) {
+                startIt = std::lower_bound(snapshot.begin(), snapshot.end(), QueryIdStart, TKqpQueryCacheSnapshot::TUidLowerBoundComparator{});
+            } else {
+                startIt = std::upper_bound(snapshot.begin(), snapshot.end(), QueryIdStart, TKqpQueryCacheSnapshot::TUidUpperBoundComparator{});
+            }
+        }
+
+        if (request.HasQueryIdEnd() and not request.GetQueryIdEnd().empty()) {
+            auto QueryIdEnd = ev->Get()->Record.GetQueryIdEnd();
+            if (request.GetQueryIdEndInclusive()) {
+                endIt = std::upper_bound(snapshot.begin(), snapshot.end(), QueryIdEnd, TKqpQueryCacheSnapshot::TUidUpperBoundComparator{});
+            } else {
+                endIt = std::lower_bound(snapshot.begin(), snapshot.end(), QueryIdEnd, TKqpQueryCacheSnapshot::TUidLowerBoundComparator{});
+            }
+        }
+
+        const ui64 batchLimit = std::min(16_MB, static_cast<ui64>(ev->Get()->Record.GetFreeSpace()));
+
+        bool firstRecordSent = false;
+        bool finished = true;
+        auto& record = response->Record;
+
+        auto currentIt = startIt;
+        for (; currentIt != endIt; ++currentIt) {
+                        currentIt->CompileResult->SerializeTo(record.AddCacheCacheQueries(),
+                {currentIt->LastTouched.MicroSeconds()}
+            );
+            const ui64 msgSize = record.ByteSizeLong();
+
+            if (firstRecordSent && msgSize > batchLimit) {
+                record.MutableCacheCacheQueries()->RemoveLast();
+                finished = false;
+                break;
+            }
+            firstRecordSent = true;
+        }
+
+        record.SetFinished(finished);
+        if (!finished) {
+            record.SetContinuationToken(currentIt->CompileResult->Uid);
+        }
+        Send(ev->Sender, response.release());
+    }
+
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        bool allowMultiBroadcasts = TableServiceConfig.GetAllowMultiBroadcasts();
-        bool enableKqpDataQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
-        bool enableKqpScanQueryStreamIdxLookupJoin = TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
+        auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
+        if (diff.has_value()) {
+            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
+                "Query cache was invalidated due to config change, config change differencer output: "
+                << diff.value());
 
-        bool enableKqpScanQuerySourceRead = TableServiceConfig.GetEnableKqpScanQuerySourceRead();
-
-        bool defaultSyntaxVersion = TableServiceConfig.GetSqlVersion();
-
-        auto indexAutoChooser = TableServiceConfig.GetIndexAutoChooseMode();
-
-        ui64 rangesLimit = TableServiceConfig.GetExtractPredicateRangesLimit();
-        ui64 idxLookupPointsLimit = TableServiceConfig.GetIdxLookupJoinPointsLimit();
-
-        bool allowOlapDataQuery = TableServiceConfig.GetAllowOlapDataQuery();
-        bool enableOlapSink = TableServiceConfig.GetEnableOlapSink();
-        bool enableOltpSink = TableServiceConfig.GetEnableOltpSink();
-        bool enableHtapTx = TableServiceConfig.GetEnableHtapTx();
-        bool enableStreamWrite = TableServiceConfig.GetEnableStreamWrite();
-        bool enableCreateTableAs = TableServiceConfig.GetEnableCreateTableAs();
-        auto blockChannelsMode = TableServiceConfig.GetBlockChannelsMode();
-
-        bool enableAstCache = TableServiceConfig.GetEnableAstCache();
-        bool enableImplicitQueryParameterTypes = TableServiceConfig.GetEnableImplicitQueryParameterTypes();
-        bool enablePgConstsToParams = TableServiceConfig.GetEnablePgConstsToParams();
-        bool enablePerStatementQueryExecution = TableServiceConfig.GetEnablePerStatementQueryExecution();
-
-        auto mkqlHeavyLimit = TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit();
-
-        ui64 defaultCostBasedOptimizationLevel = TableServiceConfig.GetDefaultCostBasedOptimizationLevel();
-        bool enableConstantFolding = TableServiceConfig.GetEnableConstantFolding();
-        bool enableFoldUdfs = TableServiceConfig.GetEnableFoldUdfs();
-
-        bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
-
-        TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
-        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
-
-        bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
-
-        bool enableNewRBO = TableServiceConfig.GetEnableNewRBO();
-        bool enableSpillingInHashJoinShuffleConnections = TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections();
-        bool enableOlapScalarApply = TableServiceConfig.GetEnableOlapScalarApply();
-        bool enableOlapSubstringPushdown = TableServiceConfig.GetEnableOlapSubstringPushdown();
+            QueryCache->Clear();
+        }
 
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
-
-        if (TableServiceConfig.GetSqlVersion() != defaultSyntaxVersion ||
-            TableServiceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin() != enableKqpScanQueryStreamIdxLookupJoin ||
-            TableServiceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin() != enableKqpDataQueryStreamIdxLookupJoin ||
-            TableServiceConfig.GetEnableKqpScanQuerySourceRead() != enableKqpScanQuerySourceRead ||
-            TableServiceConfig.GetIndexAutoChooseMode() != indexAutoChooser ||
-            TableServiceConfig.GetAllowOlapDataQuery() != allowOlapDataQuery ||
-            TableServiceConfig.GetEnableStreamWrite() != enableStreamWrite ||
-            TableServiceConfig.GetEnableOlapSink() != enableOlapSink ||
-            TableServiceConfig.GetEnableOltpSink() != enableOltpSink ||
-            TableServiceConfig.GetEnableHtapTx() != enableHtapTx ||
-            TableServiceConfig.GetEnableCreateTableAs() != enableCreateTableAs ||
-            TableServiceConfig.GetBlockChannelsMode() != blockChannelsMode ||
-            TableServiceConfig.GetExtractPredicateRangesLimit() != rangesLimit ||
-            TableServiceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit() != mkqlHeavyLimit ||
-            TableServiceConfig.GetIdxLookupJoinPointsLimit() != idxLookupPointsLimit ||
-            TableServiceConfig.GetEnableSpillingNodes() != enableSpillingNodes ||
-            TableServiceConfig.GetDefaultCostBasedOptimizationLevel() != defaultCostBasedOptimizationLevel ||
-            TableServiceConfig.GetEnableConstantFolding() != enableConstantFolding ||
-            TableServiceConfig.GetEnableFoldUdfs() != enableFoldUdfs ||
-            TableServiceConfig.GetEnableAstCache() != enableAstCache ||
-            TableServiceConfig.GetEnableImplicitQueryParameterTypes() != enableImplicitQueryParameterTypes ||
-            TableServiceConfig.GetEnablePgConstsToParams() != enablePgConstsToParams ||
-            TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
-            TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
-            TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
-            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
-            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling ||
-            TableServiceConfig.GetEnableNewRBO() != enableNewRBO ||
-            TableServiceConfig.GetEnableSpillingInHashJoinShuffleConnections() != enableSpillingInHashJoinShuffleConnections ||
-            TableServiceConfig.GetEnableOlapScalarApply() != enableOlapScalarApply ||
-            TableServiceConfig.GetEnableOlapSubstringPushdown() != enableOlapSubstringPushdown
-        )
-        {
-
-            QueryCache->Clear();
-
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE,
-                "Query cache was invalidated due to config change");
-        }
     }
 
     void HandleUndelivery(TEvents::TEvUndelivered::TPtr& ev) {
@@ -496,7 +493,8 @@ private:
             return CompileByAst(*request.QueryAst, compileRequest, ctx);
         }
 
-        if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
+        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+        if (overflow.has_value()) {
             Counters->ReportCompileRequestRejected(dbCounters);
 
             LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
@@ -505,7 +503,8 @@ private:
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue},
+                ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
             return;
         }
 
@@ -577,7 +576,8 @@ private:
                 return CompileByAst(*request.QueryAst, compileRequest, ctx);
             }
 
-            if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
+            auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+            if (overflow.has_value()) {
                 Counters->ReportCompileRequestRejected(dbCounters);
 
                 LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
@@ -586,7 +586,8 @@ private:
 
                 NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                     "Exceeded maximum number of requests in compile service queue.");
-                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx,
+                    overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
                 return;
             }
         } else {
@@ -764,21 +765,23 @@ private:
 
         compileRequest.QueryAst = std::move(queryAst);
 
-        if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
-            Counters->ReportCompileRequestRejected(compileRequest.DbCounters);
+        auto sender = compileRequest.Sender;
+        auto overflow = RequestsQueue.Enqueue(std::move(compileRequest));
+        if (overflow.has_value()) {
+            Counters->ReportCompileRequestRejected(overflow->DbCounters);
 
             LOG_WARN_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Requests queue size limit exceeded"
-                << ", sender: " << compileRequest.Sender
+                << ", sender: " << overflow->Sender
                 << ", queueSize: " << RequestsQueue.Size());
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(compileRequest.Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
+            ReplyError(overflow->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, overflow->Cookie, std::move(overflow->Orbit), std::move(overflow->CompileServiceSpan));
             return;
         }
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Added request to queue"
-            << ", sender: " << compileRequest.Sender
+            << ", sender: " << sender
             << ", queueSize: " << RequestsQueue.Size());
 
         ProcessQueue(ctx);
@@ -827,19 +830,19 @@ private:
         if (compileResult->GetAst() && QueryCache->FindByAst(query, *compileResult->GetAst(), keepInCache)) {
             return false;
         }
-        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, std::move(query), compileResult->QueryAst,
+        auto newCompileResult = TKqpCompileResult::Make(CreateGuidAsString(), compileResult->Status, compileResult->Issues, compileResult->MaxReadType, compileResult->CompilationDuration ,std::move(query), compileResult->QueryAst,
             false, {}, compileResult->ReplayMessageUserView);
         newCompileResult->AllowCache = compileResult->AllowCache;
         newCompileResult->PreparedQuery = compileResult->PreparedQuery;
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << query.SerializeToString());
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Insert preparing query with params, queryId: " << compileResult->Query->SerializeToString());
         return QueryCache->Insert(newCompileResult, TableServiceConfig.GetEnableAstCache(), isPerStatementExecution);
     }
 
     void ProcessQueue(const TActorContext& ctx) {
         auto maxActiveRequests = TableServiceConfig.GetCompileMaxActiveRequests();
-
+        TInstant processStartedAt = TInstant::Now();
         while (RequestsQueue.ActiveRequestsCount() < maxActiveRequests) {
-            auto request = RequestsQueue.Dequeue();
+            auto request = RequestsQueue.Dequeue(processStartedAt);
             if (!request) {
                 break;
             }
@@ -990,6 +993,58 @@ private:
     bool CollectDiagnostics = false;
 };
 
+
+void TKqpQueryCacheSnapshot::Clear() {
+    Entries_.clear();
+    Index_.clear();
+}
+
+void TKqpQueryCacheSnapshot::Insert(const TString& uid, const TKqpCompileResult::TConstPtr& compileResult, TInstant now) {
+    Y_ABORT_UNLESS(compileResult, "Snapshot Insert: null CompileResult");
+    auto [it, inserted] = Index_.emplace(uid, static_cast<ui32>(Entries_.size()));
+    Y_ABORT_UNLESS(inserted, "Snapshot Insert: duplicate uid");
+
+    Entries_.push_back(TEntry{compileResult, now});
+}
+
+void TKqpQueryCacheSnapshot::Erase(const TString& uid) {
+    auto it = Index_.find(uid);
+    if (it == Index_.end()) {
+        return;
+    }
+    const ui32 pos = it->second;
+    const ui32 last = static_cast<ui32>(Entries_.size() - 1);
+
+    if (pos != last) {
+        Entries_[pos] = Entries_[last];
+        const TString& movedUid = Entries_[pos].CompileResult->Uid;
+        Index_[movedUid] = pos;
+    }
+    Entries_.pop_back();
+    Index_.erase(it);
+}
+
+void TKqpQueryCacheSnapshot::Replace(const TString& uid, const TKqpCompileResult::TConstPtr& newResult) {
+    Y_ABORT_UNLESS(newResult, "Snapshot OnReplace: null CompileResult");
+    auto it = Index_.find(uid);
+    Y_ABORT_UNLESS(it != Index_.end(), "Snapshot OnReplace: uid not found");
+    Entries_[it->second].CompileResult = newResult;
+}
+
+void TKqpQueryCacheSnapshot::Touch(const TString& uid, TInstant now) {
+    auto it = Index_.find(uid);
+    if (it == Index_.end()) {
+        return;
+    }
+    Entries_[it->second].LastTouched = now;
+}
+
+TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCacheSnapshot::GetSnapshot() const {
+    return Entries_;
+}
+
+
+
 // QueryCache
 
 bool TKqpQueryCache::Insert(
@@ -999,6 +1054,7 @@ bool TKqpQueryCache::Insert(
 {
     TGuard<TAdaptiveLock> guard(Lock);
 
+    auto ts = TInstant::Now();
     if (!isPerStatementExecution) {
         InsertQuery(compileResult);
     }
@@ -1012,11 +1068,13 @@ bool TKqpQueryCache::Insert(
     TItem* item = &const_cast<TItem&>(*it.first);
     auto removedItem = List.Insert(item);
 
+    Snapshot.Insert(compileResult->Uid, item->Value.CompileResult, ts);
     IncBytes(item->Value.CompileResult->PreparedQuery->ByteSize());
 
     if (removedItem) {
         DecBytes(removedItem->Value.CompileResult->PreparedQuery->ByteSize());
 
+        Snapshot.Erase(removedItem->Value.CompileResult->Uid);
         auto queryId = *removedItem->Value.CompileResult->Query;
         QueryIndex.erase(queryId);
         if (removedItem->Value.CompileResult->GetAst()) {
@@ -1041,7 +1099,9 @@ void TKqpQueryCache::AttachReplayMessage(const TString uid, TString replayMessag
         TItem* item = &const_cast<TItem&>(*it);
         DecBytes(item->Value.ReplayMessage.size());
         item->Value.ReplayMessage = replayMessage;
-        item->Value.LastReplayTime = TInstant::Now();
+        auto ts = TInstant::Now();
+        item->Value.LastReplayTime = ts;
+        Snapshot.Touch(uid, ts);
         IncBytes(replayMessage.size());
     }
 }
@@ -1055,6 +1115,7 @@ TString TKqpQueryCache::ReplayMessageByUid(const TString uid, TDuration timeout)
         TInstant now = TInstant::Now();
         if (lastReplayTime + timeout < now) {
             lastReplayTime = now;
+            Snapshot.Touch(uid, now);
             return it->Value.ReplayMessage;
         }
     }
@@ -1066,8 +1127,10 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByUidImpl(const TString& uid, b
     if (it != Index.end()) {
         TItem* item = &const_cast<TItem&>(*it);
         if (promote) {
-            item->Value.ExpiredAt = TAppData::TimeProvider->Now() + Ttl;
+            auto ts = TAppData::TimeProvider->Now();
+            item->Value.ExpiredAt = ts + Ttl;
             List.Promote(item);
+            Snapshot.Touch(uid, ts);
         }
 
         return item->Value.CompileResult;
@@ -1099,6 +1162,7 @@ bool TKqpQueryCache::EraseByUidImpl(const TString& uid) {
     DecBytes(item->Value.ReplayMessage.size());
 
     Y_ABORT_UNLESS(item->Value.CompileResult);
+    Snapshot.Erase(uid);
     Y_ABORT_UNLESS(item->Value.CompileResult->Query);
     auto queryId = *item->Value.CompileResult->Query;
     QueryIndex.erase(queryId);
@@ -1118,7 +1182,9 @@ void TKqpQueryCache::Replace(const TKqpCompileResult::TConstPtr& compileResult) 
     auto it = Index.find(TItem(compileResult->Uid));
     if (it != Index.end()) {
         TItem& item = const_cast<TItem&>(*it);
+        Snapshot.Erase(item.Value.CompileResult->Uid);
         item.Value.CompileResult = compileResult;
+        Snapshot.Insert(compileResult->Uid, compileResult, TInstant::Now());
     }
 }
 
@@ -1214,6 +1280,11 @@ TKqpCompileResult::TConstPtr TKqpQueryCache::FindByAst(
     return FindByUidImpl(*uid, promote);
 }
 
+TVector<TKqpQueryCacheSnapshot::TEntry> TKqpQueryCache::GetSnapshot() const {
+    TGuard<TAdaptiveLock> guard(Lock);
+    return Snapshot.GetSnapshot();
+}
+
 size_t TKqpQueryCache::EraseExpiredQueries() {
     TGuard<TAdaptiveLock> guard(Lock);
 
@@ -1236,6 +1307,7 @@ void TKqpQueryCache::Clear() {
     QueryIndex.clear();
     AstIndex.clear();
     ByteSize = 0;
+    Snapshot.Clear();
 }
 
 void TKqpQueryCache::InsertQuery(const TKqpCompileResult::TConstPtr& compileResult) {

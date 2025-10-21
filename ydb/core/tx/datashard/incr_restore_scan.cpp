@@ -8,6 +8,7 @@
 #include <ydb/core/tx/datashard/change_record_body_serializer.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
 #include <ydb/core/tx/datashard/incr_restore_helpers.h>
+#include <ydb/core/tx/datashard/datashard.h> // Add for TEvIncrementalRestoreResponse
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/services/services.pb.h>
 
@@ -18,6 +19,7 @@ using namespace NTable;
 
 class TIncrementalRestoreScan
     : public IActorCallback
+    , public IActorExceptionHandler
     , public NTable::IScan
     , protected TChangeRecordBodySerializer
 {
@@ -63,17 +65,17 @@ public:
         Y_ENSURE(table->Columns.size() >= 2);
         TVector<TTag> valueTags;
         valueTags.reserve(table->Columns.size() - 1);
-        bool deletedMarkerColumnFound = false;
+        bool changeMetadataColumnFound = false;
         for (const auto& [tag, column] : table->Columns) {
             if (!column.IsKey) {
                 valueTags.push_back(tag);
-                if (column.Name == "__ydb_incrBackupImpl_deleted") {
-                    deletedMarkerColumnFound = true;
+                if (column.Name == "__ydb_incrBackupImpl_changeMetadata") {
+                    changeMetadataColumnFound = true;
                 }
             }
         }
 
-        Y_ENSURE(deletedMarkerColumnFound);
+        Y_ENSURE(changeMetadataColumnFound);
 
         return valueTags;
     }
@@ -94,6 +96,9 @@ public:
 
     void Start(TEvIncrementalRestoreScan::TEvServe::TPtr& ev) {
         LOG_D("Handle TEvIncrementalRestoreScan::TEvServe " << ev->Get()->ToString());
+
+        // Store/update the actorId on each command receipt (handles SchemeShard restarts)
+        OperatorActorId = ev->Sender;
 
         Driver->Touch(EScan::Feed);
     }
@@ -186,17 +191,26 @@ public:
         return Progress();
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) override {
-        LOG_D("Finish " << static_cast<ui64>(abort));
+    TAutoPtr<IDestructable> Finish(EStatus status) override {
+        LOG_D("Finish " << status);
 
-        if (abort != EAbort::None) {
-            // FIXME
+        if (status != EStatus::Done) {
+            // TODO: https://github.com/ydb-platform/ydb/issues/18797
+            LOG_W("IncrementalRestoreScan finished with error status: " << status);
         }
 
         Send(Parent, new TEvIncrementalRestoreScan::TEvFinished(TxId));
 
         PassAway();
         return nullptr;
+    }
+
+    bool OnUnhandledException(const std::exception& exc) override {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& o) const override {
@@ -263,6 +277,7 @@ private:
     ui64 Order = 0;
     TActorId ChangeSender;
     TMap<ui64, TChangeRecord::TPtr> PendingRecords;
+    TActorId OperatorActorId; // Store the actorId of the operation initiator for restart handling
 
     TMap<ui32, TUserTable::TUserColumn> Columns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;

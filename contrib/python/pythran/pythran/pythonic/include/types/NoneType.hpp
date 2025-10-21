@@ -15,6 +15,14 @@ namespace types
   struct none_type {
     none_type();
     intptr_t id() const;
+    bool operator==(none_type) const
+    {
+      return true;
+    }
+    explicit operator bool() const
+    {
+      return false;
+    }
   };
 
   inline std::ostream &operator<<(std::ostream &os, none_type const &)
@@ -25,7 +33,7 @@ namespace types
   template <class T, bool is_fundamental = std::is_fundamental<T>::value>
   struct none;
 
-  /* Type adapator to simulate an option type
+  /* Type adaptor to simulate an option type
    *
    * see http://en.wikipedia.org/wiki/Option_type
    */
@@ -60,10 +68,13 @@ namespace types
 
     explicit operator bool() const;
 
-    intptr_t id() const;
+    explicit operator T const &() const
+    {
+      assert(!is_none);
+      return *static_cast<T const *>(this);
+    }
 
-    template <class T0>
-    friend std::ostream &operator<<(std::ostream &os, none<T0, false> const &);
+    intptr_t id() const;
   };
 
   /* specialization of none for integral types we cannot derive from
@@ -75,7 +86,7 @@ namespace types
       return !static_cast<P const *>(this)->is_none &&
              static_cast<P const *>(this)->data;
     }
-    operator T() const
+    operator T const &() const
     {
       return static_cast<P const *>(this)->data;
     }
@@ -91,64 +102,6 @@ namespace types
   template <class T>
   struct none<T, true> : none_data<none<T, true>, T> {
     T data;
-    template <class T1>
-    friend std::ostream &operator<<(std::ostream &, none<T1, true> const &);
-    template <class T1>
-    friend T1 operator+(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend T1 operator+(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<T1, true> operator+(none<T1, true> const &t0,
-                                    none<T1, true> const &t1);
-    template <class T1>
-    friend bool operator>(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend bool operator>(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<bool> operator>(none<T1, true> const &t0,
-                                none<T1, true> const &t1);
-    template <class T1>
-    friend bool operator>=(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend bool operator>=(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<bool> operator>=(none<T1, true> const &t0,
-                                 none<T1, true> const &t1);
-    template <class T1>
-    friend bool operator<(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend bool operator<(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<bool> operator<(none<T1, true> const &t0,
-                                none<T1, true> const &t1);
-    template <class T1>
-    friend bool operator<=(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend bool operator<=(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<bool> operator<=(none<T1, true> const &t0,
-                                 none<T1, true> const &t1);
-    template <class T1>
-    friend T1 operator-(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend T1 operator-(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<T1, true> operator-(none<T1, true> const &t0,
-                                    none<T1, true> const &t1);
-    template <class T1>
-    friend T1 operator*(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend T1 operator*(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<T1, true> operator*(none<T1, true> const &t0,
-                                    none<T1, true> const &t1);
-    template <class T1>
-    friend T1 operator/(none<T1, true> const &t0, T1 const &t1);
-    template <class T1>
-    friend T1 operator/(T1 const &t0, none<T1, true> const &t1);
-    template <class T1>
-    friend none<T1, true> operator/(none<T1, true> const &t0,
-                                    none<T1, true> const &t1);
 
     template <class T1>
     none &operator+=(T1 other);
@@ -159,7 +112,6 @@ namespace types
     template <class T1>
     none &operator/=(T1 other);
 
-  public:
     bool is_none;
     none();
     none(none_type const &);
@@ -181,65 +133,64 @@ namespace types
         return {static_cast<T1>(data)};
     }
   };
-  template <class T>
-  T operator+(none<T, true> const &t0, T const &t1);
-  template <class T>
-  T operator+(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<T, true> operator+(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  bool operator>(none<T, true> const &t0, T const &t1);
-  template <class T>
-  bool operator>(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<bool> operator>(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  bool operator>=(none<T, true> const &t0, T const &t1);
-  template <class T>
-  bool operator>=(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<bool> operator>=(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  bool operator<(none<T, true> const &t0, T const &t1);
-  template <class T>
-  bool operator<(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<bool> operator<(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  bool operator<=(none<T, true> const &t0, T const &t1);
-  template <class T>
-  bool operator<=(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<bool> operator<=(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  T operator-(none<T, true> const &t0, T const &t1);
-  template <class T>
-  T operator-(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<T, true> operator-(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  T operator*(none<T, true> const &t0, T const &t1);
-  template <class T>
-  T operator*(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<T, true> operator*(none<T, true> const &t0, none<T, true> const &t1);
-  template <class T>
-  T operator/(none<T, true> const &t0, T const &t1);
-  template <class T>
-  T operator/(T const &t0, none<T, true> const &t1);
-  template <class T>
-  none<T, true> operator/(none<T, true> const &t0, none<T, true> const &t1);
+
+#define NONE_OPERATOR_OVERLOAD(op)                                             \
+  template <class T>                                                           \
+  auto operator op(none<T> const &t0, T const &t1)                             \
+      ->decltype(static_cast<T const &>(t0) op t1)                             \
+  {                                                                            \
+    return static_cast<T const &>(t0) op t1;                                   \
+  }                                                                            \
+                                                                               \
+  template <class T>                                                           \
+  auto operator op(T const &t0, none<T> const &t1)                             \
+      ->decltype(t0 op static_cast<T const &>(t1))                             \
+  {                                                                            \
+    return t0 op static_cast<T const &>(t1);                                   \
+  }                                                                            \
+                                                                               \
+  template <class T>                                                           \
+  auto operator op(none<T> const &t0, none<T> const &t1)                       \
+      ->none<decltype(static_cast<T const &>(t0)                               \
+                          op static_cast<T const &>(t1))>                      \
+  {                                                                            \
+    if (t0.is_none && t1.is_none)                                              \
+      return none_type{};                                                      \
+    else {                                                                     \
+      return {static_cast<T const &>(t0) op static_cast<T const &>(t1)};       \
+    }                                                                          \
+  }
+
+  NONE_OPERATOR_OVERLOAD(+)
+  NONE_OPERATOR_OVERLOAD(-)
+  NONE_OPERATOR_OVERLOAD(*)
+  NONE_OPERATOR_OVERLOAD(/)
+
+  NONE_OPERATOR_OVERLOAD(>)
+  NONE_OPERATOR_OVERLOAD(>=)
+  NONE_OPERATOR_OVERLOAD(<)
+  NONE_OPERATOR_OVERLOAD(<=)
+
   template <class T0, class T1>
   decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(none<T0, true> const &t0, T1 const &t1);
+  operator%(none<T0> const &t0, T1 const &t1);
+
   template <class T0, class T1>
   decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))
-  operator%(T0 const &t0, none<T1, true> const &t1);
+  operator%(T0 const &t0, none<T1> const &t1);
+
   template <class T0, class T1>
-  none<decltype(operator_::mod(std::declval<T0>(), std::declval<T1>())), true>
-  operator%(none<T0, true> const &t0, none<T1, true> const &t1);
-  template <class T>
-  std::ostream &operator<<(std::ostream &os, none<T, true> const &v);
+  none<decltype(operator_::mod(std::declval<T0>(), std::declval<T1>()))>
+  operator%(none<T0> const &t0, none<T1> const &t1);
+
+  template <class T, bool F>
+  std::ostream &operator<<(std::ostream &os, none<T, F> const &v)
+  {
+    if (v.is_none)
+      return os << none_type();
+    else
+      return os << v.data;
+  }
 
   template <class T>
   struct is_none {
@@ -268,6 +219,14 @@ namespace std
   template <size_t I, class T0>
   struct tuple_element<I, pythonic::types::none<T0>> {
     using type = typename std::tuple_element<I, T0>::type;
+  };
+
+  template <>
+  struct hash<pythonic::types::none_type> {
+    size_t operator()(const pythonic::types::none_type &x) const
+    {
+      return 0;
+    }
   };
 } // namespace std
 

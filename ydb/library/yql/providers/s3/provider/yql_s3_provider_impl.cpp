@@ -1,6 +1,8 @@
 #include "yql_s3_provider_impl.h"
 
+#if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/providers/s3/actors/yql_arrow_column_converters.h>
+#endif
 
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 
@@ -23,6 +25,7 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
         return false;
     }
 
+#if defined(_linux_) || defined(_darwin_)
     if (!keys.empty()) {
         if (useblockSink) {
             error = "Block sink is not supported for partitioned output";
@@ -57,6 +60,11 @@ bool UseBlocksSink(TStringBuf format, const TExprNode::TListType& keys, const TS
     }
 
     return true;
+#else
+    Y_UNUSED(format, keys, outputType, configuration);
+    error = TStringBuilder() << "Block sink is not supported for this platform";
+    return true;
+#endif
 }
 
 }

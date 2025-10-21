@@ -1,9 +1,11 @@
 #pragma once
 
 #include "codecs.h"
+#include "control_plane.h"
 #include "events_common.h"
 
 #include <util/datetime/base.h>
+
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -42,10 +44,14 @@ public:
     }
 
 protected:
+
     uint64_t PartitionSessionId;
     std::string TopicPath;
     std::string ReadSessionId;
     uint64_t PartitionId;
+    std::optional<TPartitionLocation> Location;
+    /*TDirectReadId*/ std::int64_t NextDirectReadId = 1;
+    std::optional</*TDirectReadId*/ std::int64_t> LastDirectReadId;
 };
 
 template<>
@@ -96,6 +102,7 @@ struct TReadSessionEvent {
             virtual ~TMessageBase() = default;
 
             virtual const std::string& GetData() const;
+            virtual const std::string& GetBrokenData() const;
 
             virtual void Commit() = 0;
 
@@ -138,6 +145,8 @@ struct TReadSessionEvent {
             //! User data.
             //! Throws decompressor exception if decompression failed.
             const std::string& GetData() const override;
+            //! Throws exception if decompression succeeded.
+            const std::string& GetBrokenData() const override;
 
             //! Commits single message.
             void Commit() override;

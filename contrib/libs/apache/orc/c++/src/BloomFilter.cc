@@ -208,7 +208,7 @@ namespace orc {
   }
 
   DIAGNOSTIC_POP
-
+  NO_SANITIZE_ATTR
   void BloomFilterImpl::addHash(int64_t hash64) {
     int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
     // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.
@@ -226,6 +226,7 @@ namespace orc {
     }
   }
 
+  NO_SANITIZE_ATTR
   bool BloomFilterImpl::testHash(int64_t hash64) const {
     int32_t hash1 = static_cast<int32_t>(hash64 & 0xffffffff);
     // In Java codes, we use "hash64 >>> 32" which is an unsigned shift op.

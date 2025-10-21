@@ -5,6 +5,7 @@
 #include "streams.h"
 #include "printout.h"
 #include "preallocated_spiller.h"
+#include "kqp_setup.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -36,9 +37,9 @@ TDuration MeasureGeneratorTime(IComputationGraph& graph, const IDataSampler& sam
 }
 
 template<bool LLVM, bool Spilling>
-THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IDataSampler& sampler)
+THolder<IComputationGraph> BuildGraph(TKqpSetup<LLVM, Spilling>& setup, std::shared_ptr<ISpillerFactory> spillerFactory, IDataSampler& sampler)
 {
-    TProgramBuilder& pb = *setup.PgmBuilder;
+    TKqpProgramBuilder& pb = setup.GetKqpBuilder();
 
     const auto streamItemType = pb.NewMultiType({sampler.GetKeyType(pb), pb.NewDataType(NUdf::TDataType<ui64>::Id)});
     const auto streamType = pb.NewStreamType(streamItemType);
@@ -76,7 +77,7 @@ THolder<IComputationGraph> BuildGraph(TSetup<LLVM, Spilling>& setup, std::shared
 template<bool LLVM, bool Spilling>
 TRunResult RunTestOverGraph(const TRunParams& params, const bool needsVerification, const bool measureReferenceMemory)
 {
-    TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
+    TKqpSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
     NYql::NLog::InitLogger("cerr", false);
 

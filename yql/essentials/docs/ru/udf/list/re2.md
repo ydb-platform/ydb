@@ -9,12 +9,20 @@ Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct
 Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>
 Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?
 Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32
+Re2::IsValidRegexp(pattern:String?, options:Struct<...>?) -> Bool
 Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>
 ```
 
 Модуль Re2 реализует поддержку регулярных выражений на основе [google::RE2](https://github.com/google/re2), где предоставляется широкий ассортимент возможностей ([см. официальную документацию](https://github.com/google/re2/wiki/Syntax)).
 
 По умолчанию UTF-8 режим включается автоматически, если регулярное выражение является валидной строкой в кодировке UTF-8, но не является валидной ASCII-строкой. Вручную настройками библиотеки re2 можно управлять с помощью передачи результата функции `Re2::Options` вторым аргументом другим функциям модуля, рядом с регулярным выражением.
+
+{% note info "Примечание" %}
+
+Все регулярные выражения, переданные в функции, должны быть валидными. Иначе ваш запрос может упасть.
+Начиная с версии [2025.03](../../changelog/2025.03.md#re2-module) такой запрос гарантированно завершится с ошибкой.
+
+{% endnote %}
 
 {% note warning %}
 
@@ -79,6 +87,10 @@ SELECT
 
 Возвращает количество совпавших с регулярным выражением непересекающихся подстрок во входной строке.
 
+## Re2::IsValidRegexp {#isvalidregexp}
+
+Проверяет, является ли переданная строка корректным шаблоном регулярного выражения согласно синтаксису Re2. Опциональный параметр `options` позволяет валидировать шаблон с использованием тех же настроек парсинга, которые будут использоваться другими функциями Re2, обеспечивая согласованность валидации.
+
 ## Re2::Options {#options}
 
 Пояснения к параметрам Re2::Options из официального [репозитория](https://github.com/google/re2/blob/main/re2/re2.h#L595-L617)
@@ -88,7 +100,7 @@ SELECT
 | CaseSensitive:Bool?                                                                                                                                                                                                                     | true     | match is case-sensitive (regexp can override with (?i) unless in posix_syntax mode) |
 | DotNl:Bool?                                                                                                                                                                                                                             | false    | let `.` match `\n` (default )                                                       |
 | Literal:Bool?                                                                                                                                                                                                                           | false    | interpret string as literal, not regexp                                             |
-| LogErrors:Bool?                                                                                                                                                                                                                         | true     | log syntax and execution errors to ERROR                                            |
+| LogErrors:Bool?                                                                                                                                                                                                                         | true     | this option is ignored                                                              |
 | LongestMatch:Bool?                                                                                                                                                                                                                      | false    | search for longest match, not first match                                           |
 | MaxMem:Uint64?                                                                                                                                                                                                                          | -        | (see below)  approx. max memory footprint of RE2                                    |
 | NeverCapture:Bool?                                                                                                                                                                                                                      | false    | parse all parens as non-capturing                                                   |

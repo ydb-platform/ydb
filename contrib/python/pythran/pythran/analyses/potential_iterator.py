@@ -9,11 +9,9 @@ from pythran.passmanager import NodeAnalysis
 import gast as ast
 
 
-class PotentialIterator(NodeAnalysis):
+class PotentialIterator(NodeAnalysis[Aliases, ArgumentReadOnce]):
     """Find whether an expression can be replaced with an iterator."""
-    def __init__(self):
-        self.result = set()
-        NodeAnalysis.__init__(self, Aliases, ArgumentReadOnce)
+    ResultType = set
 
     def visit_For(self, node):
         self.result.add(node.iter)

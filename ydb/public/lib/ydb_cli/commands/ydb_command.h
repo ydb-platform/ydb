@@ -27,10 +27,6 @@ public:
 
     static TDriver CreateDriver(TConfig& config);
     static TDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
-
-    static size_t GetNetworkThreadNum(TConfig& config);
-private:
-    static TDriverConfig CreateDriverConfig(TConfig& config);
 };
 
 class TYdbReadOnlyCommand : public TYdbCommand {

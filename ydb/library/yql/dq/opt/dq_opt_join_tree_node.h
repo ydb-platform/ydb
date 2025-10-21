@@ -67,7 +67,15 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
             stream << "   ";
         }
         stream << "  ";
-        stream << "Shuffled By: " << ShuffleLeftSideByOrderingIdx << "\n";
+        stream << "Shuffled By: ";
+        if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::DontShuffle) {
+            stream << "Don't shuffle";
+        } else if (ShuffleLeftSideByOrderingIdx == TJoinOptimizerNodeInternal::NoOrdering) {
+            stream << "No ordering";
+        } else {
+            stream << ShuffleLeftSideByOrderingIdx;
+        }
+        stream << "\n";
 
         LeftArg->Print(stream, ntabs + 1);
 
@@ -88,9 +96,14 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     const bool LeftAny;
     const bool RightAny;
 
+    enum {
+        NoOrdering = -1,
+        DontShuffle = -2
+    };
+
     // for interesting orderings framework
-    std::int64_t ShuffleLeftSideByOrderingIdx  = -1;
-    std::int64_t ShuffleRightSideByOrderingIdx = -1;
+    std::int64_t ShuffleLeftSideByOrderingIdx  = DontShuffle;
+    std::int64_t ShuffleRightSideByOrderingIdx = DontShuffle;
 };
 
 /**
@@ -118,8 +131,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
 */
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     const std::shared_ptr<IBaseOptimizerNode>& internal,
-    const TFDStorage& fdStorage,
-    bool enableShuffleElimination
+    bool enableShuffleElimination,
+    const TFDStorage* fdStorage
 );
 
 } // namespace NYql::NDq

@@ -131,13 +131,16 @@ class TListNodesCache : public TSimpleRefCount<TListNodesCache> {
 public:
     TListNodesCache();
 
-    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire);
+    void Update(TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr newNodes, TInstant newExpire,
+        std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap>&& pileMap);
     void Invalidate();
     bool NeedUpdate(TInstant now) const;
     TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr GetNodes() const;
+    std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap> GetPileMap() const;
 private:
     TIntrusiveVector<TEvInterconnect::TNodeInfo>::TConstPtr Nodes;
     TInstant Expire;
+    std::shared_ptr<const TEvInterconnect::TEvNodesInfo::TPileMap> PileMap;
 };
 
 template<typename TCacheMiss>
@@ -252,6 +255,8 @@ private:
     void OnPipeDestroyed(ui32 domain,
                          const TActorContext &ctx);
 
+    void UpdateCounters();
+
     void Handle(TEvInterconnect::TEvResolveNode::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvResolveAddress::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvInterconnect::TEvListNodes::TPtr &ev, const TActorContext &ctx);
@@ -280,6 +285,7 @@ private:
     std::array<TDynamicConfigPtr, DOMAINS_COUNT> DynamicConfigs;
     TVector<TActorId> ListNodesQueue;
     TIntrusivePtr<TListNodesCache> ListNodesCache;
+    TBridgeInfo::TPtr BridgeInfo;
 
     // When ListNodes requests are sent to NodeBroker tablets this
     // bitmap indicates domains which didn't answer yet.
@@ -295,6 +301,11 @@ private:
     bool SyncInProgress = false;
     ui64 SyncCookie = 0;
     ui64 SeqNo = 0;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr StaticNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ExpiredDynamicNodesCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EpochVersionCounter;
 };
 
 } // NNodeBroker

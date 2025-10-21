@@ -1,0 +1,39 @@
+{
+    "merge" = {
+        "read_block_count" = 4;
+        "read_block_size" = 1048576;
+        "num_threads" = 3;
+    };
+    "upload" = {
+        "read_block_count" = 4;
+        "read_block_size" = 1048576;
+    };
+    "job_io" = {
+        "fmr_table_reader" = {
+            "inflight_chunks" = 1;
+        };
+        "yt_table_reader" = {
+        };
+        "fmr_table_writer" = {
+            "max_row_weight" = 16777216;
+            "chunk_size" = 1048576;
+            "inflight_chunks" = 1;
+        };
+        "yt_table_writer" = {
+            "max_row_weight" = 16777216;
+        };
+    };
+    "partition" = {
+        "yt_table" = {
+            "max_data_weight_per_part" = 104857600;
+            "max_parts" = 100;
+        };
+        "fmr_table" = {
+            "max_data_weight_per_part" = 104857600;
+            "max_parts" = 100;
+        };
+    };
+    "generic" = {
+        "max_failed_tasks" = 5;
+    };
+}

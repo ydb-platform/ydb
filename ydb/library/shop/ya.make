@@ -16,7 +16,6 @@ PEERDIR(
 END()
 
 RECURSE(
-    protos
     sim_flowctl
     sim_shop
     ut

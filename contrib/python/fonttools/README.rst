@@ -8,7 +8,7 @@ What is this?
   fonts to and from an XML text format, which is also called TTX. It
   supports TrueType, OpenType, AFM and to an extent Type 1 and some
   Mac-specific formats. The project has an `MIT open-source
-  licence <LICENSE>`__.
+  license <LICENSE>`__.
 | Among other things this means you can use it free of charge.
 
 `User documentation <https://fonttools.readthedocs.io/en/latest/>`_ and
@@ -18,7 +18,7 @@ are available at `Read the Docs <https://fonttools.readthedocs.io/>`_.
 Installation
 ~~~~~~~~~~~~
 
-FontTools requires `Python <http://www.python.org/download/>`__ 3.8
+FontTools requires `Python <http://www.python.org/download/>`__ 3.9
 or later. We try to follow the same schedule of minimum Python version support as
 NumPy (see `NEP 29 <https://numpy.org/neps/nep-0029-deprecation_policy.html>`__).
 
@@ -81,18 +81,6 @@ are required to unlock the extra features named "ufo", etc.
 
   *Extra:* ``lxml``
 
-- ``Lib/fontTools/ufoLib``
-
-  Package for reading and writing UFO source files; it requires:
-
-  * `fs <https://pypi.org/pypi/fs>`__: (aka ``pyfilesystem2``) filesystem
-    abstraction layer.
-
-  * `enum34 <https://pypi.org/pypi/enum34>`__: backport for the built-in ``enum``
-    module (only required on Python < 3.4).
-
-  *Extra:* ``ufo``
-
 - ``Lib/fontTools/ttLib/woff2.py``
 
   Module to compress/decompress WOFF 2.0 web fonts; it requires:
@@ -136,7 +124,11 @@ are required to unlock the extra features named "ufo", etc.
     for Python, which internally uses `NumPy <https://pypi.python.org/pypi/numpy>`__
     arrays and hence is very fast;
   * `munkres <https://pypi.python.org/pypi/munkres>`__: a pure-Python
-    module that implements the Hungarian or Kuhn-Munkres algorithm.
+    module that implements the Hungarian or Kuhn-Munkres algorithm. Slower than
+    SciPy, but useful for minimalistic systems where adding SciPy is undesirable.
+
+  This ensures both performance (via SciPy) and minimal footprint (via Munkres)
+  are possible.
 
   To plot the results to a PDF or HTML format, you also need to install:
 
@@ -184,6 +176,17 @@ are required to unlock the extra features named "ufo", etc.
     operations on paths (union, intersection, etc.).
 
   *Extra:* ``pathops``
+
+- ``Lib/fontTools/ufoLib``
+
+  Package for reading and writing UFO source files; if available, it will use:
+
+  * `fs <https://pypi.org/pypi/fs>`__: (aka ``pyfilesystem2``) filesystem abstraction layer
+
+  for reading and writing UFOs to the local filesystem or zip files (.ufoz), instead of
+  the built-in ``fontTools.misc.filesystem`` package.
+  The reader and writer classes can in theory also accept any object compatible the
+  ``fs.base.FS`` interface, although not all have been tested.
 
 - ``Lib/fontTools/pens/cocoaPen.py`` and ``Lib/fontTools/pens/quartzPen.py``
 
@@ -255,7 +258,7 @@ How to make a new release
    automate that too.
 
 
-Acknowledgements
+Acknowledgments
 ~~~~~~~~~~~~~~~~
 
 In alphabetical order:
@@ -266,7 +269,7 @@ Vincent Connare, David Corbett, Simon Cozens, Dave Crossland, Simon Daniels,
 Peter Dekkers, Behdad Esfahbod, Behnam Esfahbod, Hannes Famira, Sam Fishman,
 Matt Fontaine, Takaaki Fuji, Rob Hagemans, Yannis Haralambous, Greg Hitchcock,
 Jeremie Hornus, Khaled Hosny, John Hudson, Denis Moyogo Jacquerye, Jack Jansen,
-Tom Kacvinsky, Jens Kutilek, Antoine Leca, Werner Lemberg, Tal Leming, Peter
+Tom Kacvinsky, Jens Kutilek, Antoine Leca, Werner Lemberg, Tal Leming, Liang Hai, Peter
 Lofting, Cosimo Lupo, Olli Meier, Masaya Nakamura, Dave Opstad, Laurence Penney,
 Roozbeh Pournader, Garret Rieger, Read Roberts, Colin Rofls, Guido van Rossum,
 Just van Rossum, Andreas Seidel, Georg Seifert, Chris Simpkins, Miguel Sousa,

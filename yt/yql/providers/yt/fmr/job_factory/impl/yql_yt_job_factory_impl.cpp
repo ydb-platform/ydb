@@ -7,7 +7,7 @@ namespace NYql::NFmr {
 class TFmrJobFactory: public IFmrJobFactory {
 public:
     TFmrJobFactory(const TFmrJobFactorySettings& settings)
-        : NumThreads_(settings.NumThreads), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
+        : NumThreads_(settings.NumThreads), MaxQueueSize_(settings.MaxQueueSize), Function_(settings.Function), RandomProvider_(settings.RandomProvider)
     {
         Start();
     }
@@ -42,8 +42,12 @@ public:
         return future;
     }
 
+    ui64 GetMaxParallelJobCount() const override {
+        return NumThreads_;
+    }
+
     void Start() override {
-        ThreadPool_ = CreateThreadPool(NumThreads_);
+        ThreadPool_ = CreateThreadPool(NumThreads_, MaxQueueSize_, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     }
 
     void Stop() override {
@@ -52,7 +56,8 @@ public:
 
 private:
     THolder<IThreadPool> ThreadPool_;
-    i32 NumThreads_;
+    ui64 NumThreads_;
+    ui64 MaxQueueSize_;
     std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
 };

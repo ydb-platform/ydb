@@ -21,9 +21,12 @@ namespace NKikimr::NBsController {
 
             NIceDb::TNiceDb db(txc.DB);
 
+            THashSet<TGroupId> groupsToCheck;
+
             for (NKikimrBlobStorage::TGroupMetrics& item : *record.MutableGroupMetrics()) {
                 if (TGroupInfo *group = Self->FindGroup(TGroupId::FromProto(&item, &NKikimrBlobStorage::TGroupMetrics::GetGroupId))) {
                     group->GroupMetrics = std::move(item);
+                    groupsToCheck.insert(group->ID);
 
                     TString s;
                     const bool success = group->GroupMetrics->SerializeToString(&s);
@@ -40,14 +43,12 @@ namespace NKikimr::NBsController {
                     if (TGroupInfo *group = Self->FindGroup(TGroupId::FromValue(groupId))) {
                         auto *item = outRecord.AddGroupMetrics();
                         item->SetGroupId(group->ID.GetRawId());
-                        group->FillInGroupParameters(item->MutableGroupParameters());
+                        group->FillInGroupParameters(item->MutableGroupParameters(), Self);
                     }
                 }
             }
 
-            for (auto it = Self->SelectGroupsQueue.begin(); it != Self->SelectGroupsQueue.end(); ) {
-                Self->ProcessSelectGroupsQueueItem(it++);
-            }
+            Self->UpdateWaitingGroups(groupsToCheck);
 
             return true;
         }

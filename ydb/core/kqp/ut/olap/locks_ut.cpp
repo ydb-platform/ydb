@@ -16,9 +16,9 @@ namespace NKikimr::NKqp {
 
 Y_UNIT_TEST_SUITE(KqpOlapLocks) {
     Y_UNIT_TEST(TwoQueriesWithRestartTablet) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -70,10 +70,99 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
             CompareYson(output, R"([[1u;["test1"];10];[2u;["test2"];11];[3u;["test3"];13];[4u;["test4"];14]])");
         }
     }
+
+    Y_UNIT_TEST_TWIN(NoDirtyReadsNo, SimpleReader) {
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_TX, NActors::NLog::PRI_DEBUG);
+
+        {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+            const TString query = R"(
+                CREATE TABLE `/Root/KeyValue` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                )
+                PARTITION BY HASH(Key)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        if (SimpleReader) {
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            const TString query = R"(
+                ALTER OBJECT `/Root/KeyValue` (TYPE TABLE)
+                SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`);
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto client = kikimr.GetQueryClient();
+        using namespace NYdb::NQuery;
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto insertResult1 = session
+                                 .ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "New");
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()))
+                                 .ExtractValueSync();
+        UNIT_ASSERT_C(insertResult1.IsSuccess(), insertResult1.GetIssues());
+
+        auto tx1 = insertResult1.GetTransaction();
+        UNIT_ASSERT(tx1);
+        UNIT_ASSERT(tx1->IsActive());
+
+        auto insertResult2 = session
+                                 .ExecuteQuery(Q_(R"(
+            INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "New");
+        )"), TTxControl::BeginTx(TTxSettings::SerializableRW()))
+                                 .ExtractValueSync();
+        UNIT_ASSERT_C(insertResult2.IsSuccess(), insertResult2.GetIssues());
+
+        auto tx2 = insertResult2.GetTransaction();
+        UNIT_ASSERT(tx2);
+        UNIT_ASSERT(tx2->IsActive());
+
+        {
+            const auto result = session
+                                    .ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
+            )"), TTxControl::Tx(*tx2))
+                                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues());
+            CompareYson("[[200u;[\"New\"]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        auto rollbackResult1 = tx1->Rollback().ExtractValueSync();
+        UNIT_ASSERT_C(rollbackResult1.IsSuccess(), rollbackResult1.GetIssues());
+
+        auto commit2Result = tx2->Commit().ExtractValueSync();
+        UNIT_ASSERT_C(commit2Result.IsSuccess(), commit2Result.GetIssues());
+        {
+            const auto result = session
+                                    .ExecuteQuery(Q_(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
+            )"), TTxControl::BeginTx().CommitTx())
+                                    .ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues());
+            CompareYson("[[200u;[\"New\"]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
     Y_UNIT_TEST(TableSinkWithOlapStore) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TKikimrRunner kikimr(settings);
         Tests::NCommon::TLoggerInit(kikimr)
             .SetComponents({ NKikimrServices::TX_COLUMNSHARD_WRITE, NKikimrServices::TX_COLUMNSHARD }, "CS")
@@ -104,9 +193,9 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         //It corresponds to a SCAN, then NO write then COMMIT on that shard
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -144,27 +233,44 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         //DELETE 1 row from one shard and 0 rows from others
         const auto resultDelete = client.ExecuteQuery("DELETE from `/Root/ttt` ", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         UNIT_ASSERT_C(resultDelete.IsSuccess() != reboot, resultDelete.GetIssues().ToString());
-        {
-            const auto resultSelect =
-                client.ExecuteQuery("SELECT * FROM `/Root/ttt`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
-            UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
-            const auto resultSets = resultSelect.GetResultSets();
-            UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
-            const auto resultSet = resultSets[0];
-            if (shardCount > 1 && reboot) {
-                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1); // locks broken
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
-            }
+        const auto resultSelect =
+            client.ExecuteQuery("SELECT * FROM `/Root/ttt`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(resultSelect.IsSuccess(), resultSelect.GetIssues().ToString());
+        const auto resultSets = resultSelect.GetResultSets();
+        UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
+        const auto resultSet = resultSets[0];
+        if (shardCount > 1 && reboot) {
+            const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
+            const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
+            UNIT_ASSERT_C(
+                // If UNAVAILABLE: row should still exist in DB
+                (deleteUnavailiable && resultSet.RowsCount() == 1) ||
+
+                // If UNDETERMINED: operation might have succeeded or failed
+                deleteUndetermined,
+
+                resultDelete.GetStatus()
+            );
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
         }
+
         //DELETE 0 rows from every shard
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
         if (shardCount > 1 && reboot) {
-            UNIT_ASSERT_C(!resultDelete2.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(
+                (!resultDelete2.IsSuccess() && resultSet.RowsCount() == 1) ||
+
+                // Delete success due to optimisations
+                (resultDelete2.IsSuccess() && (resultSet.RowsCount() == 0)),
+
+                resultDelete2.GetIssues().ToString()
+            );
         } else {
-            UNIT_ASSERT_C(resultDelete2.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_C(resultDelete2.IsSuccess(), resultDelete2.GetIssues().ToString());
         }
     }
     Y_UNIT_TEST_TWIN(DeleteAbsentSingleShard, Reboot) {

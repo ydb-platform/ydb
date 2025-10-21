@@ -46,9 +46,9 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
 
 TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
                    TIssues& issues)
-    : ClusterMapping(settings.ClusterMapping)
-    , PathPrefix(settings.PathPrefix)
-    , ClusterPathPrefixes(settings.ClusterPathPrefixes)
+    : ClusterMapping_(settings.ClusterMapping)
+    , PathPrefix_(settings.PathPrefix)
+    , ClusterPathPrefixes_(settings.ClusterPathPrefixes)
     , Settings(settings)
     , Pool(new TMemoryPool(4096))
     , Issues(issues)
@@ -57,7 +57,7 @@ TContext::TContext(const NSQLTranslation::TTranslationSettings& settings,
     , HasPendingErrors(false)
     , Libraries(settings.Libraries)
 {
-    Position.File = settings.File;
+    Position_.File = settings.File;
 
     for (auto& flag: settings.Flags) {
         bool value = true;
@@ -78,7 +78,7 @@ TContext::~TContext()
 }
 
 const NYql::TPosition& TContext::Pos() const {
-    return Position;
+    return Position_;
 }
 
 TString TContext::MakeName(const TString& name) {
@@ -141,8 +141,8 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
     auto& curIssue = Issues.back();
     curIssue.Severity = severity;
     curIssue.IssueCode = code;
-    IssueMsgHolder.Reset(new TStringOutput(*Issues.back().MutableMessage()));
-    return *IssueMsgHolder;
+    IssueMsgHolder_.Reset(new TStringOutput(*Issues.back().MutableMessage()));
+    return *IssueMsgHolder_;
 }
 
 bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
@@ -152,7 +152,7 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             || *arg == RtmrProviderName
             )
         {
-            ProviderPathPrefixes[*arg] = value;
+            ProviderPathPrefixes_[*arg] = value;
             return true;
         }
 
@@ -163,27 +163,27 @@ bool TContext::SetPathPrefix(const TString& value, TMaybe<TString> arg) {
             return false;
         }
 
-        ClusterPathPrefixes[normalizedClusterName] = value;
+        ClusterPathPrefixes_[normalizedClusterName] = value;
     } else {
-        PathPrefix = value;
+        PathPrefix_ = value;
     }
 
     return true;
 }
 
 TNodePtr TContext::GetPrefixedPath(const TString& cluster, const TDeferredAtom& path) {
-    auto* clusterPrefix = ClusterPathPrefixes.FindPtr(cluster);
+    auto* clusterPrefix = ClusterPathPrefixes_.FindPtr(cluster);
     if (clusterPrefix && !clusterPrefix->empty()) {
         return AddTablePathPrefix(*this, *clusterPrefix, path);
     } else {
         auto provider = GetClusterProvider(cluster);
         YQL_ENSURE(provider.Defined());
 
-        auto* providerPrefix = ProviderPathPrefixes.FindPtr(*provider);
+        auto* providerPrefix = ProviderPathPrefixes_.FindPtr(*provider);
         if (providerPrefix && !providerPrefix->empty()) {
             return AddTablePathPrefix(*this, *providerPrefix, path);
-        } else if (!PathPrefix.empty()) {
-            return AddTablePathPrefix(*this, PathPrefix, path);
+        } else if (!PathPrefix_.empty()) {
+            return AddTablePathPrefix(*this, PathPrefix_, path);
         }
 
         return path.Build();
@@ -338,22 +338,22 @@ bool TContext::UseUnordered(const TTableRef& table) const {
 }
 
 TTranslation::TTranslation(TContext& ctx)
-    : Ctx(ctx)
+    : Ctx_(ctx)
 {
 }
 
 TContext& TTranslation::Context() {
-    return Ctx;
+    return Ctx_;
 }
 
 IOutputStream& TTranslation::Error() {
-    return Ctx.Error();
+    return Ctx_.Error();
 }
 
 TNodePtr TTranslation::GetNamedNode(const TString& name) {
-    auto mapIt = Ctx.NamedNodes.find(name);
-    if (mapIt == Ctx.NamedNodes.end()) {
-        Ctx.Error() << "Unknown name: " << name;
+    auto mapIt = Ctx_.NamedNodes.find(name);
+    if (mapIt == Ctx_.NamedNodes.end()) {
+        Ctx_.Error() << "Unknown name: " << name;
         return nullptr;
     }
     Y_DEBUG_ABORT_UNLESS(!mapIt->second.empty());
@@ -362,9 +362,9 @@ TNodePtr TTranslation::GetNamedNode(const TString& name) {
 
 void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
     Y_DEBUG_ABORT_UNLESS(node);
-    auto mapIt = Ctx.NamedNodes.find(name);
-    if (mapIt == Ctx.NamedNodes.end()) {
-        auto result = Ctx.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
+    auto mapIt = Ctx_.NamedNodes.find(name);
+    if (mapIt == Ctx_.NamedNodes.end()) {
+        auto result = Ctx_.NamedNodes.insert(std::make_pair(name, TStack<TNodePtr>()));
         Y_DEBUG_ABORT_UNLESS(result.second);
         mapIt = result.first;
     }
@@ -373,12 +373,12 @@ void TTranslation::PushNamedNode(const TString& name, TNodePtr node) {
 }
 
 void TTranslation::PopNamedNode(const TString& name) {
-    auto mapIt = Ctx.NamedNodes.find(name);
-    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx.NamedNodes.end());
+    auto mapIt = Ctx_.NamedNodes.find(name);
+    Y_DEBUG_ABORT_UNLESS(mapIt != Ctx_.NamedNodes.end());
     Y_DEBUG_ABORT_UNLESS(mapIt->second.size() > 0);
     mapIt->second.pop();
     if (mapIt->second.empty()) {
-        Ctx.NamedNodes.erase(mapIt);
+        Ctx_.NamedNodes.erase(mapIt);
     }
 }
 

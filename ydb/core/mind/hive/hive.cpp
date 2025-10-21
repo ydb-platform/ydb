@@ -107,6 +107,18 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
     return std::find(AllowedDataCenters.begin(), AllowedDataCenters.end(), dc) != AllowedDataCenters.end();
 }
 
+bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
+    if (MustBePrimaryPile) {
+        return Hive->IsPrimaryPile(pile);
+    } else {
+        const auto* pileInfo = Hive->FindPile(pile);
+        if (!pileInfo) {
+            return false;
+        }
+        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+    }
+}
+
 template <typename K, typename V>
 std::unordered_map<V, K> MakeReverseMap(const std::unordered_map<K, V>& map) {
     std::unordered_map<V, K> result;

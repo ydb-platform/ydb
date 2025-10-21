@@ -579,6 +579,63 @@ TExprNode::TPtr BuildYtEquiJoinPremap(TExprBase list, TMaybeNode<TCoLambda> prem
     return {};
 }
 
+TExprBase BuildMapForPruneKeys(
+    const TExprBase node,
+    const TExprNode::TPtr extractorLambda,
+    bool isOrdered,
+    const TString& cluster,
+    const TExprNode::TPtr newWorld,
+    const TYtSectionList newInput,
+    const TTypeAnnotationNode* outItemType,
+    TExprContext& ctx,
+    const TYtState::TPtr& state) {
+
+    auto pruneKeysCallable = isOrdered ? "PruneAdjacentKeys" : "PruneKeys";
+    auto mapper = ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("stream")
+            .Callable(pruneKeysCallable)
+                .Arg(0, "stream")
+                .Add(1, extractorLambda)
+            .Seal()
+        .Seal()
+        .Build();
+
+    TVector<TYtOutTable> outTables = ConvertOutTablesWithSortAware(mapper, isOrdered, node.Pos(),
+        outItemType, ctx, state, node.Ref().GetConstraintSet());
+
+    auto settingsBuilder = Build<TCoNameValueTupleList>(ctx, node.Pos());
+    if (isOrdered) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Ordered))
+                .Build()
+            .Build();
+    }
+    if (state->Configuration->UseFlow.Get().GetOrElse(DEFAULT_USE_FLOW)) {
+        settingsBuilder
+            .Add()
+                .Name()
+                    .Value(ToString(EYtSettingType::Flow))
+                .Build()
+            .Build();
+    }
+
+    auto map = Build<TYtMap>(ctx, node.Pos())
+        .World(newWorld)
+        .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+        .Input(newInput)
+        .Output()
+            .Add(outTables)
+        .Build()
+        .Settings(settingsBuilder.Done())
+        .Mapper(std::move(mapper))
+        .Done();
+
+    return WrapOp(map, ctx);
+}
+
 // label -> pair(<asc sort keys>, <inputs matched by keys>)
 THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> CollectTableSortKeysUsage(const TYtState::TPtr& state, const TCoEquiJoin& equiJoin) {
     THashMap<TStringBuf, std::pair<TVector<TStringBuf>, ui32>> tableSortKeys;
@@ -961,6 +1018,7 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
 
     const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     const auto multi = constraints.GetConstraint<TMultiConstraintNode>();
     const TTupleExprType* tupleType = outItemType->Cast<TVariantExprType>()->GetUnderlyingType()->Cast<TTupleExprType>();
 
@@ -975,7 +1033,7 @@ TVector<TYtOutTable> ConvertMultiOutTablesWithSortAware(TExprNode::TPtr& lambda,
         if (auto sorted = itemConstraints ? itemConstraints->GetConstraint<TSortedConstraintNode>() : nullptr) {
             TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, tupleItemType->Cast<TStructExprType>());
             builder.ProcessConstraint(*sorted);
-            builder.FillRowSpecSort(*outTable.RowSpec);
+            builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
             if (builder.NeedMap()) {
                 remapper = builder.MakeRemapLambda(true);
             }
@@ -1043,6 +1101,7 @@ TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& or
 
     const ui64 nativeTypeFlags = state->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
     const bool useNativeDescSort = state->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const bool useNativeYtDefaultColumnOrder = state->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     const auto outStructType = outItemType->Cast<TStructExprType>();
 
     ordered = false;
@@ -1050,7 +1109,7 @@ TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, bool& or
     if (auto sorted = constraints.GetConstraint<TSortedConstraintNode>()) {
         TKeySelectorBuilder builder(pos, ctx, useNativeDescSort, outStructType);
         builder.ProcessConstraint(*sorted);
-        builder.FillRowSpecSort(*outTable.RowSpec);
+        builder.FillRowSpecSort(*outTable.RowSpec, useNativeYtDefaultColumnOrder);
 
         if (builder.NeedMap()) {
             lambda = ctx.Builder(pos)

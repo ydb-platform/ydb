@@ -24,7 +24,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
+#include <ydb/core/persqueue/pqtablet/cache/pq_l2_service.h>
 #include <ydb/core/util/console.h>
 
 #include <google/protobuf/text_format.h>
@@ -668,16 +668,12 @@ namespace NKikimr {
         return storagePoolKinds;
     }
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_SplitMergePartCountLimit", val, prev);
-        return prev;
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardControls.SplitMergePartCountLimit);
     }
 
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_AllowServerlessStorageBilling", isAllow, prev);
-        return prev;
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
+        TControlBoard::SetValue(isAllow, runtime->GetAppData().Icb->SchemeShardControls.AllowServerlessStorageBilling);
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels) {
@@ -1096,6 +1092,121 @@ namespace NKikimr {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
+    /**
+     * A special actor, which starts a tablet follower and restarts it, if needed.
+     */
+    class TFollowerLauncher : public TActorBootstrapped<TFollowerLauncher> {
+    private:
+        ui64 TabletId;
+        ui32 FollowerId;
+        TActorId FollowerActorId;
+
+    public:
+        TFollowerLauncher(ui64 tabletId, ui32 follewerId)
+            : TabletId(tabletId)
+            , FollowerId(follewerId)
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx) {
+            CreateFollower();
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Created follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTablet::TEvTabletDead, Handle);
+                HFunc(TEvents::TEvPoison, Handle);
+            }
+        }
+
+        void Handle(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Received EvTabletDead for tabletId " << ev->Get()->TabletID
+                        << ", but from an unknown actor ID, ignored: " << FollowerActorId
+                );
+
+                return;
+            }
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Received EvTabletDead from follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            // The follower has died, start a new one
+            FollowerActorId = {};
+            CreateFollower();
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Restarted follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+        }
+
+        void Handle(TEvents::TEvPoison::TPtr& /* ev */, const TActorContext& ctx) {
+            if (FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Destroying follower ID " << FollowerId
+                        << " for tabletId " << TabletId
+                        << ": " << FollowerActorId
+                );
+
+                ctx.Send(FollowerActorId, new TEvents::TEvPoisonPill());
+                FollowerActorId = {};
+            };
+
+            Die(ctx);
+        }
+
+    private:
+        void CreateFollower() {
+            FollowerActorId = Register(
+                CreateTabletFollower(
+                    SelfId(),
+                    CreateTestTabletInfo(
+                        TabletId,
+                        TTabletTypes::DataShard,
+                        DataGroupErasure
+                    ),
+                    new TTabletSetupInfo(
+                        &CreateDataShard,
+                        TMailboxType::Simple,
+                        0,
+                        TMailboxType::Simple,
+                        0
+                    ),
+                    FollowerId
+                )
+            );
+        }
+    };
+
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
@@ -1151,6 +1262,7 @@ namespace NKikimr {
                 HFunc(TEvHive::TEvAdoptTablet, Handle);
                 HFunc(TEvHive::TEvDeleteTablet, Handle);
                 HFunc(TEvHive::TEvDeleteOwnerTablets, Handle);
+                HFunc(TEvHive::TEvStopTablet, Handle);
                 HFunc(TEvHive::TEvRequestHiveInfo, Handle);
                 HFunc(TEvHive::TEvInitiateTabletExternalBoot, Handle);
                 HFunc(TEvHive::TEvUpdateTabletsObject, Handle);
@@ -1179,7 +1291,7 @@ namespace NKikimr {
 
         void Handle(TEvHive::TEvCreateTablet::TPtr& ev, const TActorContext& ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvCreateTablet, msg: " << ev->Get()->Record.ShortDebugString());
-            Cout << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
+            Cerr << "FAKEHIVE " << TabletID() << " TEvCreateTablet " << ev->Get()->Record.ShortDebugString() << Endl;
             NKikimrProto::EReplyStatus status = NKikimrProto::OK;
             const std::pair<ui64, ui64> key(ev->Get()->Record.GetOwner(), ev->Get()->Record.GetOwnerIdx());
             const auto type = ev->Get()->Record.GetTabletType();
@@ -1243,6 +1355,34 @@ namespace NKikimr {
                     State->TabletIdToOwner[tabletId] = key;
 
                     LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "boot OK, tablet id " << tabletId);
+
+                    // After a successful creation of a data shard, need to create
+                    // the given number of followers (if requested)
+                    //
+                    // NOTE: Only the simplest PartitionConfig -> FollowerCount option
+                    //       is supported here. More complex options (for example,
+                    //       FollowerCountPerDataCenter and FollowerGroups options)
+                    //       are completely ignored.
+                    if (type == TTabletTypes::DataShard) {
+                        const ui32 followerCount = ev->Get()->Record.GetFollowerCount();
+
+                        if (followerCount) {
+                            LOG_INFO_S(
+                                ctx,
+                                NKikimrServices::HIVE,
+                                logPrefix << "DataShard created successfully (tabletId: " << tabletId
+                                    << "), creating " << followerCount << " followers"
+                            );
+
+                            for (ui32 i = 0; i < followerCount; ++i) {
+                                const ui32 followerId = i + 1;
+
+                                it->second.FollowerLaunchers[followerId] = ctx.Register(
+                                    new TFollowerLauncher(tabletId, followerId)
+                                );
+                            }
+                        }
+                    }
                 } else {
                     LOG_ERROR_S(ctx, NKikimrServices::HIVE, logPrefix << "boot failed, status " << status);
                 }
@@ -1256,6 +1396,9 @@ namespace NKikimr {
                 auto& boundChannels = ev->Get()->Record.GetBindedChannels();
                 it->second.BoundChannels.assign(boundChannels.begin(), boundChannels.end());
                 it->second.ChannelsProfile = ev->Get()->Record.GetChannelsProfile();
+
+                it->second.State = ETabletState::ReadyToWork;
+                it->second.ObjectDomain = TSubDomainKey(ev->Get()->Record.GetObjectDomain());
             }
 
             ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
@@ -1341,6 +1484,17 @@ namespace NKikimr {
             TFakeHiveTabletInfo& tabletInfo = it->second;
             ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(tabletInfo.TabletId));
 
+            // Destroy all follower actors, if any
+            for (const auto& [followerId, launcherActorId] : it->second.FollowerLaunchers) {
+                Cerr << "FAKEHIVE " << TabletID()
+                    << " Destroying launcher for the followerId " << followerId
+                    << " for tabletId " << it->second.TabletId
+                    << ": " << launcherActorId
+                    << Endl;
+
+                ctx.Send(launcherActorId, new TEvents::TEvPoison());
+            }
+
             // Kill the tablet and don't restart it
             TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId;
             ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
@@ -1355,7 +1509,7 @@ namespace NKikimr {
         void Handle(TEvHive::TEvDeleteTablet::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteTablet, msg: " << ev->Get()->Record.ShortDebugString());
             NKikimrHive::TEvDeleteTablet& rec = ev->Get()->Record;
-            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
+            Cerr << "FAKEHIVE " << TabletID() << " TEvDeleteTablet " << rec.ShortDebugString() << Endl;
             TVector<ui64> deletedIdx;
             for (size_t i = 0; i < rec.ShardLocalIdxSize(); ++i) {
                 auto id = std::make_pair<ui64, ui64>(rec.GetShardOwnerId(), rec.GetShardLocalIdx(i));
@@ -1368,7 +1522,7 @@ namespace NKikimr {
         void Handle(TEvHive::TEvDeleteOwnerTablets::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvDeleteOwnerTablets, msg: " << ev->Get()->Record);
             NKikimrHive::TEvDeleteOwnerTablets& rec = ev->Get()->Record;
-            Cout << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl;
+            Cerr << "FAKEHIVE " << TabletID() << " TEvDeleteOwnerTablets " << rec.ShortDebugString() << Endl;
             auto ownerId = rec.GetOwner();
             TVector<ui64> toDelete;
 
@@ -1398,6 +1552,34 @@ namespace NKikimr {
             }
 
             ctx.Send(ev->Sender, new TEvHive::TEvDeleteOwnerTabletsReply(NKikimrProto::OK, TabletID(), ownerId, rec.GetTxId()));
+        }
+
+        void StopTablet(const ui64& tabletId, const TActorContext &ctx) {
+            auto ownerIt = State->TabletIdToOwner.find(tabletId);
+            if (ownerIt == State->TabletIdToOwner.end()) {
+                return;
+            }
+            auto it = State->Tablets.find(ownerIt->second);
+            if (it == State->Tablets.end()) {
+                return;
+            }
+
+            TFakeHiveTabletInfo& tabletInfo = it->second;
+
+            // Very similar to DeleteTablet but don't actually removes tablet
+            // Kill the tablet and don't restart it
+            TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId;
+            ctx.Send(bootstrapperActorId, new TEvBootstrapper::TEvStandBy());
+
+            tabletInfo.State = ETabletState::Stopped;
+        }
+
+        void Handle(TEvHive::TEvStopTablet::TPtr &ev, const TActorContext &ctx) {
+            LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvStopTablet, msg: " << ev->Get()->Record.ShortDebugString());
+            NKikimrHive::TEvStopTablet& rec = ev->Get()->Record;
+            Cerr << "FAKEHIVE " << TabletID() << " TEvStopTablet " << rec.ShortDebugString() << Endl;
+            StopTablet(rec.GetTabletID(), ctx);
+            ctx.Send(ev->Sender, new TEvHive::TEvStopTabletResult(NKikimrProto::OK, rec.GetTabletID()));
         }
 
         void Handle(TEvHive::TEvRequestHiveInfo::TPtr &ev, const TActorContext &ctx) {
@@ -1451,7 +1633,7 @@ namespace NKikimr {
 
         void Handle(TEvHive::TEvUpdateDomain::TPtr &ev, const TActorContext &ctx) {
             LOG_INFO_S(ctx, NKikimrServices::HIVE, "[" << TabletID() << "] TEvUpdateDomain, msg: " << ev->Get()->Record.ShortDebugString());
-            
+
             const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
             NHive::TDomainInfo& domainInfo = State->Domains[subdomainKey];
             if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {
@@ -1459,7 +1641,7 @@ namespace NKikimr {
             } else {
                 domainInfo.ServerlessComputeResourcesMode.Clear();
             }
-            
+
             auto response = std::make_unique<TEvHive::TEvUpdateDomainReply>();
             response->Record.SetTxId(ev->Get()->Record.GetTxId());
             response->Record.SetOrigin(TabletID());
@@ -1511,7 +1693,8 @@ namespace NKikimr {
             tabletInfo.SetTabletID(tabletId);
             if (info) {
                 tabletInfo.SetTabletType(info->Type);
-                tabletInfo.SetState(200); // THive::ReadyToWork
+                tabletInfo.SetState(ui32(info->State)); // THive::ETabletState::*
+                tabletInfo.MutableObjectDomain()->CopyFrom(info->ObjectDomain);
 
                 // TODO: fill other fields when needed
             }

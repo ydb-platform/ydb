@@ -2,21 +2,13 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/bridge.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr {
-
-namespace NDiscovery {
-    struct TCachedMessageData {
-        TString CachedMessage;
-        TString CachedMessageSsl;
-        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
-        TEvStateStorage::TEvBoardInfo::EStatus Status = TEvStateStorage::TEvBoardInfo::EStatus::Ok;
-    };
-}
 
 struct TEvDiscovery {
 
@@ -45,22 +37,61 @@ struct TEvDiscovery {
     };
 
     struct TEvDiscoveryData : public TEventLocal<TEvDiscoveryData, EvDiscoveryData> {
-        std::shared_ptr<const NDiscovery::TCachedMessageData> CachedMessageData;
+        TString CachedMessage;
+        TString CachedMessageSsl;
 
-        TEvDiscoveryData(
-                std::shared_ptr<const NDiscovery::TCachedMessageData> cachedMessageData)
-            : CachedMessageData(std::move(cachedMessageData))
-        {}
+        TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+        TBridgeInfo::TPtr BridgeInfo;
+        TEvStateStorage::TEvBoardInfo::EStatus Status;
     };
 };
 
 namespace NDiscovery {
-    NDiscovery::TCachedMessageData CreateCachedMessage(
-        const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&,
-        TMap<TActorId, TEvStateStorage::TBoardInfoEntry>,
-        TSet<TString>,
-        TString,
-        const THolder<TEvInterconnect::TEvNodeInfo>&);
+
+class TCachedMessageData {
+public:
+    TString CachedMessage;
+    TString CachedMessageSsl;
+
+    TMap<TActorId, TEvStateStorage::TBoardInfoEntry> InfoEntries; // OwnerId -> Payload
+    TBridgeInfo::TPtr BridgeInfo;
+    TEvStateStorage::TEvBoardInfo::EStatus Status;
+
+public:
+    TCachedMessageData(const TString& cachedMessage, const TString& cachedMessageSsl,
+                        const TMap<TActorId, TEvStateStorage::TBoardInfoEntry>& infoEntries,
+                        const TBridgeInfo::TPtr& bridgeInfo = nullptr,
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+        : CachedMessage(cachedMessage)
+        , CachedMessageSsl(cachedMessageSsl)
+        , InfoEntries(infoEntries)
+        , BridgeInfo(bridgeInfo)
+        , Status(status)
+    {}
+
+    TCachedMessageData(TMap<TActorId, TEvStateStorage::TBoardInfoEntry> infoEntries,
+                        const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                        const TBridgeInfo::TPtr& bridgeInfo,
+                        const TString& endpointId = {},
+                        const TSet<TString>& services = {},
+                        TEvStateStorage::TEvBoardInfo::EStatus status = TEvStateStorage::TEvBoardInfo::EStatus::Ok)
+        : InfoEntries(std::move(infoEntries))
+        , BridgeInfo(bridgeInfo)
+        , Status(status)
+    {
+        UpdateCache(nameserviceResponse, bridgeInfo, endpointId, services);
+    }
+
+    void UpdateEntries(TMap<TActorId, TEvStateStorage::TBoardInfoEntry>&& newInfoEntries);
+
+    void UpdateCache(const THolder<TEvInterconnect::TEvNodeInfo>& nameserviceResponse,
+                        const TBridgeInfo::TPtr& bridgeInfo,
+                        const TString& endpointId = {},
+                        const TSet<TString>& services = {});
+
+    TEvDiscovery::TEvDiscoveryData* ToEvent(bool returnSerializedMessage) const;
+};
+
 }
 
 using TLookupPathFunc = std::function<TString(const TString&)>;
@@ -71,10 +102,11 @@ using TLookupPathFunc = std::function<TString(const TString&)>;
 IActor* CreateDiscoverer(
     TLookupPathFunc f,
     const TString& database,
+    bool returnSerializedMessage,
     const TActorId& replyTo,
     const TActorId& cacheId);
 
 // Used to reduce number of requests to Board
-IActor* CreateDiscoveryCache(const TString& endpointId = {});
+IActor* CreateDiscoveryCache(const TString& endpointId = {}, const TMaybe<TActorId>& nameserviceActorId = {});
 
 }

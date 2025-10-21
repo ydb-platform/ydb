@@ -913,7 +913,7 @@ void AddAnyJoinOptionsToCommonJoinCore(TExprNode::TListType& options, bool swapT
     }
 }
 
-TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& groupArg, TExprNode::TPtr&& flatMapLambdaBody, const bool sysColumns, TExprContext& ctx)
+TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& groupArg, TExprNode::TPtr&& flatMapLambdaBody, const bool sysColumns, const TYtState::TPtr& state, TExprContext& ctx)
 {
     TExprNode::TPtr chopperHandler = ctx.NewLambda(pos, ctx.NewArguments(pos, {ctx.NewArgument(pos, "stup"), groupArg }), std::move(flatMapLambdaBody));
     TExprNode::TPtr chopperSwitch;
@@ -953,9 +953,8 @@ TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& 
                 .Seal()
             .Seal()
             .Build();
-    }
-    else {
-        chopperSwitch = ctx.Builder(pos)
+    } else if (state->Types->DirectRowDependsOn) {
+         chopperSwitch = ctx.Builder(pos)
             .Lambda()
                 .Param("key")
                 .Param("item")
@@ -963,6 +962,16 @@ TExprNode::TPtr BuildYtReduceLambda(TPositionHandle pos, const TExprNode::TPtr& 
                     .Callable(0, "DependsOn")
                         .Arg(0, "item")
                     .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    } else {
+        chopperSwitch = ctx.Builder(pos)
+            .Lambda()
+                .Param("key")
+                .Param("item")
+                .Callable("YtIsKeySwitch")
+                    .Arg(0, "item")
                 .Seal()
             .Seal()
             .Build();
@@ -1028,6 +1037,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
 
     TVector<bool> sortDirections(sortTableOrder.size(), true);
     ui64 nativeTypeFlags = state.Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE;
+    const bool useNativeYtDefaultColumnOrder = state.Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
     TMaybe<NYT::TNode> nativeType;
 
     if (needRemapBeforeSort) {
@@ -1076,7 +1086,7 @@ TYtSection SectionApplyAdditionalSort(const TYtSection& section, const TYtEquiJo
     sortOut.RowSpec->SortDirections = sortDirections;
 
     if (nativeType) {
-        sortOut.RowSpec->CopyTypeOrders(*nativeType);
+        sortOut.RowSpec->CopyTypeOrders(*nativeType, useNativeYtDefaultColumnOrder);
     }
 
     return Build<TYtSection>(ctx, pos)
@@ -1406,7 +1416,7 @@ bool RewriteYtMergeJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoin
             .Add(outTableInfo.ToExprNode(ctx, pos).Cast<TYtOutTable>())
         .Build()
         .Settings(settingsBuilder.Done())
-        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(joined), useSystemColumns, ctx))
+        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(joined), useSystemColumns, state, ctx))
         .Done();
 
     return true;
@@ -1724,18 +1734,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         YQL_CLOG(INFO, ProviderYt) << strategyName << " assumes unique keys for the small table";
     }
 
-    ui64 partCount = 1;
-    ui64 partRows = settings.RightRows;
-    if ((settings.RightSize > 0) && useShards) {
-        partCount = (settings.RightMemSize + settings.MapJoinLimit - 1) / settings.MapJoinLimit;
-        partRows = (settings.RightRows + partCount - 1) / partCount;
-    }
-
-    if (partCount > 1) {
-        YQL_ENSURE(!isLookupJoin);
-        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
-    }
-
     auto leftKeyColumns = settings.SwapTables ? op.RightLabel : op.LeftLabel;
     auto rightKeyColumns = settings.SwapTables ? op.LeftLabel : op.RightLabel;
     auto joinTree = ctx.NewList(pos, {
@@ -1774,6 +1772,28 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
         if (!outItemType) {
             return false;
         }
+    }
+
+    if (useBlocks) {
+        for (auto& [_, columnType] : columnTypes) {
+            if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
+                useBlocks = false;
+                YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
+                break;
+            }
+        }
+    }
+
+    ui64 partCount = 1;
+    ui64 partRows = settings.RightRows;
+    if ((settings.RightSize > 0) && useShards) {
+        partCount = std::min(((useBlocks ? settings.RightMemSizeUsingBlocks : settings.RightMemSize) + settings.MapJoinLimit - 1) / settings.MapJoinLimit, settings.RightRows);
+        partRows = (settings.RightRows + partCount - 1) / partCount;
+    }
+
+    if (partCount > 1) {
+        YQL_ENSURE(!isLookupJoin);
+        YQL_CLOG(INFO, ProviderYt) << strategyName << " sharded into " << partCount << " parts, each " << partRows << " rows";
     }
 
     auto mainPaths = MakeUnorderedSection(leftLeaf.Section, ctx).Paths();
@@ -2113,16 +2133,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                     rightOutputColumns.push_back(newName);
                     rightOutputColumnSources.emplace(newName, memberName);
                     AddJoinRemappedColumn(pos, lookupArg, joinedOutNodes, memberName, newName, ctx);
-                }
-            }
-        }
-
-        if (useBlocks) {
-            for (auto& [_, columnType] : columnTypes) {
-                if (!IsSupportedAsBlockType(pos, *columnType, ctx, *state->Types)) {
-                    useBlocks = false;
-                    YQL_CLOG(INFO, ProviderYt) << "Block mapjoin won't be used because of unsupported type: " << *columnType;
-                    break;
                 }
             }
         }
@@ -2778,14 +2788,20 @@ bool RewriteYtCommonJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, TYtJoi
                     .Value(ToString(EYtSettingType::KeySwitch), TNodeFlags::Default)
                 .Build()
             .Build();
-    }
-    else {
+    } else if (state->Types->DirectRowDependsOn) {
         chopperSwitch = Build<TCoLambda>(ctx, pos)
             .Args({"key", "item"})
             .Body<TYtIsKeySwitch>()
-                .DependsOn()
+                .Row<TCoDependsOn>()
                     .Input("item")
                 .Build()
+            .Build()
+            .Done().Ptr();
+    } else {
+        chopperSwitch = Build<TCoLambda>(ctx, pos)
+            .Args({"key", "item"})
+            .Body<TYtIsKeySwitch>()
+                .Row("item")
             .Build()
             .Done().Ptr();
     }
@@ -4809,7 +4825,7 @@ EStarRewriteStatus RewriteYtEquiJoinStarSingleChain(TYtEquiJoin equiJoin, TYtJoi
             .Add(outTableInfo.ToExprNode(ctx, pos).Cast<TYtOutTable>())
         .Build()
         .Settings(settingsBuilder.Done())
-        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(finalRenamedStream), useSystemColumns, ctx))
+        .Reducer(BuildYtReduceLambda(pos, groupArg, std::move(finalRenamedStream), useSystemColumns, state, ctx))
         .Done();
 
     op.Output = reduceOp;
@@ -5212,6 +5228,9 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     if (!HasSetting(*joinSettings, "cbo_passed") && op.CostBasedOptPassed) {
         joinSettings = AddSetting(*joinSettings, joinSettings->Pos(), "cbo_passed", {}, ctx);
     }
+    if (sections.size() < equiJoin.Input().Size()) {
+        joinSettings = RemoveSetting(*joinSettings, "prune_keys_added", ctx);
+    }
 
     auto outItemType = GetSequenceItemType(equiJoin.Pos(),
                                            equiJoin.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[1],
@@ -5239,6 +5258,19 @@ TMaybeNode<TExprBase> ExportYtEquiJoin(TYtEquiJoin equiJoin, const TYtJoinNodeOp
     children.reserve(children.size() + premaps.size());
     std::transform(premaps.cbegin(), premaps.cend(), std::back_inserter(children), std::bind(&TExprBase::Ptr, std::placeholders::_1));
     return TExprBase(ctx.ChangeChildren(join.Ref(), std::move(children)));
+}
+
+bool AreJoinInputsReady(const TYtEquiJoin& equiJoin) {
+    for (auto section: equiJoin.Input()) {
+        for (auto path: section.Paths()) {
+            TYtPathInfo pathInfo(path);
+            if (!pathInfo.Table->Stat) {
+                return false;
+            }
+        }
+    }
+
+    return true;
 }
 
 }

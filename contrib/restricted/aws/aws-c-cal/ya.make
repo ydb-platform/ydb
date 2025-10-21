@@ -9,9 +9,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(0.6.12)
+VERSION(0.7.4)
 
-ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-cal/archive/v0.6.12.tar.gz)
+ORIGINAL_SOURCE(https://github.com/awslabs/aws-c-cal/archive/v0.7.4.tar.gz)
 
 PEERDIR(
     contrib/libs/openssl

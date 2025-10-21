@@ -3,6 +3,6 @@
     <tmp_path>/program.sql:<main>:4:1: Error: Execution of node: YtMap!
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:4:1: Error: Incorrect base
-        	SELECT
-	^
+        <tmp_path>/program.sql:<main>:8:14: Error: Incorrect base
+        	    Unicode::ToUint64(value, 1),
+	             ^

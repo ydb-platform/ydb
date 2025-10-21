@@ -106,14 +106,10 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "thousand",
-                                                                                            "twothousand",
-                                                                                            "unique1",
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                                            "thousand",
+                                                                                            "twothousand"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",
@@ -146,14 +142,10 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "thousand",
-                                                                                            "twothousand",
-                                                                                            "unique1",
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                                            "thousand",
+                                                                                            "twothousand"
                                                                                         ],
                                                                                         "ReadRangesPointPrefixLen": "0",
                                                                                         "Scan": "Parallel",
@@ -190,14 +182,10 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                         "ReadColumns": [
-                                                                            "thousand",
-                                                                            "twothousand",
-                                                                            "unique1",
-                                                                            "unique2"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "unique1 (-\u221e, +\u221e)",
-                                                                            "unique2 (-\u221e, +\u221e)"
+                                                                            "unique2 (-\u221e, +\u221e)",
+                                                                            "thousand",
+                                                                            "twothousand"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
                                                                         "Scan": "Parallel",

@@ -32,6 +32,7 @@ SRCS(
     aggregated_result.cpp
     archive.cpp
     config_examples.cpp
+    interconnect_load.cpp
     keyvalue_write.cpp
     kqp.cpp
     memory.cpp

@@ -235,10 +235,20 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
 }
 
 void ObliterateDisk(TString path) {
-    TFile f(path, OpenAlways | RdWr);
+    TFile f(path, OpenExisting | RdWr);
     f.Flock(LOCK_EX | LOCK_NB);
 
-    TVector<ui8> zeros(NPDisk::FormatSectorSize * NPDisk::ReplicationFactor, 0);
+    bool isBlockDevice = false;
+    ui64 diskSizeBytes = 0;
+    DetectFileParameters(path, diskSizeBytes, isBlockDevice);
+
+    constexpr size_t portionSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+    if (diskSizeBytes <= portionSize) {
+        ythrow yexception() << "file is too small to be the YDB storage device, path# " << path.Quote() <<
+            " diskSizeBytes# " << diskSizeBytes;
+    }
+
+    TVector<ui8> zeros(portionSize, 0);
     f.Pwrite(zeros.data(), zeros.size(), 0);
     f.Flush();
 }

@@ -18,6 +18,8 @@ SRCS(
     flat_exec_seat.cpp
     flat_executor.cpp
     flat_executor.h
+    flat_executor_backup.cpp
+    flat_executor_backup.h
     flat_executor_bootlogic.cpp
     flat_executor_bootlogic.h
     flat_executor_borrowlogic.cpp
@@ -26,7 +28,6 @@ SRCS(
     flat_executor_compaction_logic.h
     flat_executor_counters.cpp
     flat_executor_counters.h
-    flat_executor_data_cleanup_logic.cpp
     flat_executor_db_mon.cpp
     flat_executor_gclogic.cpp
     flat_executor_gclogic.h
@@ -36,6 +37,7 @@ SRCS(
     flat_executor_tx_env.h
     flat_executor_txloglogic.cpp
     flat_executor_txloglogic.h
+    flat_executor_vacuum_logic.cpp
     flat_fwd_misc.cpp
     flat_iterator.h
     flat_load_blob_queue.cpp
@@ -73,6 +75,7 @@ SRCS(
     flat_update_op.h
     probes.cpp
     shared_handle.cpp
+    shared_cache_counters.cpp
     shared_sausagecache.cpp
     shared_sausagecache.h
     tablet_flat_executor.h
@@ -87,6 +90,9 @@ GENERATE_ENUM_SERIALIZATION(flat_executor_compaction_logic.h)
 GENERATE_ENUM_SERIALIZATION(flat_page_iface.h)
 GENERATE_ENUM_SERIALIZATION(flat_part_loader.h)
 GENERATE_ENUM_SERIALIZATION(flat_row_eggs.h)
+GENERATE_ENUM_SERIALIZATION(flat_scan_iface.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_s3fifo.h)
+GENERATE_ENUM_SERIALIZATION(shared_cache_events.h)
 
 IF (KIKIMR_TABLET_BORROW_WITHOUT_META)
     CFLAGS(
@@ -104,6 +110,8 @@ PEERDIR(
     library/cpp/containers/stack_vector
     library/cpp/digest/crc32c
     library/cpp/html/pcdata
+    library/cpp/http/io
+    library/cpp/json/writer
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     ydb/core/base

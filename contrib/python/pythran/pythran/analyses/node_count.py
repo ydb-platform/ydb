@@ -20,9 +20,7 @@ class NodeCount(NodeAnalysis):
     5
     """
 
-    def __init__(self):
-        self.result = 0
-        super(NodeCount, self).__init__()
+    ResultType = int
 
     def generic_visit(self, node):
         self.result += 1

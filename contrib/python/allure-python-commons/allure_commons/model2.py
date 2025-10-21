@@ -49,6 +49,7 @@ class TestResult(ExecutableItem):
     fullName = attrib(default=None)
     labels = attrib(default=Factory(list))
     links = attrib(default=Factory(list))
+    titlePath = attrib(default=Factory(list))
 
 
 @attrs

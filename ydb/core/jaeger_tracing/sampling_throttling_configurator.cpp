@@ -55,9 +55,9 @@ void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TWithTag<
     auto enrichedSettings = GenerateThrottlers(std::move(settings));
     PropagateUnspecifiedRequest(enrichedSettings.SamplingRules, NoDefaultSamplingRequestTypes);
     PropagateUnspecifiedRequest(enrichedSettings.ExternalThrottlingRules);
-    CurrentSettings = std::move(enrichedSettings);
 
     with_lock (ControlMutex) {
+        CurrentSettings = std::move(enrichedSettings);
         for (auto& control : IssuedControls) {
             control->UpdateImpl(GenerateSetup());
         }
@@ -65,7 +65,7 @@ void TSamplingThrottlingConfigurator::UpdateSettings(TSettings<double, TWithTag<
 }
 
 TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::GenerateThrottlers(
-    TSettings<double, TWithTag<TThrottlingSettings>> settings) {
+    TSettings<double, TWithTag<TThrottlingSettings>> settings) const {
     THashMap<size_t, TIntrusivePtr<TThrottler>> throttlers;
     return settings.MapThrottler([this, &throttlers](const TWithTag<TThrottlingSettings>& settings) {
         if (auto it = throttlers.FindPtr(settings.Tag)) {
@@ -78,11 +78,12 @@ TSettings<double, TIntrusivePtr<TThrottler>> TSamplingThrottlingConfigurator::Ge
 }
 
 std::unique_ptr<TSamplingThrottlingControl::TSamplingThrottlingImpl> TSamplingThrottlingConfigurator::GenerateSetup() {
-    auto setup = CurrentSettings.MapSampler([this](double fraction) {
-        return TSampler(fraction, Rng());
-    });
-
-    return std::make_unique<TSamplingThrottlingControl::TSamplingThrottlingImpl>(std::move(setup));
+    with_lock (ControlMutex) {
+        auto setup = CurrentSettings.MapSampler([this](double fraction) {
+            return TSampler(fraction, Rng());
+        });
+        return std::make_unique<TSamplingThrottlingControl::TSamplingThrottlingImpl>(std::move(setup));
+    }
 }
 
 } // namespace NKikimr::NJaegerTracing

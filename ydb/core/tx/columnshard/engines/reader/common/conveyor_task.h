@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/tx/columnshard/counters/scan.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -10,13 +11,19 @@ namespace NKikimr::NOlap::NReader {
 class IDataReader;
 
 class IApplyAction {
+private:
+    bool AppliedFlag = false;
+
 protected:
-    virtual bool DoApply(IDataReader& indexedDataRead) const = 0;
+    virtual bool DoApply(IDataReader& indexedDataRead) = 0;
 
 public:
-    bool Apply(IDataReader& indexedDataRead) const {
+    bool Apply(IDataReader& indexedDataRead) {
+        AFL_VERIFY(!AppliedFlag);
+        AppliedFlag = true;
         return DoApply(indexedDataRead);
     }
+    virtual ~IApplyAction() = default;
 };
 
 class IDataTasksProcessor {
@@ -25,7 +32,8 @@ public:
     private:
         using TBase = NConveyor::ITask;
         const NActors::TActorId OwnerId;
-        virtual TConclusionStatus DoExecuteImpl() = 0;
+        NColumnShard::TCounterGuard Guard;
+        virtual TConclusion<bool> DoExecuteImpl() = 0;
 
     protected:
         virtual void DoExecute(const std::shared_ptr<NConveyor::ITask>& taskPtr) override final;
@@ -35,10 +43,9 @@ public:
         using TPtr = std::shared_ptr<ITask>;
         virtual ~ITask() = default;
 
-        ITask(const NActors::TActorId& ownerId)
+        ITask(const NActors::TActorId& ownerId, NColumnShard::TCounterGuard&& scanCounter)
             : OwnerId(ownerId)
-        {
-
+            , Guard(std::move(scanCounter)) {
         }
     };
 };

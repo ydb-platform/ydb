@@ -75,6 +75,7 @@
                                                 "PlanNodeId": 3,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "CounterID"
                                                         ],
@@ -97,6 +98,7 @@
                                                                         "Phase": "Intermediate"
                                                                     },
                                                                     {
+                                                                        "Blocks": "True",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 2
@@ -111,15 +113,12 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                         "ReadColumns": [
-                                                                            "CounterID",
-                                                                            "URL"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "CounterID (-\u221e, +\u221e)",
                                                                             "EventDate (-\u221e, +\u221e)",
                                                                             "UserID (-\u221e, +\u221e)",
                                                                             "EventTime (-\u221e, +\u221e)",
-                                                                            "WatchID (-\u221e, +\u221e)"
+                                                                            "WatchID (-\u221e, +\u221e)",
+                                                                            "URL"
                                                                         ],
                                                                         "Scan": "Parallel",
                                                                         "SsaProgram": {

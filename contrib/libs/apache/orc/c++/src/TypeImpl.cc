@@ -19,8 +19,10 @@
 #include "TypeImpl.hh"
 #include "Adaptor.hh"
 #include "orc/Exceptions.hh"
+#include "orc/Type.hh"
 
 #include <iostream>
+#include <memory>
 #include <sstream>
 
 namespace orc {
@@ -60,6 +62,33 @@ namespace orc {
     precision_ = precision;
     scale_ = scale;
     subtypeCount_ = 0;
+  }
+
+  TypeImpl::TypeImpl(TypeKind kind, const std::string& crs) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
+    crs_ = crs;
+    edgeInterpolationAlgorithm_ = geospatial::EdgeInterpolationAlgorithm::SPHERICAL;
+  }
+
+  TypeImpl::TypeImpl(TypeKind kind, const std::string& crs,
+                     geospatial::EdgeInterpolationAlgorithm algo) {
+    parent_ = nullptr;
+    columnId_ = -1;
+    maximumColumnId_ = -1;
+    kind_ = kind;
+    maxLength_ = 0;
+    precision_ = 0;
+    scale_ = 0;
+    subtypeCount_ = 0;
+    crs_ = crs;
+    edgeInterpolationAlgorithm_ = algo;
   }
 
   uint64_t TypeImpl::assignIds(uint64_t root) const {
@@ -118,6 +147,14 @@ namespace orc {
 
   uint64_t TypeImpl::getScale() const {
     return scale_;
+  }
+
+  const std::string& TypeImpl::getCrs() const {
+    return crs_;
+  }
+
+  geospatial::EdgeInterpolationAlgorithm TypeImpl::getAlgorithm() const {
+    return edgeInterpolationAlgorithm_;
   }
 
   Type& TypeImpl::setAttribute(const std::string& key, const std::string& value) {
@@ -188,6 +225,45 @@ namespace orc {
     }
     return true;
   }
+
+  namespace geospatial {
+    std::string AlgoToString(EdgeInterpolationAlgorithm algo) {
+      switch (algo) {
+        case EdgeInterpolationAlgorithm::SPHERICAL:
+          return "speherial";
+        case VINCENTY:
+          return "vincenty";
+        case THOMAS:
+          return "thomas";
+        case ANDOYER:
+          return "andoyer";
+        case KARNEY:
+          return "karney";
+        default:
+          throw InvalidArgument("Unknown algo");
+      }
+    }
+
+    EdgeInterpolationAlgorithm AlgoFromString(const std::string& algo) {
+      if (algo == "speherial") {
+        return EdgeInterpolationAlgorithm::SPHERICAL;
+      }
+      if (algo == "vincenty") {
+        return VINCENTY;
+      }
+      if (algo == "thomas") {
+        return THOMAS;
+      }
+      if (algo == "andoyer") {
+        return ANDOYER;
+      }
+      if (algo == "karney") {
+        return KARNEY;
+      }
+      throw InvalidArgument("Unknown algo: " + algo);
+    }
+
+  }  // namespace geospatial
 
   std::string TypeImpl::toString() const {
     switch (static_cast<int64_t>(kind_)) {
@@ -271,6 +347,17 @@ namespace orc {
         result << "char(" << maxLength_ << ")";
         return result.str();
       }
+      case GEOMETRY: {
+        std::stringstream result;
+        result << "geometry(" << crs_ << ")";
+        return result.str();
+      }
+      case GEOGRAPHY: {
+        std::stringstream result;
+        result << "geography(" << crs_ << ","
+               << geospatial::AlgoToString(edgeInterpolationAlgorithm_) << ")";
+        return result.str();
+      }
       default:
         throw NotImplementedYet("Unknown type");
     }
@@ -322,6 +409,8 @@ namespace orc {
       case BINARY:
       case CHAR:
       case VARCHAR:
+      case GEOMETRY:
+      case GEOGRAPHY:
         return encoded ? std::make_unique<EncodedStringVectorBatch>(capacity, memoryPool)
                        : std::make_unique<StringVectorBatch>(capacity, memoryPool);
 
@@ -419,6 +508,15 @@ namespace orc {
     return std::make_unique<TypeImpl>(UNION);
   }
 
+  std::unique_ptr<Type> createGeometryType(const std::string& crs) {
+    return std::make_unique<TypeImpl>(GEOMETRY, crs);
+  }
+
+  std::unique_ptr<Type> createGeographyType(const std::string& crs,
+                                            geospatial::EdgeInterpolationAlgorithm algo) {
+    return std::make_unique<TypeImpl>(GEOGRAPHY, crs, algo);
+  }
+
   std::string printProtobufMessage(const google::protobuf::Message& message);
   std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& footer) {
     std::unique_ptr<Type> ret;
@@ -441,6 +539,16 @@ namespace orc {
       case proto::Type_Kind_CHAR:
       case proto::Type_Kind_VARCHAR:
         ret = std::make_unique<TypeImpl>(static_cast<TypeKind>(type.kind()), type.maximum_length());
+        break;
+
+      case proto::Type_Kind_GEOMETRY:
+        ret = std::make_unique<TypeImpl>(static_cast<TypeKind>(type.kind()), type.crs());
+        break;
+
+      case proto::Type_Kind_GEOGRAPHY:
+        ret = std::make_unique<TypeImpl>(
+            static_cast<TypeKind>(type.kind()), type.crs(),
+            static_cast<geospatial::EdgeInterpolationAlgorithm>(type.algorithm()));
         break;
 
       case proto::Type_Kind_DECIMAL:
@@ -522,6 +630,13 @@ namespace orc {
       case VARCHAR:
       case CHAR:
         result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getMaximumLength());
+        break;
+      case GEOMETRY:
+        result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getCrs());
+        break;
+      case GEOGRAPHY:
+        result = std::make_unique<TypeImpl>(fileType->getKind(), fileType->getCrs(),
+                                            fileType->getAlgorithm());
         break;
 
       case LIST:
@@ -710,6 +825,22 @@ namespace orc {
     return std::make_unique<TypeImpl>(DECIMAL, precision, scale);
   }
 
+  std::unique_ptr<Type> TypeImpl::parseGeographyType(const std::string& input, size_t start,
+                                                     size_t end) {
+    if (input[start] != '(') {
+      throw std::logic_error("Missing ( after geography.");
+    }
+    size_t pos = start + 1;
+    size_t sep = input.find(',', pos);
+    if (sep + 1 >= end || sep == std::string::npos) {
+      throw std::logic_error("Geography type must specify CRS.");
+    }
+    std::string crs = input.substr(pos, sep - pos);
+    std::string algoStr = input.substr(sep + 1, end - sep - 1);
+    geospatial::EdgeInterpolationAlgorithm algo = geospatial::AlgoFromString(algoStr);
+    return std::make_unique<TypeImpl>(GEOGRAPHY, crs, algo);
+  }
+
   void validatePrimitiveType(std::string category, const std::string& input, const size_t pos) {
     if (input[pos] == '<' || input[pos] == '(') {
       std::ostringstream oss;
@@ -780,6 +911,14 @@ namespace orc {
       uint64_t maxLength =
           static_cast<uint64_t>(atoi(input.substr(start + 1, end - start + 1).c_str()));
       return std::make_unique<TypeImpl>(CHAR, maxLength);
+    } else if (category == "geometry") {
+      if (input[start] != '(') {
+        throw std::logic_error("Missing ( after geometry.");
+      }
+      std::string crs = input.substr(start + 1, end - start + 1);
+      return std::make_unique<TypeImpl>(GEOMETRY, crs);
+    } else if (category == "geography") {
+      return parseGeographyType(input, start, end);
     } else {
       throw std::logic_error("Unknown type " + category);
     }

@@ -76,7 +76,7 @@ class TokenTest(TestCase):
     bearer_uri = 'http://server.example.com/resource?access_token=vF9dft4qmT'
 
     def _mocked_validate_bearer_token(self, token, scopes, request):
-        if not token:
+        if not token:  # noqa: SIM103
             return False
         return True
 

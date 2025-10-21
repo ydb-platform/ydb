@@ -14,7 +14,7 @@ namespace NKikimr::NArrow::NSSA {
 TConclusion<IResourceProcessor::EExecutionResult> TConstProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     AFL_VERIFY(GetInput().empty());
-    context.GetResources()->AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
+    context.MutableResources().AddConstantVerified(GetOutputColumnIdOnce(), ScalarConstant);
     return IResourceProcessor::EExecutionResult::Success;
 }
 

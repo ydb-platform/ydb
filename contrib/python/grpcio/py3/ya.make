@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.54.3)
+VERSION(1.63.2)
 
-ORIGINAL_SOURCE(mirror://pypi/g/grpcio/grpcio-1.54.3.tar.gz)
+ORIGINAL_SOURCE(mirror://pypi/g/grpcio/grpcio-1.63.2.tar.gz)
 
 PEERDIR(
     contrib/libs/grpc
@@ -49,6 +49,7 @@ PY_SRCS(
     grpc/_cython/cygrpc.pyx
     grpc/_grpcio_metadata.py
     grpc/_interceptor.py
+    grpc/_observability.py
     grpc/_plugin_wrapping.py
     grpc/_runtime_protos.py
     grpc/_server.py

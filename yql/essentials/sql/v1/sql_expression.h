@@ -21,18 +21,26 @@ public:
     {
     }
 
+    TNodePtr BuildSourceOrNode(const TRule_expr& node);
     TNodePtr Build(const TRule_expr& node);
     TNodePtr Build(const TRule_lambda_or_parameter& node);
+    TSourcePtr BuildSource(const TRule_select_or_expr& node);
+    TNodePtr BuildSourceOrNode(const TRule_smart_parenthesis& node);
 
     void SetSmartParenthesisMode(ESmartParenthesis mode) {
-        SmartParenthesisMode = mode;
+        SmartParenthesisMode_ = mode;
     }
 
     void MarkAsNamed() {
-        MaybeUnnamedSmartParenOnTop = false;
+        MaybeUnnamedSmartParenOnTop_ = false;
+    }
+
+    void ProduceYqlColumnRef() {
+        IsYqlColumnRefProduced_ = true;
     }
 
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
+
 private:
     struct TTrailingQuestions {
         size_t Count = 0;
@@ -66,10 +74,10 @@ private:
     TNodePtr JsonQueryExpr(const TRule_json_query& node);
     TNodePtr JsonApiExpr(const TRule_json_api_expr& node);
 
-    template<typename TUnaryCasualExprRule>
+    template <typename TUnaryCasualExprRule>
     TNodePtr UnaryCasualExpr(const TUnaryCasualExprRule& node, const TTrailingQuestions& tail);
 
-    template<typename TUnarySubExprRule>
+    template <typename TUnarySubExprRule>
     TNodePtr UnaryExpr(const TUnarySubExprRule& node, const TTrailingQuestions& tail);
 
     bool SqlLambdaParams(const TNodePtr& node, TVector<TSymbolNameWithPos>& args, ui32& optionalArgumentsCount);
@@ -77,7 +85,7 @@ private:
     bool SqlLambdaExprBody(TContext& ctx, const TRule_expr& node, TVector<TNodePtr>& exprSeq);
 
     TNodePtr KeyExpr(const TRule_key_expr& node) {
-        TSqlExpression expr(Ctx, Mode);
+        TSqlExpression expr(Ctx_, Mode_);
         return expr.Build(node.GetRule_expr2());
     }
 
@@ -124,15 +132,23 @@ private:
 
     void UnexpectedQuestionToken(const TTrailingQuestions& tail) {
         YQL_ENSURE(tail.Count > 0);
-        Ctx.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
+        Ctx_.Error(tail.Pos) << "Unexpected token '?' at the end of expression";
     }
 
+    bool IsTopLevelGroupBy() const;
+    TSourcePtr LangVersionedSubSelect(TSourcePtr source);
+    TNodePtr SelectSubExpr(const TRule_select_subexpr& node);
+    TNodePtr SelectOrExpr(const TRule_select_or_expr& node);
+    TNodePtr TupleOrExpr(const TRule_tuple_or_expr& node);
+    TNodePtr EmptyTuple();
     TNodePtr SmartParenthesis(const TRule_smart_parenthesis& node);
 
-    ESmartParenthesis SmartParenthesisMode = ESmartParenthesis::Default;
-    bool MaybeUnnamedSmartParenOnTop = true;
+    ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
+    bool MaybeUnnamedSmartParenOnTop_ = true;
+    bool IsSourceAllowed_ = true;
+    bool IsYqlColumnRefProduced_ = false;
 
-    THashMap<TString, TNodePtr> ExprShortcuts;
+    THashMap<TString, TNodePtr> ExprShortcuts_;
 };
 
 bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TSqlExpression& ctx, TChangefeedSettings& settings, bool alter);

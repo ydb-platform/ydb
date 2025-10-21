@@ -1,0 +1,59 @@
+name: Mute Trend Report
+
+on:
+  schedule:
+    # Every Monday at 11:00 MSK (08:00 UTC)
+    - cron: "0 8 * * 1"
+  workflow_dispatch:
+    inputs:
+      period:
+        description: 'Period for trend updates (week or month)'
+        required: false
+        default: 'week'
+        type: choice
+        options:
+          - week
+          - month
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
+jobs:
+  mute-trend-report:
+    name: Send trend updates to Telegram
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install ydb[yc] requests matplotlib numpy
+          
+      - name: Send trend updates to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+          TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
+        run: |
+          # Use input period if provided, otherwise default to 'week'
+          PERIOD="${{ inputs.period || 'week' }}"
+          echo "📊 Sending $PERIOD trend updates to Telegram"
+          
+          python3 .github/scripts/telegram/parse_and_send_team_issues.py \
+            --period-update "$PERIOD" \
+            --bot-token "$TELEGRAM_BOT_TOKEN" \
+            --team-channels "$TEAM_CHANNELS" \
+            --delay 2

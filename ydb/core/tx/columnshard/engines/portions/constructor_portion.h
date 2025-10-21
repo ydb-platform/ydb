@@ -35,7 +35,7 @@ protected:
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
-        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta), true);
+        MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta));
     }
 
     virtual std::shared_ptr<TPortionInfo> BuildPortionImpl(TPortionMeta&& meta) = 0;
@@ -50,21 +50,15 @@ public:
 
     virtual EPortionType GetType() const = 0;
 
-    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
+    TPortionInfoConstructor(const TPortionInfo& portion, const bool withMetadata)
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
         , SchemaVersion(portion.GetSchemaVersionVerified())
         , ShardingVersion(portion.GetShardingVersionOptional()) {
         if (withMetadata) {
-            MetaConstructor = TPortionMetaConstructor(portion.Meta, withMetadataBlobs);
-        } else {
-            AFL_VERIFY(!withMetadataBlobs);
+            MetaConstructor = TPortionMetaConstructor(portion.Meta);
         }
-    }
-
-    bool HaveBlobsData() {
-        return MetaConstructor.GetBlobIdsCount();
     }
 
     void SetPortionId(const ui64 value) {
@@ -151,11 +145,19 @@ public:
 class TCompactedPortionInfoConstructor: public TPortionInfoConstructor {
 private:
     using TBase = TPortionInfoConstructor;
+    YDB_READONLY_DEF(std::optional<TSnapshot>, AppearanceSnapshot);
+
 public:
     using TBase::TBase;
 
-    TCompactedPortionInfoConstructor(const TCompactedPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
-        : TBase(portion, withMetadata, withMetadataBlobs) {
+    void SetAppearanceSnapshot(const TSnapshot snapshot) {
+        AFL_VERIFY(!AppearanceSnapshot);
+        AppearanceSnapshot = snapshot;
+    }
+
+    TCompactedPortionInfoConstructor(const TCompactedPortionInfo& portion, const bool withMetadata)
+        : TBase(portion, withMetadata)
+        , AppearanceSnapshot(portion.AppearanceSnapshot) {
     }
 
     virtual EPortionType GetType() const override {
@@ -180,8 +182,8 @@ public:
         return EPortionType::Written;
     }
 
-    TWrittenPortionInfoConstructor(const TWrittenPortionInfo& portion, const bool withMetadata, const bool withMetadataBlobs)
-        : TBase(portion, withMetadata, withMetadataBlobs)
+    TWrittenPortionInfoConstructor(const TWrittenPortionInfo& portion, const bool withMetadata)
+        : TBase(portion, withMetadata)
         , CommitSnapshot(portion.GetCommitSnapshotOptional())
         , InsertWriteId(portion.GetInsertWriteId()) {
     }

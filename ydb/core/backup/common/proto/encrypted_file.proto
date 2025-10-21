@@ -1,6 +1,8 @@
 syntax = "proto3";
 option cc_enable_arenas = true;
 
+import "ydb/public/api/protos/annotations/sensitive.proto";
+
 package NKikimr.NBackup;
 
 message TExportEncryptedFileHeader {
@@ -11,7 +13,7 @@ message TExportEncryptedFileHeader {
 
 message TEncryptedFileDeserializerState {
     string EncryptionAlgorithm = 1;
-    bytes Key = 2;
+    bytes Key = 2 [(Ydb.sensitive) = true];
     bytes IV = 3;
     uint32 CurrentChunkNumber = 4;
     uint64 BytesProcessed = 5;

@@ -57,13 +57,12 @@ public:
         DataShard.SubscribeNewLocks(ctx);
     }
 
-    void ResetChanges(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc) {
+    void ResetChanges(TDataShardUserDb& userDb, TTransactionContext& txc) {
         userDb.ResetCollectedChanges();
 
-        writeOp.ReleaseTxData(txc);
-
-        if (txc.DB.HasChanges())
+        if (txc.DB.HasChanges()) {
             txc.DB.RollbackChanges();
+        }
     }
 
     bool CheckForVolatileReadDependencies(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
@@ -76,7 +75,8 @@ public:
                 Y_ENSURE(ok, "Unexpected failure to attach TxId# " << writeOp.GetTxId() << " to volatile tx " << txId);
             }
 
-            ResetChanges(userDb, writeOp, txc);
+            ResetChanges(userDb, txc);
+            writeOp.ReleaseTxData(txc);
 
             return true;
         }
@@ -152,18 +152,26 @@ public:
 
         DataShard.IncCounter(COUNTER_TX_TABLET_NOT_READY);
 
-        ResetChanges(userDb, writeOp, txc);
+        ResetChanges(userDb, txc);
+        writeOp.ReleaseTxData(txc);
         return EExecutionStatus::Restart;
     }
 
-    EExecutionStatus OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
-        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
-            return EExecutionStatus::Continue;
-        
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
-        ResetChanges(userDb, writeOp, txc);
-        return EExecutionStatus::Executed;
+    bool OnUniqueConstrainException(TDataShardUserDb& userDb, TWriteOperation& writeOp, TTransactionContext& txc, const TActorContext& ctx) {
+        if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) {
+            return false;
+        }
+
+        if (userDb.GetSnapshotReadConflict()) {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with another transaction.");
+            writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Read conflict with concurrent transaction.");
+        } else {
+            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Conflict with existing key.");
+            writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Conflict with existing key.");
+        }
+
+        ResetChanges(userDb, txc);
+        return true;
     }
 
     void DoUpdateToUserDb(TDataShardUserDb& userDb, const TValidatedWriteTxOperation& validatedOperation, TTransactionContext& txc) {
@@ -179,6 +187,7 @@ public:
 
         TSmallVec<TRawTypeValue> key;
         TSmallVec<NTable::TUpdateOp> ops;
+        const ui32 defaultFilledColumnCount = validatedOperation.GetDefaultFilledColumnCount();
 
         // Main update cycle
 
@@ -189,7 +198,7 @@ public:
             switch (operationType) {
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    userDb.UpsertRow(fullTableId, key, ops);
+                    userDb.UpsertRow(fullTableId, key, ops, defaultFilledColumnCount);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE: {
@@ -211,6 +220,11 @@ public:
                     userDb.UpdateRow(fullTableId, key, ops);
                     break;
                 }
+                case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
+                    FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
+                    userDb.IncrementRow(fullTableId, key, ops);
+                    break;
+                }
                 default:
                     // Checked before in TWriteOperation
                     Y_ENSURE(false, operationType << " operation is not supported now");
@@ -223,7 +237,8 @@ public:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE:
             case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT:
-            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: 
+            case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INCREMENT: {
                 DataShard.IncCounter(COUNTER_WRITE_ROWS, matrix.GetRowCount());
                 DataShard.IncCounter(COUNTER_WRITE_BYTES, matrix.GetBuffer().size());
                 break;
@@ -254,7 +269,7 @@ public:
 
         if (op->IsImmediate()) {
             // Every time we execute immediate transaction we may choose a new mvcc version
-            op->MvccReadWriteVersion.reset();
+            op->CachedMvccVersion.reset();
         }
 
         const TValidatedWriteTx::TPtr& writeTx = writeOp->GetWriteTx();
@@ -294,28 +309,57 @@ public:
         }
 
         if (writeTx->CheckCancelled()) {
-            writeOp->ReleaseTxData(txc);
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Tx was cancelled");
             DataShard.IncCounter(COUNTER_WRITE_CANCELLED);
+            writeOp->ReleaseTxData(txc);
             return EExecutionStatus::Executed;
         }
 
         NMiniKQL::TEngineHostCounters engineHostCounters;
         const ui64 txId = writeTx->GetTxId();
-        const auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(writeOp);
-        
-        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), readVersion, writeVersion, engineHostCounters, TAppData::TimeProvider->Now());
+        const auto mvccVersion = DataShard.GetMvccVersion(writeOp);
+
+        TDataShardUserDb userDb(DataShard, txc.DB, op->GetGlobalTxId(), mvccVersion, engineHostCounters, TAppData::TimeProvider->Now());
         userDb.SetIsWriteTx(true);
         userDb.SetIsImmediateTx(op->IsImmediate());
         userDb.SetLockTxId(writeTx->GetLockTxId());
         userDb.SetLockNodeId(writeTx->GetLockNodeId());
 
-        if (op->HasVolatilePrepareFlag()) {
+        if (op->HasVolatilePrepareFlag() || op->GetRemainReadSets()) {
             userDb.SetVolatileTxId(txId);
         }
 
+        auto mvccSnapshot = writeTx->GetMvccSnapshot();
+        if (mvccSnapshot && !writeTx->GetLockTxId()) {
+            userDb.SetSnapshotVersion(*mvccSnapshot);
+        }
+
+        bool preparedOutReadSets = false;
+        bool keepOutReadSets = writeOp->IsOutRSStored();
+
+        const auto* kqpLocks = writeTx->GetKqpLocks() ? &writeTx->GetKqpLocks().value() : nullptr;
+
+        auto ensureAbortOutReadSets = [&]() -> std::optional<EExecutionStatus> {
+            if (!op->IsImmediate() && !keepOutReadSets) {
+                op->OutReadSets().clear();
+                op->AwaitingDecisions().clear();
+                KqpFillOutReadSets(op->OutReadSets(), kqpLocks, NKikimrTx::TReadSetData::DECISION_ABORT, tabletId);
+                if (!op->OutReadSets().empty()) {
+                    DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+                    preparedOutReadSets = true;
+                }
+                keepOutReadSets = true;
+
+                if (preparedOutReadSets && !op->PreparedOutReadSets().empty()) {
+                    op->SetWaitCompletionFlag(true);
+                    return EExecutionStatus::DelayCompleteNoMoreRestarts;
+                }
+            }
+
+            return std::nullopt;
+        };
+
         try {
-            const auto* kqpLocks = writeTx->GetKqpLocks() ? &writeTx->GetKqpLocks().value() : nullptr;
             const auto& inReadSets = op->InReadSets();
             auto& awaitingDecisions = op->AwaitingDecisions();
             auto& outReadSets = op->OutReadSets();
@@ -365,8 +409,6 @@ public:
                 }
             }
 
-            bool keepOutReadSets = !op->HasVolatilePrepareFlag();
-
             Y_DEFER {
                 // We need to clear OutReadSets and AwaitingDecisions for
                 // volatile transactions, except when we commit them.
@@ -392,6 +434,11 @@ public:
                 auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
                 NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
                 DataShard.SubscribeNewLocks(ctx);
+
+                if (auto status = ensureAbortOutReadSets()) {
+                    return *status;
+                }
+
                 if (locksDb.HasChanges()) {
                     op->SetWaitCompletionFlag(true);
                     return EExecutionStatus::ExecutedNoMoreRestarts;
@@ -401,7 +448,7 @@ public:
 
             const bool isArbiter = op->HasVolatilePrepareFlag() && KqpLocksIsArbiter(tabletId, kqpLocks);
 
-            KqpCommitLocks(tabletId, kqpLocks, sysLocks, writeVersion, userDb);
+            KqpCommitLocks(tabletId, kqpLocks, sysLocks, userDb);
 
             if (writeTx->HasOperations()) {
                 for (validatedOperationIndex = 0; validatedOperationIndex < writeTx->GetOperations().size(); ++validatedOperationIndex) {
@@ -426,29 +473,39 @@ public:
 
             if (Pipeline.AddLockDependencies(op, guardLocks)) {
                 userDb.ResetCollectedChanges();
-                writeOp->ReleaseTxData(txc);
                 if (txc.DB.HasChanges()) {
                     txc.DB.RollbackChanges();
                 }
+                writeOp->ReleaseTxData(txc);
                 return EExecutionStatus::Continue;
             }
 
             // Note: any transaction (e.g. immediate or non-volatile) may decide to commit as volatile due to dependencies
             // Such transactions would have no participants and become immediately committed
             auto commitTxIds = userDb.GetVolatileCommitTxIds();
-            if (commitTxIds) {
+            if (commitTxIds || isArbiter) {
+                if (op->GetRemainReadSets()) {
+                    for (const auto& [key, received] : inReadSets) {
+                        if (received.empty()) {
+                            awaitingDecisions.insert(key.first);
+                        }
+                    }
+                }
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
                     userDb.GetVolatileTxId(),
-                    writeVersion,
+                    mvccVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),
                     participants,
                     userDb.GetChangeGroup(),
                     userDb.GetVolatileCommitOrdered(),
                     isArbiter,
+                    /* disable expectations */ !participants.empty() && !op->HasVolatilePrepareFlag(),
                     txc
                 );
+            } else {
+                awaitingDecisions.clear();
             }
 
             if (userDb.GetPerformedUserReads()) {
@@ -462,8 +519,15 @@ public:
                         DataShard.SendReadSetExpectation(ctx, op->GetStep(), op->GetTxId(), tabletId, target);
                     }
                 }
+            }
+
+            if (!op->IsImmediate() && !keepOutReadSets) {
+                if (op->OutReadSets().empty() && !op->HasVolatilePrepareFlag()) {
+                    KqpFillOutReadSets(outReadSets, kqpLocks, NKikimrTx::TReadSetData::DECISION_COMMIT, tabletId);
+                }
                 if (!op->OutReadSets().empty()) {
                     DataShard.PrepareAndSaveOutReadSets(op->GetStep(), op->GetTxId(), op->OutReadSets(), op->PreparedOutReadSets(), txc, ctx);
+                    preparedOutReadSets = true;
                 }
                 keepOutReadSets = true;
             }
@@ -472,7 +536,7 @@ public:
             AddLocksToResult(writeOp, ctx);
 
             if (!guardLocks.LockTxId) {
-                writeVersion.ToProto(writeResult->Record.MutableCommitVersion());
+                mvccVersion.ToProto(writeResult->Record.MutableCommitVersion());
             }
 
             if (auto changes = std::move(userDb.GetCollectedChanges())) {
@@ -518,16 +582,39 @@ public:
                 );
             }
 
-            writeOp->ReleaseTxData(txc);
-
             // Transaction may have made some changes before it hit the limit,
             // so we need to roll them back.
             if (txc.DB.HasChanges()) {
                 txc.DB.RollbackChanges();
             }
+
+            if (auto status = ensureAbortOutReadSets()) {
+                return *status;
+            }
+
+            writeOp->ReleaseTxData(txc);
             return EExecutionStatus::Executed;
         } catch (const TUniqueConstrainException&) {
-            return OnUniqueConstrainException(userDb, *writeOp, txc, ctx);
+            if (!OnUniqueConstrainException(userDb, *writeOp, txc, ctx)) {
+                return EExecutionStatus::Continue;
+            }
+
+            if (auto status = ensureAbortOutReadSets()) {
+                return *status;
+            }
+
+            writeOp->ReleaseTxData(txc);
+            return EExecutionStatus::Executed;
+        } catch (const TKeySizeConstraintException&) {
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, TStringBuilder() << "Size of key in secondary index is more than " << NLimits::MaxWriteKeySize);
+            txc.DB.RollbackChanges();
+            LOG_ERROR_S(ctx, NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Operation " << *writeOp << " at " << DataShard.TabletID() << " aborting. Size of key of secondary index is too big.");
+
+            if (auto status = ensureAbortOutReadSets()) {
+                return *status;
+            }
+
+            return EExecutionStatus::Executed;
         }
 
         Pipeline.AddCommittingOp(op);
@@ -538,7 +625,7 @@ public:
             op->SetWaitCompletionFlag(true);
         }
 
-        if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+        if (preparedOutReadSets && !op->PreparedOutReadSets().empty()) {
             return EExecutionStatus::DelayCompleteNoMoreRestarts;
         }
 
@@ -546,7 +633,7 @@ public:
     }
 
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
-        if (op->HasVolatilePrepareFlag() && !op->PreparedOutReadSets().empty()) {
+        if (!op->PreparedOutReadSets().empty()) {
             DataShard.SendReadSets(ctx, std::move(op->PreparedOutReadSets()));
         }
     }

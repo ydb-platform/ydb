@@ -21,9 +21,9 @@ SIZE(LARGE)
 TAG(ya:fat)
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:24 cpu:4)
+    TAG(ya:not_autocheck)
 ELSE()
-    REQUIREMENTS(ram:16 cpu:2)
+    REQUIREMENTS(ram:32 cpu:all)
 ENDIF()
 
 END()

@@ -17,6 +17,7 @@ RECURSE(
     global_plugins
     grpc
     http_proxy
+    intersection_tree
     keys
     lockfree_bucket
     logger
@@ -29,15 +30,18 @@ RECURSE(
     planner
     pretty_types_print
     protobuf_printer
+    range_treap
     query_actor
     schlab
     security
     shop
     signal_backtrace
     signals
+    slide_limiter
     table_creator
     testlib
     time_series_vec
+    union_copy_set
     wilson_ids
     workload
     workload

@@ -30,7 +30,7 @@
 # =======================
 
 KEEP     COPYRIGHT_SERVICE_LABEL 0cda88d047ce1cbd63afdf716f1ace43
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         Copyright (c) 2019 Yibo Cai
         Copyright 2022 Google LLC
@@ -273,7 +273,7 @@ BELONGS ya.make
         src/google/protobuf/descriptor.cc [544:544]
 
 KEEP     COPYRIGHT_SERVICE_LABEL e618dd164932f955bb8121f5f486e841
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         Copyright (c) 2019 Yibo Cai
         Copyright 2022 Google LLC

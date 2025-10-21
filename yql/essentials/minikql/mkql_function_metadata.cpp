@@ -6,12 +6,13 @@ namespace NMiniKQL {
 
 TKernelFamilyBase::TKernelFamilyBase(const arrow::compute::FunctionOptions* functionOptions)
     : TKernelFamily(functionOptions)
-{}
+{
+}
 
 const TKernel* TKernelFamilyBase::FindKernel(const NUdf::TDataTypeId* argTypes, size_t argTypesCount, NUdf::TDataTypeId returnType) const {
     std::vector<NUdf::TDataTypeId> args(argTypes, argTypes + argTypesCount);
-    auto it = KernelMap.find({ args, returnType });
-    if (it == KernelMap.end()) {
+    auto it = KernelMap_.find({args, returnType});
+    if (it == KernelMap_.end()) {
         return nullptr;
     }
 
@@ -20,7 +21,7 @@ const TKernel* TKernelFamilyBase::FindKernel(const NUdf::TDataTypeId* argTypes, 
 
 TVector<const TKernel*> TKernelFamilyBase::GetAllKernels() const {
     TVector<const TKernel*> ret;
-    for (const auto& k : KernelMap) {
+    for (const auto& k : KernelMap_) {
         ret.emplace_back(k.second.get());
     }
 
@@ -28,8 +29,8 @@ TVector<const TKernel*> TKernelFamilyBase::GetAllKernels() const {
 }
 
 void TKernelFamilyBase::Adopt(const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType, std::unique_ptr<TKernel>&& kernel) {
-    KernelMap.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
+    KernelMap_.emplace(std::make_pair(argTypes, returnType), std::move(kernel));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

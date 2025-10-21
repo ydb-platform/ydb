@@ -1,8 +1,7 @@
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <google/protobuf/text_format.h>
 
@@ -256,6 +255,7 @@ Y_UNIT_TEST_SUITE(TBSVWithReboots) {
 
     Y_UNIT_TEST(SimultaneousCreateDropNbs) { //+
         TTestWithReboots t;
+        t.GetTestEnvOptions().EnableRealSystemViewPaths(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             {
                 TInactiveZone inactive(activeZone);

@@ -86,6 +86,7 @@ class State(Enum):
     IN_PN = auto()  # inside parameter name eg. :name
     IN_CO = auto()  # inside inline comment eg. --
     IN_DQ = auto()  # inside dollar-quoted string eg. $$...$$
+    IN_DP = auto()  # inside dollar parameter eg. $1
 
 
 def to_statement(query):
@@ -118,6 +119,9 @@ def to_statement(query):
                 output_query.append(c)
                 if prev_c == "$":
                     state = State.IN_DQ
+                elif next_c.isdigit():
+                    state = State.IN_DP
+                    placeholders.append("")
             elif c == ":" and next_c not in ":=" and prev_c != ":":
                 state = State.IN_PN
                 placeholders.append("")
@@ -156,6 +160,19 @@ def to_statement(query):
                 except ValueError:
                     output_query.append(f"${len(placeholders)}")
 
+        elif state == State.IN_DP:
+            placeholders[-1] += c
+            output_query.append(c)
+            if next_c is None or not next_c.isdigit():
+                try:
+                    placeholders[-1] = int(placeholders[-1]) - 1
+                except ValueError:
+                    raise InterfaceError(
+                        f"Expected an integer for the $ placeholder but found "
+                        f"'{placeholders[-1]}'"
+                    )
+                state = State.OUT
+
         elif state == State.IN_CO:
             output_query.append(c)
             if c == "\n":
@@ -176,15 +193,19 @@ def to_statement(query):
             )
 
     def make_vals(args):
+        arg_list = [v for _, v in args.items()]
         vals = []
         for p in placeholders:
-            try:
-                vals.append(args[p])
-            except KeyError:
-                raise InterfaceError(
-                    f"There's a placeholder '{p}' in the query, but no matching "
-                    f"keyword argument."
-                )
+            if isinstance(p, int):
+                vals.append(arg_list[p])
+            else:
+                try:
+                    vals.append(args[p])
+                except KeyError:
+                    raise InterfaceError(
+                        f"There's a placeholder '{p}' in the query, but no matching "
+                        f"keyword argument."
+                    )
         return tuple(vals)
 
     return "".join(output_query), make_vals
@@ -257,6 +278,7 @@ __all__ = [
     "BYTES",
     "CHAR",
     "CHAR_ARRAY",
+    "Connection",
     "DATE",
     "DatabaseError",
     "Error",

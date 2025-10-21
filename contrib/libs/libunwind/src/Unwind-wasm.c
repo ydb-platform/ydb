@@ -103,8 +103,7 @@ _LIBUNWIND_EXPORT uintptr_t _Unwind_GetIP(struct _Unwind_Context *context) {
 }
 
 /// Not used in Wasm.
-_LIBUNWIND_EXPORT void _Unwind_SetIP(struct _Unwind_Context *context __attribute__((unused)),
-                                     uintptr_t value __attribute__((unused))) {}
+_LIBUNWIND_EXPORT void _Unwind_SetIP(struct _Unwind_Context *, uintptr_t) {}
 
 /// Called by personality handler to get LSDA for current frame.
 _LIBUNWIND_EXPORT uintptr_t
@@ -116,8 +115,7 @@ _Unwind_GetLanguageSpecificData(struct _Unwind_Context *context) {
 }
 
 /// Not used in Wasm.
-_LIBUNWIND_EXPORT uintptr_t
-_Unwind_GetRegionStart(struct _Unwind_Context *context __attribute__((unused))) {
+_LIBUNWIND_EXPORT uintptr_t _Unwind_GetRegionStart(struct _Unwind_Context *) {
   return 0;
 }
 
@@ -129,10 +127,4 @@ _LIBUNWIND_EXPORT _Unwind_Reason_Code
 _Unwind_RaiseException(_Unwind_Exception *exception_object __attribute__((unused))) {
   abort();
 }
-
-#if !defined(NDEBUG) && defined(STANDALONE_WASM)
-void __throw_exception_with_stack_trace(_Unwind_Exception* ex) {
-  _Unwind_RaiseException(ex);
-}
-#endif
 #endif // defined(__WASM_EXCEPTIONS__)

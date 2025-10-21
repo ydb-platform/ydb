@@ -25,7 +25,7 @@ def post_install(self):
 libcxxrt = CMakeNinjaNixProject(
     arcdir="contrib/libs/cxxsupp/libcxxrt",
     nixattr="libcxxrt",
-    owners=["g:cpp-committee", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     install_subdir="src",
     inclink={"include": {"cxxabi.h"}},
     keep_paths=[

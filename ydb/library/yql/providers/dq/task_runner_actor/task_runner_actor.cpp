@@ -274,7 +274,10 @@ private:
                         // RPC reader fallback to YT
                         fallback = true;
                         rpcReaderFalledBack = true;
-                    } else if (line.Contains("Attachments stream write timed out") || line.Contains("No alive peers found")) {
+                    } else if (rpcReaderFalledBack && (line.Contains("Attachments stream write timed out") 
+                                            || line.Contains("No alive peers found") || line.Contains("Connection reset by peer") 
+                                            || line.Contains("Connection timed out")))
+                    {
                         // RPC reader DQ retry
                         retry = true;
                     } else if (line.Contains("Transaction") && line.Contains("aborted")) {
@@ -422,7 +425,7 @@ private:
         YQL_ENSURE(!batch.IsWide());
 
         auto* source = TaskRunner->GetSource(index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion);
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), DataTransportVersion, ValuePackerVersion);
         TDqSerializedBatch serialized = dataSerializer.Serialize(batch, source->GetInputType());
 
         Invoker->Invoke([serialized=std::move(serialized), taskRunner=TaskRunner, actorSystem, selfId, cookie, parentId=ParentId, space, finish, index, settings=Settings, stageId=StageId]() mutable {
@@ -508,15 +511,18 @@ private:
         auto guard = TaskRunner->BindAllocator();
         NKikimr::NMiniKQL::TUnboxedValueBatch batch;
         auto sink = TaskRunner->GetSink(ev->Get()->Index);
-        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(), TaskRunner->GetHolderFactory(), (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion());
+        TDqDataSerializer dataSerializer(TaskRunner->GetTypeEnv(),
+                                         TaskRunner->GetHolderFactory(),
+                                         (NDqProto::EDataTransportVersion)ev->Get()->Batch.Proto.GetTransportVersion(),
+                                         FromProto(ev->Get()->Batch.Proto.GetValuePackerVersion()));
         dataSerializer.Deserialize(std::move(ev->Get()->Batch), sink->GetOutputType(), batch);
 
         Parent->SinkSend(
             ev->Get()->Index,
             std::move(batch),
             std::move(ev->Get()->Checkpoint),
-            ev->Get()->CheckpointSize,
             ev->Get()->Size,
+            ev->Get()->CheckpointSize,
             ev->Get()->Finished,
             ev->Get()->Changed);
     }
@@ -586,10 +592,10 @@ private:
         for (auto inputId = 0; inputId < inputs.size(); inputId++) {
             auto& input = inputs[inputId];
             if (input.HasSource()) {
-                Sources.emplace(inputId);
+                Sources.emplace_back(inputId);
             } else {
                 for (auto& channel : input.GetChannels()) {
-                    Inputs.emplace(channel.GetId());
+                    Inputs.emplace_back(channel.GetId());
                 }
             }
         }
@@ -609,6 +615,7 @@ private:
             Settings->Dispatch(taskMeta.GetSettings());
             Settings->FreezeDefaults();
             DataTransportVersion = Settings->GetDataTransportVersion();
+            ValuePackerVersion = FromProto(Settings->GetValuePackerVersion());
             StageId = taskMeta.GetStageId();
 
             NDq::TDqTaskSettings settings(&ev->Get()->Task);
@@ -753,10 +760,11 @@ private:
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
     bool Local;
-    THashSet<ui32> Inputs;
-    THashSet<ui32> Sources;
+    TVector<ui32> Inputs;
+    TVector<ui32> Sources;
     TIntrusivePtr<TDqConfiguration> Settings;
     NDqProto::EDataTransportVersion DataTransportVersion;
+    NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
     ui64 StageId;
     TWorkerRuntimeData* RuntimeData;
     TString ClusterName;
@@ -781,7 +789,6 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const TTxId& txId,
         ui64 taskId,
-        THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
         auto* actor = new TTaskRunnerActor(parent, alloc, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);

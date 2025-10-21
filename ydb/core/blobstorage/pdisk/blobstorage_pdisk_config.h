@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
@@ -36,7 +37,7 @@ struct TPDiskSchedulerConfig {
     double MaxChunkWritesDurationPerCycleMs = 1;
 
     TString ToString(bool isMultiline) const {
-        const char *x = isMultiline ? "\n" : "";
+        const char *x = isMultiline ? "\n " : "";
         TStringStream str;
         str << "{TPDiskSchedulerConfig" << x;
         str << " BytesSchedulerWeight# " << BytesSchedulerWeight << x;
@@ -53,7 +54,7 @@ struct TPDiskSchedulerConfig {
         str << " MaxChunkReadsDurationPerCycleMs# " << MaxChunkReadsDurationPerCycleMs << x;
         str << " MaxChunkWritesPerCycle# " << MaxChunkWritesPerCycle << x;
         str << " MaxChunkWritesDurationPerCycleMs# " << MaxChunkWritesDurationPerCycleMs << x;
-        str << "}" << x;
+        str << "}";
         return str.Str();
     }
 
@@ -136,7 +137,9 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 MaxQueuedCompletionActions;
     bool UseSpdkNvmeDriver;
 
-    ui64 ExpectedSlotCount = 0;
+    // Next 2 are either user-defined or inferred from drive size
+    ui32 ExpectedSlotCount = 0;
+    ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -168,6 +171,8 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseNoopScheduler = false;
 
     bool PlainDataChunks = false;
+
+    bool SeparateHugePriorities = false;
 
     bool MetadataOnly = false;
 
@@ -274,7 +279,7 @@ struct TPDiskConfig : public TThrRefBase {
     TString ToString(bool isMultiline) const {
         TStringStream str;
         const char *x = isMultiline ? "\n" : "";
-        str << "{TPDiskConfg" << x;
+        str << "{TPDiskConfig" << x;
         str << " Path# \"" << Path << "\"" << x;
         str << " ExpectedPath# \"" << ExpectedPath << "\"" << x;
         str << " ExpectedSerial# \"" << ExpectedSerial << "\"" << x;
@@ -316,6 +321,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " BufferPoolBufferCount# " << BufferPoolBufferCount << x;
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
         str << " InsaneLogChunksMultiplier# " << InsaneLogChunksMultiplier << x;
@@ -328,6 +334,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " CompletionThreadsCount# " << CompletionThreadsCount << x;
         str << " UseNoopScheduler# " << (UseNoopScheduler ? "true" : "false") << x;
         str << " PlainDataChunks# " << PlainDataChunks << x;
+        str << " SeparateHugePriorities# " << SeparateHugePriorities << x;
         str << "}";
         return str.Str();
     }
@@ -423,6 +430,24 @@ struct TPDiskConfig : public TThrRefBase {
         if (cfg->HasPlainDataChunks()) {
             PlainDataChunks = cfg->GetPlainDataChunks();
         }
+
+        if (cfg->HasSlotSizeInUnits()) {
+            SlotSizeInUnits = cfg->GetSlotSizeInUnits();
+        }
+
+        if (cfg->HasSeparateHugePriorities()) {
+            SeparateHugePriorities = cfg->GetSeparateHugePriorities();
+        }
+    }
+
+    ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
+        ui32 vu = groupSizeInUnits ? groupSizeInUnits : 1;
+        ui32 pu = slotSizeInUnits ? slotSizeInUnits : 1;
+        return int(vu / pu) + !!(vu % pu);
     }
 };
 

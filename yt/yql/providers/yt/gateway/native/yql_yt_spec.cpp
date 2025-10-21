@@ -85,7 +85,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps,
-    const TSet<TString>& addSecTags)
+    const TSet<TString>& addSecTags,
+    const TVector<TString>& layerPaths)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -406,6 +407,15 @@ void FillSpec(NYT::TNode& spec,
         }
     }
 
+    auto probabily = TString(std::to_string(settings->_EnforceRegexpProbabilityFail.Get().GetOrElse(0)));
+    if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+        spec["mapper"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
+    if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+        spec["reducer"]["environment"]["YQL_RE2_REGEXP_PROBABILITY_FAIL"] = probabily;
+    }
+
     if (settings->SuspendIfAccountLimitExceeded.Get(cluster).GetOrElse(false)) {
         spec["suspend_operation_if_account_limit_exceeded"] = true;
     }
@@ -473,6 +483,10 @@ void FillSpec(NYT::TNode& spec,
         spec["user_file_columnar_statistics"]["enabled"] = settings->TableContentColumnarStatistics.Get(cluster).GetOrElse(true);
     }
 
+    if (layerPaths.size() && settings->LayerPaths.Get(cluster)) {
+        throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+    }
+
     if (auto val = settings->LayerPaths.Get(cluster)) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
@@ -484,6 +498,21 @@ void FillSpec(NYT::TNode& spec,
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: *val) {
                 layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+    }
+
+    if (layerPaths.size()) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
+            }
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
             }
         }
     }
@@ -501,7 +530,7 @@ void FillSpec(NYT::TNode& spec,
         spec["max_speculative_job_count_per_task"] = i64(*val);
     }
 
-    if (auto val = settings->NetworkProject.Get(cluster)) {
+    if (auto val = settings->NetworkProject.Get(cluster).OrElse(settings->StaticNetworkProject.Get(cluster))) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             spec["mapper"]["network_project"] = *val;
         }
@@ -543,7 +572,11 @@ void CheckSpecForSecretsImpl(
 
     YQL_ENSURE(secretMasker);
 
-    auto maskedSpecStr = NYT::NodeToYsonString(spec);
+    // Secure vault is guaranteed not to be exposed by YT
+    auto cleanSpec = spec.AsMap();
+    cleanSpec.erase("secure_vault");
+    auto maskedSpecStr = NYT::NodeToYsonString(cleanSpec);
+
     auto secrets = secretMasker->Mask(maskedSpecStr);
     if (!secrets.empty()) {
         auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);
@@ -609,6 +642,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         spec.AddEnvironment("LD_LIBRARY_PATH", ".");
     }
 
+    if (settings->UseDefaultArrowAllocatorInJobs.Get().GetOrElse(false)) {
+        spec.AddEnvironment("YQL_USE_DEFAULT_ARROW_ALLOCATOR", "1");
+    }
 
     if (!localRun) {
         for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {
@@ -700,9 +736,10 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
 
     if (defaultMemoryLimit || fileMemUsage || llvmMemUsage || extraUsage.Memory || tmpFsSize) {
         const ui64 memIoBuffers = YQL_JOB_CODEC_MEM * (static_cast<size_t>(!execCtx.InputTables_.empty()) + execCtx.OutTables_.size());
+        const ui64 arrowMemoryPoolReserve = (execCtx.BlockStatus != TOperationProgress::EOpBlockStatus::None ? YQL_ARROW_MEMORY_POOL_RESERVE : 0);
         const ui64 finalMemLimit = Max<ui64>(
             defaultMemoryLimit,
-            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers,
+            128_MB + fileMemUsage + extraUsage.Memory + tmpFsSize + memIoBuffers + arrowMemoryPoolReserve,
             llvmMemUsage + memIoBuffers // LLVM consumes memory only once on job start, but after IO initialization
         );
         YQL_CLOG(DEBUG, ProviderYt) << "Job memory limit: " << finalMemLimit
@@ -712,6 +749,7 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
             << ", extra: " << extraUsage.Memory
             << ", extra tmpfs: " << tmpFsSize
             << ", I/O buffers: " << memIoBuffers
+            << ", Arrow pool reserve: " << arrowMemoryPoolReserve
             << ")";
         spec.MemoryLimit(static_cast<i64>(finalMemLimit));
     }

@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -87,8 +87,9 @@ const TImportFromS3Response::TMetadata& TImportFromS3Response::Metadata() const 
     return Metadata_;
 }
 
-TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TStatus&& status, const ::Ydb::Import::ListObjectsInS3ExportResult& proto)
+TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TStatus&& status, const Ydb::Import::ListObjectsInS3ExportResult& proto)
     : TStatus(std::move(status))
+    , Proto_(std::make_unique<Ydb::Import::ListObjectsInS3ExportResult>(proto))
 {
     Items_.reserve(proto.items_size());
     for (const auto& item : proto.items()) {
@@ -100,8 +101,34 @@ TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TStatus&& status, con
     NextPageToken_ = proto.next_page_token();
 }
 
+TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(const TListObjectsInS3ExportResult& result)
+    : TStatus(result)
+    , Items_(result.Items_)
+    , NextPageToken_(result.NextPageToken_)
+    , Proto_(std::make_unique<Ydb::Import::ListObjectsInS3ExportResult>(*result.Proto_))
+{
+}
+
+TListObjectsInS3ExportResult::TListObjectsInS3ExportResult(TListObjectsInS3ExportResult&&) = default;
+
+TListObjectsInS3ExportResult::~TListObjectsInS3ExportResult() = default;
+
+TListObjectsInS3ExportResult& TListObjectsInS3ExportResult::operator=(TListObjectsInS3ExportResult&&) = default;
+
+TListObjectsInS3ExportResult& TListObjectsInS3ExportResult::operator=(const TListObjectsInS3ExportResult& result) {
+    TStatus::operator=(result);
+    Items_ = result.Items_;
+    NextPageToken_ = result.NextPageToken_;
+    Proto_ = std::make_unique<Ydb::Import::ListObjectsInS3ExportResult>(*result.Proto_);
+    return *this;
+}
+
 const std::vector<TListObjectsInS3ExportResult::TItem>& TListObjectsInS3ExportResult::GetItems() const {
     return Items_;
+}
+
+const Ydb::Import::ListObjectsInS3ExportResult& TListObjectsInS3ExportResult::GetProto() const {
+    return *Proto_;
 }
 
 void TListObjectsInS3ExportResult::Out(IOutputStream& out) const {
@@ -233,6 +260,10 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
 
     if (settings.NoACL_) {
         settingsProto.set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SkipChecksumValidation_) {
+        settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
 
     if (settings.SourcePrefix_) {

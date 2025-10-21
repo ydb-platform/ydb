@@ -458,7 +458,7 @@ public:
             // TODO: !imp error if empty
             auto& config = *result.add_config();
             auto& identity = *config.mutable_identity();
-            identity.set_version(*metadata.Version);
+            identity.set_version(metadata.Version.value_or(0));
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_main();
             config.set_config(conf);
@@ -469,7 +469,7 @@ public:
             // TODO: !imp error if empty
             auto& config = *result.add_config();
             auto& identity = *config.mutable_identity();
-            identity.set_version(*metadata.Version);
+            identity.set_version(metadata.Version.value_or(0));
             identity.set_cluster(AppData()->ClusterName);
             identity.mutable_storage();
             config.set_config(conf);

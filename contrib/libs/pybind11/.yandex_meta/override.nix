@@ -9,5 +9,6 @@ pkgs: attrs: with pkgs; with attrs; rec {
   };
 
   patches = [];
-}
 
+  postPatch = "";
+}

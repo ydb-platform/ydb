@@ -17,13 +17,13 @@ class TestClickHouse:
         conn_name = f'conn_{table_name}'
         query_name = f'query_{table_name}'
 
-        fq_client.create_clickhouse_connection(
+        connection_id = fq_client.create_clickhouse_connection(
             name=conn_name,
             database_name=settings.clickhouse.dbname,
             database_id='clickhouse_cluster_id',
             login=settings.clickhouse.username,
             password=settings.clickhouse.password,
-        )
+        ).result.connection_id
 
         sql = fR'''
             SELECT *
@@ -43,3 +43,5 @@ class TestClickHouse:
         assert result_set.rows[0].items[0].int32_value == 1
         assert result_set.rows[1].items[0].int32_value == 2
         assert result_set.rows[2].items[0].int32_value == 3
+
+        fq_client.delete_connection(connection_id)

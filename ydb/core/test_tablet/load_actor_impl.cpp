@@ -26,14 +26,23 @@ namespace NKikimr::NTestShard {
         }
 
         auto *appData = AppData();
-        appData->Icb->RegisterSharedControl(DisableWrites, "TestShardControls.DisableWrites");
+        TControlBoard::RegisterSharedControl(DisableWrites, appData->Icb->TestShardControls.DisableWrites);
     }
 
     void TLoadActor::ClearKeys() {
         for (auto& [key, info] : Keys) {
-            Y_ABORT_UNLESS(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
-                    ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
-                    : info.ConfirmedKeyIndex == Max<size_t>());
+            auto makeError = [&] {
+                TStringBuilder sb;
+                sb << "Key# " << key << " ConfirmedKeyIndex# " << info.ConfirmedKeyIndex
+                    << " ConfirmedState# " << info.ConfirmedState << " PendingState# " << info.PendingState;
+                if (info.ConfirmedKeyIndex != Max<size_t>()) {
+                    sb << " KeyByIndex# " << ConfirmedKeys[info.ConfirmedKeyIndex];
+                }
+                return TString(sb);
+            };
+            Y_VERIFY_S(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED
+                ? info.ConfirmedKeyIndex < ConfirmedKeys.size() && ConfirmedKeys[info.ConfirmedKeyIndex] == key
+                : info.ConfirmedKeyIndex == Max<size_t>(), makeError());
             info.ConfirmedKeyIndex = Max<size_t>();
         }
         Keys.clear();
@@ -46,6 +55,7 @@ namespace NKikimr::NTestShard {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerConnect(Settings.GetStorageServerHost(),
                 Settings.GetStorageServerPort()));
             Send(TabletActorId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
+            IssuedConnect = true;
         } else {
             RunValidation(true);
         }
@@ -53,7 +63,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::PassAway() {
-        if (Settings.HasStorageServerHost()) {
+        if (IssuedConnect) {
             Send(MakeStateServerInterfaceActorId(), new TEvStateServerDisconnect);
         }
         if (ValidationActorId) {
@@ -63,7 +73,7 @@ namespace NKikimr::NTestShard {
     }
 
     void TLoadActor::HandleWakeup() {
-        STLOG(PRI_NOTICE, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
+        STLOG(PRI_ERROR, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
     }
 
@@ -71,7 +81,7 @@ namespace NKikimr::NTestShard {
         if (ValidationActorId) { // do nothing while validation is in progress
             return;
         }
-        if (StallCounter > 500) {
+        if (Settings.HasStallCounter() && StallCounter > Settings.GetStallCounter()) {
             if (WritesInFlight.empty() && PatchesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() &&
                     TransitionInFlight.empty()) {
                 StallCounter = 0;
@@ -92,7 +102,7 @@ namespace NKikimr::NTestShard {
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites) {
+            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites && BytesOfData <= Settings.GetMaxDataBytes()) {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
@@ -102,7 +112,7 @@ namespace NKikimr::NTestShard {
                     }
                     if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() || !Settings.GetResetWritePeriodOnFull()) {
                         NextWriteTimestamp += GenerateRandomInterval(Settings.GetWritePeriods());
-                        canWriteMore = NextWriteTimestamp <= now;
+                        canWriteMore = NextWriteTimestamp <= now && BytesOfData <= Settings.GetMaxDataBytes();
                     } else {
                         NextWriteTimestamp = TMonotonic::Max();
                     }
@@ -151,6 +161,7 @@ namespace NKikimr::NTestShard {
         if (ev->Get()->Connected) {
             RunValidation(true);
         } else {
+            STLOG(PRI_ERROR, TEST_SHARD, TS33, "state server not connected", (TabletId, TabletId));
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
             PassAway();
         }
@@ -207,7 +218,7 @@ namespace NKikimr::NTestShard {
                 const TString& key = nh.mapped();
                 const auto it = Keys.find(key);
                 Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                STLOG(PRI_WARN, TEST_SHARD, TS27, "patch failed", (TabletId, TabletId), (Key, key));
+                STLOG(PRI_WARN, TEST_SHARD, TS34, "patch failed", (TabletId, TabletId), (Key, key));
                 RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
             }
             if (const auto it = DeletesInFlight.find(record.GetCookie()); it != DeletesInFlight.end()) {

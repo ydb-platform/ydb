@@ -360,6 +360,10 @@ class TCdcWorker
             const auto partitionId = partition.GetPartitionId();
             const auto tabletId = partition.GetTabletId();
 
+            if (NKikimrPQ::ETopicPartitionStatus::Active != partition.GetStatus()) {
+                continue;
+            }
+
             auto it = Workers.find(partitionId);
             if (it != Workers.end()) {
                 workers.emplace(partitionId, it->second);

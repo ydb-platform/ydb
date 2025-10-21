@@ -24,4 +24,4 @@ class SelfDescribingValue(SelfDescribing):
 
     def describe_to(self, description):
         """Generates a description of the value."""
-        description.append_value(self.value)
+        description.append_description_of(self.value)

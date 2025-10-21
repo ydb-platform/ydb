@@ -413,13 +413,18 @@ private:
             }
 
             try {
+                // Note: The Arrow format actually allows reading and writing uninitialized memory.
+                // This is permitted because any "meaningful" access to the data uses a validity bitmask,
+                // which indicates whether each byte is valid.
+                YQL_MSAN_FREEZE_AND_SCOPED_UNPOISON(firstBlock->Buffer_.Get(), firstBlock->LastRecordBoundary_.value_or(firstBlock->Avail_));
                 Target_.Write(firstBlock->Buffer_.Get(), firstBlock->LastRecordBoundary_.value_or(firstBlock->Avail_));
                 if (firstBlock->LastRecordBoundary_) {
                     if (OnRecordBoundaryCallback_) {
                         OnRecordBoundaryCallback_();
                     }
                     if (firstBlock->Avail_ > *firstBlock->LastRecordBoundary_) {
-                        Target_.Write(firstBlock->Buffer_.Get() + *firstBlock->LastRecordBoundary_, firstBlock->Avail_ - *firstBlock->LastRecordBoundary_);
+                        Target_.Write(firstBlock->Buffer_.Get() + *firstBlock->LastRecordBoundary_,
+                                      firstBlock->Avail_ - *firstBlock->LastRecordBoundary_);
                     }
                 }
 
@@ -1605,6 +1610,9 @@ public:
 
     void HandleTableSwitch() {
         auto& decoder = Specs_.Inputs[TableIndex_];
+        for (auto& defVal : decoder->DefaultValues) {
+            YQL_ENSURE(!defVal, "Default values are not supported by Arrow decoder");
+        }
 
         ColumnConverters_.clear();
         ColumnConverters_.reserve(decoder->FieldsVec.size());
@@ -1618,6 +1626,8 @@ public:
 
     void Reset(bool hasRangeIndices, ui32 tableIndex, bool ignoreStreamTableIndex) override {
         TDecoder::Reset(hasRangeIndices, tableIndex, ignoreStreamTableIndex);
+
+        InputStream_->Reset();
         HandleTableSwitch();
     }
 
@@ -1788,7 +1798,9 @@ void TMkqlReaderImpl::Next() {
 
     // Unretrieable part
     auto& decoder = *Specs_->Inputs[Decoder_->TableIndex_];
-    if (Specs_->UseSkiff_) {
+    if (Specs_->UseBlockInput_) {
+        return;
+    } else if (Specs_->UseSkiff_) {
         if (decoder.OthersStructIndex && *decoder.OthersStructIndex != Max<ui32>()) {
             items[*decoder.OthersStructIndex] = BuildOthers(decoder, *others);
         }
@@ -1827,9 +1839,7 @@ void TMkqlReaderImpl::Next() {
         }
     }
 
-    if (Decoder_->HandlesSysColumns_) {
-        return;
-    }
+    YQL_ENSURE(!Decoder_->HandlesSysColumns_);
 
     if (decoder.FillSysColumnPath) {
         items[*decoder.FillSysColumnPath] = Specs_->TableNames.at(Decoder_->TableIndex_);

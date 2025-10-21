@@ -64,7 +64,7 @@ class TopicReaderSync:
     def __del__(self):
         if not self._closed:
             try:
-                logger.warning("Topic reader was not closed properly. Consider using method close().")
+                logger.debug("Topic reader was not closed properly. Consider using method close().")
                 self.close(flush=False)
             except BaseException:
                 logger.warning("Something went wrong during reader close in __del__")
@@ -204,3 +204,7 @@ class TopicReaderSync:
     def _check_closed(self):
         if self._closed:
             raise TopicReaderClosedError()
+
+    @property
+    def read_session_id(self) -> Optional[str]:
+        return self._async_reader.read_session_id

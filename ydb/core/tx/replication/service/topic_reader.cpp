@@ -28,6 +28,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
+        CreatingReadSessionInProgress = true;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
@@ -37,8 +38,13 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
         ReadSession = ev->Get()->Result;
+        CreatingReadSessionInProgress = false;
         LOG_D("Create read session"
             << ": session# " << ReadSession);
+
+        if (StoppingInProgress) {
+            return PassAway();
+        }
 
         Y_ABORT_UNLESS(Worker);
         Send(Worker, new TEvWorker::TEvHandshake());
@@ -84,17 +90,12 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
 
-        Y_ABORT_UNLESS(YdbProxy);
-        Y_ABORT_UNLESS(ReadSessionId);
+        if (!YdbProxy || !ReadSessionId) {
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+        }
 
-        auto settings = NYdb::NTopic::TCommitOffsetSettings()
-            .ReadSessionId(ReadSessionId);
-
-        const auto& topicName = Settings.GetBase().Topics_.at(0).Path_;
-        const auto partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
-        const auto& consumerName = Settings.GetBase().ConsumerName_;
-
-        Send(YdbProxy, new TEvYdbProxy::TEvCommitOffsetRequest(topicName, partitionId, consumerName, ev->Get()->Offset, std::move(settings)));
+        CommittedOffset = ev->Get()->Offset;
+        Send(YdbProxy, CreateCommitOffsetRequest().release());
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
@@ -102,8 +103,22 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             LOG_W("Handle " << ev->Get()->ToString());
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         } else {
-            LOG_D("Handle " << ev->Get()->ToString());
+            LOG_D("Handle " << CommittedOffset << " " << ev->Get()->ToString());
+            if (CommittedOffset) {
+                Send(ReadSession, CreateCommitOffsetRequest().release());
+            }
         }
+    }
+
+    std::unique_ptr<TEvYdbProxy::TEvCommitOffsetRequest> CreateCommitOffsetRequest() {
+        auto settings = NYdb::NTopic::TCommitOffsetSettings()
+            .ReadSessionId(ReadSessionId);
+
+        const auto& topicName = Settings.GetBase().Topics_.at(0).Path_;
+        const auto partitionId = Settings.GetBase().Topics_.at(0).PartitionIds_.at(0);
+        const auto& consumerName = Settings.GetBase().ConsumerName_;
+
+        return std::make_unique<TEvYdbProxy::TEvCommitOffsetRequest>(topicName, partitionId, consumerName, CommittedOffset, std::move(settings));
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
@@ -111,9 +126,10 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
+        case NYdb::EStatus::BAD_REQUEST:
             return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
-            return Leave(TEvWorker::TEvGone::UNAVAILABLE);
+            return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
         }
     }
 
@@ -126,6 +142,11 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void PassAway() override {
+        if (CreatingReadSessionInProgress) {
+            StoppingInProgress = true;
+            return;
+        }
+
         if (const auto& actorId = std::exchange(ReadSession, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -171,6 +192,10 @@ private:
     TActorId Worker;
     TActorId ReadSession;
     TString ReadSessionId;
+    ui64 CommittedOffset = 0;
+
+    bool CreatingReadSessionInProgress = false;
+    bool StoppingInProgress = false;
 
 }; // TRemoteTopicReader
 

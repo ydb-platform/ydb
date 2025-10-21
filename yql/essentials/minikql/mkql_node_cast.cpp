@@ -1,37 +1,38 @@
 #include "mkql_node_cast.h"
 
-#define MKQL_AS_VALUE(name, suffix)                                      \
-    template <>                                                          \
-    T##name##suffix*                                                     \
-    AsValue(TRuntimeNode node, const TSourceLocation& location) {        \
-        MKQL_ENSURE_WITH_LOC(                                            \
-                location,                                                \
-                node.HasValue() && node.GetStaticType()->Is##name(),     \
-                "Expected value of T" #name #suffix <<                   \
-                " but got " << node.GetStaticType()->GetKindAsStr());    \
-        return static_cast<T##name##suffix*>(node.GetValue());           \
+#define MKQL_AS_VALUE(name, suffix)                                                                      \
+    template <>                                                                                          \
+    T##name##suffix*                                                                                     \
+    AsValue(TRuntimeNode node, const TSourceLocation& location) {                                        \
+        MKQL_ENSURE_WITH_LOC(                                                                            \
+            location,                                                                                    \
+            node.HasValue() && node.GetStaticType()->Is##name(),                                         \
+            "Expected value of T" #name #suffix << " but got " << node.GetStaticType()->GetKindAsStr()); \
+        return static_cast<T##name##suffix*>(node.GetValue());                                           \
     }
 
-#define MKQL_AS_TYPE(name)                                               \
-    template <>                                                          \
-    T##name##Type*                                                       \
-    AsType(TType* type, const TSourceLocation& location) {               \
-        MKQL_ENSURE_WITH_LOC(                                            \
-                location,                                                \
-                type->Is##name(),                                        \
-                   "Expected type of T" #name "Type"                     \
-                   " but got " << type->GetKindAsStr());                 \
-        return static_cast<T##name##Type*>(type);                        \
-    }                                                                    \
-    template <>                                                          \
-    const T##name##Type*                                                 \
-    AsType(const TType* type, const TSourceLocation& location) {         \
-        MKQL_ENSURE_WITH_LOC(                                            \
-                location,                                                \
-                type->Is##name(),                                        \
-                   "Expected type of T" #name "Type"                     \
-                   " but got " << type->GetKindAsStr());                 \
-        return static_cast<const T##name##Type*>(type);                  \
+#define MKQL_AS_TYPE(name)                                       \
+    template <>                                                  \
+    T##name##Type*                                               \
+    AsType(TType* type, const TSourceLocation& location) {       \
+        MKQL_ENSURE_WITH_LOC(                                    \
+            location,                                            \
+            type->Is##name(),                                    \
+            "Expected type of T" #name "Type"                    \
+            " but got "                                          \
+                << type->GetKindAsStr());                        \
+        return static_cast<T##name##Type*>(type);                \
+    }                                                            \
+    template <>                                                  \
+    const T##name##Type*                                         \
+    AsType(const TType* type, const TSourceLocation& location) { \
+        MKQL_ENSURE_WITH_LOC(                                    \
+            location,                                            \
+            type->Is##name(),                                    \
+            "Expected type of T" #name "Type"                    \
+            " but got "                                          \
+                << type->GetKindAsStr());                        \
+        return static_cast<const T##name##Type*>(type);          \
     }
 
 namespace NKikimr {
@@ -55,6 +56,7 @@ MKQL_AS_TYPE(Tagged)
 MKQL_AS_TYPE(Block)
 MKQL_AS_TYPE(Pg)
 MKQL_AS_TYPE(Multi)
+MKQL_AS_TYPE(Linear)
 
 MKQL_AS_VALUE(Any, Type)
 MKQL_AS_VALUE(Callable, Type)
@@ -79,18 +81,18 @@ MKQL_AS_VALUE(Tuple, Literal)
 MKQL_AS_VALUE(Variant, Literal)
 
 TCallable* AsCallable(
-        const TStringBuf& name,
-        TRuntimeNode node,
-        const TSourceLocation& location)
+    const TStringBuf& name,
+    TRuntimeNode node,
+    const TSourceLocation& location)
 {
     MKQL_ENSURE_WITH_LOC(location,
-            !node.IsImmediate() && node.GetNode()->GetType()->IsCallable(),
-            "Expected callable " << name);
+                         !node.IsImmediate() && node.GetNode()->GetType()->IsCallable(),
+                         "Expected callable " << name);
 
     auto callable = static_cast<TCallable*>(node.GetNode());
     MKQL_ENSURE_WITH_LOC(location,
-            callable->GetType()->GetName() == name,
-            "Expected callable " << name);
+                         callable->GetType()->GetName() == name,
+                         "Expected callable " << name);
 
     return callable;
 }

@@ -23,7 +23,7 @@ namespace detail
 
     template < typename Directed, typename Vertex > struct edge_base
     {
-        inline edge_base() {}
+        inline edge_base() : m_source(), m_target() {}
         inline edge_base(Vertex s, Vertex d) : m_source(s), m_target(d) {}
         Vertex m_source;
         Vertex m_target;
@@ -38,7 +38,7 @@ namespace detail
     public:
         typedef void property_type;
 
-        inline edge_desc_impl() : m_eproperty(0) {}
+        inline edge_desc_impl() : Base(), m_eproperty(0) {}
 
         inline edge_desc_impl(Vertex s, Vertex d, const property_type* eplug)
         : Base(s, d), m_eproperty(const_cast< property_type* >(eplug))

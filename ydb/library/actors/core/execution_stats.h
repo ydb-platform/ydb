@@ -154,8 +154,7 @@ namespace NActors {
             } else {
                 RelaxedStore(&Stats->CpuUs, (ui64)RelaxedLoad(&Stats->CpuUs) + cpuUs);
             }
-            RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
-            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
+            CopySafeTicks();
         }
 
         void IncreaseNotEnoughCpuExecutions() {
@@ -187,6 +186,11 @@ namespace NActors {
         void Switch(TExecutorThreadStats* stats)
         {
             Stats = stats;
+        }
+
+        void CopySafeTicks() {
+            RelaxedStore(&Stats->SafeElapsedTicks, (ui64)RelaxedLoad(&Stats->ElapsedTicks));
+            RelaxedStore(&Stats->SafeParkedTicks, (ui64)RelaxedLoad(&Stats->ParkedTicks));
         }
     };
 }

@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/monitoring/monitoring.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
@@ -38,6 +38,14 @@ public:
 
         if (settings.ReturnVerboseStatus_) {
             request.set_return_verbose_status(settings.ReturnVerboseStatus_.value());
+        }
+
+        if (settings.NoMerge_) {
+            request.set_merge_records(!settings.NoMerge_.value());
+        }
+
+        if (settings.NoCache_) {
+            request.set_do_not_cache(settings.NoCache_.value());
         }
 
         if (settings.MinimumStatus_) {

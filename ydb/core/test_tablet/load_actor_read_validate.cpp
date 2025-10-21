@@ -326,6 +326,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
+                    STLOG(PRI_ERROR, TEST_SHARD, TS22, "received RACE in TEvStateServerReadResult", (TabletId, TabletId));
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
@@ -483,6 +484,7 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
+                    STLOG(PRI_ERROR, TEST_SHARD, TS32, "received RACE in TEvStateServerWriteResult", (TabletId, TabletId));
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;

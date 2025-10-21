@@ -64,6 +64,8 @@ public:
 
     void Synchronize(TInstant deadline = TInstant::Max());
 
+    double GetBacklogQueueFillFraction() const;
+
 private:
     TLogManager();
 
@@ -77,6 +79,7 @@ private:
 
 //! Sets the minimum logging level for all messages in current fiber.
 class TFiberMinLogLevelGuard
+    : private TMoveOnly
 {
 public:
     explicit TFiberMinLogLevelGuard(ELogLevel minLogLevel);
@@ -86,6 +89,26 @@ private:
     const ELogLevel OldMinLogLevel_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
+//! Sets the minimum logging level for all messages in current fiber.
+class TFiberMessageTagGuard
+    : private TMoveOnly
+{
+public:
+    explicit TFiberMessageTagGuard(std::string messageTag);
+
+    // For use with std::optional in tests.
+    TFiberMessageTagGuard(TFiberMessageTagGuard&& other);
+    TFiberMessageTagGuard& operator=(TFiberMessageTagGuard&& other) = delete;
+
+    ~TFiberMessageTagGuard();
+
+private:
+    // NB: Keeping it non-const to allow moving from in the dtor.
+    std::string OldMessageTag_;
+    bool Active_ = true;
+};
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NLogging

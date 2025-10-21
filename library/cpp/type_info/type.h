@@ -5,7 +5,6 @@
 //! Hierarchy of classes that represent types.
 #include "fwd.h"
 
-#include "error.h"
 #include "type_list.h"
 
 #include <atomic>
@@ -182,6 +181,18 @@ namespace NTi {
         inline bool IsTimestamp64() const noexcept;
         inline TTimestamp64TypePtr AsTimestamp64() const noexcept;
         inline const TTimestamp64Type* AsTimestamp64Raw() const noexcept;
+
+        inline bool IsTzDate32() const noexcept;
+        inline TTzDate32TypePtr AsTzDate32() const noexcept;
+        inline const TTzDate32Type* AsTzDate32Raw() const noexcept;
+
+        inline bool IsTzDatetime64() const noexcept;
+        inline TTzDatetime64TypePtr AsTzDatetime64() const noexcept;
+        inline const TTzDatetime64Type* AsTzDatetime64Raw() const noexcept;
+
+        inline bool IsTzTimestamp64() const noexcept;
+        inline TTzTimestamp64TypePtr AsTzTimestamp64() const noexcept;
+        inline const TTzTimestamp64Type* AsTzTimestamp64Raw() const noexcept;
 
         inline bool IsInterval64() const noexcept;
         inline TInterval64TypePtr AsInterval64() const noexcept;
@@ -606,28 +617,56 @@ namespace NTi {
         inline decltype(auto) VisitPrimitiveRaw(V&& visitor) const;
     };
 
-    /// A logical type capable of holding one of the two values: true or false.
-    class TBoolType final: public TPrimitiveType {
+    template <EPrimitiveTypeName Type, typename TDerived>
+    class TPrimitiveTypeBase
+        : public TPrimitiveType
+    {
+        using TDerivedPtr = TIntrusiveConstPtr<TDerived>;
         friend class TType;
         friend class ITypeFactoryInternal;
         friend class ITypeFactory;
         friend class IPoolTypeFactory;
 
     public:
-        TBoolTypePtr AsPtr() const noexcept {
-            return const_cast<TBoolType*>(this);
+
+        TDerivedPtr AsPtr() const noexcept {
+            return const_cast<TDerived*>(static_cast<const TDerived*>(this));
         }
 
-    private:
-        explicit TBoolType();
+    protected:
+        TPrimitiveTypeBase()
+            : TPrimitiveType({}, Type)
+        { }
 
     public:
-        static TBoolTypePtr Instance();
-        static const TBoolType* InstanceRaw();
+        static TDerivedPtr Instance()
+        {
+            return InstanceRaw()->AsPtr();
+        }
+
+        static const TDerived* InstanceRaw()
+        {
+            static auto singleton = TDerived();
+            return &singleton;
+        }
 
     protected:
-        const TBoolType* Clone(ITypeFactoryInternal& factory) const noexcept;
-        void Drop(ITypeFactoryInternal& factory) noexcept;
+        const TDerived* Clone(ITypeFactoryInternal& /*factory*/) const noexcept
+        {
+            return InstanceRaw();
+        }
+
+        void Drop(ITypeFactoryInternal& /*factory*/) noexcept
+        { }
+    };
+
+    /// A logical type capable of holding one of the two values: true or false.
+    class TBoolType final: public TPrimitiveTypeBase<EPrimitiveTypeName::Bool, TBoolType>
+    {
+    protected:
+        TBoolType() = default;
+        template <EPrimitiveTypeName, typename>
+        friend class TPrimitiveTypeBase;
     };
 
     /// A signed integer, one byte.
@@ -1275,6 +1314,33 @@ namespace NTi {
     protected:
         const TTimestamp64Type* Clone(ITypeFactoryInternal& factory) const noexcept;
         void Drop(ITypeFactoryInternal& factory) noexcept;
+    };
+
+    /// An absolute point in time in range `[-144169-01-01, 148108-01-01)`, precision up to days (Unix epoch 1970-01-01 - 0 days).
+    class TTzDate32Type final: public TPrimitiveTypeBase<EPrimitiveTypeName::TzDate32, TTzDate32Type>
+    {
+    protected:
+        TTzDate32Type() = default;
+        template <EPrimitiveTypeName, typename>
+        friend class TPrimitiveTypeBase;
+    };
+
+    /// An absolute point in time in range `[-144169-01-01, 148108-01-01)`, precision up to seconds (Unix epoch 1970-01-01 - 0 seconds).
+    class TTzDatetime64Type final: public TPrimitiveTypeBase<EPrimitiveTypeName::TzDatetime64, TTzDatetime64Type>
+    {
+    protected:
+        TTzDatetime64Type() = default;
+        template <EPrimitiveTypeName, typename>
+        friend class TPrimitiveTypeBase;
+    };
+
+    /// An absolute point in time in range `[-144169-01-01, 148108-01-01)`, precision up to milliseconds (Unix epoch 1970-01-01 - 0 milliseconds).
+    class TTzTimestamp64Type final: public TPrimitiveTypeBase<EPrimitiveTypeName::TzTimestamp64, TTzTimestamp64Type>
+    {
+    protected:
+        TTzTimestamp64Type() = default;
+        template <EPrimitiveTypeName, typename>
+        friend class TPrimitiveTypeBase;
     };
 
     /// Signed delta between two timestamps64.
@@ -2191,6 +2257,45 @@ namespace NTi {
         return static_cast<const TTimestamp64Type*>(this);
     }
 
+    bool TType::IsTzDate32() const noexcept {
+        return TypeName_ == ETypeName::TzDate32;
+    }
+
+    TTzDate32TypePtr TType::AsTzDate32() const noexcept {
+        return AsTzDate32Raw()->AsPtr();
+    }
+
+    const TTzDate32Type* TType::AsTzDate32Raw() const noexcept {
+        Y_ABORT_UNLESS(IsTzDate32());
+        return static_cast<const TTzDate32Type*>(this);
+    }
+
+    bool TType::IsTzDatetime64() const noexcept {
+        return TypeName_ == ETypeName::TzDatetime64;
+    }
+
+    TTzDatetime64TypePtr TType::AsTzDatetime64() const noexcept {
+        return AsTzDatetime64Raw()->AsPtr();
+    }
+
+    const TTzDatetime64Type* TType::AsTzDatetime64Raw() const noexcept {
+        Y_ABORT_UNLESS(IsTzDatetime64());
+        return static_cast<const TTzDatetime64Type*>(this);
+    }
+
+    bool TType::IsTzTimestamp64() const noexcept {
+        return TypeName_ == ETypeName::TzTimestamp64;
+    }
+
+    TTzTimestamp64TypePtr TType::AsTzTimestamp64() const noexcept {
+        return AsTzTimestamp64Raw()->AsPtr();
+    }
+
+    const TTzTimestamp64Type* TType::AsTzTimestamp64Raw() const noexcept {
+        Y_ABORT_UNLESS(IsTzTimestamp64());
+        return static_cast<const TTzTimestamp64Type*>(this);
+    }
+
     bool TType::IsInterval64() const noexcept {
         return TypeName_ == ETypeName::Interval64;
     }
@@ -2356,6 +2461,12 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsDatetime64());
             case ETypeName::Timestamp64:
                 return std::forward<V>(visitor)(this->AsTimestamp64());
+            case ETypeName::TzDate32:
+                return std::forward<V>(visitor)(this->AsTzDate32());
+            case ETypeName::TzDatetime64:
+                return std::forward<V>(visitor)(this->AsTzDatetime64());
+            case ETypeName::TzTimestamp64:
+                return std::forward<V>(visitor)(this->AsTzTimestamp64());
             case ETypeName::Interval64:
                 return std::forward<V>(visitor)(this->AsInterval64());
             case ETypeName::Void:
@@ -2438,6 +2549,12 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsDatetime64Raw());
             case ETypeName::Timestamp64:
                 return std::forward<V>(visitor)(this->AsTimestamp64Raw());
+            case ETypeName::TzDate32:
+                return std::forward<V>(visitor)(this->AsTzDate32Raw());
+            case ETypeName::TzDatetime64:
+                return std::forward<V>(visitor)(this->AsTzDatetime64Raw());
+            case ETypeName::TzTimestamp64:
+                return std::forward<V>(visitor)(this->AsTzTimestamp64Raw());
             case ETypeName::Interval64:
                 return std::forward<V>(visitor)(this->AsInterval64Raw());
             case ETypeName::Void:
@@ -2520,6 +2637,12 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsDatetime64());
             case EPrimitiveTypeName::Timestamp64:
                 return std::forward<V>(visitor)(this->AsTimestamp64());
+            case EPrimitiveTypeName::TzDate32:
+                return std::forward<V>(visitor)(this->AsTzDate32());
+            case EPrimitiveTypeName::TzDatetime64:
+                return std::forward<V>(visitor)(this->AsTzDatetime64());
+            case EPrimitiveTypeName::TzTimestamp64:
+                return std::forward<V>(visitor)(this->AsTzTimestamp64());
             case EPrimitiveTypeName::Interval64:
                 return std::forward<V>(visitor)(this->AsInterval64());
         }
@@ -2584,6 +2707,12 @@ namespace NTi {
                 return std::forward<V>(visitor)(this->AsDatetime64Raw());
             case NTi::EPrimitiveTypeName::Timestamp64:
                 return std::forward<V>(visitor)(this->AsTimestamp64Raw());
+            case NTi::EPrimitiveTypeName::TzDate32:
+                return std::forward<V>(visitor)(this->AsTzDate32Raw());
+            case NTi::EPrimitiveTypeName::TzDatetime64:
+                return std::forward<V>(visitor)(this->AsTzDatetime64Raw());
+            case NTi::EPrimitiveTypeName::TzTimestamp64:
+                return std::forward<V>(visitor)(this->AsTzTimestamp64Raw());
             case NTi::EPrimitiveTypeName::Interval64:
                 return std::forward<V>(visitor)(this->AsInterval64Raw());
         }

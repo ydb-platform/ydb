@@ -16,38 +16,39 @@ namespace NYql {
 namespace NResult {
 
 namespace {
-class TRestrictedYsonFormatter : public NYson::TYsonConsumerBase {
+class TRestrictedYsonFormatter: public NYson::TYsonConsumerBase {
 public:
     TRestrictedYsonFormatter(TYsonResultWriter& writer)
-        : Writer(writer) {
+        : Writer_(writer)
+    {
     }
 
     void OnStringScalar(TStringBuf value) override {
         Open();
         Type(TStringBuf("string"));
 
-        Buffer.clear();
+        Buffer_.clear();
         bool isAscii = true;
         for (size_t i = 0; i < value.size(); ++i) {
             if (ui8(value[i]) < 128) {
                 if (!isAscii) {
-                    Buffer.push_back(value[i]);
+                    Buffer_.push_back(value[i]);
                 }
             } else {
                 if (isAscii) {
-                    Buffer.resize(i);
-                    Copy(value.data(), value.data() + i, Buffer.data());
+                    Buffer_.resize(i);
+                    Copy(value.data(), value.data() + i, Buffer_.data());
                     isAscii = false;
                 }
-                Buffer.push_back('\xC0' | (ui8(value[i]) >> 6));
-                Buffer.push_back('\x80' | (ui8(value[i]) & ~'\xC0'));
+                Buffer_.push_back('\xC0' | (ui8(value[i]) >> 6));
+                Buffer_.push_back('\x80' | (ui8(value[i]) & ~'\xC0'));
             }
         }
 
         if (isAscii) {
             Value(value);
         } else {
-            Value(TStringBuf(Buffer.data(), Buffer.size()));
+            Value(TStringBuf(Buffer_.data(), Buffer_.size()));
         }
 
         Close();
@@ -82,103 +83,103 @@ public:
     }
 
     void OnEntity() override {
-        if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value"));
-            Writer.OnEntity();
-            Writer.OnEndMap();
-            AfterAttributes = false;
+        if (AfterAttributes_) {
+            Writer_.OnKeyedItem(TStringBuf("$value"));
+            Writer_.OnEntity();
+            Writer_.OnEndMap();
+            AfterAttributes_ = false;
         } else {
-            Writer.OnEntity();
+            Writer_.OnEntity();
         }
     }
 
     void OnBeginList() override {
-        if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value"));
+        if (AfterAttributes_) {
+            Writer_.OnKeyedItem(TStringBuf("$value"));
         }
 
-        Writer.OnBeginList();
-        HasAttributes.push(AfterAttributes);
-        AfterAttributes = false;
+        Writer_.OnBeginList();
+        HasAttributes_.push(AfterAttributes_);
+        AfterAttributes_ = false;
     }
 
     void OnListItem() override {
-        Writer.OnListItem();
+        Writer_.OnListItem();
     }
 
     void OnEndList() override {
-        Writer.OnEndList();
-        if (HasAttributes.top()) {
-            Writer.OnEndMap();
+        Writer_.OnEndList();
+        if (HasAttributes_.top()) {
+            Writer_.OnEndMap();
         }
 
-        HasAttributes.pop();
+        HasAttributes_.pop();
     }
 
     void OnBeginMap() override {
-        if (AfterAttributes) {
-            Writer.OnKeyedItem(TStringBuf("$value"));
+        if (AfterAttributes_) {
+            Writer_.OnKeyedItem(TStringBuf("$value"));
         }
 
-        Writer.OnBeginMap();
-        HasAttributes.push(AfterAttributes);
-        AfterAttributes = false;
+        Writer_.OnBeginMap();
+        HasAttributes_.push(AfterAttributes_);
+        AfterAttributes_ = false;
     }
 
     void OnKeyedItem(TStringBuf key) override {
         if (key.StartsWith('$')) {
-            Writer.OnKeyedItem(TString("$") + key);
+            Writer_.OnKeyedItem(TString("$") + key);
         } else {
-            Writer.OnKeyedItem(key);
+            Writer_.OnKeyedItem(key);
         }
     }
 
     void OnEndMap() override {
-        Writer.OnEndMap();
-        if (HasAttributes.top()) {
-            Writer.OnEndMap();
+        Writer_.OnEndMap();
+        if (HasAttributes_.top()) {
+            Writer_.OnEndMap();
         }
 
-        HasAttributes.pop();
+        HasAttributes_.pop();
     }
 
     void OnBeginAttributes() override {
-        Writer.OnBeginMap();
-        Writer.OnKeyedItem(TStringBuf("$attributes"));
-        Writer.OnBeginMap();
+        Writer_.OnBeginMap();
+        Writer_.OnKeyedItem(TStringBuf("$attributes"));
+        Writer_.OnBeginMap();
     }
 
     void OnEndAttributes() override {
-        Writer.OnEndMap();
-        AfterAttributes = true;
+        Writer_.OnEndMap();
+        AfterAttributes_ = true;
     }
 
     void Open() {
-        if (!AfterAttributes) {
-            Writer.OnBeginMap();
+        if (!AfterAttributes_) {
+            Writer_.OnBeginMap();
         }
     }
 
     void Close() {
-        Writer.OnEndMap();
-        AfterAttributes = false;
+        Writer_.OnEndMap();
+        AfterAttributes_ = false;
     }
 
     void Type(const TStringBuf& type) {
-        Writer.OnKeyedItem(TStringBuf("$type"));
-        Writer.OnUtf8StringScalar(type);
+        Writer_.OnKeyedItem(TStringBuf("$type"));
+        Writer_.OnUtf8StringScalar(type);
     }
 
     void Value(const TStringBuf& value) {
-        Writer.OnKeyedItem(TStringBuf("$value"));
-        Writer.OnUtf8StringScalar(value);
+        Writer_.OnKeyedItem(TStringBuf("$value"));
+        Writer_.OnUtf8StringScalar(value);
     }
 
 private:
-    TYsonResultWriter& Writer;
-    TStack<bool> HasAttributes;
-    bool AfterAttributes = false;
-    TVector<char> Buffer;
+    TYsonResultWriter& Writer_;
+    TStack<bool> HasAttributes_;
+    bool AfterAttributes_ = false;
+    TVector<char> Buffer_;
 };
 
 TString DecodeRestrictedBinaryString(const TString& data) {
@@ -199,47 +200,47 @@ TString DecodeRestrictedBinaryString(const TString& data) {
 
 void DecodeRestrictedYson(const NYT::TNode& node, NYson::TYsonConsumerBase& writer) {
     switch (node.GetType()) {
-    case NYT::TNode::String:
-        writer.OnStringScalar(node.AsString());
-        return;
+        case NYT::TNode::String:
+            writer.OnStringScalar(node.AsString());
+            return;
 
-    case NYT::TNode::Int64:
-        writer.OnInt64Scalar(node.AsInt64());
-        return;
+        case NYT::TNode::Int64:
+            writer.OnInt64Scalar(node.AsInt64());
+            return;
 
-    case NYT::TNode::Uint64:
-        writer.OnUint64Scalar(node.AsUint64());
-        return;
+        case NYT::TNode::Uint64:
+            writer.OnUint64Scalar(node.AsUint64());
+            return;
 
-    case NYT::TNode::Bool:
-        writer.OnBooleanScalar(node.AsBool());
-        return;
+        case NYT::TNode::Bool:
+            writer.OnBooleanScalar(node.AsBool());
+            return;
 
-    case NYT::TNode::Double:
-        writer.OnDoubleScalar(node.AsDouble());
-        return;
+        case NYT::TNode::Double:
+            writer.OnDoubleScalar(node.AsDouble());
+            return;
 
-    case NYT::TNode::Null:
-        writer.OnEntity();
-        return;
+        case NYT::TNode::Null:
+            writer.OnEntity();
+            return;
 
-    case NYT::TNode::List:
-        // just a list without attributes
-        writer.OnBeginList();
-        for (const auto& item : node.AsList()) {
-            writer.OnListItem();
-            DecodeRestrictedYson(item, writer);
-        }
+        case NYT::TNode::List:
+            // just a list without attributes
+            writer.OnBeginList();
+            for (const auto& item : node.AsList()) {
+                writer.OnListItem();
+                DecodeRestrictedYson(item, writer);
+            }
 
-        writer.OnEndList();
-        return;
+            writer.OnEndList();
+            return;
 
-    case NYT::TNode::Map:
-        // process below
-        break;
+        case NYT::TNode::Map:
+            // process below
+            break;
 
-    default:
-        YQL_ENSURE(false, "Unsupported node type: " << static_cast<int>(node.GetType()));
+        default:
+            YQL_ENSURE(false, "Unsupported node type: " << static_cast<int>(node.GetType()));
     }
 
     YQL_ENSURE(node.IsMap());
@@ -325,5 +326,5 @@ TString DecodeRestrictedYson(const TStringBuf& yson, NYson::EYsonFormat format) 
     return DecodeRestrictedYson(NYT::NodeFromYsonString(yson), format);
 }
 
-}
-}
+} // namespace NResult
+} // namespace NYql

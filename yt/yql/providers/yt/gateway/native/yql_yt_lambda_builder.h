@@ -29,7 +29,7 @@ namespace NNative {
 
 struct TSession;
 
-struct TNativeYtLambdaBuilder: public TLambdaBuilder {
+struct TNativeYtLambdaBuilder: public TGatewayLambdaBuilder {
     TNativeYtLambdaBuilder(NKikimr::NMiniKQL::TScopedAlloc& alloc, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TSession& session, const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
         TLangVersion langver);

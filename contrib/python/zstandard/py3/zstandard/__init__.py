@@ -4,6 +4,8 @@
 # This software may be modified and distributed under the terms
 # of the BSD license. See the LICENSE file for details.
 
+# ruff: noqa: F403, F405
+
 """Python interface to the Zstandard (zstd) compression library."""
 
 from __future__ import absolute_import, unicode_literals
@@ -12,13 +14,16 @@ from __future__ import absolute_import, unicode_literals
 #
 # 1) Export the C or CFFI "backend" through a central module.
 # 2) Implement additional functionality built on top of C or CFFI backend.
-
 import builtins
 import io
 import os
 import platform
+import sys
 
-from typing import ByteString
+if sys.version_info >= (3, 12):
+    from collections.abc import Buffer
+else:
+    from typing import ByteString as Buffer
 
 # Some Python implementations don't support C extensions. That's why we have
 # a CFFI implementation in the first place. The code here import one of our
@@ -32,7 +37,9 @@ from typing import ByteString
 # defining a variable and `setup.py` could write the file with whatever
 # policy was specified at build time. Until someone needs it, we go with
 # the hacky but simple environment variable approach.
-_module_policy = os.environ.get("PYTHON_ZSTANDARD_IMPORT_POLICY", "default")
+_module_policy = os.environ.get(
+    "PYTHON_ZSTANDARD_IMPORT_POLICY", "default"
+).strip()
 
 if _module_policy == "default":
     if platform.python_implementation() in ("CPython",):
@@ -80,7 +87,7 @@ else:
     )
 
 # Keep this in sync with python-zstandard.h, rust-ext/src/lib.rs, and debian/changelog.
-__version__ = "0.23.0"
+__version__ = "0.25.0"
 
 _MODE_CLOSED = 0
 _MODE_READ = 1
@@ -174,7 +181,7 @@ def open(
         return fh
 
 
-def compress(data: ByteString, level: int = 3) -> bytes:
+def compress(data: Buffer, level: int = 3) -> bytes:
     """Compress source data using the zstd compression format.
 
     This performs one-shot compression using basic/default compression
@@ -192,7 +199,7 @@ def compress(data: ByteString, level: int = 3) -> bytes:
     return cctx.compress(data)
 
 
-def decompress(data: ByteString, max_output_size: int = 0) -> bytes:
+def decompress(data: Buffer, max_output_size: int = 0) -> bytes:
     """Decompress a zstd frame into its original data.
 
     This performs one-shot decompression using basic/default compression

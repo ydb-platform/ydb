@@ -24,8 +24,6 @@ namespace NTabletFlatExecutor {
     };
 
     struct TSeat : public TIntrusiveListItem<TSeat> {
-        using TPinned = THashMap<TLogoBlobID, THashMap<ui32, TIntrusivePtr<TPrivatePageCachePinPad>>>;
-
         TSeat(const TSeat&) = delete;
 
         TSeat(ui32 uniqId, TAutoPtr<ITransaction> self)
@@ -73,7 +71,7 @@ namespace NTabletFlatExecutor {
         const TTxType TxType;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
-        TPinned Pinned;
+        THashMap<TLogoBlobID, THashMap<TPageId, TPrivatePageCache::TPinnedPage>> Pinned;
 
         THPTimer LatencyTimer;
         THPTimer CommitTimer;

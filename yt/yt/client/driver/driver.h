@@ -35,7 +35,7 @@ struct TDriverRequest
     explicit TDriverRequest(TRefCountedPtr holder);
 
     //! Request identifier to be logged.
-    std::variant<ui64, TGuid> Id = static_cast<ui64>(0);
+    TGuid Id;
 
     //! Command name to execute.
     TString CommandName;
@@ -60,7 +60,7 @@ struct TDriverRequest
     std::optional<std::string> UserTag;
 
     //! Filled in the context of HTTP proxy.
-    std::optional<NNet::TNetworkAddress> UserRemoteAddress;
+    std::optional<std::string> UserRemoteAddress;
 
     //! User token.
     std::optional<TString> UserToken;

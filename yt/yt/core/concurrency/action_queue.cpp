@@ -32,7 +32,7 @@ class TActionQueue::TImpl
     : public TRefCounted
 {
 public:
-    explicit TImpl(const TString& threadName)
+    explicit TImpl(std::string threadName)
         : Queue_(New<TMpscInvokerQueue>(
             CallbackEventCount_,
             GetThreadTags(threadName)))
@@ -90,7 +90,7 @@ private:
     }
 };
 
-TActionQueue::TActionQueue(TString threadName)
+TActionQueue::TActionQueue(std::string threadName)
     : Impl_(New<TImpl>(std::move(threadName)))
 { }
 
@@ -663,9 +663,9 @@ public:
     }
 
 private:
-    std::atomic<bool> Suspended_ = {false};
-    std::atomic<bool> SchedulingMore_ = {false};
-    std::atomic<int> ActiveInvocationCount_ = {0};
+    std::atomic<bool> Suspended_ = false;
+    std::atomic<bool> SchedulingMore_ = false;
+    std::atomic<int> ActiveInvocationCount_ = 0;
 
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
 

@@ -674,6 +674,13 @@ namespace std
   }
 
   template <size_t I, class T, size_t N, class V>
+  typename pythonic::types::array_base<T, N, V>::value_type
+  get(pythonic::types::array_base<T, N, V> &&t)
+  {
+    return std::move(t)[I];
+  }
+
+  template <size_t I, class T, size_t N, class V>
   struct tuple_element<I, pythonic::types::array_base<T, N, V>> {
     using type = typename pythonic::types::array_base<T, N, V>::value_type;
   };

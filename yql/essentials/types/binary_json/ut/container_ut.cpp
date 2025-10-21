@@ -5,7 +5,7 @@
 
 using namespace NKikimr::NBinaryJson;
 
-class TBinaryJsonContainerTest : public TBinaryJsonTestBase {
+class TBinaryJsonContainerTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonContainerTest()
         : TBinaryJsonTestBase()
@@ -13,12 +13,12 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonContainerTest);
-        UNIT_TEST(TestGetType);
-        UNIT_TEST(TestGetSize);
-        UNIT_TEST(TestGetElement);
-        UNIT_TEST(TestArrayIterator);
-        UNIT_TEST(TestLookup);
-        UNIT_TEST(TestObjectIterator);
+    UNIT_TEST(TestGetType);
+    UNIT_TEST(TestGetSize);
+    UNIT_TEST(TestGetElement);
+    UNIT_TEST(TestArrayIterator);
+    UNIT_TEST(TestLookup);
+    UNIT_TEST(TestObjectIterator);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -174,15 +174,16 @@ public:
                 "five": "string",
                 "six": [],
                 "seven": {}
-            })", {
-                {"one", "123"},
-                {"two", "null"},
-                {"three", "false"},
-                {"four", "true"},
-                {"five", "\"string\""},
-                {"six", "[]"},
-                {"seven", "{}"},
-            }},
+            })",
+             {
+                 {"one", "123"},
+                 {"two", "null"},
+                 {"three", "false"},
+                 {"four", "true"},
+                 {"five", "\"string\""},
+                 {"six", "[]"},
+                 {"seven", "{}"},
+             }},
         };
 
         for (const auto& testCase : testCases) {

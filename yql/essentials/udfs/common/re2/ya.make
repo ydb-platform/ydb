@@ -2,10 +2,10 @@ YQL_UDF_CONTRIB(re2_udf)
     
     YQL_ABI_VERSION(
         2
-        28
+        43
         0
     )
-    
+
     SRCS(
         re2_udf.cpp
     )

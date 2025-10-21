@@ -397,7 +397,7 @@ BELONGS Lib/ya.make
         Match type      : NOTICE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        Lib/_pydatetime.py [1197:1197]
+        Lib/_pydatetime.py [1196:1196]
 
 KEEP     MIT AND Apache-2.0   451f44d41ca04c35a541c85bdc284bb3
 BELONGS Lib/ya.make
@@ -464,7 +464,7 @@ BELONGS ya.make
         Match type      : TAG
         Links           : http://docs.python.org/license.html, http://spdx.org/licenses/Python-2.0, https://spdx.org/licenses/Python-2.0
     Files with this license:
-        Python/deepfreeze/deepfreeze.c [127644:127644]
+        Python/deepfreeze/deepfreeze.c [128179:128179]
 
 KEEP     LicenseRef-scancode-warranty-disclaimer 50a3e16ca7c1aaf79e69114d558b25a0
 BELONGS Lib/ya.make

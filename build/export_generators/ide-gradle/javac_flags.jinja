@@ -5,11 +5,6 @@
 {%-     if target_javac_flags|length -%}
 {#-     skip errorprone options and JVM args -#}
 {%-         set javac_flags = target_javac_flags|reject('startsWith', '-Xep')|reject('startsWith', '-J') -%}
-{%-         if javac_flags|length -%}
-{%-             if (javac_flags|length == 1) and (javac_flags|first == '-parameters') -%}
-{%-                 set javac_flags = [] -%}
-{%-             endif -%}
-{%-         endif -%}
 {%-         set compiler_jvm_flags = target_javac_flags|select('startsWith', '-J') -%}
 {%-     endif -%}
 
@@ -25,9 +20,10 @@ tasks.{{ task }}.configure {
 {%-         if compiler_jvm_flags|length %}
     options.isFork = true
     options.forkOptions.jvmArgs = listOf(
-{%-             for compiler_jvm_flag in compiler_jvm_flags -%}
-"{{ compiler_jvm_flag|replace("-J", "") }}"{% if not loop.last %}, {% endif -%}
-{%-             endfor -%})
+{%-             for compiler_jvm_flag in compiler_jvm_flags %}
+        "{{ compiler_jvm_flag|replace("-J", "") }}",
+{%-             endfor %}
+    )
 {%          endif -%}
 
 {%-         if has_errorprone -%}

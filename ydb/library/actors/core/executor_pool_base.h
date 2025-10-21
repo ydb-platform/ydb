@@ -9,7 +9,7 @@
 #include <ydb/library/actors/util/unordered_cache.h>
 #include <ydb/library/actors/util/threadparkpad.h>
 
-//#define RING_ACTIVATION_QUEUE 
+//#define RING_ACTIVATION_QUEUE
 
 namespace NActors {
     class TActorSystem;
@@ -27,7 +27,6 @@ namespace NActors {
         // Stuck actor monitoring
         TMutex StuckObserverMutex;
         std::vector<IActor*> Actors;
-        mutable std::vector<std::tuple<ui32, double>> DeadActorsUsage;
         friend class TExecutorThread;
         friend class TSharedExecutorThread;
         void RecalculateStuckActors(TExecutorThreadStats& stats) const;
@@ -57,7 +56,7 @@ namespace NActors {
         const bool UseRingQueueValue;
         alignas(64) TIntrusivePtr<TAffinity> ThreadsAffinity;
         alignas(64) TAtomic Semaphore = 0;
-        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueue> Activations;
+        alignas(64) std::variant<TUnorderedCacheActivationQueue, TRingActivationQueueV6> Activations;
         TAtomic ActivationsRevolvingCounter = 0;
         std::atomic_bool StopFlag = false;
     public:

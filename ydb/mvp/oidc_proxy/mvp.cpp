@@ -8,7 +8,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/library/actors/core/process_stats.h>
@@ -170,10 +170,9 @@ int TMVP::Run() {
 }
 
 int TMVP::Shutdown() {
-    ActorSystemStoppingLock.AcquireWrite();
-    AtomicSet(ActorSystemStopping, true);
-    ActorSystemStoppingLock.ReleaseWrite();
     ActorSystem.Stop();
+    AppData.GRpcClientLow->Stop(true);
+    ActorSystem.Cleanup();
     return 0;
 }
 
@@ -191,9 +190,7 @@ NMvp::TTokensConfig TMVP::TokensConfig;
 TOpenIdConnectSettings TMVP::OpenIdConnectSettings;
 
 TMVP::TMVP(int argc, char** argv)
-    : ActorSystemStoppingLock()
-    , ActorSystemStopping(false)
-    , LoggerSettings(BuildLoggerSettings())
+    : LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
 {}
@@ -234,6 +231,7 @@ void TMVP::TryGetOidcOptionsFromConfig(const YAML::Node& config) {
     OpenIdConnectSettings.TokenUrlPath = oidc["token_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_TOKEN_URL_PATH);
     OpenIdConnectSettings.ExchangeUrlPath = oidc["exchange_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_EXCHANGE_URL_PATH);
     OpenIdConnectSettings.ImpersonateUrlPath = oidc["impersonate_url_path"].as<std::string>(OpenIdConnectSettings.DEFAULT_IMPERSONATE_URL_PATH);
+    OpenIdConnectSettings.WhoamiExtendedInfoEndpoint = oidc["whoami_extended_info_endpoint"].as<std::string>("");
     Cout << "Started processing allowed_proxy_hosts..." << Endl;
     for (const std::string& host : oidc["allowed_proxy_hosts"].as<std::vector<std::string>>()) {
         Cout << host << " added to allowed_proxy_hosts" << Endl;
@@ -293,6 +291,7 @@ void TMVP::TryGetGenericOptionsFromConfig(
             ythrow yexception() << "Unknown access_service_type value: " << accessServiceTypeStr;
         }
     }
+    OpenIdConnectSettings.InitRequestTimeoutsByPath();
 }
 
 THolder<NActors::TActorSystemSetup> TMVP::BuildActorSystemSetup(int argc, char** argv) {

@@ -1,0 +1,227 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     COPYRIGHT_SERVICE_LABEL 4171695d4c508b83336ebaf6e7826344
+BELONGS ya.make
+    License text:
+        // Copyright 2024 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ftxui/dom/selection.hpp [1:1]
+        include/ftxui/screen/image.hpp [1:1]
+        include/ftxui/screen/pixel.hpp [1:1]
+        src/ftxui/dom/selection.cpp [1:1]
+        src/ftxui/dom/selection_style.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 77a150e6b5fd683af533fccf8202f0e2
+BELONGS ya.make
+    License text:
+        // Copyright 2020 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ftxui/component/captured_mouse.hpp [1:1]
+        include/ftxui/component/component_base.hpp [1:1]
+        include/ftxui/component/event.hpp [1:1]
+        include/ftxui/component/mouse.hpp [1:1]
+        include/ftxui/component/receiver.hpp [1:1]
+        include/ftxui/component/screen_interactive.hpp [1:1]
+        include/ftxui/dom/elements.hpp [1:1]
+        include/ftxui/dom/node.hpp [1:1]
+        include/ftxui/dom/requirement.hpp [1:1]
+        include/ftxui/dom/take_any_args.hpp [1:1]
+        include/ftxui/screen/box.hpp [1:1]
+        include/ftxui/screen/color.hpp [1:1]
+        include/ftxui/screen/color_info.hpp [1:1]
+        include/ftxui/screen/screen.hpp [1:1]
+        include/ftxui/screen/string.hpp [1:1]
+        include/ftxui/screen/terminal.hpp [1:1]
+        include/ftxui/util/autoreset.hpp [1:1]
+        include/ftxui/util/ref.hpp [1:1]
+        src/ftxui/component/button.cpp [1:1]
+        src/ftxui/component/checkbox.cpp [1:1]
+        src/ftxui/component/component.cpp [1:1]
+        src/ftxui/component/container.cpp [1:1]
+        src/ftxui/component/event.cpp [1:1]
+        src/ftxui/component/menu.cpp [1:1]
+        src/ftxui/component/radiobox.cpp [1:1]
+        src/ftxui/component/screen_interactive.cpp [1:1]
+        src/ftxui/component/slider.cpp [1:1]
+        src/ftxui/component/terminal_input_parser.cpp [1:1]
+        src/ftxui/component/terminal_input_parser.hpp [1:1]
+        src/ftxui/dom/automerge.cpp [1:1]
+        src/ftxui/dom/blink.cpp [1:1]
+        src/ftxui/dom/bold.cpp [1:1]
+        src/ftxui/dom/border.cpp [1:1]
+        src/ftxui/dom/clear_under.cpp [1:1]
+        src/ftxui/dom/color.cpp [1:1]
+        src/ftxui/dom/composite_decorator.cpp [1:1]
+        src/ftxui/dom/dbox.cpp [1:1]
+        src/ftxui/dom/dim.cpp [1:1]
+        src/ftxui/dom/flex.cpp [1:1]
+        src/ftxui/dom/flexbox.cpp [1:1]
+        src/ftxui/dom/flexbox_config.cpp [1:1]
+        src/ftxui/dom/flexbox_helper.hpp [1:1]
+        src/ftxui/dom/focus.cpp [1:1]
+        src/ftxui/dom/frame.cpp [1:1]
+        src/ftxui/dom/gauge.cpp [1:1]
+        src/ftxui/dom/graph.cpp [1:1]
+        src/ftxui/dom/gridbox.cpp [1:1]
+        src/ftxui/dom/hbox.cpp [1:1]
+        src/ftxui/dom/inverted.cpp [1:1]
+        src/ftxui/dom/node.cpp [1:1]
+        src/ftxui/dom/node_decorator.cpp [1:1]
+        src/ftxui/dom/node_decorator.hpp [1:1]
+        src/ftxui/dom/paragraph.cpp [1:1]
+        src/ftxui/dom/reflect.cpp [1:1]
+        src/ftxui/dom/separator.cpp [1:1]
+        src/ftxui/dom/size.cpp [1:1]
+        src/ftxui/dom/spinner.cpp [1:1]
+        src/ftxui/dom/text.cpp [1:1]
+        src/ftxui/dom/underlined.cpp [1:1]
+        src/ftxui/dom/util.cpp [1:1]
+        src/ftxui/dom/vbox.cpp [1:1]
+        src/ftxui/screen/box.cpp [1:1]
+        src/ftxui/screen/color.cpp [1:1]
+        src/ftxui/screen/color_info.cpp [1:1]
+        src/ftxui/screen/image.cpp [1:1]
+        src/ftxui/screen/screen.cpp [1:1]
+        src/ftxui/screen/string.cpp [1:1]
+        src/ftxui/screen/terminal.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 93d6be06c4778e8c36ab73cda0a8b1b6
+BELONGS ya.make
+    License text:
+        // Copyright 2023 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ftxui/dom/direction.hpp [1:1]
+        include/ftxui/dom/linear_gradient.hpp [1:1]
+        src/ftxui/component/window.cpp [1:1]
+        src/ftxui/dom/hyperlink.cpp [1:1]
+        src/ftxui/dom/linear_gradient.cpp [1:1]
+        src/ftxui/dom/strikethrough.cpp [1:1]
+        src/ftxui/dom/underlined_double.cpp [1:1]
+        src/ftxui/screen/string_internal.hpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 9c98a8e31090498eefef43ce64b1d472
+BELONGS ya.make
+    License text:
+        // Copyright 2021 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ftxui/component/component.hpp [1:1]
+        include/ftxui/component/component_options.hpp [1:1]
+        include/ftxui/dom/canvas.hpp [1:1]
+        include/ftxui/dom/deprecated.hpp [1:1]
+        include/ftxui/dom/flexbox_config.hpp [1:1]
+        include/ftxui/dom/table.hpp [1:1]
+        include/ftxui/screen/deprecated.hpp [1:1]
+        src/ftxui/component/catch_event.cpp [1:1]
+        src/ftxui/component/collapsible.cpp [1:1]
+        src/ftxui/component/dropdown.cpp [1:1]
+        src/ftxui/component/maybe.cpp [1:1]
+        src/ftxui/component/renderer.cpp [1:1]
+        src/ftxui/component/resizable_split.cpp [1:1]
+        src/ftxui/dom/box_helper.cpp [1:1]
+        src/ftxui/dom/box_helper.hpp [1:1]
+        src/ftxui/dom/canvas.cpp [1:1]
+        src/ftxui/dom/flexbox_helper.cpp [1:1]
+        src/ftxui/dom/scroll_indicator.cpp [1:1]
+        src/ftxui/dom/table.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL aca04e53f0e1ecbb7d19857e1cdfc607
+BELONGS ya.make
+    License text:
+        //  Copyright (c) 2011, Auerhaus Development, LLC
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/ftxui/component/animation.cpp [20:20]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e5499a91f4cbd29bff1d70364b5776c5
+BELONGS ya.make
+    License text:
+        Copyright (c) 2019 Arthur Sonzogni.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENSE [3:3]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f55239307282d9c3ee551812c3dca300
+BELONGS ya.make
+    License text:
+        // Copyright 2025 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        src/ftxui/dom/italic.cpp [1:1]
+
+KEEP     COPYRIGHT_SERVICE_LABEL fbfd3582cf1e2879c92ce92071ec2c70
+BELONGS ya.make
+    License text:
+        // Copyright 2022 Arthur Sonzogni. All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        include/ftxui/component/animation.hpp [1:1]
+        include/ftxui/component/loop.hpp [1:1]
+        include/ftxui/component/task.hpp [1:1]
+        src/ftxui/component/component_options.cpp [1:1]
+        src/ftxui/component/hoverable.cpp [1:1]
+        src/ftxui/component/input.cpp [1:1]
+        src/ftxui/component/loop.cpp [1:1]
+        src/ftxui/component/modal.cpp [1:1]
+        src/ftxui/component/util.cpp [1:1]
+        src/ftxui/screen/util.hpp [1:1]

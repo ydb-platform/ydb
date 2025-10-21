@@ -23,9 +23,11 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingResponse, HandleProxy);
             hFunc(TEvPrivate::TEvCheckSessionResponse, Handle);
             hFunc(TEvPrivate::TEvErrorResponse, Handle);
+            default:
+                TBase::StateWork(ev);
+                break;
         }
     }
 

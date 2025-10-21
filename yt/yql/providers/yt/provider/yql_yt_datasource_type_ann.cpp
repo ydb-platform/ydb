@@ -50,11 +50,11 @@ public:
         AddHandler({TYtLength::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleLength));
         AddHandler({TCoConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleConfigure));
         AddHandler({TYtConfigure::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleYtConfigure));
-        AddHandler({TYtTablePath::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTablePath));
-        AddHandler({TYtTableRecord::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
-        AddHandler({TYtRowNumber::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableRecord));
-        AddHandler({TYtTableIndex::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableIndex));
-        AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleIsKeySwitch));
+        AddHandler({TYtTablePath::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::String>));
+        AddHandler({TYtTableRecord::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Uint64>));
+        AddHandler({TYtRowNumber::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Uint64>));
+        AddHandler({TYtTableIndex::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Uint32>));
+        AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Bool>));
         AddHandler({TYtTableName::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableName));
     }
 
@@ -96,7 +96,9 @@ public:
         }
 
         if (!TYtTableInfo::HasSubstAnonymousLabel(TExprBase(input))) {
-            auto status = UpdateTableMeta(input, output, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, ctx);
+            const bool useNativeYtDefaultColumnOrder = State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
+
+            auto status = UpdateTableMeta(input, output, State_->TablesData, false, State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, ctx);
             if (status.Level != TStatus::Ok) {
                 return status;
             }
@@ -744,8 +746,10 @@ public:
         auto readInput = input->ChildPtr(TYtReadTable::idx_Input);
         const ERuntimeClusterSelectionMode selectionMode =
             State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        const bool useNativeYtDefaultColumnOrder =
+            State_->Configuration->UseNativeYtDefaultColumnOrder.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER);
         auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData,
-            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
+            State_->Types->UseTableMetaFromGraph, useNativeYtDefaultColumnOrder, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -983,79 +987,31 @@ public:
         return TStatus::Ok;
     }
 
-    TStatus HandleTablePath(TExprBase input, TExprContext& ctx) {
+    template<EDataSlot Type>
+    TStatus HandleTableProp(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()),
-                TStringBuilder() << "Unsupported callable " << input.Ref().Content()));
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
+                TStringBuilder() << "Unsupported callable " << input->Content()));
             return TStatus::Error;
         }
 
-        if (!EnsureArgsCount(input.Ref(), 1, ctx)) {
+        if (!EnsureArgsCount(*input, 1, ctx)) {
             return TStatus::Error;
         }
 
-        if (!EnsureDependsOn(*input.Ptr()->Child(TYtTablePath::idx_DependsOn), ctx)) {
-            return TStatus::Error;
+        if (NNodes::TCoDependsOnBase::Match(&input->Head())) {
+            if (!State_->Types->DirectRowDependsOn) {
+                output = ctx.ChangeChild(*input, 0, input->Head().HeadPtr());
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            auto status = EnsureDependsOnTailAndRewrite(input, output, ctx, *State_->Types, 0, 1);
+            if (status != IGraphTransformer::TStatus::Ok) {
+                return status;
+            }
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::String));
-        return TStatus::Ok;
-    }
-
-    TStatus HandleTableRecord(TExprBase input, TExprContext& ctx) {
-        if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()),
-                TStringBuilder() << "Unsupported callable " << input.Ref().Content()));
-            return TStatus::Error;
-        }
-
-        if (!EnsureArgsCount(input.Ref(), 1, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureDependsOn(*input.Ptr()->Child(TYtTablePropBase::idx_DependsOn), ctx)) {
-            return TStatus::Error;
-        }
-
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Uint64));
-        return TStatus::Ok;
-    }
-
-    TStatus HandleTableIndex(TExprBase input, TExprContext& ctx) {
-        if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()),
-                TStringBuilder() << "Unsupported callable " << input.Ref().Content()));
-            return TStatus::Error;
-        }
-
-        if (!EnsureArgsCount(input.Ref(), 1, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureDependsOn(*input.Ptr()->Child(TYtTableIndex::idx_DependsOn), ctx)) {
-            return TStatus::Error;
-        }
-
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Uint32));
-        return TStatus::Ok;
-    }
-
-    TStatus HandleIsKeySwitch(TExprBase input, TExprContext& ctx) {
-        if (State_->Configuration->UseSystemColumns.Get().GetOrElse(DEFAULT_USE_SYS_COLUMNS)) {
-            ctx.AddError(TIssue(ctx.GetPosition(input.Pos()),
-                TStringBuilder() << "Unsupported callable " << input.Ref().Content()));
-            return TStatus::Error;
-        }
-
-        if (!EnsureArgsCount(input.Ref(), 1, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureDependsOn(*input.Ptr()->Child(TYtIsKeySwitch::idx_DependsOn), ctx)) {
-            return TStatus::Error;
-        }
-
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TDataExprType>(EDataSlot::Bool));
+        input->SetTypeAnn(ctx.MakeType<TDataExprType>(Type));
         return TStatus::Ok;
     }
 

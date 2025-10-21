@@ -76,6 +76,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreatePrepareDistributedEraseTxInRSUnit(dataShard, pipeline);
     case EExecutionUnitKind::LoadAndWaitInRS:
         return CreateLoadAndWaitInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::LoadInRS:
+        return CreateLoadInRSUnit(dataShard, pipeline);
+    case EExecutionUnitKind::BlockFailPoint:
+        return CreateBlockFailPointUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteDataTx:
         return CreateExecuteDataTxUnit(dataShard, pipeline);
     case EExecutionUnitKind::ExecuteKqpDataTx:
@@ -142,6 +146,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateAlterCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropCdcStream:
         return CreateDropCdcStreamUnit(dataShard, pipeline);
+    case EExecutionUnitKind::RotateCdcStream:
+        return CreateRotateCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveIndex:
         return CreateMoveIndexUnit(dataShard, pipeline);
     case EExecutionUnitKind::CheckRead:

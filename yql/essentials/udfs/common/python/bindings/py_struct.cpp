@@ -34,8 +34,7 @@ TPyObjectPtr CreateNewStrucInstance(const TPyCastContext::TPtr& ctx, const NKiki
             INIT_MEMBER(name, "yql.Struct"),
             INIT_MEMBER(doc, nullptr),
             INIT_MEMBER(fields, fields.data()),
-            INIT_MEMBER(n_in_sequence, int(inspector.GetMembersCount()))
-        };
+            INIT_MEMBER(n_in_sequence, int(inspector.GetMembersCount()))};
 
         const auto typeObject = new PyTypeObject();
         if (0 > PyStructSequence_InitType2(typeObject, &desc)) {
@@ -48,14 +47,14 @@ TPyObjectPtr CreateNewStrucInstance(const TPyCastContext::TPtr& ctx, const NKiki
     const TPyObjectPtr object = PyStructSequence_New(it.first->second.GetAs<PyTypeObject>());
 #else
         const auto className = TString("yql.Struct_") += ToString(ctx->StructTypes.size());
-        PyObject* metaclass = (PyObject *) &PyClass_Type;
+        PyObject* metaclass = (PyObject*)&PyClass_Type;
         const TPyObjectPtr name = PyRepr(TStringBuf(className));
         const TPyObjectPtr bases = PyTuple_New(0);
         const TPyObjectPtr dict = PyDict_New();
 
         TPyObjectPtr newClass = PyObject_CallFunctionObjArgs(
-                metaclass, name.Get(), bases.Get(), dict.Get(),
-                nullptr);
+            metaclass, name.Get(), bases.Get(), dict.Get(),
+            nullptr);
         if (!newClass) {
             throw yexception() << "can't create new type: " << GetLastErrorAsString();
         }
@@ -72,7 +71,55 @@ TPyObjectPtr CreateNewStrucInstance(const TPyCastContext::TPtr& ctx, const NKiki
     return object;
 }
 
+TPyObjectPtr ConvertStringToPyObject(TStringBuf str)
+{
+#if PY_MAJOR_VERSION >= 3
+    return PyUnicode_FromStringAndSize(str.data(), str.size());
+#else
+    return PyString_FromStringAndSize(str.data(), str.size());
+#endif
 }
+
+// Sized counterpart of PyDict_GetItemString from C API. Returns borrowed reference.
+PyObject* GetItemFromPyDictUsingString(PyObject* v, TStringBuf key)
+{
+    TPyObjectPtr kv = ConvertStringToPyObject(key);
+    if (!kv) {
+        PyErr_Clear();
+        return nullptr;
+    }
+    return PyDict_GetItem(v, kv.Get());
+}
+
+PyObject* GetItemFromPyDictUsingBytes(PyObject* v, TStringBuf key)
+{
+    TPyObjectPtr bytesMemberName = PyBytes_FromStringAndSize(key.data(), key.size());
+    return PyDict_GetItem(v, bytesMemberName.Get());
+}
+
+// Helper function for double-probing UTF-8 str() and bytes() in the case of Python 3.
+PyObject* GetItemFromPyDict(PyObject* v, TStringBuf key)
+{
+    PyObject* ret = GetItemFromPyDictUsingString(v, key);
+#if PY_MAJOR_VERSION >= 3
+    if (!ret) {
+        ret = GetItemFromPyDictUsingBytes(v, key);
+    }
+#endif
+    return ret;
+}
+
+// Sized counterpart of PyObject_GetAttrString from C API. Returns strong reference.
+TPyObjectPtr GetAttrFromPyObject(PyObject* v, TStringBuf name)
+{
+    TPyObjectPtr w = ConvertStringToPyObject(name);
+    if (!w) {
+        return nullptr;
+    }
+    return PyObject_GetAttr(v, w.Get());
+}
+
+} // namespace
 
 TPyObjectPtr ToPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TType* type, const NUdf::TUnboxedValuePod& value)
 {
@@ -90,8 +137,8 @@ TPyObjectPtr ToPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TType* type
             const auto item = ToPyObject(ctx, inspector.GetMemberType(i), *ptr++);
             if (0 > PyObject_SetAttrString(object.Get(), name.data(), item.Get())) {
                 throw yexception()
-                        << "Can't set attr '" << name << "' to python object: "
-                        << GetLastErrorAsString();
+                    << "Can't set attr '" << name << "' to python object: "
+                    << GetLastErrorAsString();
             }
 #endif
         }
@@ -105,8 +152,8 @@ TPyObjectPtr ToPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TType* type
             const auto item = ToPyObject(ctx, inspector.GetMemberType(i), value.GetElement(i));
             if (0 > PyObject_SetAttrString(object.Get(), name.data(), item.Get())) {
                 throw yexception()
-                        << "Can't set attr '" << name << "' to python object: "
-                        << GetLastErrorAsString();
+                    << "Can't set attr '" << name << "' to python object: "
+                    << GetLastErrorAsString();
             }
 #endif
         }
@@ -128,11 +175,7 @@ NUdf::TUnboxedValue FromPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TT
             TStringBuf memberName = inspector.GetMemberName(i);
             auto memberType = inspector.GetMemberType(i);
             // borrowed reference - no need to manage ownership
-            PyObject* item = PyDict_GetItemString(value, memberName.data());
-            if (!item) {
-                TPyObjectPtr bytesMemberName = PyBytes_FromStringAndSize(memberName.data(), memberName.size());
-                item = PyDict_GetItem(value, bytesMemberName.Get());
-            }
+            PyObject* item = GetItemFromPyDict(value, memberName);
             if (!item) {
                 if (ctx->PyCtx->TypeInfoHelper->GetTypeKind(memberType) == NUdf::ETypeKind::Optional) {
                     items[i] = NUdf::TUnboxedValue();
@@ -144,20 +187,21 @@ NUdf::TUnboxedValue FromPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TT
             }
 
             try {
-                items[i] = FromPyObject(ctx, inspector.GetMemberType(i), item);
+                items[i] = FromPyObject(ctx, memberType, item);
             } catch (const yexception& e) {
                 errors.push_back(TStringBuilder() << "Failed to convert dict item '" << memberName << "' - " << e.what());
             }
         }
 
         if (!errors.empty()) {
-            throw yexception() << "Failed to convert dict to struct\n" << JoinSeq("\n", errors) << "\nDict repr: " << PyObjectRepr(value);
+            throw yexception() << "Failed to convert dict to struct\n"
+                               << JoinSeq("\n", errors) << "\nDict repr: " << PyObjectRepr(value);
         }
     } else {
         for (ui32 i = 0; i < membersCount; i++) {
             TStringBuf memberName = inspector.GetMemberName(i);
             auto memberType = inspector.GetMemberType(i);
-            TPyObjectPtr attr = PyObject_GetAttrString(value, memberName.data());
+            TPyObjectPtr attr = GetAttrFromPyObject(value, memberName);
             if (!attr) {
                 if (ctx->PyCtx->TypeInfoHelper->GetTypeKind(memberType) == NUdf::ETypeKind::Optional &&
                     PyErr_ExceptionMatches(PyExc_AttributeError)) {
@@ -178,11 +222,12 @@ NUdf::TUnboxedValue FromPyStruct(const TPyCastContext::TPtr& ctx, const NUdf::TT
         }
 
         if (!errors.empty()) {
-            throw yexception() << "Failed to convert object to struct\n" << JoinSeq("\n", errors) << "\nObject repr: " << PyObjectRepr(value);
+            throw yexception() << "Failed to convert object to struct\n"
+                               << JoinSeq("\n", errors) << "\nObject repr: " << PyObjectRepr(value);
         }
     }
 
     return mkqlStruct;
 }
 
-}
+} // namespace NPython

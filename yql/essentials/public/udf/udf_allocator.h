@@ -25,8 +25,7 @@ namespace NYql {
 namespace NUdf {
 
 template <typename Type>
-struct TStdAllocatorForUdf
-{
+struct TStdAllocatorForUdf {
     typedef Type value_type;
     typedef Type* pointer;
     typedef const Type* const_pointer;
@@ -38,12 +37,22 @@ struct TStdAllocatorForUdf
     TStdAllocatorForUdf() noexcept = default;
     ~TStdAllocatorForUdf() noexcept = default;
 
-    template<typename U> TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
-    template<typename U> struct rebind { typedef TStdAllocatorForUdf<U> other; };
-    template<typename U> bool operator==(const TStdAllocatorForUdf<U>&) const { return true; };
-    template<typename U> bool operator!=(const TStdAllocatorForUdf<U>&) const { return false; }
+    template <typename U>
+    TStdAllocatorForUdf(const TStdAllocatorForUdf<U>&) noexcept {};
+    template <typename U>
+    struct rebind { // NOLINT(readability-identifier-naming)
+        typedef TStdAllocatorForUdf<U> other;
+    };
+    template <typename U>
+    bool operator==(const TStdAllocatorForUdf<U>&) const {
+        return true;
+    };
+    template <typename U>
+    bool operator!=(const TStdAllocatorForUdf<U>&) const {
+        return false;
+    }
 
-    static pointer allocate(size_type n, const void* = nullptr)
+    static pointer allocate(size_type n, const void* = nullptr) // NOLINT(readability-identifier-naming)
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         return static_cast<pointer>(UdfAllocateWithSize(n * sizeof(value_type)));
@@ -52,7 +61,7 @@ struct TStdAllocatorForUdf
 #endif
     }
 
-    static void deallocate(const_pointer p, size_type n) noexcept
+    static void deallocate(const_pointer p, size_type n) noexcept // NOLINT(readability-identifier-naming)
     {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
         (void)(n);
@@ -82,19 +91,19 @@ struct TWithUdfAllocator {
     }
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-    void operator delete(void *mem, std::size_t sz) noexcept {
+    void operator delete(void* mem, std::size_t sz) noexcept {
         return UdfFreeWithSize(mem, sz);
     }
 
-    void operator delete[](void *mem, std::size_t sz) noexcept {
+    void operator delete[](void* mem, std::size_t sz) noexcept {
         return UdfFreeWithSize(mem, sz);
     }
 #else
-    void operator delete(void *mem) noexcept {
+    void operator delete(void* mem) noexcept {
         return UdfFree(mem);
     }
 
-    void operator delete[](void *mem) noexcept {
+    void operator delete[](void* mem) noexcept {
         return UdfFree(mem);
     }
 #endif
@@ -102,4 +111,3 @@ struct TWithUdfAllocator {
 
 } // namespace NUdf
 } // namespace NYql
-

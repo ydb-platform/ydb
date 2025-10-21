@@ -14,6 +14,7 @@ private:
     ui32 RequestsLeft;
     TVector<ui32> LightYellowMoveGroups;
     TVector<ui32> YellowStopGroups;
+    TVector<ui32> LightOrangeGroups;
 
     void Handle(TEvBlobStorage::TEvStatusResult::TPtr &ev, const TActorContext &ctx) {
         const TEvBlobStorage::TEvStatusResult *msg = ev->Get();
@@ -25,10 +26,14 @@ private:
         if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceYellowStop)) {
             YellowStopGroups.push_back(ev->Cookie);
         }
+        if (msg->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceLightOrange)) {
+            LightOrangeGroups.push_back(ev->Cookie);
+        }
 
         if (RequestsLeft == 0) {
             ctx.Send(ReplyTo, new TEvTablet::TEvCheckBlobstorageStatusResult(std::move(LightYellowMoveGroups),
-                        std::move(YellowStopGroups)));
+                        std::move(YellowStopGroups),
+                        std::move(LightOrangeGroups)));
             return Die(ctx);
         }
     }

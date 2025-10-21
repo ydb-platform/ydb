@@ -34,6 +34,7 @@ public:
         Self->Keeper.Clear();
         Self->Domains.clear();
         Self->BlockedOwners.clear();
+        Self->BridgePiles.clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -57,6 +58,7 @@ public:
             auto categoryRowset = db.Table<Schema::TabletCategory>().Select();
             auto availabilityRowset = db.Table<Schema::TabletAvailabilityRestrictions>().Select();
             auto operationsRowset = db.Table<Schema::OperationsLog>().Select();
+            auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
             if (!tabletRowset.IsReady()
                     || !tabletChannelRowset.IsReady()
                     || !tabletChannelGenRowset.IsReady()
@@ -73,7 +75,8 @@ public:
                     || !configRowset.IsReady()
                     || !categoryRowset.IsReady()
                     || !availabilityRowset.IsReady()
-                    || !operationsRowset.IsReady())
+                    || !operationsRowset.IsReady()
+                    || !bridgePileRowset.IsReady())
                 return false;
         }
 
@@ -185,7 +188,11 @@ public:
         if (Self->CurrentConfig.HasWarmUpEnabled()) {
             Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled();
         } else {
-            Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+            if (IsBridgeMode(TActivationContext::AsActorContext())) {
+                Self->WarmUp = false;
+            } else {
+                Self->WarmUp = Self->CurrentConfig.GetWarmUpEnabled() && !Self->AreWeRootHive();
+            }
         }
 
         Self->DefaultResourceMetricsAggregates.MaximumCPU.SetWindowSize(TDuration::MilliSeconds(Self->GetMetricsWindowSize()));
@@ -304,6 +311,26 @@ public:
         }
 
         {
+            size_t numPiles = 0;
+            auto bridgePileRowset = db.Table<Schema::BridgePile>().Select();
+            if (!bridgePileRowset.IsReady()) {
+                return false;
+            }
+            while (!bridgePileRowset.EndOfSet()) {
+                ++numPiles;
+                TBridgePileId pileId = TBridgePileId::FromLocalDb(bridgePileRowset.GetValue<Schema::BridgePile::Id>());
+                auto& pileInfo = Self->GetPile(pileId);
+                pileInfo.State = bridgePileRowset.GetValue<Schema::BridgePile::State>();
+                pileInfo.IsPrimary = bridgePileRowset.GetValue<Schema::BridgePile::IsPrimary>();
+                pileInfo.IsPromoted = bridgePileRowset.GetValue<Schema::BridgePile::IsPromoted>();
+                if (!bridgePileRowset.Next()) {
+                    return false;
+                }
+            }
+            BLOG_NOTICE("THive::TTxLoadEverything loaded " << numPiles << " bridge piles");
+        }
+
+        {
             size_t numNodes = 0;
             auto nodeRowset = db.Table<Schema::Node>().Range().Select();
             if (!nodeRowset.IsReady())
@@ -337,6 +364,7 @@ public:
                     }
                 }
                 node.DrainSeqNo = nodeRowset.GetValueOrDefault<Schema::Node::DrainSeqNo>();
+                node.BridgePileId = TBridgePileId::FromLocalDb(nodeRowset.GetValueOrDefault<Schema::Node::BridgePileId>());
                 if (!node.ServicedDomains) {
                     node.ServicedDomains = { Self->RootDomainKey };
                 }
@@ -453,6 +481,9 @@ public:
                         it = Self->Nodes.emplace(std::piecewise_construct, std::tuple<TNodeId>(nodeId), std::tuple<TNodeId, THive&>(nodeId, *Self)).first;
                     }
                     it->second.LockedTablets.insert(&tablet);
+                    if (Self->CurrentConfig.GetLockedTabletsSendMetrics()) {
+                        tablet.BecomeUnknown(tablet.Hive.FindNode(tablet.LockedToActor.NodeId()));
+                    }
                 }
 
                 tablet.SeizedByChild = tabletRowset.GetValueOrDefault<Schema::Tablet::SeizedByChild>();
@@ -892,6 +923,10 @@ public:
             if (!dcInfo.IsRegistered()) {
                 Self->Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateDataCenterFollowers(dcId));
             }
+        }
+
+        if (Self->BridgeInfo) {
+            Self->UpdatePiles();
         }
 
         Self->ProcessPendingStopTablet();

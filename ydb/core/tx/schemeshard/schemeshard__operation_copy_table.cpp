@@ -1,13 +1,14 @@
-#include "schemeshard__operation_part.h"
+#include "schemeshard__shred_manager.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard__operation_states.h"
+#include "schemeshard_cdc_stream_common.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_tx_infly.h"
-#include "schemeshard_cdc_stream_common.h"
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
-#include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/mind/hive/hive.h>
 
 namespace {
 
@@ -258,61 +259,10 @@ public:
     }
 };
 
-class TCopyTableBarrier: public TSubOperationState {
-private:
-    TOperationId OperationId;
-
-    TString DebugHint() const override {
-        return TStringBuilder()
-                << "TCopyTable TCopyTableBarrier"
-                << " operationId: " << OperationId;
-    }
-
-public:
-    TCopyTableBarrier(TOperationId id)
-        : OperationId(id)
-    {
-        IgnoreMessages(DebugHint(),
-            { TEvHive::TEvCreateTabletReply::EventType
-            , TEvDataShard::TEvProposeTransactionResult::EventType
-            , TEvPrivate::TEvOperationPlan::EventType
-            , TEvDataShard::TEvSchemaChanged::EventType }
-        );
-    }
-
-    bool HandleReply(TEvPrivate::TEvCompleteBarrier::TPtr& ev, TOperationContext& context) override {
-        TTabletId ssId = context.SS->SelfTabletId();
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvCompleteBarrier"
-                               << ", msg: " << ev->Get()->ToString()
-                               << ", at tablet# " << ssId);
-
-        NIceDb::TNiceDb db(context.GetDB());
-
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-        return true;
-    }
-
-    bool ProgressState(TOperationContext& context) override {
-        TTxState* txState = context.SS->FindTx(OperationId);
-        Y_ABORT_UNLESS(txState);
-
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << "ProgressState, operation type "
-                            << TTxState::TypeName(txState->TxType));
-
-        context.OnComplete.Barrier(OperationId, "CopyTableBarrier");
-        return false;
-    }
-};
-
 class TCopyTable: public TSubOperation {
 
     THashSet<TString> LocalSequences;
+    TMaybe<TPathElement::EPathState> TargetState;
 
     static TTxState::ETxState NextState() {
         return TTxState::CreateParts;
@@ -348,20 +298,30 @@ class TCopyTable: public TSubOperation {
         case TTxState::ProposedWaitParts:
             return MakeHolder<NTableState::TProposedWaitParts>(OperationId, TTxState::ETxState::CopyTableBarrier);
         case TTxState::CopyTableBarrier:
-            return MakeHolder<TCopyTableBarrier>(OperationId);
+            return MakeHolder<TWaitCopyTableBarrier>(OperationId, "TCopyTable");
         case TTxState::Done:
-            return MakeHolder<TDone>(OperationId);
+            if (!TargetState) {
+                return MakeHolder<TDone>(OperationId);
+            } else {
+                return MakeHolder<TDone>(OperationId, *TargetState);
+            }
         default:
             return nullptr;
         }
     }
 
 public:
-    using TSubOperation::TSubOperation;
+    explicit TCopyTable(const TOperationId& id, TTxState::ETxState txState, TTxState* state)
+        : TSubOperation(id, txState)
+    {
+        Y_ENSURE(state);
+        TargetState = state->TargetPathTargetState;
+    }
 
-    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+    explicit TCopyTable(const TOperationId& id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
         : TSubOperation(id, tx)
         , LocalSequences(localSequences)
+        , TargetState(targetState)
     {
     }
 
@@ -439,9 +399,7 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
-                        .NotChildren(); //imp table doesn't have indexes
+                    checks.IsInsideTableIndexPath(); //copy imp index table as index index table, not a separate one
                 } else {
                     checks.IsCommonSensePath();
                 }
@@ -485,7 +443,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
                     .PathShardsLimit(maxShardsToCreate)
                     .IsValidACL(acl);
@@ -584,7 +542,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
-            };
+        };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
         if (!alterData.Get()) {
@@ -666,15 +624,24 @@ public:
         if (Transaction.HasCreateCdcStream()) {
             txState.CdcPathId = srcPath.Base()->PathId;
         }
+        if (Transaction.GetCreateTable().HasPathState()) {
+            txState.TargetPathTargetState = Transaction.GetCreateTable().GetPathState();
+        }
 
         TShardInfo datashardInfo = TShardInfo::DataShardInfo(OperationId.GetTxId(), newTable->PathId);
         datashardInfo.BindedChannels = channelsBinding;
         auto newPartition = NTableState::ApplyPartitioningCopyTable(datashardInfo, srcTableInfo, txState, context.SS);
+        TVector<TShardIdx> newShardsIdx;
+        newShardsIdx.reserve(newPartition.size());
         for (const auto& part: newPartition) {
             context.MemChanges.GrabNewShard(context.SS, part.ShardIdx);
             context.DbChanges.PersistShard(part.ShardIdx);
+            newShardsIdx.push_back(part.ShardIdx);
         }
         context.SS->SetPartitioning(newTable->PathId, tableInfo, std::move(newPartition));
+        if (context.SS->EnableShred && context.SS->ShredManager->GetStatus() == EShredStatus::IN_PROGRESS) {
+            context.OnComplete.Send(context.SS->SelfId(), new TEvPrivate::TEvAddNewShardToShred(std::move(newShardsIdx)));
+        }
         for (const auto& shard : tableInfo->GetPartitions()) {
             Y_ABORT_UNLESS(context.SS->ShardInfos.contains(shard.ShardIdx), "shard info is set before");
             if (storePerShardConfig) {
@@ -768,14 +735,14 @@ public:
 
 namespace NKikimr::NSchemeShard {
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences)
+ISubOperation::TPtr CreateCopyTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences, TMaybe<TPathElement::EPathState> targetState)
 {
-    return MakeSubOperation<TCopyTable>(id, tx, localSequences);
+    return MakeSubOperation<TCopyTable>(id, tx, localSequences, targetState);
 }
 
-ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState state) {
-    Y_ABORT_UNLESS(state != TTxState::Invalid);
-    return MakeSubOperation<TCopyTable>(id, state);
+ISubOperation::TPtr CreateCopyTable(TOperationId id, TTxState::ETxState txState, TTxState* state) {
+    Y_ABORT_UNLESS(txState != TTxState::Invalid);
+    return MakeSubOperation<TCopyTable>(id, txState, state);
 }
 
 TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context) {
@@ -806,24 +773,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
     }
 
-    THashSet<TString> sequences;
-    for (auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     TPath dstPath = workDir.Child(copying.GetName());
@@ -846,7 +796,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
-    TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -857,9 +806,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         if (childPath.IsSequence()) {
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-            const auto& sequenceDesc = sequenceInfo->Description;
-            sequenceDescriptions.push_back(sequenceDesc);
             continue;
         }
 
@@ -883,12 +829,24 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                *operation->MutableVectorIndexKmeansTreeDescription() =
-                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                    // no specialized index description
+                    Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                    *operation->MutableVectorIndexKmeansTreeDescription() =
+                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                    *operation->MutableFulltextIndexDescription() =
+                        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                default:
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
@@ -909,22 +867,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
+            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
+            AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));
         }
     }
 
-    for (auto&& sequenceDescription : sequenceDescriptions) {
-        auto scheme = TransactionTemplate(
-            tx.GetWorkingDir() + "/" + copying.GetName(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-        scheme.SetFailOnExist(tx.GetFailOnExist());
-
-        auto* copySequence = scheme.MutableCopySequence();
-        copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *scheme.MutableSequence() = std::move(sequenceDescription);
-
-        result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
-    }
+    AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
     return result;
 }
 

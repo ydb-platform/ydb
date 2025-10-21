@@ -21,6 +21,7 @@
 * [CREATE TABLE](create_table/index.md)
 * [DROP TABLE](drop_table.md)
 * [INSERT](insert_into.md)
+* [SHOW CREATE](show_create.md)
 
 {% if feature_map_tables %}
 
@@ -42,21 +43,6 @@
 
 {% endif %}
 
-* [GROUP BY](group_by.md)
-
-{% if feature_join %}
-
-* [JOIN](join.md)
-
-{% endif %}
-
-{% if feature_window_functions %}
-
-* [WINDOW](window.md)
-
-{% endif %}
-
-* [FLATTEN](flatten.md)
 * [ACTION](action.md)
 
 {% if feature_mapreduce and process_command == "PROCESS" %}
@@ -117,5 +103,13 @@
 * [CREATE ASYNC REPLICATION](create-async-replication.md)
 * [ALTER ASYNC REPLICATION](alter-async-replication.md)
 * [DROP ASYNC REPLICATION](drop-async-replication.md)
+
+{% endif %}
+
+{% if feature_transfer %}
+
+* [CREATE TRANSFER](create-transfer.md)
+* [ALTER TRANSFER](alter-transfer.md)
+* [DROP TRANSFER](drop-transfer.md)
 
 {% endif %}

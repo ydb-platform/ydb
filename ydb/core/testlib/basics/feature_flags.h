@@ -18,7 +18,6 @@ public:
         }
 
     FEATURE_FLAG_SETTER(AllowYdbRequestsWithoutDatabase)
-    FEATURE_FLAG_SETTER(EnableSystemViews)
     FEATURE_FLAG_SETTER(EnablePersistentQueryStats)
     FEATURE_FLAG_SETTER(EnablePersistentPartitionStats)
     FEATURE_FLAG_SETTER(AllowUpdateChannelsBindingOfSolomonPartitions)
@@ -77,6 +76,12 @@ public:
     FEATURE_FLAG_SETTER(EnableDatabaseAdmin)
     FEATURE_FLAG_SETTER(EnablePermissionsExport)
     FEATURE_FLAG_SETTER(EnableShowCreate)
+    FEATURE_FLAG_SETTER(EnableLocalDBBtreeIndex)
+    FEATURE_FLAG_SETTER(EnableSharedMetadataAccessorCache)
+    FEATURE_FLAG_SETTER(EnableSystemNamesProtection)
+    FEATURE_FLAG_SETTER(EnableRealSystemViewPaths)
+    FEATURE_FLAG_SETTER(EnableDataShardWriteAlwaysVolatile)
+    FEATURE_FLAG_SETTER(EnableStreamingQueries)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -1,0 +1,2 @@
+/* custom error: Condition violated */
+select ListHasItems([WithSideEffects(Ensure(1,false))])

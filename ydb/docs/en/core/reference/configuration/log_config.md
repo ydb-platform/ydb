@@ -1,4 +1,4 @@
-# `log_config` configuration section
+# log_config
 
 The `log_config` section controls how {{ ydb-short-name }} server processes and manages its logs. It allows you to customize logging levels for different components, as well as global log formats and output methods.
 
@@ -21,7 +21,7 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 
 - **To stderr**: by default, {{ ydb-short-name }} sends all logs to stderr.
 - **To file**: logs can be written to a file using the `backend_file_name` parameter.
-- **To syslog**: when the `sys_log: true` parameter is enabled, logs are redirected to the syslog and stop being output to stderr. Logs are sent using `/dev/log` socket.
+- **To syslog**: when the `sys_log: true` parameter is enabled, logs are redirected to the syslog and stop being output to stderr. Logs are sent using the `/dev/log` socket.
 - **To Unified Agent**: when configuring the `uaclient_config` section, logs are sent to [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/) and stop being output to stderr.
 
 When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will be sent to both syslog and Unified Agent. If you need to continue outputting logs to stderr while using other methods, activate `sys_log_to_stderr: true`.
@@ -173,8 +173,8 @@ This configuration outputs logs in JSON format and sends them to Unified Agent.
 - If the `backend_file_name` parameter is specified, logs are written to this file. If the `sys_log` parameter is true, logs are sent to the system logger.
 - The `format` parameter determines how log entries are formatted. The "full" format includes all available information, "short" provides a more compact format, and "json" outputs logs in JSON format, which is convenient for parsing by logging services.
 - The internal log buffer has the following size limits:
-  - Default total size: 10MB (10 * 1024 * 1024 bytes)
-  - Default grain size: 64KB (1024 * 64 bytes)
+  - Default total size: 10MB (10 &ast; 1024 &ast; 1024 bytes)
+  - Default grain size: 64KB (1024 &ast; 64 bytes)
   - Maximum message size: 1KB (1024 bytes)
 
 ## See Also

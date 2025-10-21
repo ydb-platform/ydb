@@ -33,11 +33,13 @@ namespace NKafka {
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvKafka::TEvUpdateCounter, Handle);
                 HFunc(TEvKafka::TEvUpdateHistCounter, Handle);
+                HFunc(TEvKafka::TEvGetCountersRequest, Handle);
             }
         }
 
         void Handle(TEvKafka::TEvUpdateCounter::TPtr& ev, const TActorContext& ctx);
         void Handle(TEvKafka::TEvUpdateHistCounter::TPtr& ev, const TActorContext& ctx);
+        void Handle(TEvKafka::TEvGetCountersRequest::TPtr& ev, const TActorContext& ctx);
         TIntrusivePtr<NMonitoring::TDynamicCounters> GetGroupFromLabels(const TVector<std::pair<TString, TString>>& labels);
 
     private:
@@ -70,6 +72,9 @@ namespace NKafka {
         counter->Collect(ev->Get()->Value, ev->Get()->Count);
     }
 
+    void TKafkaMetricsActor::Handle(TEvKafka::TEvGetCountersRequest::TPtr& ev, const TActorContext&) {
+        Send(ev->Sender, new TEvKafka::TEvGetCountersResponse{Settings.Counters});
+    }
 
     NActors::IActor* CreateKafkaMetricsActor(const TKafkaMetricsSettings& settings) {
         return new TKafkaMetricsActor(settings);

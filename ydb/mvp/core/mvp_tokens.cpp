@@ -4,8 +4,8 @@
 #include <ydb/mvp/core/core_ydb.h>
 #include <ydb/public/api/grpc/ydb_auth_v1.grpc.pb.h>
 #include "mvp_tokens.h"
-#include <ydb/public/api/client/nc_private/iam/token_service.grpc.pb.h>
-#include <ydb/public/api/client/nc_private/iam/token_exchange_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_service.grpc.pb.h>
+#include <ydb/public/api/client/nc_private/iam/v1/token_exchange_service.grpc.pb.h>
 
 namespace NMVP {
 

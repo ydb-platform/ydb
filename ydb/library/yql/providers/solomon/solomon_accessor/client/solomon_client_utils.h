@@ -2,6 +2,8 @@
 
 #include <library/cpp/json/json_reader.h>
 
+#include <ydb/library/yql/providers/solomon/common/util.h>
+
 #include <map>
 #include <vector>
 
@@ -17,27 +19,14 @@ template <typename T>
 class TSolomonClientResponse {
 public:
     TSolomonClientResponse();
-    explicit TSolomonClientResponse(const TString& error);
-    explicit TSolomonClientResponse(T&& result);
-
-    TSolomonClientResponse(const TSolomonClientResponse&) = default;
-    TSolomonClientResponse(TSolomonClientResponse&&) = default;
+    explicit TSolomonClientResponse(const TString& error, EStatus status = STATUS_FATAL_ERROR);
+    explicit TSolomonClientResponse(T&& result, ui64 downloadedBytes);
 
 public:
     EStatus Status;
     TString Error;
     T Result;
-};
-
-struct TMetric {
-    std::map<TString, TString> Labels;
-    TString Type;
-};
-
-struct TTimeseries {
-    TMetric Metric;
-    std::vector<int64_t> Timestamps;
-    std::vector<double> Values;
+    ui64 DownloadedBytes = 0;
 };
 
 struct TGetLabelsResult {

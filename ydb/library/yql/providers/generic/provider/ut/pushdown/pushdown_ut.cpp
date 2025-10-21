@@ -1,29 +1,29 @@
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
-#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/generic/provider/yql_generic_state.h>
 
 #include <yql/essentials/ast/yql_ast.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
+#include <yql/essentials/core/services/yql_out_transformers.h>
+#include <yql/essentials/core/services/yql_transform_pipeline.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_type_annotation.h>
-#include <yql/essentials/core/services/yql_transform_pipeline.h>
-#include <yql/essentials/core/services/yql_out_transformers.h>
-#include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
-#include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/result/provider/yql_result_provider.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-
 #include <library/cpp/random_provider/random_provider.h>
 
 #include <google/protobuf/text_format.h>
@@ -143,6 +143,24 @@ struct TFakeGenericClient: public NConnector::IClient {
         PRIMITIVE_TYPE_COL("json_document", JSON_DOCUMENT);
         PRIMITIVE_TYPE_COL("dynumber", DYNUMBER);
 
+        // Add decimal columns
+        {
+            auto* col = schema.add_columns();
+            col->set_name("col_decimal_precision10_scale0");
+            auto* t = col->mutable_type();
+            auto* decimalType = t->mutable_decimal_type();
+            decimalType->set_precision(10);
+            decimalType->set_scale(0);
+        }
+        {
+            auto* col = schema.add_columns();
+            col->set_name("col_decimal_precision4_scale2");
+            auto* t = col->mutable_type();
+            auto* decimalType = t->mutable_decimal_type();
+            decimalType->set_precision(4);
+            decimalType->set_scale(2);
+        }
+
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
@@ -246,7 +264,12 @@ struct TPushdownFixture: public NUnitTest::TBaseFixture {
         TypesCtx = MakeIntrusive<TTypeAnnotationContext>();
         TypesCtx->RandomProvider = CreateDeterministicRandomProvider(1);
 
-        FunctionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone(); // TODO: remove Clone()
+        auto functionRegistry = CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, {})->Clone();
+        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
+        FunctionRegistry = std::move(functionRegistry);
+
+        TypesCtx->UdfResolver = NYql::NCommon::CreateSimpleUdfResolver(FunctionRegistry.Get());
+        TypesCtx->UserDataStorage = MakeIntrusive<TUserDataStorage>(nullptr, TUserDataTable(), nullptr, nullptr);
 
         {
             auto* setting = GatewaysCfg.MutableGeneric()->AddDefaultSettings();
@@ -704,6 +727,120 @@ Y_UNIT_TEST_SUITE_F(PushdownTest, TPushdownFixture) {
                             }
                             value {
                                 bytes_value: "value"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
+
+    Y_UNIT_TEST(RegexpPushdown) {
+        AssertFilter(
+            // Test REGEXP pushdown with a simple pattern matching digits
+            R"ast(
+                (Coalesce
+                    (Apply (Udf '"Re2.Grep" '((String '"\\\\d+") (Nothing 
+                        (OptionalType 
+                            (StructType 
+                                '('"CaseSensitive" (DataType 'Bool))
+                                '('"DotNl" (DataType 'Bool)) 
+                                '('"Literal" (DataType 'Bool)) 
+                                '('"LogErrors" (DataType 'Bool)) 
+                                '('"LongestMatch" (DataType 'Bool)) 
+                                '('"MaxMem" (DataType 'Uint64)) 
+                                '('"NeverCapture" (DataType 'Bool)) 
+                                '('"NeverNl" (DataType 'Bool)) 
+                                '('"OneLine" (DataType 'Bool)) 
+                                '('"PerlClasses" (DataType 'Bool)) 
+                                '('"PosixSyntax" (DataType 'Bool)) 
+                                '('"Utf8" (DataType 'Bool)) 
+                                '('"WordBoundary" (DataType 'Bool))
+                            )
+                        )
+                    ))) 
+                        (Member $row '"col_string")
+                    )
+                    (Bool '"false")
+                )
+                )ast",
+            R"proto(
+                regexp {
+                    value {
+                        column: "col_string"
+                    }
+                    pattern {
+                        typed_value {
+                            type {
+                                type_id: STRING
+                            }
+                            value {
+                                bytes_value: "\\\\d+"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
+
+    Y_UNIT_TEST(DecimalPushdownPrecision10Scale0) {
+        AssertFilter(
+            R"ast(
+                (==
+                    (Member $row '"col_decimal_precision10_scale0")
+                    (Decimal '"1" '"10" '"0")
+                )
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_decimal_precision10_scale0"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                decimal_type {
+                                    precision: 10
+                                    scale: 0
+                                }
+                            }
+                            value {
+                                bytes_value: "\001\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
+                            }
+                        }
+                    }
+                }
+            )proto"
+        );
+    }
+
+    Y_UNIT_TEST(DecimalPushdownPrecesion4Scale2) {
+        // Test with negative decimal value with fractional part
+        AssertFilter(
+            R"ast(
+                (==
+                    (Member $row '"col_decimal_precision4_scale2")
+                    (Decimal '"-22.22" '"4" '"2")
+                )
+                )ast",
+            R"proto(
+                comparison {
+                    operation: EQ
+                    left_value {
+                        column: "col_decimal_precision4_scale2"
+                    }
+                    right_value {
+                        typed_value {
+                            type {
+                                decimal_type {
+                                    precision: 4
+                                    scale: 2
+                                }
+                            }
+                            value {
+                                bytes_value: "R\367\377\377\377\377\377\377\377\377\377\377\377\377\377\377"
                             }
                         }
                     }

@@ -121,6 +121,10 @@ namespace {
             break;
         }
         case TExprNode::Callable:
+            if (node.IsPosAware()) {
+                auto pos = node.Pos();
+                hash = CseeHash(&pos, sizeof(pos), hash);
+            }
             if constexpr (UseDeterminsticHash) {
                 hash = CseeHash(node.Content().data(), node.Content().size(), hash);
             } else {
@@ -192,6 +196,9 @@ namespace {
                 case EDependencyScope::None:
                 case EDependencyScope::Mixed:
                     Y_ABORT("Strange argument.");
+            }
+            if (node.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                hash = CseeHash(node.UniqueId(), hash);
             }
             break;
         case TExprNode::World:
@@ -266,6 +273,13 @@ namespace {
             return left.Content().data() == right.Content().data() && left.GetFlagsToCompare() == right.GetFlagsToCompare();
 
         case TExprNode::Callable:
+            if (left.IsPosAware() != right.IsPosAware()) {
+                return false;
+            }
+
+            if (left.IsPosAware() && left.Pos() != right.Pos()) {
+                return false;
+            }
             // compare pointers due to intern
             if (left.Content().data() != right.Content().data()) {
                 return false;
@@ -345,6 +359,9 @@ namespace {
             return true;
         }
         case TExprNode::Argument: {
+            if (left.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World || right.GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                return false;
+            }
             if (currLeftFrame.Lambda && currRightFrame.Lambda && IsArgInScope(currLeftFrame, left) && IsArgInScope(currRightFrame, right)) {
                 const ui16 leftRelativeLevel = GetDependencyLevel(left);
                 const ui16 rightRelativeLevel = GetDependencyLevel(right);
@@ -488,7 +505,7 @@ namespace {
             }
             internal.erase(&node);
         } else {
-            insideDependsOn = insideDependsOn || node.IsCallable("DependsOn");
+            insideDependsOn = insideDependsOn || NNodes::TCoDependsOnBase::Match(&node);
             node.ForEachChild(std::bind(&CalculateCompletness, std::placeholders::_1, insideDependsOn, level, std::ref(internal),
                 std::ref(visited), std::ref(visitedInsideDependsOn)));
         }
@@ -550,7 +567,8 @@ namespace {
             }
         }
 
-        if (const auto kind = node.GetTypeAnn()->GetKind(); ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda()) {
+        if (const auto kind = node.GetTypeAnn()->GetKind(); node.IsCseeSafe() &&
+            (ETypeAnnotationKind::Flow != kind && ETypeAnnotationKind::Stream != kind || node.IsLambda())) {
             auto& nodesSet = node.IsComplete() ? uniqueNodes : incompleteNodes;
 
             const auto pair = nodesSet.equal_range(hash);

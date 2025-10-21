@@ -119,6 +119,10 @@
         GROUPS(), \
         TYPES(TString, TString, TDuration, i64, bool), \
         NAMES("scope", "user", "latencyMs", "size", "success")) \
+    PROBE(DeleteFolderResourcesRequest, \
+        GROUPS(), \
+        TYPES(TString, TString, TString, TDuration, i64, bool), \
+        NAMES("scope", "folderId", "user", "latencyMs", "size", "success")) \
 
 // YQ_CONTROL_PLANE_STORAGE_PROVIDER
 

@@ -7,6 +7,7 @@ namespace NKikimr {
 class TControlWrapper {
     TIntrusivePtr<TControl> Control;
     friend class TControlBoard;
+    friend class TDynamicControlBoard;
 
 public:
     TControlWrapper(TAtomicBase defaultValue = 0)
@@ -54,6 +55,11 @@ public:
         : Control(control)
         , CurrentValue(Control)
     {
+    }
+
+    void ResetControl(const TControlWrapper &control) {
+        Control = control;
+        CurrentValue = control;
     }
 
     i64 Update(TInstant now) {

@@ -64,7 +64,7 @@ namespace NActors {
         template <typename TDerived, typename TWaitState>
         bool Sleep(std::atomic<bool> *stopFlag);
     };
-    
+
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
@@ -104,6 +104,7 @@ namespace NActors {
         i16 PoolLeaseIndex = -1;
         i16 OwnerPoolId = -1;
         i16 CurrentPoolId = -1;
+        i16 AdjacentPoolId = -1;
         NHPTimer::STime SoftDeadlineForPool = 0;
         NHPTimer::STime SoftProcessingDurationTs = 0;
 

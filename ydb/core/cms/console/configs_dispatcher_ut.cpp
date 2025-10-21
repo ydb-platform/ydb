@@ -495,6 +495,7 @@ metadata:
   version: 0
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster2
   net_classifier_distributable_config:
@@ -538,7 +539,9 @@ metadata:
   cluster: ""
   version: 1
 
-config: {yaml_config_enabled: false}
+config:
+  yaml_config_enabled: false
+  self_management_config: {enabled: true, erasure_species: block-4-2}
 allowed_labels: {}
 selector_config: []
 )";
@@ -608,6 +611,7 @@ metadata:
   version: 0
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
 allowed_labels:
@@ -628,6 +632,7 @@ metadata:
   version: 1
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster1
   yaml_config_enabled: true
@@ -656,6 +661,7 @@ metadata:
   version: 2
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   yaml_config_enabled: true
@@ -689,6 +695,7 @@ metadata:
   version: 3
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -715,6 +722,7 @@ metadata:
   version: 4
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -762,6 +770,7 @@ metadata:
   version: 5
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -808,6 +817,7 @@ metadata:
   cluster: ""
   version: 6
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   cms_config:
@@ -854,6 +864,7 @@ metadata:
   version: 7
 
 config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
   log_config:
     cluster_name: cluster3
   yaml_config_enabled: true
@@ -884,6 +895,41 @@ selector_config:
         UNIT_ASSERT(notifications > 0);
         UNIT_ASSERT_VALUES_EQUAL(expectedConfig.ShortDebugString(), reply->Config.ShortDebugString());
     }
-}
 
+    Y_UNIT_TEST(TestYamlConfigAndIcb) {
+        NKikimrConfig::TAppConfig config;
+        auto *label = config.AddLabels();
+        label->SetName("test");
+        label->SetValue("true");
+
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig(), config);
+        InitConfigsDispatcher(runtime);
+
+        TString yamlConfig1 = R"(
+---
+metadata:
+  cluster: ""
+  version: 0
+  kind: MainConfig
+config:
+  self_management_config: {enabled: true, erasure_species: block-4-2}
+  log_config:
+    cluster_name: cluster3
+  yaml_config_enabled: true
+  immediate_controls_config:
+    data_shard_controls:
+      enable_leader_leases: 1
+      enable_locked_writes: 1
+)";
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, yamlConfig1);
+        auto& icb = *runtime.GetAppData().Icb;
+        TAtomic controlValue;
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLeaderLeases.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLeaderLeases.AtomicLoad()->Get();
+        UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
+        UNIT_ASSERT(!!icb.DataShardControls.EnableLockedWrites.AtomicLoad());
+        controlValue = icb.DataShardControls.EnableLockedWrites.AtomicLoad()->Get();
+        UNIT_ASSERT_VALUES_EQUAL(controlValue, 1);
+    }
+}
 } // namespace NKikimr

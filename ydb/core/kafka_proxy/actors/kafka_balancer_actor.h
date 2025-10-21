@@ -1,15 +1,15 @@
 #pragma once
 
 #include "actors.h"
-#include "../kafka_consumer_groups_metadata_initializers.h"
-#include "../kafka_consumer_members_metadata_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/fetch_request_actor.h>
+#include <ydb/core/persqueue/public/fetcher/fetch_request_actor.h>
 #include <ydb/core/protos/kafka.pb.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -61,10 +61,10 @@ extern const TString UPDATE_GROUP_STATE;
 extern const TString CHECK_MASTER_ALIVE;
 
 struct TGroupStatus {
-    bool Exists;
-    ui64 Generation;
-    ui64 LastSuccessGeneration;
-    ui64 State;
+    bool Exists = false;
+    ui64 Generation = 0;
+    ui64 LastSuccessGeneration = std::numeric_limits<ui64>::max();
+    ui64 State = 0;
     TString MasterId;
     TInstant LastHeartbeat;
     TString ProtocolName;
@@ -112,6 +112,11 @@ public:
 
         LEAVE_GET_LAST_GENERATION,
         LEAVE_SET_DEAD
+    };
+
+    struct MemberTimeoutsMs {
+        ui32 RebalanceTimeoutMs;
+        TInstant HeartbeatDeadline;
     };
 
     TKafkaBalancerActor(const TContext::TPtr context, ui64 cookie, ui64 corellationId, TMessagePtr<TJoinGroupRequestData> message, ui8 retryNum = 0)
@@ -309,7 +314,7 @@ private:
     std::optional<TGroupStatus> ParseGroupState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
     bool ParseAssignments(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, TString& assignments);
     bool ParseWorkerStates(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, NKafka::TWorkerState>& workerStates, TString& outLastMemberId);
-    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, ui32>& membersAndRebalanceTimeouts, TString& lastMemberId);
+    bool ParseMembersAndRebalanceTimeouts(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, std::unordered_map<TString, MemberTimeoutsMs>& membersAndRebalanceTimeouts, TString& lastMemberId);
     bool ParseDeadsAndSessionTimeout(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& deadsCount, ui32& outSessionTimeoutMs);
     bool ParseGroupsCount(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& groupsCount);
     bool ParseMemberGeneration(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, ui64& generation);
@@ -363,7 +368,7 @@ private:
     TString Assignments;
     std::unordered_map<TString, TString> WorkerStates;
     std::unordered_map<TString, NKafka::TWorkerState> AllWorkerStates;
-    std::unordered_map<TString, ui32> WaitedMemberIdsAndTimeouts;
+    std::unordered_map<TString, MemberTimeoutsMs> WaitedMemberIdsAndTimeouts;
     TInstant RebalanceStartTime = TInstant::Now();
     TString Protocol;
     TString ProtocolType;
@@ -378,7 +383,6 @@ private:
     TMessagePtr<TSyncGroupRequestData> SyncGroupRequestData;
     TMessagePtr<THeartbeatRequestData> HeartbeatGroupRequestData;
     TMessagePtr<TLeaveGroupRequestData> LeaveGroupRequestData;
-
 };
 
 } // namespace NKafka

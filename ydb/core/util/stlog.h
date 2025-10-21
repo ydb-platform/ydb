@@ -354,6 +354,10 @@ namespace NKikimr::NStLog {
                     Json.WriteKey("line");
                     Json.Write(Self->Line);
                 }
+                Json.WriteKey("brief_message");
+                Json.Write(Stream.Str());
+                Self->WriteParamsToStream(Stream);
+                Stream << " Marker# " << Self->Marker;
                 Json.WriteKey("message");
                 Json.Write(Stream.Str());
                 Self->WriteParamsToJson(Json);

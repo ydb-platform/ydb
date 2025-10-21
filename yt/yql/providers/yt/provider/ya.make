@@ -23,12 +23,14 @@ SRCS(
     yql_yt_helpers.cpp
     yql_yt_intent_determination.cpp
     yql_yt_io_discovery.cpp
+    yql_yt_io_discovery_partitions.cpp
     yql_yt_io_discovery_walk_folders.cpp
     yql_yt_join_impl.cpp
     yql_yt_join_reorder.cpp
     yql_yt_key.cpp
     yql_yt_load_table_meta.cpp
     yql_yt_load_columnar_stats.cpp
+    yql_yt_layers_integration.cpp
     yql_yt_logical_optimize.cpp
     yql_yt_mkql_compiler.cpp
     yql_yt_op_hash.cpp
@@ -72,6 +74,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/re2
     library/cpp/yson/node
     library/cpp/json/writer
     library/cpp/json

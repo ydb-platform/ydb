@@ -1,11 +1,11 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
@@ -70,6 +70,7 @@ public:
     TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
     TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
     TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings);
+    TAsyncDescribeSystemViewResult DescribeSystemView(const std::string& path, const TDescribeSystemViewSettings& settings);
 
     template<typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,

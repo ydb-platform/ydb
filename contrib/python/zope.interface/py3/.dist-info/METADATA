@@ -1,11 +1,11 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: zope.interface
-Version: 7.2
+Version: 8.0.1
 Summary: Interfaces for Python
 Home-page: https://github.com/zopefoundation/zope.interface
 Author: Zope Foundation and Contributors
 Author-email: zope-dev@zope.dev
-License: ZPL 2.1
+License: ZPL-2.1
 Keywords: interface,components,plugins
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
@@ -13,7 +13,6 @@ Classifier: License :: OSI Approved :: Zope Public License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
@@ -23,22 +22,33 @@ Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Classifier: Framework :: Zope :: 3
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
-Requires-Python: >=3.8
+Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
 License-File: LICENSE.txt
-Requires-Dist: setuptools
 Provides-Extra: docs
-Requires-Dist: Sphinx ; extra == 'docs'
-Requires-Dist: repoze.sphinx.autointerface ; extra == 'docs'
-Requires-Dist: furo ; extra == 'docs'
+Requires-Dist: Sphinx; extra == "docs"
+Requires-Dist: repoze.sphinx.autointerface; extra == "docs"
+Requires-Dist: furo; extra == "docs"
 Provides-Extra: test
-Requires-Dist: coverage[toml] ; extra == 'test'
-Requires-Dist: zope.event ; extra == 'test'
-Requires-Dist: zope.testing ; extra == 'test'
+Requires-Dist: coverage[toml]; extra == "test"
+Requires-Dist: zope.event; extra == "test"
+Requires-Dist: zope.testing; extra == "test"
 Provides-Extra: testing
-Requires-Dist: coverage[toml] ; extra == 'testing'
-Requires-Dist: zope.event ; extra == 'testing'
-Requires-Dist: zope.testing ; extra == 'testing'
+Requires-Dist: coverage[toml]; extra == "testing"
+Requires-Dist: zope.event; extra == "testing"
+Requires-Dist: zope.testing; extra == "testing"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: provides-extra
+Dynamic: requires-python
+Dynamic: summary
 
 ====================
  ``zope.interface``
@@ -75,6 +85,25 @@ For detailed documentation, please see https://zopeinterface.readthedocs.io/en/l
 =========
  Changes
 =========
+
+8.0.1 (2025-09-25)
+==================
+
+- Make tests resilient against different ways of calling them.
+
+- Remove run-time dependency on ``setuptools``.
+
+
+8.0 (2025-09-12)
+================
+
+- Replace ``pkg_resources`` namespace with PEP 420 native namespace.
+
+- Drop support for Python 3.8.
+
+- Allow using newer ``setuptools`` version.
+  (`#333 <https://github.com/zopefoundation/zope.interface/issues/333>`_)
+
 
 7.2 (2024-11-28)
 ================

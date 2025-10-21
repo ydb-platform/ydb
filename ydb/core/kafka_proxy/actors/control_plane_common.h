@@ -109,6 +109,7 @@ inline std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ValidateTo
     }
 }
 
+
 template<class T>
 inline std::unordered_set<TString> ExtractDuplicates(
         std::vector<T>& source,
@@ -202,6 +203,14 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const override {
         return DatabaseName;
+    }
+
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
     }
 
     const TIntrusiveConstPtr<NACLib::TUserToken>& GetInternalToken() const override {
@@ -376,5 +385,14 @@ private:
         SendResultCallback(Convert(status), Issue.GetMessage(), result);
     }
 };
+
+enum class ECleanupPolicy {
+    REMOVE,
+    COMPACT,
+    UNKNOWN
+};
+
+std::optional<THolder<TEvKafka::TEvTopicModificationResponse>> ConvertCleanupPolicy(const std::optional<TString>& configValue,
+                                                                                    std::optional<ECleanupPolicy>& cleanupPolicy);
 
 } //namespace NKafka

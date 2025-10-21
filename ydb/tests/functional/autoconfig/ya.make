@@ -1,12 +1,12 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 TEST_SRCS(
     test_actorsystem.py
 )
 
 IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:16 cpu:1)
+    REQUIREMENTS(ram:16 cpu:16)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
@@ -16,7 +16,6 @@ ENDIF()
 SPLIT_FACTOR(20)
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

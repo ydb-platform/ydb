@@ -110,6 +110,17 @@ public:
     TControlWrapper ForsetiOpPieceSizeRot;
     TControlWrapper UseNoopSchedulerSSD;
     TControlWrapper UseNoopSchedulerHDD;
+    TControlWrapper ChunkBaseLimitPerMille;
+    TControlWrapper SemiStrictSpaceIsolation;
+    i64 SemiStrictSpaceIsolationCached = 0;
+    NKikimrBlobStorage::TPDiskSpaceColor::E GetColorBorderIcb() {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+        switch (SemiStrictSpaceIsolation) {
+            case 1: return TColor::LIGHT_YELLOW;
+            case 2: return TColor::YELLOW;
+            default: return Cfg->SpaceColorBorder;
+        }
+    }
     bool UseNoopSchedulerCached = false;
 
     // SectorMap Controls
@@ -213,7 +224,7 @@ public:
     ui32 LastInitialChunkIdx;
     ui64 LastInitialSectorIdx;
 
-    ui64 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
+    ui32 ExpectedSlotCount = 0; // Number of slots to use for space limit calculation.
 
     TAtomic TotalOwners = 0; // number of registered owners
 
@@ -280,6 +291,7 @@ public:
     ui32 GetTotalChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
+    ui32 GetNumActiveSlots() const;
     TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy = nullptr) const;
     TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
 
@@ -365,6 +377,9 @@ public:
     bool YardInitStart(TYardInit &evYardInit);
     void YardInitFinish(TYardInit &evYardInit);
     bool YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner);
+    void YardResize(TYardResize &evYardResize);
+    void ProcessChangeExpectedSlotCount(TChangeExpectedSlotCount& request);
+
     // Scheduler weight configuration
     void ConfigureCbs(ui32 ownerId, EGate gate, ui64 weight);
     void SchedulerConfigure(const TConfigureScheduler &conf);

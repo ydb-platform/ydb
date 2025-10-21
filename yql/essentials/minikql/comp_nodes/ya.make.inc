@@ -47,6 +47,7 @@ SET(ORIG_SOURCES
     mkql_ensure.cpp
     mkql_enumerate.cpp
     mkql_exists.cpp
+    mkql_expand_map.cpp
     mkql_extend.cpp
     mkql_factory.cpp
     mkql_filter.cpp
@@ -73,6 +74,7 @@ SET(ORIG_SOURCES
     mkql_join_dict.cpp
     mkql_lazy_list.cpp
     mkql_length.cpp
+    mkql_linear.cpp
     mkql_listfromrange.cpp
     mkql_logical.cpp
     mkql_lookup.cpp
@@ -85,6 +87,8 @@ SET(ORIG_SOURCES
     mkql_match_recognize_rows_formatter.cpp
     mkql_multihopping.cpp
     mkql_multimap.cpp
+    mkql_mutdict.cpp
+    mkql_narrow_map.cpp
     mkql_next_value.cpp
     mkql_nop.cpp
     mkql_now.cpp

@@ -134,4 +134,90 @@ Y_UNIT_TEST_SUITE(TBinnedTimerQueueTest) {
             UNIT_ASSERT(queue.Validate());
         }
     }
+
+    Y_UNIT_TEST(ShouldHandleBucketBoundaries) {
+        TBinnedTimerQueue<int> queue(4, 100);
+        auto now = std::chrono::steady_clock::now();
+
+        // Fill first bucket
+        for (int i = 0; i < 100; ++i) {
+            queue.Add(std::chrono::milliseconds(i), i, now);
+        }
+
+        // Add items at bucket boundaries
+        queue.Add(std::chrono::milliseconds(100), 100, now);
+        queue.Add(std::chrono::milliseconds(101), 101, now);
+
+        // Verify order
+        for (int i = 0; i <= 101; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, i);
+            UNIT_ASSERT(queue.Validate());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldHandleBucketOverflow) {
+        TBinnedTimerQueue<int> queue(4, 2); // Small bucket limit
+
+        // Add more items than bucket limit
+        for (int i = 0; i < 10; ++i) {
+            queue.Add(std::chrono::milliseconds(i * 100), i);
+            UNIT_ASSERT(queue.Validate());
+        }
+
+        // Verify all items are popped in order
+        for (int i = 0; i < 10; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(queue.PopFront().Value, i);
+            UNIT_ASSERT(queue.Validate());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldHandleBucketRotation) {
+        TBinnedTimerQueue<int> queue(3, 100);
+
+        // Fill all buckets with items at specific time points
+        for (int i = 0; i < 300; ++i) {
+            // Use fixed time points to ensure proper bucket distribution
+            auto timePoint = std::chrono::steady_clock::time_point{} + std::chrono::milliseconds(i * 100);
+            queue.Add(std::chrono::milliseconds(i * 100), i, timePoint);
+
+            // Debug output on validation failure
+            if (!queue.Validate()) {
+                std::cerr << "Validation failed after adding item " << i << std::endl;
+                queue.Dump();
+                UNIT_ASSERT(queue.Validate());
+            }
+        }
+
+        // Pop all items and verify bucket rotation
+        for (int i = 0; i < 300; ++i) {
+            auto item = queue.PopFront();
+            UNIT_ASSERT_VALUES_EQUAL(item.Value, i);
+
+            // Debug output on validation failure
+            if (!queue.Validate()) {
+                std::cerr << "Validation failed after popping item " << i << std::endl;
+                queue.Dump();
+                UNIT_ASSERT(queue.Validate());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ShouldHandleBucketRotationWithFixedTimePoints) {
+        TBinnedTimerQueue<int> queue(3, 100);
+        auto baseTime = std::chrono::steady_clock::time_point{};
+
+        // Add items with fixed time points to ensure proper bucket distribution
+        for (int i = 0; i < 9; ++i) {
+            auto timePoint = baseTime + std::chrono::milliseconds(i * 1000);
+            queue.Add(std::chrono::milliseconds(i * 1000), i, timePoint);
+            UNIT_ASSERT(queue.Validate());
+        }
+
+        // Verify items are popped in order
+        for (int i = 0; i < 9; ++i) {
+            auto item = queue.PopFront();
+            UNIT_ASSERT_VALUES_EQUAL(item.Value, i);
+            UNIT_ASSERT(queue.Validate());
+        }
+    }
 }

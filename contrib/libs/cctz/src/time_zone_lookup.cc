@@ -16,9 +16,6 @@
 
 #if defined(__ANDROID__)
 #include <sys/system_properties.h>
-#if defined(__ANDROID_API__) && __ANDROID_API__ >= 21
-#include <dlfcn.h>
-#endif
 #endif
 
 #if defined(__APPLE__)
@@ -26,6 +23,15 @@
 #include <vector>
 #endif
 
+#if defined(__Fuchsia__)
+#error #include <fuchsia/intl/cpp/fidl.h>
+#error #include <lib/async-loop/cpp/loop.h>
+#error #include <lib/fdio/directory.h>
+#include <zircon/types.h>
+#endif
+
+#include <array>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -35,34 +41,81 @@
 
 namespace cctz {
 
-#if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ >= 21
 namespace {
-// Android 'L' removes __system_property_get() from the NDK, however
-// it is still a hidden symbol in libc so we use dlsym() to access it.
-// See Chromium's base/sys_info_android.cc for a similar example.
+#if defined(USE_WIN32_LOCAL_TIME_ZONE)
+// True if we have already failed to load the API.
+static std::atomic_bool g_ucal_getTimeZoneIDForWindowsIDUnavailable;
+static std::atomic<decltype(ucal_getTimeZoneIDForWindowsID)*>
+    g_ucal_getTimeZoneIDForWindowsIDRef;
 
-using property_get_func = int (*)(const char*, char*);
-
-property_get_func LoadSystemPropertyGet() {
-  int flag = RTLD_LAZY | RTLD_GLOBAL;
-#if defined(RTLD_NOLOAD)
-  flag |= RTLD_NOLOAD;  // libc.so should already be resident
-#endif
-  if (void* handle = dlopen("libc.so", flag)) {
-    void* sym = dlsym(handle, "__system_property_get");
-    dlclose(handle);
-    return reinterpret_cast<property_get_func>(sym);
+std::string win32_local_time_zone() {
+  // If we have already failed to load the API, then just give up.
+  if (g_ucal_getTimeZoneIDForWindowsIDUnavailable.load()) {
+    return "";
   }
-  return nullptr;
-}
 
-int __system_property_get(const char* name, char* value) {
-  static property_get_func system_property_get = LoadSystemPropertyGet();
-  return system_property_get ? system_property_get(name, value) : -1;
-}
+  auto ucal_getTimeZoneIDForWindowsIDFunc =
+      g_ucal_getTimeZoneIDForWindowsIDRef.load();
+  if (ucal_getTimeZoneIDForWindowsIDFunc == nullptr) {
+    // If we have already failed to load the API, then just give up.
+    if (g_ucal_getTimeZoneIDForWindowsIDUnavailable.load()) {
+      return "";
+    }
 
+    const HMODULE icudll = ::LoadLibraryExW(L"icu.dll", nullptr,
+                                            LOAD_LIBRARY_SEARCH_SYSTEM32);
+
+    if (icudll == nullptr) {
+      g_ucal_getTimeZoneIDForWindowsIDUnavailable.store(true);
+      return "";
+    }
+
+    ucal_getTimeZoneIDForWindowsIDFunc =
+        reinterpret_cast<decltype(ucal_getTimeZoneIDForWindowsID)*>(
+            ::GetProcAddress(icudll, "ucal_getTimeZoneIDForWindowsID"));
+
+    if (ucal_getTimeZoneIDForWindowsIDFunc == nullptr) {
+      g_ucal_getTimeZoneIDForWindowsIDUnavailable.store(true);
+      return "";
+    }
+    // store-race is not a problem here, because ::GetProcAddress() returns the
+    // same address for the same function in the same DLL.
+    g_ucal_getTimeZoneIDForWindowsIDRef.store(
+        ucal_getTimeZoneIDForWindowsIDFunc);
+
+    // We intentionally do not call ::FreeLibrary() here to avoid frequent DLL
+    // loadings and unloading. As "icu.dll" is a system library, keeping it on
+    // memory is supposed to have no major drawback.
+  }
+
+  DYNAMIC_TIME_ZONE_INFORMATION info = {};
+  if (::GetDynamicTimeZoneInformation(&info) == TIME_ZONE_ID_INVALID) {
+    return "";
+  }
+
+  std::array<UChar, 128> buffer;
+  UErrorCode status = U_ZERO_ERROR;
+  const auto num_chars_in_buffer = ucal_getTimeZoneIDForWindowsIDFunc(
+      reinterpret_cast<const UChar*>(info.TimeZoneKeyName), -1, nullptr,
+      buffer.data(), static_cast<int32_t>(buffer.size()), &status);
+  if (status != U_ZERO_ERROR || num_chars_in_buffer <= 0 ||
+      num_chars_in_buffer > static_cast<int32_t>(buffer.size())) {
+    return "";
+  }
+
+  const int num_bytes_in_utf8 = ::WideCharToMultiByte(
+      CP_UTF8, 0, reinterpret_cast<const wchar_t*>(buffer.data()),
+      static_cast<int>(num_chars_in_buffer), nullptr, 0, nullptr, nullptr);
+  std::string local_time_str;
+  local_time_str.resize(static_cast<size_t>(num_bytes_in_utf8));
+  ::WideCharToMultiByte(CP_UTF8, 0, reinterpret_cast<const wchar_t*>(buffer.data()),
+                        static_cast<int>(num_chars_in_buffer),
+                        &local_time_str[0], num_bytes_in_utf8, nullptr,
+                        nullptr);
+  return local_time_str;
+}
+#endif  // USE_WIN32_LOCAL_TIME_ZONE
 }  // namespace
-#endif
 
 std::string time_zone::name() const {
   return effective_impl().Name();
@@ -132,12 +185,61 @@ time_zone local_time_zone() {
   if (CFStringRef tz_name = CFTimeZoneGetName(tz_default)) {
     CFStringEncoding encoding = kCFStringEncodingUTF8;
     CFIndex length = CFStringGetLength(tz_name);
-    buffer.resize(CFStringGetMaximumSizeForEncoding(length, encoding) + 1);
-    if (CFStringGetCString(tz_name, &buffer[0], buffer.size(), encoding)) {
+    CFIndex max_size = CFStringGetMaximumSizeForEncoding(length, encoding) + 1;
+    buffer.resize(static_cast<size_t>(max_size));
+    if (CFStringGetCString(tz_name, &buffer[0], max_size, encoding)) {
       zone = &buffer[0];
     }
   }
   CFRelease(tz_default);
+#endif
+#if defined(__Fuchsia__)
+  std::string primary_tz;
+  [&]() {
+    // Note: We can't use the synchronous FIDL API here because it doesn't
+    // allow timeouts; if the FIDL call failed, local_time_zone() would never
+    // return.
+
+    const zx::duration kTimeout = zx::msec(500);
+
+    // Don't attach to the thread because otherwise the thread's dispatcher
+    // would be set to null when the loop is destroyed, causing any other FIDL
+    // code running on the same thread to crash.
+    async::Loop loop(&kAsyncLoopConfigNeverAttachToThread);
+
+    fuchsia::intl::PropertyProviderHandle handle;
+    zx_status_t status = fdio_service_connect_by_name(
+        fuchsia::intl::PropertyProvider::Name_,
+        handle.NewRequest().TakeChannel().release());
+    if (status != ZX_OK) {
+      return;
+    }
+
+    fuchsia::intl::PropertyProviderPtr intl_provider;
+    status = intl_provider.Bind(std::move(handle), loop.dispatcher());
+    if (status != ZX_OK) {
+      return;
+    }
+
+    intl_provider->GetProfile(
+        [&loop, &primary_tz](fuchsia::intl::Profile profile) {
+          if (!profile.time_zones().empty()) {
+            primary_tz = profile.time_zones()[0].id;
+          }
+          loop.Quit();
+        });
+    loop.Run(zx::deadline_after(kTimeout));
+  }();
+
+  if (!primary_tz.empty()) {
+    zone = primary_tz.c_str();
+  }
+#endif
+#if defined(USE_WIN32_LOCAL_TIME_ZONE)
+  std::string win32_tz = win32_local_time_zone();
+  if (!win32_tz.empty()) {
+    zone = win32_tz.c_str();
+  }
 #endif
 
   // Allow ${TZ} to override to default zone.

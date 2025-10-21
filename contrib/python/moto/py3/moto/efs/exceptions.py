@@ -8,7 +8,7 @@ class EFSError(JsonRESTError):
 class AccessPointNotFound(EFSError):
     code = 404
 
-    def __init__(self, access_point_id):
+    def __init__(self, access_point_id: str):
         super().__init__(
             "AccessPointNotFound", f"Access Point {access_point_id} does not exist."
         )
@@ -17,93 +17,83 @@ class AccessPointNotFound(EFSError):
 class FileSystemAlreadyExists(EFSError):
     code = 409
 
-    def __init__(self, creation_token, *args, **kwargs):
+    def __init__(self, creation_token: str):
         super().__init__(
             "FileSystemAlreadyExists",
-            "File system with {} already exists.".format(creation_token),
-            *args,
-            **kwargs,
+            f"File system with {creation_token} already exists.",
         )
 
 
 class FileSystemNotFound(EFSError):
     code = 404
 
-    def __init__(self, file_system_id, *args, **kwargs):
+    def __init__(self, file_system_id: str):
         super().__init__(
             "FileSystemNotFound",
-            "File system {} does not exist.".format(file_system_id),
-            *args,
-            **kwargs,
+            f"File system '{file_system_id}' does not exist.",
         )
 
 
 class FileSystemInUse(EFSError):
     code = 409
 
-    def __init__(self, msg, *args, **kwargs):
-        super().__init__("FileSystemInUse", msg, *args, **kwargs)
+    def __init__(self, msg: str):
+        super().__init__("FileSystemInUse", msg)
 
 
 class MountTargetConflict(EFSError):
     code = 409
 
-    def __init__(self, msg, *args, **kwargs):
-        super().__init__("MountTargetConflict", msg, *args, **kwargs)
+    def __init__(self, msg: str):
+        super().__init__("MountTargetConflict", msg)
 
 
 class MountTargetNotFound(EFSError):
     code = 404
 
-    def __init__(self, mount_target_id, *args, **kwargs):
+    def __init__(self, mount_target_id: str):
         super().__init__(
             "MountTargetNotFound",
-            "Mount target '{}' does not exist.".format(mount_target_id),
-            *args,
-            **kwargs,
+            f"Mount target '{mount_target_id}' does not exist.",
         )
 
 
 class BadRequest(EFSError):
     code = 400
 
-    def __init__(self, msg, *args, **kwargs):
-        super().__init__("BadRequest", msg, *args, **kwargs)
+    def __init__(self, msg: str):
+        super().__init__("BadRequest", msg)
 
 
 class PolicyNotFound(EFSError):
     code = 404
 
-    def __init__(self, *args, **kwargs):
-        super().__init__("PolicyNotFound", *args, **kwargs)
+    def __init__(self, msg: str):
+        super().__init__("PolicyNotFound", msg)
 
 
 class SubnetNotFound(EFSError):
     code = 404
 
-    def __init__(self, subnet_id, *args, **kwargs):
+    def __init__(self, subnet_id: str):
         super().__init__(
             "SubnetNotFound",
-            "The subnet ID '{}' does not exist".format(subnet_id),
-            *args,
-            **kwargs,
+            f"The subnet ID '{subnet_id}' does not exist",
         )
 
 
 class SecurityGroupNotFound(EFSError):
     code = 404
 
-    def __init__(self, security_group_id, *args, **kwargs):
+    def __init__(self, security_group_id: str):
         super().__init__(
             "SecurityGroupNotFound",
-            "The SecurityGroup ID '{}' does not exist".format(security_group_id),
-            *args,
-            **kwargs,
+            f"The SecurityGroup ID '{security_group_id}' does not exist",
         )
 
 
 class SecurityGroupLimitExceeded(EFSError):
     code = 400
 
-    def __init__(self, msg, *args, **kwargs):
-        super().__init__("SecurityGroupLimitExceeded", msg, *args, **kwargs)
+    def __init__(self, msg: str):
+        super().__init__("SecurityGroupLimitExceeded", msg)

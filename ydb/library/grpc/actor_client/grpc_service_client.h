@@ -76,9 +76,11 @@ public:
         using TResponseType = decltype(typename TCallType::TResponseEventType().Response);
         const auto& requestId = ev->Get()->RequestId;
         if (!Connection) {
-            BLOG_GRPC_D(Prefix(requestId) << "Connect to "
-                        << ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://")
-                        << Config.Locator);
+            TString schema;
+            if (!Config.UseXds) {
+                schema = ((Config.EnableSsl || !Config.SslCredentials.pem_root_certs.empty()) ? "grpcs://" : "grpc://");
+            }
+            BLOG_GRPC_D(Prefix(requestId) << "Connect to " << schema << Config.Locator);
             Connection = Client.CreateGRpcServiceConnection<TGrpcService>(Config);
         }
 
@@ -123,7 +125,7 @@ public:
 
     static NYdbGrpc::TGRpcClientConfig InitGrpcConfig(const NGrpcActorClient::TGrpcClientSettings& settings) {
         const TDuration requestTimeout = TDuration::MilliSeconds(settings.RequestTimeoutMs);
-        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdbGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
+        NYdbGrpc::TGRpcClientConfig config(settings.Endpoint, requestTimeout, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT, 0, settings.CertificateRootCA);
         config.EnableSsl = settings.EnableSsl;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIME_MS] = settings.GrpcKeepAliveTimeMs;
         config.IntChannelParams[GRPC_ARG_KEEPALIVE_TIMEOUT_MS] = settings.GrpcKeepAliveTimeoutMs;

@@ -5,6 +5,8 @@
 
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 namespace NYT::NYTree {
@@ -12,6 +14,7 @@ namespace NYT::NYTree {
 using namespace NYson;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -226,7 +229,7 @@ void ToProto(NProto::TAttributeDictionary* protoAttributes, const IAttributeDict
     for (const auto& [key, value] : pairs) {
         auto* protoAttribute = protoAttributes->add_attributes();
         protoAttribute->set_key(key);
-        protoAttribute->set_value(value.ToString());
+        protoAttribute->set_value(ToProto(value));
     }
 }
 
@@ -301,9 +304,17 @@ void TAttributeDictionarySerializer::LoadNonNull(TStreamLoadContext& context, co
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ValidateYTreeKey(IAttributeDictionary::TKeyView key)
+void ValidateYTreeKey(
+    IAttributeDictionary::TKeyView key,
+    int maxLength)
 {
-    Y_UNUSED(key);
+    if (auto keyLength = std::ssize(key); keyLength > maxLength) {
+        THROW_ERROR_EXCEPTION(
+            NYTree::EErrorCode::MaxKeyLengthViolation,
+            "Key is too long: actual %v, limit %v",
+            keyLength,
+            maxLength);
+    }
     // XXX(vvvv): Disabled due to existing data with empty keys, see https://st.yandex-team.ru/YQL-2640
 #if 0
     if (key.empty()) {
@@ -312,14 +323,19 @@ void ValidateYTreeKey(IAttributeDictionary::TKeyView key)
 #endif
 }
 
+[[noreturn]] void ThrowYPathResolutionDepthExceeded(TYPathBuf path)
+{
+    THROW_ERROR_EXCEPTION(
+        NYTree::EErrorCode::ResolveError,
+        "Path %v exceeds resolve depth limit",
+        path)
+        << TErrorAttribute("limit", MaxYPathResolveIterations);
+}
+
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth)
 {
     if (depth > MaxYPathResolveIterations) {
-        THROW_ERROR_EXCEPTION(
-            NYTree::EErrorCode::ResolveError,
-            "Path %v exceeds resolve depth limit",
-            path)
-            << TErrorAttribute("limit", MaxYPathResolveIterations);
+        ThrowYPathResolutionDepthExceeded(path);
     }
 }
 

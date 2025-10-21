@@ -17,7 +17,6 @@ ELSE()
         contrib/libs/curl
         ydb/core/base
         ydb/core/protos
-        ydb/core/wrappers/ut_helpers
         ydb/library/actors/core
     )
 ENDIF()

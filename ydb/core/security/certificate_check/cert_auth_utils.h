@@ -18,6 +18,8 @@ NKikimrConfig::TClientCertificateAuthorization::TSubjectTerm MakeSubjectTerm(con
 struct TCertAndKey {
     std::string Certificate;
     std::string PrivateKey;
+
+    std::string GetKeyWithPassword(const std::string& password) const;
 };
 
 struct TProps {

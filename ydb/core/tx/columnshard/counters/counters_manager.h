@@ -55,11 +55,6 @@ public:
         TabletCounters->IncCounter(COUNTER_OUT_OF_SPACE);
     }
 
-    void OnWriteOverloadInsertTable(const ui64 size) const {
-        TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
-        CSCounters.OnWriteOverloadInsertTable(size);
-    }
-
     void OnWriteOverloadMetadata(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadMetadata(size);
@@ -101,7 +96,17 @@ public:
         CSCounters.OnWritePutBlobsSuccess(d);
     }
 
+    void OnWritePutBulkBlobsSuccess(const TDuration d, const ui64 rowsWritten) const {
+        TabletCounters->OnWritePutBulkBlobsSuccess(rowsWritten);
+        CSCounters.OnWritePutBlobsSuccess(d);
+    }
+
     void OnWritePutBlobsFailed(const TDuration d, const ui64 /*rowsWritten*/) const {
+        TabletCounters->OnWriteFailure();
+        CSCounters.OnWritePutBlobsFail(d);
+    }
+
+    void OnWritePutBulkBlobsFailed(const TDuration d, const ui64 /*rowsWritten*/) const {
         TabletCounters->OnWriteFailure();
         CSCounters.OnWritePutBlobsFail(d);
     }

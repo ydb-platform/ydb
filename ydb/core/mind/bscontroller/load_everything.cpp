@@ -2,6 +2,8 @@
 #include "console_interaction.h"
 #include "group_geometry_info.h"
 
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
+
 #include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr {
@@ -42,6 +44,7 @@ public:
             auto scrubState = db.Table<Schema::ScrubState>().Select();
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
+            auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -61,7 +64,8 @@ public:
                     || !groupLatencies.IsReady()
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
-                    || !blobDepotDeleteQueue.IsReady()) {
+                    || !blobDepotDeleteQueue.IsReady()
+                    || !bridgeSyncState.IsReady()) {
                 return false;
             }
         }
@@ -219,6 +223,8 @@ public:
                                                    groups.GetValueOrDefault<T::MainKeyVersion>(),
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
+                                                   groups.GetValueOrDefault<T::GroupSizeInUnits>(),
+                                                   groups.GetValueOrDefault<T::BridgePileId>(),
                                                    storagePoolId,
                                                    std::get<0>(geom),
                                                    std::get<1>(geom),
@@ -247,6 +253,10 @@ public:
                     Y_DEBUG_ABORT_UNLESS(success);
                 }
 
+                if (groups.HaveValue<T::BridgeGroupInfo>()) {
+                    group.BridgeGroupInfo.emplace(groups.GetValue<T::BridgeGroupInfo>());
+                }
+
 #undef OPTIONAL
 
                 Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());
@@ -273,7 +283,7 @@ public:
         std::map<std::tuple<TNodeId, TString>, TBoxId> driveToBox;
         for (const auto& [boxId, box] : Self->Boxes) {
             for (const auto& [host, value] : box.Hosts) {
-                const auto& nodeId = Self->HostRecords->ResolveNodeId(host, value);
+                const auto& nodeId = value.EnforcedNodeId ? value.EnforcedNodeId : Self->HostRecords->ResolveNodeId(host);
                 Y_VERIFY_S(nodeId, "HostKey# " << host.Fqdn << ":" << host.IcPort << " does not resolve to a node");
                 if (const auto it = Self->HostConfigs.find(value.HostConfigId); it != Self->HostConfigs.end()) {
                     for (const auto& [drive, info] : it->second.Drives) {
@@ -343,7 +353,9 @@ public:
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
                     disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
-                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>());
+                    disks.GetValueOrDefault<T::ShredComplete>(), disks.GetValueOrDefault<T::MaintenanceStatus>(),
+                    disks.GetValueOrDefault<T::InferPDiskSlotCountFromUnitSize>(),
+                    disks.GetValueOrDefault<T::InferPDiskSlotCountMax>());
 
                 if (!disks.Next())
                     return false;
@@ -512,7 +524,44 @@ public:
             }
         }
 
+        // bridge sync state
+        Self->BridgeSyncState.clear();
+        {
+            using Table = Schema::BridgeSyncState;
+            auto bridgeSyncState = db.Table<Table>().Select();
+            if (!bridgeSyncState.IsReady()) {
+                return false;
+            }
+            while (bridgeSyncState.IsValid()) {
+                Self->BridgeSyncState[TGroupId::FromValue(bridgeSyncState.GetKey())] = {
+                    .Stage = bridgeSyncState.GetValue<Table::Stage>(),
+                    .LastError = bridgeSyncState.GetValue<Table::LastError>(),
+                    .LastErrorTimestamp = bridgeSyncState.GetValue<Table::LastErrorTimestamp>(),
+                    .FirstErrorTimestamp = bridgeSyncState.GetValue<Table::FirstErrorTimestamp>(),
+                    .ErrorCount = bridgeSyncState.GetValue<Table::ErrorCount>(),
+                };
+                if (!bridgeSyncState.Next()) {
+                    return false;
+                }
+            }
+        }
+
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
+        // fill in correct relations between bridged groups
+        for (auto& [proxyGroupId, proxyGroup] : Self->GroupMap) {
+            if (proxyGroup->BridgeGroupInfo) {
+                const auto& state = proxyGroup->BridgeGroupInfo->GetBridgeGroupState();
+                for (size_t i = 0; i < state.PileSize(); ++i) {
+                    const auto& pile = state.GetPile(i);
+                    auto *group = Self->FindGroup(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+                    Y_ABORT_UNLESS(group);
+                    Y_ABORT_UNLESS(group->BridgePileId == TBridgePileId::FromPileIndex(i));
+                    Y_ABORT_UNLESS(!group->BridgeProxyGroupId);
+                    group->BridgeProxyGroupId = proxyGroupId;
+                }
+            }
+        }
 
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
@@ -548,6 +597,105 @@ public:
         }
         for (const auto& [groupId, _] : Self->GroupMap) {
             Self->SysViewChangedGroups.insert(groupId);
+        }
+
+        // drop incorrect entries from BridgeSyncState
+        auto getSyncStageByTargetGroup = [&](TGroupId targetGroupId) -> std::optional<NKikimrBridge::TGroupState::EStage> {
+            const NKikimrBridge::TGroupState *groupState = nullptr;
+            TBridgePileId bridgePileId;
+
+            if (const auto it = Self->GroupMap.find(targetGroupId); it != Self->GroupMap.end()) {
+                if (!it->second->BridgeProxyGroupId || !it->second->BridgePileId) {
+                    Y_DEBUG_ABORT();
+                    return {};
+                }
+
+                bridgePileId = it->second->BridgePileId;
+
+                const auto jt = Self->GroupMap.find(*it->second->BridgeProxyGroupId);
+                if (jt == Self->GroupMap.end() || !jt->second->BridgeGroupInfo) {
+                    Y_DEBUG_ABORT();
+                    return {};
+                }
+
+                groupState = &jt->second->BridgeGroupInfo->GetBridgeGroupState();
+            } else if (const auto it = Self->StaticGroups.find(targetGroupId); it != Self->StaticGroups.end()) {
+                if (!it->second.Info || !it->second.Info->Group || !it->second.Info->Group->HasBridgeProxyGroupId() ||
+                        !it->second.Info->Group->HasBridgePileId()) {
+                    Y_DEBUG_ABORT();
+                    return {};
+                }
+                bridgePileId = TBridgePileId::FromProto(&it->second.Info->Group.value(),
+                    &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
+
+                const auto bridgeProxyGroupId = TGroupId::FromProto(&it->second.Info->Group.value(),
+                    &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId);
+                const auto jt = Self->StaticGroups.find(bridgeProxyGroupId);
+                if (jt == Self->StaticGroups.end() || !jt->second.Info || !jt->second.Info->Group) {
+                    Y_DEBUG_ABORT();
+                    return {};
+                }
+
+                groupState = &jt->second.Info->Group->GetBridgeGroupState();
+            } else {
+                return {}; // group deleted
+            }
+
+            if (groupState->PileSize() <= bridgePileId.GetPileIndex()) {
+                return {};
+            }
+            return groupState->GetPile(bridgePileId.GetPileIndex()).GetStage();
+        };
+
+        std::vector<TGroupId> groupsToErase;
+        for (const auto& [targetGroupId, state] : Self->BridgeSyncState) {
+            if (getSyncStageByTargetGroup(targetGroupId) != state.Stage) {
+                groupsToErase.push_back(targetGroupId);
+            }
+        }
+        for (TGroupId groupId : groupsToErase) {
+            Self->BridgeSyncState.erase(groupId);
+            db.Table<Schema::BridgeSyncState>().Key(groupId.GetRawId()).Delete();
+        }
+
+        // start syncers for unsynced groups
+        for (const auto& [groupId, group] : Self->GroupMap) {
+            if (group->BridgeGroupInfo) {
+                for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                    if (pile.GetStage() != NKikimrBridge::TGroupState::SYNCED) {
+                        const auto targetGroupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                        const auto [it, inserted] = Self->TargetGroupToSyncerState.try_emplace(targetGroupId, groupId,
+                            targetGroupId);
+                        Y_ABORT_UNLESS(inserted);
+                        Self->SyncersRequiringAction.PushBack(&it->second);
+                    }
+                }
+            }
+        }
+
+        // send notification to node warden about new groups
+        {
+            NKikimrBlobStorage::TCacheUpdate m;
+            for (const auto& [groupId, groupInfo] : Self->GroupMap) {
+                auto *kvp = m.AddKeyValuePairs();
+                kvp->SetKey(Sprintf("G%08" PRIx32, groupId));
+                kvp->SetGeneration(groupInfo->Generation);
+
+                TMaybe<TKikimrScopeId> scopeId;
+                const TStoragePoolInfo& info = Self->StoragePools.at(groupInfo->StoragePoolId);
+                if (info.SchemeshardId && info.PathItemId) {
+                    scopeId = TKikimrScopeId(*info.SchemeshardId, *info.PathItemId);
+                } else {
+                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
+                }
+
+                NKikimrBlobStorage::TGroupInfo proto;
+                SerializeGroupInfo(&proto, *groupInfo, info.Name, scopeId);
+                const bool success = proto.SerializeToString(kvp->MutableValue());
+                Y_DEBUG_ABORT_UNLESS(success);
+            }
+            const auto& selfId = Self->SelfId();
+            selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
         }
 
         return true;

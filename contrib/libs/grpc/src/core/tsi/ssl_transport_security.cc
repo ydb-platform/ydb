@@ -23,8 +23,6 @@
 #include <limits.h>
 #include <string.h>
 
-# include <cstdlib>
-
 // TODO(jboeuf): refactor inet_ntop into a portability header.
 // Note: for whomever reads this and tries to refactor this, this
 // can't be in grpc, it has to be in gpr.
@@ -60,7 +58,6 @@
 
 #include "src/core/lib/gpr/useful.h"
 #include "src/core/lib/gprpp/crash.h"
-#include "src/core/lib/surface/init.h"
 #include "src/core/tsi/ssl/key_logging/ssl_key_logging.h"
 #include "src/core/tsi/ssl/session_cache/ssl_session_cache.h"
 #include "src/core/tsi/ssl_transport_security_utils.h"
@@ -175,11 +172,6 @@ static unsigned long openssl_thread_id_cb(void) {
 static void init_openssl(void) {
 #if OPENSSL_VERSION_NUMBER >= 0x10100000
   OPENSSL_init_ssl(0, nullptr);
-  // Ensure OPENSSL global clean up happens after gRPC shutdown completes.
-  // OPENSSL registers an exit handler to clean up global objects, which
-  // otherwise may happen before gRPC removes all references to OPENSSL. Below
-  // exit handler is guaranteed to run after OPENSSL's.
-  std::atexit([]() { grpc_wait_for_shutdown_with_timeout(y_absl::Seconds(2)); });
 #else
   SSL_library_init();
   SSL_load_error_strings();

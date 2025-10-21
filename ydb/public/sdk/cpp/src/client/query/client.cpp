@@ -3,13 +3,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -834,6 +834,8 @@ public:
     }
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb) {
+        std::lock_guard lock(PrecommitCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -842,6 +844,8 @@ public:
     }
 
     void AddOnFailureCallback(TOnFailureTransactionCallback cb) {
+        std::lock_guard lock(OnFailureCallbacksMutex);
+
         if (!ChangesAreAccepted) {
             ythrow TContractViolation("Changes are no longer accepted");
         }
@@ -854,8 +858,11 @@ public:
 
 private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
-    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
-    std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+    mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+    mutable std::vector<TOnFailureTransactionCallback> OnFailureCallbacks;
+
+    std::mutex PrecommitCallbacksMutex;
+    std::mutex OnFailureCallbacksMutex;
 };
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)

@@ -15,11 +15,11 @@ Y_UNIT_TEST_SUITE(TPQRBDescribes) {
         ui32 totalPartitions = 5;
         server.AnnoyingClient->CreateTopic(topicName, totalPartitions);
 
-        auto pathDescr = server.AnnoyingClient->Ls(topicPath)->Record.GetPathDescription().GetSelf();
-
-        ui64 balancerTabletId = pathDescr.GetBalancerTabletID();
         auto* runtime = server.CleverServer->GetRuntime();
         const auto edge = runtime->AllocateEdgeActor();
+
+        auto pathDescr = server.AnnoyingClient->Describe(runtime, topicPath).GetPathDescription().GetPersQueueGroup();
+        ui64 balancerTabletId = pathDescr.GetBalancerTabletID();
         
         auto checkResponse = [&](TEvPersQueue::TEvGetPartitionsLocation* request, bool ok, ui64 partitionsCount = 0) {
             runtime->SendToPipe(balancerTabletId, edge, request);

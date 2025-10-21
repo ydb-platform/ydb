@@ -3,23 +3,16 @@
 #include "yql_yt_native.h"
 #include "yql_yt_session.h"
 
-#include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
+#include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
 #include <yt/yql/providers/yt/gateway/lib/query_cache.h>
 #include <yt/yql/providers/yt/gateway/lib/user_files.h>
 
 #include <yt/yql/providers/yt/common/yql_yt_settings.h>
 #include <yt/yql/providers/yt/lib/url_mapper/yql_yt_url_mapper.h>
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
-#include <yt/yql/providers/yt/expr_nodes/yql_yt_expr_nodes.h>
-#include <yt/yql/providers/yt/provider/yql_yt_table.h>
-
-#include <yql/essentials/providers/common/mkql/yql_provider_mkql.h>
 
 #include <yql/essentials/core/yql_user_data.h>
-#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 #include <yql/essentials/core/file_storage/file_storage.h>
-#include <yql/essentials/minikql/mkql_function_registry.h>
-#include <yql/essentials/utils/log/context.h>
 
 #include <yt/cpp/mapreduce/interface/common.h>
 #include <library/cpp/yson/node/node.h>
@@ -40,63 +33,19 @@ namespace NYql {
 
 namespace NNative {
 
-struct TInputInfo {
-    TInputInfo() = default;
-    TInputInfo(const TString& name, const NYT::TRichYPath& path, bool temp, bool strict, const TYtTableBaseInfo& info, const NYT::TNode& spec, ui32 group = 0);
-
-    TString Name;
-    NYT::TRichYPath Path;
-    TString Cluster;
-    bool Temp = false;
-    bool Dynamic = false;
-    bool Strict = true;
-    ui64 Records = 0;
-    ui64 DataSize = 0;
-    NYT::TNode Spec;
-    NYT::TNode QB2Premapper;
-    ui32 Group = 0;
-    bool Lookup = false;
-    TString ErasureCodec;
-    TString CompressionCode;
-    TString PrimaryMedium;
-    NYT::TNode Media;
-};
-
-struct TOutputInfo {
-    TOutputInfo() = default;
-    TOutputInfo(const TString& name, const TString& path, const NYT::TNode& codecSpec, const NYT::TNode& attrSpec,
-        const NYT::TSortColumns& sortedBy, NYT::TNode columnGroups)
-        : Name(name)
-        , Path(path)
-        , Spec(codecSpec)
-        , AttrSpec(attrSpec)
-        , SortedBy(sortedBy)
-        , ColumnGroups(std::move(columnGroups))
-    {
-    }
-    TString Name;
-    TString Path;
-    NYT::TNode Spec;
-    NYT::TNode AttrSpec;
-    NYT::TSortColumns SortedBy;
-    NYT::TNode ColumnGroups;
-};
-
-class TExecContextBase: public TThrRefBase {
+class TExecContextBase: public TExecContextBaseSimple {
 protected:
-    TExecContextBase(const TYtNativeServices& services,
+    TExecContextBase(
+        const TYtNativeServices::TPtr& services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         const TSession::TPtr& session,
         const TString& cluster,
         const TYtUrlMapper& urlMapper,
-        IMetricsRegistryPtr metrics);
+        IMetricsRegistryPtr metrics
+    );
 
 public:
-    TString GetInputSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput) const;
-    TString GetOutSpec(bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-    TString GetOutSpec(size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags) const;
-
     TTransactionCache::TEntry::TPtr GetEntry() const {
         return Session_->TxCache_.GetEntry(YtServer_);
     }
@@ -114,14 +63,12 @@ public:
 protected:
     void MakeUserFiles(const TUserDataTable& userDataBlocks);
 
-    void SetInput(NNodes::TExprBase input, bool forcePathColumns, const THashSet<TString>& extraSysColumns, const TYtSettings::TConstPtr& settings);
-    void SetOutput(NNodes::TYtOutSection output, const TYtSettings::TConstPtr& settings, const TString& opHash);
-    void SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings);
-    void SetCacheItem(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
-        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash);
+    void SetCache(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs,
+        const TString& tmpFolder, const TYtSettings::TConstPtr& settings, const TString& opHash) override;
 
-    template <class TTableType>
-    static TString GetSpecImpl(const TVector<TTableType>& tables, size_t beginIdx, size_t endIdx, NYT::TNode initialOutSpec, bool ensureOldTypesOnly, ui64 nativeTypeCompatibilityFlags, bool intermediateInput);
+    void FillRichPathForPullCaseInput(NYT::TRichYPath& path, TYtTableBaseInfo::TPtr tableInfo) override;
+    void FillRichPathForInput(NYT::TRichYPath& path, const TYtPathInfo& pathInfo, const TString& newPath, bool localChainTest) override;
+    bool IsLocalChainTest() const override;
 
     NThreading::TFuture<void> MakeOperationWaiter(const NYT::IOperationPtr& op, const TMaybe<ui32>& publicId) const {
         if (const auto& opTracker = Session_->OpTracker_) {
@@ -142,27 +89,19 @@ protected:
     }
 
 public:
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_ = nullptr;
     TFileStoragePtr FileStorage_;
-    TYtGatewayConfigPtr Config_;
     ISecretMasker::TPtr SecretMasker;
-    TConfigClusters::TPtr Clusters_;
-    TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler> MkqlCompiler_;
     TSession::TPtr Session_;
-    TString Cluster_;
     TString YtServer_;
     TUserFiles::TPtr UserFiles_;
     TVector<std::pair<TString, TString>> CodeSnippets_;
     std::pair<TString, TString> LogCtx_;
-    TVector<TInputInfo> InputTables_;
-    bool YamrInput = false;
-    TMaybe<TSampleParams> Sampling;
-    TVector<TOutputInfo> OutTables_;
     THolder<TYtQueryCacheItem> QueryCacheItem;
     const TYtUrlMapper& UrlMapper_;
     bool DisableAnonymousClusterAccess_;
     bool Hidden = false;
     IMetricsRegistryPtr Metrics;
+    TOperationProgress::EOpBlockStatus BlockStatus = TOperationProgress::EOpBlockStatus::None;
 };
 
 
@@ -172,7 +111,8 @@ public:
     using TPtr = ::TIntrusivePtr<TExecContext>;
     using TOptions = T;
 
-    TExecContext(const TYtNativeServices& services,
+    TExecContext(
+        const TYtNativeServices::TPtr services,
         const TConfigClusters::TPtr& clusters,
         const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
         TOptions&& options,
@@ -202,7 +142,7 @@ public:
     }
 
     void SetCacheItem(const TVector<TString>& outTablePaths, const TVector<NYT::TNode>& outTableSpecs, const TString& tmpFolder) {
-        TExecContextBase::SetCacheItem(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash());
+        TExecContextBase::SetCache(outTablePaths, outTableSpecs, tmpFolder, Options_.Config(), Options_.OperationHash());
     }
 
     TExpressionResorceUsage ScanExtraResourceUsage(const TExprNode& node, bool withInput) {
@@ -228,6 +168,19 @@ public:
         }
         auto progress = TOperationProgress(TString(YtProviderName), *publicId,
             TOperationProgress::EState::InProgress, stage);
+        Session_->ProgressWriter_(progress);
+    }
+
+    void ReportNodeBlockStatus() const {
+        auto publicId = Options_.PublicId();
+        if (!publicId) {
+            return;
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << BlockStatus << " block status for node #" << *publicId;
+        auto progress = TOperationProgress(TString(YtProviderName), *publicId,
+            TOperationProgress::EState::InProgress);
+        progress.BlockStatus = BlockStatus;
         Session_->ProgressWriter_(progress);
     }
 

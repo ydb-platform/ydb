@@ -103,7 +103,6 @@ namespace NActors {
                         actorPtr = pool->Actors.back();
                         actorPtr->StuckIndex = i;
                         pool->Actors.pop_back();
-                        pool->DeadActorsUsage.emplace_back(actor->GetActivityType().GetIndex(), actor->GetUsage(GetCycleCountFast()));
                     }
                 }
             }
@@ -212,7 +211,6 @@ namespace NActors {
 
         ThreadCtx.ResetOverwrittenEventsPerMailbox();
         ThreadCtx.ResetOverwrittenTimePerMailboxTs();
-        bool drained = false;
         for (; execCtx.ExecutedEvents < ThreadCtx.OverwrittenEventsPerMailbox(); execCtx.ExecutedEvents++) {
             if (TAutoPtr<IEventHandle> evExt = mailbox->Pop()) {
                 EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "mailbox->Pop()");
@@ -270,8 +268,6 @@ namespace NActors {
 
                     hpnow = GetCycleCountFast();
                     hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
-
-                    actor->OnDequeueEvent();
 
                     size_t dyingActorsCnt = DyingActors.size();
                     EXECUTOR_THREAD_DEBUG(EDebugLevel::Event, "dyingActorsCnt ", dyingActorsCnt);
@@ -387,7 +383,6 @@ namespace NActors {
                         ThreadCtx.WorkerId(),
                         recipient.ToString(),
                         SafeTypeName(actor));
-                drained = true;
                 break; // empty queue, leave
             }
         }
@@ -412,7 +407,7 @@ namespace NActors {
 
         NProfiling::TMemoryTagScope::Reset(0);
         TlsActivationContext = nullptr;
-        if (mailbox->IsEmpty() && drained) {
+        if (mailbox->IsEmpty() && mailbox->CanReclaim()) {
             ThreadCtx.FreeMailbox(mailbox);
         } else {
             mailbox->Unlock(ThreadCtx.Pool(), hpnow, RevolvingWriteCounter);
@@ -556,6 +551,7 @@ namespace NActors {
             NHPTimer::STime passedTime = Max<i64>(hpnow - activationStart, 0);
             ExecutionStats.SetCurrentActivationTime(activityType, Ts2Us(passedTime));
         }
+        ExecutionStats.CopySafeTicks();
     }
 
     void TExecutorThread::GetCurrentStats(TExecutorThreadStats& statsCopy) {

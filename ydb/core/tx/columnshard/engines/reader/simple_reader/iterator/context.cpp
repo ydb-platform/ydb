@@ -1,37 +1,43 @@
 #include "context.h"
 #include "source.h"
 
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessors_ordering.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
-std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& sourceExt) {
-    const auto source = std::static_pointer_cast<IDataSource>(sourceExt);
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
-    const bool dontNeedColumns = !needSnapshots && GetFFColumns()->GetColumnIds().size() == 1 &&
-                                 GetFFColumns()->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX);
-    if (!dontNeedColumns && !source->HasStageData()) {
-        if (!AskAccumulatorsScript) {
-            NCommon::TFetchingScriptBuilder acc(*this);
-            acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>(
-                source->PredictAccessorsSize(GetFFColumns()->GetColumnIds()), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Accessors));
-            acc.AddStep(std::make_shared<TPortionAccessorFetchingStep>());
-            acc.AddStep(std::make_shared<TDetectInMem>(*GetFFColumns()));
-            AskAccumulatorsScript = std::move(acc).Build();
-        }
-        return AskAccumulatorsScript;
-    }
+std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
+    const std::shared_ptr<NCommon::IDataSource>& sourceExt, const bool isFinalSyncPoint) {
     const bool partialUsageByPK = [&]() {
-        switch (source->GetUsageClass()) {
-            case TPKRangeFilter::EUsageClass::PartialUsage:
-                return true;
-            case TPKRangeFilter::EUsageClass::NoUsage:
-                return true;
-            case TPKRangeFilter::EUsageClass::FullUsage:
-                return false;
+        if (sourceExt->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+            const auto source = std::static_pointer_cast<TPortionDataSource>(sourceExt);
+            switch (source->GetUsageClass()) {
+                case TPKRangeFilter::EUsageClass::PartialUsage:
+                    return true;
+                case TPKRangeFilter::EUsageClass::NoUsage:
+                    return true;
+                case TPKRangeFilter::EUsageClass::FullUsage:
+                    return false;
+            }
         }
+        return false;
     }();
+
+    const auto* source = sourceExt->GetAs<IDataSource>();
+
+    NCommon::EPortionCommitStatus portionCommitStatus = NCommon::EPortionCommitStatus::Unknown;
+    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+        const auto* portion = static_cast<const TPortionDataSource*>(source);
+        portionCommitStatus = GetPortionCommitStatus(portion->GetPortionInfo());
+    }
+
+    // snapshot filters will filter the uncommitted changes by other txs and mark conflicts
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax() || portionCommitStatus == NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -42,14 +48,17 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             needShardingFilter = true;
         }
     }
+
+    // we exclude uncommitted changes by other txs from the duplicate filter because those changes are not visible for the given tx
+    const bool preventDuplicates = NeedDuplicateFiltering() && portionCommitStatus != NCommon::EPortionCommitStatus::UncommittedByAnotherTx;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
-                                           [hasDeletions ? 1 : 0];
+                                           [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
         if (result.NeedInitialization()) {
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
-                gInit->InitializationFinished(
-                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions));
+                gInit->InitializationFinished(BuildColumnsFetchingPlan(
+                    needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates, isFinalSyncPoint));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }
@@ -58,10 +67,13 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
 }
 
 std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
-    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion) const {
+    const bool /*useIndexes*/, const bool needFilterSharding, const bool needFilterDeletion, const bool preventDuplicates,
+    const bool isFinalSyncPoint) const {
     const bool partialUsageByPredicate = partialUsageByPredicateExt && GetPredicateColumns()->GetColumnsCount();
 
     NCommon::TFetchingScriptBuilder acc(*this);
+    acc.AddStep(std::make_shared<TInitializeSourceStep>());
+    acc.AddStep(std::make_shared<TDetectInMemFlag>(*GetFFColumns()));
     if (needFilterSharding && !GetShardingColumns()->IsEmpty()) {
         const TColumnsSetIds columnsFetch = *GetShardingColumns();
         acc.AddFetchingStep(columnsFetch, NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter);
@@ -91,16 +103,47 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
+        if (preventDuplicates) {
+            acc.AddStep(std::make_shared<TDuplicateFilter>());
+        }
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        if (GetSourcesAggregationScript()) {
+            acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
+        }
     }
-    acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
-    acc.AddStep(std::make_shared<TPrepareResultStep>());
+    if (!GetSourcesAggregationScript()) {
+        acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
+        acc.AddStep(std::make_shared<TPrepareResultStep>(isFinalSyncPoint));
+    }
     return std::move(acc).Build();
 }
 
-TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext) {
+void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
+    AFL_VERIFY(!DuplicatesManager);
+    if (NeedDuplicateFiltering()) {
+        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(casted_sources);
+        // we do not pass uncommitted portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
+        for (auto&& constructor : casted_sources->GetConstructors()) {
+            const auto info = constructor.GetPortion();
+            if (GetPortionCommitStatus(*info) != NCommon::EPortionCommitStatus::UncommittedByAnotherTx) {
+                portionsToDuplicateFilter.emplace_back(std::move(info));
+            }
+        }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
+    }
+}
+
+void TSpecialReadContext::UnregisterActors() {
+    if (NActors::TActorSystem::IsStopped()) {
+        return;
+    }
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison);
+        DuplicatesManager = TActorId();
+    }
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {
@@ -109,8 +152,8 @@ TString TSpecialReadContext::ProfileDebugString() const {
         return (val & (1 << pos)) ? 1 : 0;
     };
 
-    for (ui32 i = 0; i < (1 << 5); ++i) {
-        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)];
+    for (ui32 i = 0; i < (1 << 6); ++i) {
+        auto& script = CacheFetchingScripts[GetBit(i, 0)][GetBit(i, 1)][GetBit(i, 2)][GetBit(i, 3)][GetBit(i, 4)][GetBit(i, 5)];
         if (script.HasScript()) {
             sb << script.ProfileDebugString() << ";";
         }

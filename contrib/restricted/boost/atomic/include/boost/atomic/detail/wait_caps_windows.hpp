@@ -3,7 +3,7 @@
  * (See accompanying file LICENSE_1_0.txt or copy at
  * http://www.boost.org/LICENSE_1_0.txt)
  *
- * Copyright (c) 2020 Andrey Semashev
+ * Copyright (c) 2020-2025 Andrey Semashev
  */
 /*!
  * \file   atomic/detail/wait_caps_windows.hpp
@@ -27,31 +27,9 @@
 // https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-wakebyaddresssingle
 // https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-wakebyaddressall
 
-#if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN8 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
-
-#define BOOST_ATOMIC_DETAIL_WINDOWS_HAS_WAIT_ON_ADDRESS
-
 #define BOOST_ATOMIC_HAS_NATIVE_INT8_WAIT_NOTIFY BOOST_ATOMIC_INT8_LOCK_FREE
 #define BOOST_ATOMIC_HAS_NATIVE_INT16_WAIT_NOTIFY BOOST_ATOMIC_INT16_LOCK_FREE
 #define BOOST_ATOMIC_HAS_NATIVE_INT32_WAIT_NOTIFY BOOST_ATOMIC_INT32_LOCK_FREE
 #define BOOST_ATOMIC_HAS_NATIVE_INT64_WAIT_NOTIFY BOOST_ATOMIC_INT64_LOCK_FREE
-
-#else // BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN8 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
-
-// Since we'll detect availability of WaitOnAddress etc. at run time, we have to define capability macros to 1 instead of 2
-#if BOOST_ATOMIC_INT8_LOCK_FREE > 0
-#define BOOST_ATOMIC_HAS_NATIVE_INT8_WAIT_NOTIFY 1
-#endif
-#if BOOST_ATOMIC_INT16_LOCK_FREE > 0
-#define BOOST_ATOMIC_HAS_NATIVE_INT16_WAIT_NOTIFY 1
-#endif
-#if BOOST_ATOMIC_INT32_LOCK_FREE > 0
-#define BOOST_ATOMIC_HAS_NATIVE_INT32_WAIT_NOTIFY 1
-#endif
-#if BOOST_ATOMIC_INT64_LOCK_FREE > 0
-#define BOOST_ATOMIC_HAS_NATIVE_INT64_WAIT_NOTIFY 1
-#endif
-
-#endif // BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN8 && (BOOST_WINAPI_PARTITION_APP || BOOST_WINAPI_PARTITION_SYSTEM)
 
 #endif // BOOST_ATOMIC_DETAIL_WAIT_CAPS_WINDOWS_HPP_INCLUDED_

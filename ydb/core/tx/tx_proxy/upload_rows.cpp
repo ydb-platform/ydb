@@ -11,15 +11,18 @@ public:
     TUploadRowsInternal(
         TActorId sender,
         const TString& table,
-        std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+        std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+        std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
-        bool writeToIndexImplTable)
-        : Sender(sender)
+        bool writeToIndexImplTable,
+        ui64 cookie,
+        TBackoff backoff)
+        : TUploadRowsBase(std::move(rows))
+        , Sender(sender)
         , Table(table)
         , ColumnTypes(types)
-        , Rows(rows)
+        , Cookie(cookie)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
         AllowWriteToIndexImplTable = writeToIndexImplTable;
@@ -35,6 +38,8 @@ public:
                 UpsertIfExists = true;
                 break;
         }
+
+        Backoff = backoff;
     }
 
 private:
@@ -46,17 +51,21 @@ private:
         return Table;
     }
 
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return *Rows;
-    }
-
     bool CheckAccess(TString&) override {
         return true;
     }
 
     void SendResult(const NActors::TActorContext& ctx, const Ydb::StatusIds::StatusCode& status) override {
         auto ev = new TEvTxUserProxy::TEvUploadRowsResponse(status, Issues);
-        ctx.Send(Sender, ev);
+        ctx.Send(Sender, ev, 0, Cookie);
+    }
+
+    bool ValidateTable(TString& errorMessage) override {
+        if (GetTableKind() != NSchemeCache::TSchemeCacheNavigate::KindTable) {
+            errorMessage = "Only the OLTP table is supported";
+            return false;
+        }
+        return true;
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -79,27 +88,31 @@ private:
 private:
     const TActorId Sender;
     const TString Table;
-    const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
-    const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    const std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
+    const ui64 Cookie;
 
     NYql::TIssues Issues;
 };
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
     const TString& table,
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+    std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+    std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
-    bool writeToIndexImplTable)
+    bool writeToIndexImplTable,
+    ui64 cookie,
+    TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
         table,
         types,
-        rows,
+        std::move(rows),
         mode,
         writeToPrivateTable,
-        writeToIndexImplTable);
+        writeToIndexImplTable,
+        cookie,
+        backoff);
 }
 
 } // namespace NTxProxy

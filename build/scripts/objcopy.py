@@ -6,10 +6,11 @@ import tempfile
 import shutil
 import subprocess
 from collections import namedtuple
+from unittest.mock import patch
 
 
 def call(cmd, cwd=None, env=None):
-    return subprocess.check_output(cmd, stdin=None, stderr=subprocess.STDOUT, cwd=cwd, env=env)
+    return subprocess.check_output(cmd, stdin=None, stderr=sys.stderr, cwd=cwd, env=env)
 
 
 class LLVMResourceInserter:
@@ -78,8 +79,17 @@ class LLVMResourceInserter:
     def insert_resources(self, kv_files, kv_strings):
         kv_files = list(kv_files)
 
+        def tmp_file_generator():
+            idx = 0
+            base = os.path.basename(self.obj_out)
+            while True:
+                yield f'{base}_{str(idx)}'
+                idx += 1
+
         # Generate resource registration cpp code & compile it
-        with tempfile.NamedTemporaryFile(suffix='.cc') as dummy_src:
+        with patch.object(tempfile, "_get_candidate_names", tmp_file_generator), tempfile.NamedTemporaryFile(
+            suffix='.cc'
+        ) as dummy_src:
             cmd = [self.rescompiler, dummy_src.name, '--use-sections']
             for path, key in kv_files + list(('-', k) for k in kv_strings):
                 if path != '-':

@@ -233,7 +233,7 @@ public:
         const NKikimrBlobStorage::EPutHandleClass handleClass = record.GetHandleClass();
         const ui64 size = record.HasBuffer() ? record.GetBuffer().size() : ev.GetPayload(0).GetSize();
 
-        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
+        NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
         if (handleType == NPriPut::Log) {
             return WriteCost(size);
         } else {
@@ -248,7 +248,7 @@ public:
 
         for (ui64 idx = 0; idx < record.ItemsSize(); ++idx) {
             const ui64 size = ev.GetBufferBytes(idx);
-            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size, true);
+            NPriPut::EHandleType handleType = NPriPut::HandleType(HugeBlobSize, handleClass, size);
             if (handleType == NPriPut::Log) {
                 cost += WriteCost(size);
             } else {
@@ -379,7 +379,7 @@ public:
     template<class TEvent>
     void CountScrubRequest(const TEvent& ev) {
         ui64 cost = GetCost(ev);
-        MonGroup->UserDiskCost() += cost;
+        MonGroup->ScrubDiskCost() += cost;
         CountRequest(cost);
     }
 

@@ -1,61 +1,45 @@
 #include "shared_info.h"
+#include "pool.h"
 #include <util/string/builder.h>
 
 #include <ydb/library/actors/core/executor_pool_shared.h>
 
 namespace NActors {
 
-void TSharedInfo::Pull(const ISharedPool& shared) {
+void TSharedInfo::Pull(const std::vector<std::unique_ptr<TPoolInfo>> &pools, const ISharedPool& shared) {
     shared.FillForeignThreadsAllowed(ForeignThreadsAllowed);
-    shared.FillOwnedThreads(OwnedThreads);
 
     for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-        shared.GetSharedStatsForHarmonizer(poolId, ThreadStats);
-        for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
-            ui64 elapsed = std::exchange(CpuConsumptionByPool[poolId][threadId].Elapsed, ThreadStats[threadId].SafeElapsedTicks);
-            CpuConsumptionByPool[poolId][threadId].DiffElapsed = CpuConsumptionByPool[poolId][threadId].Elapsed - elapsed;
-            ui64 cpu = std::exchange(CpuConsumptionByPool[poolId][threadId].Cpu, ThreadStats[threadId].CpuUs);
-            CpuConsumptionByPool[poolId][threadId].DiffCpu = CpuConsumptionByPool[poolId][threadId].Cpu - cpu;
-            ui64 parked = std::exchange(CpuConsumptionByPool[poolId][threadId].Parked, ThreadStats[threadId].SafeParkedTicks);
-            CpuConsumptionByPool[poolId][threadId].DiffParked = CpuConsumptionByPool[poolId][threadId].Parked - parked;
+        for (i16 threadId = 0; threadId < ThreadCount; ++threadId) {
+            CpuConsumptionPerThread[poolId][threadId].Elapsed = pools[poolId]->SharedInfo[threadId].ElapsedCpu.GetAvgPartForLastSeconds<true>(1);
+            CpuConsumptionPerThread[poolId][threadId].Cpu = pools[poolId]->SharedInfo[threadId].UsedCpu.GetAvgPartForLastSeconds<true>(1);
         }
     }
 
-    bool isFirst = true;
+    FreeCpu = 0.0;
+    for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+        CpuConsumption[poolId].Elapsed = 0;
+        CpuConsumption[poolId].Cpu = 0;
+        CpuConsumption[poolId].CpuQuota = 0;
+    }
 
-    for (i16 threadId = 0; threadId < static_cast<i16>(ThreadStats.size()); ++threadId) {
-        TStackVec<ui64, 8> elapsedByPool;
-        TStackVec<ui64, 8> cpuByPool;
-        ui64 parked = 0;
-
+    for (i16 threadId = 0; threadId < ThreadCount; ++threadId) {
+        float parked = 1;
         for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-            elapsedByPool.push_back(CpuConsumptionByPool[poolId][threadId].DiffElapsed);
-            cpuByPool.push_back(CpuConsumptionByPool[poolId][threadId].DiffCpu);
-            parked += CpuConsumptionByPool[poolId][threadId].DiffParked;
-        }
-
-        ui64 threadTime = std::accumulate(elapsedByPool.begin(), elapsedByPool.end(), 0ull) + parked;
-        if (threadTime == 0) {
-            continue;
-        } else if (isFirst) {
-            isFirst = false;
-            for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-                CpuConsumption[poolId].Elapsed = 0;
-                CpuConsumption[poolId].Cpu = 0;
-                CpuConsumption[poolId].CpuQuota = 0;
+            parked -= CpuConsumptionPerThread[poolId][threadId].Elapsed;
+            CpuConsumption[poolId].Elapsed += CpuConsumptionPerThread[poolId][threadId].Elapsed;
+            CpuConsumption[poolId].Cpu += CpuConsumptionPerThread[poolId][threadId].Cpu;
+            if (poolId != ThreadOwners[threadId]) {
+                CpuConsumption[poolId].ForeignElapsed += CpuConsumptionPerThread[poolId][threadId].Elapsed;
+                CpuConsumption[poolId].ForeignCpu += CpuConsumptionPerThread[poolId][threadId].Cpu;
             }
         }
+        CpuConsumption[ThreadOwners[threadId]].CpuQuota += parked;
+        FreeCpu += parked;
+    }
 
-        
-        for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
-            float elapsedCpu = static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffElapsed) / threadTime;
-            float cpu = static_cast<float>(CpuConsumptionByPool[poolId][threadId].DiffCpu) / threadTime;
-            CpuConsumption[poolId].Elapsed += elapsedCpu;
-            CpuConsumption[poolId].Cpu += cpu;
-            CpuConsumption[poolId].CpuQuota += elapsedCpu;
-        }
-        float parkedCpu = static_cast<float>(parked) / threadTime;
-        CpuConsumption[ThreadOwners[threadId]].CpuQuota += parkedCpu;
+    for (i16 poolId = 0; poolId < PoolCount; ++poolId) {
+        CpuConsumption[poolId].CpuQuota += CpuConsumption[poolId].Elapsed;
     }
 }
 
@@ -66,9 +50,11 @@ void TSharedInfo::Init(i16 poolCount, const ISharedPool *shared) {
     CpuConsumption.resize(poolCount);
     if (shared) {
         shared->FillThreadOwners(ThreadOwners);
-        CpuConsumptionByPool.resize(poolCount);
+        shared->FillOwnedThreads(OwnedThreads);
+        ThreadCount = ThreadOwners.size();
+        CpuConsumptionPerThread.resize(poolCount);
         for (i16 i = 0; i < poolCount; ++i) {
-            CpuConsumptionByPool[i].resize(ThreadOwners.size());
+            CpuConsumptionPerThread[i].resize(ThreadCount);
         }
         ThreadStats.resize(ThreadOwners.size());
         for (ui32 i = 0; i < ThreadOwners.size(); ++i) {
@@ -95,11 +81,11 @@ TString TSharedInfo::ToString() const {
     for (ui32 i = 0; i < CpuConsumption.size(); ++i) {
         builder << "Pool[" << i << "]: " << CpuConsumption[i].ToString() << "; ";
     }
-    builder << "} CpuConsumptionByPool: {";
-    for (ui32 i = 0; i < CpuConsumptionByPool.size(); ++i) {
+    builder << "} CpuConsumptionPerThread: {";
+    for (ui32 i = 0; i < CpuConsumptionPerThread.size(); ++i) {
         builder << "Pool[" << i << "]: {";
-        for (ui32 j = 0; j < CpuConsumptionByPool[i].size(); ++j) {
-            builder << "Thread[" << j << "]: " << CpuConsumptionByPool[i][j].ToString() << "; ";
+        for (ui32 j = 0; j < CpuConsumptionPerThread[i].size(); ++j) {
+            builder << "Thread[" << j << "]: " << CpuConsumptionPerThread[i][j].ToString() << "; ";
         }
         builder << "} ";
     }
@@ -113,6 +99,8 @@ TString TPoolSharedThreadCpuConsumption::ToString() const {
     builder << " Elapsed: " << Elapsed << "; ";
     builder << " Cpu: " << Cpu << "; ";
     builder << " CpuQuota: " << CpuQuota << "; ";
+    builder << " ForeignElapsed: " << ForeignElapsed << "; ";
+    builder << " ForeignCpu: " << ForeignCpu << "; ";
     builder << "}";
     return builder;
 }
@@ -122,10 +110,6 @@ TString TSharedThreadCpuConsumptionByPool::ToString() const {
     builder << "{";
     builder << " Elapsed: " << Elapsed << "; ";
     builder << " Cpu: " << Cpu << "; ";
-    builder << " Parked: " << Parked << "; ";
-    builder << " DiffElapsed: " << DiffElapsed << "; ";
-    builder << " DiffCpu: " << DiffCpu << "; ";
-    builder << " DiffParked: " << DiffParked << "; ";
     builder << "}";
     return builder;
 }

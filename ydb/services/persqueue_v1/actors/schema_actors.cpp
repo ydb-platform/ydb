@@ -3,7 +3,7 @@
 #include "persqueue_utils.h"
 
 #include <ydb/core/client/server/ic_nodes_cache_service.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
@@ -109,6 +109,9 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         if (config.HasFederationAccount()) {
             (*settings->mutable_attributes())["_federation_account"] = config.GetFederationAccount();
         }
+        if (config.GetEnableCompactification()) {
+            (*settings->mutable_attributes())["_cleanup_policy"] = "compact";
+        }
         bool local = config.GetLocalDC();
         settings->set_client_write_disabled(!local);
         const auto &partConfig = config.GetPartitionConfig();
@@ -163,7 +166,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
             }
         }
-        if (partConfig.HasMirrorFrom()) {
+        if (NPQ::MirroringEnabled(config)) {
             auto rmr = settings->mutable_remote_mirror_rule();
             TStringBuilder endpoint;
             if (partConfig.GetMirrorFrom().GetUseSecureConnection()) {
@@ -661,7 +664,7 @@ void TDescribeTopicActorImpl::RequestPartitionsLocation(const TActorContext& ctx
     for (auto p : Settings.Partitions) {
         if (p >= TotalPartitions) {
             return RaiseError(
-                TStringBuilder() << "No partition " << Settings.Partitions[0] << " in topic",
+                TStringBuilder() << "No partition " << p << " in topic",
                 Ydb::PersQueue::ErrorCode::BAD_REQUEST, Ydb::StatusIds::BAD_REQUEST, ctx
             );
         }
@@ -900,14 +903,12 @@ bool TDescribeTopicActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
 
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);
-
     }
     return true;
 }
@@ -1017,9 +1018,8 @@ bool TDescribeConsumerActor::ApplyResponse(
         TEvPersQueue::TEvGetPartitionsLocationResponse::TPtr& ev, const TActorContext&
 ) {
     const auto& record = ev->Get()->Record;
-    Y_ABORT_UNLESS(record.LocationsSize() == TotalPartitions);
     Y_ABORT_UNLESS(Settings.RequireLocation);
-    for (auto i = 0u; i < TotalPartitions; ++i) {
+    for (auto i = 0u; i < std::min<ui64>(record.LocationsSize(), TotalPartitions); ++i) {
         const auto& location = record.GetLocations(i);
         auto* locationResult = Result.mutable_partitions(i)->mutable_partition_location();
         SetPartitionLocation(location, locationResult);

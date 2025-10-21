@@ -26,6 +26,7 @@ private:
     YDB_READONLY_DEF(NKikimrDataEvents::TEvWrite::TOperation::EOperationType, OperationType);
     YDB_READONLY_DEF(TTableId, TableId);
     YDB_READONLY_DEF(std::vector<ui32>, ColumnIds);
+    YDB_READONLY_DEF(ui32, DefaultFilledColumnCount);
     YDB_READONLY_DEF(TSerializedCellMatrix, Matrix);
 };
 
@@ -131,6 +132,7 @@ private:
     YDB_READONLY_DEF(TInstant, ReceivedAt);
     YDB_READONLY_DEF(std::optional<ui64>, OverloadSubscribe);
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
+    YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
 
     YDB_READONLY_DEF(ui64, TxSize);
 
@@ -156,6 +158,7 @@ public:
     void FillVolatileTxData(TDataShard* self);
 
     TString GetTxBody() const;
+    bool TrySetTxBody(const TString& txBody);
     void SetTxBody(const TString& txBody);
     void ClearTxBody();
 
@@ -256,7 +259,7 @@ public:
     TValidatedWriteTx::TPtr& GetWriteTx() {
         return WriteTx;
     }
-    TValidatedWriteTx::TPtr BuildWriteTx(TDataShard* self);
+    bool BuildWriteTx(TDataShard* self);
 
     void ClearWriteTx() { 
         WriteTx = nullptr; 
@@ -272,6 +275,9 @@ public:
     void SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg);
     void SetWriteResult(std::unique_ptr<NEvents::TDataEvents::TEvWriteResult>&& writeResult);
 
+    std::optional<TString> OnMigration(TDataShard& self, const TActorContext& ctx) override;
+    bool OnRestoreMigrated(TDataShard& self, const TString& body) override;
+    bool OnFinishMigration(TDataShard& self, const NTable::TScheme& scheme) override;
     bool OnStopping(TDataShard& self, const TActorContext& ctx) override;
     void OnCleanup(TDataShard& self, std::vector<std::unique_ptr<IEventHandle>>& replies) override;
 

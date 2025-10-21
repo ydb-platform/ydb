@@ -19,11 +19,10 @@
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 
 #include <ydb/library/actors/core/defs.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
 #include <ydb/library/actors/core/scheduler_actor.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <util/generic/vector.h>
@@ -254,6 +253,11 @@ public:
     TSecurityServicesInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories);
 
     void InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) override;
+
+private:
+    void InitializeTokenManager(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
+    void InitializeLdapAuthProvider(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
+    void InitializeTicketParser(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData);
 };
 
 // grpc_proxy
@@ -404,9 +408,21 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+class TScanGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
 public:
-    TGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    TScanGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TCompGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TCompGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TDeduplicationGroupedMemoryLimiterInitializer: public IKikimrServicesInitializer {
+public:
+    TDeduplicationGroupedMemoryLimiterInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -416,21 +432,21 @@ public:
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TCompConveyorInitializer: public IKikimrServicesInitializer {
+class TCompositeConveyorInitializer : public IKikimrServicesInitializer {
 public:
-    TCompConveyorInitializer(const TKikimrRunConfig& runConfig);
+    TCompositeConveyorInitializer(const TKikimrRunConfig& runConfig);
+	void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TGeneralCachePortionsMetadataInitializer: public IKikimrServicesInitializer {
+public:
+    TGeneralCachePortionsMetadataInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
-class TScanConveyorInitializer: public IKikimrServicesInitializer {
+class TGeneralCacheColumnDataInitializer: public IKikimrServicesInitializer {
 public:
-    TScanConveyorInitializer(const TKikimrRunConfig& runConfig);
-    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
-};
-
-class TInsertConveyorInitializer: public IKikimrServicesInitializer {
-public:
-    TInsertConveyorInitializer(const TKikimrRunConfig& runConfig);
+    TGeneralCacheColumnDataInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 
@@ -637,6 +653,12 @@ class TAwsApiInitializer : public IServiceInitializer {
 public:
     TAwsApiInitializer(IGlobalObjectStorage& globalObjects);
 
+    void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
+};
+
+class TOverloadManagerInitializer: public IKikimrServicesInitializer {
+public:
+    TOverloadManagerInitializer(const TKikimrRunConfig& runConfig);
     void InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) override;
 };
 

@@ -39,12 +39,20 @@ struct TIsSkiffRow
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Return skiff schema for row type `T`.
+//! Return skiff schema for row type `T` which will be requested.
 /// Need to write its specialization.
 template <typename T>
 NSkiff::TSkiffSchemaPtr GetSkiffSchema(const TMaybe<TSkiffRowHints>& /*hints*/)
 {
     static_assert(TDependentFalse<T>, "Unimplemented `GetSkiffSchema` method");
+}
+
+//! Return skiff schema for row type `T` which will be used for skiff parser.
+/// By default, it is equal to the requested schema.
+template <typename T>
+NSkiff::TSkiffSchemaPtr GetParserSkiffSchema(const TMaybe<TSkiffRowHints>& hints)
+{
+    return GetSkiffSchema<T>(hints);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

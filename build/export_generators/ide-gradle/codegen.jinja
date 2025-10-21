@@ -1,7 +1,9 @@
 {%- macro TopDepends(taskvar) -%}
 {%-     if proto_template %}
 
-tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
+tasks.named("prepareMainProtos").configure {
+    dependsOn({{ taskvar }})
+}
 {%-     endif -%}
 
 {#-     Check main target codegen -#}
@@ -13,8 +15,21 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
-{%-     if not(disable_lombok_plugin) and (current_target.use_annotation_processor|select('startsWith', 'contrib/java/org/projectlombok/lombok')|length) %}
-tasks.getByName("delombok").mustRunAfter({{ taskvar }})
+{%-     if hasResources -%}
+{#-         Check main target codegen -#}
+{%-         if varprefix == "codegen" %}
+tasks.processResources.configure {
+    dependsOn({{ taskvar }})
+}
+{%-         endif %}
+tasks.processTestResources.configure {
+    dependsOn({{ taskvar }})
+}
+{%-     endif -%}
+{%-     if with_lombok_plugin %}
+tasks.named("delombok").configure {
+    mustRunAfter({{ taskvar }})
+}
 {%-     endif -%}
 
 {%-     if with_kotlin -%}
@@ -37,10 +52,12 @@ tasks.withType<KaptGenerateStubsTask>().configureEach {
 
 {%- macro ObjDepends(obj) -%}
 {%-     set taskvar = varprefix + obj['_object_index'] -%}
-{%-     if obj['_parent_object_index'] -%}
+{%-     if obj['_parent_object_index'] and obj['_parent_object_index'] in current_target_object_indexes -%}
 {%-         set parent_taskvar = varprefix + obj['_parent_object_index'] %}
 
-tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
+tasks.named("{{ parent_taskvar }}").configure {
+    dependsOn({{ taskvar }})
+}
 {%-     else -%}
 {{ TopDepends(taskvar) }}
 {%-     endif  -%}

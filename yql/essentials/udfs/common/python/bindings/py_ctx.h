@@ -41,28 +41,28 @@ public:
     }
 
     void Cleanup() override {
-        Value = {};
+        Value_ = {};
     }
 
     template <typename TCtx>
     void Set(const TIntrusivePtr<TCtx>& ctx, TValueType val) {
-        Value = std::move(val);
+        Value_ = std::move(val);
         ctx->CleanupList.PushBack(this);
     }
 
     bool IsSet() const {
-        return !!Value;
+        return !!Value_;
     }
 
     const TValueType& Get() const {
-        if (!Value) {
+        if (!Value_) {
             throw yexception() << "Trying to use python wrap object with destroyed yql value";
         }
-        return Value;
+        return Value_;
     }
 
 private:
-    TValueType Value;
+    TValueType Value_;
 };
 
 struct TPyContext: public TSimpleRefCount<TPyContext> {
@@ -79,7 +79,7 @@ struct TPyContext: public TSimpleRefCount<TPyContext> {
     }
 
     void Cleanup() {
-        for (auto& o: CleanupList) {
+        for (auto& o : CleanupList) {
             o.Cleanup();
         }
         CleanupList.Clear();
@@ -91,7 +91,7 @@ struct TPyContext: public TSimpleRefCount<TPyContext> {
 };
 
 struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
-    const NKikimr::NUdf::IValueBuilder *const ValueBuilder;
+    const NKikimr::NUdf::IValueBuilder* const ValueBuilder;
     const TPyContext::TPtr PyCtx;
     std::unordered_map<const NKikimr::NUdf::TType*, TPyObjectPtr> StructTypes;
     bool LazyInputObjects = true;
@@ -103,9 +103,9 @@ struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
     THolder<IMemoryLock> MemoryLock;
 
     TPyCastContext(
-            const NKikimr::NUdf::IValueBuilder* builder,
-            TPyContext::TPtr pyCtx,
-            THolder<IMemoryLock> memoryLock = {});
+        const NKikimr::NUdf::IValueBuilder* builder,
+        TPyContext::TPtr pyCtx,
+        THolder<IMemoryLock> memoryLock = {});
 
     ~TPyCastContext();
 
@@ -117,4 +117,4 @@ struct TPyCastContext: public TSimpleRefCount<TPyCastContext> {
 
 using TPyCastContextPtr = TPyCastContext::TPtr;
 
-} // namspace NPython
+} // namespace NPython

@@ -91,7 +91,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         LOG_T("Operation " << *op << " (build_kqp_data_tx_out_rs) at " << tabletId
             << " set memory limit " << (txc.GetMemoryLimit() - dataTx->GetTxSize()));
 
-        dataTx->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
+        dataTx->SetMvccVersion(DataShard.GetMvccVersion(tx));
 
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
             auto result = KqpRunTransaction(ctx, op->GetTxId(), useGenericReadSets, tasksRunner);

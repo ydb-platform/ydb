@@ -323,12 +323,12 @@ void SkipYson(TYsonBuffer& buf) {
     case BeginListSymbol: {
         buf.Next();
         for (;;) {
+            if (buf.Current() == EndListSymbol) {
+                break;
+            }
             SkipYson(buf);
             if (buf.Current() == ListItemSeparatorSymbol) {
                 buf.Next();
-            }
-            if (buf.Current() == EndListSymbol) {
-                break;
             }
         }
         buf.Next();
@@ -339,15 +339,15 @@ void SkipYson(TYsonBuffer& buf) {
         auto originalEnd = buf.Current()  == BeginMapSymbol ? EndMapSymbol : EndAttributesSymbol;
         buf.Next();
         for (;;) {
+            if (buf.Current() == originalEnd) {
+                break;
+            }
             SkipYson(buf);
             YQL_ENSURE(buf.Current() == KeyValueSeparatorSymbol);
             buf.Next();
             SkipYson(buf);
             if (buf.Current() == KeyedItemSeparatorSymbol) {
                 buf.Next();
-            }
-            if (buf.Current() == originalEnd) {
-                break;
             }
         }
         buf.Next();
@@ -621,8 +621,10 @@ struct TComplexTypeYsonReaderTraits {
         ythrow yexception() << "Complex type Yson reader not implemented for block resources";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const NUdf::TType* type) {
         Y_UNUSED(type);
+        Y_UNUSED(IsNull);
         ythrow yexception() << "Complex type Yson reader not implemented for singular types.";
     }
 
@@ -991,15 +993,12 @@ std::unique_ptr<IYtColumnConverter> MakeYtColumnConverter(TType* type, const NUd
             }
         case NUdf::EDataSlot::Datetime:
             if (nativeYtTypeFlags & NTCF_DATE) {
-                // YT arrow type is arrow::date64 - milliseconds since epoch (int64 underlying)
-                // YQL arrow type is arrow::uint32 - seconds since epoch
-                //
-                // Additional cast to arrow::timestamp(second) (int64 underlying) is required
-                // to convert milliseconds to seconds
-                return CreateArrowNativeColumnConverter<TCastAndBoundCheckConverter<arrow::Type::DATE64, uint32_t>>(
+                // YT arrow type is arrow::timestamp (int64 underlying) (seconds are expected)
+                // YQL arrow type is arrow::uint32
+                return CreateArrowNativeColumnConverter<TCastAndBoundCheckConverter<arrow::Type::TIMESTAMP, uint32_t>>(
                     std::move(settings),
-                    arrow::date64(),
-                    std::vector {arrow::timestamp(arrow::TimeUnit::SECOND), arrow::int64()},
+                    arrow::timestamp(arrow::TimeUnit::SECOND),
+                    arrow::int64(),
                     NUdf::MAX_DATETIME, false
                 );
             } else {

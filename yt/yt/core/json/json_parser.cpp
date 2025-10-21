@@ -6,7 +6,7 @@
 
 #include <array>
 
-#include <contrib/libs/yajl/src/api/yajl_parse.h>
+#include <contrib/deprecated/yajl/src/api/yajl_parse.h>
 
 namespace NYT::NJson {
 
@@ -235,6 +235,19 @@ void ParseJson(
     EYsonType type)
 {
     TJsonParser jsonParser(consumer, config, type);
+    jsonParser.Parse(input);
+}
+
+void ParseWebJson(
+    IInputStream* input,
+    IYsonConsumer* consumer,
+    TWebJsonFormatConfigPtr /*config*/,
+    EYsonType type)
+{
+    TJsonParser jsonParser(
+        consumer,
+        New<TJsonFormatConfig>(),
+        type);
     jsonParser.Parse(input);
 }
 

@@ -14,13 +14,10 @@
 
 namespace NKikimr::NStat {
 
-TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info, bool forTests)
+TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
 {
-    PropagateInterval = forTests ? TDuration::Seconds(5) : TDuration::Minutes(3);
-    PropagateTimeout = forTests ? TDuration::Seconds(3) : TDuration::Minutes(2);
-
     auto seed = std::random_device{}();
     RandomGenerator.seed(seed);
 
@@ -43,6 +40,15 @@ void TStatisticsAggregator::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const 
 
 void TStatisticsAggregator::OnActivateExecutor(const TActorContext& ctx) {
     SA_LOG_I("[" << TabletID() << "] OnActivateExecutor");
+
+    auto appData = AppData(ctx);
+    Y_ABORT_UNLESS(appData);
+    PropagateIntervalDedicated = TDuration::Seconds(
+        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsDedicated());
+    PropagateIntervalServerless = TDuration::Seconds(
+        appData->StatisticsConfig.GetBaseStatsPropagateIntervalSecondsServerless());
+    // Start with the dedicated interval, switch to the serverless one if needed.
+    PropagateInterval = PropagateIntervalDedicated;
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);
@@ -231,6 +237,11 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvFastPropagateCheck::TPtr&) {
 void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     SA_LOG_T("[" << TabletID() << "] EvPropagate");
 
+    if (BaseStatistics.size() > 1) {
+        // We are in a shared database, switch to a bigger propagation interval.
+        PropagateInterval = PropagateIntervalServerless;
+    }
+
     if (EnableStatistics) {
         PropagateStatistics();
     }
@@ -238,12 +249,20 @@ void TStatisticsAggregator::Handle(TEvPrivate::TEvPropagate::TPtr&) {
     Schedule(PropagateInterval, new TEvPrivate::TEvPropagate());
 }
 
-void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr&) {
+void TStatisticsAggregator::Handle(TEvStatistics::TEvPropagateStatisticsResponse::TPtr& ev) {
+    SA_LOG_D("[" << TabletID() << "] EvPropagateStatisticsResponse, cookie: " << ev->Cookie);
+
     if (!PropagationInFlight) {
         return;
     }
+    if (ev->Cookie != 0 && ev->Cookie != CurPropagationSeq) {
+        // Response is not from the current propagation round, ignore.
+        // Cookie == 0 may come from an older YDB version, retain the old logic for these events.
+        return;
+    }
     if (LastSSIndex < PropagationSchemeShards.size()) {
-        LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, LastSSIndex, true);
+        LastSSIndex = PropagatePart(
+            PropagationNodes, PropagationSchemeShards, LastSSIndex, true, CurPropagationSeq);
     } else {
         PropagationInFlight = false;
         PropagationNodes.clear();
@@ -316,7 +335,7 @@ void TStatisticsAggregator::SendStatisticsToNode(TNodeId nodeId, const std::vect
     std::vector<TNodeId> nodeIds;
     nodeIds.push_back(nodeId);
 
-    PropagatePart(nodeIds, ssIds, 0, false);
+    PropagatePart(nodeIds, ssIds, 0, false, InvalidPropagationSeq);
 }
 
 void TStatisticsAggregator::PropagateStatistics() {
@@ -342,13 +361,15 @@ void TStatisticsAggregator::PropagateStatistics() {
         ssIds.push_back(ssId);
     }
 
-    Schedule(PropagateTimeout, new TEvPrivate::TEvPropagateTimeout);
+    auto timeout = PropagateInterval * 3 / 5;
+    Schedule(timeout, new TEvPrivate::TEvPropagateTimeout);
 
+    ++CurPropagationSeq;
     PropagationInFlight = true;
     PropagationNodes = std::move(nodeIds);
     PropagationSchemeShards = std::move(ssIds);
 
-    LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, 0, true);
+    LastSSIndex = PropagatePart(PropagationNodes, PropagationSchemeShards, 0, true, CurPropagationSeq);
 }
 
 void TStatisticsAggregator::PropagateFastStatistics() {
@@ -373,11 +394,11 @@ void TStatisticsAggregator::PropagateFastStatistics() {
         ssIds.push_back(ssId);
     }
 
-    PropagatePart(nodeIds, ssIds, 0, false);
+    PropagatePart(nodeIds, ssIds, 0, false, InvalidPropagationSeq);
 }
 
 size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds, const std::vector<TSSId>& ssIds,
-    size_t lastSSIndex, bool useSizeLimit)
+    size_t lastSSIndex, bool useSizeLimit, ui64 cookie)
 {
     auto propagate = std::make_unique<TEvStatistics::TEvPropagateStatistics>();
     auto* record = propagate->MutableRecord();
@@ -395,15 +416,16 @@ size_t TStatisticsAggregator::PropagatePart(const std::vector<TNodeId>& nodeIds,
         auto* entry = record->AddEntries();
         entry->SetSchemeShardId(ssId);
         auto itStats = BaseStatistics.find(ssId);
-        if (itStats != BaseStatistics.end()) {
-            entry->SetStats(itStats->second);
-            size += itStats->second.size();
+        if (itStats != BaseStatistics.end() && itStats->second.Committed) {
+            const auto& stats = *itStats->second.Committed;
+            entry->SetStats(stats);
+            size += stats.size();
         } else {
             entry->SetStats(TString()); // stats are not sent from SS yet
         }
     }
 
-    Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release());
+    Send(NStat::MakeStatServiceID(leadingNodeId), propagate.release(), 0, cookie);
 
     return index;
 }
@@ -539,7 +561,7 @@ void TStatisticsAggregator::Resolve() {
     Y_ABORT_UNLESS(NavigateType == ENavigateType::Traversal  && !NavigateAnalyzeOperationId
                 || NavigateType == ENavigateType::Analyze && NavigateAnalyzeOperationId);
     Y_ABORT_UNLESS(NavigatePathId);
-        
+
     ++ResolveRound;
 
     TVector<TCell> plusInf;
@@ -622,7 +644,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
     if (ForceTraversals.empty()) {
         SA_LOG_T("[" << TabletID() << "] ScheduleNextAnalyze. Empty ForceTraversals");
         return;
-    }    
+    }
     SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze");
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
@@ -648,7 +670,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db) {
                 }
             }
         }
-        
+
         SA_LOG_D("[" << TabletID() << "] ScheduleNextAnalyze. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
         continue;
     }
@@ -675,7 +697,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
                         break;
                     }
                 }
-                
+
                 if (!pathId) {
                     SA_LOG_D("[" << TabletID() << "] ScheduleNextTraversal. All the force traversal tables sent the requests. OperationId=" << operation.OperationId);
                     continue;
@@ -696,17 +718,17 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
         auto* oldestTable = ScheduleTraversalsByTime.Top();
         if (TInstant::Now() < oldestTable->LastUpdateTime + ScheduleTraversalPeriod) {
-            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. " 
+            SA_LOG_T("[" << TabletID() << "] A schedule traversal is skiped. "
                 << "The oldest table " << oldestTable->PathId << " update time " << oldestTable->LastUpdateTime << " is too fresh.");
             return;
         }
 
         pathId = oldestTable->PathId;
-    } 
-    
+    }
+
     if (!pathId) {
         SA_LOG_E("[" << TabletID() << "] No traversal from schemeshard.");
-        return;       
+        return;
     }
 
     TraversalPathId = pathId;
@@ -727,7 +749,7 @@ void TStatisticsAggregator::ScheduleNextTraversal(NIceDb::TNiceDb& db) {
 
     TraversalIsColumnTable = *isColumnTable;
 
-    SA_LOG_D("[" << TabletID() << "] Start " 
+    SA_LOG_D("[" << TabletID() << "] Start "
         << LastTraversalWasForceString()
         << " traversal navigate for path " << pathId);
 
@@ -765,13 +787,13 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db) {
 
         UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::TraversalFinished, forceTraversalOperation->OperationId, *operationTable,  db);
 
-        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(), 
+        bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
         [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
         if (!tablesRemained) {
             DeleteForceTraversalOperation(ForceTraversalOperationId, db);
         }
     }
-    
+
     ResetTraversalState(db);
 }
 
@@ -784,9 +806,9 @@ TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::CurrentF
 }
 
 TStatisticsAggregator::TForceTraversalOperation* TStatisticsAggregator::ForceTraversalOperation(const TString& operationId) {
-    auto forceTraversalOperation = std::find_if(ForceTraversals.begin(), ForceTraversals.end(), 
+    auto forceTraversalOperation = std::find_if(ForceTraversals.begin(), ForceTraversals.end(),
         [operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
-    
+
     if (forceTraversalOperation == ForceTraversals.end()) {
         return nullptr;
     } else {
@@ -804,12 +826,12 @@ std::optional<bool> TStatisticsAggregator::IsColumnTable(const TPathId& pathId) 
     } else {
         SA_LOG_E("[" << TabletID() << "] IsColumnTable. traversal path " << pathId << " is not known to schemeshard");
         return {};
-    }    
+    }
 }
 
 void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db) {
     db.Table<Schema::ForceTraversalOperations>().Key(ForceTraversalOperationId).Delete();
-    
+
     auto operation = ForceTraversalOperation(operationId);
     for(const TForceTraversalTable& table : operation->Tables) {
         db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
@@ -826,15 +848,15 @@ TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTravers
                 if (operationTable.PathId == pathId) {
                     return &operationTable;
                 }
-            } 
+            }
         }
     }
-    
+
     return nullptr;
 }
 
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::CurrentForceTraversalTable() {
-    return ForceTraversalTable(ForceTraversalOperationId, TraversalPathId); 
+    return ForceTraversalTable(ForceTraversalOperationId, TraversalPathId);
 }
 
 void TStatisticsAggregator::UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db) {
@@ -977,6 +999,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
                 auto extr = [](const auto& x) { return x; };
                 PrintContainerStart(FastNodes, 8, str, extr);
             }
+            str << "CurPropagationSeq: " << CurPropagationSeq << Endl;
             str << "PropagationInFlight: " << PropagationInFlight << Endl;
             str << "PropagationSchemeShards: " << PropagationSchemeShards.size() << Endl;
             {
@@ -1012,7 +1035,7 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
             if (!ForceTraversals.empty()) {
                 auto extr = [](const auto& x) { return x.CreatedAt.ToStringUpToSeconds(); };
                 PrintContainerStart(ForceTraversals, 2, str, extr);
-            }            
+            }
 
             str << Endl;
             str << "NavigateType: " << GetNavigateTypeString() << Endl;
@@ -1054,5 +1077,23 @@ bool TStatisticsAggregator::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev
     ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
     return true;
 }
+
+ void TStatisticsAggregator::ReportBaseStatisticsCounters() {
+    ui64 totalRowCount = 0;
+    ui64 totalBytesSize = 0;
+    for (const auto& [_, serializedStats] : BaseStatistics) {
+        if (!serializedStats.Committed) {
+            continue;
+        }
+        NKikimrStat::TSchemeShardStats stats;
+        Y_PROTOBUF_SUPPRESS_NODISCARD stats.ParseFromString(*serializedStats.Committed);
+        for (const auto& entry: stats.GetEntries()) {
+            totalRowCount += entry.GetRowCount();
+            totalBytesSize += entry.GetBytesSize();
+        }
+    }
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_ROW_COUNT].Set(totalRowCount);
+    TabletCounters->Simple()[COUNTER_BASE_STATISTICS_TOTAL_BYTES_SIZE].Set(totalBytesSize);
+ }
 
 } // NKikimr::NStat

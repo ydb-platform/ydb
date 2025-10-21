@@ -1,5 +1,5 @@
 #include "fifo_cleanup.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "log.h"
 #include "executor.h"
 

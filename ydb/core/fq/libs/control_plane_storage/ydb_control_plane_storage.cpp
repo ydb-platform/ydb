@@ -131,6 +131,7 @@ void TYdbControlPlaneStorageActor::CreatePendingSmallTable()
         .AddNullableColumn(TENANT_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(ASSIGNED_UNTIL_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(RETRY_RATE_COLUMN_NAME, EPrimitiveType::Double)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, SCOPE_COLUMN_NAME, QUERY_ID_COLUMN_NAME})
         .Build();
 
@@ -313,6 +314,7 @@ void TYdbControlPlaneStorageActor::CreateMappingsTable()
         .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(VTENANT_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(NODE_COLUMN_NAME, EPrimitiveType::String)
         .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME})
         .Build();
 
@@ -525,7 +527,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
             .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
-                if (responseTasks && status.GetStatus() == EStatus::GENERIC_ERROR) {
+                if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
                 }
             });

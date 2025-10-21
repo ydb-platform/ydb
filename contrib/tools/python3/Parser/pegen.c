@@ -244,7 +244,7 @@ initialize_token(Parser *p, Token *parser_token, struct token *new_token, int to
     parser_token->metadata = NULL;
     if (new_token->metadata != NULL) {
         if (_PyArena_AddPyObject(p->arena, new_token->metadata) < 0) {
-            Py_DECREF(parser_token->metadata);
+            Py_DECREF(new_token->metadata);
             return -1;
         }
         parser_token->metadata = new_token->metadata;
@@ -637,7 +637,8 @@ expr_ty _PyPegen_soft_keyword_token(Parser *p) {
     Py_ssize_t size;
     PyBytes_AsStringAndSize(t->bytes, &the_token, &size);
     for (char **keyword = p->soft_keywords; *keyword != NULL; keyword++) {
-        if (strncmp(*keyword, the_token, size) == 0) {
+        if (strlen(*keyword) == (size_t)size &&
+            strncmp(*keyword, the_token, (size_t)size) == 0) {
             return _PyPegen_name_from_token(p, t);
         }
     }

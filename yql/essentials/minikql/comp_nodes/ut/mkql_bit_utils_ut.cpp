@@ -22,7 +22,6 @@ ui8 NaiveCompressByte(ui8 value, ui8 mask) {
 
 } // namespace
 
-
 Y_UNIT_TEST_SUITE(TMiniKQLBitUtilsTest) {
 Y_UNIT_TEST(TestCompressByte) {
     for (size_t value = 0; value < 256; ++value) {
@@ -60,8 +59,7 @@ Y_UNIT_TEST(CompressUnalignedOutput) {
     UNIT_ASSERT_EQUAL(result[2] & 0x3, 0b01);
 }
 
-}
+} // Y_UNIT_TEST_SUITE(TMiniKQLBitUtilsTest)
 
 } // namespace NMiniKQL
 } // namespace NKikimr
-

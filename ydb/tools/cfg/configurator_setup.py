@@ -100,6 +100,9 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
     argument_group.add_argument(
         '--nbs-control', action='store_true', help='Forces cfg command to generate NBS Control configuration'
     )
+    argument_group.add_argument(
+        '--nbs-disk-agent', action='store_true', help='Forces cfg command to generate Disk Agent Control configuration'
+    )
     argument_group.add_argument('--nfs', action='store_true', help='Forces cfg command to generate NFS configuration')
     argument_group.add_argument(
         '--nfs-control', action='store_true', help='Forces cfg command to generate NFS Control configuration'

@@ -252,13 +252,29 @@ X509Ptr GenerateSelfSignedCertificate(PKeyPtr& pkey, const TProps& props) {
     return std::move(x509);
 }
 
-std::string WriteAsPEM(PKeyPtr& pkey) {
+int GetPasswordCallback(char* buf, int size, int /*rwflag*/, void* userData) {
+    CHECK(userData, "Nonnull userData is expected");
+    CHECK(size > 0, "Positive size is expected");
+    std::string* password = reinterpret_cast<std::string*>(userData);
+    size_t passwordSize = std::min(static_cast<size_t>(size), password->size());
+    memcpy(buf, password->data(), passwordSize);
+    return static_cast<int>(passwordSize);
+}
+
+std::string WriteAsPEM(PKeyPtr& pkey, const std::string& password = {}) {
     std::array<char, maxCertSize> buf{0};
 
     auto bio = BIOPtr(BIO_new(BIO_s_mem()));
     CHECK(bio, "Unable to create BIO structure.");
 
-    PEM_write_bio_RSAPrivateKey(bio.get(), EVP_PKEY_get0_RSA(pkey.get()), nullptr, nullptr, 0, nullptr, nullptr);
+    pem_password_cb* passwordCallback = nullptr;
+    void* userData = nullptr;
+    if (!password.empty()) {
+        userData = const_cast<std::string*>(&password); // Our callback does not modify the password, so const_cast is safe here.
+        passwordCallback = &GetPasswordCallback;
+    }
+
+    PEM_write_bio_RSAPrivateKey(bio.get(), EVP_PKEY_get0_RSA(pkey.get()), nullptr, nullptr, 0, passwordCallback, userData);
 
     BIO_read(bio.get(), buf.data(), maxCertSize - 1);
 
@@ -472,6 +488,11 @@ TCertAndKey GenerateSignedCert(const TCertAndKey& rootCA, const TProps& props) {
     result.PrivateKey = WriteAsPEM(keys);
 
     return result;
+}
+
+std::string TCertAndKey::GetKeyWithPassword(const std::string& password) const {
+    PKeyPtr key = ReadPrivateKeyAsPEM(PrivateKey);
+    return WriteAsPEM(key, password);
 }
 
 void VerifyCert(const std::string& cert, const std::string& caCert) {

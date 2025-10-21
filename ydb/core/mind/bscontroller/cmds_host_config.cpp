@@ -23,6 +23,8 @@ namespace NKikimr::NBsController {
             driveInfo.SharedWithOs = drive.GetSharedWithOs();
             driveInfo.ReadCentric = drive.GetReadCentric();
             driveInfo.Kind = drive.GetKind();
+            driveInfo.InferPDiskSlotCountFromUnitSize = drive.GetInferPDiskSlotCountFromUnitSize();
+            driveInfo.InferPDiskSlotCountMax = drive.GetInferPDiskSlotCountMax();
 
             if (drive.HasPDiskConfig()) {
                 TString config;
@@ -46,6 +48,8 @@ namespace NKikimr::NBsController {
             driveInfo.SharedWithOs = false;
             driveInfo.ReadCentric = false;
             driveInfo.Kind = 0;
+            driveInfo.InferPDiskSlotCountFromUnitSize = 0;
+            driveInfo.InferPDiskSlotCountMax = 0;
             driveInfo.PDiskConfig = defaultPDiskConfig;
 
             for (const auto& path : field) {

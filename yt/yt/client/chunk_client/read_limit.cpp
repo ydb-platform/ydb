@@ -334,7 +334,7 @@ void Serialize(const TLegacyReadLimit& readLimit, IYsonConsumer* consumer)
 namespace {
 
 template <class T>
-std::optional<T> FindReadLimitComponent(const IAttributeDictionaryPtr& attributes, const TString& key)
+std::optional<T> FindReadLimitComponent(const IAttributeDictionaryPtr& attributes, const std::string& key)
 {
     try {
         return attributes->Find<T>(key);
@@ -469,7 +469,7 @@ void Serialize(const TLegacyReadRange& readRange, NYson::IYsonConsumer* consumer
 namespace {
 
 template <class T>
-std::optional<T> FindReadRangeComponent(const IAttributeDictionaryPtr& attributes, const TString& key)
+std::optional<T> FindReadRangeComponent(const IAttributeDictionaryPtr& attributes, const std::string& key)
 {
     try {
         return attributes->Find<T>(key);

@@ -186,6 +186,20 @@ TableServiceConfig {
 }
 
 QueryServiceConfig {
+  AvailableExternalDataSources: "ObjectStorage"
+  AvailableExternalDataSources: "ClickHouse"
+  AvailableExternalDataSources: "PostgreSQL"
+  AvailableExternalDataSources: "MySQL"
+  AvailableExternalDataSources: "Ydb"
+  AvailableExternalDataSources: "YT"
+  AvailableExternalDataSources: "Greenplum"
+  AvailableExternalDataSources: "MsSQLServer"
+  AvailableExternalDataSources: "Oracle"
+  AvailableExternalDataSources: "Logging"
+  AvailableExternalDataSources: "Solomon"
+  AvailableExternalDataSources: "Redis"
+  AvailableExternalDataSources: "Prometheus"
+  AvailableExternalDataSources: "OpenSearch"
   AllExternalDataSourcesAreAvailable: true
   Generic {
     Connector {
@@ -255,7 +269,8 @@ class KqpRunner(Runner):
         result_path = artifacts.make_path(test_name=test_name, artifact_name='result.json')
 
         # For debug add option --trace-opt to args
-        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} --result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} '
+        cmd = f'{self.kqprun_path} -s {scheme_path} -p {script_path} --app-config={app_conf_path} ' + \
+              f'--result-file={result_path} --result-format=full-json --udfs-dir={self.udf_dir} --exclude-linked-udfs '
 
         output = None
         data_out = None

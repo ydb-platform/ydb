@@ -27,6 +27,7 @@ DB connection options in the command line are specified before defining the comm
 
 - `-e, --endpoint <endpoint>` is the [endpoint](../../../concepts/connect.md#endpoint), that is, the main connection parameter that allows finding a {{ ydb-short-name }} server on the network. If no port is specified, port 2135 is used. If no protocol is specified, gRPCs (with encryption) is used in {{ ydb-short-name }} CLI public builds.
 - `-d, --database <database>` is the [database path](../../../concepts/connect.md#database).
+- `--no-discovery` means do not perform discovery (client balancing) for ydb cluster connection. If this option is set the user provided endpoint (by `-e` option) will be used to setup a connections.
 
 {% include [auth/options.md](auth/options.md) %}
 

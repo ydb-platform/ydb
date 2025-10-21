@@ -1,6 +1,8 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_actors_util.h"
+#if defined(_linux_) || defined(_darwin_)
 #include "yql_arrow_column_converters.h"
+#endif
 
 #include <arrow/result.h>
 #include <arrow/table.h>
@@ -8,8 +10,6 @@
 #include <library/cpp/string_utils/base64/base64.h>
 #include <parquet/arrow/writer.h>
 #include <util/generic/size_literals.h>
-
-#include <ydb/library/yql/providers/s3/compressors/factory.h>  // defines NO_SANITIZE_THREAD
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -20,6 +20,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -27,9 +28,7 @@
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#ifdef THROW
 #undef THROW
-#endif
 #include <library/cpp/string_utils/quote/quote.h>
 #include <library/cpp/xml/document/xml-document.h>
 
@@ -388,12 +387,13 @@ private:
     }
 
     void StartUploadParts() {
-        while (auto part = Parts->Pop()) {
+        for (auto part = Parts->Pop(); part || (!SentCount && Parts->IsSealed()); part = Parts->Pop()) {
             const auto size = part.size();
             const auto index = Tags.size();
             Tags.emplace_back();
             InFlight += size;
             SentSize += size;
+            SentCount++;
             auto authInfo = Credentials.GetAuthInfo();
             Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
@@ -461,6 +461,7 @@ private:
 
     size_t InFlight = 0ULL;
     size_t SentSize = 0ULL;
+    size_t SentCount = 0ULL;
 
     const TTxId TxId;
     const IHTTPGateway::TPtr Gateway;
@@ -641,13 +642,7 @@ private:
         auto status = result->Get()->Status;
         auto issues = std::move(result->Get()->Issues);
         LOG_W("TS3WriteActor", "TEvUploadError, status: " << NDqProto::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
-
-        if (status == NDqProto::StatusIds::UNSPECIFIED) {
-            status = NDqProto::StatusIds::INTERNAL_ERROR;
-            issues.AddIssue("Got upload error with unspecified error code.");
-        }
-
-        Callbacks->OnAsyncOutputError(OutputIndex, issues, status);
+        OnFatalError(std::move(issues), status);
     }
 
     void FinishIfNeeded() const {
@@ -701,8 +696,13 @@ private:
         const auto usedSpace = GetUsedSpace(/* storedOnly */ false);
         if (usedSpace >= i64(MemoryLimit) && usedSpace == GetUsedSpace(/* storedOnly */ true)) {
             // If all data is not inflight and all uploads running now -- deadlock occurred
-            Callbacks->OnAsyncOutputError(OutputIndex, {NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
+            OnFatalError({NYql::TIssue(TStringBuilder() << "Writing deadlock occurred, please increase write actor memory limit (used " << usedSpace << " bytes for " << FileWriteActors.size() << " partitions)")}, NDqProto::StatusIds::INTERNAL_ERROR);
         }
+    }
+
+    void OnFatalError(TIssues&& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode, std::source_location location = std::source_location::current()) const {
+        TSourceErrorHandler::CanonizeFatalError(issues, fatalCode, location);
+        Callbacks->OnAsyncOutputError(OutputIndex, issues, fatalCode);
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -799,6 +799,7 @@ private:
     const std::vector<TString> Keys;
 };
 
+#if defined(_linux_) || defined(_darwin_)
 class TS3BlockWriteActor : public TS3WriteActorBase {
     using TBase = TS3WriteActorBase;
 
@@ -938,10 +939,11 @@ private:
     TString SerializedData;
     std::unique_ptr<parquet::arrow::FileWriter> Writer;
 };
+#endif
 
-} // namespace
+} // anonymous namespace
 
-std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
+std::pair<IDqComputeActorAsyncOutput*, IActor*> CreateS3WriteActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     IRandomProvider* randomProvider,
@@ -982,6 +984,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         return {actor, actor};
     }
 
+#if defined(_linux_) || defined(_darwin_)
     const auto& arrowSettings = params.GetArrowSettings();
 
     const auto programBuilder = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
@@ -1012,6 +1015,10 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
 
     const auto actor = new TS3BlockWriteActor(std::move(settings), s3Params);
     return {actor, actor};
+#else
+    YQL_ENSURE(false, "Block sink is not supported for this platform");
+    return {nullptr, nullptr};
+#endif
 }
 
 } // namespace NYql::NDq

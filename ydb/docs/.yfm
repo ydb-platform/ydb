@@ -18,6 +18,7 @@ resources:
         - "https://login.vk.com"
         - "https://runtime.strm.yandex.ru"
         - "https://www.youtube.com"
+        - "https://rutube.ru"
 
 docs-viewer:
   project-name: ydb
@@ -25,9 +26,8 @@ docs-viewer:
   langs: ['en','ru']
   themes: ['light', 'dark']
   favicon-src: https://storage.yandexcloud.net/ydb-site-assets/favicon-202305/favicon.ico
-  gtm: 
-    id: GTM-W7ZBL4X
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
+  metrika: 94806704
   unrestrict-revision-access: true
   need_pdf: true
   pdf: true

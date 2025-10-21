@@ -21,7 +21,7 @@ public:
     TString ToJson() const;
 
 private:
-    TMap<TString, TString> Data;
+    TMap<TString, TString> Data_;
 };
 
 // is used for backward compatibility when content contains just token

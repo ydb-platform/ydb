@@ -124,7 +124,7 @@ def fix_gnu_param(arch, ex):
 
 
 def fix_windows_param(ex):
-    with tempfile.NamedTemporaryFile(delete=False) as def_file:
+    with tempfile.NamedTemporaryFile(mode='wt', delete=False) as def_file:
         exports = []
         for item in ex:
             if item.get('lang') == 'C':
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     if '--start-plugins' in args:
         ib = args.index('--start-plugins')
         ie = args.index('--end-plugins')
-        plugins = args[ib + 1:ie]
+        plugins = list(sorted(args[ib + 1:ie]))
         args = args[:ib] + args[ie + 1:]
 
     for p in plugins:

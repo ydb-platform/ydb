@@ -22,6 +22,9 @@ items:
       href: localdb-uncommitted-txs.md
   - name: Hive
     href: hive.md
+    items:
+     - name: Запуск таблеток
+       href: hive-booting.md
   - name: DataShard
     items:
     - name: Локи и видимость изменений в транзакциях
@@ -30,6 +33,10 @@ items:
       href: datashard-distributed-txs.md
   - name: Конфигурация V2
     href: configuration-v2.md
+  - name: Режим bridge
+    href: bridge.md
+  - name: Spilling Service
+    href: spilling-service.md
   - name: Тестирование с помощью нагружающих акторов
     href: load-actors-overview.md
     items:

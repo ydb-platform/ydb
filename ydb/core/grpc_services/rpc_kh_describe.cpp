@@ -106,6 +106,8 @@ private:
             WaitingResolveReply = true;
         } else {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
+
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = std::move(path);
             if (entry.Path.empty()) {
@@ -228,7 +230,7 @@ private:
     void ResolveShards(const NActors::TActorContext& ctx) {
         auto& entry = ResolveNamesResult->ResultSet.front();
 
-        if (entry.TableId.IsSystemView()) {
+        if (entry.TableId.IsSystemView() || entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
             // Add fake shard for sys view
             auto* p = Result.add_partitions();
             p->set_tablet_id(1);

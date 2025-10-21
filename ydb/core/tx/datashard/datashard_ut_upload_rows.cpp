@@ -25,7 +25,8 @@ static void DoStartUploadTestRows(
         const Tests::TServer::TPtr& server,
         const TActorId& sender,
         const TString& tableName,
-        Ydb::Type::PrimitiveTypeId typeId)
+        Ydb::Type::PrimitiveTypeId typeId,
+        TBackoff backoff = TBackoff(0))
 {
     auto& runtime = *server->GetRuntime();
 
@@ -43,7 +44,7 @@ static void DoStartUploadTestRows(
         rows->emplace_back(serializedKey, serializedValue);
     }
 
-    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows);
+    auto actor = NTxProxy::CreateUploadRowsInternal(sender, tableName, types, rows, NTxProxy::EUploadRowsMode::Normal, false, false, 0, backoff);
     runtime.Register(actor);
 }
 
@@ -195,7 +196,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             runtime.Send(ev.Release(), 0, true);
         }
 
-        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SCHEME_ERROR);
+        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::GENERIC_ERROR);
     }
 
     Y_UNIT_TEST(TestUploadRowsLocks) {
@@ -736,7 +737,79 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::GENERIC_ERROR);
     }
 
-    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe) {
+    Y_UNIT_TEST(RetryUploadRowsToShard) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        auto [shards, _] = CreateShardedTable(server, sender, "/Root", "table-1", 2, false);
+
+        TVector<THolder<IEventHandle>> blockedEnqueueRecords;
+        TVector<TActorId> requestedTablets;
+        auto prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvUploadRowsRequest) {
+                bool firstMessage = requestedTablets.empty();
+                requestedTablets.push_back(ev->Recipient);
+
+                if (firstMessage) {
+                    blockedEnqueueRecords.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP; // drop a message for one datashard
+                };
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        auto splitShard = [&](size_t shardId, size_t splitKey) {
+            auto senderSplit = runtime.AllocateEdgeActor();
+            ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", shards.at(shardId), splitKey);
+            WaitTxNotification(server, senderSplit, txId);
+            auto tablets = GetTableShards(server, senderSplit, "/Root/table-1");
+            UNIT_ASSERT(tablets.size() == shards.size() + 1);
+        };
+
+
+        DoStartUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, TBackoff(5));
+
+        splitShard(0, 5);
+
+        for (auto& ev : blockedEnqueueRecords) {
+            auto response = MakeHolder<TEvDataShard::TEvUploadRowsResponse>();
+            response->Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+            response->Record.SetTabletID(shards[0]);
+            runtime.Send(ev->Sender, ev->Recipient, response.Release());
+        }
+        blockedEnqueueRecords.clear();
+
+        DoWaitUploadTestRows(server, sender, Ydb::StatusIds::SUCCESS);
+        // Must receive 4 events:
+        // - splitted shard (event was blocked and unswered with status WRONG_SHARD_STATE)
+        // - other shard existed after create table
+        // - two shards created after split
+        UNIT_ASSERT_VALUES_EQUAL(requestedTablets.size(), 4);
+        THashSet<TActorId> requestedTabletsSet(requestedTablets.begin(), requestedTablets.end());
+        UNIT_ASSERT_VALUES_EQUAL(requestedTabletsSet.size(), 4);
+
+        auto data = KqpSimpleExec(runtime, Q_(R"(
+            SELECT COUNT(*) FROM `/Root/table-1`
+        )"));
+        // DoStartUploadTestRows wrote 32 rows
+        UNIT_ASSERT_VALUES_EQUAL(data, "{ items { uint64_value: 32 } }");
+    }
+
+    void DoShouldRejectOnChangeQueueOverflow(bool overloadSubscribe, bool withBackoff = false) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -749,6 +822,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::RPC_REQUEST, NLog::PRI_DEBUG);
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
@@ -787,7 +861,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         UNIT_ASSERT(observedUploadStatus.back() == NKikimrTxDataShard::TError::OK);
         observedUploadStatus.clear();
 
-        if (!overloadSubscribe) {
+        if (!overloadSubscribe && !withBackoff) {
             DoUploadTestRows(server, sender, "/Root/table-1", Ydb::Type::UINT32, Ydb::StatusIds::OVERLOADED);
             return;
         }
@@ -803,7 +877,8 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
             }
         }));
 
-        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32);
+        TBackoff backoff = withBackoff ? TBackoff(3, TDuration::Seconds(1)) : TBackoff(0);
+        DoStartUploadTestRows(server, responseAwaiter, "/Root/table-1", Ydb::Type::UINT32, backoff);
 
         runtime.SimulateSleep(TDuration::Seconds(1));
         UNIT_ASSERT(!blockedEnqueueRecords.empty());
@@ -843,6 +918,10 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
 
     Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetry) {
         DoShouldRejectOnChangeQueueOverflow(true);
+    }
+
+    Y_UNIT_TEST(ShouldRejectOnChangeQueueOverflowAndRetryOnRetryableError) {
+        DoShouldRejectOnChangeQueueOverflow(false, true);
     }
 
     Y_UNIT_TEST(BulkUpsertDuringAddIndexRaceCorruption) {

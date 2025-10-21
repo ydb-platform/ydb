@@ -26,11 +26,13 @@ def do(args):
         'Type',
         'Status',
         'DecommitStatus',
+        'MaintenanceStatus',
         'Kind',
         'BoxId',
         'Guid',
         'NumStaticSlots',
         'ExpectedSlotCount',
+        'SlotSizeInUnits',
         'PDiskConfig',
         'Usage',
         'UsedSize',
@@ -48,6 +50,7 @@ def do(args):
         'Type',
         'Status',
         'DecommitStatus',
+        'MaintenanceStatus',
     ]
     col_units = {
         'Usage': '%',
@@ -83,12 +86,13 @@ def do(args):
         row['Path'] = pdisk.Path
         row['Status'] = kikimr_bsconfig.EDriveStatus.Name(pdisk.DriveStatus)
         row['DecommitStatus'] = kikimr_bsconfig.EDecommitStatus.Name(pdisk.DecommitStatus)
+        row['MaintenanceStatus'] = kikimr_bsconfig.TMaintenanceStatus.E.Name(pdisk.MaintenanceStatus)
         row['Type'] = common.EPDiskType.Name(pdisk.Type)
         row['BoxId'] = pdisk.BoxId
         row['Kind'] = pdisk.Kind
         row['Guid'] = pdisk.Guid
         row['NumStaticSlots'] = pdisk.NumStaticSlots
-        row['ExpectedSlotCount'] = pdisk.ExpectedSlotCount
+        row['ExpectedSlotCount'], row['SlotSizeInUnits'] = common.get_pdisk_inferred_settings(pdisk)
         row['PDiskConfig'] = text_format.MessageToString(pdisk.PDiskConfig, as_one_line=True)
         row['AvailableSize'] = pdisk.PDiskMetrics.AvailableSize
         row['TotalSize'] = pdisk.PDiskMetrics.TotalSize

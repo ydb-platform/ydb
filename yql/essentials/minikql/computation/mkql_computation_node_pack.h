@@ -24,11 +24,11 @@ namespace NMiniKQL {
 namespace NDetails {
 
 enum EPackProps {
-  Begin,
-  UseOptionalMask = Begin,
-  UseTopLength,
-  SingleOptional,
-  End
+    Begin,
+    UseOptionalMask = Begin,
+    UseTopLength,
+    SingleOptional,
+    End
 };
 
 using TPackProperties = TEnumBitSet<EPackProps, EPackProps::Begin, EPackProps::End>;
@@ -51,12 +51,12 @@ struct TPackerState {
 
 } // namespace NDetails
 
-template<bool Fast>
+template <bool Fast>
 class TValuePackerGeneric {
 public:
     using TSelf = TValuePackerGeneric<Fast>;
 
-    TValuePackerGeneric(bool stable, const TType *type);
+    TValuePackerGeneric(bool stable, const TType* type);
 
     // reference is valid till the next call to Pack()
     TStringBuf Pack(const NUdf::TUnboxedValuePod& value) const;
@@ -70,14 +70,36 @@ private:
     mutable NDetails::TPackerState State_;
 };
 
-template<bool Fast>
+// This version specify exactly how data will be packed and unpacked.
+enum class EValuePackerVersion {
+    V0 = 0, // Initial version.
+    V1 = 1, // Fixed Block type |child_data| serialization/deserialization.
+            // Remove the invariant of equality of offsets for all recursive children.
+};
+
+template <bool Fast>
 class TValuePackerTransport {
 public:
     using TSelf = TValuePackerTransport<Fast>;
 
-    explicit TValuePackerTransport(const TType* type, arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+    explicit TValuePackerTransport(const TType* type, EValuePackerVersion valuePackerVersion,
+                                   TMaybe<size_t> bufferPageAllocSize = Nothing(),
+                                   arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+
+    // Deprecated: For YDB sync only.
+    explicit TValuePackerTransport(const TType* type,
+                                   TMaybe<size_t> bufferPageAllocSize = Nothing(),
+                                   arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+
     // for compatibility with TValuePackerGeneric - stable packing is not supported
-    TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+    TValuePackerTransport(bool stable, const TType* type, EValuePackerVersion valuePackerVersion,
+                          TMaybe<size_t> bufferPageAllocSize = Nothing(),
+                          arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
+
+    // Deprecated: For YDB sync only.
+    TValuePackerTransport(bool stable, const TType* type,
+                          TMaybe<size_t> bufferPageAllocSize = Nothing(),
+                          arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
@@ -103,6 +125,7 @@ public:
     NYql::TChunkedBuffer Pack(const NUdf::TUnboxedValuePod& value) const;
     NUdf::TUnboxedValue Unpack(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory) const;
     void UnpackBatch(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;
+
 private:
     void BuildMeta(TPagedBuffer::TPtr& buffer, bool addItemCount) const;
     void StartPack();
@@ -115,6 +138,7 @@ private:
     const TType* const Type_;
     ui64 ItemCount_ = 0;
     TPagedBuffer::TPtr Buffer_;
+    const size_t BufferPageAllocSize_;
     mutable NDetails::TPackerState State_;
     mutable NDetails::TPackerState IncrementalState_;
 
@@ -122,7 +146,7 @@ private:
     bool IsBlock_ = false;
     bool IsLegacyBlock_ = false;
     ui32 BlockLenIndex_ = 0;
-
+    EValuePackerVersion ValuePackerVersion_;
     TVector<std::unique_ptr<IBlockSerializer>> BlockSerializers_;
     TVector<std::unique_ptr<IBlockReader>> BlockReaders_;
     TVector<std::shared_ptr<arrow::ArrayData>> ConvertedScalars_;
@@ -133,11 +157,12 @@ private:
 
 using TValuePacker = TValuePackerGeneric<false>;
 
-class TValuePackerBoxed : public TComputationValue<TValuePackerBoxed>, public TValuePacker {
+class TValuePackerBoxed: public TComputationValue<TValuePackerBoxed>, public TValuePacker {
     typedef TComputationValue<TValuePackerBoxed> TBase;
+
 public:
     TValuePackerBoxed(TMemoryUsageInfo* memInfo, bool stable, const TType* type);
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

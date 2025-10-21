@@ -119,9 +119,9 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             Y_ABORT_UNLESS(ev.has_value());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
             if (!lockEvent) {
-                if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
                     Cerr << "Got destroy event";
-                } else if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*ev)) {
+                } else if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*ev)) {
                     Cerr << "Got part closed event\n";
                 } else if (auto* otherEv = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*ev)) {
                     Cerr << "Got session closed event" << otherEv->DebugString() << Endl;

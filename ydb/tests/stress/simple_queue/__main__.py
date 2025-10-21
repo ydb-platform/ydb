@@ -11,5 +11,4 @@ if __name__ == '__main__':
     parser.add_argument('--mode', default="row", choices=["row", "column"], help='STORE mode for CREATE TABLE')
     args = parser.parse_args()
     with Workload(args.endpoint, args.database, args.duration, args.mode) as workload:
-        for handle in workload.loop():
-            handle()
+        workload.start()

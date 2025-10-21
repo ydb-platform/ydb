@@ -69,6 +69,7 @@ public:
     ~TTable();
 
     void PrepareRollback();
+    void PrepareTruncate();
     void RollbackChanges();
     void CommitChanges(TArrayRef<const TMemGlob> blobs);
     void CommitNewTable(TArrayRef<const TMemGlob> blobs);
@@ -171,6 +172,7 @@ public:
     void Update(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion);
 
     void UpdateTx(ERowOp, TRawVals key, TOpsRef, TArrayRef<const TMemGlob> apart, ui64 txId);
+    void LockRowTx(ELockMode, TRawVals key, ui64 txId);
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
 
@@ -185,6 +187,7 @@ public:
     const absl::flat_hash_set<ui64>& GetOpenTxs() const;
     size_t GetOpenTxCount() const;
     size_t GetTxsWithDataCount() const;
+    size_t GetTxsWithStatusCount() const;
     size_t GetCommittedTxCount() const;
     size_t GetRemovedTxCount() const;
 
@@ -437,6 +440,7 @@ private:
         bool MutableExisted;
         bool MutableUpdated;
         bool DisableEraseCache;
+        bool Truncated;
 
         TRollbackState(TEpoch epoch)
             : Epoch(epoch)

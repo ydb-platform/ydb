@@ -38,6 +38,7 @@ struct TEvPrivate {
         EvGenerateTestData,
         EvRefreshScaleRecommendation,
         EvUpdateFollowers,
+        EvUpdateBalanceCounters,
         EvEnd
     };
 
@@ -88,9 +89,9 @@ struct TEvPrivate {
 
     struct TEvRestartComplete : TEventLocal<TEvRestartComplete, EvRestartComplete> {
         TFullTabletId TabletId;
-        TStringBuf Status;
+        TString Status;
 
-        TEvRestartComplete(TFullTabletId tabletId, TStringBuf status)
+        TEvRestartComplete(TFullTabletId tabletId, const TString& status)
             : TabletId(tabletId)
             , Status(status)
         {}
@@ -142,6 +143,8 @@ struct TEvPrivate {
 
     struct TEvUpdateFollowers : TEventLocal<TEvUpdateFollowers, EvUpdateFollowers> {
     };
+
+    struct TEvUpdateBalanceCounters : TEventLocal<TEvUpdateBalanceCounters, EvUpdateBalanceCounters> {};
 };
 
 } // NHive

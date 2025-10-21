@@ -63,9 +63,19 @@ struct TObjectStorageExternalSource : public IExternalSource {
             } else if (key.StartsWith("projection.") || key == "storage.location.template") {
                 objectStorage.mutable_projection()->insert({key, value});
             } else if (lowerKey == "partitioned_by") {
-                auto json = NSc::TValue::FromJsonThrow(value);
-                for (const auto& column: json.GetArray()) {
-                    *objectStorage.add_partitioned_by() = column;
+                try {
+                    const auto json = NSc::TValue::FromJsonThrow(value);
+                    if (!json.IsArray()) {
+                        throw TExternalSourceException() << "partitioned_by must be an array of column names";
+                    }
+                    for (const auto& column: json.GetArray()) {
+                        if (!column.IsString()) {
+                            throw TExternalSourceException() << "partitioned_by must be an array of strings";
+                        }
+                        *objectStorage.add_partitioned_by() = column;
+                    }
+                } catch (const std::exception& e) {
+                    throw TExternalSourceException() << "Failed to parse partitioned_by: " << e.what();
                 }
             } else if (IsIn({"file_pattern"sv, "data.interval.unit"sv, "data.datetime.format_name"sv, "data.datetime.format"sv, "data.timestamp.format_name"sv, "data.timestamp.format"sv, "data.date.format"sv, "csv_delimiter"sv}, lowerKey)) {
                 objectStorage.mutable_format_setting()->insert({lowerKey, value});

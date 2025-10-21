@@ -15,16 +15,18 @@ RECURSE(
     federated_topic
     federated_topic/impl
     helpers
-    impl/ydb_endpoints
-    impl/ydb_internal/common
-    impl/ydb_internal/db_driver_state
-    impl/ydb_internal/grpc_connections
-    impl/ydb_internal/logger
-    impl/ydb_internal/make_request
-    impl/ydb_internal/plain_status
-    impl/ydb_internal/thread_pool
-    impl/ydb_internal/value_helpers
-    impl/ydb_stats
+    impl/endpoints
+    impl/executor
+    impl/internal/common
+    impl/internal/db_driver_state
+    impl/internal/grpc_connections
+    impl/internal/logger
+    impl/internal/make_request
+    impl/internal/plain_status
+    impl/internal/thread_pool
+    impl/internal/value_helpers
+    impl/session
+    impl/stats
     import
     operation
     params

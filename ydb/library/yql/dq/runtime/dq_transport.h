@@ -4,6 +4,7 @@
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/dq/common/dq_serialized_batch.h>
 #include <ydb/library/yql/dq/proto/dq_transport.pb.h>
+#include <ydb/library/yql/dq/runtime/dq_packer_version_helper.h>
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -17,10 +18,15 @@ namespace NYql::NDq {
 class TDqDataSerializer : private TNonCopyable {
 public:
     TDqDataSerializer(const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-        const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion)
+                      const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+                      NDqProto::EDataTransportVersion transportVersion,
+                      NKikimr::NMiniKQL::EValuePackerVersion packerVersion)
         : TypeEnv(typeEnv)
         , HolderFactory(holderFactory)
-        , TransportVersion(transportVersion) {}
+        , TransportVersion(transportVersion)
+        , ValuePackerVersion(packerVersion)
+    {
+    }
 
     NDqProto::EDataTransportVersion GetTransportVersion() const;
 
@@ -33,14 +39,14 @@ public:
             TransportVersion == NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 ||
             TransportVersion == NDqProto::DATA_TRANSPORT_OOB_PICKLE_1_0)
         {
-            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(itemType);
+            NKikimr::NMiniKQL::TValuePackerTransport<false> packer(itemType, ValuePackerVersion);
             return SerializeBatch(packer, first, last);
         }
 
         if (TransportVersion == NDqProto::DATA_TRANSPORT_UV_FAST_PICKLE_1_0 ||
             TransportVersion == NDqProto::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0)
         {
-            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(itemType);
+            NKikimr::NMiniKQL::TValuePackerTransport<true> packer(itemType, ValuePackerVersion);
             return SerializeBatch(packer, first, last);
         }
         YQL_ENSURE(false, "Unsupported TransportVersion");
@@ -71,6 +77,8 @@ public:
     const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
     const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     const NDqProto::EDataTransportVersion TransportVersion;
+    const NKikimr::NMiniKQL::EValuePackerVersion ValuePackerVersion;
+
 private:
     template <class TForwardIterator, class TPacker>
     TDqSerializedBatch SerializeBatch(TPacker& packer, TForwardIterator first, TForwardIterator last) const {
@@ -83,6 +91,7 @@ private:
         TDqSerializedBatch result;
         result.Proto.SetTransportVersion(TransportVersion);
         result.Proto.SetChunks(count);
+        result.Proto.SetValuePackerVersion(ToProto(ValuePackerVersion));
         result.SetPayload(packer.Finish());
         return result;
     }

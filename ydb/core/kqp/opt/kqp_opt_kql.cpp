@@ -540,13 +540,13 @@ TExprBase BuildDeleteTableWithIndex(const TKiWriteTable& write, const TKikimrTab
         .Done();
 }
 
-TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx)
+TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withSystemColumns,
+    const TCoLambda& filter, const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
 {
     const auto tableMeta = BuildTableMeta(tableData, pos, ctx);
     const auto tableColumns = BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/);
 
-    const auto allRows = BuildReadTable(tableColumns, pos, tableData, false, {}, ctx);
+    const auto allRows = BuildReadTable(tableColumns, pos, tableData, (isBatch == "true"), {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(allRows)
@@ -557,7 +557,7 @@ TExprBase BuildRowsToDelete(const TKikimrTableDescription& tableData, bool withS
 TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescription& tableData, bool withSystemColumns,
     TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
     auto keysToDelete = ProjectColumns(rowsToDelete, tableData.Metadata->KeyColumnNames, ctx);
 
     return Build<TKqlDeleteRows>(ctx, del.Pos())
@@ -572,60 +572,21 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.Pos(), ctx);
-
-    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
-        [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
-            return BuildTableMeta(meta, pos, ctx);
-        });
-    YQL_ENSURE(indexes);
-
-    const auto& pk = tableData.Metadata->KeyColumnNames;
-
-    auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+    TKqpDeleteRowsIndexSettings settings;
+    settings.SkipLookup = true;
+    auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
+    return Build<TKqlDeleteRowsIndex>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
-        .Input(ProjectColumns(rowsToDelete, pk, ctx))
-        .ReturningColumns<TCoAtomList>().Build()
-        .IsBatch(del.IsBatch())
-        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
+        .Input(rowsToDelete)
+        .ReturningColumns(del.ReturningColumns())
+        .Settings(settings.BuildNode(ctx, del.Pos()))
         .Done();
-
-    TVector<TExprBase> effects;
-    effects.push_back(tableDelete);
-
-    for (const auto& [indexMeta, indexDesc] : indexes) {
-        THashSet<TStringBuf> indexTableColumns;
-
-        THashSet<TString> keyColumns;
-        for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(keyColumns.emplace(column).second);
-            indexTableColumns.emplace(column);
-        }
-
-        for (const auto& column : pk) {
-            if (keyColumns.insert(column).second) {
-                indexTableColumns.emplace(column);
-            }
-        }
-
-        auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-            .Table(indexMeta)
-            .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
-            .ReturningColumns<TCoAtomList>().Build()
-            .IsBatch(del.IsBatch())
-            .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
-            .Done();
-
-        effects.push_back(indexDelete);
-    }
-
-    return Build<TExprList>(ctx, del.Pos()).Add(effects).Done();
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
-    const TPositionHandle pos, TExprContext& ctx)
+    const TCoAtom& isBatch, const TPositionHandle pos, TExprContext& ctx)
 {
-    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, false, {}, ctx);
+    auto kqlReadTable = BuildReadTable(BuildColumnsList(tableData, pos, ctx, withSystemColumns, true /*ignoreWriteOnlyColumns*/), pos, tableData, (isBatch == "true"), {}, ctx);
 
     return Build<TCoFilter>(ctx, pos)
         .Input(kqlReadTable)
@@ -692,7 +653,7 @@ THashSet<TStringBuf> GetUpdateColumns(const TKikimrTableDescription& tableData, 
 TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
     auto updateColumns = GetUpdateColumns(tableData, update.Update());
     auto updatedRows = BuildUpdatedRows(rowsToUpdate, update.Update(), updateColumns, update.Pos(), ctx);
@@ -720,7 +681,7 @@ TExprBase BuildUpdateTable(const TKiUpdateTable& update, const TKikimrTableDescr
 TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
-    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.Pos(), ctx);
+    auto rowsToUpdate = BuildRowsToUpdate(tableData, withSystemColumns, update.Filter(), update.IsBatch(), update.Pos(), ctx);
 
     TVector<TExprBase> effects;
 
@@ -739,15 +700,16 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             return BuildTableMeta(meta, pos, ctx);
         });
 
-    auto is_uniq = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
-        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    auto idxNeedsKqpEffect = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique ||
+            x.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree;
     };
 
-    const bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
+    const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
-    // For uniq index rewrite UPDATE in to UPDATE ON
-    if (hasUniqIndex) {
-        auto effect = Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
+    // For unique or vector index rewrite UPDATE to UPDATE ON
+    if (needsKqpEffect) {
+        return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
                 .Input(updatedRows)
@@ -759,9 +721,6 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Build()
             .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
-
-        effects.emplace_back(effect);
-        return Build<TExprList>(ctx, update.Pos()).Add(effects).Done();
     }
 
     const auto& pk = tableData.Metadata->KeyColumnNames;
@@ -775,7 +734,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         .Columns()
             .Add(updateColumnsList)
             .Build()
-        .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+        .IsBatch(update.IsBatch())
         .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
         .ReturningColumns(update.ReturningColumns())
         .Done();
@@ -846,7 +805,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Columns()
                     .Add(indexColumnsList)
                     .Build()
-                .IsBatch(ctx.NewAtom(update.Pos(), "false"))
+                .IsBatch(update.IsBatch())
                 .Settings().Build()
                 .Done();
 
@@ -942,15 +901,33 @@ TExprBase WriteTableWithIndexUpdate(const TKiWriteTable& write, const TCoAtomLis
     Y_UNREACHABLE();
 }
 
+bool CheckWriteToIndex(const TExprBase& write, const NYql::TKikimrTableDescription& tableData, TExprContext& ctx) {
+    if (tableData.Metadata->IsIndexImplTable) {
+        const TString err = TStringBuilder() << "Writing to index implementation tables is not allowed. Table: `"
+            << tableData.Metadata->Name << "`.";
+        ctx.AddError(YqlIssue(ctx.GetPosition(write.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
+        return false;
+    }
+    return true;
+}
+
+bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTableDescription& tableData, TExprContext& ctx) {
+    if (tableData.Metadata->WritesToTableAreDisabled) {
+        const TString err = TStringBuilder() << "Table `" << tableData.Metadata->Name << "` modification is disabled: "
+                << tableData.Metadata->DisableWritesReason;
+        ctx.AddError(YqlIssue(ctx.GetPosition(write.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
+        return false;
+    }
+    return true;
+}
+
 TExprNode::TPtr HandleWriteTable(const TKiWriteTable& write, TExprContext& ctx, TKqpOptimizeContext& kqpCtx, const TKikimrTablesData& tablesData)
 {
     if (GetTableOp(write) == TYdbOperation::FillTable) {
         return BuildFillTable(write, ctx).Ptr();
     }
     auto& tableData = GetTableData(tablesData, write.DataSink().Cluster(), write.Table().Value());
-    if (tableData.Metadata->IsIndexImplTable) {
-        const TString err = "Writing to index implementation tables is not allowed.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(write.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
+    if (!CheckWriteToIndex(write, tableData, ctx) || !CheckDisabledWriteToUniqIndex(write, tableData, ctx)) {
         return nullptr;
     }
     const bool isSink = NeedSinks(tableData, kqpCtx);
@@ -984,9 +961,7 @@ TExprNode::TPtr HandleUpdateTable(const TKiUpdateTable& update, TExprContext& ct
 {
     Y_UNUSED(kqpCtx);
     const auto& tableData = GetTableData(tablesData, update.DataSink().Cluster(), update.Table().Value());
-    if (tableData.Metadata->IsIndexImplTable) {
-        const TString err = "Writing to index implementation tables is not allowed.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(update.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
+    if (!CheckWriteToIndex(update, tableData, ctx) || !CheckDisabledWriteToUniqIndex(update, tableData, ctx)) {
         return nullptr;
     }
 
@@ -1002,9 +977,7 @@ TExprNode::TPtr HandleDeleteTable(const TKiDeleteTable& del, TExprContext& ctx, 
 {
     Y_UNUSED(kqpCtx);
     auto& tableData = GetTableData(tablesData, del.DataSink().Cluster(), del.Table().Value());
-    if (tableData.Metadata->IsIndexImplTable) {
-        const TString err = "Writing to index implementation tables is not allowed.";
-        ctx.AddError(YqlIssue(ctx.GetPosition(del.Pos()), TIssuesIds::KIKIMR_BAD_REQUEST, err));
+    if (!CheckWriteToIndex(del, tableData, ctx) || !CheckDisabledWriteToUniqIndex(del, tableData, ctx)) {
         return nullptr;
     }
 

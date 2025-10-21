@@ -2,7 +2,7 @@
 
 Механизм для выноса части запроса в отдельный приложенный файл. Чтобы воспользоваться механизмом, необходимо выставить прагму:
 
-* [PRAGMA Library](pragma.md#library) &mdash; помечает приложенный файл как доступный для импорта.
+* [PRAGMA Library](pragma/file.md#library) &mdash; помечает приложенный файл как доступный для импорта.
 
 ## EXPORT
 
@@ -20,7 +20,7 @@
 
 {% note warning %}
 
-Файл, на который ссылается [PRAGMA Library](pragma.md#library), должен быть приложен к запросу. __Использовать для этой цели [PRAGMA File](pragma.md#file) нельзя__.
+Файл, на который ссылается [PRAGMA Library](pragma/file.md#library), должен быть приложен к запросу. __Использовать для этой цели [PRAGMA File](pragma/file.md#file) нельзя__.
 
 {% endnote %}
 

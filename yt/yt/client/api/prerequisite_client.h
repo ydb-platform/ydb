@@ -7,11 +7,13 @@ namespace NYT::NApi {
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TPrerequisiteAttachOptions
+    : public TTimeoutOptions
 {
     bool AutoAbort = false;
     std::optional<TDuration> PingPeriod;
     bool Ping = true;
     bool PingAncestors = false;
+    std::optional<std::string> PingerAddress;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

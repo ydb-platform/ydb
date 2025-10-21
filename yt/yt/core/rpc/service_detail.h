@@ -765,9 +765,9 @@ protected:
         NProfiling::TCounter RequestQueueByteSizeLimitErrorCounter;
         NProfiling::TCounter UnauthenticatedRequestCounter;
 
-        std::atomic<NLogging::ELogLevel> LogLevel = {};
-        std::atomic<NLogging::ELogLevel> ErrorLogLevel = {};
-        std::atomic<TDuration> LoggingSuppressionTimeout = {};
+        std::atomic<NLogging::ELogLevel> LogLevel;
+        std::atomic<NLogging::ELogLevel> ErrorLogLevel;
+        std::atomic<TDuration> LoggingSuppressionTimeout;
 
         using TNonowningPerformanceCountersKey = std::tuple<TStringBuf, TRequestQueue*>;
         using TOwningPerformanceCountersKey = std::tuple<std::string, TRequestQueue*>;
@@ -1152,6 +1152,8 @@ private:
     std::atomic<int> QueueSize_ = 0;
     std::atomic<i64> QueueByteSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
+
+    std::atomic<TDuration> TestingDelay_;
 
 
     void ScheduleRequestsFromQueue();

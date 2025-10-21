@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(2.9)
+VERSION(2.12)
 
-ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.9.tar.gz)
+ORIGINAL_SOURCE(https://github.com/axboe/liburing/archive/liburing-2.12.tar.gz)
 
 LICENSE(
     "(GPL-2.0-only WITH Linux-syscall-note OR MIT)" AND
@@ -61,6 +61,7 @@ RECURSE(
     test/ce593a6c480a.t
     test/close-opath.t
     test/cmd-discard.t
+    test/conn-unreach.t
     test/connect-rep.t
     test/connect.t
     test/coredump.t
@@ -79,10 +80,12 @@ RECURSE(
     test/eeed8b54e0df.t
     test/empty-eownerdead.t
     test/eploop.t
+    test/epwait.t
     test/eventfd-disable.t
     test/eventfd-reg.t
     test/eventfd-ring.t
     test/eventfd.t
+    test/evfd-short-read.t
     test/evloop.t
     test/exec-target.t
     test/exit-no-cleanup.t
@@ -91,6 +94,7 @@ RECURSE(
     test/fc2a85cb02ef.t
     test/fd-install.t
     test/fd-pass.t
+    test/fdinfo-sqpoll.t
     test/fdinfo.t
     test/fifo-nonblock-read.t
     test/file-exit-unreg.t
@@ -104,9 +108,11 @@ RECURSE(
     test/fixed-hugepage.t
     test/fixed-link.t
     test/fixed-reuse.t
+    test/fixed-seg.t
     test/fpos.t
     test/fsnotify.t
     test/fsync.t
+    test/futex-kill.t
     test/futex.t
     test/hardlink.t
     test/ignore-single-mmap.t
@@ -119,6 +125,7 @@ RECURSE(
     test/iopoll-leak.t
     test/iopoll-overflow.t
     test/iopoll.t
+    test/iowait.t
     test/kallsyms.t
     test/lfs-openat-write.t
     test/lfs-openat.t
@@ -149,6 +156,7 @@ RECURSE(
     test/pipe-bug.t
     test/pipe-eof.t
     test/pipe-reuse.t
+    test/pipe.t
     test/poll-cancel-all.t
     test/poll-cancel-ton.t
     test/poll-cancel.t
@@ -169,8 +177,11 @@ RECURSE(
     test/read-mshot-stdin.t
     test/read-mshot.t
     test/read-write.t
+    test/recv-bundle-short-ooo.t
+    test/recv-inc-ooo.t
     test/recv-msgall-stream.t
     test/recv-msgall.t
+    test/recv-mshot-fair.t
     test/recv-multishot.t
     test/recvsend_bundle-inc.t
     test/recvsend_bundle.t
@@ -193,6 +204,7 @@ RECURSE(
     test/send-zerocopy.t
     test/send_recv.t
     test/send_recvmsg.t
+    test/sendmsg_iov_clean.t
     test/shared-wq.t
     test/short-read.t
     test/shutdown.t
@@ -228,13 +240,17 @@ RECURSE(
     test/thread-exit.t
     test/timeout-new.t
     test/timeout.t
+    test/timerfd-short-read.t
+    test/timestamp.t
     test/truncate.t
     test/tty-write-dpoll.t
     test/unlink.t
+    test/vec-regbuf.t
     test/version.t
     test/wait-timeout.t
     test/waitid.t
     test/wakeup-hang.t
     test/wq-aff.t
     test/xattr.t
+    test/zcrx.t
 )

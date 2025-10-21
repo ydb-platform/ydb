@@ -1,21 +1,20 @@
 #pragma once
 #include "defs.h"
-#include <ydb/core/util/queue_oneone_inplace.h>
+#include <ydb/core/util/queue_inplace.h>
 
 namespace NKikimr {
 
-template <typename T, typename TDestruct, typename TEvent>
+template <typename T, typename TEvent>
 class TTxProgressQueue {
     bool HasInFly;
-    TOneOneQueueInplace<T, 32> Queue;
+    TQueueInplace<T, 32> Queue;
+
 public:
     TTxProgressQueue()
         : HasInFly(false)
     {}
 
     ~TTxProgressQueue() {
-        while (T head = Queue.Pop())
-            TDestruct::Destroy(head);
     }
 
     void Progress(T x, const TActorContext &ctx) {
@@ -24,13 +23,13 @@ public:
             ctx.Send(ctx.SelfID, new TEvent(x));
             HasInFly = true;
         } else {
-            Queue.Push(x);
+            Queue.Push(std::move(x));
         }
     }
 
     void Reset(const TActorContext &ctx) {
         Y_DEBUG_ABORT_UNLESS(HasInFly);
-        if (T x = Queue.Pop())
+        if (T x = Queue.PopDefault())
             ctx.Send(ctx.SelfID, new TEvent(x));
         else
             HasInFly = false;

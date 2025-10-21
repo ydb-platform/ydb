@@ -8,6 +8,8 @@
 #include <yt/yt/client/api/journal_writer.h>
 #include <yt/yt/client/api/transaction.h>
 
+#include <yt/yt/client/bundle_controller_client/bundle_controller_settings.h>
+
 #include <yt/yt/client/chaos_client/replication_card_cache.h>
 
 #include <yt/yt/client/scheduler/spec_patch.h>
@@ -30,8 +32,6 @@ class TMockClient
     : public IClient
 {
 public:
-    using TRange = std::pair<int, int>;
-
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     void SetTableMountCache(NTabletClient::ITableMountCachePtr value);
 
@@ -39,6 +39,8 @@ public:
     void SetTimestampProvider(NTransactionClient::ITimestampProviderPtr value);
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
+
+    MOCK_METHOD(const TClientOptions&, GetOptions, (), (override));
 
     MOCK_METHOD(TFuture<std::optional<std::string>>, GetClusterName, (bool fetchIfNull), (override));
 
@@ -545,19 +547,19 @@ public:
         const TPutFileToCacheOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<TGetCurrentUserResultPtr>, GetCurrentUser, (
+    MOCK_METHOD(TFuture<TGetCurrentUserResult>, GetCurrentUser, (
         const TGetCurrentUserOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, AddMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TAddMemberOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, RemoveMember, (
-        const TString& group,
-        const TString& member,
+        const std::string& group,
+        const std::string& member,
         const TRemoveMemberOptions& options),
         (override));
 
@@ -673,6 +675,11 @@ public:
 
     MOCK_METHOD(TFuture<TListOperationsResult>, ListOperations, (
         const TListOperationsOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<TListJobsResult>, ListJobs, (
@@ -808,6 +815,10 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (
         const std::string& bundleName,
         const NBundleControllerClient::TGetBundleConfigOptions& options), (override));
@@ -877,6 +888,11 @@ public:
         const TDistributedWriteSessionStartOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<void>, PingDistributedWriteSession, (
+        TSignedDistributedWriteSessionPtr session,
+        const TDistributedWriteSessionPingOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, FinishDistributedWriteSession, (
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options),
@@ -897,7 +913,7 @@ public:
     MOCK_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (
         const TSignedShuffleHandlePtr& shuffleHandle,
         int partitionIndex,
-        std::optional<TRange> writerIndexRange,
+        std::optional<TIndexRange> writerIndexRange,
         const TShuffleReaderOptions& options),
         (override));
 
@@ -906,6 +922,15 @@ public:
         const std::string& partitionColumn,
         std::optional<int> writerIndex,
         const TShuffleWriterOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (
+        const TChaosLeaseStartOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options),
         (override));
 
 private:

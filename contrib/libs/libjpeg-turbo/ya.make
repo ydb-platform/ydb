@@ -11,12 +11,13 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2.1.4)
+VERSION(3.1.1)
 
-ORIGINAL_SOURCE(https://github.com/libjpeg-turbo/libjpeg-turbo/archive/2.1.4.tar.gz)
+ORIGINAL_SOURCE(https://github.com/libjpeg-turbo/libjpeg-turbo/archive/3.1.1.tar.gz)
 
 ADDINCL(
     contrib/libs/libjpeg-turbo
+    contrib/libs/libjpeg-turbo/src
     FOR
     asm
     contrib/libs/libjpeg-turbo/simd/nasm
@@ -43,11 +44,7 @@ IF (SANITIZER_TYPE)
     )
 ENDIF()
 
-IF (OS_ANDROID)
-    SRCS(
-        jsimd_none.c
-    )
-ELSEIF (ARCH_I386)
+IF (ARCH_I386 AND NOT OS_ANDROID)
     SRCS(
         simd/i386/jccolor-avx2.asm
         simd/i386/jccolor-mmx.asm
@@ -126,7 +123,7 @@ ELSEIF (ARCH_X86_64)
         simd/x86_64/jsimd.c
         simd/x86_64/jsimdcpu.asm
     )
-ELSEIF (ARCH_ARM7_NEON AND NOT MSVC)
+ELSEIF (ARCH_ARM7)
     ADDINCL(
         contrib/libs/libjpeg-turbo/simd/arm
     )
@@ -148,13 +145,7 @@ ELSEIF (ARCH_ARM7_NEON AND NOT MSVC)
         simd/arm/jidctred-neon.c
         simd/arm/jquanti-neon.c
     )
-ELSEIF (ARCH_ARM7 AND NOT MSVC)
-    SRCS(
-        simd/arm/aarch32/jchuff-neon.c
-        simd/arm/aarch32/jsimd.c
-        simd/arm/aarch32/jsimd_neon.S
-    )
-ELSEIF (ARCH_ARM64 AND NOT MSVC)
+ELSEIF (ARCH_ARM64)
     ADDINCL(
         contrib/libs/libjpeg-turbo/simd/arm
     )
@@ -175,72 +166,122 @@ ELSEIF (ARCH_ARM64 AND NOT MSVC)
         simd/arm/jidctred-neon.c
         simd/arm/jquanti-neon.c
     )
-ELSE()
-    SRCS(
-        jsimd_none.c
-    )
 ENDIF()
 
 SRCS(
-    jaricom.c
-    jcapimin.c
-    jcapistd.c
-    jcarith.c
-    jccoefct.c
-    jccolor.c
-    jcdctmgr.c
-    jchuff.c
-    jcicc.c
-    jcinit.c
-    jcmainct.c
-    jcmarker.c
-    jcmaster.c
-    jcomapi.c
-    jcparam.c
-    jcphuff.c
-    jcprepct.c
-    jcsample.c
-    jctrans.c
-    jdapimin.c
-    jdapistd.c
-    jdarith.c
-    jdatadst-tj.c
-    jdatadst.c
-    jdatasrc-tj.c
-    jdatasrc.c
-    jdcoefct.c
-    jdcolor.c
-    jddctmgr.c
-    jdhuff.c
-    jdicc.c
-    jdinput.c
-    jdmainct.c
-    jdmarker.c
-    jdmaster.c
-    jdmerge.c
-    jdphuff.c
-    jdpostct.c
-    jdsample.c
-    jdtrans.c
-    jerror.c
-    jfdctflt.c
-    jfdctfst.c
-    jfdctint.c
-    jidctflt.c
-    jidctfst.c
-    jidctint.c
-    jidctred.c
-    jmemmgr.c
-    jmemnobs.c
-    jquant1.c
-    jquant2.c
-    jutils.c
-    rdbmp.c
-    rdppm.c
-    transupp.c
-    turbojpeg.c
-    wrbmp.c
-    wrppm.c
+    src/jaricom.c
+    src/jcapimin.c
+    src/jcarith.c
+    src/jchuff.c
+    src/jcicc.c
+    src/jcinit.c
+    src/jclhuff.c
+    src/jcmarker.c
+    src/jcmaster.c
+    src/jcomapi.c
+    src/jcparam.c
+    src/jcphuff.c
+    src/jctrans.c
+    src/jdapimin.c
+    src/jdarith.c
+    src/jdatadst-tj.c
+    src/jdatadst.c
+    src/jdatasrc-tj.c
+    src/jdatasrc.c
+    src/jdhuff.c
+    src/jdicc.c
+    src/jdinput.c
+    src/jdlhuff.c
+    src/jdmarker.c
+    src/jdmaster.c
+    src/jdphuff.c
+    src/jdtrans.c
+    src/jerror.c
+    src/jfdctflt.c
+    src/jmemmgr.c
+    src/jmemnobs.c
+    src/jpeg_nbits.c
+    src/rdbmp.c
+    src/transupp.c
+    src/turbojpeg.c
+    src/wrapper/jcapistd-12.c
+    src/wrapper/jcapistd-16.c
+    src/wrapper/jcapistd-8.c
+    src/wrapper/jccoefct-12.c
+    src/wrapper/jccoefct-8.c
+    src/wrapper/jccolor-12.c
+    src/wrapper/jccolor-16.c
+    src/wrapper/jccolor-8.c
+    src/wrapper/jcdctmgr-12.c
+    src/wrapper/jcdctmgr-8.c
+    src/wrapper/jcdiffct-12.c
+    src/wrapper/jcdiffct-16.c
+    src/wrapper/jcdiffct-8.c
+    src/wrapper/jclossls-12.c
+    src/wrapper/jclossls-16.c
+    src/wrapper/jclossls-8.c
+    src/wrapper/jcmainct-12.c
+    src/wrapper/jcmainct-16.c
+    src/wrapper/jcmainct-8.c
+    src/wrapper/jcprepct-12.c
+    src/wrapper/jcprepct-16.c
+    src/wrapper/jcprepct-8.c
+    src/wrapper/jcsample-12.c
+    src/wrapper/jcsample-16.c
+    src/wrapper/jcsample-8.c
+    src/wrapper/jdapistd-12.c
+    src/wrapper/jdapistd-16.c
+    src/wrapper/jdapistd-8.c
+    src/wrapper/jdcoefct-12.c
+    src/wrapper/jdcoefct-8.c
+    src/wrapper/jdcolor-12.c
+    src/wrapper/jdcolor-16.c
+    src/wrapper/jdcolor-8.c
+    src/wrapper/jddctmgr-12.c
+    src/wrapper/jddctmgr-8.c
+    src/wrapper/jddiffct-12.c
+    src/wrapper/jddiffct-16.c
+    src/wrapper/jddiffct-8.c
+    src/wrapper/jdlossls-12.c
+    src/wrapper/jdlossls-16.c
+    src/wrapper/jdlossls-8.c
+    src/wrapper/jdmainct-12.c
+    src/wrapper/jdmainct-16.c
+    src/wrapper/jdmainct-8.c
+    src/wrapper/jdmerge-12.c
+    src/wrapper/jdmerge-8.c
+    src/wrapper/jdpostct-12.c
+    src/wrapper/jdpostct-16.c
+    src/wrapper/jdpostct-8.c
+    src/wrapper/jdsample-12.c
+    src/wrapper/jdsample-16.c
+    src/wrapper/jdsample-8.c
+    src/wrapper/jfdctfst-12.c
+    src/wrapper/jfdctfst-8.c
+    src/wrapper/jfdctint-12.c
+    src/wrapper/jfdctint-8.c
+    src/wrapper/jidctflt-12.c
+    src/wrapper/jidctflt-8.c
+    src/wrapper/jidctfst-12.c
+    src/wrapper/jidctfst-8.c
+    src/wrapper/jidctint-12.c
+    src/wrapper/jidctint-8.c
+    src/wrapper/jidctred-12.c
+    src/wrapper/jidctred-8.c
+    src/wrapper/jquant1-12.c
+    src/wrapper/jquant1-8.c
+    src/wrapper/jquant2-12.c
+    src/wrapper/jquant2-8.c
+    src/wrapper/jutils-12.c
+    src/wrapper/jutils-16.c
+    src/wrapper/jutils-8.c
+    src/wrapper/rdppm-12.c
+    src/wrapper/rdppm-16.c
+    src/wrapper/rdppm-8.c
+    src/wrapper/wrppm-12.c
+    src/wrapper/wrppm-16.c
+    src/wrapper/wrppm-8.c
+    src/wrbmp.c
 )
 
 END()

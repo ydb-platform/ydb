@@ -142,6 +142,7 @@ class CommitOffsetRequest(IToProto):
     consumer: str
     partition_id: int
     offset: int
+    read_session_id: Optional[str]
 
     def to_proto(self) -> ydb_topic_pb2.CommitOffsetRequest:
         return ydb_topic_pb2.CommitOffsetRequest(
@@ -149,6 +150,7 @@ class CommitOffsetRequest(IToProto):
             consumer=self.consumer,
             partition_id=self.partition_id,
             offset=self.offset,
+            read_session_id=self.read_session_id,
         )
 
 

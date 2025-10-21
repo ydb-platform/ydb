@@ -277,10 +277,8 @@ Y_UNIT_TEST_SUITE(KqpQueryPerf) {
     }
 
     Y_UNIT_TEST_QUAD(IndexLookupJoin, EnableStreamLookup, QueryService) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
-        auto settings = TKikimrSettings()
-            .SetAppConfig(appConfig);
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(EnableStreamLookup);
         TKikimrRunner kikimr{settings};
 
         auto [stats, results] = ExecQuery(kikimr, QueryService, Q1_(R"(

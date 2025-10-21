@@ -88,8 +88,8 @@ struct TLockNodeOptions
     , public TPrerequisiteOptions
 {
     bool Waitable = false;
-    std::optional<TString> ChildKey;
-    std::optional<TString> AttributeKey;
+    std::optional<std::string> ChildKey;
+    std::optional<std::string> AttributeKey;
 };
 
 struct TLockNodeResult

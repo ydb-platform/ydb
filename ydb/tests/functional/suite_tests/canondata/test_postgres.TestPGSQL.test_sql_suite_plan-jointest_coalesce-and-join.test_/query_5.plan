@@ -64,9 +64,6 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/xx",
                                                         "ReadColumns": [
-                                                            "pkxx"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "pkxx (-\u221e, +\u221e)"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
@@ -96,9 +93,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/coalesce-and-join.test_plan/yy",
                                                                         "ReadColumns": [
-                                                                            "pkxx"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "pkxx (-\u221e, +\u221e)",
                                                                             "pkyy (-\u221e, +\u221e)"
                                                                         ],

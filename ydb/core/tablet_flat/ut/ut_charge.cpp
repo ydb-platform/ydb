@@ -380,17 +380,17 @@ namespace {
 
         std::string AssertMessage(bool fail) const {
             return 
-                "Seq: " + std::to_string(CurrentStep()) + 
+                "Seq: " + CurrentStepStr() + 
                 " Fail: " + (fail ? "Yes" : "No");
         }
         std::string AssertMessage(TGroupId group) const {
             return 
-                "Seq: " + std::to_string(CurrentStep()) + 
+                "Seq: " + CurrentStepStr() + 
                 " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
         }
         std::string AssertMessage(TGroupId group, TPageIdFlags flags) const {
             auto result = 
-                "Seq: " + std::to_string(CurrentStep()) + 
+                "Seq: " + CurrentStepStr() + 
                 " Group: " + std::to_string(group.Index) + "," + std::to_string(group.IsHistoric());
 
             if (flags & TPageIdFlags::IfFail) {

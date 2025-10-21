@@ -16,13 +16,16 @@ namespace NKikimr::NKqp {
 struct TKqpRunScriptActorSettings {
     TString Database;
     TString ExecutionId;
-    ui64 LeaseGeneration = 0;
+    i64 LeaseGeneration = 0;
     TDuration LeaseDuration;
     TDuration ResultsTtl;
     TDuration ProgressStatsPeriod;
     TIntrusivePtr<TKqpCounters> Counters;
+    bool SaveQueryPhysicalGraph = false;
+    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
+    bool DisableDefaultTimeout = false;
 };
 
-NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, const TKqpRunScriptActorSettings& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);
+NActors::IActor* CreateRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig);
 
 } // namespace NKikimr::NKqp

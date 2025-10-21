@@ -84,9 +84,6 @@ namespace NActors {
         , DefSelfID(NodeId, "actorsystem")
         , AppData0(appData)
         , LoggerSettings0(loggerSettings)
-        , StartExecuted(false)
-        , StopExecuted(false)
-        , CleanupExecuted(false)
     {
         ServiceMap.Reset(new TServiceMap());
     }
@@ -95,7 +92,14 @@ namespace NActors {
         Cleanup();
     }
 
-    static void CheckEventMemory(IEventBase *ev) {
+	bool TActorSystem::IsStopped() {
+		if (!TlsActivationContext) {
+			return true;
+		}
+		return TlsActivationContext->ActorSystem()->StopExecuted || !TlsActivationContext->ActorSystem()->StartExecuted;
+	}
+
+	static void CheckEventMemory(IEventBase* ev) {
         if constexpr (!NSan::MSanIsOn()) {
             return;
         }
@@ -368,8 +372,7 @@ namespace NActors {
 
     void TActorSystem::Start() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
-        Y_ABORT_UNLESS(StartExecuted == false);
-        StartExecuted = true;
+        Y_ABORT_UNLESS(!StartExecuted.exchange(true));
 
         ScheduleQueue.Reset(new NSchedulerQueue::TQueueType());
         TVector<NSchedulerQueue::TReader*> scheduleReaders;
@@ -414,12 +417,10 @@ namespace NActors {
 
     void TActorSystem::Stop() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
-        if (StopExecuted || !StartExecuted) {
+        if (!StartExecuted.load() || StopExecuted.exchange(true)) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
             return;
         }
-
-        StopExecuted = true;
 
         for (auto&& fn : std::exchange(DeferredPreStop, {})) {
             fn();
@@ -435,11 +436,10 @@ namespace NActors {
     void TActorSystem::Cleanup() {
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup");
         Stop();
-        if (CleanupExecuted || !StartExecuted) {
+        if (!StartExecuted.load() || CleanupExecuted.exchange(true)) {
             ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: already cleaned up");
             return;
         }
-        CleanupExecuted = true;
         CpuManager->Cleanup();
         Scheduler.Destroy();
         ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");

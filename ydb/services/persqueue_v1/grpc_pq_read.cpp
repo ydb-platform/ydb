@@ -128,25 +128,25 @@ void TPQReadService::Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr&
 
     if (TooMuchSessions()) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - too much sessions");
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(
-            FillDirectReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
+        ev->Get()->Attach(ctx.SelfID);
+        ev->Get()->WriteAndFinish(
+            FillDirectReadResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), Ydb::StatusIds::OVERLOADED); //CANCELLED
         return;
     }
     if (HaveClusters && (Clusters.empty() || LocalCluster.empty())) {
         LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, "new grpc connection failed - cluster is not known yet");
 
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(
-            FillDirectReadResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
+        ev->Get()->Attach(ctx.SelfID);
+        ev->Get()->WriteAndFinish(
+            FillDirectReadResponse("cluster initializing", PersQueue::ErrorCode::INITIALIZING), Ydb::StatusIds::UNAVAILABLE); //CANCELLED
         // TODO: Inc SLI Errors
         return;
     } else {
         Y_ABORT_UNLESS(TopicsHandler != nullptr);
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
+        auto ip = ev->Get()->GetPeerName();
 
         const ui64 cookie = NextCookie();
- 
+
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "new direct session created cookie " << cookie);
 
         TActorId worker = ctx.Register(new TDirectReadSessionActor(

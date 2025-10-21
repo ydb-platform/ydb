@@ -54,6 +54,7 @@ inline const std::string ResponseFormatOptionsHeaderName("X-YT-Response-Format-O
 inline const std::string UserNameHeaderName("X-YT-User-Name");
 inline const std::string UserTagHeaderName("X-YT-User-Tag");
 inline const std::string XYTErrorHeaderName("X-YT-Error");
+inline const std::string XYTErrorContentTypeHeaderName("X-YT-Error-Content-Type");
 inline const std::string XYTResponseCodeHeaderName("X-YT-Response-Code");
 inline const std::string XYTResponseMessageHeaderName("X-YT-Response-Message");
 inline const std::string XYTSpanIdHeaderName("X-YT-Span-Id");
@@ -65,10 +66,23 @@ inline const std::string XYTTraceIdHeaderName("X-YT-Trace-Id");
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void FillYTErrorHeaders(const IResponseWriterPtr& rsp, const TError& error);
-void FillYTErrorTrailers(const IResponseWriterPtr& rsp, const TError& error);
+void FillYTErrorHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
+void FillYTErrorTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
 
-TError ParseYTError(const IResponsePtr& rsp, bool fromTrailers = false);
+void FillYTErrorResponseHeaders(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
+void FillYTErrorResponseTrailers(
+    const IResponseWriterPtr& rsp,
+    const TError& error);
+
+TError ParseYTError(
+    const IResponsePtr& rsp,
+    bool fromTrailers = false);
 
 //! Catches exception thrown from underlying handler body and
 //! translates it into HTTP error.

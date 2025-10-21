@@ -1,7 +1,6 @@
 #include "rsa.h"
 
 #include <library/cpp/openssl/big_integer/big_integer.h>
-#include <library/cpp/openssl/init/init.h>
 
 #include <util/generic/yexception.h>
 #include <util/generic/buffer.h>
@@ -11,14 +10,6 @@
 
 using namespace NOpenSsl;
 using namespace NOpenSsl::NRsa;
-
-namespace {
-    struct TInit {
-        inline TInit() {
-            InitOpenSSL();
-        }
-    } INIT;
-}
 
 TPublicKey::TPublicKey(const TBigInteger& e, const TBigInteger& n)
     : Key_(RSA_new())

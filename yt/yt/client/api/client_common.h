@@ -12,6 +12,8 @@
 
 #include <yt/yt/client/tablet_client/public.h>
 
+#include <yt/yt/client/query_client/public.h>
+
 #include <yt/yt/core/rpc/public.h>
 
 namespace NYT::NApi {
@@ -180,8 +182,20 @@ struct TSelectRowsOptions
     NYson::TYsonString PlaceholderValues;
     //! Native or WebAssembly execution backend.
     std::optional<NCodegen::EExecutionBackend> ExecutionBackend;
+    //! JIT optimization level hint.
+    std::optional<NCodegen::EOptimizationLevel> OptimizationLevel;
     //! Explicitly allow or forbid the usage of row cache.
     std::optional<bool> UseLookupCache;
+    //! Tune batch sizes for row processing.
+    std::optional<i64> RowsetProcessingBatchSize;
+    //! Tune write row batch size.
+    std::optional<i64> WriteRowsetSize;
+    //! Tune join row batch size.
+    std::optional<i64> MaxJoinBatchSize;
+    //! Determines the way statistics are aggregated across subqueries.
+    std::optional<NQueryClient::EStatisticsAggregation> StatisticsAggregation;
+    //! Minimizes request rate to dictionary tables when executing joins.
+    std::optional<bool> UseOrderByInJoinSubqueries;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.

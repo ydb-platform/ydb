@@ -5,7 +5,7 @@
 #include <library/cpp/yt/error/error.h>
 
 #include <library/cpp/yt/memory/blob.h>
-#include <library/cpp/yt/memory/memory_usage_tracker.h>
+#include <library/cpp/yt/memory/simple_memory_usage_tracker.h>
 #include <library/cpp/yt/memory/ref.h>
 
 namespace NYT {
@@ -162,11 +162,6 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TErrorOr<TSharedRef> TryTrackMemory(
-    const IMemoryUsageTrackerPtr& tracker,
-    TSharedRef reference,
-    bool keepExistingTracking = false);
-
-TSharedRef TrackMemory(
     const IMemoryUsageTrackerPtr& tracker,
     TSharedRef reference,
     bool keepExistingTracking = false);

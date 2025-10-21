@@ -254,6 +254,8 @@ namespace orc {
           break;
 
         case BINARY:
+        case GEOMETRY:
+        case GEOGRAPHY:
           result = std::make_unique<BinaryColumnPrinter>(buffer, param);
           break;
 

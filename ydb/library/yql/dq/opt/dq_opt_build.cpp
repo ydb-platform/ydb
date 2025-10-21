@@ -436,6 +436,7 @@ bool IsSupportedForWide(const TDqConnection& conn) {
     if (!(conn.Maybe<TDqCnHashShuffle>() ||
           conn.Maybe<TDqCnMerge>() ||
           conn.Maybe<TDqCnUnionAll>() ||
+          conn.Maybe<TDqCnParallelUnionAll>() ||
           conn.Maybe<TDqCnBroadcast>() ||
           conn.Maybe<TDqCnMap>()))
     {

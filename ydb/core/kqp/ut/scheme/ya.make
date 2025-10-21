@@ -12,8 +12,10 @@ ENDIF()
 
 SRCS(
     kqp_acl_ut.cpp
-    kqp_scheme_ut.cpp
     kqp_constraints_ut.cpp
+    kqp_scheme_ut.cpp
+    kqp_scheme_fulltext_ut.cpp
+    kqp_secrets_ut.cpp
 )
 
 PEERDIR(

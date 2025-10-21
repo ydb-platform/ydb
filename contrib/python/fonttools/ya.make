@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.57.0)
+VERSION(4.60.1)
 
 LICENSE(MIT)
 
@@ -23,6 +23,7 @@ PY_SRCS(
     fontTools/__main__.py
     fontTools/afmLib.py
     fontTools/agl.py
+    fontTools/annotations.py
     fontTools/cffLib/CFF2ToCFF.py
     fontTools/cffLib/CFFToCFF2.py
     fontTools/cffLib/__init__.py
@@ -83,8 +84,21 @@ PY_SRCS(
     fontTools/misc/dictTools.py
     fontTools/misc/eexec.py
     fontTools/misc/encodingTools.py
+    fontTools/misc/enumTools.py
     fontTools/misc/etree.py
     fontTools/misc/filenames.py
+    fontTools/misc/filesystem/__init__.py
+    fontTools/misc/filesystem/_base.py
+    fontTools/misc/filesystem/_copy.py
+    fontTools/misc/filesystem/_errors.py
+    fontTools/misc/filesystem/_info.py
+    fontTools/misc/filesystem/_osfs.py
+    fontTools/misc/filesystem/_path.py
+    fontTools/misc/filesystem/_subfs.py
+    fontTools/misc/filesystem/_tempfs.py
+    fontTools/misc/filesystem/_tools.py
+    fontTools/misc/filesystem/_walk.py
+    fontTools/misc/filesystem/_zipfs.py
     fontTools/misc/fixedTools.py
     fontTools/misc/intTools.py
     fontTools/misc/iterTools.py
@@ -192,6 +206,7 @@ PY_SRCS(
     fontTools/ttLib/tables/G_P_K_G_.py
     fontTools/ttLib/tables/G_P_O_S_.py
     fontTools/ttLib/tables/G_S_U_B_.py
+    fontTools/ttLib/tables/G_V_A_R_.py
     fontTools/ttLib/tables/G__l_a_t.py
     fontTools/ttLib/tables/G__l_o_c.py
     fontTools/ttLib/tables/H_V_A_R_.py
@@ -289,13 +304,19 @@ PY_SRCS(
     fontTools/ufoLib/validators.py
     fontTools/unicode.py
     fontTools/unicodedata/Blocks.py
+    fontTools/unicodedata/Mirrored.py
     fontTools/unicodedata/OTTags.py
     fontTools/unicodedata/ScriptExtensions.py
     fontTools/unicodedata/Scripts.py
     fontTools/unicodedata/__init__.py
     fontTools/varLib/__init__.py
     fontTools/varLib/__main__.py
-    fontTools/varLib/avar.py
+    fontTools/varLib/avar/__init__.py
+    fontTools/varLib/avar/__main__.py
+    fontTools/varLib/avar/build.py
+    fontTools/varLib/avar/map.py
+    fontTools/varLib/avar/plan.py
+    fontTools/varLib/avar/unbuild.py
     fontTools/varLib/avarPlanner.py
     fontTools/varLib/builder.py
     fontTools/varLib/cff.py
@@ -323,6 +344,7 @@ PY_SRCS(
     fontTools/varLib/stat.py
     fontTools/varLib/varStore.py
     fontTools/voltLib/__init__.py
+    fontTools/voltLib/__main__.py
     fontTools/voltLib/ast.py
     fontTools/voltLib/error.py
     fontTools/voltLib/lexer.py

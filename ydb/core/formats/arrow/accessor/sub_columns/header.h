@@ -28,6 +28,16 @@ private:
 
 public:
 
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("columns", ColumnStats.DebugJson());
+        result.InsertValue("others", OtherStats.DebugJson());
+        result.InsertValue("h_size", HeaderSize);
+        result.InsertValue("c_size", ColumnsSize);
+        result.InsertValue("o_size", OthersSize);
+        return result;
+    }
+
     bool HasSubColumn(const TString& subColumnName) const {
         return ColumnStats.GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
                OtherStats.GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));

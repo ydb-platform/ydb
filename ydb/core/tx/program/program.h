@@ -74,7 +74,8 @@ public:
 
     [[nodiscard]] TConclusionStatus Init(
         const NArrow::NSSA::IColumnResolver& columnResolver, NKikimrSchemeOp::EOlapProgramType programType, TString serializedProgram) noexcept;
-    [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
+    [[nodiscard]] TConclusionStatus Init(
+        const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TOlapProgram& olapProgramProto) noexcept;
     [[nodiscard]] TConclusionStatus Init(const NArrow::NSSA::IColumnResolver& columnResolver, const NKikimrSSA::TProgram& programProto) noexcept;
 
     const std::shared_ptr<NArrow::NSSA::NGraph::NExecution::TCompiledGraph>& GetChainVerified() const {
@@ -86,8 +87,8 @@ public:
         return Program;
     }
 
-    [[nodiscard]] TConclusionStatus ApplyProgram(const std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>& collection,
-        const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
+    [[nodiscard]] TConclusion<std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>> ApplyProgram(
+        std::unique_ptr<NArrow::NAccessor::TAccessorsCollection>&& collection, const std::shared_ptr<NArrow::NSSA::IDataSource>& source) const;
     [[nodiscard]] TConclusion<std::shared_ptr<arrow::RecordBatch>> ApplyProgram(
         const std::shared_ptr<arrow::RecordBatch>& batch, const NArrow::NSSA::IColumnResolver& resolver) const;
 

@@ -17,7 +17,7 @@ public:
     using THandler = std::function<TStatus(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)>;
 
     TVisitorTransformerBase(bool failOnUnknown)
-        : FailOnUnknown(failOnUnknown)
+        : FailOnUnknown_(failOnUnknown)
     {
     }
 
@@ -27,48 +27,48 @@ public:
     }
 
     bool CanParse(const TExprNode& node) const {
-        return Handlers.contains(node.Content());
+        return Handlers_.contains(node.Content());
     }
 
 protected:
     void AddHandler(std::initializer_list<TStringBuf> names, THandler handler);
 
     template <class TDerived>
-    THandler Hndl(TStatus(TDerived::* handler)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)) {
-        return [this, handler] (TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
+    THandler Hndl(TStatus (TDerived::*handler)(const TExprNode::TPtr&, TExprNode::TPtr&, TExprContext&)) {
+        return [this, handler](TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
             return (static_cast<TDerived*>(this)->*handler)(input, output, ctx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(TStatus(TDerived::* handler)(const TExprNode::TPtr&, TExprContext&)) {
-        return [this, handler] (TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    THandler Hndl(TStatus (TDerived::*handler)(const TExprNode::TPtr&, TExprContext&)) {
+        return [this, handler](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
             return (static_cast<TDerived*>(this)->*handler)(input, ctx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(TStatus(TDerived::* handler)(NNodes::TExprBase, TExprContext&)) {
-        return [this, handler] (TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    THandler Hndl(TStatus (TDerived::*handler)(NNodes::TExprBase, TExprContext&)) {
+        return [this, handler](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
             return (static_cast<TDerived*>(this)->*handler)(NNodes::TExprBase(input), ctx);
         };
     }
 
-    THandler Hndl(TStatus(*handler)(const TExprNode::TPtr&, TExprContext&)) {
-        return [handler] (TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    THandler Hndl(TStatus (*handler)(const TExprNode::TPtr&, TExprContext&)) {
+        return [handler](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
             return handler(input, ctx);
         };
     }
 
-    THandler Hndl(TStatus(*handler)(NNodes::TExprBase, TExprContext&)) {
-        return [handler] (TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
+    THandler Hndl(TStatus (*handler)(NNodes::TExprBase, TExprContext&)) {
+        return [handler](TExprNode::TPtr input, TExprNode::TPtr& /*output*/, TExprContext& ctx) {
             return handler(NNodes::TExprBase(input), ctx);
         };
     }
 
 protected:
-    const bool FailOnUnknown;
-    THashMap<TStringBuf, THandler> Handlers;
+    const bool FailOnUnknown_;
+    THashMap<TStringBuf, THandler> Handlers_;
 };
 
-} // NYql
+} // namespace NYql

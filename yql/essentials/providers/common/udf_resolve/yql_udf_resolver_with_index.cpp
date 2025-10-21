@@ -22,36 +22,37 @@ namespace NCommon {
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 
-class TUdfResolverWithIndex : public IUdfResolver {
-    class TResourceFile : public TThrRefBase {
+class TUdfResolverWithIndex: public IUdfResolver {
+    class TResourceFile: public TThrRefBase {
     public:
         typedef TIntrusivePtr<TResourceFile> TPtr;
 
     public:
         TResourceFile(TString alias, const TVector<TString>& modules, TFileLinkPtr link)
-            : Link_(std::move(link))
+            : Link(std::move(link))
         {
-            Import_.FileAlias = alias;
-            Import_.Block = &Block_;
-            Import_.Modules = MakeMaybe(modules);
+            Import.FileAlias = alias;
+            Import.Block = &Block;
+            Import.Modules = MakeMaybe(modules);
 
-            Block_.Type = EUserDataType::PATH;
-            Block_.Data = Link_->GetPath();
-            Block_.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.Type = EUserDataType::PATH;
+            Block.Data = Link->GetPath();
+            Block.Usage.Set(EUserDataBlockUsage::Udf);
+            Block.FrozenFile = Link;
         }
 
         static TResourceFile::TPtr Create(const TString& packageName, const TSet<TString>& modules, TFileLinkPtr link) {
             // assume package name has no bad symbols for file name
-            TString basename =  link->GetPath().Basename();
+            TString basename = link->GetPath().Basename();
             TString alias = basename.StartsWith("lib") ? basename : ("lib_" + packageName + "_udf.so");
             alias.to_lower();
             return MakeIntrusive<TResourceFile>(std::move(alias), TVector<TString>(modules.begin(), modules.end()), std::move(link));
         }
 
     public:
-        TFileLinkPtr Link_;
-        TUserDataBlock Block_;
-        TImport Import_;
+        TFileLinkPtr Link;
+        TUserDataBlock Block;
+        TImport Import;
     };
 
 public:
@@ -67,20 +68,20 @@ public:
     }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
-        with_lock(Lock_) {
+        with_lock (Lock_) {
             TString moduleNameStr(moduleName);
             if (!UdfIndex_->ContainsModuleStrict(moduleNameStr)) {
                 return Nothing();
             }
 
             auto file = DownloadFileWithModule(moduleNameStr);
-            return MakeMaybe<TFilePathWithMd5>(file->Link_->GetPath(), file->Link_->GetMd5());
+            return MakeMaybe<TFilePathWithMd5>(file->Link->GetPath(), file->Link->GetMd5());
         }
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
-        with_lock(Lock_) {
+                      TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
+        with_lock (Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
             TVector<TFunction*> fallbackFunctions;
@@ -171,7 +172,7 @@ private:
             return false;
         }
 
-        additionalImport = &file->Import_;
+        additionalImport = &file->Import;
 
         if (info.IsTypeAwareness) {
             function.Name = info.Name;
@@ -205,6 +206,8 @@ private:
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
         function.Messages = info.Messages;
+        function.MinLangVer = info.MinLangVer;
+        function.MaxLangVer = info.MaxLangVer;
         return true;
     }
 
@@ -243,7 +246,7 @@ private:
             auto p = DownloadedFiles_.emplace(d, file);
             if (!p.second) {
                 // should not happen because UdfIndex handles conflicts
-                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link_->GetPath();
+                ythrow yexception() << "file already downloaded for module " << canonizedModuleName << ", conflicting path " << downloadLink.Path << ", existing local file " << p.first->second->Link->GetPath();
             }
         }
 

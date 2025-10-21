@@ -58,6 +58,8 @@ struct IPqGateway : public TThrRefBase {
 
     virtual void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) = 0;
 
+    virtual void AddCluster(const NYql::TPqClusterConfig& cluster) = 0;
+
     virtual NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const = 0;
 
     virtual NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const = 0;

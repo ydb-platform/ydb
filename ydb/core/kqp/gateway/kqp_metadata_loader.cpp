@@ -8,11 +8,14 @@
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
+#include <ydb/core/sys_view/common/resolver.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <yql/essentials/utils/signals/utils.h>
 
+#include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NKikimr::NKqp {
 
@@ -42,7 +45,7 @@ NavigateEntryResult CreateNavigateEntry(const TString& path,
         auto tempTablesInfoIt = tempTablesState->FindInfo(currentPath, false);
         if (tempTablesInfoIt != tempTablesState->TempTables.end()) {
             queryName = currentPath;
-            currentPath = GetTempTablePath(tempTablesState->Database, tempTablesState->SessionId, tempTablesInfoIt->first);
+            currentPath = GetTempTablePath(tempTablesState->Database, tempTablesState->TempDirName, tempTablesInfoIt->first);
         }
     }
     entry.Path = SplitPath(currentPath);
@@ -119,6 +122,24 @@ void IndexProtoToMetadata(const TIndexProto& indexes, NYql::TKikimrTableMetadata
         }
 
         tableMeta->Indexes.emplace_back(NYql::TIndexDescription(index));
+    }
+}
+
+template<typename TIndexProto>
+void CheckWritesAreDisabled(const TIndexProto& indexes, NYql::TKikimrTableMetadataPtr tableMeta) {
+    TStringBuilder disableReason;
+    for (const NKikimrSchemeOp::TIndexDescription& index : indexes) {
+        if (index.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique && index.GetState() != NKikimrSchemeOp::EIndexState::EIndexStateReady) {
+            if (disableReason) {
+                disableReason << ", ";
+            }
+            disableReason << "Unique index " << index.GetName() << " is under construction";
+        }
+    }
+
+    if (disableReason) {
+        tableMeta->WritesToTableAreDisabled = true;
+        tableMeta->DisableWritesReason = disableReason;
     }
 }
 
@@ -235,6 +256,9 @@ TTableMetadataResult GetTableMetadataResult(const NSchemeCache::TSchemeCacheNavi
 
     IndexProtoToMetadata(entry.Indexes, tableMeta);
 
+    // Check if we have unique indexes that are not built
+    CheckWritesAreDisabled(entry.Indexes, tableMeta);
+
     return result;
 }
 
@@ -327,6 +351,60 @@ TTableMetadataResult GetViewMetadataResult(
   return builtResult;
 }
 
+TTableMetadataResult GetSysViewMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+                                              const TString& cluster, const TString& sysViewName) {
+    TTableMetadataResult result;
+    result.SetSuccess();
+    result.Metadata = new NYql::TKikimrTableMetadata(cluster, sysViewName);
+
+    auto tableMeta = result.Metadata;
+    tableMeta->DoesExist = true;
+    tableMeta->PathId = NYql::TKikimrPathId(entry.TableId.PathId.OwnerId, entry.TableId.PathId.LocalPathId);
+    tableMeta->SysView = entry.TableId.SysViewInfo;
+    tableMeta->SchemaVersion = entry.TableId.SchemaVersion;
+    tableMeta->Kind = NYql::EKikimrTableKind::SysView;
+
+    tableMeta->Attributes = entry.Attributes;
+
+    std::map<ui32, TString, std::less<ui32>> keyColumns;
+    std::map<ui32, TString, std::less<ui32>> columnOrder;
+    for (const auto& [id, column] : entry.Columns) {
+        const bool notNull = entry.NotNullColumns.contains(column.Name);
+        const TString typeName = GetTypeName(NScheme::TTypeInfoMod{column.PType, column.PTypeMod});
+
+        tableMeta->Columns.emplace(
+            column.Name,
+            NYql::TKikimrColumnMetadata(column.Name, column.Id, typeName, notNull, column.PType, column.PTypeMod)
+        );
+
+        if (column.KeyOrder >= 0) {
+            keyColumns[column.KeyOrder] = column.Name;
+        }
+
+        columnOrder[column.Id] = column.Name;
+    }
+
+    tableMeta->KeyColumnNames.reserve(keyColumns.size());
+    for (const auto& columnName : std::views::values(keyColumns)) {
+        tableMeta->KeyColumnNames.push_back(columnName);
+    }
+
+    tableMeta->ColumnOrder.reserve(columnOrder.size());
+    for (const auto& columnName : std::views::values(columnOrder)) {
+        tableMeta->ColumnOrder.push_back(columnName);
+    }
+
+    YQL_ENSURE(entry.SysViewInfo);
+    auto& sysViewInfo = tableMeta->SysViewInfo.ConstructInPlace();
+    sysViewInfo.SetType(entry.SysViewInfo->Description.GetType());
+
+    if (entry.SysViewInfo->Description.HasSourceObject()) {
+        *sysViewInfo.MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
+    }
+
+    return result;
+}
+
 TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
         const TString& cluster, const TString& mainCluster, const TString& tableName, std::optional<TString> queryName = std::nullopt) {
     using TResult = NYql::IKikimrGateway::TTableMetadataResult;
@@ -359,7 +437,8 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
                      EKind::KindColumnTable,
                      EKind::KindExternalTable,
                      EKind::KindExternalDataSource,
-                     EKind::KindView}, entry.Kind));
+                     EKind::KindView,
+                     EKind::KindSysView}, entry.Kind));
 
     TTableMetadataResult result;
     switch (entry.Kind) {
@@ -371,6 +450,9 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             break;
         case EKind::KindView:
             result = GetViewMetadataResult(entry, cluster, tableName);
+            break;
+        case EKind::KindSysView:
+            result = GetSysViewMetadataResult(entry, cluster, tableName);
             break;
         default:
             result = GetTableMetadataResult(entry, cluster, tableName, queryName);
@@ -490,9 +572,14 @@ void UpdateExternalDataSourceSecretsValue(TTableMetadataResult& externalDataSour
     }
 }
 
-NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TActorSystem* actorSystem) {
+NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> LoadExternalDataSourceSecretValues(
+    const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TString& database,
+    TActorSystem* actorSystem
+) {
     const auto& authDescription = entry.ExternalDataSourceInfo->Description.GetAuth();
-    return DescribeExternalDataSourceSecrets(authDescription, userToken ? userToken->GetUserSID() : "", actorSystem);
+    return DescribeExternalDataSourceSecrets(authDescription, userToken, database, actorSystem);
 }
 
 } // anonymous namespace
@@ -576,17 +663,30 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
 }
 
 NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
-    const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
-) {
+    const TString& cluster, const TString& table, const TString& sysViewName)
+{
     TNavigate::TEntry entry;
 
-    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
-    entry.Kind = TNavigate::KindTable;
+    const auto sysViewType = NSysView::GetSystemViewRewrittenResolver().GetSystemViewType(sysViewName);
+    auto schema = NSysView::GetSystemViewRewrittenResolver().GetSystemViewSchema(*sysViewType);
+
+    entry.Kind = TNavigate::KindSysView;
     entry.Columns = std::move(schema->Columns);
-    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
+    for (const auto& [id, column] : entry.Columns) {
+        if (column.IsNotNullColumn) {
+            entry.NotNullColumns.insert(column.Name);
+        }
+    }
 
-    auto result = GetTableMetadataResult(entry, cluster, table);
+    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0);
 
+    auto sysViewInfo = MakeIntrusive<TNavigate::TSysViewInfo>();
+    sysViewInfo->Kind = TNavigate::KindSysView;
+    sysViewInfo->Description.SetType(*sysViewType);
+
+    entry.SysViewInfo = sysViewInfo;
+
+    auto result = GetSysViewMetadataResult(entry, cluster, table);
     return MakeFuture(result);
 }
 
@@ -601,8 +701,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
         NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
 
         NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
-        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
-            tableMetaFuture = LoadSysViewRewrittenMetadata(sysViewPath, cluster, table);
+        if (settings.SysViewRewritten_ && NSysView::GetSystemViewRewrittenResolver().IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(cluster, table, sysViewPath.ViewName);
         } else {
             tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
         }
@@ -825,11 +925,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     const auto schemeCacheId = MakeSchemeCacheID();
 
+    auto ptr = weak_from_base();
     auto future = SendActorRequest<TRequest, TResponse, TResult>(
         ActorSystem,
         schemeCacheId,
         ev.Release(),
-        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, this, queryName, externalPath]
+        [userToken, database, cluster, mainCluster = Cluster, table, settings, expectedSchemaVersion, ptr, queryName, externalPath]
             (TPromise<TResult> promise, TResponse&& response) mutable
         {
             try {
@@ -860,7 +961,12 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                     }
                 }
 
-                const bool resolveEntityInsideDataSource = (cluster != Cluster);
+                auto locked = ptr.lock();
+                if (!locked) {
+                    promise.SetValue(ResultFromError<TResult>(YqlIssue({}, TIssuesIds::KIKIMR_INDEX_METADATA_LOAD_FAILED, "lock failed")));
+                    return;
+                }
+                const bool resolveEntityInsideDataSource = (cluster != locked->Cluster);
                 // resolveEntityInsideDataSource => entry.Kind == EKind::KindExternalDataSource
                 if (resolveEntityInsideDataSource && entry.Kind != EKind::KindExternalDataSource) {
                     const auto message = TStringBuilder()
@@ -881,8 +987,8 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                         if (externalPath) {
                             externalDataSourceMetadata.Metadata->ExternalSource.TableLocation = *externalPath;
                         }
-                        LoadExternalDataSourceSecretValues(entry, userToken, ActorSystem)
-                            .Subscribe([promise, externalDataSourceMetadata, settings](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
+                        LoadExternalDataSourceSecretValues(entry, userToken, database, locked->ActorSystem)
+                            .Subscribe([promise, externalDataSourceMetadata, settings, table, database, externalPath, locked](const TFuture<TEvDescribeSecretsResponse::TDescription>& result) mutable
                         {
                             UpdateExternalDataSourceSecretsValue(externalDataSourceMetadata, result.GetValue());
                             if (!externalDataSourceMetadata.Success()) {
@@ -890,39 +996,75 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                                 return;
                             }
 
-                            NExternalSource::IExternalSource::TPtr externalSource;
-                            if (settings.ExternalSourceFactory) {
-                                try {
-                                    externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
-                                } catch (const std::exception& exception) {
-                                    TTableMetadataResult wrapper;
-                                    wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
-                                    promise.SetValue(wrapper);
-                                    return;
-                                }
-                            }
-
-                            if (externalSource && externalSource->CanLoadDynamicMetadata()) {
-                                auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
-                                externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
-                                externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
-                                    .Subscribe([promise = std::move(promise), externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                            auto loadDynamicMetadata = [promise, settings, table, database, externalPath] (const TTableMetadataResult& externalDataSourceMetadata) mutable {
+                                NExternalSource::IExternalSource::TPtr externalSource;
+                                if (settings.ExternalSourceFactory) {
+                                    try {
+                                        externalSource = settings.ExternalSourceFactory->GetOrCreate(externalDataSourceMetadata.Metadata->ExternalSource.Type);
+                                    } catch (const std::exception& exception) {
                                         TTableMetadataResult wrapper;
-                                        try {
-                                            auto& dynamicMetadata = result.GetValue();
-                                            if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
-                                                wrapper.SetSuccess();
-                                                wrapper.Metadata = externalDataSourceMetadata.Metadata;
-                                            } else {
-                                                wrapper.SetException(yexception() << "couldn't enrich metadata with dynamically loaded part");
-                                            }
-                                        } catch (const std::exception& exception) {
-                                            wrapper.SetException(yexception() << "couldn't load table metadata: " << exception.what());
-                                        }
+                                        wrapper.SetException(yexception() << "couldn't get external source with type " << externalDataSourceMetadata.Metadata->ExternalSource.Type << ", " <<  exception.what());
                                         promise.SetValue(wrapper);
+                                        return;
+                                    }
+                                }
+
+                                if (externalSource && externalSource->CanLoadDynamicMetadata()) {
+                                    auto externalSourceMeta = ConvertToExternalSourceMetadata(*externalDataSourceMetadata.Metadata);
+                                    externalSourceMeta->Attributes = settings.ReadAttributes; // attributes, collected from AST
+                                    externalSource->LoadDynamicMetadata(std::move(externalSourceMeta))
+                                    .Subscribe([promise, externalDataSourceMetadata](const TFuture<std::shared_ptr<NExternalSource::TMetadata>>& result) mutable {
+                                            TTableMetadataResult wrapper;
+                                            try {
+                                                auto& dynamicMetadata = result.GetValue();
+                                                if (!dynamicMetadata->Changed || EnrichMetadata(*externalDataSourceMetadata.Metadata, *dynamicMetadata)) {
+                                                    wrapper.SetSuccess();
+                                                    wrapper.Metadata = externalDataSourceMetadata.Metadata;
+                                                } else {
+                                                    wrapper.SetException(yexception() << "couldn't enrich metadata with dynamically loaded part");
+                                                }
+                                            } catch (const std::exception& exception) {
+                                                wrapper.SetException(yexception() << "couldn't load table metadata: " << exception.what());
+                                            }
+                                            promise.SetValue(wrapper);
+                                        });
+                                } else {
+                                    promise.SetValue(externalDataSourceMetadata);
+                                }
+                            };
+                            if (externalDataSourceMetadata.Metadata->ExternalSource.Type == ToString(NYql::EDatabaseType::Ydb) && externalPath) {
+                                auto& source = externalDataSourceMetadata.Metadata->ExternalSource;
+                                THashMap<TString, TString> properties = {source.Properties.GetProperties().begin(), source.Properties.GetProperties().end()};
+
+                                auto token = source.Token;
+                                auto secretName = source.DataSourceAuth.GetToken().GetTokenSecretName();
+                                auto structuredTokenJson = NYql::ComposeStructuredTokenJsonForTokenAuthWithSecret(secretName, token);
+                                auto databaseName = properties.Value("database_name", "");
+                                TString useTlsStr = properties.Value("use_tls", "false");
+                                useTlsStr.to_lower();
+                                bool useTls = useTlsStr == "true"sv;
+
+                                auto path = databaseName + "/" + *externalPath;
+
+                                GetSchemeEntryType(
+                                    locked->FederatedQuerySetup,
+                                    source.DataSourceLocation,
+                                    databaseName,
+                                    useTls,
+                                    structuredTokenJson,
+                                    path)
+                                    .Subscribe([externalDataSourceMetadata, f = loadDynamicMetadata, promise] (const NThreading::TFuture<TGetSchemeEntryResult>& result) mutable {
+                                        TGetSchemeEntryResult value = result.GetValue();
+                                        if (value.Issues) {
+                                            externalDataSourceMetadata.AddIssues(value.Issues);
+                                        }
+                                        if (value.EntryType == NYdb::NScheme::ESchemeEntryType::Topic) {
+                                            externalDataSourceMetadata.Metadata->ExternalSource.Type = ToString(NYql::EDatabaseType::YdbTopics);
+                                        }
+                                        f(externalDataSourceMetadata);
                                     });
                             } else {
-                                promise.SetValue(externalDataSourceMetadata);
+                                loadDynamicMetadata(externalDataSourceMetadata);
                             }
                         });
                         break;
@@ -936,7 +1078,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             return;
                         }
                         settings.WithExternalDatasources_ = true;
-                        LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
+                        locked->LoadTableMetadataCache(cluster, dataSourcePath, settings, database, userToken)
                             .Apply([promise, externalTableMetadata](const TFuture<TTableMetadataResult>& result) mutable
                         {
                             auto externalDataSourceMetadata = result.GetValue();
@@ -953,7 +1095,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                             }
                             TIndexId pathId = TIndexId(child.PathId, child.SchemaVersion);
 
-                            LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
+                            locked->LoadTableMetadataCache(cluster, std::make_pair(pathId, table), settings, database, userToken)
                                 .Apply([promise](const TFuture<TTableMetadataResult>& result) mutable
                             {
                                 promise.SetValue(result.GetValue());

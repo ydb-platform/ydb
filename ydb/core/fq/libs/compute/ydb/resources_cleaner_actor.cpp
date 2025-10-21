@@ -15,7 +15,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -89,7 +88,7 @@ public:
         const auto& response = *ev.Get()->Get();
         if (response.Status == NYdb::EStatus::TIMEOUT || response.Status == NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED) {
             LOG_I("Operation partly forgotten, will be retried: " << response.Status);
-            SendForgetOperation(TDuration::MilliSeconds(BackoffTimer.NextBackoffMs()));
+            SendForgetOperation(BackoffTimer.Next());
             return;
         }
         if (response.Status != NYdb::EStatus::SUCCESS && response.Status != NYdb::EStatus::NOT_FOUND) {

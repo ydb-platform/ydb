@@ -47,7 +47,6 @@ PEERDIR(
     yql/essentials/sql/pg
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/udfs/common/compress_base
-    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/histogram
@@ -69,8 +68,7 @@ PEERDIR(
     yql/essentials/udfs/common/url_base
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
-    ydb/library/breakpad 
-    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+    ydb/library/breakpad
 )
 
 YQL_LAST_ABI_VERSION()

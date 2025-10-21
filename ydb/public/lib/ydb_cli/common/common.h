@@ -26,8 +26,17 @@ namespace NConsoleClient {
 // Print 'Try "--help" option for more info'
 class TMisuseException : public yexception {};
 
-// Print command help
-class TMisuseWithHelpException : public TMisuseException {};
+// I.e. help was printed, just need to return EXIT_SUCCESS
+class TNeedToExitWithCode : public yexception {
+public:
+    TNeedToExitWithCode(int code)
+        : Code(code) {}
+    int GetCode() const {
+        return Code;
+    }
+private:
+    int Code;
+};
 
 class TProfileConfig {
 public:

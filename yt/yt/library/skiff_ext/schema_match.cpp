@@ -17,6 +17,7 @@ using namespace NSkiff;
 const TString KeySwitchColumnName = "$key_switch";
 const TString OtherColumnsName = "$other_columns";
 const TString SparseColumnsName = "$sparse_columns";
+const TString RemainingRowBytesColumnName = "$remaining_row_bytes";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,12 +63,13 @@ static bool IsSkiffSpecialColumn(
     static const THashSet<std::string, THash<TStringBuf>, TEqualTo<>> specialColumns{
         KeySwitchColumnName,
         OtherColumnsName,
+        RemainingRowBytesColumnName,
         SparseColumnsName,
     };
     return specialColumns.contains(columnName) || columnName == rangeIndexColumnName || columnName == rowIndexColumnName;
 }
 
-static std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
+std::pair<std::shared_ptr<TSkiffSchema>, bool> DeoptionalizeSchema(std::shared_ptr<TSkiffSchema> skiffSchema)
 {
     if (skiffSchema->GetWireType() != EWireType::Variant8) {
         return std::pair(skiffSchema, true);
@@ -155,6 +157,8 @@ static TSkiffTableDescription CreateTableDescription(
         } else if (childName == rangeIndexColumnName) {
             result.RangeIndexFieldIndex = i;
             result.RangeIndexMode = GetRowRangeIndexMode(child, childName);
+        } else if (childName == RemainingRowBytesColumnName) {
+            result.RemainingRowBytesFieldIndex = i;
         }
         result.DenseFieldDescriptionList.emplace_back(childName, child);
     }
@@ -329,9 +333,9 @@ TFieldDescription::TFieldDescription(TString name, std::shared_ptr<TSkiffSchema>
     , Schema_(std::move(schema))
 { }
 
-EWireType TFieldDescription::ValidatedSimplify() const
+EWireType TFieldDescription::ValidatedGetDeoptionalizeType(bool simplify) const
 {
-    auto result = Simplify();
+    auto result = GetDeoptionalizeType(simplify);
     if (!result) {
         THROW_ERROR_EXCEPTION("Column %Qv cannot be represented with Skiff schema %Qv",
             Name_,
@@ -350,12 +354,12 @@ bool TFieldDescription::IsRequired() const
     return DeoptionalizeSchema(Schema_).second;
 }
 
-std::optional<EWireType> TFieldDescription::Simplify() const
+std::optional<EWireType> TFieldDescription::GetDeoptionalizeType(bool simplify) const
 {
     const auto& [deoptionalized, required] = DeoptionalizeSchema(Schema_);
     auto wireType = deoptionalized->GetWireType();
-    if (IsSimpleType(wireType)) {
-        if (wireType != EWireType::Nothing || required) {
+    if (wireType != EWireType::Nothing || required) {
+        if (!simplify || IsSimpleType(wireType)) {
             return wireType;
         }
     }

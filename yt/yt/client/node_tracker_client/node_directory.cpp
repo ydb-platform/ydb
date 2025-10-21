@@ -706,7 +706,8 @@ const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetwor
         return it->second;
     }
 
-    THROW_ERROR_EXCEPTION("Cannot select address for host %v since there is no compatible network",
+    THROW_ERROR_EXCEPTION(EErrorCode::NoSuchNetwork,
+        "Cannot select address for host %Qv since there is no compatible network",
         FindDefaultAddress(addresses))
         << TErrorAttribute("remote_networks", GetKeys(addresses))
         << TErrorAttribute("local_networks", networks);

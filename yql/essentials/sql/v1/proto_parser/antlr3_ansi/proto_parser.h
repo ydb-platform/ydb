@@ -5,4 +5,4 @@ namespace NSQLTranslationV1 {
 
 NSQLTranslation::TParserFactoryPtr MakeAntlr3AnsiParserFactory();
 
-}
+} // namespace NSQLTranslationV1

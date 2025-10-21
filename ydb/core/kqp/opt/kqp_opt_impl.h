@@ -7,26 +7,8 @@
 
 namespace NKikimr::NKqp::NOpt {
 
-static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
-    const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx)
-{
-// #define KQP_ENABLE_DUMP_APPLIED_RULE
-#ifdef KQP_ENABLE_DUMP_APPLIED_RULE
-    if (input != output) {
-        auto builder = TStringBuilder() << "Rule applied: " << name << Endl;
-        builder << "Expression before rule application: " << Endl;
-        builder << KqpExprToPrettyString(*input, ctx) << Endl;
-        builder << "Expression after rule application: " << Endl;
-        builder << KqpExprToPrettyString(*output, ctx);
-        YQL_CLOG(TRACE, ProviderKqp) << builder;
-    }
-#else
-    Y_UNUSED(ctx);
-    if (input != output) {
-        YQL_CLOG(TRACE, ProviderKqp) << name;
-    }
-#endif
-}
+void DumpAppliedRule(const TString& name, const NYql::TExprNode::TPtr& input,
+    const NYql::TExprNode::TPtr& output, NYql::TExprContext& ctx);
 
 bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
 bool IsKqpPureInputs(const NYql::NNodes::TExprList& inputs);
@@ -35,6 +17,8 @@ const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData&
     TStringBuf cluster, TStringBuf table);
 
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TString>& columnNames,
+    NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const TVector<TStringBuf>& columnNames,
     NYql::TExprContext& ctx);
 NYql::NNodes::TExprBase ProjectColumns(const NYql::NNodes::TExprBase& input, const THashSet<TStringBuf>& columnNames,
     NYql::TExprContext& ctx);
@@ -55,7 +39,26 @@ TVector<std::pair<NYql::TExprNode::TPtr, const NYql::TIndexDescription*>> BuildS
 
 bool IsBuiltEffect(const NYql::NNodes::TExprBase& effect);
 
+TVector<TString> ExtractSortingKeys(const NYql::NNodes::TCoLambda& keySelector);
+
 bool IsSortKeyPrimary(const NYql::NNodes::TCoLambda& keySelector, const NYql::TKikimrTableDescription& tableDesc,
-    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {});
+    const TMaybe<THashSet<TStringBuf>>& passthroughFields = {}, const ui64 skipPointKeys = 0);
+
+enum ESortDirection : ui32 {
+    None = 0,
+    Forward = 1,
+    Reverse = 2,
+    Unknown = 4,
+};
+
+using ESortDirectionRaw = std::underlying_type<ESortDirection>::type;
+
+inline ESortDirection operator|(ESortDirection a, ESortDirection b) {
+    return ESortDirection(static_cast<ESortDirectionRaw>(a) | static_cast<ESortDirectionRaw>(b));
+}
+
+inline ESortDirection operator|=(ESortDirection& a, ESortDirection b) { return (a = a | b); }
+
+ESortDirection GetSortDirection(const NYql::NNodes::TExprBase& sortDirections);
 
 } // namespace NKikimr::NKqp::NOpt

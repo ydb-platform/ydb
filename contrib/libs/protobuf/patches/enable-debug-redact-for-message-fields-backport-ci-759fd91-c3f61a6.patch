@@ -1,0 +1,72 @@
+--- contrib/libs/protobuf/src/google/protobuf/text_format.cc	(7e573068bfd84adfb48ca975dd5bf3837a5bc0d1)
++++ contrib/libs/protobuf/src/google/protobuf/text_format.cc	(working tree)
+@@ -2508,6 +2508,10 @@ void TextFormat::Printer::PrintField(const Message& message,
+     PrintFieldName(message, field_index, count, reflection, field, generator);
+ 
+     if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
++      if (TryRedactFieldValue(message, field, generator,
++                              /*insert_value_separator=*/true)) {
++        break;
++      }
+       const FastFieldValuePrinter* printer = GetFieldPrinter(field);
+       const Message& sub_message =
+           field->is_repeated()
+@@ -2582,9 +2586,8 @@ void TextFormat::Printer::PrintFieldValue(const Message& message,
+       << "Index must be -1 for non-repeated fields";
+ 
+   const FastFieldValuePrinter* printer = GetFieldPrinter(field);
+-  if (redact_debug_string_ && field->options().debug_redact()) {
+-    // TODO(b/258975650): Create OSS redaction documentation
+-    generator->PrintString("[REDACTED]");
++  if (TryRedactFieldValue(message, field, generator,
++                          /*insert_value_separator=*/false)) {
+     return;
+   }
+ 
+@@ -2799,6 +2802,30 @@ void TextFormat::Printer::PrintUnknownFields(
+   }
+ }
+ 
++bool TextFormat::Printer::TryRedactFieldValue(
++    const Message& message, const FieldDescriptor* field,
++    BaseTextGenerator* generator, bool insert_value_separator) const {
++  auto do_redact = [&](const TProtoStringType& replacement) {
++    if (insert_value_separator) {
++      generator->PrintMaybeWithMarker(MarkerToken(), ": ");
++    }
++    generator->PrintString(replacement);
++    if (insert_value_separator) {
++      if (single_line_mode_) {
++        generator->PrintLiteral(" ");
++      } else {
++        generator->PrintLiteral("\n");
++      }
++    }
++  };
++
++  if (redact_debug_string_ && field->options().debug_redact()) {
++    do_redact("[REDACTED]");
++    return true;
++  }
++  return false;
++}
++
+ }  // namespace protobuf
+ }  // namespace google
+ 
+--- contrib/libs/protobuf/src/google/protobuf/text_format.h	(7e573068bfd84adfb48ca975dd5bf3837a5bc0d1)
++++ contrib/libs/protobuf/src/google/protobuf/text_format.h	(working tree)
+@@ -487,6 +487,13 @@ class PROTOBUF_EXPORT TextFormat {
+ 
+     bool PrintAny(const Message& message, BaseTextGenerator* generator) const;
+ 
++    // Try to redact a field value based on the annotations associated with
++    // the field. This function returns true if it redacts the field value.
++    bool TryRedactFieldValue(const Message& message,
++                             const FieldDescriptor* field,
++                             BaseTextGenerator* generator,
++                             bool insert_value_separator) const;
++
+     const FastFieldValuePrinter* GetFieldPrinter(
+         const FieldDescriptor* field) const {
+       auto it = custom_printers_.find(field);

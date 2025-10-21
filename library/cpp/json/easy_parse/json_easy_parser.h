@@ -43,4 +43,4 @@ namespace NJson {
         TString ConvertToTabDelimited(const TString& json) const;
         bool Parse(const TString& json, TVector<TString>* res) const;
     };
-}
+} // namespace NJson

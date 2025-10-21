@@ -1,17 +1,17 @@
-#include "schemeshard_xxport__tx_base.h"
-#include "schemeshard_xxport__helpers.h"
+#include "schemeshard_audit_log.h"
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
 #include "schemeshard_export_uploaders.h"
-#include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
-
-#include <ydb/core/backup/common/encryption.h>
+#include "schemeshard_xxport__helpers.h"
+#include "schemeshard_xxport__tx_base.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+
+#include <ydb/core/backup/common/encryption.h>
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
@@ -158,6 +158,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             exportInfo->UserSID = request.GetUserSID();
         }
 
+        exportInfo->SanitizedToken = request.GetSanitizedToken();
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateExport(db, *exportInfo);
 
@@ -219,15 +221,10 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
-        TString commonSourcePath = GetCommonSourcePath(settings);
-        if (commonSourcePath && commonSourcePath.back() != '/') {
-            commonSourcePath.push_back('/');
-        }
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString srcPath = commonSourcePath + item.source_path();
-            const TPath path = TPath::Resolve(srcPath, Self);
+            const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -243,7 +240,7 @@ private:
                 }
             }
 
-            exportInfo.Items.emplace_back(srcPath, path.Base()->PathId, path->PathType);
+            exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(itemIdx);
         }
 
@@ -387,10 +384,17 @@ private:
             // to do: enable view checksum validation
             constexpr bool EnableChecksums = false;
             metadata.SetVersion(EnableChecksums ? 1 : 0);
+            metadata.SetEnablePermissions(exportInfo.EnablePermissions);
+
+            TMaybe<NBackup::TEncryptionIV> iv;
+            if (exportSettings.has_encryption_settings()) {
+                iv = NBackup::TEncryptionIV::FromBinaryString(exportInfo.ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+            }
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo.Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions
+                exportSettings, databaseRoot, metadata.Serialize(), exportInfo.EnablePermissions,
+                iv
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }

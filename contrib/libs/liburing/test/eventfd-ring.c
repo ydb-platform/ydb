@@ -16,16 +16,14 @@
 #include "liburing.h"
 #include "helpers.h"
 
-int main(int argc, char *argv[])
+static int test(int flags)
 {
 	struct io_uring_params p = {};
 	struct io_uring ring1, ring2;
 	struct io_uring_sqe *sqe;
 	int ret, evfd1, evfd2;
 
-	if (argc > 1)
-		return T_EXIT_SKIP;
-
+	p.flags = flags;
 	ret = io_uring_queue_init_params(8, &ring1, &p);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
@@ -35,7 +33,7 @@ int main(int argc, char *argv[])
 		fprintf(stdout, "Skipping\n");
 		return T_EXIT_SKIP;
 	}
-	ret = io_uring_queue_init(8, &ring2, 0);
+	ret = io_uring_queue_init(8, &ring2, flags);
 	if (ret) {
 		fprintf(stderr, "ring setup failed: %d\n", ret);
 		return T_EXIT_FAIL;
@@ -92,6 +90,33 @@ int main(int argc, char *argv[])
 	ret = io_uring_submit(&ring1);
 	if (ret != 1) {
 		fprintf(stderr, "submit: %d\n", ret);
+		return T_EXIT_FAIL;
+	}
+
+	return T_EXIT_PASS;
+
+}
+
+int main(int argc, char *argv[])
+{
+	int ret;
+
+	if (argc > 1)
+		return T_EXIT_SKIP;
+
+	ret = test(0);
+	if (ret == T_EXIT_SKIP) {
+		return T_EXIT_SKIP;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "test 0 failed\n");
+		return T_EXIT_FAIL;
+	}
+
+	ret = test(IORING_SETUP_DEFER_TASKRUN|IORING_SETUP_SINGLE_ISSUER);
+	if (ret == T_EXIT_SKIP) {
+		return T_EXIT_SKIP;
+	} else if (ret != T_EXIT_PASS) {
+		fprintf(stderr, "test defer failed\n");
 		return T_EXIT_FAIL;
 	}
 

@@ -2,6 +2,7 @@
 
 #include <yt/yt/core/logging/log_manager.h>
 
+#include <yt/yt/core/misc/backtrace.h>
 #include <yt/yt/core/misc/codicil.h>
 #include <yt/yt/core/misc/proc.h>
 
@@ -16,17 +17,9 @@
 
 #include <library/cpp/yt/string/raw_formatter.h>
 
-#include <library/cpp/yt/backtrace/backtrace.h>
-
 #include <library/cpp/yt/system/handle_eintr.h>
 
 #include <library/cpp/yt/misc/tls.h>
-
-#ifdef _unix_
-#include <library/cpp/yt/backtrace/cursors/libunwind/libunwind_cursor.h>
-#else
-#include <library/cpp/yt/backtrace/cursors/dummy/dummy_cursor.h>
-#endif
 
 #include <util/system/defaults.h>
 
@@ -77,19 +70,6 @@ void WriteToStderr(const char* buffer)
 ////////////////////////////////////////////////////////////////////////////////
 
 namespace NDetail {
-
-Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
-{
-#ifdef _unix_
-    NBacktrace::TLibunwindCursor cursor;
-#else
-    NBacktrace::TDummyCursor cursor;
-#endif
-    return NBacktrace::GetBacktrace(
-        &cursor,
-        TMutableRange(*buffer),
-        /*framesToSkip*/ 2);
-}
 
 using NYT::WriteToStderr;
 
@@ -495,6 +475,7 @@ Y_WEAK void MaybeThrowSafeAssertionException(TStringBuf /*message*/)
 void AssertTrapImpl(
     TStringBuf trapType,
     TStringBuf expr,
+    TStringBuf description,
     TStringBuf file,
     int line,
     TStringBuf function)
@@ -504,6 +485,14 @@ void AssertTrapImpl(
     formatter.AppendString(trapType);
     formatter.AppendString("(");
     formatter.AppendString(expr);
+    if (!description.empty()) {
+        if (!expr.empty()) {
+            formatter.AppendString(", ");
+        }
+        formatter.AppendChar('"');
+        FormatString(&formatter, description, "Q");
+        formatter.AppendChar('"');
+    }
     formatter.AppendString(") at ");
     formatter.AppendString(file);
     formatter.AppendString(":");
@@ -545,8 +534,8 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
 
     NDetail::DumpSigcontext(uc);
 
-    // The easiest way to choose proper overload...
-    DumpStackTrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
+    // NB: Constructing std::function from this lambda must not lead to allocations.
+    DumpBacktrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
 
     NDetail::DumpUndumpableBlocksInfo();
 

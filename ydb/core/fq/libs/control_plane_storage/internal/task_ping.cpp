@@ -109,7 +109,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
             jobId = *parser.ColumnParser(JOB_ID_COLUMN_NAME).GetOptionalString();
         }
 
-        TRetryLimiter retryLimiter;
+        NKikimr::NKqp::TRetryLimiter retryLimiter;
         {
             TResultSetParser parser(resultSets[2]);
             if (!parser.TryNextRow()) {
@@ -330,7 +330,7 @@ NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::
 void TControlPlaneStorageBase::UpdateTaskInfo(
     NActors::TActorSystem* actorSystem, Fq::Private::PingTaskRequest& request, const std::shared_ptr<TFinalStatus>& finalStatus, FederatedQuery::Query& query,
     FederatedQuery::Internal::QueryInternal& internal, FederatedQuery::Job& job, TString& owner,
-    TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const
+    NKikimr::NKqp::TRetryLimiter& retryLimiter, TDuration& backoff, TInstant& expireAt) const
 {
     TMaybe<FederatedQuery::QueryMeta::ComputeStatus> queryStatus;
     if (request.status() != FederatedQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED) {
@@ -357,7 +357,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
             internal.clear_operation_id();
         }
 
-        TRetryPolicyItem policy(0, 0, TDuration::Seconds(1), TDuration::Zero());
+        NKikimr::NKqp::TRetryPolicyItem policy(0, 0, TDuration::Seconds(1), TDuration::Zero());
         auto it = Config->RetryPolicies.find(request.status_code());
         auto policyFound = it != Config->RetryPolicies.end();
         if (policyFound) {
@@ -376,7 +376,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
         if (retryLimiter.UpdateOnRetry(now, policy) && now < executionDeadline) {
             queryStatus.Clear();
             // failing query is throttled for backoff period
-            backoff = policy.BackoffPeriod * (retryLimiter.RetryRate + 1);
+            backoff = retryLimiter.Backoff;
             owner = "";
             if (!transientIssues) {
                 transientIssues.ConstructInPlace();
@@ -622,7 +622,7 @@ void TControlPlaneStorageBase::UpdateTaskInfo(
 
 void TControlPlaneStorageBase::FillQueryStatistics(
     const std::shared_ptr<TFinalStatus>& finalStatus, const FederatedQuery::Query& query,
-    const FederatedQuery::Internal::QueryInternal& internal, const TRetryLimiter& retryLimiter) const
+    const FederatedQuery::Internal::QueryInternal& internal, const NKikimr::NKqp::TRetryLimiter& retryLimiter) const
 {
     finalStatus->FinalStatistics = ExtractStatisticsFromProtobuf(internal.statistics());
     finalStatus->FinalStatistics.push_back(std::make_pair("IsAutomatic", query.content().automatic()));

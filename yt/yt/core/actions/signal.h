@@ -61,6 +61,14 @@ public: \
     } \
     static_assert(true)
 
+#define DEFINE_SIGNAL_WITH_ACCESSOR_OVERRIDE(TSignature, name) \
+    DEFINE_SIGNAL_OVERRIDE(TSignature, name); \
+    ::NYT::TCallbackList<TSignature>* Get##name##Signal() override \
+    { \
+        return &name##_; \
+    } \
+    static_assert(true)
+
 #define DECLARE_SIGNAL(TSignature, name) \
     void Subscribe##name(const ::NYT::TCallback<TSignature>& callback); \
     void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback)
@@ -76,6 +84,10 @@ public: \
 #define DECLARE_INTERFACE_SIGNAL(TSignature, name) \
     virtual void Subscribe##name(const ::NYT::TCallback<TSignature>& callback) = 0; \
     virtual void Unsubscribe##name(const ::NYT::TCallback<TSignature>& callback) = 0
+
+#define DECLARE_INTERFACE_SIGNAL_WITH_ACCESSOR(TSignature, name) \
+    DECLARE_INTERFACE_SIGNAL(TSignature, name); \
+    virtual ::NYT::TCallbackList<TSignature>* Get##name##Signal() = 0
 
 #define DELEGATE_SIGNAL_WITH_RENAME(declaringType, TSignature, name, delegateTo, delegateName) \
     void declaringType::Subscribe##name(const ::NYT::TCallback<TSignature>& callback) \

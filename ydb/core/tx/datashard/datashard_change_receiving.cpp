@@ -307,18 +307,16 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
                 return false;
         }
 
-        if (!UseStepTxId(record) && !MvccReadWriteVersion) {
-            auto [readVersion, writeVersion] = Self->GetReadWriteVersions();
-            Y_DEBUG_ABORT_UNLESS(readVersion == writeVersion);
-            MvccReadWriteVersion = writeVersion;
-            Pipeline.AddCommittingOp(*MvccReadWriteVersion);
+        if (!UseStepTxId(record) && !MvccVersion) {
+            MvccVersion = Self->GetMvccVersion();
+            Pipeline.AddCommittingOp(*MvccVersion);
         }
 
         if (UseStepTxId(record)) {
             txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
         } else {
             Self->SysLocksTable().BreakLocks(tableId, KeyCells.GetCells()); // probably redundant, we expect target table to be locked until complete restore
-            txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccReadWriteVersion);
+            txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, *MvccVersion);
         }
 
         Self->GetConflictsCache().GetTableCache(tableInfo.LocalTid).RemoveUncommittedWrites(KeyCells.GetCells(), txc.DB);
@@ -408,8 +406,8 @@ public:
     void Complete(const TActorContext& ctx) override {
         Y_ENSURE(Status);
 
-        if (MvccReadWriteVersion) {
-            Pipeline.RemoveCommittingOp(*MvccReadWriteVersion);
+        if (MvccVersion) {
+            Pipeline.RemoveCommittingOp(*MvccVersion);
         }
 
         if (Status->Record.GetStatus() == NKikimrChangeExchange::TEvStatus::STATUS_OK) {
@@ -425,7 +423,7 @@ private:
     TPipeline& Pipeline;
     TEvChangeExchange::TEvApplyRecords::TPtr Ev;
     THolder<TEvChangeExchange::TEvStatus> Status;
-    std::optional<TRowVersion> MvccReadWriteVersion;
+    std::optional<TRowVersion> MvccVersion;
 
     TSerializedCellVec KeyCells;
     TSerializedCellVec ValueCells;

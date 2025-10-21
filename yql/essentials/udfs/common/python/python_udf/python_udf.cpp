@@ -10,9 +10,9 @@
 namespace {
 
 #if PY_MAJOR_VERSION >= 3
-#define PYTHON_PROGRAMM_NAME L"YQL::Python3"
+    #define PYTHON_PROGRAMM_NAME L"YQL::Python3"
 #else
-#define PYTHON_PROGRAMM_NAME "YQL::Python2"
+    #define PYTHON_PROGRAMM_NAME "YQL::Python2"
 #endif
 
 int AddToPythonPath(const TVector<TStringBuf>& pathVals)
@@ -20,9 +20,11 @@ int AddToPythonPath(const TVector<TStringBuf>& pathVals)
     char pathVar[] = "path"; // PySys_{Get,Set}Object take a non-const char* arg
 
     TPyObjectPtr sysPath(PySys_GetObject(pathVar), TPyObjectPtr::ADD_REF);
-    if (!sysPath) return -1;
+    if (!sysPath) {
+        return -1;
+    }
 
-    for (const auto& val: pathVals) {
+    for (const auto& val : pathVals) {
         TPyObjectPtr pyStr = PyRepr(val.data());
         int rc = PyList_Append(sysPath.Get(), pyStr.Get());
         if (rc != 0) {
@@ -45,13 +47,13 @@ void InitArcadiaPythonRuntime()
 //////////////////////////////////////////////////////////////////////////////
 // TPythonModule
 //////////////////////////////////////////////////////////////////////////////
-class TPythonModule: public IUdfModule
-{
+class TPythonModule: public IUdfModule {
 public:
     TPythonModule(const TString& resourceName, EPythonFlavor pythonFlavor, bool standalone = true)
-        : ResourceName(resourceName), Standalone(standalone)
+        : ResourceName_(resourceName)
+        , Standalone_(standalone)
     {
-        if (Standalone) {
+        if (Standalone_) {
             Py_SetProgramName(PYTHON_PROGRAMM_NAME);
             PrepareYqlModule();
             Py_Initialize();
@@ -67,7 +69,7 @@ public:
         }
 
 #ifndef _win_
-        if (Standalone) {
+        if (Standalone_) {
             TVector<TStringBuf> paths;
             if (pythonFlavor == EPythonFlavor::System) {
                 paths.push_back(TStringBuf("/usr/lib/python2.7/dist-packages"));
@@ -82,14 +84,14 @@ public:
         TPyObjectPtr pyExecutableStr = PyRepr(GetExecPath().data());
         Y_ABORT_UNLESS(PySys_SetObject(executableVar, pyExecutableStr.Get()) >= 0, "Can't set sys.executable");
 
-        if (Standalone) {
+        if (Standalone_) {
             PyEval_InitThreads();
             MainThreadState_ = PyEval_SaveThread();
         }
     }
 
     ~TPythonModule() {
-        if (Standalone) {
+        if (Standalone_) {
             PyEval_RestoreThread(MainThreadState_);
             Py_Finalize();
         }
@@ -99,15 +101,15 @@ public:
         PyCleanup();
     }
 
-    void GetAllFunctions(IFunctionsSink&) const final {}
+    void GetAllFunctions(IFunctionsSink&) const final {
+    }
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(typeConfig);
 
         if (flags & TFlags::TypesOnly) {
@@ -121,15 +123,15 @@ public:
             }
 
             const auto pos = builder.GetSourcePosition();
-            builder.Implementation(new TPythonFunctionFactory(name, ResourceName, userType, std::move(typeHelper), pos));
+            builder.Implementation(new TPythonFunctionFactory(name, ResourceName_, userType, std::move(typeHelper), pos));
         } catch (const yexception& e) {
             builder.SetError(TStringBuf(e.what()));
         }
     }
 
 private:
-    TString ResourceName;
-    bool Standalone;
+    TString ResourceName_;
+    bool Standalone_;
     PyThreadState* MainThreadState_;
 };
 
@@ -137,44 +139,43 @@ private:
 // TStubModule
 //////////////////////////////////////////////////////////////////////////////
 class TStubModule: public IUdfModule {
-    void GetAllFunctions(IFunctionsSink&) const final {}
-
-    void BuildFunctionTypeInfo(
-            const TStringRef& /*name*/,
-            TType* /*userType*/,
-            const TStringRef& /*typeConfig*/,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& /*builder*/) const final
-    {
-        Y_DEBUG_ABORT_UNLESS(flags & TFlags::TypesOnly,
-                "in stub module this function can be called only for types loading");
+    void GetAllFunctions(IFunctionsSink&) const final {
     }
 
-    void CleanupOnTerminate() const final {}
+    void BuildFunctionTypeInfo(
+        const TStringRef& /*name*/,
+        TType* /*userType*/,
+        const TStringRef& /*typeConfig*/,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& /*builder*/) const final {
+        Y_DEBUG_ABORT_UNLESS(flags & TFlags::TypesOnly,
+                             "in stub module this function can be called only for types loading");
+    }
+
+    void CleanupOnTerminate() const final {
+    }
 };
 
 } // namespace
 
 void NKikimr::NUdf::RegisterYqlPythonUdf(
-        IRegistrator& registrator,
-        ui32 flags,
-        TStringBuf moduleName,
-        TStringBuf resourceName,
-        EPythonFlavor pythonFlavor)
+    IRegistrator& registrator,
+    ui32 flags,
+    TStringBuf moduleName,
+    TStringBuf resourceName,
+    EPythonFlavor pythonFlavor)
 {
     if (flags & IRegistrator::TFlags::TypesOnly) {
         registrator.AddModule(moduleName, new TStubModule);
     } else {
         registrator.AddModule(
             moduleName,
-            NKikimr::NUdf::GetYqlPythonUdfModule(resourceName, pythonFlavor, true)
-        );
+            NKikimr::NUdf::GetYqlPythonUdfModule(resourceName, pythonFlavor, true));
     }
 }
 
 TUniquePtr<NKikimr::NUdf::IUdfModule> NKikimr::NUdf::GetYqlPythonUdfModule(
     TStringBuf resourceName, NKikimr::NUdf::EPythonFlavor pythonFlavor,
-    bool standalone
-) {
+    bool standalone) {
     return new TPythonModule(TString(resourceName), pythonFlavor, standalone);
 }

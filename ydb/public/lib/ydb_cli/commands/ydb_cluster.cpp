@@ -1,12 +1,13 @@
 #include "ydb_cluster.h"
 
+#include "ydb_bridge.h"
 #include "ydb_dynamic_config.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 using namespace NKikimr;
@@ -20,6 +21,7 @@ TCommandCluster::TCommandCluster()
     AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false, true));
     AddCommand(std::make_unique<TCommandClusterDump>());
     AddCommand(std::make_unique<TCommandClusterRestore>());
+    AddCommand(std::make_unique<TCommandBridge>(true));
 }
 
 TCommandClusterBootstrap::TCommandClusterBootstrap()

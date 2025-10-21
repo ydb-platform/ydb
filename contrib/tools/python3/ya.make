@@ -2,9 +2,9 @@
 
 LIBRARY()
 
-VERSION(3.12.9)
+VERSION(3.12.12)
 
-ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.9.tar.gz)
+ORIGINAL_SOURCE(https://github.com/python/cpython/archive/v3.12.12.tar.gz)
 
 LICENSE(Python-2.0)
 
@@ -39,7 +39,6 @@ CFLAGS(
     -DPy_BUILD_CORE
     -DPy_BUILD_CORE_BUILTIN
     -DUSE_ZLIB_CRC32
-    -DABIFLAGS=\"\"
     -DPREFIX=\"/var/empty\"
     -DEXEC_PREFIX=\"/var/empty\"
     -DVERSION=\"3.12\"

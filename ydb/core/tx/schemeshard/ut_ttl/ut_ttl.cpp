@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;
@@ -521,8 +521,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         };
 
         auto setAllowConditionalEraseOperations = [&](bool value) {
-            TAtomic unused;
-            runtime.GetAppData().Icb->SetValue("SchemeShard_AllowConditionalEraseOperations", value, unused);
+            TControlBoard::SetValue(value, runtime.GetAppData().Icb->SchemeShardControls.AllowConditionalEraseOperations);
         };
 
         const TInstant now = TInstant::ParseIso8601("2020-09-18T18:00:00.000000Z");

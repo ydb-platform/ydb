@@ -329,10 +329,14 @@ def signature(script, name):
     ))))) str))))
 ))
 
+(let EnsureStructType (lambda '(str)
+    (EnsureTypeKind str 'Struct)
+))
+
 (let DispatchStructFunc (lambda '(impl) (lambda '(str fields) 
     (MatchType str 'Null (lambda '() (Null)) (lambda '()
-    (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply impl unpacked fields))))
-    (lambda '() (Apply impl str fields))))
+    (MatchType str 'Optional (lambda '() (Map str (lambda '(unpacked) (Apply impl (Apply EnsureStructType unpacked) fields))))
+    (lambda '() (Apply impl (Apply EnsureStructType str) fields))))
 ))))
 
 (let ChooseMembers (Apply DispatchStructFunc ChooseMembersImpl))

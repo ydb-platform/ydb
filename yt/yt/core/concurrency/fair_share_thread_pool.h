@@ -20,6 +20,8 @@ struct IFairShareThreadPool
 
 DEFINE_REFCOUNTED_TYPE(IFairShareThreadPool)
 
+////////////////////////////////////////////////////////////////////////////////
+
 IFairShareThreadPoolPtr CreateFairShareThreadPool(
     int threadCount,
     const std::string& threadNamePrefix);

@@ -1,6 +1,6 @@
 --- contrib/python/jedi/py3/jedi/evaluate/compiled/fake.py	(index)
 +++ contrib/python/jedi/py3/jedi/evaluate/compiled/fake.py	(working tree)
-@@ -3,22 +3,26 @@ Loads functions that are mixed in to the standard library. E.g. builtins are
+@@ -3,22 +3,31 @@ Loads functions that are mixed in to the standard library. E.g. builtins are
  written in C (binaries), but my autocompletion only understands Python code. By
  mixing in Python code, the autocompletion should work much better for builtins.
  """
@@ -18,29 +18,49 @@
  
  def _get_path_dict():
 -    path = os.path.dirname(os.path.abspath(__file__))
-+    path = os.path.dirname(__file__)
++    path = os.path.dirname(os.path.abspath(__file__)) if os.getenv("Y_PYTHON_SOURCE_ROOT") else os.path.dirname(__file__)
      base_path = os.path.join(path, 'fake')
      dct = {}
 -    for file_name in os.listdir(base_path):
 -        if file_name.endswith('.pym'):
 -            dct[file_name[:-4]] = os.path.join(base_path, file_name)
-+    for file_name in __res.resfs_files():
-+        if sys.version_info[0] == 3:
-+            file_name = str(file_name, 'ascii')
-+        if file_name.startswith(base_path) and file_name.endswith('.pym'):
-+            dct[file_name[len(base_path) + 1:-4]] = file_name
++    if os.getenv("Y_PYTHON_SOURCE_ROOT"):
++        for file_name in os.listdir(base_path):
++            if file_name.endswith('.pym'):
++                dct[file_name[:-4]] = os.path.join(base_path, file_name)
++    else:
++        for file_name in __res.resfs_files():
++            if sys.version_info[0] == 3:
++                file_name = str(file_name, 'ascii')
++            if file_name.startswith(base_path) and file_name.endswith('.pym'):
++                dct[file_name[len(base_path) + 1:-4]] = file_name
      return dct
  
  
-@@ -45,8 +49,9 @@ def _load_faked_module(evaluator, module_name):
+@@ -45,8 +49,13 @@ def _load_faked_module(evaluator, module_name):
          fake_modules[module_name] = None
          return
  
 -    with open(path) as f:
 -        source = f.read()
-+    if sys.version_info[0] == 3:
-+        path = bytes(path, 'ascii')
-+    source = __res.resfs_read(path)
++    if os.getenv("Y_PYTHON_SOURCE_ROOT"):
++        with open(path) as f:
++            source = f.read()
++    else:
++        if sys.version_info[0] == 3:
++            path = bytes(path, 'ascii')
++        source = __res.resfs_read(path)
  
      fake_modules[module_name] = m = evaluator.latest_grammar.parse(unicode(source))
  
+--- contrib/python/jedi/py3/jedi/parser_utils.py	(index)
++++ contrib/python/jedi/py3/jedi/parser_utils.py	(working tree)
+@@ -257,4 +257,7 @@ def get_cached_code_lines(grammar, path):
+     Basically access the cached code lines in parso. This is not the nicest way
+     to do this, but we avoid splitting all the lines again.
+     """
+-    return parser_cache[grammar._hashed][path].lines
++    try:
++        return parser_cache[grammar._hashed][path].lines
++    except:
++        return None

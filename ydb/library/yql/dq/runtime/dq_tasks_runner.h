@@ -220,6 +220,7 @@ struct TDqTaskRunnerMemoryLimits {
     ui32 OutputChunkMaxSize = 0;
     ui32 ChunkSizeLimit = 48_MB;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
+    TMaybe<size_t> BufferPageAllocSize;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,
@@ -266,7 +267,8 @@ public:
             Task_ = HeapTask_.get();
             Y_ABORT_UNLESS(!task.Arena);
         } else {
-            Y_ABORT("not allowed to copy dq settings for arena allocated messages.");
+            Task_ = task.GetTask();
+            Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
         }
     }
 
@@ -282,6 +284,12 @@ public:
         Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
+    
+    NDqProto::TDqTask* GetTask() const {
+        Y_ABORT_UNLESS(Arena);
+        return Task_;
+    }
+
 
     const ::NYql::NDqProto::TTaskInput& GetInputs(size_t index) const {
         return Task_->GetInputs(index);
@@ -399,6 +407,10 @@ public:
         return Task_->HasEnableSpilling() && Task_->GetEnableSpilling();
     }
 
+    NYql::NDqProto::EValuePackerVersion GetValuePackerVersion() const {
+        return Task_->GetValuePackerVersion();
+    }
+
 private:
 
     // external callback to retrieve parameter value.
@@ -454,6 +466,7 @@ public:
     virtual const NKikimr::NMiniKQL::TWatermark& GetWatermark() const = 0;
 
     virtual void SetSpillerFactory(std::shared_ptr<NKikimr::NMiniKQL::ISpillerFactory> spillerFactory) = 0;
+    virtual TString GetOutputDebugString() = 0;
 };
 
 TIntrusivePtr<IDqTaskRunner> MakeDqTaskRunner(

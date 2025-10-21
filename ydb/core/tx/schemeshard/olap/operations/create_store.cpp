@@ -1,3 +1,4 @@
+#include <ydb/core/tx/schemeshard/olap/operations/checks.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard__operation_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
@@ -339,6 +340,15 @@ public:
             return result;
         }
 
+        for (auto& schemaPreset : Transaction.GetCreateColumnStore().GetSchemaPresets()) {
+            if (schemaPreset.HasSchema()) {
+                if (auto checkResult = NKikimr::NSchemeShard::NOlap::CheckColumns(schemaPreset.GetSchema().GetColumns(), AppData()); !checkResult) {
+                    result->SetError(NKikimrScheme::StatusSchemeError, checkResult.error());
+                    return result;
+                }
+            }
+        }
+
         NSchemeShard::TPath parentPath = NSchemeShard::TPath::Resolve(parentPathStr, context.SS);
         {
             NSchemeShard::TPath::TChecker checks = parentPath.Check();
@@ -377,7 +387,7 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .DepthLimit()
                     .PathsLimit()
                     .DirChildrenLimit()

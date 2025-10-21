@@ -1,8 +1,8 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 
 #include "actor.h"
-#include "cfg.h"
+#include <ydb/core/ymq/actor/cfg/cfg.h>
 #include "error.h"
 #include "events.h"
 #include "limits.h"
@@ -30,6 +30,8 @@
 #include <util/generic/is_in.h>
 #include <util/string/ascii.h>
 #include <util/string/join.h>
+
+#include <ydb/library/security/util.h>
 
 namespace NKikimr::NSQS {
 
@@ -385,7 +387,7 @@ private:
     void AuditLogEntryImpl(const TString& requestId, const TError* error = nullptr) {
         static const TString EmptyValue = "{none}";
         AUDIT_LOG(
-            AUDIT_PART("component", TString("ymq"))
+            AUDIT_PART("component", "ymq")
             AUDIT_PART("request_id", requestId)
             AUDIT_PART("subject", (UserSID_ ? UserSID_ : EmptyValue))
             AUDIT_PART("account", UserName_)
@@ -394,7 +396,7 @@ private:
             AUDIT_PART("resource_id", GetQueueName(), Cfg().GetYandexCloudMode())
             AUDIT_PART("operation", ActionToCloudConvMethod(Action_))
             AUDIT_PART("queue", GetQueueName())
-            AUDIT_PART("status", TString(error ? "ERROR": "SUCCESS"))
+            AUDIT_PART("status", error ? "ERROR": "SUCCESS")
             AUDIT_PART("reason", error->GetMessage(), error)
             AUDIT_PART("detailed_status", error->GetErrorCode(), error)
         );
@@ -573,6 +575,8 @@ private:
         UserName_ = request.GetAuth().GetUserName();
         FolderId_ = request.GetAuth().GetFolderId();
         UserSID_ = request.GetAuth().GetUserSID();
+        MaskedToken_ = NKikimr::MaskIAMTicket(SecurityToken_);
+        AuthType_ = request.GetAuth().GetAuthType();
 
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
@@ -881,7 +885,10 @@ protected:
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken_;
-    TString  UserSID_; // identifies the client who sent this request
+    TString UserSID_; // identifies the client who sent this request
+    TString MaskedToken_;
+    TString AuthType_;
+
     bool UserExists_ = false;
     bool QueueExists_ = false;
     ui64     Shards_;

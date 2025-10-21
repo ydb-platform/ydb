@@ -1,7 +1,8 @@
 #include "validation.h"
 
-#include <util/string/builder.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+
+#include <util/string/builder.h>
 
 extern "C" {
 #include <yql/essentials/parser/pg_wrapper/postgresql/src/include/catalog/pg_type_d.h>

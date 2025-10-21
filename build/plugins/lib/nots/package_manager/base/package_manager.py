@@ -34,6 +34,7 @@ class BasePackageManager(object, metaclass=ABCMeta):
         script_path,
         module_path=None,
         sources_root=None,
+        verbose=False,
     ):
         self.module_path = build_path[len(build_root) + 1 :] if module_path is None else module_path
         self.build_path = build_path
@@ -42,6 +43,7 @@ class BasePackageManager(object, metaclass=ABCMeta):
         self.sources_root = sources_path[: -len(self.module_path) - 1] if sources_root is None else sources_root
         self.nodejs_bin_path = nodejs_bin_path
         self.script_path = script_path
+        self.verbose = verbose
 
     @classmethod
     def load_package_json(cls, path):
@@ -53,13 +55,18 @@ class BasePackageManager(object, metaclass=ABCMeta):
         return PackageJson.load(path)
 
     @classmethod
-    def load_package_json_from_dir(cls, dir_path):
+    def load_package_json_from_dir(cls, dir_path, empty_if_missing=False):
         """
         :param dir_path: path to directory with package.json
         :type dir_path: str
         :rtype: PackageJson
         """
-        return cls.load_package_json(build_pj_path(dir_path))
+        pj_path = build_pj_path(dir_path)
+        if empty_if_missing and not os.path.exists(pj_path):
+            pj = PackageJson(pj_path)
+            pj.data = {}
+            return pj
+        return cls.load_package_json(pj_path)
 
     def _build_package_json(self):
         """
@@ -107,22 +114,16 @@ class BasePackageManager(object, metaclass=ABCMeta):
     def build_workspace(self, tarballs_store: str):
         pass
 
+    @abstractmethod
+    def build_ts_proto_auto_workspace(self, deps_mod: str):
+        pass
+
     def get_local_peers_from_package_json(self):
         """
         Returns paths of direct workspace dependencies (source root related).
         :rtype: list of str
         """
         return self.load_package_json_from_dir(self.sources_path).get_workspace_dep_paths(base_path=self.module_path)
-
-    def get_peers_from_package_json(self):
-        """
-        Returns paths of workspace dependencies (source root related).
-        :rtype: list of str
-        """
-        pj = self.load_package_json_from_dir(self.sources_path)
-        prefix_len = len(self.sources_root) + 1
-
-        return [p[prefix_len:] for p in pj.get_workspace_map(ignore_self=True).keys()]
 
     @timeit
     def _exec_command(self, args, cwd: str, include_defaults=True, script_path=None, env={}):
@@ -134,13 +135,27 @@ class BasePackageManager(object, metaclass=ABCMeta):
             + args
             + (self._get_default_options() if include_defaults else [])
         )
-        p = subprocess.Popen(cmd, cwd=cwd, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env)
+        p = subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            stdin=None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=env,
+            text=True,
+            encoding="utf-8",
+        )
         stdout, stderr = p.communicate()
+
+        if self.verbose:
+            print(f'cd {cwd} && {" ".join(cmd)}', file=sys.stderr)
+            print(f'stdout: {stdout}', file=sys.stderr) if stdout else None
+            print(f'stderr: {stderr}', file=sys.stderr) if stderr else None
 
         if p.returncode != 0:
             self._dump_debug_log()
 
-            raise PackageManagerCommandError(cmd, p.returncode, stdout.decode("utf-8"), stderr.decode("utf-8"))
+            raise PackageManagerCommandError(cmd, p.returncode, stdout, stderr)
 
     def _nm_path(self, *parts):
         return os.path.join(build_nm_path(self.build_path), *parts)

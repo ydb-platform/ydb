@@ -153,9 +153,9 @@ static void ValidateAppendKeyColumns(const TSortColumns& sortColumns, const TTab
     }
 }
 
-const std::vector<TString>& GetTableUploadOptionsAttributeKeys()
+const std::vector<std::string>& GetTableUploadOptionsAttributeKeys()
 {
-    static const std::vector<TString> Result{
+    static const std::vector<std::string> Result{
         "schema_mode",
         "optimize_for",
         "chunk_format",

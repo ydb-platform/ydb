@@ -18,8 +18,8 @@ inline T Min(T l, T r) {
     return std::fmin(l, r);
 }
 
-template<typename TLeft, typename TRight, typename TOutput>
-struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft, TRight, TOutput>> {
+template <typename TLeft, typename TRight, typename TOutput>
+struct TMin: public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft, TRight, TOutput>> {
     static TOutput Do(TLeft left, TRight right)
     {
         return Min<TOutput>(left, right);
@@ -45,11 +45,11 @@ struct TMin : public TSimpleArithmeticBinary<TLeft, TRight, TOutput, TMin<TLeft,
 #endif
 };
 
-template<typename TType>
-struct TFloatAggrMin : public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMin<TType>> {
+template <typename TType>
+struct TFloatAggrMin: public TSimpleArithmeticBinary<TType, TType, TType, TFloatAggrMin<TType>> {
     static TType Do(TType left, TType right)
     {
-        return  left < right || std::isnan(right) ? left : right;
+        return left < right || std::isnan(right) ? left : right;
     }
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* left, Value* right, const TCodegenContext&, BasicBlock*& block)
@@ -62,15 +62,17 @@ struct TFloatAggrMin : public TSimpleArithmeticBinary<TType, TType, TType, TFloa
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TDecimalMin {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto lv = left.GetInt128();
-        if (!NYql::NDecimal::IsComparable(lv))
+        if (!NYql::NDecimal::IsComparable(lv)) {
             return right;
+        }
         const auto rv = right.GetInt128();
-        if (!NYql::NDecimal::IsComparable(rv))
+        if (!NYql::NDecimal::IsComparable(rv)) {
             return left;
+        }
         return NUdf::TUnboxedValuePod(lv > rv ? rv : lv);
     }
 
@@ -109,7 +111,7 @@ struct TDecimalMin {
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TDecimalAggrMin {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto lv = left.GetInt128();
@@ -127,11 +129,14 @@ struct TDecimalAggrMin {
 #endif
 };
 
-template<typename TType>
-using TAggrMin = std::conditional_t<std::is_floating_point<TType>::value, TFloatAggrMin<TType>, TMin<TType, TType, TType>>;
+template <typename TType>
+using TAggrMin = std::conditional_t<
+    std::is_floating_point<TType>::value,
+    TFloatAggrMin<TType>,
+    TMin<TType, TType, TType>>;
 
-template<typename TType>
-struct TTzMin : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMin<TType>> {
+template <typename TType>
+struct TTzMin: public TSelectArithmeticBinaryCopyTimezone<TType, TTzMin<TType>> {
     static bool Do(TType left, TType right)
     {
         return left <= right;
@@ -144,8 +149,8 @@ struct TTzMin : public TSelectArithmeticBinaryCopyTimezone<TType, TTzMin<TType>>
 #endif
 };
 
-template<typename TType>
-struct TAggrTzMin : public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMin<TType>> {
+template <typename TType>
+struct TAggrTzMin: public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMin<TType>> {
     static bool Do(TType left, TType right)
     {
         return left <= right;
@@ -168,7 +173,7 @@ struct TAggrTzMin : public TSelectArithmeticBinaryWithTimezone<TType, TAggrTzMin
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 struct TCustomMin {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const bool r = CompareCustoms<Slot>(left, right) > 0;
@@ -190,7 +195,7 @@ struct TCustomMin {
 #endif
 };
 
-}
+} // namespace
 
 void RegisterMin(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNumericFunctionOpt<TMin, TBinaryArgsOpt>(registry, "Min");

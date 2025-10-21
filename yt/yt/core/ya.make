@@ -9,6 +9,10 @@ IF (ARCH_X86_64)
     CFLAGS(-mpclmul)
 ENDIF()
 
+IF (YT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+    CXXFLAGS(-DYT_ENRICH_PROMISE_ABANDONED_WITH_BACKTRACE)
+ENDIF()
+
 NO_LTO()
 
 SRCS(
@@ -32,8 +36,6 @@ SRCS(
     bus/tcp/client.cpp
     bus/tcp/local_bypass.cpp
     bus/tcp/server.cpp
-    bus/tcp/ssl_context.cpp
-    bus/tcp/ssl_helpers.cpp
 
     compression/brotli.cpp
     compression/bzip2.cpp
@@ -115,6 +117,7 @@ SRCS(
     logging/zstd_compression.cpp
 
     misc/arithmetic_formula.cpp
+    misc/backtrace.cpp
     misc/backoff_strategy.cpp
     misc/bitmap.cpp
     misc/bit_packed_unsigned_vector.cpp
@@ -137,6 +140,7 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/inotify.cpp
     misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
     misc/relaxed_mpsc_queue.cpp
@@ -202,9 +206,11 @@ SRCS(
     rpc/helpers.cpp
     rpc/local_channel.cpp
     rpc/local_server.cpp
-    rpc/message.cpp
     rpc/message_format.cpp
+    rpc/message.cpp
     rpc/null_channel.cpp
+    rpc/overload_controller.cpp
+    rpc/overload_controlling_service_base.cpp
     rpc/peer_discovery.cpp
     rpc/per_key_request_queue_provider.cpp
     rpc/protocol_version.cpp
@@ -215,8 +221,8 @@ SRCS(
     rpc/roaming_channel.cpp
     rpc/serialized_channel.cpp
     rpc/server_detail.cpp
-    rpc/service.cpp
     rpc/service_detail.cpp
+    rpc/service.cpp
     rpc/static_channel_factory.cpp
     rpc/stream.cpp
     rpc/throttling_channel.cpp
@@ -252,6 +258,7 @@ SRCS(
     yson/null_consumer.cpp
     yson/parser.cpp
     yson/producer.cpp
+    yson/protobuf_helpers.cpp
     yson/protobuf_interop.cpp
     yson/protobuf_interop_options.cpp
     yson/protobuf_interop_unknown_fields.cpp
@@ -333,7 +340,7 @@ PEERDIR(
     contrib/libs/libbz2
     contrib/libs/c-ares
     contrib/libs/farmhash
-    contrib/libs/yajl
+    contrib/deprecated/yajl
     contrib/libs/lz4
     contrib/libs/openssl
 
@@ -360,6 +367,7 @@ PEERDIR(
 
     yt/yt_proto/yt/core
 
+    library/cpp/containers/concurrent_hash
     library/cpp/yt/assert
     library/cpp/yt/backtrace
     library/cpp/yt/coding
@@ -403,6 +411,7 @@ IF (NOT OPENSOURCE AND OS_LINUX)
         benchmarks
         bus/benchmarks
         yson/benchmark
+        ytree/benchmarks
     )
 ENDIF()
 

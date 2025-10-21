@@ -24,6 +24,8 @@ public:
 
     void AddEdge(const TVertexDescriptor& from, const TVertexDescriptor& to);
 
+    void AddVertex(const TVertexDescriptor& from);
+
 private:
     std::vector<TVertexDescriptor> TopologicalOrdering_;
     THashMap<TVertexDescriptor, THashSet<TVertexDescriptor>> OutgoingEdges_;

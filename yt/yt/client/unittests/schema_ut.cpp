@@ -1,15 +1,15 @@
-#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
-#include "yt/yt/client/table_client/logical_type.h"
-
 #include <yt/yt/core/test_framework/framework.h>
 
 #include <yt/yt/client/table_client/comparator.h>
+#include <yt/yt/client/table_client/logical_type.h>
 #include <yt/yt/client/table_client/schema.h>
 #include <yt/yt/client/table_client/schema_serialization_helpers.h>
 
 #include <yt/yt_proto/yt/client/table_chunk_format/proto/chunk_meta.pb.h>
 
 #include <yt/yt/core/ytree/convert.h>
+
+#include <yt/yt/library/logical_type_shortcuts/logical_type_shortcuts.h>
 
 #include <random>
 

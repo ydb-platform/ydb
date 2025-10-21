@@ -112,7 +112,7 @@ class TFiber
 public:
     using TFiberList = TIntrusiveList<TFiberBase, NDetail::TFiberRegisterTag>;
 
-    static TFiber* CreateFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+    static TFiber* CreateFiber(EExecutionStackKind stackKind = DefaultExecutionStackKind);
 
     // Set this as AfterSwitch to release fiber's resources.
     static void ReleaseFiber(TFiber* fiber);
@@ -130,7 +130,7 @@ private:
     const std::shared_ptr<TExecutionStack> Stack_;
     TExceptionSafeContext MachineContext_;
 
-    explicit TFiber(EExecutionStackKind stackKind = EExecutionStackKind::Small);
+    explicit TFiber(EExecutionStackKind stackKind = DefaultExecutionStackKind);
     ~TFiber();
 
     void DoRunNaked() override;

@@ -19,7 +19,6 @@ SRCS(
     cell_master/proto/cell_directory.proto
 
     chaos_client/proto/replication_card.proto
-    chaos_client/proto/chaos_lease.proto
 
     chunk_client/proto/data_statistics.proto
     chunk_client/proto/chunk_meta.proto
@@ -50,6 +49,7 @@ SRCS(
     scheduler/proto/spec_patch.proto
 
     misc/proto/workload.proto
+    misc/proto/signature.proto
 )
 
 EXCLUDE_TAGS(GO_PROTO)

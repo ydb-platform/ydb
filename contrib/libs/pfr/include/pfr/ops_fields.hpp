@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -8,6 +8,8 @@
 #pragma once
 
 #include <pfr/detail/config.hpp>
+
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #include <pfr/core.hpp>
 #include <pfr/detail/functional.hpp>
@@ -32,6 +34,8 @@
 ///
 /// \b Synopsis:
 namespace pfr {
+
+PFR_BEGIN_MODULE_EXPORT
 
     /// Does a field-by-field equality comparison.
     ///
@@ -122,6 +126,11 @@ namespace pfr {
         return result;
 #endif
     }
+
+PFR_END_MODULE_EXPORT
+
 } // namespace pfr
+
+#endif  // #if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #endif // PFR_OPS_HPP

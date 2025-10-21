@@ -31,11 +31,24 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
             info.IPv6Addrs.emplace_back(addr);
         }
         info.SslTargetNameOverride = endpointInfo.ssl_target_name_override();
+        info.BridgePileName = endpointInfo.bridge_pile_name();
+    }
+
+    const auto& pileStates = proto.pile_states();
+    PileStates_.reserve(pileStates.size());
+    for (const auto& pileState : pileStates) {
+        TPileState& info = PileStates_.emplace_back();
+        info.State = static_cast<TPileState::EState>(pileState.state());
+        info.PileName = pileState.pile_name();
     }
 }
 
 const std::vector<TEndpointInfo>& TListEndpointsResult::GetEndpointsInfo() const {
     return Info_;
+}
+
+const std::vector<TPileState>& TListEndpointsResult::GetPileStates() const {
+    return PileStates_;
 }
 
 TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto)
@@ -63,11 +76,12 @@ TNodeLocation::TNodeLocation(const Ydb::Discovery::NodeLocation& location)
     , RackNum(location.has_rack_num() ? std::make_optional(location.rack_num()) : std::nullopt)
     , BodyNum(location.has_body_num() ? std::make_optional(location.body_num()) : std::nullopt)
     , Body(location.has_body() ? std::make_optional(location.body()) : std::nullopt)
+    , BridgePileName(location.has_bridge_pile_name() ? std::make_optional(location.bridge_pile_name()) : std::nullopt)
     , DataCenter(location.has_data_center() ? std::make_optional(location.data_center()) : std::nullopt)
     , Module(location.has_module() ? std::make_optional(location.module()) : std::nullopt)
     , Rack(location.has_rack() ? std::make_optional(location.rack()) : std::nullopt)
     , Unit(location.has_unit() ? std::make_optional(location.unit()) : std::nullopt)
-    {}
+{}
 
 TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     : NodeId(info.node_id())
@@ -77,7 +91,7 @@ TNodeInfo::TNodeInfo(const Ydb::Discovery::NodeInfo& info)
     , Address(info.address())
     , Location(info.location())
     , Expire(info.expire())
-    {}
+{}
 
 TNodeRegistrationResult::TNodeRegistrationResult(TStatus&& status, const Ydb::Discovery::NodeRegistrationResult& proto)
     : TStatus(std::move(status))
@@ -212,6 +226,9 @@ public:
         auto requestLocation = request.mutable_location();
         const auto& location = settings.Location_;
 
+        if (location.BridgePileName) {
+            requestLocation->set_bridge_pile_name(TStringType{location.BridgePileName.value()});
+        }
         if (location.DataCenter) {
             requestLocation->set_data_center(TStringType{location.DataCenter.value()});
         }

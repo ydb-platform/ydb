@@ -131,7 +131,7 @@ def post_install(self):
 
 
 curl = GNUMakeNixProject(
-    owners=["g:cpp-contrib", "g:geoapps_infra"],
+    owners=["g:cpp-contrib"],
     arcdir="contrib/libs/curl",
     nixattr="curl",
     ignore_commands=[

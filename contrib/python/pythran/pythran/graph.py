@@ -18,11 +18,11 @@ class DiGraph(object):
         return (k for k, v in self._adjacency.items() if node in v)
 
     def add_node(self, node):
-        self._adjacency.setdefault(node, set())
+        self._adjacency.setdefault(node, {})
 
     def add_edge(self, src, dest, **props):
         self.add_node(dest)
-        self._adjacency.setdefault(src, set()).add(dest)
+        self._adjacency.setdefault(src, {}).setdefault(dest, None)
         self._edges[(src, dest)] = props
 
     @property
@@ -33,7 +33,7 @@ class DiGraph(object):
         return dest in self._adjacency[src]
 
     def remove_edge(self, src, dest):
-        self._adjacency[src].remove(dest)
+        self._adjacency[src].pop(dest)
         del self._edges[(src, dest)]
 
     def __len__(self):

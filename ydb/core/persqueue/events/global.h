@@ -1,4 +1,7 @@
 #pragma once
+
+#include "events.h"
+
 #include <ydb/core/keyvalue/defs.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
@@ -16,7 +19,7 @@ namespace NKikimr {
 
 namespace TEvPersQueue {
     enum EEv {
-        EvRequest = EventSpaceBegin(TKikimrEvents::ES_PQ),
+        EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
         EvUpdateConfig, //change config for all partitions and count of partitions
         EvUpdateConfigResponse,
         EvOffsets, //get offsets from all partitions in order 0..n-1 - it's for scheemeshard to change (TabletId,PartId) to Partition
@@ -34,14 +37,14 @@ namespace TEvPersQueue {
         EvLockPartition,
         EvReleasePartition,
         EvPartitionReleased,
-        EvDescribe,
-        EvDescribeResponse,
+        EvDescribe, // deprecated
+        EvDescribeResponse, // deprecated
         EvGetReadSessionsInfo,
         EvReadSessionsInfoResponse,
         EvWakeupClient, // deprecated
-        EvUpdateACL,
-        EvCheckACL,
-        EvCheckACLResponse,
+        EvUpdateACL, // deprecated
+        EvCheckACL, // deprecated
+        EvCheckACLResponse, // deprecated
         EvError,
         EvGetPartitionIdForWrite,
         EvGetPartitionIdForWriteResponse,
@@ -54,6 +57,10 @@ namespace TEvPersQueue {
         EvGetPartitionsLocationResponse,
         EvReadingPartitionFinished,
         EvReadingPartitionStarted,
+        EvOffloadStatus,
+        EvBalancingSubscribe,
+        EvBalancingUnsubscribe,
+        EvBalancingSubscribeNotify,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -204,31 +211,6 @@ namespace TEvPersQueue {
         TEvPartitionClientInfoResponse() = default;
     };
 
-    struct TEvDescribe : public TEventPB<TEvDescribe, NKikimrPQ::TDescribe, EvDescribe> {
-        TEvDescribe()
-        {}
-    };
-
-    struct TEvDescribeResponse : public TEventPB<TEvDescribeResponse, NKikimrPQ::TDescribeResponse, EvDescribeResponse> {
-        TEvDescribeResponse()
-        {}
-    };
-
-    struct TEvUpdateACL : public TEventLocal<TEvUpdateACL, EvUpdateACL> {
-        TEvUpdateACL()
-        {}
-    };
-
-    struct TEvCheckACL : public TEventPB<TEvCheckACL, NKikimrPQ::TCheckACL, EvCheckACL> {
-        TEvCheckACL()
-        {}
-    };
-
-    struct TEvCheckACLResponse : public TEventPB<TEvCheckACLResponse, NKikimrPQ::TCheckACLResponse, EvCheckACLResponse> {
-        TEvCheckACLResponse()
-        {};
-    };
-
     struct TEvError : public TEventPB<TEvError,
             NPersQueueCommon::TError, EvError> {
             TEvError() {}
@@ -250,6 +232,7 @@ namespace TEvPersQueue {
     };
 
     struct TEvProposeTransaction : public TEventPreSerializedPB<TEvProposeTransaction, NKikimrPQ::TEvProposeTransaction, EvProposeTransaction> {
+        NWilson::TSpan ExecuteSpan;
     };
 
     struct TEvProposeTransactionBuilder: public TEvProposeTransaction {
@@ -271,6 +254,7 @@ namespace TEvPersQueue {
     };
 
     using TEvProposeTransactionAttach = TEvDataShard::TEvProposeTransactionAttach;
+    using TEvProposeTransactionAttachResult = TEvDataShard::TEvProposeTransactionAttachResult;
 
     struct TEvReadingPartitionFinishedRequest : public TEventPB<TEvReadingPartitionFinishedRequest, NKikimrPQ::TEvReadingPartitionFinishedRequest, EvReadingPartitionFinished> {
         TEvReadingPartitionFinishedRequest() = default;
@@ -292,5 +276,38 @@ namespace TEvPersQueue {
         }
     };
 
+    struct TEvOffloadStatus : TEventPB<TEvOffloadStatus, NKikimrPQ::TEvOffloadStatus, EvOffloadStatus> {};
+
+    struct TEvBalancingSubscribe : TEventPB<TEvBalancingSubscribe, NKikimrPQ::TEvBalancingSubscribe, EvBalancingSubscribe> {
+        TEvBalancingSubscribe() = default;
+
+        TEvBalancingSubscribe(TActorId client, const TString& topic, const TString& consumer) {
+            ActorIdToProto(client, Record.MutableSourceActor());
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+    };
+
+    struct TEvBalancingUnsubscribe : TEventPB<TEvBalancingUnsubscribe, NKikimrPQ::TEvBalancingUnsubscribe, EvBalancingUnsubscribe> {
+        TEvBalancingUnsubscribe() = default;
+
+        TEvBalancingUnsubscribe(TActorId client, const TString& topic, const TString& consumer) {
+            ActorIdToProto(client, Record.MutableSourceActor());
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+        }
+    };
+
+    struct TEvBalancingSubscribeNotify : TEventPB<TEvBalancingSubscribeNotify, NKikimrPQ::TEvBalancingSubscribeNotify, EvBalancingSubscribeNotify> {
+        TEvBalancingSubscribeNotify() = default;
+
+        TEvBalancingSubscribeNotify(ui64 generation, ui64 cookie, const TString& topic, const TString& consumer, const NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status) {
+            Record.SetGeneration(generation);
+            Record.SetCookie(cookie);
+            Record.SetTopic(topic);
+            Record.SetConsumer(consumer);
+            Record.SetStatus(status);
+        }
+    };
 };
 } //NKikimr

@@ -63,6 +63,11 @@ enum EColumnCache {
     ColumnCacheEver = 2;
 }
 
+enum EColumnCacheMode {
+    ColumnCacheModeRegular = 0;
+    ColumnCacheModeTryKeepInMemory = 1;
+}
+
 enum EColumnStorage {
     ColumnStorage1 = 0;
     ColumnStorage2 = 1;
@@ -136,6 +141,7 @@ message TFamilyDescription {
     optional EColumnStorage Storage = 8; // DEPRECATED: use StorageConfig
     optional TStorageConfig StorageConfig = 9;
     optional int32 ColumnCodecLevel = 10;
+    optional EColumnCacheMode ColumnCacheMode = 11;
 }
 
 message TFastSplitSettings {
@@ -330,6 +336,7 @@ message TTableDescription {
         TTableIncrementalBackupConfig IncrementalBackupConfig = 43;
     }
 
+    // For kqp internal use only
     optional bool Temporary = 41;
 
     // This flag is create-only, and has to be set up
@@ -337,6 +344,8 @@ message TTableDescription {
     // It won't be present on describes and won't be preserved
     optional bool SystemColumnNamesAllowed = 42;
     optional bool AllowUnderSameOperation = 44 [default = false];
+    // Create only as-well. Used for CopyTable to create table in desired state instead of default
+    optional EPathState PathState = 46;
 }
 
 message TDictionaryEncodingSettings {
@@ -573,6 +582,8 @@ message TCompactionSelectorConstructorContainer {
 
 message TCompactionPlannerConstructorContainer {
     optional string ClassName = 1;
+    optional uint64 NodePortionsCountLimit = 2;
+    optional double WeightKff = 3 [default = 1.0];
 
     message TLOptimizer {
 
@@ -588,10 +599,15 @@ message TCompactionPlannerConstructorContainer {
         repeated TCompactionSelectorConstructorContainer Selectors = 2;
     }
 
+    message TTilingOptimizer {
+        optional string Json = 1;
+    }
+
     oneof Implementation {
         TLOptimizer LBuckets = 20;
         TSOptimizer SBuckets = 21;
         TLCOptimizer LCBuckets = 22;
+        TTilingOptimizer Tiling = 23;
     }
 }
 
@@ -906,6 +922,9 @@ message TColumnTableDescription {
 
     // Channels for standalone column table
     optional TColumnStorageConfig StorageConfig = 13;
+
+    // For kqp internal use only
+    optional bool Temporary = 14;
 }
 
 message TAlterColumnTable {
@@ -1025,6 +1044,7 @@ message TCdcStreamDescription {
     // Set to '0' to disable resolved timestamps
     optional uint64 ResolvedTimestampsIntervalMs = 10;
     optional TCdcStreamScanProgress ScanProgress = 11;
+    optional bool SchemaChanges = 12;
 }
 
 message TCreateCdcStream {
@@ -1057,10 +1077,17 @@ message TAlterCdcStream {
 
 message TDropCdcStream {
     optional string TableName = 1;
-    optional string StreamName = 2;
+    repeated string StreamName = 2;
+}
+
+message TRotateCdcStream {
+    optional string TableName = 1;
+    optional string OldStreamName = 2;
+    optional TCreateCdcStream NewStream = 3;
 }
 
 message TContinuousBackupDescription {
+    optional string StreamName = 1;
 }
 
 message TCreateContinuousBackup {
@@ -1076,6 +1103,7 @@ message TAlterContinuousBackup {
 
     message TTakeIncrementalBackup {
         optional string DstPath = 1;
+        optional string DstStreamPath = 2;
     }
 
     oneof Action {
@@ -1104,12 +1132,33 @@ message TRestoreMultipleIncrementalBackups {
     optional NKikimrProto.TPathID DstPathId = 4;
 }
 
+message TIncrementalRestoreFinalize {
+    optional uint64 OriginalOperationId = 1;
+    optional uint64 BackupCollectionPathId = 2;
+    repeated string TargetTablePaths = 3;
+    repeated string BackupTablePaths = 4;
+}
+
+message TIncrementalRestoreOperationId {
+    optional uint64 TxId = 1;
+    optional uint32 SubTxId = 2;
+}
+
+message TIncrementalRestoreOperationsList {
+    repeated TIncrementalRestoreOperationId Operations = 1;
+}
+
+message TCreateLongIncrementalBackupOp {
+    repeated NKikimrProto.TPathID StreamPathIds = 1;
+}
+
 enum EIndexType {
     EIndexTypeInvalid = 0;
     EIndexTypeGlobal = 1;
     EIndexTypeGlobalAsync = 2;
     EIndexTypeGlobalUnique = 3;
     EIndexTypeGlobalVectorKmeansTree = 4;
+    EIndexTypeGlobalFulltext = 5;
 }
 
 enum EIndexState {
@@ -1121,6 +1170,10 @@ enum EIndexState {
 
 message TVectorIndexKmeansTreeDescription {
     optional Ydb.Table.KMeansTreeSettings Settings = 1;
+}
+
+message TFulltextIndexDescription {
+    optional Ydb.Table.FulltextIndexSettings Settings = 1;
 }
 
 message TIndexDescription {
@@ -1144,6 +1197,7 @@ message TIndexDescription {
 
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 11;
+        TFulltextIndexDescription FulltextIndexDescription = 12;
     }
 }
 
@@ -1156,12 +1210,14 @@ message TIndexCreationConfig {
     repeated string DataColumnNames = 6; //columns to be denormalized to read data just from index
     oneof SpecializedIndexDescription {
         TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 7;
+        TFulltextIndexDescription FulltextIndexDescription = 8;
     }
 }
 
 message TGenericTxInFlyExtraData {
     message TTxCopyTableExtraData {
         optional NKikimrProto.TPathID CdcPathId = 1;
+        optional NKikimrSchemeOp.EPathState TargetPathTargetState = 2;
     }
 
     // we do not use oneof here as far as we want to combine some subops rarely
@@ -1221,6 +1277,8 @@ message TCopyTableConfig { //TTableDescription implemets copying a table in orig
     // additionally creates cdc stream on src table consistently with taking snapshot
     optional TCreateCdcStream CreateSrcCdcStream = 6;
     optional bool AllowUnderSameOperation = 7 [default = false];
+
+    optional NKikimrSchemeOp.EPathState TargetPathTargetState = 8;
 }
 
 message TConsistentTableCopyingConfig {
@@ -1393,14 +1451,24 @@ message TPersQueueGroupDescription {
     message TPartitionSplit {
         required uint32 Partition = 1;
         required bytes SplitBoundary = 2;
+        repeated uint32 ChildPartitionIds = 3; // use the prescribed ids instead of auto generating new ones
+        optional bool CreateRootLevelSibling = 4; // create a new child partition at the root level if its sibling already exists
     }
     repeated TPartitionSplit Split = 15;
 
     message TPartitionMerge {
         required uint32 Partition = 1;
         required uint32 AdjacentPartition = 2;
+        optional uint32 ChildPartitionId = 3; // use the prescribed id instead of auto generating new one
     }
     repeated TPartitionMerge Merge = 16;
+
+    message TPartitionBoundary {
+        required uint32 Partition = 1;
+        optional NKikimrPQ.TPartitionKeyRange KeyRange = 2;
+        optional bool CreatePartition = 3;
+    }
+    repeated TPartitionBoundary RootPartitionBoundaries = 17;
 }
 
 message TRtmrVolumeDescription {
@@ -1578,6 +1646,7 @@ message TReplicationDescription {
         optional string TransformLambda = 1;
         optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
         optional uint64 BatchSizeBytes = 3 [default = 8388608];
+        optional string DirectoryPath = 4;
     }
 
     optional TAlterTransfer AlterTransfer = 10;
@@ -1679,6 +1748,51 @@ message TAlterShards {
     }
 }
 
+message TDropColumnBuild {
+    optional NKikimrIndexBuilder.TColumnBuildSettings Settings = 1;
+    optional uint64 SnapshotTxId = 2;
+    optional uint64 BuildIndexId = 3;
+}
+
+// Begin Set Column Constraints
+
+message TSetColumnConstraintSettings {
+    enum EConstraint {
+        NOT_NULL = 1;
+    }
+
+    optional string ColumnName = 1;
+    optional EConstraint Constraint = 2;
+}
+
+message TSetColumnConstraintsInitiate {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsLock {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsCheck {
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+}
+
+message TSetColumnConstraintsFinalize {
+    enum EStatus {
+        SUCCESS = 0;
+        COLUMN_CONSTRAINT_VIOLATION = 1;
+    }
+
+    optional string TableName = 1;
+    repeated TSetColumnConstraintSettings ConstraintSettings = 2;
+    optional EStatus Status = 3;
+}
+
+// End Set Column Constraints
+
 // Request for scheme modification
 // Has only one of the operations
 message TModifyScheme {
@@ -1686,6 +1800,7 @@ message TModifyScheme {
     optional EOperationType OperationType = 2;
     optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
+    optional bool ReplaceIfExists = 91 [default = false];
     optional bool AllowAccessToPrivatePaths = 53 [default = false];
 
     optional TMkDir MkDir = 3;
@@ -1732,6 +1847,7 @@ message TModifyScheme {
     optional TCreateCdcStream CreateCdcStream = 45;
     optional TAlterCdcStream AlterCdcStream = 46;
     optional TDropCdcStream DropCdcStream = 47;
+    optional TRotateCdcStream RotateCdcStream = 83;
     optional TMove MoveTable = 48;
     optional TMove MoveTableIndex = 49;
     optional TSequenceDescription Sequence = 51;
@@ -1750,6 +1866,7 @@ message TModifyScheme {
     optional TDropBlockStoreVolume DropBlockStoreVolume = 60;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings InitiateColumnBuild = 61;
+    optional TDropColumnBuild DropColumnBuild = 86;
 
     optional bool SuccessOnNotExist = 62;
 
@@ -1786,6 +1903,20 @@ message TModifyScheme {
 
     optional TSysViewDescription CreateSysView = 81;
 
+    optional TChangePathState ChangePathState = 82;
+
+    optional TIncrementalRestoreFinalize IncrementalRestoreFinalize = 84;
+
+    optional TCreateLongIncrementalBackupOp CreateLongIncrementalBackupOp = 85;
+
+    optional TSetColumnConstraintsInitiate SetColumnConstraintsInitiate = 87;
+
+    // Secret
+    optional TSecretSchemaOp CreateSecret = 88;
+    optional TSecretSchemaOp AlterSecret = 89;
+
+    optional TStreamingQueryDescription CreateStreamingQuery = 90;
+
     // Some entries are grouped by semantics, so are out of order
 }
 
@@ -1810,6 +1941,7 @@ message TDescribeOptions {
     optional bool ReturnRangeKey = 9 [default = true];
     optional bool ReturnSetVal = 10 [default = false];
     optional bool ReturnIndexTableBoundaries = 11 [default = false];
+    optional bool ReturnSecretValue = 12 [default = false];
 }
 
 // Request to read scheme for a specific path
@@ -1855,6 +1987,8 @@ enum EPathType {
     EPathTypeBackupCollection = 22;
     EPathTypeTransfer = 23;
     EPathTypeSysView = 24;
+    EPathTypeSecret = 25;
+    EPathTypeStreamingQuery = 26;
 }
 
 enum EPathSubType {
@@ -1863,6 +1997,7 @@ enum EPathSubType {
     EPathSubTypeAsyncIndexImplTable = 2;
     EPathSubTypeStreamImpl = 3;
     EPathSubTypeVectorKmeansTreeIndexImplTable = 4;
+    EPathSubTypeFulltextIndexImplTable = 5;
 }
 
 enum EPathState {
@@ -1878,6 +2013,8 @@ enum EPathState {
     EPathStateRestore = 10;
     EPathStateMoving = 11;
     EPathStateOutgoingIncrementalRestore = 12;
+    EPathStateAwaitingOutgoingIncrementalRestore = 13;
+    EPathStateIncomingIncrementalRestore = 14;
 }
 
 message TPathVersion {
@@ -1913,6 +2050,8 @@ message TPathVersion {
     optional uint64 ResourcePoolVersion = 30;
     optional uint64 BackupCollectionVersion = 31;
     optional uint64 SysViewVersion = 32;
+    optional uint64 SecretVersion = 33;
+    optional uint64 StreamingQueryVersion = 34;
 }
 
 // Describes single path
@@ -1934,7 +2073,7 @@ message TDirEntry {
     optional TPathVersion Version = 15;
     optional bool ChildrenExist = 16;
 
-    optional uint64 BalancerTabletID = 999; //temporary optimization for old PQ read/write protocol. Must be removed later
+    reserved 999;
 }
 
 // Describes single partition (range or point) of a table
@@ -2005,6 +2144,8 @@ message TPathDescription {
     optional TResourcePoolDescription ResourcePoolDescription = 30;
     optional TBackupCollectionDescription BackupCollectionDescription = 31;
     optional TSysViewDescription SysViewDescription = 32;
+    optional TSecretDescription SecretDescription = 33;
+    optional TStreamingQueryDescription StreamingQueryDescription = 34;
 }
 
 // For persisting AlterTable Tx description in Schemeshard internal DB
@@ -2221,4 +2362,41 @@ message TExportMetadata {
 message TSysViewDescription {
     optional string Name = 1;
     optional NKikimrSysView.ESysViewType Type = 2;
+    optional NKikimrProto.TPathID SourceObject = 3;
+}
+
+message TLongIncrementalRestoreOp {
+    optional uint64 TxId = 1;
+    optional NKikimrProto.TPathID BackupCollectionPathId = 2;
+    optional string Id = 3;
+    repeated string TablePathList = 4;
+    optional string FullBackupTrimmedName = 5;
+    repeated string IncrementalBackupTrimmedNames = 6;
+    repeated uint64 InvolvedShards = 7;
+}
+
+message TChangePathState {
+    optional string Path = 1;
+    optional EPathState TargetState = 2;
+}
+
+message TSecretDescription {
+    optional string Name = 1;
+    optional string Value = 2; // original, unencrypted value
+    optional uint64 Version = 3;
+}
+
+message TSecretSchemaOp {
+    optional string Name = 1;
+    optional string Value = 2; // original, unencrypted value
+    optional bool InheritPermissions = 3;
+}
+
+message TStreamingQueryProperties {
+    map<string, string> Properties = 1;
+}
+
+message TStreamingQueryDescription {
+    optional string Name = 1;
+    optional TStreamingQueryProperties Properties = 2;
 }

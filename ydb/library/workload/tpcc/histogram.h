@@ -15,6 +15,7 @@ public:
 
     void RecordValue(uint64_t value);
     void Add(const THistogram& other);
+    void Sub(const THistogram& other);
     uint64_t GetValueAtPercentile(double percentile) const;
     void Reset();
 
@@ -29,6 +30,7 @@ private:
     uint64_t MaxValue_;
     std::vector<uint64_t> Buckets_;
     uint64_t TotalCount_;
+    uint64_t MaxRecordedValue_;  // Track the maximum recorded value
 };
 
 } // namespace NYdb::NTPCC

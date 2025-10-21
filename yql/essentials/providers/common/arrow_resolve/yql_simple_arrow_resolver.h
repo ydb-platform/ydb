@@ -4,9 +4,9 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-    class IFunctionRegistry;
-}
-}
+class IFunctionRegistry;
+} // namespace NMiniKQL
+} // namespace NKikimr
 
 namespace NYql {
 

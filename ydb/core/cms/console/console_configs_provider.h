@@ -196,6 +196,7 @@ private:
                       const TActorContext &ctx);
 
     void ProcessScheduledUpdates(const TActorContext &ctx);
+    void RemoveSubscription(const TActorId& subscriber);
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev);
     void Handle(TEvConsole::TEvConfigSubscriptionRequest::TPtr &ev, const TActorContext &ctx);
@@ -258,14 +259,21 @@ private:
     }
 
     struct TCounters {
+        using TDynamicCounterPtr = ::NMonitoring::TDynamicCounterPtr;
         using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
+        TDynamicCounterPtr Counters;
         TCounterPtr ScheduledConfigUpdates;
         TCounterPtr InflightConfigUpdates;
 
-        explicit TCounters(::NMonitoring::TDynamicCounterPtr counters)
-            : ScheduledConfigUpdates(counters->GetCounter("ScheduledConfigUpdates", false))
+        explicit TCounters(TDynamicCounterPtr counters)
+            : Counters(counters)
+            , ScheduledConfigUpdates(counters->GetCounter("ScheduledConfigUpdates", false))
             , InflightConfigUpdates(counters->GetCounter("InflightConfigUpdates", false))
         {
+        }
+
+        ~TCounters() {
+            Counters->ResetCounters();
         }
     };
 

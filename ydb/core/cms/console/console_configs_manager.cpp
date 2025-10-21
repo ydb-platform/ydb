@@ -17,6 +17,8 @@
 #include <util/random/random.h>
 #include <util/string/split.h>
 
+#include "console_configuration_info_collector.h"
+
 namespace NKikimr::NConsole {
 
 void TConfigsManager::ClearState()
@@ -76,8 +78,6 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
             auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            auto resolved = NYamlConfig::ResolveAll(tree);
-
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
                     << " expected " << ClusterName
@@ -93,17 +93,19 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
             std::vector<TString> errors;
-            for (auto& [_, config] : resolved.Configs) {
-                auto cfg = NYamlConfig::YamlToProto(
-                    config.second,
-                    true,
-                    true,
-                    unknownFieldsCollector);
-                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                if (result == NKikimr::NConfig::EValidationResult::Error) {
-                    ythrow yexception() << errors.front();
-                }
-            }
+            NYamlConfig::ResolveUniqueDocs(
+                tree,
+                [&](NYamlConfig::TDocumentConfig&& config) {
+                    auto cfg = NYamlConfig::YamlToProto(
+                        config.second,
+                        true,
+                        true,
+                        unknownFieldsCollector);
+                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
+                });
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 
@@ -175,25 +177,25 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            auto resolved = NYamlConfig::ResolveAll(tree);
-
             errors.clear();
 
             auto* csk = AppData()->ConfigSwissKnife;
 
-            for (auto& [_, config] : resolved.Configs) {
-                auto cfg = NYamlConfig::YamlToProto(
-                    config.second,
-                    true,
-                    true,
-                    unknownFieldsCollector);
-                if (csk) {
-                    auto result = csk->ValidateConfig(cfg, errors);
-                    if (result == NYamlConfig::EValidationResult::Error) {
-                        ythrow yexception() << errors.front();
+            NYamlConfig::ResolveUniqueDocs(
+                tree,
+                [&](NYamlConfig::TDocumentConfig&& config) {
+                    auto cfg = NYamlConfig::YamlToProto(
+                        config.second,
+                        true,
+                        true,
+                        unknownFieldsCollector);
+                    if (csk) {
+                        auto result = csk->ValidateConfig(cfg, errors);
+                        if (result == NYamlConfig::EValidationResult::Error) {
+                            ythrow yexception() << errors.front();
+                        }
                     }
-                }
-            }
+                });
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 
@@ -809,10 +811,11 @@ void TConfigsManager::Handle(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, 
                 TxProcessor->ProcessTx(CreateTxReplaceDatabaseYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TError& error) {
+                NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
                 AuditLogReplaceConfigTransaction(
                     /* peer = */ ev->Get()->Record.GetPeerName(),
-                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
-                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
+                    /* userSID = */ token.GetUserSID(),
+                    /* sanitizedToken = */ token.GetSanitizedToken(),
                     /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
@@ -838,10 +841,11 @@ void TConfigsManager::Handle(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, cons
                 TxProcessor->ProcessTx(CreateTxSetDatabaseYamlConfig(ev), ctx);
             },
             [&](const NYamlConfig::TError& error) {
+                NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
                 AuditLogReplaceConfigTransaction(
                     /* peer = */ ev->Get()->Record.GetPeerName(),
-                    /* userSID = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetUserSID(),
-                    /* sanitizedToken = */ NACLib::TUserToken(ev->Get()->Record.GetUserToken()).GetSanitizedToken(),
+                    /* userSID = */ token.GetUserSID(),
+                    /* sanitizedToken = */ token.GetSanitizedToken(),
                     /* oldConfig = */ MainYamlConfig,
                     /* newConfig = */ ev->Get()->Record.GetRequest().config(),
                     /* reason = */ error.Error,
@@ -891,6 +895,11 @@ void TConfigsManager::Handle(TEvConsole::TEvGetNodeLabelsRequest::TPtr &ev, cons
 void TConfigsManager::Handle(TEvConsole::TEvFetchStartupConfigRequest::TPtr &ev, const TActorContext &ctx)
 {
     ctx.Send(ev->Forward(MakeConfigsDispatcherID(SelfId().NodeId())));
+}
+
+void TConfigsManager::Handle(TEvConsole::TEvGetConfigurationVersionRequest::TPtr &ev, const TActorContext &ctx)
+{
+    ctx.Register(CreateConfigurationInfoCollector(ev->Sender, ev->Get()->Record.GetRequest().list_nodes()));
 }
 
 void TConfigsManager::Handle(TEvConsole::TEvGetAllMetadataRequest::TPtr &ev, const TActorContext &ctx)
@@ -1212,10 +1221,11 @@ void TConfigsManager::ScheduleLogCleanup(const TActorContext &ctx)
 }
 
 void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest::TPtr &ev, const TActorContext &) {
+    NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
-        /* userSID = */ ev->Get()->Record.GetUserToken(),
-        /* sanitizedToken = */ TString(),
+        /* userSID = */ token.GetUserSID(),
+        /* sanitizedToken = */ token.GetSanitizedToken(),
         /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",
@@ -1223,10 +1233,11 @@ void TConfigsManager::HandleUnauthorized(TEvConsole::TEvReplaceYamlConfigRequest
 }
 
 void TConfigsManager::HandleUnauthorized(TEvConsole::TEvSetYamlConfigRequest::TPtr &ev, const TActorContext &) {
+    NACLib::TUserToken token(ev->Get()->Record.GetUserToken());
     AuditLogReplaceConfigTransaction(
         /* peer = */ ev->Get()->Record.GetPeerName(),
-        /* userSID = */ ev->Get()->Record.GetUserToken(),
-        /* sanitizedToken = */ TString(),
+        /* userSID = */ token.GetUserSID(),
+        /* sanitizedToken = */ token.GetSanitizedToken(),
         /* oldConfig = */ MainYamlConfig,
         /* newConfig = */ ev->Get()->Record.GetRequest().config(),
         /* reason = */ "Unauthorized.",

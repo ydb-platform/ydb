@@ -1203,6 +1203,9 @@ private:
         if (info.IsDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
             info.Attrs["enable_dynamic_store_read"] = "true";
         }
+        if (!attrs.AsMap().contains("schema") || !attrs["schema"].Attributes().AsMap().contains("strict") || !NYT::GetBool(attrs["schema"].Attributes()["strict"])) {
+            info.Attrs["native_strict_schema"] = "false";
+        }
 
         NYT::TNode schemaAttrs;
         if (req.ForceInferSchema() && req.InferSchemaRows() > 0) {
@@ -1610,13 +1613,18 @@ private:
         return res;
     }
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) const override {
         return TClusterConnectionResult();
     }
 
     TMaybe<TString> GetTableFilePath(const TGetTableFilePathOptions&& options) override {
         return Services_->GetTablePath(options.Cluster(), options.Path(), options.IsTemp());
     }
+
+    NThreading::TFuture<IYtGateway::TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&&) override {
+        return MakeFuture<IYtGateway::TLayersSnapshotResult>();
+    }
+
 
 private:
     TYtFileServices::TPtr Services_;

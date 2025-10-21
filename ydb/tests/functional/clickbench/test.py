@@ -127,10 +127,9 @@ def save_canonical_data(data, fname):
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
-@pytest.mark.parametrize("executer", ["scan", "generic"])
-def test_run_benchmark(store, executer):
+def test_run_benchmark(store):
     path = "clickbench/benchmark/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime-types=dt32"])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
@@ -143,14 +142,14 @@ def test_run_benchmark(store, executer):
 
     # just validating that benchmark can be executed successfully on this data.
     out_fpath = os.path.join(yatest.common.output_path(), 'click_bench.{}.results'.format(store))
-    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath, "--executer", executer])
+    ret = run_cli(["workload", "clickbench", "--path", path, "run", "--output", out_fpath])
     assert_that(ret.exit_code, is_(0))
 
 
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_determentistic(store):
     path = "clickbench/determentistic/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime-types=dt32"])
     assert_that(ret.exit_code, is_(0))
     ret = run_cli(
         [
@@ -180,7 +179,7 @@ def test_run_determentistic(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_plans(store):
     ret = run_cli(
-        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime"]
+        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime-types=dt32"]
     )
     assert_that(ret.exit_code, is_(0))
 

@@ -44,7 +44,7 @@ void FormatProgressWithProjection(
     builder->AppendChar('[');
 
     if (it != segments.begin()) {
-        builder->AppendFormat("<%v, %x>", segments[0].LowerKey, segments[0].Timestamp);
+        builder->AppendFormat("<%v, %v>", segments[0].LowerKey, segments[0].Timestamp);
         if (it != std::next(segments.begin())) {
             builder->AppendString(", ...");
         }
@@ -52,7 +52,7 @@ void FormatProgressWithProjection(
     }
 
     for (; it != segments.end() && it->LowerKey <= replicationProgressProjection.To; ++it) {
-        builder->AppendFormat("%v<%v, %x>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
+        builder->AppendFormat("%v<%v, %v>", comma ? ", " : "", it->LowerKey,  it->Timestamp);
         comma = true;
     }
 
@@ -119,6 +119,15 @@ bool TReplicationCardFetchOptions::Contains(const TReplicationCardFetchOptions& 
     return (selfMask | NDetail::ToBitMask(other)) == selfMask;
 }
 
+TReplicationCardFetchOptions& TReplicationCardFetchOptions::operator |= (const TReplicationCardFetchOptions& other)
+{
+    IncludeCoordinators |= other.IncludeCoordinators;
+    IncludeProgress |= other.IncludeProgress;
+    IncludeHistory |= other.IncludeHistory;
+    IncludeReplicatedTableOptions |= other.IncludeReplicatedTableOptions;
+    return *this;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 void FormatValue(
@@ -131,7 +140,7 @@ void FormatValue(
     const auto& segments = replicationProgress.Segments;
     if (!replicationProgressProjection) {
         builder->AppendFormat("%v", MakeFormattableView(segments, [] (auto* builder, const auto& segment) {
-            builder->AppendFormat("<%v, %x>", segment.LowerKey, segment.Timestamp);
+            builder->AppendFormat("<%v, %v>", segment.LowerKey, segment.Timestamp);
         }));
     } else  {
         NDetail::FormatProgressWithProjection(builder, replicationProgress, *replicationProgressProjection);
@@ -178,9 +187,12 @@ void FormatValue(
         replicationCard.Era,
         MakeFormattableView(
             replicationCard.Replicas,
-            [&] (TStringBuilderBase* builder, std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo> replica) {
+            [&] (
+                TStringBuilderBase* builder,
+                const std::pair<const NYT::TGuid, NYT::NChaosClient::TReplicaInfo>& replica)
+            {
                 FormatValue(builder, replica.first, TStringBuf());
-                builder->AppendString(": ");
+                builder->AppendString(": "sv);
                 FormatValue(builder, replica.second, TStringBuf(), replicationProgressProjection);
             }),
         replicationCard.CoordinatorCellIds,
@@ -595,6 +607,23 @@ TTimestamp GetReplicationProgressTimestampForKeyOrThrow(
     return *timestamp;
 }
 
+NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
+    const TReplicationCard& replicationCard,
+    NTableClient::TLegacyKey lower,
+    NTableClient::TLegacyKey upper)
+{
+    auto replicationTimestamp = MaxTimestamp;
+    for (const auto& [_, replica] : replicationCard.Replicas) {
+        auto minTimestamp = GetReplicationProgressMinTimestamp(
+            replica.ReplicationProgress,
+            lower,
+            upper);
+        replicationTimestamp = std::min(replicationTimestamp, minTimestamp);
+    }
+
+    return replicationTimestamp;
+}
+
 TTimestamp GetReplicationProgressMinTimestamp(
     const TReplicationProgress& progress,
     TLegacyKey lower,
@@ -723,6 +752,7 @@ TReplicationProgress BuildMaxProgress(
     }
 
     TReplicationProgress result;
+    result.Segments.reserve(progress.Segments.size() + other.Segments.size());
 
     auto progressIt = progress.Segments.begin();
     auto otherIt = other.Segments.begin();

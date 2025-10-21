@@ -55,7 +55,7 @@ def recursive_glob(root, begin_template=None, end_template=None):
             yield os.path.relpath(path, root)
 
 
-def pytest_generate_tests_by_template(template, metafunc, data_path):
+def collect_argvalues_by_template(template, data_path):
     assert data_path is not None
 
     argvalues = []
@@ -66,10 +66,25 @@ def pytest_generate_tests_by_template(template, metafunc, data_path):
                             for sql_query_path in recursive_glob(os.path.join(data_path, suite), end_template=template)]):
             argvalues.append((suite, case))
 
+    return argvalues
+
+
+def pytest_generate_tests_by_template(template, metafunc, data_path):
+    if isinstance(template, str):
+        template = [template]
+
+    argvalues = []
+    for t in template:
+        argvalues += collect_argvalues_by_template(t, data_path)
+
     metafunc.parametrize(['suite', 'case'], argvalues)
 
 
-def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
+def pytest_generate_sql_tests(metafunc, data_path, template=['.sql', '.yql']):
+    pytest_generate_tests_by_template(template, metafunc, data_path)
+
+
+def collect_argvalues_for_run(template, suites, currentPart, partsCount, data_path, mode_expander):
     assert data_path is not None
     argvalues = []
 
@@ -104,13 +119,24 @@ def pytest_generate_tests_for_run(metafunc, template='.sql', suites=None, curren
             else:
                 argvalues += mode_expander(to_append)
 
+    return argvalues
+
+
+def pytest_generate_tests_for_run(metafunc, template=['.sql', '.yql'], suites=None, currentPart=0, partsCount=1, data_path=None, mode_expander=None):
+    if isinstance(template, str):
+        template = [template]
+
+    argvalues = []
+    for t in template:
+        argvalues += collect_argvalues_for_run(t, suites, currentPart, partsCount, data_path, mode_expander)
+
     metafunc.parametrize(
         ['suite', 'case', 'cfg'] + (['what'] if mode_expander is not None else []),
         argvalues,
     )
 
 
-def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template='.sql', mode_expander=None):
+def pytest_generate_tests_for_part(metafunc, currentPart, partsCount, data_path=None, template=['.sql', '.yql'], mode_expander=None):
     return pytest_generate_tests_for_run(metafunc, currentPart=currentPart, partsCount=partsCount,
                                          data_path=data_path, template=template, mode_expander=mode_expander)
 
@@ -136,6 +162,7 @@ def validate_cfg(result):
             "canonize_lineage",
             "peephole_use_blocks",
             "with_final_result_issues",
+            "xsqlfail",
             "xfail",
             "pragma",
             "canonize_yt",
@@ -153,7 +180,7 @@ def get_config(suite, case, cfg, data_path):
     result = []
     try:
         default_cfg = get_cfg_file('default.txt', case)
-        inherit = ['canonize_peephole', 'canonize_lineage', 'peephole_use_blocks']
+        inherit = ['canonize_peephole', 'canonize_lineage', 'peephole_use_blocks', 'langver']
         with open(os.path.join(data_path, suite, default_cfg)) as cfg_file_content:
             result = [line.strip().split() for line in cfg_file_content.readlines() if line.strip() and line.strip().split()[0]]
         validate_cfg(result)
@@ -285,3 +312,14 @@ def replace_vars(sql_query, var_tag):
     for var_name, var_value in vars:
         sql_query = re.sub(re.escape(var_name.strip()), var_value.strip(), sql_query)
     return sql_query
+
+
+def get_case_file(data, suite, case, exts=['.sql', '.yql']):
+    if isinstance(exts, str):
+        exts = [exts]
+
+    files = [os.path.join(data, suite, '%s%s' % (case, ext)) for ext in exts]
+    files = [file for file in files if os.path.exists(file)]
+    assert len(files) != 0, 'No file for %s/%s found' % (suite, case)
+    assert len(files) == 1, 'Ambiguous files for %s/%s: %s' % (suite, case, exts)
+    return files[0]

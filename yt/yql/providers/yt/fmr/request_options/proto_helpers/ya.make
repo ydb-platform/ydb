@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    yt/cpp/mapreduce/common
     yt/yql/providers/yt/fmr/proto
 )
 

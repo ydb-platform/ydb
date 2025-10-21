@@ -398,6 +398,7 @@ class OTTableWriter(object):
         self.localState = localState
         self.tableTag = tableTag
         self.parent = None
+        self.name = "<none>"
 
     def __setitem__(self, name, value):
         state = self.localState.copy() if self.localState else dict()
@@ -499,8 +500,7 @@ class OTTableWriter(object):
             internedTables = {}
 
         items = self.items
-        for i in range(len(items)):
-            item = items[i]
+        for i, item in enumerate(items):
             if hasattr(item, "getCountData"):
                 items[i] = item.getCountData()
             elif hasattr(item, "subWriter"):
@@ -1129,8 +1129,7 @@ class BaseTable(object):
         for conv in self.getConverters():
             if conv.repeat:
                 value = getattr(self, conv.name, [])
-                for i in range(len(value)):
-                    item = value[i]
+                for i, item in enumerate(value):
                     conv.xmlWrite(xmlWriter, font, item, conv.name, [("index", i)])
             else:
                 if conv.aux and not eval(conv.aux, None, vars(self)):

@@ -1,13 +1,18 @@
 import abc
 import enum
+import json
 import logging
 import threading
 from typing import (
     Iterable,
     Optional,
+    Dict,
+    Any,
+    Union,
 )
 
 from . import base
+from .base import QueryExplainResultFormat
 
 from .. import _apis, issues, _utilities
 from ..settings import BaseRequestSettings
@@ -18,12 +23,10 @@ from .._grpc.grpcwrapper import ydb_query_public_types as _ydb_query_public
 
 from .transaction import QueryTxContext
 
+from .._constants import DEFAULT_INITIAL_RESPONSE_TIMEOUT, DEFAULT_LONG_STREAM_TIMEOUT
+
 
 logger = logging.getLogger(__name__)
-
-
-DEFAULT_ATTACH_FIRST_RESP_TIMEOUT = 600
-DEFAULT_ATTACH_LONG_TIMEOUT = 31536000  # year
 
 
 class QuerySessionStateEnum(enum.Enum):
@@ -142,9 +145,9 @@ class BaseQuerySession:
         self._state = QuerySessionState(settings)
         self._attach_settings: BaseRequestSettings = (
             BaseRequestSettings()
-            .with_operation_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
-            .with_cancel_after(DEFAULT_ATTACH_LONG_TIMEOUT)
-            .with_timeout(DEFAULT_ATTACH_LONG_TIMEOUT)
+            .with_operation_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_cancel_after(DEFAULT_LONG_STREAM_TIMEOUT)
+            .with_timeout(DEFAULT_LONG_STREAM_TIMEOUT)
         )
 
         self._last_query_stats = None
@@ -233,7 +236,7 @@ class QuerySession(BaseQuerySession):
 
     _stream = None
 
-    def _attach(self, first_resp_timeout: int = DEFAULT_ATTACH_FIRST_RESP_TIMEOUT) -> None:
+    def _attach(self, first_resp_timeout: int = DEFAULT_INITIAL_RESPONSE_TIMEOUT) -> None:
         self._stream = self._attach_call()
         status_stream = _utilities.SyncResponseIterator(
             self._stream,
@@ -373,3 +376,29 @@ class QuerySession(BaseQuerySession):
                 settings=self._settings,
             ),
         )
+
+    def explain(
+        self,
+        query: str,
+        parameters: dict = None,
+        *,
+        result_format: QueryExplainResultFormat = QueryExplainResultFormat.STR,
+    ) -> Union[str, Dict[str, Any]]:
+        """Explains query result
+        :param query: YQL or SQL query.
+        :param parameters: dict with parameters and YDB types;
+        :param result_format: Return format: string or dict.
+        :return: Parsed query plan.
+        """
+
+        res = self.execute(query, parameters, exec_mode=base.QueryExecMode.EXPLAIN)
+
+        # is needs to read result sets for set last_query_stats as sideeffect
+        for _ in res:
+            pass
+
+        plan = self.last_query_stats.query_plan
+        if result_format == QueryExplainResultFormat.DICT:
+            plan = json.loads(plan)
+
+        return plan

@@ -3,6 +3,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_combine.h>
+#include <ydb/library/yql/dq/comp_nodes/dq_hash_aggregate.h>
 
 namespace NYql {
 
@@ -47,7 +49,7 @@ private:
 TComputationNodeFactory GetCommonDqFactory() {
     return [] (TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             TStringBuf name = callable.GetType()->GetName();
-            if (name == "DqNotify") {
+            if (name == "DqNotify"sv) {
                 return new TDqNotify(ctx.Mutables);
             }
 

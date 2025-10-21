@@ -3,8 +3,8 @@
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
-#include <ydb/core/persqueue/partition_scale_manager.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/core/persqueue/pqrb/partition_scale_manager.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_env.h>
 
@@ -32,10 +32,10 @@ Y_UNIT_TEST_SUITE(WithSDK) {
 
     Y_UNIT_TEST(DescribeConsumer) {
         TTopicSdkTestSetup setup = CreateSetup();
-        setup.CreateTopic(std::string{TEST_TOPIC}, std::string{TEST_CONSUMER}, 1);
+        setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
 
         auto describe = [&]() {
-            return setup.DescribeConsumer(TString{TEST_TOPIC}, TString{TEST_CONSUMER});
+            return setup.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER);
         };
 
         auto write = [&](size_t seqNo) {
@@ -89,14 +89,14 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             auto& c = p.GetPartitionConsumerStats();
             UNIT_ASSERT_VALUES_EQUAL(true, c.has_value());
             UNIT_ASSERT_VALUES_EQUAL(0, c->GetCommittedOffset());
-            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); // 
+            UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(7), c->GetMaxWriteTimeLag()); //
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxReadTimeLag());
             UNIT_ASSERT_VALUES_EQUAL(TDuration::Seconds(0), c->GetMaxCommittedTimeLag());
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3)); // why not zero?
             UNIT_ASSERT_VALUES_EQUAL(1, c->GetLastReadOffset());
         }
 
-        UNIT_ASSERT(setup.Commit(TString{TEST_TOPIC}, TEST_CONSUMER, 0, 1).IsSuccess());
+        UNIT_ASSERT(setup.Commit(TEST_TOPIC, TEST_CONSUMER, 0, 1).IsSuccess());
 
         // Check describe for topic whis contains messages, has commited offset but hasn`t read (restart tablet for example)
         {
@@ -131,11 +131,11 @@ Y_UNIT_TEST_SUITE(WithSDK) {
                 if (e) {
                     Cerr << ">>>>> Event = " << e->index() << Endl << Flush;
                 }
-                if (e && std::holds_alternative<TReadSessionEvent::TDataReceivedEvent>(e.value())) {
+                if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(e.value())) {
                     // we must recive only one date event with second message
                     break;
-                } else if (e && std::holds_alternative<TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
-                    std::get<TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
+                } else if (e && std::holds_alternative<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value())) {
+                    std::get<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(e.value()).Confirm();
                 }
                 UNIT_ASSERT_C(endTime > TInstant::Now(), "Unable wait");
             }
@@ -161,6 +161,83 @@ Y_UNIT_TEST_SUITE(WithSDK) {
             UNIT_ASSERT_TIME_EQUAL(TInstant::Now(), c->GetLastReadTime(), TDuration::Seconds(3));
             UNIT_ASSERT_VALUES_EQUAL(2, c->GetLastReadOffset());
         }
+    }
+
+    Y_UNIT_TEST(ReadWithBadTopic) {
+        TTopicSdkTestSetup setup = CreateSetup();
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> topics = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& topic : topics) {
+            Cerr << "Checking topic: '" << topic << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(topic));
+            settings.ConsumerName(TEST_CONSUMER);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
+
+    Y_UNIT_TEST(ReadWithBadConsumer) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        std::vector<std::string> consumers = { "//", "==", "--", "**", "@@", "!!", "##", "$$", "\%\%", "^^", "::", "&&", "??",
+             "\\\\", "||", "++", "--", ",,", "..", "``", "~~", ";;", "::", "((", "))", "[[", "]]", "{{", "}}", ""};
+        for (auto& consumer : consumers) {
+            Cerr << "Checking consumer: '" << consumer << "'" << Endl;
+
+            TReadSessionSettings settings;
+            settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+            settings.ConsumerName(consumer);
+            auto session = client.CreateReadSession(settings);
+            auto event = session->GetEvent(true);
+            // check that verify didn`t happened
+            UNIT_ASSERT(event.has_value());
+        }
+    }
+
+    Y_UNIT_TEST(Read_WithConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.ConsumerName(TEST_CONSUMER);
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
+    }
+
+    Y_UNIT_TEST(Read_WithoutConsumer_WithBadPartitions) {
+        TTopicSdkTestSetup setup = CreateSetup();
+        setup.CreateTopic(TEST_TOPIC);
+
+        TTopicClient client(setup.MakeDriver());
+
+        TReadSessionSettings settings;
+        settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC)
+            .AppendPartitionIds(0)
+            .AppendPartitionIds(101)
+            .AppendPartitionIds(113));
+        settings.WithoutConsumer();
+        auto session = client.CreateReadSession(settings);
+        auto event = session->GetEvent(true);
+        // check that verify didn`t happened
+        UNIT_ASSERT(event.has_value());
     }
 }
 

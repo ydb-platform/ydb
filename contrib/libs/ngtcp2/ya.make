@@ -2,11 +2,13 @@
 
 LIBRARY()
 
-VERSION(1.12.0)
+VERSION(1.15.1)
 
-ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.12.0/ngtcp2-1.12.0.tar.xz)
+ORIGINAL_SOURCE(https://github.com/ngtcp2/ngtcp2/releases/download/v1.15.1/ngtcp2-1.15.1.tar.xz)
 
 LICENSE(
+    "(Apache-2.0 OR MIT)" AND
+    Apache-2.0 AND
     BSD-3-Clause AND
     FSFAP AND
     MIT
@@ -14,16 +16,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-PEERDIR(
-    contrib/libs/openssl
-)
-
 ADDINCL(
     GLOBAL contrib/libs/ngtcp2/lib/includes
     contrib/libs/ngtcp2
-    contrib/libs/ngtcp2/crypto
-    contrib/libs/ngtcp2/crypto/includes
-    contrib/libs/ngtcp2/lib
 )
 
 NO_COMPILER_WARNINGS()
@@ -33,16 +28,16 @@ NO_RUNTIME()
 CFLAGS(
     -DBUILDING_NGTCP2
     -DHAVE_CONFIG_H
+    -DNGTCP2_STATICLIB
 )
 
 SRCS(
-    crypto/quictls/quictls.c
-    crypto/shared.c
     lib/ngtcp2_acktr.c
     lib/ngtcp2_addr.c
     lib/ngtcp2_balloc.c
     lib/ngtcp2_bbr.c
     lib/ngtcp2_buf.c
+    lib/ngtcp2_callbacks.c
     lib/ngtcp2_cc.c
     lib/ngtcp2_cid.c
     lib/ngtcp2_conn.c
@@ -60,6 +55,7 @@ SRCS(
     lib/ngtcp2_objalloc.c
     lib/ngtcp2_opl.c
     lib/ngtcp2_path.c
+    lib/ngtcp2_pcg.c
     lib/ngtcp2_pkt.c
     lib/ngtcp2_pmtud.c
     lib/ngtcp2_ppe.c
@@ -67,6 +63,7 @@ SRCS(
     lib/ngtcp2_pv.c
     lib/ngtcp2_qlog.c
     lib/ngtcp2_range.c
+    lib/ngtcp2_ratelim.c
     lib/ngtcp2_ringbuf.c
     lib/ngtcp2_rob.c
     lib/ngtcp2_rst.c
@@ -82,3 +79,8 @@ SRCS(
 )
 
 END()
+
+RECURSE(
+    crypto/boringssl
+    crypto/quictls
+)

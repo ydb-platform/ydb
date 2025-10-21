@@ -222,8 +222,8 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
             NKikimrBlobStorage::TConfigRequest request;
             auto *cmd = request.AddCommand();
             auto *us = cmd->MutableUpdateSettings();
-            us->SetEnableSelfHeal(true);
-            us->SetEnableGroupLayoutSanitizer(true);
+            us->AddEnableSelfHeal(true);
+            us->AddEnableGroupLayoutSanitizer(true);
             // us->AddAllowMultipleRealmsOccupation(allowMultipleRealmsOccupation);
             auto response = env->Invoke(request);
             UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
@@ -244,7 +244,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
     }
 
     void StressTest(TBlobStorageGroupType groupType, ui32 dcs, ui32 racks, ui32 units) {
+        const TDuration timeLimit = TDuration::Seconds(60);
         const ui32 steps = 100;
+        THPTimer timer;
         std::vector<TNodeLocation> locations;
 
         MakeLocations(locations, dcs, racks, units, LocationGenerator);
@@ -322,6 +324,9 @@ Y_UNIT_TEST_SUITE(GroupLayoutSanitizer) {
         bool groupLayoutSanitizer = false;
 
         for (ui32 i = 0; i < steps; ++i) {
+            if (TDuration::Seconds(timer.Passed()) > timeLimit) {
+                Cerr << "Test terminated prematurely due to timeout, steps processed# " << i << Endl;
+            }
             switch (act.GetRandom()) {
                 case EActions::SHUFFLE_LOCATIONS:
                     shuffleLocations();

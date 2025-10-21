@@ -1,5 +1,5 @@
 from moto.core.responses import BaseResponse
-from .models import codebuild_backends
+from .models import codebuild_backends, CodeBuildBackend
 from .exceptions import (
     InvalidInputException,
     ResourceAlreadyExistsException,
@@ -7,9 +7,10 @@ from .exceptions import (
 )
 import json
 import re
+from typing import Any, Dict, List
 
 
-def _validate_required_params_source(source):
+def _validate_required_params_source(source: Dict[str, Any]) -> None:
     if source["type"] not in [
         "BITBUCKET",
         "CODECOMMIT",
@@ -28,15 +29,14 @@ def _validate_required_params_source(source):
         raise InvalidInputException("Project source location is required")
 
 
-def _validate_required_params_service_role(account_id, service_role):
-    if f"arn:aws:iam::{account_id}:role/service-role/" not in service_role:
+def _validate_required_params_service_role(account_id: str, service_role: str) -> None:
+    if not service_role.startswith(f"arn:aws:iam::{account_id}:role/"):
         raise InvalidInputException(
             "Invalid service role: Service role account ID does not match caller's account"
         )
 
 
-def _validate_required_params_artifacts(artifacts):
-
+def _validate_required_params_artifacts(artifacts: Dict[str, Any]) -> None:
     if artifacts["type"] not in ["CODEPIPELINE", "S3", "NO_ARTIFACTS"]:
         raise InvalidInputException("Invalid type provided: Artifact type")
 
@@ -49,17 +49,14 @@ def _validate_required_params_artifacts(artifacts):
         raise InvalidInputException("Project source location is required")
 
 
-def _validate_required_params_environment(environment):
-
+def _validate_required_params_environment(environment: Dict[str, Any]) -> None:
     if environment["type"] not in [
         "WINDOWS_CONTAINER",
         "LINUX_CONTAINER",
         "LINUX_GPU_CONTAINER",
         "ARM_CONTAINER",
     ]:
-        raise InvalidInputException(
-            "Invalid type provided: {0}".format(environment["type"])
-        )
+        raise InvalidInputException(f"Invalid type provided: {environment['type']}")
 
     if environment["computeType"] not in [
         "BUILD_GENERAL1_SMALL",
@@ -68,11 +65,11 @@ def _validate_required_params_environment(environment):
         "BUILD_GENERAL1_2XLARGE",
     ]:
         raise InvalidInputException(
-            "Invalid compute type provided: {0}".format(environment["computeType"])
+            f"Invalid compute type provided: {environment['computeType']}"
         )
 
 
-def _validate_required_params_project_name(name):
+def _validate_required_params_project_name(name: str) -> None:
     if len(name) >= 150:
         raise InvalidInputException(
             "Only alphanumeric characters, dash, and underscore are supported"
@@ -84,30 +81,29 @@ def _validate_required_params_project_name(name):
         )
 
 
-def _validate_required_params_id(build_id, build_ids):
+def _validate_required_params_id(build_id: str, build_ids: List[str]) -> None:
     if ":" not in build_id:
         raise InvalidInputException("Invalid build ID provided")
 
     if build_id not in build_ids:
-        raise ResourceNotFoundException("Build {0} does not exist".format(build_id))
+        raise ResourceNotFoundException(f"Build {build_id} does not exist")
 
 
 class CodeBuildResponse(BaseResponse):
     @property
-    def codebuild_backend(self):
+    def codebuild_backend(self) -> CodeBuildBackend:
         return codebuild_backends[self.current_account][self.region]
 
-    def list_builds_for_project(self):
+    def list_builds_for_project(self) -> str:
         _validate_required_params_project_name(self._get_param("projectName"))
 
         if (
             self._get_param("projectName")
             not in self.codebuild_backend.codebuild_projects.keys()
         ):
+            name = self._get_param("projectName")
             raise ResourceNotFoundException(
-                "The provided project arn:aws:codebuild:{0}:{1}:project/{2} does not exist".format(
-                    self.region, self.current_account, self._get_param("projectName")
-                )
+                f"The provided project arn:aws:codebuild:{self.region}:{self.current_account}:project/{name} does not exist"
             )
 
         ids = self.codebuild_backend.list_builds_for_project(
@@ -116,20 +112,18 @@ class CodeBuildResponse(BaseResponse):
 
         return json.dumps({"ids": ids})
 
-    def create_project(self):
+    def create_project(self) -> str:
         _validate_required_params_source(self._get_param("source"))
-        _validate_required_params_service_role(
-            self.current_account, self._get_param("serviceRole")
-        )
+        service_role = self._get_param("serviceRole")
+        _validate_required_params_service_role(self.current_account, service_role)
         _validate_required_params_artifacts(self._get_param("artifacts"))
         _validate_required_params_environment(self._get_param("environment"))
         _validate_required_params_project_name(self._get_param("name"))
 
         if self._get_param("name") in self.codebuild_backend.codebuild_projects.keys():
+            name = self._get_param("name")
             raise ResourceAlreadyExistsException(
-                "Project already exists: arn:aws:codebuild:{0}:{1}:project/{2}".format(
-                    self.region, self.current_account, self._get_param("name")
-                )
+                f"Project already exists: arn:aws:codebuild:{self.region}:{self.current_account}:project/{name}"
             )
 
         project_metadata = self.codebuild_backend.create_project(
@@ -137,26 +131,25 @@ class CodeBuildResponse(BaseResponse):
             self._get_param("source"),
             self._get_param("artifacts"),
             self._get_param("environment"),
-            self._get_param("serviceRole"),
+            service_role=service_role,
         )
 
         return json.dumps({"project": project_metadata})
 
-    def list_projects(self):
+    def list_projects(self) -> str:
         project_metadata = self.codebuild_backend.list_projects()
         return json.dumps({"projects": project_metadata})
 
-    def start_build(self):
+    def start_build(self) -> str:
         _validate_required_params_project_name(self._get_param("projectName"))
 
         if (
             self._get_param("projectName")
             not in self.codebuild_backend.codebuild_projects.keys()
         ):
+            name = self._get_param("projectName")
             raise ResourceNotFoundException(
-                "Project cannot be found: arn:aws:codebuild:{0}:{1}:project/{2}".format(
-                    self.region, self.current_account, self._get_param("projectName")
-                )
+                f"Project cannot be found: arn:aws:codebuild:{self.region}:{self.current_account}:project/{name}"
             )
 
         metadata = self.codebuild_backend.start_build(
@@ -166,7 +159,7 @@ class CodeBuildResponse(BaseResponse):
         )
         return json.dumps({"build": metadata})
 
-    def batch_get_builds(self):
+    def batch_get_builds(self) -> str:
         for build_id in self._get_param("ids"):
             if ":" not in build_id:
                 raise InvalidInputException("Invalid build ID provided")
@@ -174,17 +167,17 @@ class CodeBuildResponse(BaseResponse):
         metadata = self.codebuild_backend.batch_get_builds(self._get_param("ids"))
         return json.dumps({"builds": metadata})
 
-    def list_builds(self):
+    def list_builds(self) -> str:
         ids = self.codebuild_backend.list_builds()
         return json.dumps({"ids": ids})
 
-    def delete_project(self):
+    def delete_project(self) -> str:
         _validate_required_params_project_name(self._get_param("name"))
 
         self.codebuild_backend.delete_project(self._get_param("name"))
-        return
+        return "{}"
 
-    def stop_build(self):
+    def stop_build(self) -> str:
         _validate_required_params_id(
             self._get_param("id"), self.codebuild_backend.list_builds()
         )

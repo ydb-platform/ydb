@@ -66,15 +66,18 @@ public:
             TEvResolvedRegistrationRequest(
                     TEvNodeBroker::TEvRegistrationRequest::TPtr request,
                     NActors::TScopeId scopeId,
-                    TSubDomainKey servicedSubDomain)
+                    TSubDomainKey servicedSubDomain,
+                    TString error)
                 : Request(request)
                 , ScopeId(scopeId)
                 , ServicedSubDomain(servicedSubDomain)
+                , Error(std::move(error))
             {}
 
             TEvNodeBroker::TEvRegistrationRequest::TPtr Request;
             NActors::TScopeId ScopeId;
             TSubDomainKey ServicedSubDomain;
+            TString Error;
         };
 
         struct TEvProcessSubscribersQueue : public TEventLocal<TEvProcessSubscribersQueue, EvProcessSubscribersQueue> {};
@@ -298,6 +301,8 @@ private:
     void RemoveSubscriber(TActorId subscriber, const TActorContext &ctx);
     bool HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) const;
 
+    void UpdateCommittedStateCounters();
+
     void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
                 const TActorContext &ctx);
     void Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr &ev,
@@ -350,6 +355,7 @@ private:
     THashMap<TActorId, TPipeServerInfo> PipeServers;
     THashMap<TActorId, TSubscriberInfo> Subscribers;
     TIntrusiveList<TSubscriberInfo> SubscribersQueue; // sorted by version
+    bool ScheduledProcessSubscribersQueue = false;
 
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;

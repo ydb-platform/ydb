@@ -1064,6 +1064,10 @@ void THierarchicalDRRQuoterResourceTree::ReportConsumed(double consumed, TTickPr
         }
         ScheduleNextTick(queue, now);
     }
+
+    if (auto* parent = GetParent()) {
+        parent->ReportConsumed(consumed, queue, now);
+    }
 }
 
 THolder<TQuoterSession> THierarchicalDRRQuoterResourceTree::DoCreateSession(const NActors::TActorId& clientId, ui32 clientVersion) {

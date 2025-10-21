@@ -369,6 +369,9 @@ Interval64 = type_base.make_primitive_type("Interval64")
 TzDate = type_base.make_primitive_type("TzDate", yt_type_name="tz_date")
 TzDatetime = type_base.make_primitive_type("TzDatetime", yt_type_name="tz_datetime")
 TzTimestamp = type_base.make_primitive_type("TzTimestamp", yt_type_name="tz_timestamp")
+TzDate32 = type_base.make_primitive_type("TzDate32", yt_type_name="tz_date32")
+TzDatetime64 = type_base.make_primitive_type("TzDatetime64", yt_type_name="tz_datetime64")
+TzTimestamp64 = type_base.make_primitive_type("TzTimestamp64", yt_type_name="tz_timestamp64")
 
 Void = type_base.make_primitive_type("Void")
 Null = type_base.make_primitive_type("Null")
@@ -422,7 +425,7 @@ def _parse_type(type_description):
 
 
 def _parse_type_v1(type_description, required):
-    if required:
+    if required or type_description in [Null.yt_type_name_v1, Void.yt_type_name_v1]:
         _validate(isinstance(type_description, six.string_types), "\"type_description\" must be a string for v1 type")
         _validate(type_description in PRIMITIVES_V1, "unknown type \"{}\"".format(type_description))
         return PRIMITIVES_V1[type_description]

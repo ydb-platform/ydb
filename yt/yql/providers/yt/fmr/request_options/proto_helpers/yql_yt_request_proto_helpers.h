@@ -13,6 +13,14 @@ NProto::TYtTableRef YtTableRefToProto(const TYtTableRef& ytTableRef);
 
 TYtTableRef YtTableRefFromProto(const NProto::TYtTableRef protoYtTableRef);
 
+NProto::TYtTableTaskRef YtTableTaskRefToProto(const TYtTableTaskRef& ytTableTaskRef);
+
+TYtTableTaskRef YtTableTaskRefFromProto(const NProto::TYtTableTaskRef protoYtTableTaskRef);
+
+NProto::TFmrTableId FmrTableIdToProto(const TFmrTableId& fmrTableId);
+
+TFmrTableId FmrTableIdFromProto(const NProto::TFmrTableId& protoFmrTableId);
+
 NProto::TFmrTableRef FmrTableRefToProto(const TFmrTableRef& fmrTableRef);
 
 TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef);
@@ -33,6 +41,14 @@ NProto::TTableStats TableStatsToProto(const TTableStats& tableStats);
 
 TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats);
 
+NProto::TChunkStats ChunkStatsToProto(const TChunkStats& chunkStats);
+
+TChunkStats ChunkStatsFromProto(const NProto::TChunkStats& protoChunkStats);
+
+NProto::TTableChunkStats TableChunkStatsToProto(const TTableChunkStats& tableChunkStats);
+
+TTableChunkStats TableChunkStatsFromProto(const NProto::TTableChunkStats& protoTableChunkStats);
+
 NProto::TStatistics StatisticsToProto(const TStatistics& stats);
 
 TStatistics StatisticsFromProto(const NProto::TStatistics& protoStats);
@@ -44,6 +60,10 @@ TOperationTableRef OperationTableRefFromProto(const NProto::TOperationTableRef& 
 NProto::TTaskTableRef TaskTableRefToProto(const TTaskTableRef& taskTableRef);
 
 TTaskTableRef TaskTableRefFromProto(const NProto::TTaskTableRef& protoTaskTableRef);
+
+NProto::TTaskTableInputRef TaskTableInputRefToProto(const TTaskTableInputRef& taskTableInputRef);
+
+TTaskTableInputRef TaskTableInputRefFromProto(const NProto::TTaskTableInputRef& protoTaskTableInputRef);
 
 NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperationParams& uploadOperationParams);
 
@@ -68,6 +88,14 @@ TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperatio
 NProto::TMergeTaskParams MergeTaskParamsToProto(const TMergeTaskParams& mergeTaskParams);
 
 TMergeTaskParams MergeTaskParamsFromProto(const NProto::TMergeTaskParams& protoMergeTaskParams);
+
+NProto::TMapOperationParams MapOperationParamsToProto(const TMapOperationParams& mapOperationParams);
+
+TMapOperationParams MapOperationParamsFromProto(const NProto::TMapOperationParams& protoMapOperationParams);
+
+NProto::TMapTaskParams MapTaskParamsToProto(const TMapTaskParams& mapTaskParams);
+
+TMapTaskParams MapTaskParamsFromProto(const NProto::TMapTaskParams& protoMapTaskParams);
 
 NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams);
 

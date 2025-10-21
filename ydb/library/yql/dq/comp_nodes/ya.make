@@ -1,18 +1,19 @@
 LIBRARY()
 
+SRCS()
+
+# TODO: Migrate all dependents to explicit llvm16/no_llvm and remove this peerdir
 PEERDIR(
-    ydb/library/actors/core
-    ydb/library/yql/dq/actors/compute
-    yql/essentials/minikql/computation
-    yql/essentials/utils
+    ydb/library/yql/dq/comp_nodes/llvm16
 )
-
-SRCS(
-    yql_common_dq_factory.cpp
-)
-
-YQL_LAST_ABI_VERSION()
-
 
 END()
 
+RECURSE(
+    llvm16
+    no_llvm
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yt/yql/providers/yt/gateway/lib/exec_ctx.h>
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 #include <yt/yql/providers/yt/lib/secret_masker/secret_masker.h>
 
@@ -11,14 +12,10 @@
 
 namespace NYql {
 
-class TYtGatewayConfig;
-using TYtGatewayConfigPtr = std::shared_ptr<TYtGatewayConfig>;
-
-struct TYtNativeServices {
-    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
+struct TYtNativeServices: public TYtBaseServices {
+    using TPtr = TIntrusivePtr<TYtNativeServices>;
 
     TFileStoragePtr FileStorage;
-    TYtGatewayConfigPtr Config;
     // allow anonymous access for tests
     bool DisableAnonymousClusterAccess = false;
     IMetricsRegistryPtr Metrics;

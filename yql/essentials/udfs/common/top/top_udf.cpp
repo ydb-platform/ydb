@@ -65,106 +65,109 @@ struct TGenericPairCompare {
 
 template <typename TValue, typename TCompare, typename TAllocator>
 class TTopKeeperContainer {
-    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper;
+    TTopKeeper<TValue, TCompare, true, TAllocator> Keeper_;
     using TOrderedSet = TMultiSet<TValue, TCompare, TAllocator>;
-    TMaybe<TOrderedSet> OrderedSet;
-    size_t MaxSize = 0;
-    bool Finalized = false;
-    TCompare Compare;
+    TMaybe<TOrderedSet> OrderedSet_;
+    size_t MaxSize_ = 0;
+    bool Finalized_ = false;
+    TCompare Compare_;
+
 public:
     explicit TTopKeeperContainer(TCompare compare)
-        : Keeper(0, compare)
-        , Compare(compare)
-    {}
+        : Keeper_(0, compare)
+        , Compare_(compare)
+    {
+    }
 
     TVector<TValue, TAllocator> GetInternal() {
-        if (OrderedSet) {
+        if (OrderedSet_) {
             TVector<TValue, TAllocator> result;
-            std::copy(OrderedSet->begin(), OrderedSet->end(), std::back_inserter(result));
+            std::copy(OrderedSet_->begin(), OrderedSet_->end(), std::back_inserter(result));
             return result;
         }
-        Finalized = true;
-        return Keeper.GetInternal();
+        Finalized_ = true;
+        return Keeper_.GetInternal();
     }
 
     void Insert(const TValue& value) {
-        if (MaxSize == 0) {
+        if (MaxSize_ == 0) {
             return;
         }
-        if (Finalized && !OrderedSet) {
-            const auto& items = Keeper.Extract();
-            OrderedSet = TOrderedSet{items.begin(), items.end(), Compare};
+        if (Finalized_ && !OrderedSet_) {
+            const auto& items = Keeper_.Extract();
+            OrderedSet_ = TOrderedSet{items.begin(), items.end(), Compare_};
         }
-        if (OrderedSet) {
-            if (OrderedSet->size() < MaxSize) {
-                OrderedSet->insert(value);
+        if (OrderedSet_) {
+            if (OrderedSet_->size() < MaxSize_) {
+                OrderedSet_->insert(value);
                 return;
             }
-            Y_ENSURE(OrderedSet->size() == MaxSize);
-            Y_ENSURE(!OrderedSet->empty());
-            auto last = --OrderedSet->end();
-            if (Compare(value, *last)) {
-                OrderedSet->erase(last);
-                OrderedSet->insert(value);
+            Y_ENSURE(OrderedSet_->size() == MaxSize_);
+            Y_ENSURE(!OrderedSet_->empty());
+            auto last = --OrderedSet_->end();
+            if (Compare_(value, *last)) {
+                OrderedSet_->erase(last);
+                OrderedSet_->insert(value);
             }
             return;
         }
-        Keeper.Insert(value);
+        Keeper_.Insert(value);
     }
 
     bool IsEmpty() const {
-        return OrderedSet ? OrderedSet->empty() : Keeper.IsEmpty();
+        return OrderedSet_ ? OrderedSet_->empty() : Keeper_.IsEmpty();
     }
 
     size_t GetSize() const {
-        return OrderedSet ? OrderedSet->size() : Keeper.GetSize();
+        return OrderedSet_ ? OrderedSet_->size() : Keeper_.GetSize();
     }
 
     size_t GetMaxSize() const {
-        return MaxSize;
+        return MaxSize_;
     }
 
     void SetMaxSize(size_t newMaxSize) {
-        MaxSize = newMaxSize;
-        if (Finalized && !OrderedSet) {
-            auto items = Keeper.Extract();
+        MaxSize_ = newMaxSize;
+        if (Finalized_ && !OrderedSet_) {
+            auto items = Keeper_.Extract();
             auto begin = items.begin();
-            auto end = begin + Min(MaxSize, items.size());
-            OrderedSet = TOrderedSet{begin, end, Compare};
+            auto end = begin + Min(MaxSize_, items.size());
+            OrderedSet_ = TOrderedSet{begin, end, Compare_};
         }
-        if (OrderedSet) {
-            while (OrderedSet->size() > MaxSize) {
-                auto last = --OrderedSet->end();
-                OrderedSet->erase(last);
+        if (OrderedSet_) {
+            while (OrderedSet_->size() > MaxSize_) {
+                auto last = --OrderedSet_->end();
+                OrderedSet_->erase(last);
             }
             return;
         }
 
-        Keeper.SetMaxSize(MaxSize);
+        Keeper_.SetMaxSize(MaxSize_);
     }
 };
 
 template <typename TCompare>
 class TTopKeeperWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper;
+    TTopKeeperContainer<TUnboxedValue, TCompare, TUnboxedValue::TAllocator> Keeper_;
 
 protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
-        : Keeper(compare)
-    {}
+        : Keeper_(compare)
+    {
+    }
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         AddValue(value);
     }
 
     void Merge(TTopKeeperWrapperBase& left, TTopKeeperWrapperBase& right) {
-        Keeper.SetMaxSize(left.Keeper.GetMaxSize());
-        for (const auto& item : left.Keeper.GetInternal()) {
+        Keeper_.SetMaxSize(left.Keeper_.GetMaxSize());
+        for (const auto& item : left.Keeper_.GetInternal()) {
             AddValue(item);
         }
-        for (const auto& item : right.Keeper.GetInternal()) {
+        for (const auto& item : right.Keeper_.GetInternal()) {
             AddValue(item);
         }
     }
@@ -173,7 +176,7 @@ protected:
         auto maxSize = serialized.GetElement(0).Get<ui32>();
         auto list = serialized.GetElement(1);
 
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         const auto listIter = list.GetListIterator();
         for (TUnboxedValue current; listIter.Next(current);) {
             AddValue(current);
@@ -182,20 +185,20 @@ protected:
 
 public:
     void AddValue(const TUnboxedValuePod& value) {
-        Keeper.Insert(TUnboxedValuePod(value));
+        Keeper_.Insert(TUnboxedValuePod(value));
     }
 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item;
         }
 
         TUnboxedValue* items = nullptr;
         auto result = builder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod((ui32)Keeper.GetMaxSize());
+        items[0] = TUnboxedValuePod((ui32)Keeper_.GetMaxSize());
         items[1] = list;
 
         return result;
@@ -203,9 +206,9 @@ public:
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item;
         }
         return list;
@@ -215,24 +218,25 @@ public:
 template <typename TCompare>
 class TTopKeeperPairWrapperBase {
 protected:
-    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper;
+    TTopKeeperContainer<TUnboxedValuePair, TCompare, TStdAllocatorForUdf<TUnboxedValuePair>> Keeper_;
 
 protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
-        : Keeper(compare)
-    {}
+        : Keeper_(compare)
+    {
+    }
 
     void Init(const TUnboxedValuePod& key, const TUnboxedValuePod& payload, ui32 maxSize) {
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         AddValue(key, payload);
     }
 
     void Merge(TTopKeeperPairWrapperBase& left, TTopKeeperPairWrapperBase& right) {
-        Keeper.SetMaxSize(left.Keeper.GetMaxSize());
-        for (const auto& item : left.Keeper.GetInternal()) {
+        Keeper_.SetMaxSize(left.Keeper_.GetMaxSize());
+        for (const auto& item : left.Keeper_.GetInternal()) {
             AddValue(item.first, item.second);
         }
-        for (const auto& item : right.Keeper.GetInternal()) {
+        for (const auto& item : right.Keeper_.GetInternal()) {
             AddValue(item.first, item.second);
         }
     }
@@ -241,7 +245,7 @@ protected:
         auto maxSize = serialized.GetElement(0).Get<ui32>();
         auto list = serialized.GetElement(1);
 
-        Keeper.SetMaxSize(maxSize);
+        Keeper_.SetMaxSize(maxSize);
         const auto listIter = list.GetListIterator();
         for (TUnboxedValue current; listIter.Next(current);) {
             AddValue(current.GetElement(0), current.GetElement(1));
@@ -250,14 +254,14 @@ protected:
 
 public:
     void AddValue(const TUnboxedValuePod& key, const TUnboxedValuePod& payload) {
-        Keeper.Insert(std::make_pair(TUnboxedValuePod(key), TUnboxedValuePod(payload)));
+        Keeper_.Insert(std::make_pair(TUnboxedValuePod(key), TUnboxedValuePod(payload)));
     }
 
     TUnboxedValue Serialize(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             TUnboxedValue* items = nullptr;
             auto pair = builder->NewArray(2U, items);
             items[0] = item.first;
@@ -267,7 +271,7 @@ public:
 
         TUnboxedValue* items = nullptr;
         auto result = builder->NewArray(2U, items);
-        items[0] = TUnboxedValuePod((ui32)Keeper.GetMaxSize());
+        items[0] = TUnboxedValuePod((ui32)Keeper_.GetMaxSize());
         items[1] = list;
 
         return result;
@@ -275,23 +279,21 @@ public:
 
     TUnboxedValue GetResult(const IValueBuilder* builder) {
         TUnboxedValue* values = nullptr;
-        auto list = builder->NewArray(Keeper.GetSize(), values);
+        auto list = builder->NewArray(Keeper_.GetSize(), values);
 
-        for (const auto& item : Keeper.GetInternal()) {
+        for (const auto& item : Keeper_.GetInternal()) {
             *values++ = item.second;
         }
         return list;
     }
 };
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopKeeperDataWrapper;
 
 template <EDataSlot Slot, bool IsTop>
 class TTopKeeperDataWrapper<Slot, false, IsTop>
-    : public TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>>
-{
+    : public TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>> {
 public:
     using TBase = TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>>;
 
@@ -316,8 +318,7 @@ public:
 
 template <EDataSlot Slot, bool IsTop>
 class TTopKeeperDataWrapper<Slot, true, IsTop>
-    : public TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>>
-{
+    : public TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>> {
 public:
     using TBase = TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>>;
 
@@ -345,8 +346,7 @@ class TTopKeeperWrapper;
 
 template <bool IsTop>
 class TTopKeeperWrapper<false, IsTop>
-    : public TTopKeeperWrapperBase<TGenericCompare<IsTop>>
-{
+    : public TTopKeeperWrapperBase<TGenericCompare<IsTop>> {
 public:
     using TBase = TTopKeeperWrapperBase<TGenericCompare<IsTop>>;
 
@@ -371,8 +371,7 @@ public:
 
 template <bool IsTop>
 class TTopKeeperWrapper<true, IsTop>
-    : public TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>>
-{
+    : public TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>> {
 public:
     using TBase = TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>>;
 
@@ -395,7 +394,6 @@ public:
     }
 };
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopResourceData;
 
@@ -414,9 +412,8 @@ TTopResource<HasKey, IsTop>* GetTopResource(const TUnboxedValuePod& arg) {
     return static_cast<TTopResource<HasKey, IsTop>*>(arg.AsBoxed().Get());
 }
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopCreateData : public TBoxedValue {
+class TTopCreateData: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -436,7 +433,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopCreate : public TBoxedValue {
+class TTopCreate: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -457,14 +454,15 @@ private:
 public:
     explicit TTopCreate(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopAddValueData : public TBoxedValue {
+class TTopAddValueData: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -486,7 +484,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopAddValue : public TBoxedValue {
+class TTopAddValue: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -508,11 +506,12 @@ private:
 
 public:
     explicit TTopAddValue(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopSerializeData : public TBoxedValue {
+class TTopSerializeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -521,7 +520,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopSerialize : public TBoxedValue {
+class TTopSerialize: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
@@ -530,11 +529,12 @@ private:
 
 public:
     explicit TTopSerialize(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopDeserializeData : public TBoxedValue {
+class TTopDeserializeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResourceData<Slot, HasKey, IsTop>(args[0]));
@@ -542,7 +542,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopDeserialize : public TBoxedValue {
+class TTopDeserialize: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResource<HasKey, IsTop>(args[0], Compare_));
@@ -551,14 +551,15 @@ private:
 public:
     explicit TTopDeserialize(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopMergeData : public TBoxedValue {
+class TTopMergeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -568,7 +569,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopMerge : public TBoxedValue {
+class TTopMerge: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResource<HasKey, IsTop>(args[0]);
@@ -579,14 +580,15 @@ private:
 public:
     explicit TTopMerge(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopGetResultData : public TBoxedValue {
+class TTopGetResultData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -595,7 +597,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopGetResult : public TBoxedValue {
+class TTopGetResult: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
@@ -604,25 +606,24 @@ private:
 
 public:
     explicit TTopGetResult(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
-
-#define RESOURCE(slot, hasKey, isTop)                             \
-extern const char TopResourceName_##slot##_##hasKey##_##isTop[] = \
-    "Top.TopResource."#slot"."#hasKey"."#isTop;                   \
-template <>                                                       \
-class TTopResourceData<EDataSlot::slot, hasKey, isTop>:           \
-    public TBoxedResource<                                        \
-        TTopKeeperDataWrapper<EDataSlot::slot, hasKey, isTop>,    \
-        TopResourceName_##slot##_##hasKey##_##isTop>              \
-{                                                                 \
-public:                                                           \
-    template <typename... Args>                                   \
-    inline TTopResourceData(Args&&... args)                       \
-        : TBoxedResource(std::forward<Args>(args)...)             \
-    {}                                                            \
-};
+#define RESOURCE(slot, hasKey, isTop)                                                                                  \
+    extern const char TopResourceName_##slot##_##hasKey##_##isTop[] =                                                  \
+        "Top.TopResource." #slot "." #hasKey "." #isTop;                                                               \
+    template <>                                                                                                        \
+    class TTopResourceData<EDataSlot::slot, hasKey, isTop>: public TBoxedResource<                                     \
+                                                                TTopKeeperDataWrapper<EDataSlot::slot, hasKey, isTop>, \
+                                                                TopResourceName_##slot##_##hasKey##_##isTop> {         \
+    public:                                                                                                            \
+        template <typename... Args>                                                                                    \
+        inline TTopResourceData(Args&&... args)                                                                        \
+            : TBoxedResource(std::forward<Args>(args)...)                                                              \
+        {                                                                                                              \
+        }                                                                                                              \
+    };
 
 #define RESOURCE_00(slot, ...) RESOURCE(slot, false, false)
 #define RESOURCE_01(slot, ...) RESOURCE(slot, false, true)
@@ -679,52 +680,50 @@ UDF_TYPE_ID_MAP(RESOURCE_11)
 #define TYPE_10(slot, ...) MAKE_TYPE(slot, true, false)
 #define TYPE_11(slot, ...) MAKE_TYPE(slot, true, true)
 
-#define PARAMETRIZE(action)              \
-    if (hasKey) {                        \
-        if (isTop) {                     \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_11) \
-            }                            \
-        } else {                         \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_10) \
-            }                            \
-        }                                \
-    } else {                             \
-        if (isTop) {                     \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_01) \
-            }                            \
-        } else {                         \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_00) \
-            }                            \
-        }                                \
+#define PARAMETRIZE(action)                  \
+    if (hasKey) {                            \
+        if (isTop) {                         \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_11) \
+            }                                \
+        } else {                             \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_10) \
+            }                                \
+        }                                    \
+    } else {                                 \
+        if (isTop) {                         \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_01) \
+            }                                \
+        } else {                             \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_00) \
+            }                                \
+        }                                    \
     }
 
-
-#define RESOURCE_GENERIC(hasKey, isTop)                           \
-extern const char TopResourceName_Generic_##hasKey##_##isTop[] =  \
-    "Top.TopResource.Generic."#hasKey"."#isTop;                   \
-template <>                                                       \
-class TTopResource<hasKey, isTop>:                                \
-    public TBoxedResource<                                        \
-        TTopKeeperWrapper<hasKey, isTop>,                         \
-        TopResourceName_Generic_##hasKey##_##isTop>               \
-{                                                                 \
-public:                                                           \
-    template <typename... Args>                                   \
-    inline TTopResource(Args&&... args)                           \
-        : TBoxedResource(std::forward<Args>(args)...)             \
-    {}                                                            \
-};
+#define RESOURCE_GENERIC(hasKey, isTop)                                                  \
+    extern const char TopResourceName_Generic_##hasKey##_##isTop[] =                     \
+        "Top.TopResource.Generic." #hasKey "." #isTop;                                   \
+    template <>                                                                          \
+    class TTopResource<hasKey, isTop>: public TBoxedResource<                            \
+                                           TTopKeeperWrapper<hasKey, isTop>,             \
+                                           TopResourceName_Generic_##hasKey##_##isTop> { \
+    public:                                                                              \
+        template <typename... Args>                                                      \
+        inline TTopResource(Args&&... args)                                              \
+            : TBoxedResource(std::forward<Args>(args)...)                                \
+        {                                                                                \
+        }                                                                                \
+    };
 
 RESOURCE_GENERIC(false, false)
 RESOURCE_GENERIC(false, true)
 RESOURCE_GENERIC(true, false)
 RESOURCE_GENERIC(true, true)
 
-#define MAKE_IMPL_GENERIC(operation, hasKey, isTop)                 \
+#define MAKE_IMPL_GENERIC(operation, hasKey, isTop) \
     builder.Implementation(new operation<hasKey, isTop>(compare));
 
 #define CREATE_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopCreate, hasKey, isTop)
@@ -734,7 +733,7 @@ RESOURCE_GENERIC(true, true)
 #define DESERIALIZE_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopDeserialize, hasKey, isTop)
 #define GET_RESULT_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopGetResult, hasKey, isTop)
 
-#define TYPE_GENERIC(hasKey, isTop)                                         \
+#define TYPE_GENERIC(hasKey, isTop) \
     topType = builder.Resource(TopResourceName_Generic_##hasKey##_##isTop);
 
 #define PARAMETRIZE_GENERIC(action) \
@@ -752,7 +751,6 @@ RESOURCE_GENERIC(true, true)
         }                           \
     }
 
-
 static const auto CreateName = TStringRef::Of("Create");
 static const auto AddValueName = TStringRef::Of("AddValue");
 static const auto SerializeName = TStringRef::Of("Serialize");
@@ -760,7 +758,7 @@ static const auto DeserializeName = TStringRef::Of("Deserialize");
 static const auto MergeName = TStringRef::Of("Merge");
 static const auto GetResultName = TStringRef::Of("GetResult");
 
-class TTopModule : public IUdfModule {
+class TTopModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("Top");
@@ -783,8 +781,7 @@ public:
         TType* userType,
         const TStringRef& typeConfig,
         ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const final
-    {
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(typeConfig);
 
         try {
@@ -951,4 +948,3 @@ public:
 } // namespace
 
 REGISTER_MODULES(TTopModule)
-

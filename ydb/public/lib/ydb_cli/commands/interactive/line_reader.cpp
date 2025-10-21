@@ -6,7 +6,7 @@
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/string_util.h>
+#include <yql/essentials/sql/v1/complete/text/word.h>
 
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
@@ -46,6 +46,7 @@ public:
     TLineReader(std::string prompt, std::string historyFilePath, TClientCommand::TConfig& config);
 
     std::optional<std::string> ReadLine() override;
+    void ClearHints() override;
 
 private:
     void AddToHistory(const std::string& line);
@@ -72,6 +73,8 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
         return YQLCompleter->ApplyHeavy(Rx.get_state().text(), prefix, contextLen);
     });
+
+    Rx.set_hint_delay(100);
     Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
         return YQLCompleter->ApplyLight(Rx.get_state().text(), prefix, contextLen);
     });
@@ -80,14 +83,14 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
         YQLHighlighter->Apply(text, colors);
     });
 
-    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) { 
-        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code); 
+    Rx.bind_key(replxx::Replxx::KEY::control('N'), [&](char32_t code) {
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_NEXT, code);
     });
-    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) { 
-        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code); 
+    Rx.bind_key(replxx::Replxx::KEY::control('P'), [&](char32_t code) {
+        return Rx.invoke(replxx::Replxx::ACTION::HISTORY_PREVIOUS, code);
     });
-    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) { 
-        return replxx::Replxx::ACTION_RESULT::BAIL; 
+    Rx.bind_key(replxx::Replxx::KEY::control('D'), [](char32_t) {
+        return replxx::Replxx::ACTION_RESULT::BAIL;
     });
     Rx.bind_key(replxx::Replxx::KEY::control('J'), [&](char32_t code) {
         return Rx.invoke(replxx::Replxx::ACTION::COMMIT_LINE, code);
@@ -97,7 +100,6 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
         {'(', ')'},
         {'[', ']'},
         {'{', '}'},
-        {'`', '`'},
         {'\'', '\''},
         {'"', '"'},
     }) {
@@ -119,6 +121,11 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath, TClien
     if (!Rx.history_load(HistoryFilePath)) {
         Rx.print("Loading history failed: %s\n", strerror(errno));
     }
+}
+
+void TLineReader::ClearHints() {
+    std::cout << std::endl;
+    Rx.invoke(replxx::Replxx::ACTION::CLEAR_SELF, 0);
 }
 
 std::optional<std::string> TLineReader::ReadLine() {

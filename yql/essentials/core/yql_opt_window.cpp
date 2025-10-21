@@ -758,17 +758,17 @@ public:
     using TPtr = TIntrusivePtr<TChain1MapTraits>;
 
     TChain1MapTraits(TStringBuf name, TPositionHandle pos)
-      : Name(name)
-      , Pos(pos)
+      : Name_(name)
+      , Pos_(pos)
     {
     }
 
     TStringBuf GetName() const {
-        return Name;
+        return Name_;
     }
 
     TPositionHandle GetPos() const {
-        return Pos;
+        return Pos_;
     }
 
     // Lambda(row) -> AsTuple(output, state)
@@ -788,16 +788,16 @@ public:
 
     virtual ~TChain1MapTraits() = default;
 private:
-    const TStringBuf Name;
-    const TPositionHandle Pos;
+    const TStringBuf Name_;
+    const TPositionHandle Pos_;
 };
 
 class TChain1MapTraitsLagLead : public TChain1MapTraits {
 public:
     TChain1MapTraitsLagLead(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> queueOffset)
         : TChain1MapTraits(name, raw.Pos)
-        , QueueOffset(queueOffset)
-        , LeadLagLambda(raw.CalculateLambda)
+        , QueueOffset_(queueOffset)
+        , LeadLagLambda_(raw.CalculateLambda)
     {
     }
 
@@ -835,8 +835,8 @@ public:
 
 private:
     TExprNode::TPtr CalculateOutputLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const {
-        if (!QueueOffset.Defined()) {
-            return AddOptionalIfNotAlreadyOptionalOrNull(LeadLagLambda, ctx);
+        if (!QueueOffset_.Defined()) {
+            return AddOptionalIfNotAlreadyOptionalOrNull(LeadLagLambda_, ctx);
         }
 
         YQL_ENSURE(dataQueue);
@@ -845,8 +845,8 @@ private:
 
         auto body = ctx.Builder(GetPos())
             .Callable("IfPresent")
-                .Add(0, BuildQueuePeek(GetPos(), dataQueue, *QueueOffset, rowArg, ctx))
-                .Add(1, AddOptionalIfNotAlreadyOptionalOrNull(LeadLagLambda, ctx))
+                .Add(0, BuildQueuePeek(GetPos(), dataQueue, *QueueOffset_, rowArg, ctx))
+                .Add(1, AddOptionalIfNotAlreadyOptionalOrNull(LeadLagLambda_, ctx))
                 .Callable(2, "Null")
                 .Seal()
             .Seal()
@@ -855,8 +855,8 @@ private:
         return ctx.NewLambda(GetPos(), ctx.NewArguments(GetPos(), {rowArg}), std::move(body));
     }
 
-    const TMaybe<ui64> QueueOffset;
-    const TExprNode::TPtr LeadLagLambda;
+    const TMaybe<ui64> QueueOffset_;
+    const TExprNode::TPtr LeadLagLambda_;
 };
 
 class TChain1MapTraitsRowNumber : public TChain1MapTraits {
@@ -904,7 +904,7 @@ class TChain1MapTraitsCumeDist : public TChain1MapTraits {
 public:
     TChain1MapTraitsCumeDist(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn(partitionRowsColumn)
+        , PartitionRowsColumn_(partitionRowsColumn)
     {
     }
 
@@ -919,7 +919,7 @@ public:
                         .Add(0, BuildDouble(GetPos(), 1.0, ctx))
                         .Callable(1, "Member")
                             .Arg(0, "row")
-                            .Atom(1, PartitionRowsColumn)
+                            .Atom(1, PartitionRowsColumn_)
                         .Seal()
                     .Seal()
                     .Add(1, BuildUint64(GetPos(), 1, ctx))
@@ -945,7 +945,7 @@ public:
                         .Seal()
                         .Callable(1, "Member")
                             .Arg(0, "row")
-                            .Atom(1, PartitionRowsColumn)
+                            .Atom(1, PartitionRowsColumn_)
                         .Seal()
                     .Seal()
                     .Callable(1, "Inc")
@@ -957,17 +957,17 @@ public:
     }
 
 private:
-    const TString PartitionRowsColumn;
+    const TString PartitionRowsColumn_;
 };
 
 class TChain1MapTraitsNTile : public TChain1MapTraits {
 public:
     TChain1MapTraitsNTile(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
         : TChain1MapTraits(name, raw.Pos)
-        , PartitionRowsColumn(partitionRowsColumn)
+        , PartitionRowsColumn_(partitionRowsColumn)
     {
         YQL_ENSURE(raw.Params.size() == 1);
-        Param = raw.Params[0];
+        Param_ = raw.Params[0];
     }
 
     // Lambda(row) -> AsTuple(output, state)
@@ -997,14 +997,14 @@ public:
                             .Callable(0, "/")
                                 .Callable(0, "*")
                                     .Callable(0, "SafeCast")
-                                        .Add(0, Param)
+                                        .Add(0, Param_)
                                         .Atom(1, "Uint64")
                                     .Seal()
                                     .Arg(1, "state")
                                 .Seal()
                                 .Callable(1, "Member")
                                     .Arg(0, "row")
-                                    .Atom(1, PartitionRowsColumn)
+                                    .Atom(1, PartitionRowsColumn_)
                                 .Seal()
                             .Seal()
                         .Seal()
@@ -1018,17 +1018,17 @@ public:
     }
 
 private:
-    const TString PartitionRowsColumn;
-    TExprNode::TPtr Param;
+    const TString PartitionRowsColumn_;
+    TExprNode::TPtr Param_;
 };
 
 class TChain1MapTraitsRankBase : public TChain1MapTraits {
 public:
     TChain1MapTraitsRankBase(TStringBuf name, const TRawTrait& raw)
         : TChain1MapTraits(name, raw.Pos)
-        , ExtractForCompareLambda(raw.CalculateLambda->ChildPtr(1))
-        , Ansi(HasSetting(*raw.CalculateLambda->Child(2), "ansi"))
-        , KeyType(raw.OutputType)
+        , ExtractForCompareLambda_(raw.CalculateLambda->ChildPtr(1))
+        , Ansi_(HasSetting(*raw.CalculateLambda->Child(2), "ansi"))
+        , KeyType_(raw.OutputType)
     {
     }
 
@@ -1050,8 +1050,8 @@ public:
 
 
         auto initKeyLambda = BuildRawInitLambda(ctx);
-        if (!Ansi && KeyType->GetKind() == ETypeAnnotationKind::Optional) {
-            auto stateType = GetStateType(KeyType->Cast<TOptionalExprType>()->GetItemType(), ctx);
+        if (!Ansi_ && KeyType_->GetKind() == ETypeAnnotationKind::Optional) {
+            auto stateType = GetStateType(KeyType_->Cast<TOptionalExprType>()->GetItemType(), ctx);
             initKeyLambda = BuildOptKeyInitLambda(initKeyLambda, stateType, ctx);
         }
 
@@ -1060,7 +1060,7 @@ public:
                 .Param("row")
                 .Apply(initKeyLambda)
                     .With(0)
-                        .Apply(ExtractForCompareLambda)
+                        .Apply(ExtractForCompareLambda_)
                             .With(0, "row")
                         .Seal()
                     .Done()
@@ -1075,11 +1075,11 @@ public:
     TExprNode::TPtr BuildUpdateLambda(const TExprNode::TPtr& dataQueue, TExprContext& ctx) const final {
         Y_UNUSED(dataQueue);
 
-        bool useAggrEquals = Ansi;
+        bool useAggrEquals = Ansi_;
         auto updateKeyLambda = BuildRawUpdateLambda(useAggrEquals, ctx);
 
-        if (!Ansi && KeyType->GetKind() == ETypeAnnotationKind::Optional) {
-            auto stateType = GetStateType(KeyType->Cast<TOptionalExprType>()->GetItemType(), ctx);
+        if (!Ansi_ && KeyType_->GetKind() == ETypeAnnotationKind::Optional) {
+            auto stateType = GetStateType(KeyType_->Cast<TOptionalExprType>()->GetItemType(), ctx);
             updateKeyLambda = ctx.Builder(GetPos())
                 .Lambda()
                     .Param("key")
@@ -1118,7 +1118,7 @@ public:
                 .Param("state")
                 .Apply(updateKeyLambda)
                     .With(0)
-                        .Apply(ExtractForCompareLambda)
+                        .Apply(ExtractForCompareLambda_)
                             .With(0, "row")
                         .Seal()
                     .Done()
@@ -1160,9 +1160,9 @@ private:
             .Build();
     }
 
-    const TExprNode::TPtr ExtractForCompareLambda;
-    const bool Ansi;
-    const TTypeAnnotationNode* const KeyType;
+    const TExprNode::TPtr ExtractForCompareLambda_;
+    const bool Ansi_;
+    const TTypeAnnotationNode* const KeyType_;
 };
 
 class TChain1MapTraitsRank : public TChain1MapTraitsRankBase {
@@ -1236,7 +1236,7 @@ class TChain1MapTraitsPercentRank : public TChain1MapTraitsRank {
 public:
     TChain1MapTraitsPercentRank(TStringBuf name, const TRawTrait& raw, const TString& partitionRowsColumn)
         : TChain1MapTraitsRank(name, raw)
-        , PartitionRowsColumn(partitionRowsColumn)
+        , PartitionRowsColumn_(partitionRowsColumn)
     {
     }
 
@@ -1258,7 +1258,7 @@ public:
                     .Callable(1, "Dec")
                         .Callable(0, "Member")
                             .Arg(0, "row")
-                            .Atom(1, PartitionRowsColumn)
+                            .Atom(1, PartitionRowsColumn_)
                         .Seal()
                     .Seal()
                 .Seal()
@@ -1267,7 +1267,7 @@ public:
     }
 
 private:
-    const TString PartitionRowsColumn;
+    const TString PartitionRowsColumn_;
 };
 
 class TChain1MapTraitsDenseRank : public TChain1MapTraitsRankBase {
@@ -1332,46 +1332,46 @@ class TChain1MapTraitsStateBase : public TChain1MapTraits {
 public:
     TChain1MapTraitsStateBase(TStringBuf name, const TRawTrait& raw)
         : TChain1MapTraits(name, raw.Pos)
-        , FrameNeverEmpty(raw.FrameSettings.IsNonEmpty())
-        , InitLambda(raw.InitLambda)
-        , UpdateLambda(raw.UpdateLambda)
-        , CalculateLambda(raw.CalculateLambda)
-        , DefaultValue(raw.DefaultValue)
+        , FrameNeverEmpty_(raw.FrameSettings.IsNonEmpty())
+        , InitLambda_(raw.InitLambda)
+        , UpdateLambda_(raw.UpdateLambda)
+        , CalculateLambda_(raw.CalculateLambda)
+        , DefaultValue_(raw.DefaultValue)
     {
     }
 
 protected:
     TExprNode::TPtr GetInitLambda() const {
-        return InitLambda;
+        return InitLambda_;
     }
 
     TExprNode::TPtr GetUpdateLambda() const {
-        return UpdateLambda;
+        return UpdateLambda_;
     }
 
     TExprNode::TPtr GetCalculateLambda() const {
-        return CalculateLambda;
+        return CalculateLambda_;
     }
 
     TExprNode::TPtr GetDefaultValue() const {
-        return DefaultValue;
+        return DefaultValue_;
     }
 
-    const bool FrameNeverEmpty;
+    const bool FrameNeverEmpty_;
 
 private:
-    const TExprNode::TPtr InitLambda;
-    const TExprNode::TPtr UpdateLambda;
-    const TExprNode::TPtr CalculateLambda;
-    const TExprNode::TPtr DefaultValue;
+    const TExprNode::TPtr InitLambda_;
+    const TExprNode::TPtr UpdateLambda_;
+    const TExprNode::TPtr CalculateLambda_;
+    const TExprNode::TPtr DefaultValue_;
 };
 
 class TChain1MapTraitsCurrentOrLagging : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsCurrentOrLagging(TStringBuf name, const TRawTrait& raw, TMaybe<ui64> lagQueueIndex)
         : TChain1MapTraitsStateBase(name, raw)
-        , LaggingQueueIndex(lagQueueIndex)
-        , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
+        , LaggingQueueIndex_(lagQueueIndex)
+        , OutputIsOptional_(raw.OutputType->IsOptionalOrNull())
     {
     }
 
@@ -1390,14 +1390,14 @@ public:
     TExprNode::TPtr ExtractLaggingOutput(const TExprNode::TPtr& lagQueue,
         const TExprNode::TPtr& dependsOn, TExprContext& ctx) const override
     {
-        if (!LaggingQueueIndex.Defined()) {
+        if (!LaggingQueueIndex_.Defined()) {
             return {};
         }
 
-        YQL_ENSURE(!FrameNeverEmpty);
+        YQL_ENSURE(!FrameNeverEmpty_);
         auto output = ctx.Builder(GetPos())
             .Callable("Map")
-                .Add(0, BuildQueuePeek(GetPos(), lagQueue, *LaggingQueueIndex, dependsOn, ctx))
+                .Add(0, BuildQueuePeek(GetPos(), lagQueue, *LaggingQueueIndex_, dependsOn, ctx))
                 .Lambda(1)
                     .Param("struct")
                     .Callable("Member")
@@ -1407,20 +1407,20 @@ public:
                 .Seal()
             .Seal()
             .Build();
-        return CoalesceQueueOutput(GetPos(), output, OutputIsOptional, GetDefaultValue(), ctx);
+        return CoalesceQueueOutput(GetPos(), output, OutputIsOptional_, GetDefaultValue(), ctx);
     }
 
 private:
-    const TMaybe<ui64> LaggingQueueIndex;
-    const bool OutputIsOptional;
+    const TMaybe<ui64> LaggingQueueIndex_;
+    const bool OutputIsOptional_;
 };
 
 class TChain1MapTraitsLeading : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsLeading(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex, ui64 lastRowIndex)
         : TChain1MapTraitsStateBase(name, raw)
-        , QueueBegin(currentRowIndex + 1)
-        , QueueEnd(lastRowIndex + 1)
+        , QueueBegin_(currentRowIndex + 1)
+        , QueueEnd_(lastRowIndex + 1)
     {
     }
 
@@ -1434,7 +1434,7 @@ public:
         auto rowArg = ctx.NewArgument(GetPos(), "row");
         auto state = ctx.Builder(GetPos())
             .Callable("Fold")
-                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin, QueueEnd, rowArg, ctx))
+                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin_, QueueEnd_, rowArg, ctx))
                 .Apply(1, originalInit)
                     .With(0, rowArg)
                 .Seal()
@@ -1470,7 +1470,7 @@ public:
 
         auto state = ctx.Builder(GetPos())
             .Callable("Fold")
-                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin, QueueEnd, rowArg, ctx))
+                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin_, QueueEnd_, rowArg, ctx))
                 .Apply(1, originalUpdate)
                     .With(0, rowArg)
                     .With(1, stateArg)
@@ -1497,15 +1497,15 @@ public:
     }
 
 private:
-    const ui64 QueueBegin;
-    const ui64 QueueEnd;
+    const ui64 QueueBegin_;
+    const ui64 QueueEnd_;
 };
 
 class TChain1MapTraitsFull : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsFull(TStringBuf name, const TRawTrait& raw, ui64 currentRowIndex)
         : TChain1MapTraitsStateBase(name, raw)
-        , QueueBegin(currentRowIndex + 1)
+        , QueueBegin_(currentRowIndex + 1)
     {
     }
 
@@ -1519,7 +1519,7 @@ public:
         auto rowArg = ctx.NewArgument(GetPos(), "row");
         auto state = ctx.Builder(GetPos())
             .Callable("Fold")
-                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin, Max<ui64>(), rowArg, ctx))
+                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin_, Max<ui64>(), rowArg, ctx))
                 .Apply(1, originalInit)
                     .With(0, rowArg)
                 .Seal()
@@ -1559,16 +1559,16 @@ public:
     }
 
 private:
-    const ui64 QueueBegin;
+    const ui64 QueueBegin_;
 };
 
 class TChain1MapTraitsGeneric : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsGeneric(TStringBuf name, const TRawTrait& raw, ui64 queueBegin, ui64 queueEnd)
         : TChain1MapTraitsStateBase(name, raw)
-        , QueueBegin(queueBegin)
-        , QueueEnd(queueEnd)
-        , OutputIsOptional(raw.OutputType->IsOptionalOrNull())
+        , QueueBegin_(queueBegin)
+        , QueueEnd_(queueEnd)
+        , OutputIsOptional_(raw.OutputType->IsOptionalOrNull())
     {
     }
 
@@ -1607,7 +1607,7 @@ private:
 
         auto fold1 = ctx.Builder(GetPos())
             .Callable("Fold1")
-                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin, QueueEnd, rowArg, ctx))
+                .Add(0, BuildQueueRange(GetPos(), dataQueue, QueueBegin_, QueueEnd_, rowArg, ctx))
                 .Add(1, ctx.DeepCopyLambda(*originalInit))
                 .Add(2, ctx.DeepCopyLambda(*originalUpdate))
             .Seal()
@@ -1622,7 +1622,7 @@ private:
             .Seal()
             .Build();
 
-        if (FrameNeverEmpty) {
+        if (FrameNeverEmpty_) {
             // output is always non-empty optional in this case
             // we do IfPresent with some fake output value to remove optional
             // this will have exactly the same result as Unwrap(output)
@@ -1644,19 +1644,19 @@ private:
                 .Build();
         }
 
-        return CoalesceQueueOutput(GetPos(), output, OutputIsOptional, GetDefaultValue(), ctx);
+        return CoalesceQueueOutput(GetPos(), output, OutputIsOptional_, GetDefaultValue(), ctx);
     }
 
-    const ui64 QueueBegin;
-    const ui64 QueueEnd;
-    const bool OutputIsOptional;
+    const ui64 QueueBegin_;
+    const ui64 QueueEnd_;
+    const bool OutputIsOptional_;
 };
 
 class TChain1MapTraitsEmpty : public TChain1MapTraitsStateBase {
 public:
     TChain1MapTraitsEmpty(TStringBuf name, const TRawTrait& raw)
         : TChain1MapTraitsStateBase(name, raw)
-        , RawOutputType(raw.OutputType)
+        , RawOutputType_(raw.OutputType)
     {
     }
 
@@ -1693,10 +1693,10 @@ public:
 private:
     TExprNode::TPtr BuildFinalOutput(TExprContext& ctx) const {
         const auto defaultValue = GetDefaultValue();
-        YQL_ENSURE(!FrameNeverEmpty);
+        YQL_ENSURE(!FrameNeverEmpty_);
 
         if (defaultValue->IsCallable("Null")) {
-            auto resultingType = RawOutputType;
+            auto resultingType = RawOutputType_;
             if (!resultingType->IsOptionalOrNull()) {
                 resultingType = ctx.MakeType<TOptionalExprType>(resultingType);
             }
@@ -1710,7 +1710,7 @@ private:
         return defaultValue;
     }
 
-    const TTypeAnnotationNode* const RawOutputType;
+    const TTypeAnnotationNode* const RawOutputType_;
 };
 
 struct TQueueParams {
@@ -3474,12 +3474,12 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
     TWindowFrameSettings settings;
 
     if (node.IsCallable("WinOnRows")) {
-        settings.Type = EFrameType::FrameByRows;
+        settings.Type_ = EFrameType::FrameByRows;
     } else if (node.IsCallable("WinOnRange")) {
-        settings.Type = EFrameType::FrameByRange;
+        settings.Type_ = EFrameType::FrameByRange;
     } else {
         YQL_ENSURE(node.IsCallable("WinOnGroups"));
-        settings.Type = EFrameType::FrameByGroups;
+        settings.Type_ = EFrameType::FrameByGroups;
     }
     auto frameSpec = node.Child(0);
     if (frameSpec->Type() == TExprNode::List) {
@@ -3503,7 +3503,7 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             }
 
             if (settingName == "compact") {
-                settings.Compact = true;
+                settings.Compact_ = true;
                 continue;
             }
 
@@ -3519,8 +3519,8 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             }
 
             hasBound = true;
-            TMaybe<i32>& boundOffset = (settingName == "begin") ? settings.FirstOffset : settings.LastOffset;
-            TExprNode::TPtr& frameBound = (settingName == "begin") ? settings.First : settings.Last;
+            TMaybe<i32>& boundOffset = (settingName == "begin") ? settings.FirstOffset_ : settings.LastOffset_;
+            TExprNode::TPtr& frameBound = (settingName == "begin") ? settings.First_ : settings.Last_;
 
             if (setting->Tail().IsList()) {
                 TExprNode::TPtr fb = setting->TailPtr();
@@ -3638,8 +3638,8 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
             return {};
         }
     } else if (frameSpec->IsCallable("Void")) {
-        settings.FirstOffset = {};
-        settings.LastOffset = 0;
+        settings.FirstOffset_ = {};
+        settings.LastOffset_ = 0;
     } else {
         const TTypeAnnotationNode* type = frameSpec->GetTypeAnn();
         ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
@@ -3648,35 +3648,35 @@ TMaybe<TWindowFrameSettings> TWindowFrameSettings::TryParse(const TExprNode& nod
     }
 
     // frame will always contain rows if it includes current row
-    if (!settings.FirstOffset) {
-        settings.NeverEmpty = !settings.LastOffset.Defined() || *settings.LastOffset >= 0;
-    } else if (!settings.LastOffset.Defined()) {
-        settings.NeverEmpty = !settings.FirstOffset.Defined() || *settings.FirstOffset <= 0;
+    if (!settings.FirstOffset_) {
+        settings.NeverEmpty_ = !settings.LastOffset_.Defined() || *settings.LastOffset_ >= 0;
+    } else if (!settings.LastOffset_.Defined()) {
+        settings.NeverEmpty_ = !settings.FirstOffset_.Defined() || *settings.FirstOffset_ <= 0;
     } else {
-        settings.NeverEmpty = *settings.FirstOffset <= *settings.LastOffset && *settings.FirstOffset <= 0 && *settings.LastOffset >= 0;
+        settings.NeverEmpty_ = *settings.FirstOffset_ <= *settings.LastOffset_ && *settings.FirstOffset_ <= 0 && *settings.LastOffset_ >= 0;
     }
 
     return settings;
 }
 
 TMaybe<i32> TWindowFrameSettings::GetFirstOffset() const {
-    YQL_ENSURE(Type == FrameByRows);
-    return FirstOffset;
+    YQL_ENSURE(Type_ == FrameByRows);
+    return FirstOffset_;
 }
 
 TMaybe<i32> TWindowFrameSettings::GetLastOffset() const {
-    YQL_ENSURE(Type == FrameByRows);
-    return LastOffset;
+    YQL_ENSURE(Type_ == FrameByRows);
+    return LastOffset_;
 }
 
 TCoFrameBound TWindowFrameSettings::GetFirst() const {
-    YQL_ENSURE(First);
-    return TCoFrameBound(First);
+    YQL_ENSURE(First_);
+    return TCoFrameBound(First_);
 }
 
 TCoFrameBound TWindowFrameSettings::GetLast() const {
-    YQL_ENSURE(Last);
-    return TCoFrameBound(Last);
+    YQL_ENSURE(Last_);
+    return TCoFrameBound(Last_);
 }
 
 TExprNode::TPtr ZipWithSessionParamsLambda(TPositionHandle pos, const TExprNode::TPtr& partitionKeySelector,

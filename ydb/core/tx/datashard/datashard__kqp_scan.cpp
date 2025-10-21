@@ -30,7 +30,7 @@ constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 class TKqpScanResult : public IDestructable {};
 
-class TKqpScan : public TActor<TKqpScan>, public NTable::IScan {
+class TKqpScan : public TActor<TKqpScan>, public IActorExceptionHandler, public NTable::IScan {
 public:
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_TABLE_SCAN;
@@ -332,14 +332,14 @@ private:
     }
 
 private:
-    TAutoPtr<IDestructable> Finish(EAbort abort) final {
-        auto prio = abort == EAbort::None ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
+    TAutoPtr<IDestructable> Finish(EStatus status) final {
+        auto prio = status == EStatus::Done ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
         LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_DATASHARD, "Finish scan"
             << ", at: " << ScanActorId << ", scanId: " << ScanId
-            << ", table: " << TablePath << ", reason: " << (int) abort
+            << ", table: " << TablePath << ", reason: " << status
             << ", abortEvent: " << (AbortEvent ? AbortEvent->Record.ShortDebugString() : TString("<none>")));
 
-        if (abort != EAbort::None || AbortEvent) {
+        if (status != EStatus::Done || AbortEvent) {
             auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(Generation, TabletId);
 
             if (AbortEvent) {
@@ -351,9 +351,13 @@ private:
                 }
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             } else {
-                ev->Record.SetStatus(Ydb::StatusIds::ABORTED);
-                auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED, TStringBuilder()
-                    << "Table " << TablePath << " scan failed, reason: " << ToString((int) abort));
+                ev->Record.SetStatus(status == NTable::EStatus::Exception
+                    ? Ydb::StatusIds::INTERNAL_ERROR
+                    : Ydb::StatusIds::ABORTED);
+                TStringBuilder error;
+                auto issueId = status == NTable::EStatus::Exception ? NYql::TIssuesIds::DEFAULT_ERROR : NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED;
+                auto issue = NYql::YqlIssue({}, issueId, TStringBuilder()
+                    << "Table " << TablePath << " scan failed, reason: " << status);
                 IssueToMessage(issue, ev->Record.MutableIssues()->Add());
             }
 
@@ -376,6 +380,14 @@ private:
         PassAway();
 
         return new TKqpScanResult();
+    }
+
+    bool OnUnhandledException(const std::exception& exc) final {
+        if (!Driver) {
+            return false;
+        }
+        Driver->Throw(exc);
+        return true;
     }
 
     void Describe(IOutputStream& out) const final {

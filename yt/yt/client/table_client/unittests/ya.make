@@ -6,6 +6,7 @@ SRCS(
     columnar_statistics_ut.cpp
     columnar_ut.cpp
     logical_type_short_notation_ut.cpp
+    record_codegen_ut.cpp
     serialization_ut.cpp
     unversioned_row_ut.cpp
 )

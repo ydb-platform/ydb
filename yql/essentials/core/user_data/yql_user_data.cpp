@@ -6,14 +6,13 @@ namespace NUserData {
 
 void TUserData::UserDataToLibraries(
     const TVector<TUserData>& userData,
-    THashMap<TString,TString>& modules
-) {
+    THashMap<TString, TString>& modules) {
     for (const TUserData& item : userData) {
-        if (item.Type_ == EType::LIBRARY) {
-            if (item.Disposition_ == EDisposition::RESOURCE) { // TODO: support other disposition options
-                modules[to_lower(item.Name_)] = item.Content_;
-            } else if (item.Disposition_ == EDisposition::RESOURCE_FILE) {
-                modules[to_lower(item.Name_)] = item.Name_;
+        if (item.Type == EType::LIBRARY) {
+            if (item.Disposition == EDisposition::RESOURCE) { // TODO: support other disposition options
+                modules[to_lower(item.Name)] = item.Content;
+            } else if (item.Disposition == EDisposition::RESOURCE_FILE) {
+                modules[to_lower(item.Name)] = item.Name;
             }
         }
     }
@@ -23,8 +22,7 @@ void TUserData::UserDataToLibraries(
 void TUserData::FillFromFolder(
     TFsPath root,
     EType type,
-    TVector<TUserData>& userData
-) {
+    TVector<TUserData>& userData) {
     if (!root.Exists()) {
         return;
     }
@@ -35,11 +33,9 @@ void TUserData::FillFromFolder(
             continue;
         }
         TFsPath filePath(file->fts_path);
-        userData.push_back({
-            type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath
-        });
+        userData.push_back({type, EDisposition::FILESYSTEM, filePath.RelativeTo(root), filePath});
     }
 }
 
-}
-}
+} // namespace NUserData
+} // namespace NYql

@@ -8,7 +8,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/library/grpc/server/grpc_request.h>
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash.h>
 #include <util/system/mutex.h>
@@ -81,6 +81,11 @@ public:
         AtomicSet(ShuttingDown_, 1);
         if (ClustersUpdaterStatus) {
             ClustersUpdaterStatus->Stop();
+        }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
         }
     }
 

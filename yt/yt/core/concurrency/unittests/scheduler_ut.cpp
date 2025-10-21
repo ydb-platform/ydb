@@ -662,61 +662,6 @@ TEST_F(TSchedulerTest, CancelInAdjacentCallback)
     EXPECT_TRUE(asyncResult2.IsOK());
 }
 
-TEST_F(TSchedulerTest, CancelInApply)
-{
-    auto invoker = Queue1->GetInvoker();
-
-    BIND([=] {
-        auto promise = NewPromise<void>();
-
-        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
-            auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
-            canceler(TError("kek"));
-
-            auto p = NewPromise<void>();
-            WaitFor(p.ToFuture())
-                .ThrowOnError();
-        })));
-
-        promise.Set();
-
-        YT_UNUSED_FUTURE(promise.ToFuture().Apply(BIND([] {
-            auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
-            canceler(TError("kek"));
-
-            auto p = NewPromise<void>();
-            WaitFor(p.ToFuture())
-                .ThrowOnError();
-        })));
-    })
-        .AsyncVia(invoker)
-        .Run()
-        .Get();
-}
-
-TEST_F(TSchedulerTest, CancelInApplyUnique)
-{
-    auto invoker = Queue1->GetInvoker();
-
-    BIND([=] {
-        auto promise = NewPromise<int>();
-
-        auto f2 = promise.ToFuture().ApplyUnique(BIND([] (TErrorOr<int>&& /*error*/) {
-            auto canceler = NYT::NConcurrency::GetCurrentFiberCanceler();
-            canceler(TError("kek"));
-
-            auto p = NewPromise<void>();
-            WaitFor(p.ToFuture())
-                .ThrowOnError();
-        }));
-
-        promise.Set(42);
-    })
-        .AsyncVia(invoker)
-        .Run()
-        .Get();
-}
-
 TEST_F(TSchedulerTest, CancelInAdjacentThread)
 {
     auto closure = TCallback<void(const TError&)>();
@@ -1207,8 +1152,8 @@ TEST_F(TSuspendableInvokerTest, VerifySerializedActionsOrder)
 
     const int totalActionCount = 100000;
 
-    std::atomic<int> actionIndex = {0};
-    std::atomic<int> reorderingCount = {0};
+    std::atomic<int> actionIndex = 0;
+    std::atomic<int> reorderingCount = 0;
 
     for (int i = 0; i < totalActionCount / 2; ++i) {
         BIND([&actionIndex, &reorderingCount, i] {

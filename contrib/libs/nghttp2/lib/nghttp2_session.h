@@ -45,7 +45,7 @@
    preface handling. */
 extern int nghttp2_enable_strict_preface;
 
-extern nghttp2_stream root;
+extern nghttp2_stream nghttp2_stream_root;
 
 /*
  * Option flags.
@@ -105,6 +105,10 @@ typedef struct {
 /* The default values for stream reset rate limiter. */
 #define NGHTTP2_DEFAULT_STREAM_RESET_BURST 1000
 #define NGHTTP2_DEFAULT_STREAM_RESET_RATE 33
+
+/* The default values for glitch rate limiter. */
+#define NGHTTP2_DEFAULT_GLITCH_BURST 1000
+#define NGHTTP2_DEFAULT_GLITCH_RATE 33
 
 /* The default max number of CONTINUATION frames following an incoming
    HEADER frame. */
@@ -229,6 +233,8 @@ struct nghttp2_session {
   /* Stream reset rate limiter.  If receiving excessive amount of
      stream resets, GOAWAY will be sent. */
   nghttp2_ratelim stream_reset_ratelim;
+  /* Rate limiter for all kinds of glitches. */
+  nghttp2_ratelim glitch_ratelim;
   /* Sequential number across all streams to process streams in
      FIFO. */
   uint64_t stream_seq;
@@ -403,13 +409,22 @@ int nghttp2_session_add_item(nghttp2_session *session,
                              nghttp2_outbound_item *item);
 
 /*
+ * This function wraps around nghttp2_session_add_rst_stream_continue
+ * with continue_without_stream = 1.
+ */
+int nghttp2_session_add_rst_stream(nghttp2_session *session, int32_t stream_id,
+                                   uint32_t error_code);
+
+/*
  * Adds RST_STREAM frame for the stream |stream_id| with the error
  * code |error_code|. This is a convenient function built on top of
  * nghttp2_session_add_frame() to add RST_STREAM easily.
  *
  * This function simply returns 0 without adding RST_STREAM frame if
  * given stream is in NGHTTP2_STREAM_CLOSING state, because multiple
- * RST_STREAM for a stream is redundant.
+ * RST_STREAM for a stream is redundant.  It also returns 0 without
+ * adding the frame if |continue_without_stream| is nonzero, and
+ * stream was already gone.
  *
  * This function returns 0 if it succeeds, or one of the following
  * negative error codes:
@@ -417,8 +432,10 @@ int nghttp2_session_add_item(nghttp2_session *session,
  * NGHTTP2_ERR_NOMEM
  *     Out of memory.
  */
-int nghttp2_session_add_rst_stream(nghttp2_session *session, int32_t stream_id,
-                                   uint32_t error_code);
+int nghttp2_session_add_rst_stream_continue(nghttp2_session *session,
+                                            int32_t stream_id,
+                                            uint32_t error_code,
+                                            int continue_without_stream);
 
 /*
  * Adds PING frame. This is a convenient function built on top of

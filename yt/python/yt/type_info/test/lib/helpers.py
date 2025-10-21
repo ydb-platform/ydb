@@ -28,6 +28,9 @@ NO_ARGUMENT_TYPES = [
     "TzDate",
     "TzDatetime",
     "TzTimestamp",
+    "TzDate32",
+    "TzDatetime64",
+    "TzTimestamp64",
 
     "Void",
     "Null",

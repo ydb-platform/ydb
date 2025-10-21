@@ -2359,6 +2359,7 @@ enum class EOperationAttribute : int
     Spec              /* "spec" */,
     FullSpec          /* "full_spec" */,
     UnrecognizedSpec  /* "unrecognized_spec" */,
+    Alerts            /* "alerts" */,
 };
 
 ///
@@ -2949,6 +2950,10 @@ struct TListJobsOptions
     FLUENT_FIELD_OPTION(TString, OperationIncarnation);
 
     ///
+    /// @brief Return only jobs with given monitoring descriptor.
+    FLUENT_FIELD_OPTION(TString, MonitoringDescriptor);
+
+    ///
     /// @brief Search for jobs with start time >= `FromTime`.
     FLUENT_FIELD_OPTION(TInstant, FromTime);
 
@@ -3213,11 +3218,11 @@ struct TJobTraceEvent
 
     ///
     /// @brief Index of the trace event.
-    i64 EventIndex;
+    i64 EventIndex = 0;
 
     ///
-    /// @brief Raw evenr in json format.
-    TString Event;
+    /// @brief Raw event in json format.
+    std::string Event;
 
     ///
     /// @brief Time of the event.
@@ -3320,6 +3325,10 @@ struct IOperation
     ///
     /// @return `Nothing()` if operation has no running jobs yet, e.g. when it is in "materializing" or "pending" state.
     virtual TMaybe<TOperationBriefProgress> GetBriefProgress() = 0;
+
+    ///
+    /// Get operation alerts.
+    virtual TMaybe<THashMap<TString, TYtError>> GetAlerts() = 0;
 
     ///
     /// @brief Abort operation.

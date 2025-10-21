@@ -391,6 +391,12 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
 
     table.ChangesRequested = false;
 
+    // Compactions have been cancelled, we may need to resubmit
+    ResubmitCompactions(table);
+}
+
+void TCompactionLogic::ResubmitCompactions(TCompactionLogicState::TTableInfo &table)
+{
     auto &inMem = table.InMem;
 
     auto resubmit = [&](const TString& type, ui32 priority) {
@@ -427,6 +433,14 @@ void TCompactionLogic::StrategyChanging(TCompactionLogicState::TTableInfo &table
 
         default:
             break;
+    }
+
+    if (table.Strategy &&
+        table.ForcedCompactionState == EForcedCompactionState::None &&
+        table.Strategy->GetLastFinishedForcedCompactionId() < table.LastStartedFullCompactionId)
+    {
+        // We need to start a new forced compaction cycle
+        PrepareForceCompaction(table.TableId);
     }
 }
 
@@ -577,6 +591,7 @@ bool TCompactionLogic::BeginMemTableCompaction(ui64 taskId, ui32 tableId)
             }
             case EForceCompaction::Full: {
                 forcedCompactionId = tableInfo->CurrentForcedMemCompactionId;
+                tableInfo->LastStartedFullCompactionId = forcedCompactionId;
                 break;
             }
         }
@@ -711,6 +726,8 @@ TTableCompactionChanges TCompactionLogic::RemovedParts(ui32 tableId, TArrayRef<c
     ret.Table = tableId;
     ret.Changes = tableInfo->Strategy->PartsRemoved(parts);
     ret.Strategy = tableInfo->StrategyType;
+    // A call to PartsRemoved has cancelled all ongoing compactions, resubmit them again
+    ResubmitCompactions(*tableInfo);
     return ret;
 }
 

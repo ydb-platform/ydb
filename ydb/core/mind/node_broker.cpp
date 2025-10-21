@@ -459,7 +459,10 @@ void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
 
 void TNodeBroker::ScheduleProcessSubscribersQueue(const TActorContext &ctx)
 {
-    ctx.Schedule(TDuration::Seconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+    if (!ScheduledProcessSubscribersQueue && !SubscribersQueue.Empty()) {
+        ctx.Schedule(TDuration::MilliSeconds(1), new TEvPrivate::TEvProcessSubscribersQueue);
+        ScheduledProcessSubscribersQueue = true;
+    }
 }
 
 void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
@@ -775,6 +778,13 @@ bool TNodeBroker::HasOutdatedSubscription(TActorId subscriber, ui64 newSeqNo) co
         return it->second.SeqNo < newSeqNo;
     }
     return false;
+}
+
+void TNodeBroker::UpdateCommittedStateCounters() {
+    TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
+    TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
+    TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
 }
 
 void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
@@ -1384,7 +1394,7 @@ void TNodeBroker::TDirtyState::DbUpdateNodeLocation(const TNodeInfo &node,
 }
 
 void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
-                                       TTransactionContext &txc) 
+                                       TTransactionContext &txc)
 {
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -1395,7 +1405,7 @@ void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId)
         .UpdateToNull<T::SlotIndex>();
 }
-  
+
 void TNodeBroker::TDirtyState::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
@@ -1489,6 +1499,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
         TActorId ReplyTo;
         NActors::TScopeId ScopeId;
         TSubDomainKey ServicedSubDomain;
+        TString Error;
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -1505,8 +1516,31 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 
             auto& record = Ev->Get()->Record;
 
+            if (const auto& bridgePileName = TNodeLocation(record.GetLocation()).GetBridgePileName()) {
+                if (AppData()->BridgeModeEnabled) {
+                    const auto& bridge = AppData()->BridgeConfig;
+                    const auto& piles = bridge.GetPiles();
+                    bool found = false;
+                    for (int i = 0; i < piles.size(); ++i) {
+                        if (piles[i].GetName() == *bridgePileName) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        Error = TStringBuilder() << "Incorrect bridge pile name " << *bridgePileName;
+                    }
+                } else {
+                    Error = "Bridge pile specified while bridge mode is disabled";
+                }
+            } else if (AppData()->BridgeModeEnabled) {
+                Error = "Bridge pile not specified while bridge mode is enabled";
+            }
+
             if (record.HasPath()) {
                 auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+                req->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
+
                 auto& rset = req->ResultSet;
                 rset.emplace_back();
                 auto& item = rset.back();
@@ -1554,7 +1588,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
                 << ": scope id# " << ScopeIdToString(ScopeId)
                 << ": serviced subdomain# " << ServicedSubDomain);
 
-            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain));
+            Send(ReplyTo, new TEvPrivate::TEvResolvedRegistrationRequest(Ev, ScopeId, ServicedSubDomain, std::move(Error)));
             Die(ctx);
         }
 
@@ -1569,9 +1603,9 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvRegistrationRequest::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
                          const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
-        << ": request# " << ev->Get()->Record.ShortDebugString());   
+        << ": request# " << ev->Get()->Record.ShortDebugString());
     TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
-    Execute(CreateTxGracefulShutdown(ev), ctx);                     
+    Execute(CreateTxGracefulShutdown(ev), ctx);
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
@@ -1687,19 +1721,14 @@ void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
 
 void TNodeBroker::Handle(TEvPrivate::TEvProcessSubscribersQueue::TPtr &, const TActorContext &ctx)
 {
-    constexpr size_t MAX_BATCH_SIZE = 1000;
-
-    size_t batchSize = 0;
-    while (batchSize < SubscribersQueue.Size() && batchSize < MAX_BATCH_SIZE) {
+    ScheduledProcessSubscribersQueue = false;
+    if (!SubscribersQueue.Empty()) {
         auto& subscriber = *SubscribersQueue.Front();
-        if (subscriber.SentVersion >= Committed.Epoch.Version) {
-            break;
+        if (subscriber.SentVersion < Committed.Epoch.Version) {
+            SendUpdateNodes(subscriber, ctx);
+            ScheduleProcessSubscribersQueue(ctx);
         }
-        SendUpdateNodes(subscriber, ctx);
-        ++batchSize;
     }
-
-    ScheduleProcessSubscribersQueue(ctx);
 }
 
 TNodeBroker::TState::TState(TNodeBroker* self)

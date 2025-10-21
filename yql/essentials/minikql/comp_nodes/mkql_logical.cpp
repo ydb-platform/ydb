@@ -1,5 +1,5 @@
 #include "mkql_logical.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include "mkql_check_args.h"
@@ -10,8 +10,9 @@ namespace NMiniKQL {
 namespace {
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TAndWrapper : public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
+class TAndWrapper: public TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TAndWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TAndWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -20,14 +21,14 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (!left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
             }
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (!right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(false);
@@ -47,7 +48,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto uvFalse = GetFalse(context);
 
@@ -62,7 +63,7 @@ public:
         BranchInst::Create(done, both, skip, block);
 
         block = both;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         if (IsLeftOptional) {
             const auto andr = BinaryOperator::CreateAnd(left, right, "and", block);
@@ -82,8 +83,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TOrWrapper : public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
+class TOrWrapper: public TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TOrWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TOrWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -92,14 +94,14 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (!IsLeftOptional || left) {
             if (left.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
             }
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (!IsRightOptional || right) {
             if (right.template Get<bool>()) {
                 return NUdf::TUnboxedValuePod(true);
@@ -119,7 +121,7 @@ public:
         auto& context = ctx.Codegen.GetContext();
         const auto valueType = Type::getInt128Ty(context);
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto uvTrue = GetTrue(context);
 
@@ -134,7 +136,7 @@ public:
         BranchInst::Create(done, both, skip, block);
 
         block = both;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         if (IsLeftOptional) {
             const auto andr = BinaryOperator::CreateAnd(left, right, "and", block);
@@ -154,8 +156,9 @@ public:
 };
 
 template <bool IsLeftOptional, bool IsRightOptional>
-class TXorWrapper : public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
+class TXorWrapper: public TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> {
     typedef TBinaryCodegeneratorNode<TXorWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TXorWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(left, right, EValueRepresentation::Embedded)
@@ -164,12 +167,12 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& left = this->Left->GetValue(ctx);
+        const auto& left = this->Left_->GetValue(ctx);
         if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
         }
 
-        const auto& right = this->Right->GetValue(ctx);
+        const auto& right = this->Right_->GetValue(ctx);
         if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
         }
@@ -192,14 +195,14 @@ public:
             const auto result = PHINode::Create(valueType, 2, "result", done);
 
             if (IsLeftOptional) {
-                const auto left = GetNodeValue(this->Left, ctx, block);
+                const auto left = GetNodeValue(this->Left_, ctx, block);
 
                 const auto skip = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, left, zero, "skip", block);
                 result->addIncoming(zero, block);
                 BranchInst::Create(done, both, skip, block);
 
                 block = both;
-                const auto right = GetNodeValue(this->Right, ctx, block);
+                const auto right = GetNodeValue(this->Right_, ctx, block);
 
                 if (IsRightOptional) {
                     const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
@@ -213,14 +216,14 @@ public:
                     result->addIncoming(full, block);
                 }
             } else if (IsRightOptional) {
-                const auto right = GetNodeValue(this->Right, ctx, block);
+                const auto right = GetNodeValue(this->Right_, ctx, block);
 
                 const auto skip = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, right, zero, "skip", block);
                 result->addIncoming(zero, block);
                 BranchInst::Create(done, both, skip, block);
 
                 block = both;
-                const auto left = GetNodeValue(this->Left, ctx, block);
+                const auto left = GetNodeValue(this->Left_, ctx, block);
 
                 const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
                 const auto full = BinaryOperator::CreateOr(xorr, GetFalse(context), "full", block);
@@ -232,8 +235,8 @@ public:
 
             return result;
         } else {
-            const auto left = GetNodeValue(this->Left, ctx, block);
-            const auto right = GetNodeValue(this->Right, ctx, block);
+            const auto left = GetNodeValue(this->Left_, ctx, block);
+            const auto right = GetNodeValue(this->Right_, ctx, block);
 
             const auto xorr = BinaryOperator::CreateXor(left, right, "xor", block);
             const auto full = BinaryOperator::CreateOr(xorr, GetFalse(context), "full", block);
@@ -244,12 +247,14 @@ public:
 };
 
 template <bool IsOptional>
-class TNotWrapper : public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
+class TNotWrapper: public TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> {
     typedef TDecoratorCodegeneratorNode<TNotWrapper<IsOptional>> TBaseComputation;
+
 public:
     TNotWrapper(IComputationNode* arg)
         : TBaseComputation(arg)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& arg) const {
         if (IsOptional && !arg) {
@@ -289,8 +294,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
         } else {
             return new TWrapper<true, false>(ctx.Mutables, left, right);
         }
-    }
-    else {
+    } else {
         if (isRightOptional) {
             return new TWrapper<false, true>(ctx.Mutables, left, right);
         } else {
@@ -299,7 +303,7 @@ IComputationNode* WrapLogicalFunction(TCallable& callable, const TComputationNod
     }
 }
 
-}
+} // namespace
 
 IComputationNode* WrapAnd(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapLogicalFunction<TAndWrapper>(callable, ctx);
@@ -325,12 +329,10 @@ IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryCont
 
     if (isOptional) {
         return new TNotWrapper<true>(node);
-    }
-    else {
+    } else {
         return new TNotWrapper<false>(node);
     }
 }
 
-
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

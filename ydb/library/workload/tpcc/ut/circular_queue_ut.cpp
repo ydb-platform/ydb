@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
         queue.Resize(3);
         UNIT_ASSERT(queue.Empty());
         UNIT_ASSERT(!queue.IsFull());
-        UNIT_ASSERT_VALUES_EQUAL(queue.GetSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0);
     }
 
     Y_UNIT_TEST(ShouldPushAndPopSingleItem) {
@@ -37,7 +37,7 @@ Y_UNIT_TEST_SUITE(TCircularQueueTest) {
         UNIT_ASSERT(!queue.TryPush(3)); // Full
 
         UNIT_ASSERT(queue.IsFull());
-        UNIT_ASSERT_VALUES_EQUAL(queue.GetSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2);
     }
 
     Y_UNIT_TEST(ShouldRejectPopWhenEmpty) {

@@ -7,7 +7,7 @@
 
 #include <ydb/services/deprecated/persqueue_v0/api/grpc/persqueue.grpc.pb.h>
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
@@ -71,6 +71,11 @@ public:
         AtomicSet(ShuttingDown_, 1);
         if (ClustersUpdaterStatus) {
             ClustersUpdaterStatus->Stop();
+        }
+        auto g(Guard(Lock));
+        for (auto it = Sessions.begin(); it != Sessions.end();) {
+            auto jt = it++;
+            jt->second->DestroyStream("Grpc server is dead", NPersQueue::NErrorCode::BAD_REQUEST);
         }
     }
 

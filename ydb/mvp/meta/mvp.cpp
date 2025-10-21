@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <google/protobuf/text_format.h>
 #include <ydb/mvp/core/protos/mvp.pb.h>
@@ -120,10 +120,9 @@ int TMVP::Run() {
 }
 
 int TMVP::Shutdown() {
-    ActorSystemStoppingLock.AcquireWrite();
-    AtomicSet(ActorSystemStopping, true);
-    ActorSystemStoppingLock.ReleaseWrite();
     ActorSystem.Stop();
+    AppData.GRpcClientLow->Stop(true);
+    ActorSystem.Cleanup();
     return 0;
 }
 
@@ -136,10 +135,10 @@ TString TMVP::GetAppropriateEndpoint(const NHttp::THttpIncomingRequestPtr& req) 
 NMvp::TTokensConfig TMVP::TokensConfig;
 TString TMVP::MetaDatabaseTokenName;
 
+bool TMVP::DbUserTokenSource = false;
+
 TMVP::TMVP(int argc, char** argv)
-    : ActorSystemStoppingLock()
-    , ActorSystemStopping(false)
-    , LoggerSettings(BuildLoggerSettings())
+    : LoggerSettings(BuildLoggerSettings())
     , ActorSystemSetup(BuildActorSystemSetup(argc, argv))
     , ActorSystem(ActorSystemSetup, &AppData, LoggerSettings)
 {
@@ -177,6 +176,7 @@ void TMVP::TryGetMetaOptionsFromConfig(const YAML::Node& config) {
     MetaDatabase = meta["meta_database"].as<std::string>("");
     MetaCache = meta["meta_cache"].as<bool>(false);
     MetaDatabaseTokenName = meta["meta_database_token_name"].as<std::string>("");
+    DbUserTokenSource = meta["db_user_token_access"].as<bool>(false);
 }
 
 void TMVP::TryGetGenericOptionsFromConfig(

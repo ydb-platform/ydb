@@ -355,14 +355,14 @@ void TLockCommand::Register(TRegistrar registrar)
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "child_key",
         [] (TThis* command) -> auto& {
             return command->Options.ChildKey;
         })
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<std::optional<TString>>(
+    registrar.ParameterWithUniversalAccessor<std::optional<std::string>>(
         "attribute_key",
         [] (TThis* command) -> auto& {
             return command->Options.AttributeKey;

@@ -4,7 +4,7 @@
 
 Counting the number of rows in the table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
-Like other aggregate functions, it can be combined with [GROUP BY](../syntax/group_by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../syntax/group_by.md#distinct) to count distinct values.{% endif %}
+Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.{% endif %}
 
 ### Examples
 
@@ -75,13 +75,20 @@ The function *does not* do the implicit type casting to Boolean for strings and 
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
+FROM my_table;
 ```
 
 {% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
-To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/group_by.md#distinct) because arguments contain no values. To get this result, use in the subquery the built-in function [IF](basic.md#if) with two arguments (to get `NULL` in else), and apply an outer [COUNT(DISTINCT ...)](#count) to its result.
+To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
+
+```yql
+SELECT
+    COUNT(DISTINCT IF(value % 2 == 1, value))
+FROM my_table;
+```
 
 {% endnote %}
 
@@ -175,7 +182,7 @@ The order of elements in the result list depends on the implementation and can't
 
 To return a list of multiple values from one line, **DO NOT** use the `AGGREGATE_LIST` function several times, but add all the needed values to a container, for example, via [AsList](basic.md#aslist) or [AsTuple](basic.md#astuple), then pass this container to a single `AGGREGATE_LIST` call.
 
-For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/group_by.md).
+For example, you can combine it with `DISTINCT` and the function [String::JoinFromList](../udf/list/string.md) (it's an equivalent of `','.join(list)` in Python) to output to a string all the values found in the column after [GROUP BY](../syntax/select/group-by.md).
 
 ### Examples
 
@@ -462,7 +469,7 @@ Difference between Adaptive and Block:
 ### If you need an accurate histogram
 
 1. You can use the aggregate functions described below with fixed bucket grids: [LinearHistogram](#linearhistogram) or [LogarithmicHistogram](#linearhistogram).
-2. You can calculate the bucket number for each row and apply to it [GROUP BY](../syntax/group_by.md).
+2. You can calculate the bucket number for each row and apply to it [GROUP BY](../syntax/select/group-by.md).
 
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a weight is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
 
@@ -594,7 +601,7 @@ FROM my_table;
 
   ## SessionStart {#session-start}
 
-No arguments. It's allowed only if there is [SessionWindow](../syntax/group_by.md#session-window) in [GROUP BY](../syntax/group_by.md) / [PARTITION BY](../syntax/window.md#partition).
+No arguments. It's allowed only if there is [SessionWindow](../syntax/select/group-by.md#session-window) in [GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Returns the value of the `SessionWindow` key column. If `SessionWindow` has two arguments, it returns the minimum value of the first argument within the group/section.
 In the case of the expanded version `SessionWindow`, it returns the value of the second element from the tuple returned by `<calculate_lambda>`, for which the first tuple element is `True`.
 

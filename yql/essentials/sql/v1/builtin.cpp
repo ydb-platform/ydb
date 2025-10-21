@@ -2857,9 +2857,14 @@ struct TSimplePgFuncInfo {
     std::string_view NativeFuncName;
 };
 
+struct TMissingFuncInfo {
+    std::string_view Suggestion;
+};
+
 using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFuncInfo, THash<TString>>;
 using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
 using TSimplePgFuncMap = std::unordered_map<TString, TSimplePgFuncInfo, THash<TString>>;
+using TMissingFuncMap = std::unordered_map<TString, TMissingFuncInfo, THash<TString>>;
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& functionName,
@@ -3014,6 +3019,7 @@ struct TBuiltinFuncData {
     const TAggrFuncFactoryCallbackMap AggrFuncs;
     const TCoreFuncMap CoreFuncs;
     const TSimplePgFuncMap SimplePgFuncs;
+    const TMissingFuncMap MissingFuncs;
 
     TBuiltinFuncData()
         : BuiltinFuncs(MakeBuiltinFuncs())
@@ -3022,7 +3028,9 @@ struct TBuiltinFuncData {
         ,
         CoreFuncs(MakeCoreFuncs())
         ,
-        SimplePgFuncs(MakeSimplePgFuncMap())
+        SimplePgFuncs(MakeSimplePgFuncs())
+        ,
+        MissingFuncs(MakeMissingFuncs())
     {
     }
 
@@ -3530,13 +3538,83 @@ struct TBuiltinFuncData {
         return coreFuncs;
     }
 
-    TSimplePgFuncMap MakeSimplePgFuncMap() {
+    TSimplePgFuncMap MakeSimplePgFuncs() {
         TSimplePgFuncMap simplePgFuncs = {
             {"now", {"CurrentUtcTimestamp"}},
             {"to_date", {"DateTime::Format"}},
             {"round", {"Math::Round"}},
+            {"floor", {"Math::Floor"}},
+            {"date_trunc", {"DateTime::StartOf"}},
         };
         return simplePgFuncs;
+    }
+
+    TMissingFuncMap MakeMissingFuncs() {
+        TMissingFuncMap missingFuncs = {
+            {"lower", {"String::AsciiToLower or Unicode::ToLower"}},
+            {"upper", {"String::AsciiToUpper or Unicode::ToUpper"}},
+            {"replace", {"String::ReplaceAll"}},
+            {"todate", {"CAST(_ as Date)"}},
+            {"todatetime", {"CAST(_ as DateTime)"}},
+            {"today", {"CurrentUtcDate()"}},
+            {"tolist", {"AsList"}},
+            {"tostring", {"CAST(_ as String)"}},
+            {"listdistinct", {"ListUniq or ListUniqStable"}},
+            {"ypathstring", {"Yson::YPathString"}},
+            {"substr", {"Substring or Unicode::Substring"}},
+            {"type", {"FormatType(TypeOf(_))"}},
+            {"splittolist", {"String::SplitToList or Unicode::SplitToList"}},
+            {"listlenght", {"ListLength"}},
+            {"converttostring", {"Yson::ConvertToString"}},
+            {"uniq", {"HLL"}},
+            {"cnt", {"Count"}},
+            {"as_table", {"FROM AS_TABLE(_)"}},
+            {"astable", {"FROM AS_TABLE(_)"}},
+            {"range", {"FROM RANGE(_)"}},
+            {"rand", {"Random(_)"}},
+            {"regexp", {"regexp operator or Re2::Match"}},
+            {"left", {"Substring or Unicode::Substring"}},
+            {"str", {"CAST(_ as String)"}},
+            {"values", {"FROM (VALUES _)"}},
+            {"has", {"DictContains"}},
+            {"mean", {"Avg"}},
+            {"currentdate", {"CurrentUtcDate"}},
+            {"regexp_extract", {"Re2::Capture"}},
+            {"lenght", {"Length"}},
+            {"convert", {"CAST"}},
+            {"indexof", {"Find"}},
+            {"convertyson", {"Yson::Serialize/Yson::SerializeText/Yson::SerializePretty"}},
+            {"each", {"FROM EACH(_)"}},
+            {"listcontains", {"ListHas"}},
+            {"ifnull", {"operator '\?\?' or Coalesce/NVL"}},
+            {"date_format", {"DateTime::Format"}},
+            {"asstring", {"CAST(_ as String)"}},
+            {"flatten", {"FROM FLATTEN LIST BY or ListFlatten"}},
+            {"jsonextractstring", {"Yson::ParseJson + Yson::LookupString"}},
+            {"ysonextractstring", {"Yson::Parse + Yson::LookupString"}},
+            {"dateadd", {"DateTime::Update"}},
+            {"like", {"FROM LIKE(_)"}},
+            {"isnull", {"_ IS NULL"}},
+            {"from_unixtime", {"DateTime::FromSeconds"}},
+            {"position", {"Find or Unicode::Find"}},
+            {"regexp_replace", {"Re2::Replace"}},
+            {"toint64", {"CAST(_ as Int64)"}},
+            {"datediff", {"operator '-' + DateTime::To*"}},
+            {"todate32", {"CAST(_ as Date32)"}},
+            {"trim", {"String::Strip or Unicode::Strip"}},
+            {"converttolist", {"Yson::ConvertToList"}},
+            {"multiif", {"CASE WHEN"}},
+            {"group_concat", {"AggList + String::JoinFromList or Unicode::JoinFromList"}},
+            {"intervalfromdays", {"DateTime::IntervalFromDays"}},
+            {"argmax", {"MaxBy"}},
+            {"argmin", {"MinBy"}},
+            {"tostartofmonth", {"DateTime::StartOfMonth"}},
+            {"tounixtimestamp", {"DateTime::ToSeconds"}},
+            {"split", {"String::SplitToList or Unicode::SplitToList"}},
+            {"match", {"Re2::Match"}},
+            {"contains", {"Find(_) IS NOT NULL or ListHas/DictContains"}},
+        };
+        return missingFuncs;
     }
 };
 
@@ -3547,6 +3625,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
     const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
+    const TMissingFuncMap& missingFuncs = funcData->MissingFuncs;
 
     for (auto& arg : args) {
         if (!arg) {
@@ -4027,6 +4106,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             if (simplePgFunc != simplePgFuncs.end()) {
                 b << ", consider using " << simplePgFunc->second.NativeFuncName << " function instead.";
                 b << " It's possible to use SimplePg::" << lowerName << " function as well but with some performance overhead.";
+            } else if (auto it = missingFuncs.find(lowerName); it != missingFuncs.end()) {
+                b << ", consider using " << it->second.Suggestion << " function(s) instead.";
             } else {
                 bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
                 bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);

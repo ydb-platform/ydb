@@ -13927,6 +13927,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
         ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
         Functions["YqlColumnRef"] = &PgColumnRefWrapper;
+        Functions["YqlStar"] = &PgStarWrapper;
+        Functions["YqlWhere"] = &PgWhereWrapper;
+        Functions["YqlSort"] = &PgSortWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

@@ -68,7 +68,19 @@ TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream
     }));
 }
 
+template <class TRequestMessage, class TResponse>
+TFuture<NConcurrency::IAsyncZeroCopyOutputStreamPtr> CreateRpcClientOutputStream(
+    TIntrusivePtr<TTypedClientRequest<TRequestMessage, TResponse>> request,
+    TCallback<void(TIntrusivePtr<TResponse>&&)> rspHandler)
+{
+    auto invokeResult = request->Invoke()
+        .ApplyUnique(std::move(rspHandler));
+
+    return NDetail::CreateRpcClientOutputStreamFromInvokedRequest(
+        std::move(request),
+        std::move(invokeResult));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc
-

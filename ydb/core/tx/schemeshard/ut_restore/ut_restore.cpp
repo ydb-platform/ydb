@@ -2674,30 +2674,7 @@ value {
 
         NBackup::TEncryptionIV tableIV = NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableSchema, 1, 0);
 
-        // TString backupMetadata = R"json({
-        //     "kind": "SimpleExportV0",
-        //     "compression": "zstd",
-        //     "encryption": "ChaCha20-Poly1305",
-        //     "checksum": "sha256"
-        // })json";
-        // file("metadata.json", backupMetadata, Nothing());
-
-        // TString schemaMappingMetadata = R"json({
-        //     "kind": "SchemaMappingV0"
-        // })json";
-        // file("SchemaMapping/metadata.json.enc", schemaMappingMetadata, iv);
-
-        // TString mappingJson = Sprintf(R"json({
-        //     "exportedObjects": {
-        //         "TestTable": {
-        //             "exportPrefix": "001",
-        //             "iv": "%s"
-        //         }
-        //     }
-        // })json", tableIV.GetHexString().c_str());
-        // file("SchemaMapping/mapping.json.enc", schemaMappingMetadata, NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::SchemaMapping, 0, 0));
-
-        TString tableMetadata = R"json({
+        const TString tableMetadata = R"json({
             "version": 1,
             "full_backups": [
                 {
@@ -2709,7 +2686,7 @@ value {
         })json";
         file("001/metadata.json.enc", tableMetadata, tableIV);
 
-        TString tableSchema = R"json(
+        const TString tableSchema = R"json(
             columns {
                 name: "Key"
                 type {

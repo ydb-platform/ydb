@@ -30,7 +30,10 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
 
     TSaverContext saverContext(StoragesManager);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
-    for (const auto& [_, level]: LevelsByWeight) {
+    for (const auto& [weight, level]: LevelsByWeight) {
+        if (weight == 0) {
+            continue;
+        }
         auto tasks = level->GetOptimizationTasks();
         for (auto& data: tasks) {
             if (data.IsEmpty()) {

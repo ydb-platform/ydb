@@ -11,6 +11,7 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+// TODO MLP Slow zone
 class TStorage {
 public:
     // The maximum number of messages per flight. If a larger number is required, then you need

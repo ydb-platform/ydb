@@ -792,6 +792,7 @@ TBlobStorageController::TScrubState::~TScrubState()
 void TBlobStorageController::TScrubState::HandleTimer() {
     Impl->OnTimer(TActivationContext::Now());
     TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
+    UpdateBlobCheckerState();
 }
 
 void TBlobStorageController::TScrubState::Clear() {

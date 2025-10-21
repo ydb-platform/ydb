@@ -36,6 +36,7 @@ SRCS(
     group_mapper.cpp
     group_mapper.h
     group_metrics_exchange.cpp
+    blob_checker_planner.cpp
     impl.h
     indir.h
     init_scheme.cpp
@@ -51,7 +52,6 @@ SRCS(
     register_node.cpp
     request_controller_info.cpp
     resources.h
-    scan_throttler.cpp
     scheme.h
     scrub.cpp
     shred.cpp

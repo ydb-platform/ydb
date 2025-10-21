@@ -844,6 +844,21 @@ void TestFixedSizeBinaryDataTypeConversion() {
     }
 }
 
+template <TType::EKind SingularKind>
+void TestSingularTypeConversion() {
+    TTestContext context;
+    TType* type = GetTypeOfSingular<SingularKind>(context.TypeEnv);
+
+    UNIT_ASSERT(NFormats::IsArrowCompatible(type));
+
+    TUnboxedValueVector empty;
+
+    auto array = NFormats::NTestUtils::MakeArray(empty, type);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->type_id() == arrow::Type::NA);
+    UNIT_ASSERT(array->length() == 0);
+}
+
 Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     // Integral types
     Y_UNIT_TEST(DataType_Bool) {
@@ -982,6 +997,23 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
 
     Y_UNIT_TEST(DataType_Uuid) {
         TestFixedSizeBinaryDataTypeConversion<NUdf::TUuid>();
+    }
+
+    // Singular types
+    Y_UNIT_TEST(DataType_Null) {
+        TestSingularTypeConversion<TType::EKind::Null>();
+    }
+
+    Y_UNIT_TEST(DataType_Void) {
+        TestSingularTypeConversion<TType::EKind::Void>();
+    }
+
+    Y_UNIT_TEST(DataType_EmptyList) {
+        TestSingularTypeConversion<TType::EKind::EmptyList>();
+    }
+
+    Y_UNIT_TEST(DataType_EmptyDict) {
+        TestSingularTypeConversion<TType::EKind::EmptyDict>();
     }
 }
 

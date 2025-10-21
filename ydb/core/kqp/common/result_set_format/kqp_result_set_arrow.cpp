@@ -82,9 +82,9 @@ bool NeedWrapByExternalOptional(const NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Null:
         case NMiniKQL::TType::EKind::Variant:
         case NMiniKQL::TType::EKind::Optional:
-            return true;
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
+            return true;
         case NMiniKQL::TType::EKind::Data:
         case NMiniKQL::TType::EKind::Struct:
         case NMiniKQL::TType::EKind::Tuple:
@@ -447,10 +447,9 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::Null:
-            return arrow::null();
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
-            return arrow::struct_({});
+            return arrow::null();
         case NMiniKQL::TType::EKind::Data: {
             auto dataType = static_cast<const NMiniKQL::TDataType*>(type);
             return GetArrowType(dataType);
@@ -560,19 +559,12 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Void:
-        case NMiniKQL::TType::EKind::Null: {
+        case NMiniKQL::TType::EKind::Null:
+        case NMiniKQL::TType::EKind::EmptyList:
+        case NMiniKQL::TType::EKind::EmptyDict: {
             YQL_ENSURE(builder->type()->id() == arrow::Type::NA, "Unexpected builder type");
             auto status = builder->AppendNull();
             YQL_ENSURE(status.ok(), "Failed to append null value: " << status.ToString());
-            break;
-        }
-
-        case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict: {
-            YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
-            auto structBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
-            auto status = structBuilder->Append();
-            YQL_ENSURE(status.ok(), "Failed to append empty dict/list value: " << status.ToString());
             break;
         }
 

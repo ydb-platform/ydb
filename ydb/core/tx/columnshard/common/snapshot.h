@@ -106,6 +106,22 @@ public:
     explicit operator size_t() const {
         return CombineHashes(PlanStep, TxId);
     }
+
+    TSnapshot GetPreviousSnapshot() const {
+        if (TxId == 0) {
+            return TSnapshot(PlanStep - 1, ::Max<ui64>());
+        } else {
+            return TSnapshot(PlanStep, TxId - 1);
+        }
+    }
+
+    TSnapshot GetNextSnapshot() const {
+        if (TxId == ::Max<ui64>()) {
+            return TSnapshot(PlanStep + 1, 0);
+        } else {
+            return TSnapshot(PlanStep, TxId + 1);
+        }
+    }
 };
 
 } // namespace NKikimr::NOlap

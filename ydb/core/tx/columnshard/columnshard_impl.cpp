@@ -176,15 +176,14 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
     auto plannedTx = ProgressTxController->GetPlannedTx();
     if (plannedTx) {
         // We may only read just before the first transaction in the queue
-        auto maxReadVersion = TRowVersion(plannedTx->Step, plannedTx->TxId).Prev();
-        return NOlap::TSnapshot(maxReadVersion.Step, maxReadVersion.TxId);
+        auto firstPlannedSnapshot = NOlap::TSnapshot(plannedTx->Step, plannedTx->TxId);
+        return firstPlannedSnapshot.GetPreviousSnapshot();
+    } else {
+        // If we use the current snapshot for internal modification, the scan will see portions that are committed with the same snapshot.
+        // So we should use the previous snapshot to avoid this.
+        // Internal modification are, for example, the abort of a transaction and no tx writes (bulk upsert).
+        return GetCurrentSnapshotForInternalModification().GetPreviousSnapshot();
     }
-    ui64 step = LastPlannedStep;
-    if (MediatorTimeCastEntry) {
-        ui64 mediatorStep = MediatorTimeCastEntry->Get(TabletID());
-        step = Max(step, mediatorStep);
-    }
-    return NOlap::TSnapshot(step, Max<ui64>());
 }
 
 ui64 TColumnShard::GetOutdatedStep() const {

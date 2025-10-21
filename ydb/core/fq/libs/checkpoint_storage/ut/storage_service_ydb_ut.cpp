@@ -43,18 +43,24 @@ using TRuntimePtr = std::unique_ptr<TTestActorRuntime>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <bool UseYdbSdk, bool EnableGc = false>
-class TFixture : public NUnitTest::TBaseFixture {
+template <bool UseYdbSdk>
+class TStorageServiceTest : public NUnitTest::TTestBase{
+    using TSelf = TStorageServiceTest<UseYdbSdk>;
+
 public:
-    void SetUp(NUnitTest::TTestContext& /* context */) override {
+    void SetUp() override {
+        Init();
+    }
+
+    void Init(bool enableGc = false) {
         if constexpr (UseYdbSdk) {
-            InitSdkConnection();
+            InitSdkConnection(enableGc);
         } else {
             InitLocalConnection();
         }
     }
 
-    void InitSdkConnection() {
+    void InitSdkConnection(bool enableGc) {
         Runtime = std::make_unique<TTestBasicRuntime>(1, true);
         Runtime->SetLogPriority(NKikimrServices::STREAMS_STORAGE_SERVICE, NLog::PRI_DEBUG);
 
@@ -67,7 +73,7 @@ public:
         storageConfig.SetTablePrefix(CreateGuidAsString());
 
         auto& gcConfig = *config.MutableCheckpointGarbageConfig();
-        gcConfig.SetEnabled(EnableGc);
+        gcConfig.SetEnabled(enableGc);
 
         auto driverConfig = NYdb::TDriverConfig();
         NYdb::TDriver driver(driverConfig);
@@ -331,6 +337,247 @@ public:
         return nodesState;
     }
 
+    UNIT_TEST_SUITE_DEMANGLE(TSelf);
+    UNIT_TEST(ShouldRegister);
+    UNIT_TEST(ShouldNotRegisterPrevGeneration);
+    UNIT_TEST(ShouldRegisterNextGeneration);
+    UNIT_TEST(ShouldCreateCheckpoint);
+    UNIT_TEST(ShouldNotCreateCheckpointWhenUnregistered);
+    UNIT_TEST(ShouldNotCreateCheckpointTwice);
+    UNIT_TEST(ShouldNotCreateCheckpointAfterGenerationChanged);
+    UNIT_TEST(ShouldGetCheckpoints);
+    UNIT_TEST(ShouldPendingAndCompleteCheckpoint);
+    UNIT_TEST(ShouldAbortCheckpoint);
+    UNIT_TEST(ShouldNotPendingCheckpointWithoutCreation);
+    UNIT_TEST(ShouldNotCompleteCheckpointWithoutCreation);
+    UNIT_TEST(ShouldNotAbortCheckpointWithoutCreation);
+    UNIT_TEST(ShouldNotCompleteCheckpointWithoutPending);
+    UNIT_TEST(ShouldNotPendingCheckpointGenerationChanged);
+    UNIT_TEST(ShouldNotCompleteCheckpointGenerationChanged);
+    UNIT_TEST(ShouldSaveState);
+    UNIT_TEST(ShouldGetState);
+    UNIT_TEST(ShouldUseGc);
+    UNIT_TEST_SUITE_END();
+
+    void ShouldRegister() {
+        RegisterDefaultCoordinator();
+    }
+
+    /*
+ *  We weakened registration condition at while, registration with the same generation
+ *  is not possible
+ *
+    Y_UNIT_TEST_F(ShouldNotRegisterSameTwice)
+    {
+        auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterSameTwice");
+
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(runtime, coordinator1);
+        RegisterCoordinator(runtime, coordinator1, true);
+    }
+*/
+
+    void ShouldNotRegisterPrevGeneration() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+
+        TCoordinatorId coordinator2(GraphId, Generation - 1);
+        RegisterCoordinator(coordinator2, true);
+    }
+
+    void ShouldRegisterNextGeneration() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+
+        TCoordinatorId coordinator2(GraphId, Generation + 1);
+        RegisterCoordinator(coordinator2);
+
+        // try register prev generation again
+        RegisterCoordinator(coordinator1, true);
+    }
+
+    void ShouldCreateCheckpoint() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+    }
+
+    void ShouldNotCreateCheckpointWhenUnregistered() {
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotCreateCheckpointTwice() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotCreateCheckpointAfterGenerationChanged() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        TCoordinatorId coordinator2(GraphId, Generation + 1);
+        RegisterCoordinator(coordinator2);
+
+        // second checkpoint, but with previous generation
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
+    }
+
+    void ShouldGetCheckpoints() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CreateCheckpoint(GraphId, Generation, CheckpointId3, false);
+
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
+
+        THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
+        for (const auto& checkpoint: checkpoints) {
+            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
+            checkpoinIds.insert(checkpoint.CheckpointId);
+        }
+
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId1));
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId2));
+        UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
+    }
+
+    void ShouldPendingAndCompleteCheckpoint() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+
+        for (const auto& checkpoint: checkpoints) {
+            if (checkpoint.CheckpointId == CheckpointId1) {
+                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
+            } else if (checkpoint.CheckpointId == CheckpointId2) {
+                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
+            } else {
+                UNIT_ASSERT(false);
+            }
+        }
+    }
+
+    void ShouldAbortCheckpoint() {
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
+        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
+        AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
+
+        auto checkpoints = GetCheckpoints(GraphId);
+        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
+
+        for (const auto& checkpoint: checkpoints) {
+            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
+        }
+    }
+
+    void ShouldNotPendingCheckpointWithoutCreation() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotCompleteCheckpointWithoutCreation() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotAbortCheckpointWithoutCreation() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+
+        AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotCompleteCheckpointWithoutPending() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotPendingCheckpointGenerationChanged() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        auto nextGen = Generation + 1;
+        TCoordinatorId coordinator2(GraphId, nextGen);
+        RegisterCoordinator(coordinator2);
+
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldNotCompleteCheckpointGenerationChanged() {
+        TCoordinatorId coordinator1(GraphId, Generation);
+        RegisterCoordinator(coordinator1);
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        auto nextGen = Generation + 1;
+        TCoordinatorId coordinator2(GraphId, nextGen);
+        RegisterCoordinator(coordinator2);
+
+        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
+    }
+
+    void ShouldSaveState() {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
+
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+
+        SaveState(1317, CheckpointId1, MakeState("some random state"));
+    }
+
+    void ShouldGetState() {
+        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
+
+        RegisterDefaultCoordinator();
+        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
+        auto state = MakeState("some random state");
+        SaveState(1317, CheckpointId1, state);
+
+        auto actual = GetState(1317, GraphId, CheckpointId1);
+        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+    }
+
+    void ShouldUseGc() {
+        Init(true);
+        RegisterDefaultCoordinator();
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId2);
+        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
+
+        TCheckpoints checkpoints;
+        DoWithRetry<yexception>([&]() {
+            Cerr << "GetCheckpoints 0 " << Endl;
+            checkpoints = GetCheckpoints(GraphId);
+            if (checkpoints.size() != 1) {
+                throw yexception() << "gc not finished yet";
+            }
+        }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
+    }
+
 private:
     TPortManager PortManager;
     ui16 MsgBusPort = 0;
@@ -349,490 +596,10 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constexpr bool EnableGC = true;
-constexpr bool DisableGC = false;
-using TSdkFixture = TFixture<true, DisableGC>; 
-using TLocalFixture = TFixture<false, DisableGC>;
-
-
-Y_UNIT_TEST_SUITE(TStorageServiceTest) {
-    Y_UNIT_TEST_F(ShouldRegister, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-    }
-
-/*
- *  We weakened registration condition at while, registration with the same generation
- *  is not possible
- *
-    Y_UNIT_TEST_F(ShouldNotRegisterSameTwice)
-    {
-        auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterSameTwice");
-
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(runtime, coordinator1);
-        RegisterCoordinator(runtime, coordinator1, true);
-    }
-*/
-    Y_UNIT_TEST_F(ShouldNotRegisterPrevGeneration, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        TCoordinatorId coordinator2(GraphId, Generation - 1);
-        RegisterCoordinator(coordinator2, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldRegisterNextGeneration, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        TCoordinatorId coordinator2(GraphId, Generation + 1);
-        RegisterCoordinator(coordinator2);
-
-        // try register prev generation again
-        RegisterCoordinator(coordinator1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointWhenUnregistered, TSdkFixture)
-    {
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointAfterGenerationChanged, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        TCoordinatorId coordinator2(GraphId, Generation + 1);
-        RegisterCoordinator(coordinator2);
-
-        // second checkpoint, but with previous generation
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldGetCheckpoints, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId3, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
-
-        THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
-        for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
-            checkpoinIds.insert(checkpoint.CheckpointId);
-        }
-
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId1));
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId2));
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
-    }
-
-    Y_UNIT_TEST_F(ShouldPendingAndCompleteCheckpoint, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            if (checkpoint.CheckpointId == CheckpointId1) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
-            } else if (checkpoint.CheckpointId == CheckpointId2) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
-            } else {
-                UNIT_ASSERT(false);
-            }
-        }
-    }
-
-    Y_UNIT_TEST_F(ShouldAbortCheckpoint, TSdkFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
-        AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
-        }
-    }
-
-    Y_UNIT_TEST_F(ShouldNotPendingCheckpointWithoutCreation, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutCreation, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotAbortCheckpointWithoutCreation, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutPending, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotPendingCheckpointGenerationChanged, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        auto nextGen = Generation + 1;
-        TCoordinatorId coordinator2(GraphId, nextGen);
-        RegisterCoordinator(coordinator2);
-
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointGenerationChanged, TSdkFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        auto nextGen = Generation + 1;
-        TCoordinatorId coordinator2(GraphId, nextGen);
-        RegisterCoordinator(coordinator2);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveState, TSdkFixture)
-    {
-        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        SaveState(1317, CheckpointId1, MakeState("some random state"));
-    }
-
-    Y_UNIT_TEST_F(ShouldGetState, TSdkFixture)
-    {
-        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
-
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
-    }
-
-    using TEnableGCFixture = TFixture<true, EnableGC>;
-
-    Y_UNIT_TEST_F(ShouldUseGc, TEnableGCFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId2);
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
-
-        TCheckpoints checkpoints;
-        DoWithRetry<yexception>([&]() {
-            Cerr << "GetCheckpoints 0 " << Endl;
-            checkpoints = GetCheckpoints(GraphId);
-            if (checkpoints.size() != 1) {
-                throw yexception() << "gc not finished yet";
-            }
-        }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
-    }
-};
-
-Y_UNIT_TEST_SUITE(TStorageServiceLocalTest) {
-    Y_UNIT_TEST_F(ShouldRegister, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-    }
-
-/*
- *  We weakened registration condition at while, registration with the same generation
- *  is not possible
- *
-    Y_UNIT_TEST_F(ShouldNotRegisterSameTwice)
-    {
-        auto runtime = PrepareTestActorRuntime("TStorageServiceTestShouldNotRegisterSameTwice");
-
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(runtime, coordinator1);
-        RegisterCoordinator(runtime, coordinator1, true);
-    }
-*/
-    Y_UNIT_TEST_F(ShouldNotRegisterPrevGeneration, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        TCoordinatorId coordinator2(GraphId, Generation - 1);
-        RegisterCoordinator(coordinator2, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldRegisterNextGeneration, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        TCoordinatorId coordinator2(GraphId, Generation + 1);
-        RegisterCoordinator(coordinator2);
-
-        // try register prev generation again
-        RegisterCoordinator(coordinator1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldCreateCheckpoint, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointWhenUnregistered, TLocalFixture)
-    {
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointTwice2, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCreateCheckpointAfterGenerationChanged, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        TCoordinatorId coordinator2(GraphId, Generation + 1);
-        RegisterCoordinator(coordinator2);
-
-        // second checkpoint, but with previous generation
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldGetCheckpoints, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CreateCheckpoint(GraphId, Generation, CheckpointId3, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 3UL);
-
-        THashSet<TCheckpointId, TCheckpointIdHash> checkpoinIds;
-        for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Pending);
-            checkpoinIds.insert(checkpoint.CheckpointId);
-        }
-
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId1));
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId2));
-        UNIT_ASSERT(checkpoinIds.contains(CheckpointId3));
-    }
-
-    Y_UNIT_TEST_F(ShouldPendingAndCompleteCheckpoint, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            if (checkpoint.CheckpointId == CheckpointId1) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::PendingCommit);
-            } else if (checkpoint.CheckpointId == CheckpointId2) {
-                UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Completed);
-            } else {
-                UNIT_ASSERT(false);
-            }
-        }
-    }
-
-    Y_UNIT_TEST_F(ShouldAbortCheckpoint, TLocalFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CreateCheckpoint(GraphId, Generation, CheckpointId2, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId2, false);
-        CompleteCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, false);
-        AbortCheckpoint(GraphId, Generation, CheckpointId2, false);
-
-        auto checkpoints = GetCheckpoints(GraphId);
-        UNIT_ASSERT_VALUES_EQUAL(checkpoints.size(), 2UL);
-
-        for (const auto& checkpoint: checkpoints) {
-            UNIT_ASSERT(checkpoint.Status == ECheckpointStatus::Aborted);
-        }
-    }
-
-    Y_UNIT_TEST_F(ShouldNotPendingCheckpointWithoutCreation, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutCreation, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotAbortCheckpointWithoutCreation, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-
-        AbortCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointWithoutPending, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotPendingCheckpointGenerationChanged, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        auto nextGen = Generation + 1;
-        TCoordinatorId coordinator2(GraphId, nextGen);
-        RegisterCoordinator(coordinator2);
-
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldNotCompleteCheckpointGenerationChanged, TLocalFixture)
-    {
-        TCoordinatorId coordinator1(GraphId, Generation);
-        RegisterCoordinator(coordinator1);
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        PendingCommitCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        auto nextGen = Generation + 1;
-        TCoordinatorId coordinator2(GraphId, nextGen);
-        RegisterCoordinator(coordinator2);
-
-        CompleteCheckpoint(GraphId, Generation, CheckpointId1, true);
-    }
-
-    Y_UNIT_TEST_F(ShouldSaveState, TLocalFixture)
-    {
-        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-
-        SaveState(1317, CheckpointId1, MakeState("some random state"));
-    }
-
-    Y_UNIT_TEST_F(ShouldGetState, TLocalFixture)
-    {
-        NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
-
-        RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
-
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
-    }
-
-    using TEnableGCFixture = TFixture<false, EnableGC>;
-
-    Y_UNIT_TEST_F(ShouldUseGc, TEnableGCFixture)
-    {
-        RegisterDefaultCoordinator();
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId1);
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId2);
-        CreateCompletedCheckpoint(GraphId, Generation, CheckpointId3);
-
-        TCheckpoints checkpoints;
-        DoWithRetry<yexception>([&]() {
-            Cerr << "GetCheckpoints 0 " << Endl;
-            checkpoints = GetCheckpoints(GraphId);
-            if (checkpoints.size() != 1) {
-                throw yexception() << "gc not finished yet";
-            }
-        }, TRetryOptions(100, TDuration::MilliSeconds(100)), true);
-    }
-};
+using TStorageServiceSdkTest = TStorageServiceTest<true>; 
+using TStorageServiceLocalTest = TStorageServiceTest<false>;
+
+UNIT_TEST_SUITE_REGISTRATION(TStorageServiceSdkTest);
+UNIT_TEST_SUITE_REGISTRATION(TStorageServiceLocalTest);
 
 } // namespace NFq

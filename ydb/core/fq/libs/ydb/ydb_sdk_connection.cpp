@@ -1,4 +1,3 @@
-#include <ydb/core/fq/libs/ydb/ydb_connection.h>
 #include <ydb/core/fq/libs/ydb/sdk_table_client.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>

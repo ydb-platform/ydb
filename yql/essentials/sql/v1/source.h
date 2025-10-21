@@ -71,6 +71,7 @@ public:
     virtual bool IsStream() const;
     virtual EOrderKind GetOrderKind() const;
     virtual TWriteSettings GetWriteSettings() const;
+    virtual void SetDiscardInInvalidPlace();
     TNodePtr PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate);
     virtual bool SetSamplingOptions(TContext& ctx, TPosition pos, ESampleClause clause, ESampleMode mode, TNodePtr samplingRate, TNodePtr samplingSeed);
     virtual bool SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hints, const TTableHints& contextHints);

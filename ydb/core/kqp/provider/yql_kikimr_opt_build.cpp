@@ -77,7 +77,6 @@ bool GetResultDiscard(const TResWriteBase& resWrite) {
     return false;
 }
 
-
 enum class TPrimitiveYdbOperation : ui32 {
     Read = 1 << 0,
     Write = 1 << 1

@@ -1179,6 +1179,10 @@ public:
         return Settings_;
     }
 
+    void SetDiscardInInvalidPlace() override {
+        Settings_.DiscardInInvalidPlace = true;
+    }
+
     bool HasSelectResult() const final {
         return !Settings_.Discard;
     }
@@ -1197,7 +1201,7 @@ private:
     TVector<TNodePtr> Args_;
     TNodePtr Udf_;
     TNodePtr Having_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
     TVector<TSortSpecificationPtr> AssumeOrderBy_;
     const bool ListCall_;
 };
@@ -1416,6 +1420,10 @@ public:
         return Settings_;
     }
 
+    void SetDiscardInInvalidPlace() override {
+        Settings_.DiscardInInvalidPlace = true;
+    }
+
     bool HasSelectResult() const override {
         return !Settings_.Discard;
     }
@@ -1460,7 +1468,7 @@ private:
     TSourcePtr OriginalSource_;
     TNodePtr Flatten_;
     TNodePtr PreFlattenMap_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
     TVector<TSourcePtr> Subselects_;
     TVector<TNodePtr> Grouping_;
     TVector<TNodePtr> GroupByExpr_;
@@ -1875,6 +1883,10 @@ public:
 
     TWriteSettings GetWriteSettings() const override {
         return Settings_;
+    }
+
+    void SetDiscardInInvalidPlace() override {
+        Settings_.DiscardInInvalidPlace = true;
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
@@ -2325,7 +2337,7 @@ private:
     bool OrderByInit_ = false;
     TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec_;
     const bool SelectStream_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
     const TColumnsSets UniqueSets_, DistinctSets_;
     TMap<TString, TNodePtr> ExtraSortColumns_;
 };
@@ -2551,6 +2563,10 @@ public:
         return Settings_;
     }
 
+    void SetDiscardInInvalidPlace() override {
+        Settings_.DiscardInInvalidPlace = true;
+    }
+
     TNodePtr DoClone() const final {
         return new TProcessSource(Pos_, Source_->CloneSource(), SafeClone(With_), WithExtFunction_,
                                   CloneContainer(Terms_), ListCall_, ProcessStream_, Settings_, CloneContainer(AssumeOrderBy_));
@@ -2579,7 +2595,7 @@ private:
     TVector<TNodePtr> Terms_;
     const bool ListCall_;
     const bool ProcessStream_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
     TVector<TSortSpecificationPtr> AssumeOrderBy_;
 };
 
@@ -2914,11 +2930,15 @@ public:
         return Settings_;
     }
 
+    void SetDiscardInInvalidPlace() override {
+        Settings_.DiscardInInvalidPlace = true;
+    }
+
 private:
     TVector<TSourcePtr> Sources_;
     const TString Operator_;
     bool QuantifierAll_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
 };
 
 TSourcePtr BuildSelectOp(
@@ -3226,6 +3246,10 @@ public:
         auto settings = Y(Q(Y(Q("type"))));
         if (writeSettings.Discard) {
             settings = L(settings, Q(Y(Q("discard"))));
+        }
+
+        if (writeSettings.DiscardInInvalidPlace) {
+            settings = L(settings, Q(Y(Q("discardinvalidplace"))));
         }
 
         if (!writeSettings.Label.Empty()) {

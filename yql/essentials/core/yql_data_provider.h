@@ -108,6 +108,7 @@ public:
         EResultFormat Format;
         TString FormatDetails;
         bool Discard = false;
+        bool DiscardInInvalidPlace = false;
     };
 
     virtual bool Initialize(TExprContext& ctx) = 0;

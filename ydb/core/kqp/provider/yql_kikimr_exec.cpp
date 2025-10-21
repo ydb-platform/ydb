@@ -1296,13 +1296,11 @@ private:
         if (SessionCtx->Query().Type == EKikimrQueryType::Script) {
             if (fillSettings.Discard) {
                 ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                    << "DISCARD not supported in YDB queries"));
+                    << "DISCARD not supported in YDB scripts"));
                 return SyncError();
             }
         }
 
-        // Check for DISCARD in invalid place (subquery or non-first UNION ALL subquery)
-        // This is always an error for non-DML queries
         if (fillSettings.DiscardInInvalidPlace && SessionCtx->Query().Type != EKikimrQueryType::Dml) {
             ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
                 << "DISCARD can only be used at the top level, not inside subqueries"));

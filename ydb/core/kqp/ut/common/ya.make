@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    arrow_builders.cpp
     json2_udf.cpp
     kqp_ut_common.cpp
     kqp_ut_common.h

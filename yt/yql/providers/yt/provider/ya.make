@@ -122,6 +122,7 @@ PEERDIR(
     yt/yql/providers/yt/common
     yt/yql/providers/yt/expr_nodes
     yt/yql/providers/yt/lib/expr_traits
+    yt/yql/providers/yt/lib/full_capture
     yt/yql/providers/yt/lib/graph_reorder
     yt/yql/providers/yt/lib/hash
     yt/yql/providers/yt/lib/key_filter

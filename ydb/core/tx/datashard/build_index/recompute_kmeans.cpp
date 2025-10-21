@@ -53,6 +53,9 @@ protected:
     ui64 ReadRows = 0;
     ui64 ReadBytes = 0;
 
+    bool InForeign = false;
+    NTable::TPos IsForeignPos = 0;
+
     IDriver* Driver = nullptr;
     NYql::TIssues Issues;
 
@@ -80,9 +83,11 @@ public:
     {
         LOG_I("Create " << Debug());
 
+        InForeign = request.GetSkipOverlapForeign();
+
         const auto& embedding = request.GetEmbeddingColumn();
         ui32 dataPos = 0;
-        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos);
+        ScanTags = MakeScanTags(table, embedding, {}, false, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
     }
 
@@ -192,6 +197,13 @@ protected:
 
     void Feed(TArrayRef<const TCell>, TArrayRef<const TCell> row)
     {
+        if (InForeign) {
+            bool foreign = row.at(IsForeignPos).AsValue<bool>();
+            if (foreign) {
+                // Skip rows from "non-domestic" clusters to not affect K-means centroids
+                return;
+            }
+        }
         if (auto pos = Clusters->FindCluster(row, EmbeddingPos); pos) {
             Clusters->AggregateToCluster(*pos, row.at(EmbeddingPos).AsRef());
         }

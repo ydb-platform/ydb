@@ -71,6 +71,10 @@ inline constexpr const char* PostingTable = "indexImplPostingTable";
 
 inline constexpr const char* BuildSuffix0 = "0build";
 inline constexpr const char* BuildSuffix1 = "1build";
+inline constexpr auto IsForeignType = Ydb::Type::BOOL;
+inline constexpr const char* IsForeignColumn = "__ydb_foreign";
+inline constexpr auto DistanceType = Ydb::Type::DOUBLE;
+inline constexpr const char* DistanceColumn = "__ydb_distance";
 
 // Prefix table
 inline constexpr const char* PrefixTable = "indexImplPrefixTable";

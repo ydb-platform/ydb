@@ -1625,6 +1625,7 @@ message TEvLocalKMeansRequest {
 
     optional uint32 OverlapClusters = 24;
     optional double OverlapRatio = 25;
+    optional bool OverlapOutForeign = 26;
 }
 
 message TEvLocalKMeansResponse {
@@ -1678,6 +1679,7 @@ message TEvReshuffleKMeansRequest {
 
     optional uint32 OverlapClusters = 18;
     optional double OverlapRatio = 19;
+    optional bool OverlapOutForeign = 20;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1716,6 +1718,8 @@ message TEvRecomputeKMeansRequest {
     repeated string Clusters = 10;
 
     optional string EmbeddingColumn = 11;
+
+    optional bool SkipOverlapForeign = 12;
 }
 
 message TEvRecomputeKMeansResponse {
@@ -1794,6 +1798,7 @@ message TEvPrefixKMeansRequest {
 
     optional uint32 OverlapClusters = 21;
     optional double OverlapRatio = 22;
+    optional bool OverlapOutForeign = 23;
 }
 
 message TEvPrefixKMeansResponse {

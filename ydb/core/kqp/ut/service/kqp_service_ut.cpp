@@ -638,6 +638,8 @@ struct TDictCase {
         TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2)
                                         .SetUseRealThreads(false));
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 const nodeId = runtime.GetNodeId(0);
+
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
         kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});

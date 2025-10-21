@@ -954,7 +954,7 @@ TString TNodeState::GetDebugInfo() {
         << Endl;
 
     for (auto& [info, descriptor] : OutputDescriptors) {
-        builder << "  Output " << info.ChannelId << ", FL=" << descriptor->FillLevel
+        builder << "  Output " << info.ChannelId << ", FL=" << (ui32)descriptor->FillLevel
             << ", IF:" << descriptor->IsFlushed() << ", TA=" << descriptor->IsTerminatedOrAborted()
             << ", EF: " << descriptor->EarlyFinished.load()
             << ", PP:" << descriptor->PushBytes.load() << ':' << descriptor->PopBytes.load() << Endl;

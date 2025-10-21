@@ -106,7 +106,7 @@ protected:
         }
         RefreshWeights();
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {

@@ -32,7 +32,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
     for (const auto& [weight, level]: LevelsByWeight) {
         if (weight == 0) {
-            continue;
+            break;
         }
         auto tasks = level->GetOptimizationTasks();
         for (auto& data: tasks) {

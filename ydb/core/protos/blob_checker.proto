@@ -5,7 +5,7 @@ import "ydb/core/protos/blobstorage.proto";
 
 package NKikimrBlobChecker;
 
-message TBlobCheckerGroupState {
+message TBlobCheckerGroupStatus {
     uint64 ShortStatus = 1;
     uint64 LastScanFinishedTimestamp = 2;  // TMonotonic
     NKikimrProto.TLogoBlobID MaxCheckedBlob = 3;

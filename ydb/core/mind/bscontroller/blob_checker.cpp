@@ -4,22 +4,27 @@
 namespace NKikimr {
 
 ///////////////////////////////////////////////////////////////////////////////////
-// TBlobCheckerGroupState
+// TBlobCheckerGroupStatus
 ///////////////////////////////////////////////////////////////////////////////////
 
-TBlobCheckerGroupState::TBlobCheckerGroupState(ui64 status, TMonotonic lastScan,
+TBlobCheckerGroupStatus::TBlobCheckerGroupStatus(ui64 status, TMonotonic lastScan,
         TLogoBlobID maxChecked)
     : ShortStatus(status)
     , LastScanFinishedTimestamp(lastScan)
     , MaxCheckedBlob(blob)
 {}
 
-TBlobCheckerGroupState TBlobCheckerGroupState::Deserialize(
-        NKikimrBlobChecker::TBlobCheckerGroupState serializedState) {
+TBlobCheckerGroupStatus TBlobCheckerGroupStatus::Deserialize(
+        NKikimrBlobChecker::TBlobCheckerGroupStatus serializedState) {
     ui64 status = serializedState.GetShortStatus();
     TMonotonic timestamp = reinterpret_cast<TMonotonic>(serializedState.GetLastScanFinishedTimestamp());
     TLogoBlobID blob = LogoBlobIDFromLogoBlobID(serializedState.GetMaxCheckedBlob());
-    return TBlobCheckerGroupState(status, timestamp, blob);
+    return TBlobCheckerGroupStatus(status, timestamp, blob);
+}
+
+TString TBlobCheckerGroupStatus::CreateInitialSerialized() {
+    NKikimrBlobChecker::TBlobCheckerGroupStatus proto;
+    proto.SetShortStatus();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -53,7 +58,7 @@ TString TEvBlobCheckerFinishQuantum::ToString() const {
     return str.Str();
 }
 
-TEvControllerBlobCheckerUpdateGroupStatus::TEvControllerBlobCheckerUpdateGroupStatus(
+TEvBlobCheckerUpdateGroupStatus::TEvBlobCheckerUpdateGroupStatus(
         TGroupId groupId, TString serializedState, bool finishScan)
     : GroupId(groupId)
     , SerializedState(serializedState)
@@ -61,23 +66,23 @@ TEvControllerBlobCheckerUpdateGroupStatus::TEvControllerBlobCheckerUpdateGroupSt
 {}
 
 TEvBlobCheckerUpdateGroupSet::TEvBlobCheckerUpdateGroupSet(
-        std::vector<TGroupIdWithSerializedState>&& newGroups,
+        std::unordered_map<TGroupId, TString>&& newGroups,
         std::vector<TGroupId>&& deletedGroups)
-    : NewGroups(newGroups)
-    , DeletedGroups(deletedGroups)
+    : NewGroups(std::forward<std::unordered_map<TGroupId, TString>>(newGroups))
+    , DeletedGroups(std::forward<std::vector<TGroupId>>(deletedGroups))
 {}
 
-TEvBlobCheckerPlanScan::TEvBlobCheckerPlanScan(TGroupId groupId)
+TEvBlobCheckerPlanCheck::TEvBlobCheckerPlanCheck(TGroupId groupId)
     : GroupId(groupId)
 {}
 
-TEvBlobCheckerScanDecision::TEvBlobCheckerScanDecision(TGroupId groupId,
+TEvBlobCheckerDecision::TEvBlobCheckerDecision(TGroupId groupId,
         NKikimrProto::EReplyStatus status)
     : GroupId(groupId)
     , Status(status)
 {}
 
-TEvBlobCheckerScanDecision::TEvUpdateBlobCheckerSettings(TDuration periodicity)
+TEvBlobCheckerDecision::TEvBlobCheckerUpdateSettings(TDuration periodicity)
     : Periodicity(periodicity)
 {}
 
@@ -269,10 +274,12 @@ private:
 
 class TBlobCheckerOrchestrator : public TActorBootstrapped<TBlobCheckerOrchestrator> {
 public:
-    TBlobCheckerOrchestrator(TActorId bscActorId, std::vector<std::pair<TGroupId, TString>>&& serializedState)
+    TBlobCheckerOrchestrator(TActorId bscActorId,
+            std::unordered_map<TGroupId, TString>&& serializedGroups,
+            TDuration periodicity)
         : BSCActorId(bscActorId)
     {
-        AddGroups(srd)
+        AddGroups(serializedGroups)
     }
 
     void Bootstrap() {
@@ -290,7 +297,8 @@ private:
         hFunc(TEvBlobCheckerFinishQuantum, Handle);
         cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
         hFunc(TEvBlobCheckerUpdateGroupSet, Handle);
-        hFunc(EvBlobCheckerScanDecision, Handle);
+        hFunc(TEvBlobCheckerDecision, Handle);
+        hFunc(TEvBlobCheckerUpdateSettings, Handle);
         cFunc(TEvent::TEvWakeup::EventType, HandleWakeup);
     })
 
@@ -320,7 +328,7 @@ private:
         }
     }
 
-    void Handle(const EvBlobCheckerScanDecision::TPtr& ev) {
+    void Handle(const EvBlobCheckerDecision::TPtr& ev) {
         TGroupId groupId = ev->Get()->GroupId;
         STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO21, "Got decision from BSC",
                 (GroupId, groupId),
@@ -353,10 +361,18 @@ private:
         STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO20, "Worker finished quantum",
                 (Event, ev->Get()->ToString()));
 
-        Send(BSCActorId, new TEvControllerBlobCheckerUpdateGroupStatus(
-            groupId,
+        auto it = Groups.find(groupId);
+        if (it == Groups.end()) {
+            // Group was deleted, nothing to do
+            return;
+        }
 
-        ));
+        Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(
+                groupId, ));
+    }
+
+    void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev) {
+        
     }
 
     void HandleWakeup() {
@@ -370,18 +386,18 @@ private:
     }
 
 private:
-    void AddGroups(std::vector<std::pair<TGroupId, TString>>&& newGroups) {
+    void AddGroups(std::unordered_map<TGroupId, TString>&& newGroups) {
         STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO10, "Adding new groups",
                 (NewGroupsCount, newGroups.size()));
         for (const auto& [groupId, serializedState] : newGroups) {
-            Groups[groupId].State = TBlobCheckerGroupState::Deserialize(serializedState);
+            Groups[groupId].State = TBlobCheckerGroupStatus::Deserialize(serializedState);
         }
     }
 
     void SendRequest(TGroupId groupId) {
         STLOG(PRI_NOTICE, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO22, "Sending request to BSC",
                 (GroupId, groupId));
-        Send(BSCActorId, new TEvBlobCheckerPlanScan(groupId))
+        Send(BSCActorId, new TEvBlobCheckerPlanCheck(groupId))
     }
 
 private:
@@ -393,7 +409,7 @@ private:
 
 private:
     struct TGroupCheckStatus {
-        TBlobCheckerGroupState State;
+        TBlobCheckerGroupStatus State;
         std::optional<TActorId> WorkerId;
     };
 
@@ -408,8 +424,11 @@ private:
 // Actor Creators
 ///////////////////////////////////////////////////////////////////////////////////
 
-NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId) {
-    return new TBlobCheckerOrchestrator(TActorId bscActorId);
+NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
+        std::unordered_map<TGroupId, TString> serializedGroups,
+        TDuration periodicity) {
+    return new TBlobCheckerOrchestrator(bscActorId, std::move(serializedGroups),
+            periodicity);
 }
 
 NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId) {

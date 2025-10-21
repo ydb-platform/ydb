@@ -287,4 +287,5 @@ enum ETxTypes {
     TXTYPE_CHECK_UNSYNCED = 31 [(TxTypeOpts) = {Name: "TTxCheckUnsynced"}];
     TXTYPE_UPDATE_BRIDGE_GROUP_INFO = 32 [(TxTypeOpts) = {Name: "TTxUpdateBridgeGroupInfo"}];
     TXTYPE_UPDATE_BRIDGE_SYNC_STATE = 33 [(TxTypeOpts) = {Name: "TTxUpdateBridgeSyncState"}];
+    TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 34 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
 }

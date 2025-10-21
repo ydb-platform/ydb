@@ -71,7 +71,7 @@ struct TEnvironmentSetup {
         bool EnableSelfHeal = true;
         bool EnableDonorMode = true;
         bool EnableGroupLayoutSanitizer = false;
-        std::optional<TDuration> BlobCheckerPeriodicity = std::nullopt;
+        TDuration BlobCheckerPeriodicity = TDuration::Zero();
     };
 
     const TSettings Settings;
@@ -997,7 +997,7 @@ config:
         us->AddEnableSelfHeal(settings.EnableSelfHeal);
         us->AddEnableDonorMode(settings.EnableDonorMode);
         us->AddEnableGroupLayoutSanitizer(settings.EnableGroupLayoutSanitizer);
-        us->AddEnableBlobChecker(settings.EnableBlobChecker);
+        us->AddBlobCheckerPeriodicity(settings.BlobCheckerPeriodicity);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

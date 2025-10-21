@@ -8,8 +8,9 @@
 namespace NKikimr {
 
 enum EBlobCheckerResultStatusFlags : ui64 {
-    DataIssues      = 0b0001,
-    PlacementIssues = 0b0010,
+    ScanFinished    = 0b0001,
+    DataIssues      = 0b0010,
+    PlacementIssues = 0b0100,
 };
 
 enum EBlobCheckerWorkerQuantumStatus : ui32 {
@@ -19,11 +20,6 @@ enum EBlobCheckerWorkerQuantumStatus : ui32 {
 };
 
 TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus value);
-
-struct TGroupIdWithSerializedState {
-    TGroupId GroupId;
-    TString Data;
-};
 
 struct TEvBlobCheckerFinishQuantum : public TEventLocal<TEvBlobCheckerFinishQuantum, TEvPrivate::EvBlobCheckerFinishQuantum> {
 public:
@@ -44,10 +40,10 @@ public:
     ui32 PlacementIssuesCount;
 };
 
-struct TEvControllerBlobCheckerUpdateGroupStatus : TEventLocal<TEvControllerBlobCheckerUpdateGroupStatus,
-        TEvPrivate::EvControllerBlobCheckerUpdateGroupStatus> {
+struct TEvBlobCheckerUpdateGroupStatus : TEventLocal<TEvBlobCheckerUpdateGroupStatus,
+        TEvPrivate::EvBlobCheckerUpdateGroupStatus> {
 public:
-    TEvControllerBlobCheckerUpdateGroupStatus(TGroupId groupId, TString serializedState, bool finishScan);
+    TEvBlobCheckerUpdateGroupStatus(TGroupId groupId, TString serializedState, bool finishScan);
 
 public:
     TGroupId GroupId;
@@ -58,48 +54,48 @@ public:
 struct TEvBlobCheckerUpdateGroupSet : TEventLocal<TEvBlobCheckerUpdateGroupSet,
         TEvPrivate::EvBlobCheckerUpdateGroupSet> {
 public:
-    TEvBlobCheckerUpdateGroupSet(std::vector<TGroupIdWithSerializedState>&& newGroups,
+    TEvBlobCheckerUpdateGroupSet(std::unordered_map<TGroupId, TString>&& newGroups,
             std::vector<TGroupId>&& deletedGroups);
 
 public:
-    std::vector<TGroupIdWithSerializedState> NewGroups;
+    std::unordered_map<TGroupId, TString> NewGroups;
     std::vector<TGroupId> DeletedGroups;
 };
 
-struct TEvBlobCheckerPlanScan : TEventLocal<TEvBlobCheckerPlanScan,
-        TEvPrivate::EvBlobCheckerPlanScan> {
+struct TEvBlobCheckerPlanCheck : TEventLocal<TEvBlobCheckerPlanCheck,
+        TEvPrivate::EvBlobCheckerPlanCheck> {
 public:
-    TEvBlobCheckerPlanScan(TGroupId groupId);
+    TEvBlobCheckerPlanCheck(TGroupId groupId);
 
 public:
     TGroupId GroupId;
 };
 
-struct TEvBlobCheckerScanDecision : TEventLocal<TEvBlobCheckerScanDecision,
-        TEvPrivate::EvBlobCheckerScanDecision> {
+struct TEvBlobCheckerDecision : TEventLocal<TEvBlobCheckerDecision,
+        TEvPrivate::EvBlobCheckerDecision> {
 public:
-    TEvBlobCheckerScanDecision(TGroupId groupId, NKikimrProto::EReplyStatus status);
+    TEvBlobCheckerDecision(TGroupId groupId, NKikimrProto::EReplyStatus status);
 
 public:
     TGroupId GroupId;
     NKikimrProto::EReplyStatus Status;
 };
 
-struct TEvUpdateBlobCheckerSettings : TEventLocal<TEvUpdateBlobCheckerSettings,
-        TEvPrivate::EvUpdateBlobCheckerSettings> {
+struct TEvBlobCheckerUpdateSettings : TEventLocal<TEvBlobCheckerUpdateSettings,
+        TEvPrivate::EvBlobCheckerUpdateSettings> {
 
 public:
-    TEvUpdateBlobCheckerSettings(TDuration periodicity);
+    TEvBlobCheckerUpdateSettings(TDuration periodicity);
 
 public:
     TDuration Periodicity;
 };
 
-struct TBlobCheckerGroupState {
+struct TBlobCheckerGroupStatus {
 public:
-    TBlobCheckerGroupState(ui64 status, TMonotonic lastScan, TLogoBlobID maxChecked);
-    static TBlobCheckerGroupState Deserialize(NKikimrBlobChecker::TBlobCheckerGroupState serializedState);
-    static NKikimrBlobChecker::TBlobCheckerGroupState CreateEmptySerialized();
+    TBlobCheckerGroupStatus(ui64 status, TMonotonic lastScan, TLogoBlobID maxChecked);
+    static TBlobCheckerGroupStatus Deserialize(NKikimrBlobChecker::TBlobCheckerGroupStatus serializedState);
+    static TString CreateInitialSerialized();
 
 public:
     ui64 ShortStatus;
@@ -108,6 +104,7 @@ public:
 };
 
 NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
-        std::vector<TGroupIdWithSerializedState>&& serializedGroups);
+        std::unordered_map<TGroupId, TString> serializedGroups,
+        TDuration periodicity);
 
 } // namespace NKikimr

@@ -7,6 +7,19 @@ namespace NKikimr::NPQ::NMLP {
 
 Y_UNIT_TEST_SUITE(TMLPStorageTests) {
 
+struct MockTimeProvider : public ITimeProvider {
+
+    TInstant Now() override {
+        return Value;
+    }
+
+    void Tick(TDuration duration) {
+        Value += duration;
+    }
+
+    TInstant Value = TInstant::Now();
+};
+
 Y_UNIT_TEST(NextFromEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider());
 
@@ -520,18 +533,35 @@ Y_UNIT_TEST(CompactStorage) {
 }
 
 Y_UNIT_TEST(ProccessDeadlines) {
-    TStorage storage(CreateDefaultTimeProvider());
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    TStorage storage(timeProvider);
     storage.SetKeepMessageOrder(true);
     storage.AddMessage(3, true, 5);
     storage.AddMessage(4, true, 7);
     storage.AddMessage(5, true, 11);
     storage.AddMessage(6, true, 13);
 
-    storage.Next(TInstant::Now() + TDuration::Seconds(1));
-    storage.Next(TInstant::Now() - TDuration::Seconds(1));
+
+
+    storage.Next(timeProvider->Now() + TDuration::Seconds(10));
+    timeProvider->Tick(TDuration::Seconds(5));
+    storage.Next(timeProvider->Now() + TDuration::Seconds(10));
+    timeProvider->Tick(TDuration::Seconds(7));
 
     auto result = storage.ProccessDeadlines();
     UNIT_ASSERT_VALUES_EQUAL(result, 1);
+
+    {
+        auto* message = storage.GetMessage(3);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Unprocessed);
+        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+    }
+    {
+        auto* message = storage.GetMessage(4);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->ReceiveCount, 1);
+    }
 
     auto& metrics = storage.GetMetrics();
     UNIT_ASSERT_VALUES_EQUAL(metrics.InflyMessageCount, 4);

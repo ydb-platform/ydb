@@ -74,6 +74,7 @@ public:
     ui64 GetFirstUnlockedOffset() const;
     TInstant GetBaseDeadline() const;
     TInstant GetMessageDeadline(TMessageId message);
+    const TMessage* GetMessage(TMessageId message);
 
 
     // Return next message for client processing.
@@ -106,8 +107,8 @@ public:
 
 private:
     // offsetDelte, TMessage
-    TMessage* GetMessage(ui64 offset);
-    TMessage* GetMessage(ui64 offset, EMessageStatus expectedStatus);
+    TMessage* GetMessageInt(ui64 offset);
+    TMessage* GetMessageInt(ui64 offset, EMessageStatus expectedStatus);
     ui64 NormalizeDeadline(TInstant deadline);
 
     TMessageId DoLock(ui64 offsetDelta, TInstant deadline);

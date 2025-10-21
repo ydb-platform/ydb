@@ -54,7 +54,7 @@ bool TStorage::Unlock(TMessageId messageId) {
 }
 
 bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
-    auto* message = GetMessage(messageId, EMessageStatus::Locked);
+    auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -66,7 +66,7 @@ bool TStorage::ChangeMessageDeadline(TMessageId messageId, TInstant deadline) {
 }
 
 TInstant TStorage::GetMessageDeadline(TMessageId messageId) {
-    auto* message = GetMessage(messageId, EMessageStatus::Locked);
+    auto* message = GetMessageInt(messageId, EMessageStatus::Locked);
     if (!message) {
         return TInstant::Zero();
     }
@@ -231,7 +231,7 @@ bool TStorage::CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot) {
     return true;
 }
 
-TStorage::TMessage* TStorage::GetMessage(ui64 offset) {
+TStorage::TMessage* TStorage::GetMessageInt(ui64 offset) {
     if (offset < FirstOffset) {
         return nullptr;
     }
@@ -244,8 +244,12 @@ TStorage::TMessage* TStorage::GetMessage(ui64 offset) {
     return &Messages[offsetDelta];
 }
 
-TStorage::TMessage* TStorage::GetMessage(ui64 offset, EMessageStatus expectedStatus) {
-    auto* message = GetMessage(offset);
+const TStorage::TMessage* TStorage::GetMessage(TMessageId message) {
+    return GetMessageInt(message);
+}
+
+TStorage::TMessage* TStorage::GetMessageInt(ui64 offset, EMessageStatus expectedStatus) {
+    auto* message = GetMessageInt(offset);
     if (!message) {
         return nullptr;
     }
@@ -298,7 +302,7 @@ TMessageId TStorage::DoLock(ui64 offsetDelta, TInstant deadline) {
 }
 
 bool TStorage::DoCommit(ui64 offset) {
-    auto* message = GetMessage(offset);
+    auto* message = GetMessageInt(offset);
     if (!message) {
         return false;
     }
@@ -332,7 +336,7 @@ bool TStorage::DoCommit(ui64 offset) {
 }
 
 bool TStorage::DoUnlock(ui64 offset) {
-    auto* message = GetMessage(offset, EMessageStatus::Locked);
+    auto* message = GetMessageInt(offset, EMessageStatus::Locked);
     if (!message) {
         return false;
     }
@@ -354,7 +358,7 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
 
     --Metrics.LockedMessageCount;
 
-    if (message.ReceiveCount > MaxMessageReceiveCount) {
+    if (message.ReceiveCount >= MaxMessageReceiveCount) {
         // TODO Move to DLQ
         message.Status = EMessageStatus::DLQ;
 

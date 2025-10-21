@@ -21,6 +21,12 @@ using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NArrow;
 using namespace NYql;
 
+inline static constexpr size_t TEST_ARRAY_SIZE = 1 << 16;
+inline static constexpr ui8 DECIMAL_PRECISION = 35;
+inline static constexpr ui8 DECIMAL_SCALE = 10;
+
+static_assert(DECIMAL_PRECISION >= DECIMAL_SCALE, "Decimal precision must be greater than or equal to scale");
+
 namespace {
 
 ui16 GetTimezoneIdSkipEmpty(ui16 index) {
@@ -87,6 +93,10 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             }
             return MakeString(NUdf::TStringRef(uuid));
         }
+        case NUdf::EDataSlot::Decimal: {
+            auto decimal = NYql::NDecimal::FromString(TStringBuilder() << value << ".123", DECIMAL_PRECISION, DECIMAL_SCALE);
+            return NUdf::TUnboxedValuePod(decimal);
+        }
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
         case NUdf::EDataSlot::Datetime:
@@ -147,7 +157,7 @@ struct TTestContext {
     ui16 VariantSize = 0;
 
     // Used to create LargeVariantType
-    TVector<TType *> BasicTypes = {
+    TVector<TType*> BasicTypes = {
         TDataType::Create(NUdf::TDataType<bool>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<i8>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<ui8>::Id, TypeEnv),
@@ -161,7 +171,8 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv),
-        // TDataType::Create(NUdf::TDataType<NUdf::TDecimal>::Id, TypeEnv), // TODO: yql/essentials/minikql/mkql_node.cpp:486
+        TDataType::Create(NUdf::TDataType<NUdf::TUuid>::Id, TypeEnv),
+        TDataDecimalType::Create(DECIMAL_PRECISION, DECIMAL_SCALE, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv),
@@ -737,8 +748,6 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
 
 namespace NKikimr::NKqp::NFormats {
 
-inline static constexpr size_t TEST_ARRAY_SIZE = 1 << 16;
-
 template <typename MiniKQLType, typename PhysicalType, typename ArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
 void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     TTestContext context;
@@ -792,11 +801,17 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
     }
 }
 
-template <typename TMiniKQLType>
+template <typename TMiniKQLType, bool IsDecimalType = false>
 void TestFixedSizeBinaryDataTypeConversion() {
     TTestContext context;
+    TType* type;
 
-    auto type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    if constexpr (IsDecimalType) {
+        type = TDataDecimalType::Create(35, 10, context.TypeEnv);
+    } else {
+        type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    }
+
     UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(type));
 
     TUnboxedValueVector values;
@@ -817,9 +832,15 @@ void TestFixedSizeBinaryDataTypeConversion() {
     UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
-        auto valueLine = std::string(reinterpret_cast<const char *>(typedArray->Value(i)), NScheme::FSB_SIZE);
-        auto expected = values[i].AsStringRef();
-        UNIT_ASSERT_STRINGS_EQUAL(valueLine, std::string(expected.Data(), expected.Size()));
+        if constexpr (IsDecimalType) {
+            auto valueLine = reinterpret_cast<const char*>(typedArray->Value(i));
+            auto expected = values[i].AsStringRef().Data();
+            UNIT_ASSERT_STRINGS_EQUAL(valueLine, expected);
+        } else {
+            auto valueLine = std::string(reinterpret_cast<const char*>(typedArray->Value(i)), NScheme::FSB_SIZE);
+            auto expected = values[i].AsStringRef();
+            UNIT_ASSERT_STRINGS_EQUAL(valueLine, std::string(expected.Data(), expected.Size()));
+        }
     }
 }
 
@@ -872,8 +893,7 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
 
     // Binary number types
     Y_UNIT_TEST(DataType_Decimal) {
-        // TODO: Support fixed size binary
-        // TestDataTypeConversion<NUdf::TDecimal, std::string, arrow::FixedSizeBinaryArray, /* IsStringType */ true>(arrow::Type::FIXED_SIZE_BINARY);
+        TestFixedSizeBinaryDataTypeConversion<NUdf::TDecimal, /* IsDecimalType */ true>();
     }
 
     Y_UNIT_TEST(DataType_DyNumber) {

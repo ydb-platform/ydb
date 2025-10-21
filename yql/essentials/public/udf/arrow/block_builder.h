@@ -729,7 +729,9 @@ public:
 
         const std::string_view str = value.AsStringRef();
         auto ptr = AddNoFill(str.size());
-        std::memcpy(ptr, str.data(), str.size());
+        if (str.data()) {
+            std::memcpy(ptr, str.data(), str.size());
+        }
     }
 
     void DoAdd(TInputBuffer& input) final {

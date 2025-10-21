@@ -9,8 +9,8 @@
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
-
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/utils/unaligned_read.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/singleton.h>
@@ -2123,18 +2123,34 @@ public:
             return EState::AtNull == State_ || Iterator_.Ok();
         }
 
+        void FromUnpack(NUdf::TUnboxedValue& out) {
+            if (EState::AtNull == State_) {
+                out = Parent_->PayloadPacker_.Unpack(GetSmallValue(*Parent_->NullPayload_), Parent_->Ctx_->HolderFactory);
+            } else {
+                const auto& iteratorValue = Iterator_.Get();
+                const auto& aligned = NYql::TypedReadUnaligned(&iteratorValue.second);
+                out = Parent_->PayloadPacker_.Unpack(GetSmallValue(aligned), Parent_->Ctx_->HolderFactory);
+            }
+        }
+
+        void FromIterator(NUdf::TUnboxedValue& out) {
+            if (EState::AtNull == State_) {
+                out = NUdf::TUnboxedValue();
+            } else {
+                out = NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator_.Get().first));
+            }
+        }
+
         bool Next(NUdf::TUnboxedValue& key) final {
             if (!Skip()) {
                 return false;
             }
 
-            key = NoSwap
-                      ? (EState::AtNull == State_
-                             ? NUdf::TUnboxedValue()
-                             : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator_.Get().first)))
-                      : (EState::AtNull == State_
-                             ? Parent_->PayloadPacker_.Unpack(GetSmallValue(*Parent_->NullPayload_), Parent_->Ctx_->HolderFactory)
-                             : Parent_->PayloadPacker_.Unpack(GetSmallValue(Iterator_.Get().second), Parent_->Ctx_->HolderFactory));
+            if constexpr (NoSwap) {
+                FromIterator(key);
+            } else {
+                FromUnpack(key);
+            }
             return true;
         }
 
@@ -2142,13 +2158,11 @@ public:
             if (!Next(key)) {
                 return false;
             }
-            payload = NoSwap
-                          ? (EState::AtNull == State_
-                                 ? Parent_->PayloadPacker_.Unpack(GetSmallValue(*Parent_->NullPayload_), Parent_->Ctx_->HolderFactory)
-                                 : Parent_->PayloadPacker_.Unpack(GetSmallValue(Iterator_.Get().second), Parent_->Ctx_->HolderFactory))
-                          : (EState::AtNull == State_
-                                 ? NUdf::TUnboxedValue()
-                                 : NUdf::TUnboxedValue(NUdf::TUnboxedValuePod(Iterator_.Get().first)));
+            if constexpr (NoSwap) {
+                FromUnpack(payload);
+            } else {
+                FromIterator(payload);
+            }
             return true;
         }
 
@@ -2191,7 +2205,9 @@ private:
         if (!it.Ok()) {
             return NUdf::TUnboxedValuePod();
         }
-        return PayloadPacker_.Unpack(GetSmallValue(it.Get().second), Ctx_->HolderFactory).Release().MakeOptional();
+        const auto& iteratorValue = it.Get();
+        const auto& aligned = NYql::TypedReadUnaligned(&iteratorValue.second);
+        return PayloadPacker_.Unpack(GetSmallValue(aligned), Ctx_->HolderFactory).Release().MakeOptional();
     }
 
     NUdf::TUnboxedValue GetKeysIterator() const final {

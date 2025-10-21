@@ -14,7 +14,7 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
-  REVIEWERS: "['ci']"
+  REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test"
   BUILD_TYPE: relwithdebinfo
 

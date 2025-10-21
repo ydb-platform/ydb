@@ -889,7 +889,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                 << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
-    if (offset == GetEndOffset() && read->Timeout != 0) {
+    if (offset == GetEndOffset() && (read->Timeout != 0 || !read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {
             if (IsActive()) {
@@ -908,7 +908,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
 
-    if (offset >= GetEndOffset() && !read->IsInternal()) { // Why? EndOffset == 0 && offset == 0
+    if (offset > GetEndOffset()) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
             TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->ReplyTo));
         return;

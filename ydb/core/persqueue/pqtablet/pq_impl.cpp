@@ -1330,23 +1330,28 @@ void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
     PQ_ENSURE(cfg.HasVersion());
     const int curConfigVersion = cfg.GetVersion();
 
-    THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existed;
+    THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existedConsumers;
+    std::unordered_set<ui32> existedId;
     for (const auto& c : Config.GetConsumers()) {
-        existed[c.GetName()] = c;
+        existedConsumers[c.GetName()] = c;
+        existedId.insert(c.GetId());
     }
 
-    auto nextConsumerId = Config.GetNextConsumerId();
+    ui32 nextConsumerId = 0;
     for (auto& c : *cfg.MutableConsumers()) {
-        auto it = existed.find(c.GetName());
-        if (it != existed.end() && it->second.GetVersion() == c.GetVersion()) {
+        auto it = existedConsumers.find(c.GetName());
+        if (it != existedConsumers.end() && it->second.GetVersion() == c.GetVersion()) {
             c.SetGeneration(it->second.GetGeneration());
             c.SetId(it->second.GetId());
         } else {
             c.SetGeneration(curConfigVersion);
-            c.SetId(++nextConsumerId); // TODO check < Max<ui32>()
+            for (++nextConsumerId; existedId.contains(nextConsumerId); ++nextConsumerId) {
+                AFL_ENSURE(nextConsumerId < Max<ui32>());
+            }
+            c.SetId(nextConsumerId);
+            existedId.insert(nextConsumerId);
         }
     }
-    cfg.SetNextConsumerId(nextConsumerId);
 }
 
 void TPersQueue::ProcessUpdateConfigRequest(TAutoPtr<TEvPersQueue::TEvUpdateConfig> ev, const TActorId& sender, const TActorContext& ctx)

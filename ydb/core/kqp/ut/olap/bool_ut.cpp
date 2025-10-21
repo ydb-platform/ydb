@@ -20,6 +20,7 @@
 #include <util/string/printf.h>
 #include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/uuid/uuid.h>
+#include <ydb/core/kqp/ut/common/arrow_builders.h>
 
 #include <functional>
 #include <tuple>
@@ -216,28 +217,29 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithColumnName(const TVector<TRow>& rows, const TString& columnName) {
-        arrow::Int32Builder idBuilder;
-        arrow::Int64Builder intBuilder;
-        arrow::UInt8Builder boolBuilder;
+        using namespace NKikimr::NKqp::NTestArrow;
+        std::vector<int32_t> ids;
+        std::vector<int64_t> vals;
+        std::vector<std::optional<bool>> bs;
+        ids.reserve(rows.size());
+        vals.reserve(rows.size());
+        bs.reserve(rows.size());
         for (auto&& r : rows) {
-            Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
-            Y_ABORT_UNLESS(intBuilder.Append(r.IntVal).ok());
-            if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
-            } else {
-                Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
-            }
+            ids.push_back(r.Id);
+            vals.push_back(r.IntVal);
+            bs.push_back(r.B);
         }
 
-        std::shared_ptr<arrow::Array> idArr;
-        Y_ABORT_UNLESS(idBuilder.Finish(&idArr).ok());
-        std::shared_ptr<arrow::Array> intArr;
-        Y_ABORT_UNLESS(intBuilder.Finish(&intArr).ok());
-        std::shared_ptr<arrow::Array> boolArr;
-        Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
-        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(columnName, arrow::int64()),
-            arrow::field("b", arrow::uint8()) });
-        return arrow::RecordBatch::Make(schema, rows.size(), { idArr, intArr, boolArr });
+        auto idArr = MakeInt32Array(ids);
+        auto intArr = MakeInt64Array(vals);
+        auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
+        auto schema = arrow::schema({
+            arrow::field("id", arrow::int32(), /*nullable*/ false),
+            arrow::field(columnName, arrow::int64()),
+            arrow::field("b", arrow::uint8())
+        });
+
+        return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, intArr, boolArr });
     }
 
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatch(const TVector<TRow>& rows) {
@@ -245,28 +247,29 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
     }
 
     std::shared_ptr<arrow::RecordBatch> MakeArrowBatchWithSecondColumn(const TVector<TRow>& rows, const TString& secondName) {
-        arrow::Int32Builder idBuilder;
-        arrow::Int64Builder secondBuilder;
-        arrow::UInt8Builder boolBuilder;
+        using namespace NKikimr::NKqp::NTestArrow;
+        std::vector<int32_t> ids;
+        std::vector<int64_t> seconds;
+        std::vector<std::optional<bool>> bs;
+        ids.reserve(rows.size());
+        seconds.reserve(rows.size());
+        bs.reserve(rows.size());
         for (auto&& r : rows) {
-            Y_ABORT_UNLESS(idBuilder.Append(r.Id).ok());
-            Y_ABORT_UNLESS(secondBuilder.Append(r.IntVal).ok());
-            if (r.B.has_value()) {
-                Y_ABORT_UNLESS(boolBuilder.Append(*r.B ? 1 : 0).ok());
-            } else {
-                Y_ABORT_UNLESS(boolBuilder.AppendNull().ok());
-            }
+            ids.push_back(r.Id);
+            seconds.push_back(r.IntVal);
+            bs.push_back(r.B);
         }
 
-        std::shared_ptr<arrow::Array> idArr;
-        Y_ABORT_UNLESS(idBuilder.Finish(&idArr).ok());
-        std::shared_ptr<arrow::Array> secondArr;
-        Y_ABORT_UNLESS(secondBuilder.Finish(&secondArr).ok());
-        std::shared_ptr<arrow::Array> boolArr;
-        Y_ABORT_UNLESS(boolBuilder.Finish(&boolArr).ok());
-        auto schema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field(secondName, arrow::int64()),
-            arrow::field("b", arrow::uint8()) });
-        return arrow::RecordBatch::Make(schema, rows.size(), { idArr, secondArr, boolArr });
+        auto idArr = MakeInt32Array(ids);
+        auto secondArr = MakeInt64Array(seconds);
+        auto boolArr = MakeBoolArrayAsUInt8Nullable(bs);
+        auto schema = arrow::schema({
+            arrow::field("id", arrow::int32(), /*nullable*/ false),
+            arrow::field(secondName, arrow::int64()),
+            arrow::field("b", arrow::uint8())
+        });
+
+        return MakeBatch({ schema->field(0), schema->field(1), schema->field(2) }, { idArr, secondArr, boolArr });
     }
 
     void BulkUpsertRowTableArrow(TTestHelper& helper, const TString& name, const TVector<TRow>& rows) {
@@ -332,7 +335,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         if (scanMode == EQueryMode::SCAN_QUERY) {
             helper.ReadData(query, expected);
         } else {
-            helper.ExecuteQuery(query);
+            helper.ReadDataExecQuery(query, expected);
         }
     }
 
@@ -774,15 +777,11 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
             if (schema.size() == 1) {
                 if (Load == ELoadKind::ARROW) {
-                    arrow::UInt8Builder b;
-                    for (auto&& r : rows) {
-                        Y_ABORT_UNLESS(b.Append(r.B.value() ? 1 : 0).ok());
-                    }
-
-                    std::shared_ptr<arrow::Array> bArr;
-                    Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-                    auto aSchema = arrow::schema({ arrow::field("b", arrow::uint8(), /*nullable*/ false) });
-                    auto batch = arrow::RecordBatch::Make(aSchema, rows.size(), { bArr });
+                    using namespace NKikimr::NKqp::NTestArrow;
+                    std::vector<bool> bs; bs.reserve(rows.size());
+                    for (auto&& r : rows) bs.push_back(r.B.value());
+                    auto bArr = MakeBoolArrayAsUInt8(bs);
+                    auto batch = MakeBatch({ arrow::field("b", arrow::uint8(), /*nullable*/ false) }, { bArr });
                     helper.BulkUpsert(col, batch);
                 } else if (Load == ELoadKind::YDB_VALUE) {
                     TValueBuilder builder;
@@ -804,34 +803,18 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 }
 
-                helper.ReadData("SELECT COUNT(*) FROM `" + name + "`", "[[2u]]");
+                CheckOrExec(helper, "SELECT COUNT(*) FROM `" + name + "`", "[[2u]]", Scan);
             } else {
                 if (Load == ELoadKind::ARROW) {
-                    arrow::Int32Builder id;
-                    arrow::UInt8Builder b;
-                    arrow::Int64Builder i64;
-                    for (auto&& r : rows) {
-                        Y_ABORT_UNLESS(id.Append(r.Id).ok());
-                        Y_ABORT_UNLESS(b.Append(r.B.value() ? 1 : 0).ok());
-                        Y_ABORT_UNLESS(i64.Append(r.IntVal).ok());
-                    }
-
-                    std::shared_ptr<arrow::Array> idArr;
-                    Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-                    
-                    std::shared_ptr<arrow::Array> bArr;
-                    Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-                    
-                    std::shared_ptr<arrow::Array> iArr;
-                    Y_ABORT_UNLESS(i64.Finish(&iArr).ok());
-                    
-                    auto aSchema = arrow::schema({
-                        arrow::field("id", arrow::int32()),
-                        arrow::field("b", arrow::uint8(), /*nullable*/ false),
-                        arrow::field("int", arrow::int64()),
-                    });
-
-                    auto batch = arrow::RecordBatch::Make(aSchema, rows.size(), { idArr, bArr, iArr });
+                    using namespace NKikimr::NKqp::NTestArrow;
+                    std::vector<int32_t> ids; ids.reserve(rows.size());
+                    std::vector<uint8_t> bools; bools.reserve(rows.size());
+                    std::vector<int64_t> ints; ints.reserve(rows.size());
+                    for (auto&& r : rows) { ids.push_back(r.Id); bools.push_back(r.B.value() ? 1u : 0u); ints.push_back(r.IntVal); }
+                    auto idArr = MakeInt32Array(ids);
+                    auto bArr  = MakeUInt8Array(bools);
+                    auto iArr  = MakeInt64Array(ints);
+                    auto batch = MakeBatch({ arrow::field("id", arrow::int32()), arrow::field("b", arrow::uint8(), /*nullable*/ false), arrow::field("int", arrow::int64()) }, { idArr, bArr, iArr });
                     helper.BulkUpsert(col, batch);
                 } else if (Load == ELoadKind::YDB_VALUE) {
                     TValueBuilder builder;
@@ -857,11 +840,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
                     UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
                 }
 
-                if (Scan == EQueryMode::SCAN_QUERY) {
-                    helper.ReadData("SELECT " + selectExpr + " FROM `" + name + "` ORDER BY id", expectedScan);
-                } else {
-                    helper.ExecuteQuery("SELECT " + selectExpr + " FROM `" + name + "` ORDER BY id");
-                }
+                CheckOrExec(helper, "SELECT " + selectExpr + " FROM `" + name + "` ORDER BY id", expectedScan, Scan);
             }
         };
 
@@ -943,53 +922,28 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[100]];[[%false];2;[200]]])");
-            helper.ReadData("SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;100];[%false;2;200]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + ds + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + cs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[100]];[[%false];2;[200]]])", Scan);
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;100];[%false;2;200]])", Scan);
 
         helper.ExecuteQuery("UPDATE `" + ds + "` SET int = int + 1 WHERE b = true");
         helper.ExecuteQuery("UPDATE `" + cs + "` SET int = int + 1 WHERE b = true");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[200]]])");
-            helper.ReadData("SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;200]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + ds + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + cs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[200]]])", Scan);
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;200]])", Scan);
 
         helper.ExecuteQuery("UPSERT INTO `" + ds + "` (id, int, b) VALUES (3, 300, true)");
         helper.ExecuteQuery("UPSERT INTO `" + cs + "` (id, int, b) VALUES (3, 300, true)");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[200]];[[%true];3;[300]]])");
-            helper.ReadData("SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;200];[%true;3;300]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + ds + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + cs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[200]];[[%true];3;[300]]])", Scan);
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;200];[%true;3;300]])", Scan);
 
         helper.ExecuteQuery("REPLACE INTO `" + ds + "` (id, int, b) VALUES (2, 250, false)");
         helper.ExecuteQuery("REPLACE INTO `" + cs + "` (id, int, b) VALUES (2, 250, false)");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[250]];[[%true];3;[300]]])");
-            helper.ReadData("SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;250];[%true;3;300]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + ds + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + cs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%false];2;[250]];[[%true];3;[300]]])", Scan);
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%false;2;250];[%true;3;300]])", Scan);
 
         helper.ExecuteQuery("DELETE FROM `" + ds + "` WHERE b = false");
         helper.ExecuteQuery("DELETE FROM `" + cs + "` WHERE b = false");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%true];3;[300]]])");
-            helper.ReadData("SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + ds + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + cs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + ds + "` ORDER BY id", R"([[[%true];1;[101]];[[%true];3;[300]]])", Scan);
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + cs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])", Scan);
 
         const TString csFromDs = "/Root/CSFromDS";
         TVector<TTestHelper::TColumnSchema> schema2 = schema;
@@ -999,22 +953,14 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.ExecuteQuery(
             "UPSERT INTO `" + csFromDs + "` (id, int, b) "
             "SELECT id, COALESCE(int, CAST(0 AS Int64)), COALESCE(b, CAST(false AS Bool)) FROM `" + ds + "`");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + csFromDs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + csFromDs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + csFromDs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])", Scan);
 
         const TString dsFromCs = "/Root/DSFromCS";
         helper.ExecuteQuery("CREATE TABLE `" + dsFromCs + "` (id Int32 NOT NULL, int Int64 NOT NULL, b Bool NOT NULL, PRIMARY KEY (id))");
         helper.ExecuteQuery(
             "UPSERT INTO `" + dsFromCs + "` (id, int, b) "
             "SELECT id, COALESCE(int, CAST(0 AS Int64)), COALESCE(b, CAST(false AS Bool)) FROM `" + cs + "`");
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, id, int FROM `" + dsFromCs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, id, int FROM `" + dsFromCs + "` ORDER BY id");
-        }
+        CheckOrExec(helper, "SELECT b, id, int FROM `" + dsFromCs + "` ORDER BY id", R"([[%true;1;101];[%true;3;300]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolOperatorsAndAggregations, EQueryMode, ELoadKind) {
@@ -1035,15 +981,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id;
-            arrow::UInt8Builder b;
-            Y_ABORT_UNLESS(id.Append(1).ok()); Y_ABORT_UNLESS(b.Append(1).ok());
-            Y_ABORT_UNLESS(id.Append(2).ok()); Y_ABORT_UNLESS(b.Append(0).ok());
-            Y_ABORT_UNLESS(id.Append(3).ok()); Y_ABORT_UNLESS(b.AppendNull().ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false), arrow::field("b", arrow::uint8()) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 3, { idArr, bArr });
+            using namespace NKikimr::NKqp::NTestArrow;
+            auto idArr = MakeInt32Array({1,2,3});
+            auto bArr  = MakeBoolArrayAsUInt8Nullable({true, false, std::nullopt});
+            auto batch = MakeBatch(
+                { arrow::field("id", arrow::int32(), /*nullable*/ false),
+                  arrow::field("b", arrow::uint8()) },
+                { idArr, bArr }
+            );
+
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1061,31 +1007,18 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT NOT b FROM `" + cs + "` ORDER BY id", R"([[[%false]];[[%true]];[#]])");
-            helper.ReadData("SELECT b AND true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])");
-            helper.ReadData("SELECT b AND false FROM `" + cs + "` ORDER BY id", R"([[[%false]];[[%false]];[[%false]]])");
-            helper.ReadData("SELECT b OR true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%true]];[[%true]]])");
-            helper.ReadData("SELECT b OR false FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])");
-            helper.ReadData("SELECT b = true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])");
-            helper.ReadData("SELECT b != false FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])");
-            helper.ReadData("SELECT b IS NULL FROM `" + cs + "` ORDER BY id", R"([[%false];[%false];[%true]])");
-            helper.ReadData("SELECT min(b), max(b), count(b), count(*) FROM `" + cs + "`",
-                R"([[[%false];[%true];2u;3u]])");
-            helper.ReadData("SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b",
-                R"([[#;1u];[[%false];1u];[[%true];1u]])");
-        } else {
-            helper.ExecuteQuery("SELECT NOT b FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b AND true FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b AND false FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b OR true FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b OR false FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b = true FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b != false FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT b IS NULL FROM `" + cs + "` ORDER BY id");
-            helper.ExecuteQuery("SELECT min(b), max(b), count(b), count(*) FROM `" + cs + "`");
-            helper.ExecuteQuery("SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b");
-        }
+        CheckOrExec(helper, "SELECT NOT b FROM `" + cs + "` ORDER BY id", R"([[[%false]];[[%true]];[#]])", Scan);
+        CheckOrExec(helper, "SELECT b AND true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])", Scan);
+        CheckOrExec(helper, "SELECT b AND false FROM `" + cs + "` ORDER BY id", R"([[[%false]];[[%false]];[[%false]]])", Scan);
+        CheckOrExec(helper, "SELECT b OR true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%true]];[[%true]]])", Scan);
+        CheckOrExec(helper, "SELECT b OR false FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])", Scan);
+        CheckOrExec(helper, "SELECT b = true FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])", Scan);
+        CheckOrExec(helper, "SELECT b != false FROM `" + cs + "` ORDER BY id", R"([[[%true]];[[%false]];[#]])", Scan);
+        CheckOrExec(helper, "SELECT b IS NULL FROM `" + cs + "` ORDER BY id", R"([[%false];[%false];[%true]])", Scan);
+        CheckOrExec(helper, "SELECT min(b), max(b), count(b), count(*) FROM `" + cs + "`",
+            R"([[[%false];[%true];2u;3u]])", Scan);
+        CheckOrExec(helper, "SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b",
+            R"([[#;1u];[[%false];1u];[[%true];1u]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestOrderByBoolWithLimit, EQueryMode, ELoadKind) {
@@ -1138,13 +1071,53 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         const TString qAsc = "SELECT b, id FROM `" + cs + "` ORDER BY b, id LIMIT 1";
         const TString qDesc = "SELECT b, id FROM `" + cs + "` ORDER BY b DESC, id LIMIT 1";
 
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(qAsc, R"([[%false;2]])");
-            helper.ReadData(qDesc, R"([[%true;1]])");
+        CheckOrExec(helper, qAsc, R"([[%false;2]])", Scan);
+        CheckOrExec(helper, qDesc, R"([[%true;1]])", Scan);
+
+        const TString csPk = "/Root/BoolOrderLimitPk";
+        TVector<TTestHelper::TColumnSchema> schemaPk = {
+            TTestHelper::TColumnSchema().SetName("b").SetType(NScheme::NTypeIds::Bool).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable colPk;
+        colPk.SetName(csPk).SetPrimaryKey({ "b", "id" }).SetSharding({ "b", "id" }).SetSchema(schemaPk);
+        helper.CreateTable(colPk);
+
+        if (Load == ELoadKind::ARROW) {
+            arrow::UInt8Builder b;
+            arrow::Int32Builder id;
+            Y_ABORT_UNLESS(b.Append(1).ok()); Y_ABORT_UNLESS(id.Append(1).ok());
+            Y_ABORT_UNLESS(b.Append(0).ok()); Y_ABORT_UNLESS(id.Append(2).ok());
+            Y_ABORT_UNLESS(b.Append(1).ok()); Y_ABORT_UNLESS(id.Append(3).ok());
+            Y_ABORT_UNLESS(b.Append(0).ok()); Y_ABORT_UNLESS(id.Append(4).ok());
+            std::shared_ptr<arrow::Array> bArr; Y_ABORT_UNLESS(b.Finish(&bArr).ok());
+            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+            auto aSchema = arrow::schema({ arrow::field("b", arrow::uint8(), /*nullable*/ false),
+                arrow::field("id", arrow::int32(), /*nullable*/ false) });
+            auto batch = arrow::RecordBatch::Make(aSchema, 4, { bArr, idArr });
+            helper.BulkUpsert(colPk, batch);
+        } else if (Load == ELoadKind::YDB_VALUE) {
+            TValueBuilder builder;
+            builder.BeginList();
+            builder.AddListItem().BeginStruct().AddMember("b").Bool(true).AddMember("id").Int32(1).EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("b").Bool(false).AddMember("id").Int32(2).EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("b").Bool(true).AddMember("id").Int32(3).EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("b").Bool(false).AddMember("id").Int32(4).EndStruct();
+            builder.EndList();
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(csPk, builder.Build()).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         } else {
-            helper.ExecuteQuery(qAsc);
-            helper.ExecuteQuery(qDesc);
+            TStringBuilder csv;
+            csv << "true,1\nfalse,2\ntrue,3\nfalse,4\n";
+            auto res = helper.GetKikimr().GetTableClient().BulkUpsert(csPk, EDataFormat::CSV, csv).GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
+
+        const TString qAscPk = "SELECT b, id FROM `" + csPk + "` ORDER BY b, id LIMIT 1";
+        const TString qDescPk = "SELECT b, id FROM `" + csPk + "` ORDER BY b DESC, id LIMIT 1";
+        CheckOrExec(helper, qAscPk, R"([[%false;2]])", Scan);
+        CheckOrExec(helper, qDescPk, R"([[%true;1]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolCompare, EQueryMode, ELoadKind) {
@@ -1213,11 +1186,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
 
         auto check = [&](const TString& cond, const TString& expected) {
             const TString q = "SELECT b, id, int FROM `" + cs + "` WHERE " + cond + " ORDER BY id";
-            if (Scan == EQueryMode::SCAN_QUERY) {
-                helper.ReadData(q, expected);
-            } else {
-                helper.ExecuteQuery(q);
-            }
+            CheckOrExec(helper, q, expected, Scan);
         };
 
         check("b > false", R"([[%true;1;100];[%true;3;300]])");
@@ -1310,11 +1279,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         }
 
         const TString q = "SELECT flag, id FROM `" + cs + "` WHERE v1 < v2 AND flag ORDER BY id";
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(q, R"([[%true;1];[%true;3]])");
-        } else {
-            helper.ExecuteQuery(q);
-        }
+        CheckOrExec(helper, q, R"([[%true;1];[%true;3]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolWriteComparison, EQueryMode, ELoadKind) {
@@ -1337,32 +1302,19 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id; arrow::Int64Builder a; arrow::Int64Builder b; arrow::UInt8Builder cmp;
-            Y_ABORT_UNLESS(id.Append(1).ok());
-            Y_ABORT_UNLESS(a.Append(10).ok());
-            Y_ABORT_UNLESS(b.Append(20).ok());
-            Y_ABORT_UNLESS(cmp.AppendNull().ok());
-            Y_ABORT_UNLESS(id.Append(2).ok());
-            Y_ABORT_UNLESS(a.Append(30).ok());
-            Y_ABORT_UNLESS(b.Append(5).ok());
-            Y_ABORT_UNLESS(cmp.AppendNull().ok());
+            using namespace NKikimr::NKqp::NTestArrow;
+            auto idArr = MakeInt32Array({1, 2});
+            auto aArr  = MakeInt64Array({10, 30});
+            auto bArr  = MakeInt64Array({20, 5});
+            auto cArr  = MakeUInt8ArrayNullable({std::nullopt, std::nullopt});
+            auto batch = MakeBatch(
+                { arrow::field("id", arrow::int32(), /*nullable*/ false),
+                  arrow::field("a", arrow::int64(), /*nullable*/ false),
+                  arrow::field("b", arrow::int64(), /*nullable*/ false),
+                  arrow::field("cmp", arrow::uint8()) },
+                { idArr, aArr, bArr, cArr }
+            );
 
-            std::shared_ptr<arrow::Array> idArr;
-            Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-
-            std::shared_ptr<arrow::Array> aArr;
-            Y_ABORT_UNLESS(a.Finish(&aArr).ok());
-
-            std::shared_ptr<arrow::Array> bArr;
-            Y_ABORT_UNLESS(b.Finish(&bArr).ok());
-
-            std::shared_ptr<arrow::Array> cArr;
-            Y_ABORT_UNLESS(cmp.Finish(&cArr).ok());
-
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("a", arrow::int64(), /*nullable*/ false), arrow::field("b", arrow::int64(), /*nullable*/ false),
-                arrow::field("cmp", arrow::uint8()) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 2, { idArr, aArr, bArr, cArr });
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1382,11 +1334,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.ExecuteQuery("UPDATE `" + cs + "` SET cmp = (a < b)");
 
         const TString q = "SELECT cmp, id FROM `" + cs + "` ORDER BY id";
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(q, R"([[[%true];1];[[%false];2]])");
-        } else {
-            helper.ExecuteQuery(q);
-        }
+        CheckOrExec(helper, q, R"([[[%true];1];[[%false];2]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolNot, EQueryMode, ELoadKind) {
@@ -1407,14 +1355,15 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         helper.CreateTable(col);
 
         if (Load == ELoadKind::ARROW) {
-            arrow::Int32Builder id; arrow::UInt8Builder f;
-            Y_ABORT_UNLESS(id.Append(1).ok()); Y_ABORT_UNLESS(f.Append(1).ok());
-            Y_ABORT_UNLESS(id.Append(2).ok()); Y_ABORT_UNLESS(f.Append(0).ok());
-            std::shared_ptr<arrow::Array> idArr; Y_ABORT_UNLESS(id.Finish(&idArr).ok());
-            std::shared_ptr<arrow::Array> fArr;  Y_ABORT_UNLESS(f.Finish(&fArr).ok());
-            auto aSchema = arrow::schema({ arrow::field("id", arrow::int32(), /*nullable*/ false),
-                arrow::field("flag", arrow::uint8(), /*nullable*/ false) });
-            auto batch = arrow::RecordBatch::Make(aSchema, 2, { idArr, fArr });
+            using namespace NKikimr::NKqp::NTestArrow;
+            auto idArr = MakeInt32Array({1, 2});
+            auto fArr  = MakeBoolArrayAsUInt8({true, false});
+            auto batch = MakeBatch(
+                { arrow::field("id", arrow::int32(), /*nullable*/ false),
+                  arrow::field("flag", arrow::uint8(), /*nullable*/ false) },
+                { idArr, fArr }
+            );
+
             helper.BulkUpsert(col, batch);
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
@@ -1431,11 +1380,7 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
         }
 
         const TString q = "SELECT NOT flag, id FROM `" + cs + "` ORDER BY id";
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData(q, R"([[%false;1];[%true;2]])");
-        } else {
-            helper.ExecuteQuery(q);
-        }
+        CheckOrExec(helper, q, R"([[%false;1];[%true;2]])", Scan);
     }
 
     Y_UNIT_TEST_ALL_ENUM_VALUES_VAR(TestBoolGroupByCounts, EQueryMode, ELoadKind) {
@@ -1482,12 +1427,8 @@ Y_UNIT_TEST_SUITE(KqpBoolColumnShard) {
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
         }
 
-        if (Scan == EQueryMode::SCAN_QUERY) {
-            helper.ReadData("SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b",
-                R"([[#;1u];[[%false];1u];[[%true];1u]])");
-        } else {
-            helper.ExecuteQuery("SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b");
-        }
+        CheckOrExec(helper, "SELECT b, count(*) FROM `" + cs + "` GROUP BY b ORDER BY b",
+            R"([[#;1u];[[%false];1u];[[%true];1u]])", Scan);
     }
 }
 }   // namespace NKqp

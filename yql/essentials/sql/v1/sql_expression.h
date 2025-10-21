@@ -35,6 +35,10 @@ public:
         MaybeUnnamedSmartParenOnTop_ = false;
     }
 
+    void ProduceYqlColumnRef() {
+        IsYqlColumnRefProduced_ = true;
+    }
+
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
 
 private:
@@ -142,6 +146,7 @@ private:
     ESmartParenthesis SmartParenthesisMode_ = ESmartParenthesis::Default;
     bool MaybeUnnamedSmartParenOnTop_ = true;
     bool IsSourceAllowed_ = true;
+    bool IsYqlColumnRefProduced_ = false;
 
     THashMap<TString, TNodePtr> ExprShortcuts_;
 };

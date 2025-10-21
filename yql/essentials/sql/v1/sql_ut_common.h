@@ -10695,3 +10695,112 @@ Y_UNIT_TEST(NamedNode) {
     UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
 }
 } // Y_UNIT_TEST_SUITE(InlineUncorrelatedSubquery)
+
+Y_UNIT_TEST_SUITE(YqlSelect) {
+
+Y_UNIT_TEST(LangVer) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 3);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        res.Issues.ToOneLineString(),
+        "YqlSelect is not available before 2025.04");
+}
+
+Y_UNIT_TEST(Minimal) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {{TString("YqlSelect"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(Expr) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 2 + 2 * 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("+MayWarn"), 0},
+        {TString("*MayWarn"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["+MayWarn"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["*MayWarn"], 1);
+}
+
+Y_UNIT_TEST(ResultColumnLabel) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 AS x;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {{TString("YqlSelect"), 0}};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+}
+
+Y_UNIT_TEST(FromAnonValues) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT 1 FROM (VALUES (1));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("YqlValuesList"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlValuesList"], 1);
+}
+
+Y_UNIT_TEST(FromValues) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::MakeLangVersion(2025, 4);
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        PRAGMA YqlSelect = 'force';
+        SELECT a FROM (VALUES (1)) AS x (a);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("YqlSelect"), 0},
+        {TString("YqlValuesList"), 0},
+        {TString("YqlColumnRef"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 2);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlValuesList"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlColumnRef"], 1);
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelect)

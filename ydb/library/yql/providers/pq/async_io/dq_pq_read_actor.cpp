@@ -13,7 +13,6 @@
 #include <ydb/library/actors/log_backend/actor_log_backend.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
@@ -236,7 +235,10 @@ public:
 
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(TClusterState& state) {
         NYdb::NTopic::TTopicClientSettings opts = PqGateway->GetTopicClientSettings();
-        SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
+        if (SourceParams.GetUseActorSystemThreadsInTopicClient()) {
+            SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+        }
 
         opts.Database(SourceParams.GetDatabase())
             .DiscoveryEndpoint(SourceParams.GetEndpoint())
@@ -260,7 +262,6 @@ public:
 
     void LoadState(const TSourceState& state) override {
         TDqPqReadActorBase::LoadState(state);
-        InitWatermarkTracker();
 
         Clusters.clear();
         AsyncInit = {};
@@ -298,9 +299,10 @@ public:
             SRC_LOG_I("SessionId: " << GetSessionId(clusterState.Index) << " CreateReadSession");
             if (WatermarkTracker) {
                 TPartitionKey partitionKey { .Cluster = TString(clusterState.Info.Name) };
+                auto now = TInstant::Now();
                 for (const auto partitionId : GetPartitionsToRead(clusterState)) { // XXX duplicated, but rare
                     partitionKey.PartitionId = partitionId;
-                    WatermarkTracker->RegisterPartition(partitionKey);
+                    WatermarkTracker->RegisterPartition(partitionKey, now);
                 }
             }
         }
@@ -383,23 +385,6 @@ private:
         }
         FederatedTopicClient.Reset();
         TActor<TDqPqReadActor>::PassAway();
-    }
-
-    void MaybeScheduleNextIdleCheck(TInstant systemTime) {
-        if (!WatermarkTracker) {
-            return;
-        }
-
-        const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-        if (!nextIdleCheckAt) {
-            return;
-        }
-
-        if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
-            NextIdlenessCheckAt = *nextIdleCheckAt;
-            SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-            Schedule(*nextIdleCheckAt, new TEvPrivate::TEvSourceDataReady());
-        }
     }
 
     void StartClusterDiscovery() {
@@ -614,20 +599,14 @@ private:
         return res;
     }
 
-    void InitWatermarkTracker() {
-        SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-            << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
+    void InitWatermarkTracker() override {
+        auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+        auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+        TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
+    }
 
-        if (!SourceParams.GetWatermarks().GetEnabled()) {
-            return;
-        }
-
-        WatermarkTracker.ConstructInPlace(
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-            SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-            TDuration::MicroSeconds(SourceParams.GetWatermarks().GetLateArrivalDelayUs()),
-            TInstant::Now()
-        );
+    void ScheduleSourcesCheck(TInstant at) override {
+        Schedule(at, new TEvPrivate::TEvSourceDataReady());
     }
 
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {
@@ -883,8 +862,6 @@ private:
     NYdb::NTopic::TDeferredCommit CurrentDeferredCommit;
     std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
     std::queue<TReadyBatch> ReadyBuffer;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
-    TMaybe<TInstant> NextIdlenessCheckAt;
     IPqGateway::TPtr PqGateway;
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     ui32 TopicPartitionsCount = 0;

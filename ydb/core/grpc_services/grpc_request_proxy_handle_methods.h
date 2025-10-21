@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rpc_calls.h"
+#include "rpc_calls_topic.h"
 
 namespace NKikimr {
 namespace NGRpcService {

@@ -75,7 +75,7 @@ public:
         : Request(std::move(request))
         , Counters(counters)
         , OwnerActor(owner)
-        , TasksGraph(Request.TxAlloc, {}, {}, Counters, {})
+        , TasksGraph({}, Request.Transactions, Request.TxAlloc, {}, {}, Counters, {})
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
@@ -123,11 +123,9 @@ public:
         }
 
         LOG_D("Begin literal execution, txs: " << Request.Transactions.size());
-        auto& transactions = Request.Transactions;
-        TasksGraph.FillKqpTasksGraphStages(transactions);
 
-        for (ui32 txIdx = 0; txIdx < transactions.size(); ++txIdx) {
-            auto& tx = transactions[txIdx];
+        for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
+            auto& tx = Request.Transactions.at(txIdx);
 
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
@@ -137,7 +135,7 @@ public:
                 YQL_ENSURE(stageInfo.Meta.ShardOperations.empty());
                 YQL_ENSURE(stageInfo.InputsCount == 0);
 
-                TasksGraph.AddTask(stageInfo);
+                TasksGraph.AddTask(stageInfo, TKqpTasksGraph::TTaskType::LITERAL);
             }
 
             ResponseEv->InitTxResult(tx.Body);

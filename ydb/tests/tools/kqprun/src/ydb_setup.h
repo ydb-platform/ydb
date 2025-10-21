@@ -51,13 +51,13 @@ public:
 
     TRequestResult YqlScriptRequest(const TRequestOptions& query, TQueryMeta& meta, std::vector<Ydb::ResultSet>& resultSets) const;
 
-    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, TExecutionMeta& meta) const;
+    TRequestResult GetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID, TExecutionMeta& meta) const;
 
-    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, i32 resultSetId, Ydb::ResultSet& resultSet) const;
+    TRequestResult FetchScriptExecutionResultsRequest(const TString& database, const TString& operation, const TString& userSID, i32 resultSetId, Ydb::ResultSet& resultSet) const;
 
-    TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
+    TRequestResult ForgetScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const;
 
-    TRequestResult CancelScriptExecutionOperationRequest(const TString& database, const TString& operation) const;
+    TRequestResult CancelScriptExecutionOperationRequest(const TString& database, const TString& operation, const TString& userSID) const;
 
     void QueryRequestAsync(const TRequestOptions& query) const;
 

@@ -10,6 +10,7 @@
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+#include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
 
 namespace NKikimr::NViewer {
 
@@ -44,6 +45,7 @@ private:
     ui32 Cookie = 1;
     TVector<THeader> Headers;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
+    bool IsAutoScaledTopic = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     ui64 TabletId;
     TActorId WriteActorId;
@@ -62,14 +64,6 @@ public:
             TBase::Become(&TThis::StateWork);
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "fields 'path','message' and 'seqno' are required and should not be empty"));
         }
-
-
-        // const auto& params(Event->Get()->Request.GetParams());
-        // if (params.Has("headers")) {
-        //     Split(params.Get("headers"), ",", Headers);
-        // } else {
-        //     return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'permissions' is required"));
-        // }
 
         TopicPath = Params.Get("path");
 
@@ -98,6 +92,7 @@ public:
                 Headers.emplace_back(headerMap.at("key").GetStringRobust(), headerMap.at("value").GetStringRobust());
             }
         }
+
 
         SendSchemeCacheRequest(ActorContext());
         TBase::Become(&TThis::StateWork);
@@ -164,6 +159,7 @@ public:
         return std::move(ev);
 
     }
+
     void SendSchemeCacheRequest(const TActorContext& ctx) {
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         // KAFKA_LOG_D("Produce actor: Describe topic '" << topicPath << "'");
@@ -186,18 +182,29 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
         }
 
+        const auto& pqDescription = PQGroupInfo->Description;
         MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
+        if (pqDescription.GetPQTabletConfig().GetPartitionStrategy().HasPartitionStrategyType() &&
+            pqDescription.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType() != 0) {
+                IsAutoScaledTopic = true;
+        }
+        if (!Params.Has("partition")) {
+            if (IsAutoScaledTopic) {
+                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "You must provide partition id you want to put records to for autoscaled topic."));
+                return;
+            }
+            // auto chooser = NPQ::CreatePartitionChooser(pqDescription, true); // without hash?
+            // if (record.explicit_hash_key().empty()) {
+            //     return HexBytesToDecimal(MD5::Calc(Key));
+            // } else {
+            //     return BytesToDecimal(record.explicit_hash_key());
+            // }
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "NOT IMPLEMENTED partition chooser"));
+                return;
+        }
+            // TString hashKey = NPQ::AsKeyBound(GetHashKey(Message));
+            // auto* partition = chooser->GetPartition(hashKey);
 
-        // if (!Context->RequireAuthentication || info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
-        //         topic.Status = OK;
-        //         topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
-        //         topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
-        //     } else {
-        //         KAFKA_LOG_W("Produce actor: Unauthorized PRODUCE to topic '" << topicPath << "'");
-        //         topic.Status = UNAUTHORIZED;
-        //         topic.ExpirationTime = now + TOPIC_UNATHORIZED_EXPIRATION_INTERVAL;
-        // }
-        // TIntrusivePtr<NACLib::TUserToken> token(Event->Get()->UserToken);
         if (Event->Get()->UserToken.empty()) {
             if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
                 ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
@@ -213,16 +220,12 @@ public:
         PQGroupInfo = info.PQGroupInfo;
         // SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
-        if (!AppData(this->ActorContext())->PQConfig.GetTopicsAreFirstClassCitizen() && !PQGroupInfo->Description.GetPQTabletConfig().GetLocalDC()) {
+
+        if (!AppData(this->ActorContext())->PQConfig.GetTopicsAreFirstClassCitizen() && !pqDescription.GetPQTabletConfig().GetLocalDC()) {
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "LocalDC is not set fot federation."));
             return;
         }
-        const auto& pqDescription = PQGroupInfo->Description;
-        if (!Partition) {
-            auto chooser = NPQ::CreatePartitionChooser(pqDescription, true);
-            // chooser->GetPartition()
-        }
-        const auto& partitions = PQGroupInfo->Description.GetPartitions();\
+        const auto& partitions = pqDescription.GetPartitions();\
         for (auto& partition : partitions) {
             auto partitionId = partition.GetPartitionId();
             if (partitionId == Partition) {
@@ -249,7 +252,7 @@ public:
         auto r = request->Get();
         auto cookie = r->Record.GetPartitionResponse().GetCookie();
         if (cookie != Cookie) {
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Cookies do not match"));
+            ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
         }
         if (r->IsSuccess()) {
             ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Recieved response"));

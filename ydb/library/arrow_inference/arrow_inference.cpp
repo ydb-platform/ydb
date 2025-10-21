@@ -2,13 +2,13 @@
 
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
-#include <arrow/api.h>
-#include <arrow/table.h>
-#include <arrow/csv/options.h>
-#include <arrow/csv/reader.h>
-#include <arrow/json/options.h>
-#include <arrow/json/reader.h>
-#include <parquet/arrow/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/table.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/options.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/csv/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/json/options.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/json/reader.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/parquet/arrow/reader.h>
 
 #include <util/stream/file.h>
 #include <util/string/builder.h>
@@ -18,48 +18,48 @@ namespace NYdb::NArrowInference {
 
 namespace {
 
-bool ShouldBeOptional(const arrow::DataType& type, std::shared_ptr<TFormatConfig> config) {
+bool ShouldBeOptional(const arrow20::DataType& type, std::shared_ptr<TFormatConfig> config) {
     if (!config->ShouldMakeOptional) {
         return false;
     }
 
     switch (type.id()) {
-        case arrow::Type::NA:
-        case arrow::Type::STRING:
-        case arrow::Type::BINARY:
-        case arrow::Type::LARGE_BINARY:
-        case arrow::Type::FIXED_SIZE_BINARY:
+        case arrow20::Type::NA:
+        case arrow20::Type::STRING:
+        case arrow20::Type::BINARY:
+        case arrow20::Type::LARGE_BINARY:
+        case arrow20::Type::FIXED_SIZE_BINARY:
         return false;
     default:
         return true;
     }
 }
 
-bool IsFloatingPoint(arrow::Type::type id) {
-    return id == arrow::Type::FLOAT || id == arrow::Type::DOUBLE || id == arrow::Type::HALF_FLOAT;
+bool IsFloatingPoint(arrow20::Type::type id) {
+    return id == arrow20::Type::FLOAT || id == arrow20::Type::DOUBLE || id == arrow20::Type::HALF_FLOAT;
 }
 
-bool IsInteger(arrow::Type::type id) {
-    return id >= arrow::Type::UINT8 && id <= arrow::Type::INT64;
+bool IsInteger(arrow20::Type::type id) {
+    return id >= arrow20::Type::UINT8 && id <= arrow20::Type::INT64;
 }
 
-std::shared_ptr<arrow::DataType> GetCommonDataType(const std::shared_ptr<arrow::DataType>& type1,
-                                                   const std::shared_ptr<arrow::DataType>& type2) {
+std::shared_ptr<arrow20::DataType> GetCommonDataType(const std::shared_ptr<arrow20::DataType>& type1,
+                                                   const std::shared_ptr<arrow20::DataType>& type2) {
     if (type1->Equals(*type2)) {
         return type1;
     }
     if (IsFloatingPoint(type1->id()) || IsFloatingPoint(type2->id())) {
-        return arrow::float64();
+        return arrow20::float64();
     }
     if (IsInteger(type1->id()) && IsInteger(type2->id())) {
-        return arrow::int64();
+        return arrow20::int64();
     }
 
     // TODO: Format specific. Utf8 is ok for all CSV data. For parquet its probably binary
-    return arrow::utf8();
+    return arrow20::utf8();
 }
 
-std::shared_ptr<arrow::Schema> InferCommonSchema(const std::vector<std::shared_ptr<arrow::Schema>>& schemas) {
+std::shared_ptr<arrow20::Schema> InferCommonSchema(const std::vector<std::shared_ptr<arrow20::Schema>>& schemas) {
     if (schemas.empty()) {
         return nullptr;
     }
@@ -80,15 +80,15 @@ std::shared_ptr<arrow::Schema> InferCommonSchema(const std::vector<std::shared_p
 
             auto commonType = GetCommonDataType(currentField->type(), newField->type());
             bool isNullable = currentField->nullable() || schema->field(j)->nullable();
-            commonFields[j] = arrow::field(commonFields[j]->name(), commonType, isNullable);
+            commonFields[j] = arrow20::field(commonFields[j]->name(), commonType, isNullable);
         }
     }
 
-    return std::make_shared<arrow::Schema>(commonFields);
+    return std::make_shared<arrow20::Schema>(commonFields);
 }
 
-std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
-    const std::shared_ptr<arrow::io::InputStream>& input,
+std::shared_ptr<arrow20::Schema> GetSchemaFromCsv(
+    const std::shared_ptr<arrow20::io::InputStream>& input,
     std::shared_ptr<TCsvConfig> config) {
     if (!config) {
         return nullptr;
@@ -97,15 +97,15 @@ std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
     config->ReadOpts.use_threads = false;
     config->ReadOpts.block_size = 1 << 20;
 
-    auto result = arrow::csv::StreamingReader::Make(
-        arrow::io::default_io_context(), input, config->ReadOpts, config->ParseOpts, config->ConvOpts);
+    auto result = arrow20::csv::StreamingReader::Make(
+        arrow20::io::default_io_context(), input, config->ReadOpts, config->ParseOpts, config->ConvOpts);
     if (!result.ok()) {
         return nullptr;
     }
 
     auto streamingReader = result.ValueOrDie();
     int64_t rowsRead = 0;
-    std::shared_ptr<arrow::Schema> schema = nullptr;
+    std::shared_ptr<arrow20::Schema> schema = nullptr;
 
     while (rowsRead < config->RowsToAnalyze || config->RowsToAnalyze == 0) {
         auto batch_result = streamingReader->Next();
@@ -124,21 +124,21 @@ std::shared_ptr<arrow::Schema> GetSchemaFromCsv(
     return schema;
 }
 
-std::shared_ptr<arrow::Schema> GetSchemaFromJson(const std::shared_ptr<arrow::io::InputStream>& input, std::shared_ptr<TJsonConfig> config) {
+std::shared_ptr<arrow20::Schema> GetSchemaFromJson(const std::shared_ptr<arrow20::io::InputStream>& input, std::shared_ptr<TJsonConfig> config) {
     if (!config) {
         return nullptr;
     }
-    std::shared_ptr<arrow::json::TableReader> reader;
-    arrow::json::ReadOptions readOptions = arrow::json::ReadOptions::Defaults();
+    std::shared_ptr<arrow20::json::TableReader> reader;
+    arrow20::json::ReadOptions readOptions = arrow20::json::ReadOptions::Defaults();
     readOptions.use_threads = false;
-    if (auto randomFile = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input)) {
+    if (auto randomFile = std::dynamic_pointer_cast<arrow20::io::RandomAccessFile>(input)) {
         int64_t fileSize;
         auto size_status = randomFile->GetSize().Value(&fileSize);
         if (size_status.ok()) {
             readOptions.block_size = static_cast<int32_t>(fileSize);
         }
     }
-    auto result = arrow::json::TableReader::Make(arrow::default_memory_pool(), input, readOptions, config->ParseOpts).Value(&reader);
+    auto result = arrow20::json::TableReader::Make(arrow20::default_memory_pool(), input, readOptions, config->ParseOpts).Value(&reader);
     if (!result.ok()) {
         return nullptr;
     }
@@ -149,26 +149,26 @@ std::shared_ptr<arrow::Schema> GetSchemaFromJson(const std::shared_ptr<arrow::io
     return tableResult.ValueOrDie()->schema();
 }
 
-std::shared_ptr<arrow::Schema> GetSchemaFromParquet(const std::shared_ptr<arrow::io::InputStream>& input) {
-    auto file = std::dynamic_pointer_cast<arrow::io::RandomAccessFile>(input);
+std::shared_ptr<arrow20::Schema> GetSchemaFromParquet(const std::shared_ptr<arrow20::io::InputStream>& input) {
+    auto file = std::dynamic_pointer_cast<arrow20::io::RandomAccessFile>(input);
     if (!file) {
         return nullptr;
     }
 
-    parquet::arrow::FileReaderBuilder builder;
-    builder.properties(parquet::ArrowReaderProperties(false));
+    parquet20::arrow20::FileReaderBuilder builder;
+    builder.properties(parquet20::ArrowReaderProperties(false));
     auto openStatus = builder.Open(file);
     if (!openStatus.ok()) {
         return nullptr;
     }
 
-    std::unique_ptr<parquet::arrow::FileReader> reader;
+    std::unique_ptr<parquet20::arrow20::FileReader> reader;
     auto readerStatus = builder.Build(&reader);
     if (!readerStatus.ok()) {
         return nullptr;
     }
 
-    std::shared_ptr<arrow::Schema> schema;
+    std::shared_ptr<arrow20::Schema> schema;
     auto schemaRes = reader->GetSchema(&schema);
     if (!schemaRes.ok()) {
         return nullptr;
@@ -179,15 +179,15 @@ std::shared_ptr<arrow::Schema> GetSchemaFromParquet(const std::shared_ptr<arrow:
 
 } // namespace
 
-std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<TFormatConfig> config) {
+std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow20::io::InputStream>>& inputs, std::shared_ptr<TFormatConfig> config) {
     if (inputs.empty()) {
         return TString{"no input files"};
     }
 
-    std::vector<std::shared_ptr<arrow::Schema>> schemas;
+    std::vector<std::shared_ptr<arrow20::Schema>> schemas;
 
     for (auto& input : inputs) {
-        std::shared_ptr<arrow::Schema> schema;
+        std::shared_ptr<arrow20::Schema> schema;
 
         switch (config->Format) {
         case EFileFormat::CsvWithNames:
@@ -223,110 +223,131 @@ std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<
     return commonSchema->fields();
 }
 
-bool ArrowToYdbType(Ydb::Type& result, const arrow::DataType& type, std::shared_ptr<TFormatConfig> config) {
+bool ArrowToYdbType(Ydb::Type& result, const arrow20::DataType& type, std::shared_ptr<TFormatConfig> config) {
     auto& resType = ShouldBeOptional(type, config) ? *result.mutable_optional_type()->mutable_item() : result;
     switch (type.id()) {
-    case arrow::Type::NA:
+    case arrow20::Type::NA:
         resType.set_type_id(Ydb::Type::UTF8);
         return true;
-    case arrow::Type::BOOL:
+    case arrow20::Type::BOOL:
         resType.set_type_id(Ydb::Type::BOOL);
         return true;
-    case arrow::Type::UINT8:
+    case arrow20::Type::UINT8:
         resType.set_type_id(Ydb::Type::UINT8);
         return true;
-    case arrow::Type::INT8:
+    case arrow20::Type::INT8:
         resType.set_type_id(Ydb::Type::INT8);
         return true;
-    case arrow::Type::UINT16:
+    case arrow20::Type::UINT16:
         resType.set_type_id(Ydb::Type::UINT16);
         return true;
-    case arrow::Type::INT16:
+    case arrow20::Type::INT16:
         resType.set_type_id(Ydb::Type::INT16);
         return true;
-    case arrow::Type::UINT32:
+    case arrow20::Type::UINT32:
         resType.set_type_id(Ydb::Type::UINT32);
         return true;
-    case arrow::Type::INT32:
+    case arrow20::Type::INT32:
         resType.set_type_id(Ydb::Type::INT32);
         return true;
-    case arrow::Type::UINT64:
+    case arrow20::Type::UINT64:
         resType.set_type_id(Ydb::Type::UINT64);
         return true;
-    case arrow::Type::INT64:
+    case arrow20::Type::INT64:
         resType.set_type_id(Ydb::Type::INT64);
         return true;
-    case arrow::Type::HALF_FLOAT: // TODO: is there anything?
+    case arrow20::Type::HALF_FLOAT: // TODO: is there anything?
         return false;
-    case arrow::Type::FLOAT:
+    case arrow20::Type::FLOAT:
         resType.set_type_id(Ydb::Type::FLOAT);
         return true;
-    case arrow::Type::DOUBLE:
+    case arrow20::Type::DOUBLE:
         resType.set_type_id(Ydb::Type::DOUBLE);
         return true;
-    case arrow::Type::STRING: // TODO: is it true?
+    case arrow20::Type::STRING: // TODO: is it true?
         resType.set_type_id(Ydb::Type::UTF8);
         return true;
-    case arrow::Type::BINARY: // TODO: is it true?
+    case arrow20::Type::BINARY: // TODO: is it true?
         resType.set_type_id(Ydb::Type::STRING);
         return true;
-    case arrow::Type::FIXED_SIZE_BINARY: // TODO: is it true?
+    case arrow20::Type::FIXED_SIZE_BINARY: // TODO: is it true?
         resType.set_type_id(Ydb::Type::STRING);
         return true;
-    case arrow::Type::DATE32:
+    case arrow20::Type::DATE32:
         resType.set_type_id(Ydb::Type::DATE);
         return true;
-    case arrow::Type::DATE64: // TODO: is it true?
+    case arrow20::Type::DATE64: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DATETIME64);
         return true;
-    case arrow::Type::TIMESTAMP:
+    case arrow20::Type::TIMESTAMP:
         if (config->Format == EFileFormat::JsonEachRow || config->Format == EFileFormat::JsonList) {
             result.set_type_id(Ydb::Type::UTF8);
         } else {
             resType.set_type_id(Ydb::Type::TIMESTAMP);
         }
         return true;
-    case arrow::Type::TIME32: // TODO: is there anything?
+    case arrow20::Type::TIME32: // TODO: is there anything?
         return false;
-    case arrow::Type::TIME64: // TODO: is there anything?
+    case arrow20::Type::TIME64: // TODO: is there anything?
         return false;
-    case arrow::Type::INTERVAL_MONTHS: // TODO: is it true?
+    case arrow20::Type::INTERVAL_MONTHS: // TODO: is it true?
         return false;
-    case arrow::Type::INTERVAL_DAY_TIME: // TODO: is it true?
+    case arrow20::Type::INTERVAL_DAY_TIME: // TODO: is it true?
         resType.set_type_id(Ydb::Type::INTERVAL64);
         return true;
-    case arrow::Type::DECIMAL128: // TODO: is it true?
+    case arrow20::Type::DECIMAL128: // TODO: is it true?
         resType.set_type_id(Ydb::Type::DOUBLE);
         return true;
-    case arrow::Type::DECIMAL256: // TODO: is there anything?
+    case arrow20::Type::DECIMAL256: // TODO: is there anything?
         return false;
-    case arrow::Type::LARGE_LIST: // TODO: is it true?
-    case arrow::Type::FIXED_SIZE_LIST: // TODO: is it true?
-    case arrow::Type::LIST: { // TODO: is ok?
-        return false;
-    }
-    case arrow::Type::STRUCT:
-    case arrow::Type::SPARSE_UNION:
-    case arrow::Type::DENSE_UNION: {
+    case arrow20::Type::LARGE_LIST: // TODO: is it true?
+    case arrow20::Type::FIXED_SIZE_LIST: // TODO: is it true?
+    case arrow20::Type::LIST: { // TODO: is ok?
         return false;
     }
-    case arrow::Type::DICTIONARY: // TODO: is representable?
-        return false;
-    case arrow::Type::MAP: { // TODO: is ok?
+    case arrow20::Type::STRUCT:
+    case arrow20::Type::SPARSE_UNION:
+    case arrow20::Type::DENSE_UNION: {
         return false;
     }
-    case arrow::Type::EXTENSION: // TODO: is representable?
+    case arrow20::Type::DICTIONARY: // TODO: is representable?
         return false;
-    case arrow::Type::DURATION: // TODO: is it true?
+    case arrow20::Type::MAP: { // TODO: is ok?
+        return false;
+    }
+    case arrow20::Type::EXTENSION: // TODO: is representable?
+        return false;
+    case arrow20::Type::DURATION: // TODO: is it true?
         resType.set_type_id(Ydb::Type::INTERVAL64);
         return true;
-    case arrow::Type::LARGE_STRING: // TODO: is it true?
+    case arrow20::Type::LARGE_STRING: // TODO: is it true?
         resType.set_type_id(Ydb::Type::UTF8);
         return true;
-    case arrow::Type::LARGE_BINARY: // TODO: is it true?
+    case arrow20::Type::LARGE_BINARY: // TODO: is it true?
         resType.set_type_id(Ydb::Type::STRING);
         return true;
-    case arrow::Type::MAX_ID:
+    case arrow20::Type::INTERVAL_MONTH_DAY_NANO: // TODO: is it true?
+        resType.set_type_id(Ydb::Type::INTERVAL64);
+        return true;
+    case arrow20::Type::RUN_END_ENCODED: // TODO: is representable?
+        return false;
+    case arrow20::Type::STRING_VIEW: // TODO: is it true?
+        resType.set_type_id(Ydb::Type::UTF8);
+        return true;
+    case arrow20::Type::BINARY_VIEW: // TODO: is it true?
+        resType.set_type_id(Ydb::Type::STRING);
+        return true;
+    case arrow20::Type::LIST_VIEW: // TODO: is representable?
+        return false;
+    case arrow20::Type::LARGE_LIST_VIEW: // TODO: is representable?
+        return false;
+    case arrow20::Type::DECIMAL32: // TODO: is it true?
+        resType.set_type_id(Ydb::Type::DOUBLE);
+        return true;
+    case arrow20::Type::DECIMAL64: // TODO: is it true?
+        resType.set_type_id(Ydb::Type::DOUBLE);
+        return true;
+    case arrow20::Type::MAX_ID:
         return false;
     }
     return false;

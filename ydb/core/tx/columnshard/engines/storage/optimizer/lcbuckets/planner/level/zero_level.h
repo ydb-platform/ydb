@@ -73,7 +73,7 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const override;
     virtual TInstant DoGetWeightExpirationInstant() const override;
 
-    virtual TCompactionTaskData DoGetOptimizationTask() const override;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const override;
     virtual ui64 GetExpectedPortionSize() const override {
         return ExpectedBlobsSize;
     }

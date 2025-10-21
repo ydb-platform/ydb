@@ -811,10 +811,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
             NKikimrPQ::TTransaction tx;
             PQ_ENSURE(tx.ParseFromString(pair.GetValue()));
 
-            if (tx.GetKind() == NKikimrPQ::TTransaction::KIND_UNKNOWN) {
-                PQ_LOG_TX_W("Invalid transaction state. Key " << pair.GetKey());
-                continue;
-            }
+            PQ_ENSURE(tx.GetKind() != NKikimrPQ::TTransaction::KIND_UNKNOWN)("Key", pair.GetKey());
 
             PQ_LOG_TX_I("Restore Tx. " <<
                      "TxId: " << tx.GetTxId() <<

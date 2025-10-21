@@ -57,6 +57,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateKeySetResult);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
+            HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
         }
     }
     void Bootstrap() override {
@@ -113,7 +114,6 @@ public:
     }
 
     THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> FormWriteRequest() {
-        ui64 totalSize = 0;
         auto ev = MakeHolder<NPQ::TEvPartitionWriter::TEvWriteRequest>();
         auto& request = ev->Record;
         auto* partitionRequest = request.MutablePartitionRequest();
@@ -144,7 +144,8 @@ public:
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-        w->SetSourceId(SourceId);
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
+
         w->SetData(str);
         // create timestamp?? какой ставить?
         w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
@@ -153,8 +154,9 @@ public:
         // w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
-        w->SetSeqNo(SeqNo);
-        totalSize += Message ? Message.size() : 0;
+        w->SetSeqNo(1);
+        // w->SetSeqNo(SeqNo);
+        ui64 totalSize = Message ? Message.size() : 0;
         partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
         return std::move(ev);
 
@@ -182,6 +184,7 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
         }
 
+        PQGroupInfo = info.PQGroupInfo;
         const auto& pqDescription = PQGroupInfo->Description;
         MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
         if (pqDescription.GetPQTabletConfig().GetPartitionStrategy().HasPartitionStrategyType() &&
@@ -217,7 +220,6 @@ public:
             };
         }
 
-        PQGroupInfo = info.PQGroupInfo;
         // SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
 
 
@@ -239,7 +241,6 @@ public:
             .WithTopicPath(TopicPath)
             .WithSourceId(SourceId);
             // .WithCheckRequestUnits(MeteringMode, Context->RlContext)
-            // .WithKafkaProducerInstanceId(producerInstanceId);
 
         auto* writerActor = CreatePartitionWriter(SelfId(), TabletId, Partition, opts);
         WriteActorId = ctx.RegisterWithSameMailbox(writerActor);
@@ -248,9 +249,14 @@ public:
         // ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }
 
+    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
+        Cerr << "Produce actor: Init " << request->Get()->ToString();
+    }
+
     void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext&) {
         auto r = request->Get();
-        auto cookie = r->Record.GetPartitionResponse().GetCookie();
+        const auto& resp = r->Record.GetPartitionResponse();
+        auto cookie = resp.GetCookie();
         if (cookie != Cookie) {
             ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
         }

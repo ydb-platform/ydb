@@ -169,9 +169,14 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     ui64 MemLimitBytes = 0;
     ui64 TargetInMemoryBytes = 0;
-    ui64 CurrentInMemoryLimitBytes = 0;
+    ui64 CurrentInMemoryBytes = 0; // sum of PageMapSize of all in-memory collections
     ui64 ActiveInMemoryBytes = 0;
     ui64 InFlyInMemoryBytes = 0;
+
+    ui64 GetInMemoryLimitBytes() {
+        ui64 remainInFlyLimit = Config.GetInMemoryInFlyLimit() > InFlyInMemoryBytes ? Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes : 0;
+        return Min(CurrentInMemoryBytes + remainInFlyLimit, TargetInMemoryBytes);
+    }
 
     void ActualizeCacheSizeLimit() {
         ui64 limitBytes = MemLimitBytes;
@@ -185,7 +190,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         // limit of cache depends only on config and mem because passive pages may go in and out arbitrary
         // we may have some passive bytes, so if we fully fill this Cache we may exceed the limit
         // because of that DoGC should be called to ensure limits
-        Cache.UpdateLimit(limitBytes, CurrentInMemoryLimitBytes);
+        Cache.UpdateLimit(limitBytes, GetInMemoryLimitBytes());
         Counters.ActiveLimitBytes->Set(limitBytes);
     }
 
@@ -325,6 +330,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             auto emplaced = collection.PageMap.emplace(page->PageId, page);
             Y_ENSURE(emplaced, "Pages should be unique");
             collection.PageMapSize += TPageTraits::GetSize(page.Get());
+            if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
+                CurrentInMemoryBytes += TPageTraits::GetSize(page.Get());
+            }
 
             page->Collection = &collection;
             BodyProvided(collection, page.Get());
@@ -740,7 +748,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 ui64 totalBytes = msg->Cookie + sizeof(TPage) * msg->Pages.size();
                 Y_ENSURE(InFlyInMemoryBytes >= totalBytes);
                 InFlyInMemoryBytes -= totalBytes;
-                ActualizeInMemoryLimit();
                 break;
         }
         if (queue) {
@@ -784,6 +791,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 for (const auto& [owner, pageCollection] : collection->InMemoryOwners) {
                     NotifyInMemOwner(pageCollection, loadedPages, owner);
                 }
+                ActualizeCacheSizeLimit();
                 Evict(Cache.EnsureLimits());
             }
         }
@@ -804,6 +812,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             Y_ENSURE(collection.PageMap.emplace(pageId, (page = new TPage(pageId, pageCollection.Page(pageId).Size, &collection))));
             page->CacheMode = initialMode;
             collection.PageMapSize += TPageTraits::GetSize(page);
+            if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
+                CurrentInMemoryBytes += TPageTraits::GetSize(page);
+            }
         }
 
         return page;
@@ -879,7 +890,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     // page was accessed while being passive, load it back
                     ReloadEvictedPage(page);
                 } else if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory
-                    && ActiveInMemoryBytes + TPageTraits::GetSize(page) < CurrentInMemoryLimitBytes)
+                    && ActiveInMemoryBytes + TPageTraits::GetSize(page) < GetInMemoryLimitBytes())
                 {
                     ReloadEvictedPage(page, false);
                 }
@@ -907,8 +918,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
                     PendingInMemoryPages[collection->Id].emplace(pageId);
                 }
-                Y_DEBUG_ABORT_UNLESS(collection->PageMapSize >= TPageTraits::GetSize(page));
-                collection->PageMapSize -= TPageTraits::GetSize(page);
+                ui64 pageSize = TPageTraits::GetSize(page);
+                Y_DEBUG_ABORT_UNLESS(collection->PageMapSize >= pageSize);
+                collection->PageMapSize -= pageSize;
+                if (page->CacheMode == NTable::NPage::ECacheMode::TryKeepInMemory) {
+                    Y_DEBUG_ABORT_UNLESS(CurrentInMemoryBytes >= pageSize);
+                    CurrentInMemoryBytes -= pageSize;
+                }
                 Y_ENSURE(collection->PageMap.erase(pageId));
                 // Note: don't use page after erase as it may be deleted
                 if (collection->Owners) {
@@ -1139,11 +1155,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Y_ENSURE(TargetInMemoryBytes >= collection.TotalSize);
         TargetInMemoryBytes -= collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
-        if (TargetInMemoryBytes < CurrentInMemoryLimitBytes) {
-            CurrentInMemoryLimitBytes = TargetInMemoryBytes;
-        }
 
-        ActualizeInMemoryLimit();
+        Y_ENSURE(CurrentInMemoryBytes >= collection.PageMapSize);
+        CurrentInMemoryBytes -= collection.PageMapSize;
+        ActualizeCacheSizeLimit();
+
         PendingInMemoryPages.erase(collection.Id);
         // TODO: move pages async and batched
         for (const auto& kv : collection.PageMap) {
@@ -1166,7 +1182,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     break;
                 case PageStateEvicted:
                     // also we need to notify about pages that can be reloaded
-                    if (ActiveInMemoryBytes + TPageTraits::GetSize(page) < CurrentInMemoryLimitBytes) {
+                    if (ActiveInMemoryBytes + TPageTraits::GetSize(page) < GetInMemoryLimitBytes()) {
                         ReloadEvictedPage(page, false);
                         loadedPages.push_back(page);
                     }
@@ -1186,8 +1202,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             << " to " << ECacheMode::TryKeepInMemory);
         TargetInMemoryBytes += collection.TotalSize;
         Counters.TargetInMemoryBytes->Set(TargetInMemoryBytes);
-        CurrentInMemoryLimitBytes += collection.PageMapSize;
-        ActualizeInMemoryLimit();
+        CurrentInMemoryBytes += collection.PageMapSize;
+        ActualizeCacheSizeLimit();
 
         TVector<TPage*> loadedPages;
         auto& pagesToLoad = PendingInMemoryPages[collection.Id];
@@ -1219,13 +1235,6 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         Evict(Cache.EnsureLimits());
-    }
-
-    void ActualizeInMemoryLimit() {
-        if (CurrentInMemoryLimitBytes < TargetInMemoryBytes && InFlyInMemoryBytes < Config.GetInMemoryInFlyLimit()) {
-            CurrentInMemoryLimitBytes += Min(TargetInMemoryBytes - CurrentInMemoryLimitBytes, Config.GetInMemoryInFlyLimit() - InFlyInMemoryBytes);
-        }
-        ActualizeCacheSizeLimit();
     }
 
     void TryLoadInMemoryCollections() {

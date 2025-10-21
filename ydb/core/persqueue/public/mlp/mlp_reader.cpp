@@ -54,11 +54,11 @@ STFUNC(TReaderActor::DescribeState) {
 void TReaderActor::DoSelectPartition() {
     LOG_D("Start select partition");
     Become(&TReaderActor::SelectPartitionState);
-    SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
+    SendToTablet(ReadBalancerTabletId, new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
 }
 
-void TReaderActor::Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
+void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPGetPartitionResponse " << ev->Get()->Record.ShortDebugString());
     auto* result = ev->Get();
     switch (result->GetStatus()) {
         case Ydb::StatusIds::SUCCESS: {
@@ -85,8 +85,8 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
 
 STFUNC(TReaderActor::SelectPartitionState) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvMLPGetPartitionResponse, Handle);
-        hFunc(TEvPersQueue::TEvMLPErrorResponse, Handle);
+        hFunc(TEvPQ::TEvMLPGetPartitionResponse, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnSelectPartition);
         sFunc(TEvents::TEvPoison, PassAway);
     }
@@ -95,12 +95,12 @@ STFUNC(TReaderActor::SelectPartitionState) {
 void TReaderActor::DoRead() {
     LOG_D("Start read");
     Become(&TReaderActor::ReadState);
-    SendToTablet(PQTabletId, new TEvPersQueue::TEvMLPReadRequest(Settings.TopicName, Settings.Consumer, PartitionId,
+    SendToTablet(PQTabletId, new TEvPQ::TEvMLPReadRequest(Settings.TopicName, Settings.Consumer, PartitionId,
         Settings.WaitTime.ToDeadLine(), Settings.VisibilityTimeout.ToDeadLine(), Settings.MaxNumberOfMessage));
 }
 
-void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPReadResponse");
+void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPReadResponse");
 
     auto response = std::make_unique<TEvReadResponse>();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
@@ -131,8 +131,8 @@ void TReaderActor::Handle(TEvPersQueue::TEvMLPReadResponse::TPtr& ev) {
     PassAway();
 }
 
-void TReaderActor::Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
     PassAway();
 }
@@ -151,8 +151,8 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
 
 STFUNC(TReaderActor::ReadState) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvMLPReadResponse, Handle);
-        hFunc(TEvPersQueue::TEvMLPErrorResponse, Handle);
+        hFunc(TEvPQ::TEvMLPReadResponse, Handle);
+        hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
         hFunc(TEvPipeCache::TEvDeliveryProblem, HandleOnRead);
         sFunc(TEvents::TEvPoison, PassAway);
     }

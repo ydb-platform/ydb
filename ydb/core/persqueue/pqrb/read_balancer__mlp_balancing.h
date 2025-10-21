@@ -23,7 +23,7 @@ class TMLPBalancer {
 public:
     explicit TMLPBalancer(TPersQueueReadBalancer& topicActor);
 
-    void Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
 
     const NKikimrPQ::TPQTabletConfig& GetConfig() const;
 

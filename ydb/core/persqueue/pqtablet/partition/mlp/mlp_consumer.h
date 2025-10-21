@@ -4,7 +4,6 @@
 #include "mlp_common.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
-#include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -32,15 +31,15 @@ protected:
     TString BuildLogPrefix() const override;
 
 private:
-    void Queue(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void Queue(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Queue(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
-    void Queue(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
-    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void HandleOnInit(TEvKeyValue::TEvResponse::TPtr&);
     void HandleOnWrite(TEvKeyValue::TEvResponse::TPtr&);
@@ -76,10 +75,10 @@ private:
 
     std::unique_ptr<TStorage> Storage;
 
-    std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> ReadRequestsQueue;
-    std::deque<TEvPersQueue::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
-    std::deque<TEvPersQueue::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
-    std::deque<TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
+    std::deque<TEvPQ::TEvMLPReadRequest::TPtr> ReadRequestsQueue;
+    std::deque<TEvPQ::TEvMLPCommitRequest::TPtr> CommitRequestsQueue;
+    std::deque<TEvPQ::TEvMLPUnlockRequest::TPtr> UnlockRequestsQueue;
+    std::deque<TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr> ChangeMessageDeadlineRequestsQueue;
 
     std::deque<TReadResult> PendingReadQueue;
     std::deque<TResult> PendingCommitQueue;

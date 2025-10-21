@@ -93,10 +93,10 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     template<typename TEventHandle>
     bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
@@ -258,10 +258,10 @@ private:
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
 
     using TMLPRequest = std::variant<
-        TEvPersQueue::TEvMLPReadRequest::TPtr,
-        TEvPersQueue::TEvMLPCommitRequest::TPtr,
-        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
-        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+        TEvPQ::TEvMLPReadRequest::TPtr,
+        TEvPQ::TEvMLPCommitRequest::TPtr,
+        TEvPQ::TEvMLPUnlockRequest::TPtr,
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
     TDeque<TMLPRequest> MLPRequests;
 

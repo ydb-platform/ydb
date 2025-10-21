@@ -22,20 +22,20 @@ TMLPBalancer::TMLPBalancer(TPersQueueReadBalancer& topicActor)
     : TopicActor(topicActor) {
 }
 
-void TMLPBalancer::Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr& ev) {
+void TMLPBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     auto& consumerName = ev->Get()->GetConsumer();
 
     auto* consumerConfig = NPQ::GetConsumer(GetConfig(), consumerName);
     if (!consumerConfig) {
         PQ_LOG_D("Consumer '" << consumerName << "' does not exist");
-        TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+        TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "Consumer '" << consumerName << "' does not exist"), 0, ev->Cookie);
         return;
     }
 
     if (consumerConfig->GetType() != NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_MLP) {
         PQ_LOG_D("Consumer '" << consumerName << "' is not MLP consumer");
-        TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+        TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() << "Consumer '" << consumerName << "' is not MLP consumer"), 0, ev->Cookie);
         return;
     }
@@ -44,7 +44,7 @@ void TMLPBalancer::Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr& ev) {
     auto& consumer = it->second;
 
     auto& partitionConfig = consumer.NextPartition();
-    TopicActor.Send(ev->Sender, new TEvPersQueue::TEvMLPGetPartitionResponse(partitionConfig.GetPartitionId(), partitionConfig.GetTabletId()), 0, ev->Cookie);
+    TopicActor.Send(ev->Sender, new TEvPQ::TEvMLPGetPartitionResponse(partitionConfig.GetPartitionId(), partitionConfig.GetTabletId()), 0, ev->Cookie);
 }
 
 const NKikimrPQ::TPQTabletConfig& TMLPBalancer::GetConfig() const {

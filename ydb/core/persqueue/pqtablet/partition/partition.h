@@ -599,10 +599,10 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -673,10 +673,10 @@ private:
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
             hFuncTraced(TEvPQ::TEvMLPRestartActor, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
-            hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -1190,14 +1190,14 @@ private:
     bool InitNewHeadForCompaction();
 
 private:
-    void HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
-    void HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPReadRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
 
     void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
 
@@ -1213,10 +1213,10 @@ private:
     std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
 
     using TMLPPendingEvent = std::variant<
-        TEvPersQueue::TEvMLPReadRequest::TPtr,
-        TEvPersQueue::TEvMLPCommitRequest::TPtr,
-        TEvPersQueue::TEvMLPUnlockRequest::TPtr,
-        TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr
+        TEvPQ::TEvMLPReadRequest::TPtr,
+        TEvPQ::TEvMLPCommitRequest::TPtr,
+        TEvPQ::TEvMLPUnlockRequest::TPtr,
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
     >;
     std::deque<TMLPPendingEvent> MLPPendingEvents;
 };

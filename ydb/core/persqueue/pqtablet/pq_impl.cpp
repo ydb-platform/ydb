@@ -5261,19 +5261,19 @@ void TPersQueue::Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext
              new TEvPQ::TEvForceCompaction(event.PartitionId));
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+void TPersQueue::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+void TPersQueue::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+void TPersQueue::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
-void TPersQueue::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+void TPersQueue::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     ForwardToPartition(ev->Get()->GetPartitionId(), ev);
 }
 
@@ -5281,7 +5281,7 @@ template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
-        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
         return true;
     }
@@ -5360,10 +5360,10 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvPQ::TEvDeletePartitionDone, Handle);
         HFuncTraced(TEvPQ::TEvTransactionCompleted, Handle);
         HFuncTraced(TEvPQ::TEvForceCompaction, Handle);
-        hFuncTraced(TEvPersQueue::TEvMLPReadRequest, Handle);
-        hFuncTraced(TEvPersQueue::TEvMLPCommitRequest, Handle);
-        hFuncTraced(TEvPersQueue::TEvMLPUnlockRequest, Handle);
-        hFuncTraced(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+        hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             return false;
     }

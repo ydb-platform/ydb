@@ -3,14 +3,13 @@
 #include "mlp_storage.h"
 
 #include <ydb/core/persqueue/common/key.h>
-#include <ydb/core/persqueue/events/internal.h>
 
 namespace NKikimr::NPQ::NMLP {
 
 namespace {
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
+    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
 }
 
 template<typename T>
@@ -90,42 +89,42 @@ TString TConsumerActor::BuildLogPrefix() const {
     return TStringBuilder() << "[" << PartitionId << "][MLP][" << Config.GetName() << "] ";
 }
 
-void TConsumerActor::Queue(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("Queue TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+void TConsumerActor::Queue(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
     ReadRequestsQueue.push_back(std::move(ev));
 }
 
-void TConsumerActor::Queue(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("Queue TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+void TConsumerActor::Queue(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
-void TConsumerActor::Queue(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("Queue TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+void TConsumerActor::Queue(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
     UnlockRequestsQueue.push_back(std::move(ev));
 }
 
-void TConsumerActor::Queue(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("Queue TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    LOG_D("Queue TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
-void TConsumerActor::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
+void TConsumerActor::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
 
-void TConsumerActor::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
+void TConsumerActor::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
 
-void TConsumerActor::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
+void TConsumerActor::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
 
-void TConsumerActor::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+void TConsumerActor::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     Queue(ev);
     ProcessEventQueue();
 }
@@ -181,10 +180,10 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
 STFUNC(TConsumerActor::StateInit) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvMLPReadRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPCommitRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPReadRequest, Queue);
+        hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
+        hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
+        hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnInit);
         hFunc(TEvPQ::TEvProxyResponse, HandleOnInit);
         hFunc(TEvPQ::TEvError, Handle);
@@ -222,9 +221,9 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
         auto msgs = std::exchange(PendingReadQueue, {});
         RegisterWithSameMailbox(new TMessageEnricherActor(PartitionId, PartitionActorId, Config.GetName(), std::move(msgs))); // TODO excahnge
     }
-    ReplyOk<TEvPersQueue::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
-    ReplyOk<TEvPersQueue::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
-    ReplyOk<TEvPersQueue::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
+    ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
+    ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
+    ReplyOk<TEvPQ::TEvMLPChangeMessageDeadlineResponse>(SelfId(), PendingChangeMessageDeadlineQueue);
 
     ProcessEventQueue();
     FetchMessagesIfNeeded();
@@ -241,10 +240,10 @@ void TConsumerActor::CommitIfNeeded() {
 
 STFUNC(TConsumerActor::StateWork) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvMLPReadRequest, Handle);
-        hFunc(TEvPersQueue::TEvMLPCommitRequest, Handle);
-        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Handle);
-        hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Handle);
+        hFunc(TEvPQ::TEvMLPReadRequest, Handle);
+        hFunc(TEvPQ::TEvMLPCommitRequest, Handle);
+        hFunc(TEvPQ::TEvMLPUnlockRequest, Handle);
+        hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
         hFunc(TEvents::TEvWakeup, HandleOnWork);
@@ -256,10 +255,10 @@ STFUNC(TConsumerActor::StateWork) {
 
 STFUNC(TConsumerActor::StateWrite) {
     switch (ev->GetTypeRewrite()) {
-        hFunc(TEvPersQueue::TEvMLPReadRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPCommitRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPUnlockRequest, Queue);
-        hFunc(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest, Queue);
+        hFunc(TEvPQ::TEvMLPReadRequest, Queue);
+        hFunc(TEvPQ::TEvMLPCommitRequest, Queue);
+        hFunc(TEvPQ::TEvMLPUnlockRequest, Queue);
+        hFunc(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Queue);
         hFunc(TEvKeyValue::TEvResponse, HandleOnWrite);
         hFunc(TEvPQ::TEvProxyResponse, Handle);
         hFunc(TEvPQ::TEvError, Handle);
@@ -322,7 +321,7 @@ void TConsumerActor::ProcessEventQueue() {
     auto now = TInstant::Now();
 
     ui64 fromOffset = 0;
-    std::deque<TEvPersQueue::TEvMLPReadRequest::TPtr> readRequestsQueue;
+    std::deque<TEvPQ::TEvMLPReadRequest::TPtr> readRequestsQueue;
     for (auto& ev : ReadRequestsQueue) {
         size_t count = ev->Get()->GetMaxNumberOfMessages();
         auto visibilityDeadline = ev->Get()->GetVisibilityDeadline();
@@ -344,7 +343,7 @@ void TConsumerActor::ProcessEventQueue() {
         if (messages.empty() && ev->Get()->GetWaitDeadline() <= now) {
             // Optimization: do not need to upload the message body.
             LOG_D("Reply empty result: sender=" << ev->Sender.ToString() << " cookie=" << ev->Cookie);
-            Send(ev->Sender, new TEvPersQueue::TEvMLPReadResponse(), 0, ev->Cookie);
+            Send(ev->Sender, new TEvPQ::TEvMLPReadResponse(), 0, ev->Cookie);
             continue;
         } else if (messages.empty()) {
             readRequestsQueue.push_back(std::move(ev));

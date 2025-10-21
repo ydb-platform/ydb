@@ -1,7 +1,5 @@
 #include "mlp_message_enricher.h"
 
-#include <ydb/core/persqueue/events/global.h>
-
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& partitionActor, const TString& consumerName, std::deque<TReadResult>&& replies)
@@ -11,7 +9,7 @@ TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& p
     , ConsumerName(consumerName)
     , Queue(std::move(replies))
     , Backoff(5, TDuration::MilliSeconds(50))
-    , PendingResponse(std::make_unique<TEvPersQueue::TEvMLPReadResponse>())
+    , PendingResponse(std::make_unique<TEvPQ::TEvMLPReadResponse>())
 {
 }
 
@@ -24,7 +22,7 @@ void TMessageEnricherActor::Bootstrap() {
 void TMessageEnricherActor::PassAway() {
     LOG_D("PassAway");
     for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
+        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
 
     TBase::PassAway();
@@ -68,7 +66,7 @@ void TMessageEnricherActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 }
                 if (reply.Offsets.empty()) {
                     Send(reply.Sender, PendingResponse.release(), 0, reply.Cookie);
-                    PendingResponse = std::make_unique<TEvPersQueue::TEvMLPReadResponse>();
+                    PendingResponse = std::make_unique<TEvPQ::TEvMLPReadResponse>();
                     Queue.pop_front();
                     continue;
                 }
@@ -92,7 +90,7 @@ void TMessageEnricherActor::Handle(TEvents::TEvWakeup::TPtr&) {
     LOG_D("TEvents::TEvWakeup");
 
     for (auto& reply : Queue) {
-        Send(reply.Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::TIMEOUT, "Enrich timeout"), 0, reply.Cookie);
+        Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::TIMEOUT, "Enrich timeout"), 0, reply.Cookie);
     }
     Queue.clear();
 
@@ -114,7 +112,7 @@ void TMessageEnricherActor::ProcessQueue() {
     while(!Queue.empty()) {
         auto& reply = Queue.front();
         if (reply.Offsets.empty()) {
-            Send(reply.Sender, new TEvPersQueue::TEvMLPReadResponse(), 0, reply.Cookie);
+            Send(reply.Sender, new TEvPQ::TEvMLPReadResponse(), 0, reply.Cookie);
 
             Queue.pop_front();
             continue;

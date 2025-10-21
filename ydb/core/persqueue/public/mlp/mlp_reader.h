@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
@@ -26,13 +26,13 @@ private:
     STFUNC(DescribeState);
 
     void DoSelectPartition();
-    void Handle(TEvPersQueue::TEvMLPGetPartitionResponse::TPtr&);
+    void Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr&);
     void HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(SelectPartitionState);
 
     void DoRead();
-    void Handle(TEvPersQueue::TEvMLPReadResponse::TPtr&);
-    void Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr&);
+    void Handle(TEvPQ::TEvMLPReadResponse::TPtr&);
+    void Handle(TEvPQ::TEvMLPErrorResponse::TPtr&);
     void HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr&);
     STFUNC(ReadState);
 

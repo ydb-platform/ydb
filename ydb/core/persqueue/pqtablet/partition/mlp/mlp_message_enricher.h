@@ -40,7 +40,7 @@ private:
     TBackoff Backoff;
     ui64 Cookie = 0;
 
-    std::unique_ptr<TEvPersQueue::TEvMLPReadResponse> PendingResponse;
+    std::unique_ptr<TEvPQ::TEvMLPReadResponse> PendingResponse;
 };
 
 } // namespace NKikimr::NPQ::NMLP

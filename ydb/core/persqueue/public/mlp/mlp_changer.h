@@ -4,7 +4,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/persqueue/common/actor.h>
-#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/util/backoff.h>
 
@@ -127,8 +127,8 @@ private:
         ReplyIfPossible();
     }
 
-    void Handle(TEvPersQueue::TEvMLPErrorResponse::TPtr& ev) {
-        LOG_D("Handle TEvPersQueue::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    void Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
+        LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
 
         auto partitionId = ev->Cookie;
 
@@ -171,7 +171,7 @@ private:
     STFUNC(ChangesState) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TResponse, Handle);
-            hFunc(TEvPersQueue::TEvMLPErrorResponse, Handle);
+            hFunc(TEvPQ::TEvMLPErrorResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
         }

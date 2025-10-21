@@ -4,23 +4,23 @@
 
 namespace NKikimr::NPQ {
 
-void TPartition::HandleOnInit(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::HandleOnInit(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
     MLPPendingEvents.emplace_back(ev);
 }
 
-void TPartition::HandleOnInit(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
     MLPPendingEvents.emplace_back(ev);
 }
 
-void TPartition::HandleOnInit(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
     MLPPendingEvents.emplace_back(ev);
 }
 
-void TPartition::HandleOnInit(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("HandleOnInit TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    LOG_D("HandleOnInit TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
     MLPPendingEvents.emplace_back(ev);
 }
 
@@ -28,7 +28,7 @@ template<typename TEventHandle>
 void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev) {
     auto it = MLPConsumers.find(consumer);
     if (it == MLPConsumers.end()) {
-        Send(ev->Sender, new TEvPersQueue::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Consumer not found"), 0, ev->Cookie);
+        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::SCHEME_ERROR, "Consumer not found"), 0, ev->Cookie);
         return;
     }
 
@@ -36,23 +36,23 @@ void TPartition::ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHa
     Forward(ev, consumerInfo.ActorId);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvMLPReadRequest::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::Handle(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPReadRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvMLPCommitRequest::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::Handle(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPCommitRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvMLPUnlockRequest::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::Handle(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPUnlockRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 
-void TPartition::Handle(TEvPersQueue::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
+void TPartition::Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
+    LOG_D("Handle TEvPQ::TEvMLPChangeMessageDeadlineRequest " << ev->Get()->Record.ShortDebugString());
     ForwardToMLPConsumer(ev->Get()->GetConsumer(), ev);
 }
 

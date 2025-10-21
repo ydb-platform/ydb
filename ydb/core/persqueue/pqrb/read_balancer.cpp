@@ -1082,7 +1082,7 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
     }
 }
 
-void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr& ev) {
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     MLPBalancer->Handle(ev);
 }
 
@@ -1145,7 +1145,7 @@ STFUNC(TPersQueueReadBalancer::StateWork) {
         // from MirrorDescriber
         HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
         // MLP
-        hFunc(TEvPersQueue::TEvMLPGetPartitionRequest, Handle);
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
         default:
             HandleDefaultEvents(ev, SelfId());
             break;

@@ -135,7 +135,7 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPersQueue::TEvMLPGetPartitionRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
 
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);

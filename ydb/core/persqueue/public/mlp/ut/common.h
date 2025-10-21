@@ -3,7 +3,7 @@
 #include "mlp.h"
 
 #include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
@@ -87,8 +87,8 @@ inline TActorId CreateMessageDeadlineChangerActor(NActors::TTestActorRuntime& ru
     return readerId;
 }
 
-inline THolder<TEvPersQueue::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
-    return runtime.GrabEdgeEvent<TEvPersQueue::TEvMLPReadResponse>();
+inline THolder<TEvPQ::TEvMLPReadResponse> WaitResult(NActors::TTestActorRuntime& runtime) {
+    return runtime.GrabEdgeEvent<TEvPQ::TEvMLPReadResponse>();
 }
 
 inline THolder<TEvReadResponse> GetReadResponse(NActors::TTestActorRuntime& runtime, TDuration timeout = TDuration::Seconds(5)) {

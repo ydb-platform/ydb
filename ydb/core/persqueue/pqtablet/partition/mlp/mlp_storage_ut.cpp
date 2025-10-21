@@ -9,6 +9,10 @@ Y_UNIT_TEST_SUITE(TMLPStorageTests) {
 
 struct MockTimeProvider : public ITimeProvider {
 
+    MockTimeProvider() {
+        Value = TInstant::Seconds(1761034384);
+    }
+
     TInstant Now() override {
         return Value;
     }
@@ -17,7 +21,7 @@ struct MockTimeProvider : public ITimeProvider {
         Value += duration;
     }
 
-    TInstant Value = TInstant::Now();
+    TInstant Value;
 };
 
 Y_UNIT_TEST(NextFromEmptyStorage) {
@@ -542,8 +546,6 @@ Y_UNIT_TEST(ProccessDeadlines) {
     storage.AddMessage(5, true, 11);
     storage.AddMessage(6, true, 13);
 
-
-
     storage.Next(timeProvider->Now() + TDuration::Seconds(10));
     timeProvider->Tick(TDuration::Seconds(5));
     storage.Next(timeProvider->Now() + TDuration::Seconds(10));
@@ -571,6 +573,40 @@ Y_UNIT_TEST(ProccessDeadlines) {
     UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 0);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DeadlineExpiredMessageCount, 1);
     UNIT_ASSERT_VALUES_EQUAL(metrics.DLQMessageCount, 0);
+}
+
+Y_UNIT_TEST(MoveBaseDeadline) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+
+    TStorage storage(timeProvider);
+    storage.SetKeepMessageOrder(true);
+    storage.AddMessage(3, true, 5);
+    storage.AddMessage(4, true, 7);
+    storage.AddMessage(5, true, 11);
+
+    storage.Next(timeProvider->Now() + TDuration::Seconds(3));
+    storage.Next(timeProvider->Now() + TDuration::Seconds(5));
+    storage.Next(timeProvider->Now() + TDuration::Seconds(7));
+
+    timeProvider->Tick(TDuration::Seconds(5));
+
+    storage.MoveBaseDeadline();
+
+    {
+        auto* message = storage.GetMessage(3);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
+    }
+    {
+        auto* message = storage.GetMessage(4);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 0);
+    }
+    {
+        auto* message = storage.GetMessage(5);
+        UNIT_ASSERT_VALUES_EQUAL(message->Status, TStorage::EMessageStatus::Locked);
+        UNIT_ASSERT_VALUES_EQUAL(message->DeadlineDelta, 2);
+    }
 }
 
 }

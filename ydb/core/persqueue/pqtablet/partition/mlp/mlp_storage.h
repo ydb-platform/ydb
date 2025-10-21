@@ -95,8 +95,9 @@ public:
     void AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash);
 
     size_t ProccessDeadlines();
-    // TODO удалять сообщения если в партиции сместился StartOffset
+    // TODO MLP удалять сообщения если в партиции сместился StartOffset
     size_t Compact();
+    void MoveBaseDeadline();
 
     bool InitializeFromSnapshot(const NKikimrPQ::TMLPStorageSnapshot& snapshot);
     bool CreateSnapshot(NKikimrPQ::TMLPStorageSnapshot& snapshot);
@@ -116,7 +117,6 @@ private:
     bool DoUnlock(ui64 offset);
     void DoUnlock(TMessage& message, ui64 offset);
 
-    void UpdateDeltas();
     void UpdateFirstUncommittedOffset();
 
 private:

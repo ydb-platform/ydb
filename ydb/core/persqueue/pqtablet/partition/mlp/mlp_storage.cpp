@@ -270,7 +270,7 @@ ui64 TStorage::NormalizeDeadline(TInstant deadline) {
     auto deadlineDuration = deadline - BaseDeadline;
     auto deadlineDelta = deadlineDuration.Seconds() + (deadlineDuration.MilliSecondsOfSecond() ? 1 : 0);
     if (deadlineDelta >= MaxDeadlineDelta) {
-        UpdateDeltas();
+        MoveBaseDeadline();
         if (deadline <= BaseDeadline) {
             deadlineDelta = 0;
         } else {
@@ -370,7 +370,7 @@ void TStorage::DoUnlock(TMessage& message, ui64 offset) {
     }
 }
 
-void TStorage::UpdateDeltas() {
+void TStorage::MoveBaseDeadline() {
     auto now = TimeProvider->Now();
     auto deadlineDiff = (now - BaseDeadline).Seconds();
 

@@ -14,10 +14,6 @@ ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexO
 ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
-ydb/core/graph/ut Graph.LocalBordersOnGet
-ydb/core/graph/ut sole chunk chunk
-ydb/core/kafka_proxy/ut PublishKafkaEndpoints.TopicMetadataOnlyOneReplicaNodeReturned
-ydb/core/kafka_proxy/ut sole chunk chunk
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
@@ -26,8 +22,7 @@ ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestReadLargeParquetFile
 ydb/core/kqp/ut/federated_query/s3 sole chunk chunk
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter+StreamLookup
 ydb/core/kqp/ut/join KqpIndexLookupJoin.LeftJoinRightNullFilter-StreamLookup
-ydb/core/kqp/ut/olap KqpOlapDictionary.DifferentPages[]
-ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,false,1024,0,1000000,0]
+ydb/core/kqp/ut/olap KqpOlapJson.BloomMixIndexesVariants[false,true,0,10,1000,0.5,CATEGORY_BLOOM_FILTER]
 ydb/core/kqp/ut/olap KqpOlapJson.QuotedFilterVariants[10,true,1024,0,1000000,0]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFirstLevelVariants[10,true,1024,0,100,0.5]
 ydb/core/kqp/ut/olap KqpOlapJson.RestoreFullJsonVariants[2,true,1024,0,0,0]
@@ -66,6 +61,7 @@ ydb/core/statistics/aggregator/ut [*/*] chunk chunk
 ydb/core/statistics/service/ut BasicStatistics.PersistenceWithStorageFailuresAndReboots
 ydb/core/statistics/service/ut [*/*] chunk chunk
 ydb/core/tablet/ut BootstrapperTest.MultipleBootstrappers
+ydb/core/tablet_flat/ut TSharedPageCache.S3FIFO
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
@@ -75,8 +71,6 @@ ydb/core/tx/schemeshard/ut_index_build_reboots [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-true
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots [*/*] chunk chunk
 ydb/core/util/ut TCircularOperationQueueTest.ShouldShuffle
 ydb/core/viewer/tests test.py.test_async_replication_describe
 ydb/core/viewer/tests test.py.test_topic_data_cdc
@@ -84,9 +78,9 @@ ydb/core/viewer/tests test.py.test_viewer_query_long
 ydb/core/viewer/tests test.py.test_viewer_query_long_multipart
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster sole chunk chunk
+ydb/library/yql/providers/generic/connector/tests/datasource/oracle test.py.test_select_positive[LONGRAW-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch_ch-kqprun]
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
-ydb/public/sdk/cpp/src/client/topic/ut BasicUsage.ConflictingWrites
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Olap_WriteToTopicAndTable_4_Query
 ydb/public/sdk/cpp/src/client/topic/ut TxUsage.Sinks_Oltp_WriteToTopicAndTable_6_Query
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
@@ -97,6 +91,7 @@ ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility/configs test_defaults.py.test_compare_config_default_values[stable-25-1-3-current]
 ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v1-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/analytics test_join.py.TestJoinAnalytics.test_simple[v2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-0-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-1-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-2-True-3-fq_client0-mvp_external_ydb_endpoint0]
@@ -107,9 +102,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-7-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-8-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
-ydb/tests/fq/http_api sole chunk chunk
-ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_create_idempotency
-ydb/tests/fq/mem_alloc test_dc_local.py.TestAlloc.test_dc_locality[kikimr0]
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_huge_source[v1-false-client0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_top_level_listing_2[v2-kikimr_params0-false-client0]
@@ -121,34 +113,6 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/null_select.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q1.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q1.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q10.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q10.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q11.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q11.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q12.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q12.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q13.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q13.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q14.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q14.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q15.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q15.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q16.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q16.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q17.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q17.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q18.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q18.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q19.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q19.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q2.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q2.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q20.sql-plan]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q20.sql-result_sets]
-ydb/tests/functional/canonical test_sql.py.TestCanonicalFolder1.test_case[simple/q21.sql-plan]
 ydb/tests/functional/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
@@ -157,7 +121,6 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_24_4_to_current_mixed]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[stable_25_1_to_current_mixed]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current-column]
@@ -166,7 +129,6 @@ ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_24_4_to_current_mixed-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple[stable_25_1_to_current_mixed-column]
-ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_current-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-column]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[current_to_stable_24_4-row]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_tpch1[stable_24_4_to_current-column]
@@ -183,12 +145,9 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-ro
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
-ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v0-tables_format_v1-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v1-std]
-ydb/tests/functional/sqs/common test_queue_tags.py.TestQueueTags.test_tag_queue[tables_format_v0-fifo]
 ydb/tests/functional/sqs/messaging test_generic_messaging.py.TestSqsGenericMessagingWithPath.test_change_visibility_to_zero_works[tables_format_v0-std]
-ydb/tests/functional/sqs/multinode test_multinode_cluster.py.TestSqsMultinodeCluster.test_sqs_writes_through_proxy_on_each_node[tables_format_v0-std]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/coalesce-and-join.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join-group-by-with-null.test]
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join0.test]
@@ -202,11 +161,6 @@ ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[p
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-3.test]
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select2-4.test]
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[plan-select3-9.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select1-1.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select1-2.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select1-3.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select1-4.test]
-ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select1-5.test]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_create_drop_create_table3[enable_alter_database_create_hive_first--false]
@@ -232,6 +186,7 @@ ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsert
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_insert_delete_and_read_simpletable
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch
 ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch_tx
+ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_bulkinsert_and_count
 ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_upsert_and_count
 ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]

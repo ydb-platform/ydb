@@ -1,4 +1,4 @@
-name: SLO
+name: C++ SDK SLO
 
 on:
   workflow_dispatch:

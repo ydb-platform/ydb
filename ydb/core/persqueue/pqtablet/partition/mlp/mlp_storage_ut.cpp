@@ -543,6 +543,8 @@ Y_UNIT_TEST(ProccessDeadlines) {
     storage.SetKeepMessageOrder(true);
     storage.AddMessage(3, true, 5);
     storage.AddMessage(4, true, 7);
+    storage.AddMessage(5, true, 11);
+    storage.AddMessage(6, true, 13);
 
     storage.Next(timeProvider->Now() + TDuration::Seconds(10));
     timeProvider->Tick(TDuration::Seconds(5));

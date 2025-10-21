@@ -323,6 +323,9 @@ private:
     }
 
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
+        if (!ReadActorInput) {
+            return;
+        }
         TMaybe<TInstant> watermark;
         ui64 freeSpace = 32*1024*1024; // FIXME The value doesn't really matter, but where to take it from?
         NKikimr::NMiniKQL::TUnboxedValueBatch rows;

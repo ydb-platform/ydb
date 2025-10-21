@@ -161,7 +161,7 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
         lateArrivalDelay,
         idleDelay,
-        TInstant::Now()
+        LogPrefix
     );
 }
 

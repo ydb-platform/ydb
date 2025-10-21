@@ -568,7 +568,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 

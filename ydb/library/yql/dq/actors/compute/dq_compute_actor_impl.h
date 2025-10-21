@@ -1619,8 +1619,9 @@ protected:
         auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
         // only schedule new check if nothing scheduled at same or earlier time
         if (checkTime && (InflightIdlenessCheck.empty() || *InflightIdlenessCheck.cbegin() > *checkTime)) {
-            CA_LOG_T("Reschedule next idleness check from {" << JoinSeq(',', InflightIdlenessCheck) << "} to " << checkTime);
-            InflightIdlenessCheck.emplace(*checkTime);
+            CA_LOG_T("Schedule next idleness check from {" << JoinSeq(',', InflightIdlenessCheck) << "} to " << checkTime);
+            auto [_, inserted] = InflightIdlenessCheck.emplace(*checkTime);
+            Y_DEBUG_ABORT_UNLESS(inserted);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
     }
@@ -1735,15 +1736,16 @@ protected:
 
 private:
     void InitializeWatermarks() {
+        TInstant now = TInstant::Now();
         for (const auto& [id, source] : SourcesMap) {
             if (source.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterAsyncInput(id, source.WatermarksIdleDelay);
+                WatermarksTracker.RegisterAsyncInput(id, source.WatermarksIdleDelay, now);
             }
         }
 
         for (const auto& [id, channel] : InputChannelsMap) {
             if (channel.WatermarksMode == NDqProto::EWatermarksMode::WATERMARKS_MODE_DEFAULT) {
-                WatermarksTracker.RegisterInputChannel(id, channel.WatermarksIdleDelay);
+                WatermarksTracker.RegisterInputChannel(id, channel.WatermarksIdleDelay, now);
             }
         }
     }

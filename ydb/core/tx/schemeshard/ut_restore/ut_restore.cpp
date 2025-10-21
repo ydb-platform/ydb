@@ -2663,57 +2663,10 @@ value {
 
     size_t MakeBigEncryptedExport(TS3Mock& s3Mock, const TString& key, const NBackup::TEncryptionIV& iv, size_t encryptedBlockSize, size_t resultFileSize, bool compressed) {
         const TStringBuf exportPrefix = "/test_bucket/Export123/";
-
         NBackup::TEncryptionKey encryptionKey(key);
-        auto file = [&](TStringBuf path, TString content, TMaybe<NBackup::TEncryptionIV> iv) {
-            if (iv) {
-                NBackup::TEncryptedFileSerializer::EncryptFullFile("ChaCha20-Poly1305", encryptionKey, *iv, content).AsString(content);
-            }
-            s3Mock.GetData()[TStringBuilder() << exportPrefix << path] = std::move(content);
-        };
-
-        NBackup::TEncryptionIV tableIV = NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableSchema, 1, 0);
-
-        const TString tableMetadata = R"json({
-            "version": 1,
-            "full_backups": [
-                {
-                    "snapshot_vts": [1760880975483,281474976715758]
-                }
-            ],
-            "permissions": 0,
-            "changefeeds":[]
-        })json";
-        file("001/metadata.json.enc", tableMetadata, tableIV);
-
-        const TString tableSchema = R"json(
-            columns {
-                name: "Key"
-                type {
-                    type_id: UINT64
-                }
-            }
-            columns {
-                name: "Value"
-                type {
-                    optional_type {
-                        item {
-                            type_id: UTF8
-                        }
-                    }
-                }
-            }
-            primary_key: "Key"
-            partitioning_settings {
-                partitioning_by_size: DISABLED
-                partitioning_by_load: DISABLED
-                min_partitions_count: 1
-            }
-        )json";
-        file("001/scheme.pb.enc", tableSchema, NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableSchema, 1, 0));
 
         // Encode data lines
-        NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableData, 1, 0));
+        NBackup::TEncryptedFileSerializer serializer("ChaCha20-Poly1305", encryptionKey, NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::TableData, 0, 0));
         TString resultEncryptedData;
         size_t unencryptedDataSize = 0;
         auto addToResult = [&](TStringBuf data, bool last) {
@@ -2774,7 +2727,7 @@ value {
         Cerr << "Patched file with lines: " << line << Endl;
         Cerr << "Patched file with size " << unencryptedDataSize << Endl;
         Cerr << "Patched encrypted file with size " << resultEncryptedData.size() << Endl;
-        file(path, resultEncryptedData, Nothing());
+        s3Mock.GetData()[TStringBuilder() << exportPrefix << path] = resultEncryptedData;
 
         constexpr bool additionalCheck = true;
         if (additionalCheck) {
@@ -2800,6 +2753,7 @@ value {
             }
             UNIT_ASSERT_VALUES_EQUAL(decodedLines, line);
         }
+        UNIT_ASSERT(line > 0);
         return line;
     }
 
@@ -2822,7 +2776,6 @@ value {
     void ImportBigEncryptedFile(size_t encryptedBlockSize, size_t resultFileSize, size_t readBatchSize, bool compressed) {
         TString key = "Cool very very secret rand key!!";
         NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Generate();
-        NBackup::TEncryptionIV tableIV = NBackup::TEncryptionIV::Combine(iv, NBackup::EBackupFileType::Metadata, 1, 0);
 
         TPortManager portManager;
         const ui16 s3Port = portManager.GetPort();
@@ -2873,7 +2826,7 @@ value {
                     key: "%s"
                 }
             }
-        )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(tableIV).c_str(), key.c_str()));
+        )", GenerateTableDescription(desc).data(), s3Port, readBatchSize, PrintInProtoText(iv).c_str(), key.c_str()));
         UNIT_ASSERT_EQUAL(status, NKikimrScheme::StatusAccepted);
         env.TestWaitNotification(runtime, txId);
 

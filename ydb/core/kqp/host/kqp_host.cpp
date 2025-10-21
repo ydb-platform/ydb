@@ -1889,7 +1889,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->Gateway = FederatedQuerySetup->PqGateway;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 

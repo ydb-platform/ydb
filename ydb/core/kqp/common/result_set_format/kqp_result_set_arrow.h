@@ -70,11 +70,11 @@ namespace NKikimr::NKqp::NFormats {
  */
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type);
 
+bool IsArrowCompatible(const NMiniKQL::TType* type);
+
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type);
 
 namespace NTestUtils {
-
-bool IsArrowCompatible(const NMiniKQL::TType* type);
 
 std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type);
 

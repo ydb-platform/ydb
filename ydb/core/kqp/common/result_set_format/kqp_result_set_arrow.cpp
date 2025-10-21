@@ -485,6 +485,78 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
     return arrow::null();
 }
 
+bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
+    switch (type->GetKind()) {
+        case NMiniKQL::TType::EKind::Void:
+        case NMiniKQL::TType::EKind::Null:
+        case NMiniKQL::TType::EKind::EmptyList:
+        case NMiniKQL::TType::EKind::EmptyDict:
+        case NMiniKQL::TType::EKind::Data:
+            return true;
+
+        case NMiniKQL::TType::EKind::Struct: {
+            auto structType = static_cast<const NMiniKQL::TStructType*>(type);
+            bool isCompatible = true;
+            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
+                auto memberType = structType->GetMemberType(index);
+                isCompatible = isCompatible && IsArrowCompatible(memberType);
+            }
+            return isCompatible;
+        }
+
+        case NMiniKQL::TType::EKind::Tuple: {
+            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
+            bool isCompatible = true;
+            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
+                auto elementType = tupleType->GetElementType(index);
+                isCompatible = isCompatible && IsArrowCompatible(elementType);
+            }
+            return isCompatible;
+        }
+
+        case NMiniKQL::TType::EKind::Optional: {
+            auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
+            auto innerOptionalType = optionalType->GetItemType();
+            if (NeedWrapByExternalOptional(innerOptionalType)) {
+                return false;
+            }
+            return IsArrowCompatible(innerOptionalType);
+        }
+
+        case NMiniKQL::TType::EKind::List: {
+            auto listType = static_cast<const NMiniKQL::TListType*>(type);
+            auto itemType = listType->GetItemType();
+            return IsArrowCompatible(itemType);
+        }
+
+        case NMiniKQL::TType::EKind::Variant: {
+            auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
+            if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
+                return false;
+            }
+            NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
+            YQL_ENSURE(innerType->IsTuple() || innerType->IsStruct(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+            return IsArrowCompatible(innerType);
+        }
+
+        case NMiniKQL::TType::EKind::Dict:
+        case NMiniKQL::TType::EKind::Block:
+        case NMiniKQL::TType::EKind::Type:
+        case NMiniKQL::TType::EKind::Stream:
+        case NMiniKQL::TType::EKind::Callable:
+        case NMiniKQL::TType::EKind::Any:
+        case NMiniKQL::TType::EKind::Resource:
+        case NMiniKQL::TType::EKind::ReservedKind:
+        case NMiniKQL::TType::EKind::Flow:
+        case NMiniKQL::TType::EKind::Tagged:
+        case NMiniKQL::TType::EKind::Pg:
+        case NMiniKQL::TType::EKind::Multi:
+        case NMiniKQL::TType::EKind::Linear:
+            return false;
+    }
+    return false;
+}
+
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
         case NMiniKQL::TType::EKind::Void:
@@ -831,78 +903,6 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<
 }
 
 } // namespace
-
-bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
-    switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Void:
-        case NMiniKQL::TType::EKind::Null:
-        case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
-        case NMiniKQL::TType::EKind::Data:
-            return true;
-
-        case NMiniKQL::TType::EKind::Struct: {
-            auto structType = static_cast<const NMiniKQL::TStructType*>(type);
-            bool isCompatible = true;
-            for (ui32 index = 0; index < structType->GetMembersCount(); ++index) {
-                auto memberType = structType->GetMemberType(index);
-                isCompatible = isCompatible && IsArrowCompatible(memberType);
-            }
-            return isCompatible;
-        }
-
-        case NMiniKQL::TType::EKind::Tuple: {
-            auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
-            bool isCompatible = true;
-            for (ui32 index = 0; index < tupleType->GetElementsCount(); ++index) {
-                auto elementType = tupleType->GetElementType(index);
-                isCompatible = isCompatible && IsArrowCompatible(elementType);
-            }
-            return isCompatible;
-        }
-
-        case NMiniKQL::TType::EKind::Optional: {
-            auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
-            auto innerOptionalType = optionalType->GetItemType();
-            if (NeedWrapByExternalOptional(innerOptionalType)) {
-                return false;
-            }
-            return IsArrowCompatible(innerOptionalType);
-        }
-
-        case NMiniKQL::TType::EKind::List: {
-            auto listType = static_cast<const NMiniKQL::TListType*>(type);
-            auto itemType = listType->GetItemType();
-            return IsArrowCompatible(itemType);
-        }
-
-        case NMiniKQL::TType::EKind::Variant: {
-            auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
-            if (variantType->GetAlternativesCount() > arrow::UnionType::kMaxTypeCode) {
-                return false;
-            }
-            NMiniKQL::TType* innerType = variantType->GetUnderlyingType();
-            YQL_ENSURE(innerType->IsTuple() || innerType->IsStruct(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
-            return IsArrowCompatible(innerType);
-        }
-
-        case NMiniKQL::TType::EKind::Dict:
-        case NMiniKQL::TType::EKind::Block:
-        case NMiniKQL::TType::EKind::Type:
-        case NMiniKQL::TType::EKind::Stream:
-        case NMiniKQL::TType::EKind::Callable:
-        case NMiniKQL::TType::EKind::Any:
-        case NMiniKQL::TType::EKind::Resource:
-        case NMiniKQL::TType::EKind::ReservedKind:
-        case NMiniKQL::TType::EKind::Flow:
-        case NMiniKQL::TType::EKind::Tagged:
-        case NMiniKQL::TType::EKind::Pg:
-        case NMiniKQL::TType::EKind::Multi:
-        case NMiniKQL::TType::EKind::Linear:
-            return false;
-    }
-    return false;
-}
 
 std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type) {
     auto arrayType = GetArrowType(type);

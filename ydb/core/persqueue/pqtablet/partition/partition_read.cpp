@@ -710,7 +710,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
             res->Destination, 0, TabletActorId, Config.GetMeteringMode(), IsActive(), GetResultPostProcessor<NKikimrClient::TCmdReadResult>(res->User)
     );
 
-    ctx.Send(ReplyTo(answer.ReplyTo), answer.Event.Release());
+    ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
     LOG_D(" waiting read cookie " << ev->Get()->Cookie
         << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
@@ -781,17 +781,10 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
                                                   lastOffset);
 }
 
-TActorId TPartition::ReplyTo(const TActorId& replyTo) const {
-    if (replyTo) {
-        return replyTo;
-    }
-    return TabletActorId;
-}
-
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     auto* read = ev->Get();
 
-    auto replyTo = ReplyTo(read->ReplyTo);
+    auto replyTo = ReplyTo(read->Cookie, read->ReplyTo);
 
     if (read->Count == 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR].Increment(1);
@@ -889,7 +882,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                 << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
-    if (offset == GetEndOffset() && (read->Timeout != 0 || !read->IsInternal())) { // Why? If read timeout = 0 we wait?
+    if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {
             if (IsActive()) {
@@ -908,9 +901,9 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         return;
     }
 
-    if (offset > GetEndOffset()) {
+    if (offset >= GetEndOffset()) {
         ReplyError(ctx, read->Cookie,  NPersQueue::NErrorCode::BAD_REQUEST,
-            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->ReplyTo));
+            TStringBuilder() << "Offset more than EndOffset. Offset=" << offset << ", EndOffset=" << GetEndOffset(), ReplyTo(read->Cookie, read->ReplyTo));
         return;
     }
 

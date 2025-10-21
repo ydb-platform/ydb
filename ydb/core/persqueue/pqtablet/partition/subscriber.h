@@ -29,7 +29,7 @@ struct TReadInfo {
     ui16 PartNo;
     ui32 Count;
     ui32 Size;
-    ui64 Destination;
+    ui64 Destination; // It is cookie!!!
     TInstant Timestamp;
     ui64 ReadTimestampMs;
     TDuration WaitQuotaTime;

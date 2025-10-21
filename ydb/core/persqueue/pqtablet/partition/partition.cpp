@@ -264,8 +264,18 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
     }
 }
 
+TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) const {
+    if (replyTo) {
+        return replyTo;
+    }
+    if (destination == 0) {
+        return SelfId();
+    }
+    return TabletActorId;
+}
+
 void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
-    auto replyToActor = replyTo ? replyTo : TabletActorId;
+    auto replyToActor = ReplyTo(dst, replyTo);
     ReplyPersQueueError(
         replyToActor, ctx, TabletId, TopicName(), Partition,
         TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
@@ -1735,7 +1745,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(ReplyTo(info.ReplyTo), answer.Event.Release());
+    ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }

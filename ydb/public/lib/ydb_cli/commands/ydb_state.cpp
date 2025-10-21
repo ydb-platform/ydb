@@ -13,15 +13,15 @@ TCommandClusterState::TCommandClusterState()
 }
 
 TCommandClusterStateFetch::TCommandClusterStateFetch()
-    : TYdbReadOnlyCommand("fetch", {}, "Fetch cluster internal state")
+    : TYdbReadOnlyCommand("fetch", {}, "Collect information about cluster nodes state and metrics")
 {}
 
 void TCommandClusterStateFetch::Config(TConfig& config) {
     TYdbReadOnlyCommand::Config(config);
     config.SetFreeArgsNum(0);
-    config.Opts->AddLongOption("duration", "Duration of collecting cluster state in seconds")
+    config.Opts->AddLongOption("duration", "The time limit to collect cluster state and metrics in seconds")
         .OptionalArgument("NUM").StoreResult(&DurationSeconds);
-    config.Opts->AddLongOption("period", "Period of collectiong counters in seconds")
+    config.Opts->AddLongOption("period", "The period of collecting metrics from nodes in seconds")
         .OptionalArgument("NUM").StoreResult(&PeriodSeconds);
     AddOutputFormats(config, {
         EDataFormat::Json

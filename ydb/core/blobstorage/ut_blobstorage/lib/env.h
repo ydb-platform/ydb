@@ -67,6 +67,13 @@ struct TEnvironmentSetup {
         const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
     };
 
+    struct TBSCSettings {
+        bool EnableSelfHeal = true;
+        bool EnableDonorMode = true;
+        bool EnableGroupLayoutSanitizer = false;
+        std::optional<TDuration> BlobCheckerPeriodicity = std::nullopt;
+    };
+
     const TSettings Settings;
 
     class TMockPDiskServiceFactory : public IPDiskServiceFactory {
@@ -983,15 +990,24 @@ config:
         }
     }
 
-    void UpdateSettings(bool selfHeal, bool donorMode, bool groupLayoutSanitizer = false) {
+    void UpdateSettings(TBSCSettings settings) {
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->AddEnableSelfHeal(selfHeal);
-        us->AddEnableDonorMode(donorMode);
-        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        us->AddEnableSelfHeal(settings.EnableSelfHeal);
+        us->AddEnableDonorMode(settings.EnableDonorMode);
+        us->AddEnableGroupLayoutSanitizer(settings.EnableGroupLayoutSanitizer);
+        us->AddEnableBlobChecker(settings.EnableBlobChecker);
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
+    void UpdateSettings(bool selfHeal, bool donorMode, bool groupLayoutSanitizer = false) {
+        UpdateSettings(TBSCSettings{
+            .EnableSelfHeal = selfHeal,
+            .EnableDonorMode = donorMode,
+            .EnableGroupLayoutSanitizer = groupLayoutSanitizer,
+        });
     }
 
     void EnableDonorMode() {

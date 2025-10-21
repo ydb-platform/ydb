@@ -265,8 +265,6 @@ public:
     // OwnerBeginUser - per-VDisk qouta
 
     const i64 SysReserveSize = 5;
-    const i64 CommonStaticLogSize = 70;
-    i64 MaxCommonLogChunks = 200;
 
     TChunkTracker()
         : GlobalQuota(new TPerOwnerQuotaTracker())
@@ -295,7 +293,7 @@ public:
             return false;
         }
 
-        i64 staticLog = params.HasStaticGroups ? CommonStaticLogSize : 0;
+        i64 staticLog = params.HasStaticGroups ? params.CommonStaticLogChunks : 0;
         unappropriated += GlobalQuota->AddSystemOwner(OwnerCommonStaticLog, staticLog, "Common Log Static Group Bonus");
         if (unappropriated < 0) {
             outErrorReason = (TStringBuilder() << "Error adding OwnerCommonStaticLog quota, size# " << staticLog
@@ -303,9 +301,8 @@ public:
             return false;
         }
 
-        MaxCommonLogChunks = params.MaxCommonLogChunks;
         if (params.SeparateCommonLog) {
-            i64 commonLog = MaxCommonLogChunks;
+            i64 commonLog = params.MaxCommonLogChunks;
             if (commonLog + staticLog < params.CommonLogSize) {
                 commonLog = params.CommonLogSize - staticLog;
             }

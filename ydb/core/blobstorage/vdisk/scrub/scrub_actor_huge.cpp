@@ -18,9 +18,7 @@ namespace NKikimr {
             }
         } else {
             STLOGX(GetActorContext(), PRI_INFO, BS_VDISK_SCRUB, VDS20, VDISKP(LogPrefix, "starting huge blob scrubbing"));
-            // FIXME: check if this is correct logic?
-            heapIt.Seek(TLogoBlobID(Max<ui64>(), Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel,
-                TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie));
+            heapIt.SeekToLast();
         }
 
         auto readHugeBlob = [&](const TDiskPart& location) {

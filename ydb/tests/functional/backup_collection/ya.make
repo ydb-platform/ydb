@@ -2,7 +2,7 @@ PY3TEST()
 
 TEST_SRCS(
     "conftest.py"
-    "basic_user_scenarios.py"
+    "x.py"
 )
 
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)

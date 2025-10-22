@@ -11,6 +11,7 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/core/base
     ydb/core/http_proxy
+    ydb/core/http_proxy/ut/datastreams_fixture
     ydb/core/testlib/default
     ydb/library/aclib
     ydb/library/persqueue/tests

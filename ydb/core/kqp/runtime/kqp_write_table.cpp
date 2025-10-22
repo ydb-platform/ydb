@@ -1467,10 +1467,12 @@ public:
     void Open(
         const TWriteToken token,
         const TTableId tableId,
+        const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumns,
         TVector<NKikimrKqp::TKqpColumnMetadataProto>&& inputColumns,
         std::vector<ui32>&& writeIndex,
         const i64 priority) override {
+        AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
         auto [iter, inserted] = WriteInfos.emplace(
             token,
             TWriteInfo {
@@ -1480,7 +1482,7 @@ public:
                     .InputColumnsMetadata = std::move(inputColumns),
                     .WriteIndex = std::move(writeIndex),
                     .Priority = priority,
-                    .OperationType = NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED,
+                    .OperationType = operationType,
                 },
                 .Serializer = nullptr,
                 .Closed = false,
@@ -1505,17 +1507,11 @@ public:
 
     void Write(
             const TWriteToken token,
-            const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
             IDataBatchPtr&& data) override {
         auto& info = WriteInfos.at(token);
         AFL_ENSURE(!info.Closed);
         AFL_ENSURE(info.Serializer);
-        AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
-        AFL_ENSURE(info.Metadata.OperationType == operationType
-            || (info.Serializer->IsEmpty()
-                && info.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED));
-        info.Metadata.OperationType = operationType;
-        // TODO: move operation type to open
+        AFL_ENSURE(info.Metadata.OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
 
         if (!data->AttachedAlloc()) {
             AFL_ENSURE(!Settings.Inconsistent);

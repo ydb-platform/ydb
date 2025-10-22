@@ -36,6 +36,8 @@ PY3TEST()
         ydb/tests/olap/lib
         ydb/tests/olap/scenario/helpers
     )
+    
+    REQUIREMENTS(cpu:2)
 
     SIZE(MEDIUM)
 

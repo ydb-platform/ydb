@@ -9,6 +9,7 @@ TEST_SRCS(
     test_vdisks.py
 )
 
+REQUIREMENTS(cpu:4)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:32 cpu:4)
 ENDIF()

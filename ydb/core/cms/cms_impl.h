@@ -388,9 +388,15 @@ private:
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
-    void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
     template<typename TEvRequestPtr>
-    bool CheckEnabled(TEvRequestPtr &ev, const TActorContext &ctx);
+    bool CheckEnabled(TEvRequestPtr &ev, const TActorContext &ctx) {
+        if (!State->Config.Enable) {
+            ReplyWithError<TEvCms::TEvPermissionResponse>(ev, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", ctx);
+        }
+        return State->Config.Enable;
+    }
+
+    void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);

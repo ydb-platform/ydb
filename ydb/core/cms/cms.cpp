@@ -1660,15 +1660,6 @@ void TCms::StartCollecting()
     Register(collector);
 }
 
-template<typename TEvRequestPtr>
-bool TCms::CheckEnabled(TEvRequestPtr &ev, const TActorContext &ctx)
-{
-    if (!State->Config.Enable) {
-        ReplyWithError<TEvCms::TEvPermissionResponse>(ev, TStatus::ERROR_TEMP, "CMS is disabled", ctx);
-    }
-    return State->Config.Enable;
-}
-
 void TCms::CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx)
 {
     auto &rec = ev->Get()->Record;

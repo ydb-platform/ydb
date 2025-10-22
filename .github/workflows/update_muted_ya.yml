@@ -101,12 +101,6 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Get debug script from dev branch
-        run: |
-          git fetch origin dev_test_unified_update_muted_ya_3:refs/remotes/origin/dev_test_unified_update_muted_ya_3
-          git show origin/dev_test_unified_update_muted_ya_3:.github/scripts/tests/create_new_muted_ya.py > .github/scripts/tests/create_new_muted_ya.py
-          chmod +x .github/scripts/tests/create_new_muted_ya.py
-
       - name: Generate new muted_ya.txt
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya \

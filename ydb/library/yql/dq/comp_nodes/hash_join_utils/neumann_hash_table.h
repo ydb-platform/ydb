@@ -122,9 +122,6 @@ class TNeumannHashTable {
         Hash Hash;
         ui32 Index;
     };
-    template <>
-    struct TOutplaceImpl<true> : TOutplaceImpl<false> {
-    };
 
     using TOutplace = TOutplaceImpl<ConsecutiveDuplicates>;
     static_assert(sizeof(TOutplace) <= kEmbeddedSize);
@@ -416,7 +413,7 @@ class TNeumannHashTable {
     }
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
-               auto &&onMatch) {
+               std::invocable<const ui8*> auto onMatch) const {
         Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 

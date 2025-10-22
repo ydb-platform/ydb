@@ -58,6 +58,7 @@ class Daemon(object):
         command,
         cwd,
         timeout,
+        env=None,
         stdout_file="/dev/null",
         stderr_file="/dev/null",
         aux_file=None,
@@ -78,6 +79,7 @@ class Daemon(object):
         self.__stdout_file = None
         self.__stderr_file = None
         self.__aux_file = None
+        self.__env = env
 
     def update_command(self, new_command):
         new_command_tuple = tuple(new_command)
@@ -132,6 +134,7 @@ class Daemon(object):
             stderr=self.__stderr_file,
             wait=False,
             core_pattern=self.__core_pattern,
+            env=self.__env,
         )
         wait_for(self.is_alive, self.__timeout)
 

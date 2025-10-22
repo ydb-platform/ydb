@@ -540,7 +540,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
             module=module,
-            seed_nodes_file=seed_nodes_file,
         )
         return self._nodes[node_index]
 

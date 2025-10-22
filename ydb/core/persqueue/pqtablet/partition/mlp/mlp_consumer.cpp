@@ -272,7 +272,7 @@ STFUNC(TConsumerActor::StateWrite) {
 void TConsumerActor::Restart(TString&& error) {
     LOG_E(error);
 
-    Send(PartitionActorId, new TEvPQ::TEvMLPRestartActor());
+    Send(TabletActorId, new TEvents::TEvPoison());
 
     ReplyErrorAll(SelfId(), ReadRequestsQueue);
     ReplyErrorAll(SelfId(), CommitRequestsQueue);

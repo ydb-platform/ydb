@@ -658,7 +658,7 @@ constexpr ui64 CpuLoadMicroseconds(const ui64 percent) {
  * The strategy for sending duplicate EvGetTableStatsResult messages
  * to induce various boundary conditions related to split transactions.
  */
-enum class SendDuplicateTableStatsStrategy {
+enum class ESendDuplicateTableStatsStrategy {
     /**
      * Do not send duplicate EvGetTableStatsResult messages.
      *
@@ -692,7 +692,7 @@ struct TLoadAndSplitSimulator {
     ui64 TableLocalPathId;
     ui64 TableOwnerId;
     bool ShouldSendReadRequests;
-    SendDuplicateTableStatsStrategy SendDuplicateTableStats;
+    ESendDuplicateTableStatsStrategy SendDuplicateTableStats;
     std::map<ui64, std::unique_ptr<IEventHandle>> DuplicateTableStatsByDatashardId;
     TTestActorRuntime* TestRuntime;
     TActorId SenderActorId;
@@ -725,7 +725,7 @@ struct TLoadAndSplitSimulator {
         ui64 tableOwnerId,
         ui64 initialDatashardId,
         bool shouldSendReadRequests,
-        SendDuplicateTableStatsStrategy sendDuplicateTableStats,
+        ESendDuplicateTableStatsStrategy sendDuplicateTableStats,
         const std::map<ui32, ui32>& targetCpuLoadByFolowerId,
         TTestActorRuntime& testRuntime
     ) : TableLocalPathId(tableLocalPathId)
@@ -947,7 +947,7 @@ struct TLoadAndSplitSimulator {
                         << ")"
                         << Endl;
 
-                    if (SendDuplicateTableStats != SendDuplicateTableStatsStrategy::None) {
+                    if (SendDuplicateTableStats != ESendDuplicateTableStatsStrategy::None) {
                         Y_ASSERT(!ev->Cookie);
 
                         std::unique_ptr<TEvDataShard::TEvGetTableStatsResult> msg_copy(
@@ -967,10 +967,10 @@ struct TLoadAndSplitSimulator {
                         );
 
                         switch (SendDuplicateTableStats) {
-                            case SendDuplicateTableStatsStrategy::None:
+                            case ESendDuplicateTableStatsStrategy::None:
                                 break;
 
-                            case SendDuplicateTableStatsStrategy::Immediately:
+                            case ESendDuplicateTableStatsStrategy::Immediately:
                                 {
                                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                                         << ", sending a duplicate EvGetTableStatsResult "
@@ -981,7 +981,7 @@ struct TLoadAndSplitSimulator {
                                 }
                                 break;
 
-                            case SendDuplicateTableStatsStrategy::AfterSplitAck:
+                            case ESendDuplicateTableStatsStrategy::AfterSplitAck:
                                 {
                                     Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
                                         << ", saving a duplicate EvGetTableStatsResult "
@@ -1010,25 +1010,49 @@ struct TLoadAndSplitSimulator {
                         << Endl;
 
                     // remove info for the source shard(s) that will be splitted
-                    // (split will have single source range)
+                    // (split will have a single source range, merge - multiple)
+                    const TString splitMergeVerb =
+                        (msg->Record.GetSplitDescription().GetSourceRanges().size() > 1)
+                            ? "\n... were merged"
+                            : " was splitted";
+
+                    auto sourceShardsBuilder = TStringBuilder();
+                    TString datashardName =
+                        (msg->Record.GetSplitDescription().GetSourceRanges().size() > 1)
+                            ? "\n... datashard "
+                            : ", datashard ";
+
                     for (const auto& i : msg->Record.GetSplitDescription().GetSourceRanges()) {
                         DatashardsKeyRanges.erase(i.GetTabletID());
+
+                        const ui64 start = FromSerialized(i.GetKeyRangeBegin());
+                        // NOTE: empty KeyRangeEnd means infinity
+                        const auto keyRangeEnd = i.GetKeyRangeEnd();
+                        const ui64 end = (keyRangeEnd.size() > 0) ? FromSerialized(keyRangeEnd) : 0;
+
+                        sourceShardsBuilder << datashardName << i.GetTabletID()
+                            << " (start="  << start
+                            << ", end=" << ((end != 0) ? end : 1000000)
+                            << ")";
                     }
+
                     // add info for destination shards
                     for (const auto& i : msg->Record.GetSplitDescription().GetDestinationRanges()) {
-                        auto& [start, end] = DatashardsKeyRanges[i.GetTabletID()];
-                        start = FromSerialized(i.GetKeyRangeBegin());
-                        //NOTE: empty KeyRangeEnd means infinity
+                        const ui64 start = FromSerialized(i.GetKeyRangeBegin());
+                        // NOTE: empty KeyRangeEnd means infinity
                         const auto keyRangeEnd = i.GetKeyRangeEnd();
-                        end = (keyRangeEnd.size() > 0) ? FromSerialized(keyRangeEnd) : 0;
+                        const ui64 end = (keyRangeEnd.size() > 0) ? FromSerialized(keyRangeEnd) : 0;
 
                         Cerr << "TEST TLoadAndSplitSimulator for table id " << TableLocalPathId
-                            << ", datashard " << msg->Record.GetSplitDescription().GetSourceRanges(0).GetTabletID()
-                            << " split into datashard " << i.GetTabletID()
+                            << sourceShardsBuilder
+                            << splitMergeVerb
+                            << " into datashard " << i.GetTabletID()
                             << " (start="  << start
                             << ", end=" << ((end != 0) ? end : 1000000)
                             << ")"
                             << Endl;
+
+                        DatashardsKeyRanges[i.GetTabletID()] = std::make_pair(start, end);
                     }
 
                     ++SplitReqCount;
@@ -1051,7 +1075,7 @@ struct TLoadAndSplitSimulator {
                     ++SplitAckCount;
 
                     // Check, if need to send a duplicate EvGetTableStatsResult to the same shard
-                    if (SendDuplicateTableStats == SendDuplicateTableStatsStrategy::AfterSplitAck) {
+                    if (SendDuplicateTableStats == ESendDuplicateTableStatsStrategy::AfterSplitAck) {
                         const auto it_stats = DuplicateTableStatsByDatashardId.find(msg->Record.GetTabletId());
 
                         if (it_stats != DuplicateTableStatsByDatashardId.end()) {
@@ -1121,7 +1145,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         const TString& tablePath,
         const std::map<ui32, ui32>& targetCpuLoadByFolowerId,
         bool shouldSendReadRequests = false,
-        SendDuplicateTableStatsStrategy sendDuplicateTableStats = SendDuplicateTableStatsStrategy::None,
+        ESendDuplicateTableStatsStrategy sendDuplicateTableStats = ESendDuplicateTableStatsStrategy::None,
         const TDuration& maxTestDuration = TDuration::Max()
     ) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
@@ -1175,7 +1199,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             tableOwnerId,
             initialDatashardId,
             false /* shouldSendReadRequests */,
-            SendDuplicateTableStatsStrategy::None,
+            ESendDuplicateTableStatsStrategy::None,
             {{0, targetCpuLoadPercent}}, // Target CPU load for the leader only
             runtime
         );
@@ -1400,7 +1424,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             "/MyRoot/Table",
             {{0, cpuLoadSimulated}}, // Target CPU load for the leader only
             false /* shouldSendReadRequests */,
-            SendDuplicateTableStatsStrategy::Immediately // Trigger concurrent split transactions
+            ESendDuplicateTableStatsStrategy::Immediately // Trigger concurrent split transactions
         );
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
@@ -1452,7 +1476,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             "/MyRoot/Table",
             {{0, cpuLoadSimulated}}, // Target CPU load for the leader only
             false /* shouldSendReadRequests */,
-            SendDuplicateTableStatsStrategy::AfterSplitAck // Trigger duplicate split transactions
+            ESendDuplicateTableStatsStrategy::AfterSplitAck // Trigger duplicate split transactions
         );
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
@@ -1513,7 +1537,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
                 {3, cpuLoadSimulated},
             },
             true /* shouldSendReadRequests */,
-            SendDuplicateTableStatsStrategy::None,
+            ESendDuplicateTableStatsStrategy::None,
             /// @todo Remove the time limit once splitting by the replica load is implemented
             TDuration::Seconds(30) // Only 15 seconds real time
         );
@@ -1523,5 +1547,358 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
 
         /// @todo Use expectedPartitionCount instead of 1 once splitting by the follower load is implemented
         TestDescribeResult(tableInfo, {NLs::PartitionCount(1)});
+    }
+}
+
+/**
+ * The set of tests, which verify the merge-by-load logic in the SchemeShard class.
+ */
+Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
+    /**
+     * Execute a test on the given table, which simulates high CPU load on the leader and/or followers
+     * to split it and then drops the CPU load to allow the table to be merged back.
+     *
+     * @param[in] runtime The test runtime
+     * @param[in] tablePath The table to use for the test
+     * @param[in] maxPartitionCount The expected number of partitions (after splitting)
+     * @param[in] finalPartitionCount The expected number of partitions (after merging)
+     * @param[in] splitCpuLoadByFolowerId The map from the follower ID (0 == leader)
+     *                                    to the corresponding induced CPU load (as percent),
+     *                                    which will be used for splitting the table
+     * @param[in] mergeCpuLoadByFolowerId The map from the follower ID (0 == leader)
+     *                                    to the corresponding induced CPU load (as percent),
+     *                                    which will be used for merging the table
+     * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
+     * @param[in] maxTestDuration The maximum duration of the test
+     */
+    void MergeByLoad(
+        TTestActorRuntime& runtime,
+        const TString& tablePath,
+        ui32 maxPartitionCount,
+        ui32 finalPartitionCount,
+        const std::map<ui32, ui32>& splitCpuLoadByFolowerId,
+        const std::map<ui32, ui32>& mergeCpuLoadByFolowerId,
+        bool shouldSendReadRequests = false,
+        const TDuration& maxTestDuration = TDuration::Max()
+    ) {
+        auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
+        Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
+
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(1)});
+
+        const ui64 tableLocalPathId = tableInfo.GetPathDescription().GetSelf().GetPathId();
+        const ui64 tableOwnerId = tableInfo.GetPathDescription().GetSelf().GetSchemeshardId();
+        const ui64 initialDatashardId = tableInfo.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+
+        TLoadAndSplitSimulator simulatorSplit(
+            tableLocalPathId,
+            tableOwnerId,
+            initialDatashardId,
+            shouldSendReadRequests,
+            ESendDuplicateTableStatsStrategy::None,
+            splitCpuLoadByFolowerId,
+            runtime
+        );
+
+        const auto prevObserverFunc = runtime.SetObserverFunc(
+            [&simulatorSplit](TAutoPtr<IEventHandle>& event) {
+                simulatorSplit.ChangeEvent(event);
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        );
+
+        // Wait for the table to be fully splitted
+        {
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = [&simulatorSplit]() {
+                auto now = TInstant::Now();
+                return (simulatorSplit.SplitAckCount > 0)
+                    && ((now - simulatorSplit.LastSplitAckTime) > TDuration::Seconds(3));
+            };
+            runtime.DispatchEvents(opts, maxTestDuration);
+        }
+
+        Cerr << "TEST MergeByLoad, splitted " << simulatorSplit.SplitAckCount << " times"
+            << ", datashard count " << simulatorSplit.DatashardsKeyRanges.size()
+            << Endl;
+
+        tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
+        Cerr << "TEST table state after splitting:" << Endl << tableInfo.DebugString() << Endl;
+
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(maxPartitionCount)});
+
+        // Start a new simulator, which will handle the merge back
+        TLoadAndSplitSimulator simulatorMerge(
+            tableLocalPathId,
+            tableOwnerId,
+            initialDatashardId,
+            shouldSendReadRequests,
+            ESendDuplicateTableStatsStrategy::None,
+            mergeCpuLoadByFolowerId,
+            runtime
+        );
+
+        // The simulator for the merge should use the final shards from splitting
+        simulatorMerge.DatashardsKeyRanges = simulatorSplit.DatashardsKeyRanges;
+
+        runtime.SetObserverFunc(prevObserverFunc);
+        runtime.SetObserverFunc(
+            [&simulatorMerge](TAutoPtr<IEventHandle> &event) {
+                simulatorMerge.ChangeEvent(event);
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+        );
+
+        // NOTE: To force splitting, the simulator induces very high CPU load
+        //       for all EvPeriodicTableStats events. To force merging, the simulator
+        //       induces medium CPU load for all EvPeriodicTableStats events.
+        //       The problem is that the merge-by-load code takes into account
+        //       the peak CPU usage over a certain time period. To make sure
+        //       the two CPU loads (for splitting and for merging) do not interfere
+        //       with each other, the test needs to wait for some time to make sure
+        //       there is enough gap between the high and the medium CPU loads
+        //       for all shards.
+        Cerr << "TEST waiting for the CPU load data to settle..." << Endl;
+
+        {
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = []() -> bool {
+                return false;
+            };
+
+            runtime.DispatchEvents(opts, TDuration::Seconds(10));
+        }
+
+        Cerr << "TEST finished waiting for the CPU load data to settle..." << Endl;
+
+        // Before forcing the table to be merged, reduce the thresholds
+        // for partition merging to make the test execute faster
+        TControlBoard::SetValue(
+            1,
+            runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinUptimeSec
+        );
+
+        TControlBoard::SetValue(
+            10,
+            runtime.GetAppData().Icb->SchemeShardControls.MergeByLoadMinLowLoadDurationSec
+        );
+
+        // Wait for the table to be fully merged back
+        {
+            TDispatchOptions opts;
+            opts.CustomFinalCondition = [&simulatorMerge]() {
+                auto now = TInstant::Now();
+                return (simulatorMerge.SplitAckCount > 0)
+                    && ((now - simulatorMerge.LastSplitAckTime) > TDuration::Seconds(3));
+            };
+            runtime.DispatchEvents(opts, maxTestDuration);
+        }
+
+        Cerr << "TEST MergeByLoad, merged " << simulatorMerge.SplitAckCount << " times"
+            << ", datashard count " << simulatorMerge.DatashardsKeyRanges.size()
+            << Endl;
+
+        tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
+        Cerr << "TEST table state after merging:" << Endl << tableInfo.DebugString() << Endl;
+
+        TestDescribeResult(tableInfo, {NLs::PartitionCount(finalPartitionCount)});
+    }
+
+    /**
+     * Verify that a shard merges all partitions when there is no CPU load
+     * neither on the leader nor on the followers.
+     */
+    Y_UNIT_TEST(MergeWithoutLeaderOrFollowerLoad) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 maxPartitionCount = 5;
+
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64"}
+                Columns { Name: "value" Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        MaxPartitionsCount: %d
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                            CpuPercentageThreshold: 70
+                        }
+                    }
+
+                    FollowerCount: 3
+                }
+            )",
+            maxPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        MergeByLoad(
+            runtime,
+            "/MyRoot/Table",
+            maxPartitionCount,
+            1 /* finalPartitionCount */,
+            {
+                // The initial CPU load only on the leaders to force the split
+                {0, 100},
+                {1, 0},
+                {2, 0},
+                {3, 0},
+            },
+            {
+                // Drop the CPU load to 0% both on the leader and all the followers
+                // to force the table to be merged back to a single partition
+                {0, 0},
+                {1, 0},
+                {2, 0},
+                {3, 0},
+            },
+            true /* shouldSendReadRequests */
+        );
+    }
+
+    /**
+     * Verify that a shard does not merge partitions when there is CPU load
+     * on the leader.
+     */
+    Y_UNIT_TEST(NoMergeWithLeaderLoad) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 maxPartitionCount = 5;
+
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64"}
+                Columns { Name: "value" Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        MaxPartitionsCount: %d
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                            CpuPercentageThreshold: 70
+                        }
+                    }
+
+                    FollowerCount: 3
+                }
+            )",
+            maxPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        MergeByLoad(
+            runtime,
+            "/MyRoot/Table",
+            maxPartitionCount,
+            maxPartitionCount /* finalPartitionCount */,
+            {
+                // The initial CPU load only on the leaders to force the split
+                {0, 100},
+                {1, 0},
+                {2, 0},
+                {3, 0},
+            },
+            {
+                // Keep the CPU load on the leader to prevent the table from merging
+                //
+                // WARNING: The CPU percentage here must be below the threshold
+                //          for splitting (70%), but above the threshold for merging
+                //          (70% of the splitting threshold == 50%)
+                {0, 60},
+                {1, 0},
+                {2, 0},
+                {3, 0},
+            },
+            true /* shouldSendReadRequests */,
+            TDuration::Seconds(30) // Only 15 seconds real time
+        );
+    }
+
+    /**
+     * Verify that a shard does not merge partitions when there is CPU load
+     * on the followers.
+     *
+     * @todo Once merging by the follower load is implemented,
+     *       this test should be adjusted to match the merging logic.
+     *       For now this test is essentially reversed - it verifies that
+     *       the merging is triggered, even if all followers are overloaded.
+     */
+    Y_UNIT_TEST(NoMergeWithFollowerLoad) {
+        TTestBasicRuntime runtime;
+        auto env = SetupEnv(runtime);
+
+        const ui32 maxPartitionCount = 5;
+
+        const auto tableScheme = Sprintf(
+            R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64"}
+                Columns { Name: "value" Type: "Uint64"}
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    PartitioningPolicy {
+                        MinPartitionsCount: 1
+                        MaxPartitionsCount: %d
+
+                        SplitByLoadSettings: {
+                            Enabled: true
+                            CpuPercentageThreshold: 70
+                        }
+                    }
+
+                    FollowerCount: 3
+                }
+            )",
+            maxPartitionCount
+        );
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, txId, "/MyRoot", tableScheme);
+        env.TestWaitNotification(runtime, txId);
+
+        MergeByLoad(
+            runtime,
+            "/MyRoot/Table",
+            maxPartitionCount,
+            /// @todo This limit should be adjusting once merging-by-load is changed
+            ///       to taking into account the CPU load on the followers
+            1 /* finalPartitionCount */,
+            {
+                // The initial CPU load only on the leaders to force the split
+                {0, 100},
+                {1, 0},
+                {2, 0},
+                {3, 0},
+            },
+            {
+                // Drop the CPU load to 0% on the leader, but raise the load
+                // on all the followers to prevent the table from merging
+                //
+                // WARNING: The CPU percentage here must be below the threshold
+                //          for splitting (70%), but above the threshold for merging
+                //          (70% of the splitting threshold == 50%)
+                {0, 0},
+                {1, 60},
+                {2, 60},
+                {3, 60},
+            },
+            true /* shouldSendReadRequests */
+        );
     }
 }

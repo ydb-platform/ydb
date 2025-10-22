@@ -19,7 +19,7 @@ class TScaleRecommenderPolicy {
 public:
     TScaleRecommenderPolicy(ui64 hiveId, bool dryRun);
     virtual ~TScaleRecommenderPolicy() = default;
-    virtual ui32 MakeScaleRecommendation(ui32 readyNodes, const NKikimrConfig::THiveConfig& config) const = 0;
+    virtual std::optional<ui32> MakeScaleRecommendation(ui32 readyNodes, const NKikimrConfig::THiveConfig& config) const = 0;
 
     virtual TString GetLogPrefix() const;
 private:
@@ -30,7 +30,7 @@ private:
 class TTargetTrackingPolicy : public TScaleRecommenderPolicy {
 public:
     TTargetTrackingPolicy(double target, const std::deque<double>& usageHistory, ui64 hiveId = 0, bool dryRun = false);
-    ui32 MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const override;
+    std::optional<ui32> MakeScaleRecommendation(ui32 readyNodesCount, const NKikimrConfig::THiveConfig& config) const override;
 
     virtual TString GetLogPrefix() const override;
 private:

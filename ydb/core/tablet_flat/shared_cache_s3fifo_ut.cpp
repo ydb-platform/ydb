@@ -61,6 +61,17 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         return result;
     }
 
+    TVector<ui32> InsertUntouched(auto& cache, NTest::TPage& page) {
+        auto evicted = cache.InsertUntouched(&page);
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
+            result.push_back(p.Id);
+        }
+        return result;
+    }
+
     TVector<ui32> EvictNext(auto& cache) {
         auto evicted = cache.EvictNext();
         TVector<ui32> result;
@@ -68,6 +79,17 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
             UNIT_ASSERT_VALUES_EQUAL(evicted->Location, ES3FIFOPageLocation::None);
             UNIT_ASSERT_VALUES_EQUAL(evicted->Frequency.load(), 0);
             result.push_back(evicted->Id);
+        }
+        return result;
+    }
+
+    TVector<ui32> EnsureLimits(auto& cache) {
+        auto evicted = cache.EnsureLimits();
+        TVector<ui32> result;
+        for (auto& p : evicted) {
+            UNIT_ASSERT_VALUES_EQUAL(p.Location, ES3FIFOPageLocation::None);
+            UNIT_ASSERT_VALUES_EQUAL(p.Frequency.load(), 0);
+            result.push_back(p.Id);
         }
         return result;
     }
@@ -293,6 +315,65 @@ Y_UNIT_TEST_SUITE(TS3FIFOCache) {
         }
 
         Cerr << 1.0 * hits / (hits + misses);
+    }
+
+    Y_UNIT_TEST(InsertUntouched) {
+        TS3FIFOCache<NTest::TPage, TPageTraits> cache(10);
+
+        NTest::TPage page1{1, 2};
+        NTest::TPage page2{2, 2};
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(Touch(cache, page2), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {1 0f 2b}, {2 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: "));
+
+        UNIT_ASSERT_VALUES_EQUAL(EvictNext(cache), TVector<ui32>{1});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: 1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(InsertUntouched(cache, page1), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 2b}, {1 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: 1"));
+    }
+
+    Y_UNIT_TEST(EnsureLimits) {
+        TS3FIFOCache<NTest::TPage, TPageTraits> cache(8);
+
+        TVector<THolder<NTest::TPage>> pages;
+        for (ui32 pageId : xrange(4)) {
+            pages.push_back(MakeHolder<NTest::TPage>(pageId, 2));
+            Touch(cache, *pages.back());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {0 0f 2b}, {1 0f 2b}, {2 0f 2b}, {3 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: "));
+
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {0 0f 2b}, {1 0f 2b}, {2 0f 2b}, {3 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: "));
+
+        cache.UpdateLimit(5);
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), (TVector<ui32>{0, 1}));
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 2b}, {3 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: 0, 1"));
+
+        UNIT_ASSERT_VALUES_EQUAL(EnsureLimits(cache), TVector<ui32>{});
+        UNIT_ASSERT_VALUES_EQUAL(cache.Dump(), (TString)(TStringBuilder()
+            << "SmallQueue: {2 0f 2b}, {3 0f 2b}"
+            << " MainQueue: "
+            << " GhostQueue: 0, 1"));
     }
 }
 

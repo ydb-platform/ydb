@@ -377,9 +377,9 @@ public:
 
     void Open(
         const TWriteToken token,
-        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& keyColumnsMetadata,
-        TVector<NKikimrKqp::TKqpColumnMetadataProto>&& columnsMetadata,
-        std::vector<ui32>&& writeIndexes,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata,
+        TVector<NKikimrKqp::TKqpColumnMetadataProto> columnsMetadata,
+        std::vector<ui32> writeIndexes,
         i64 priority) {
         YQL_ENSURE(!Closed);
         ShardedWriteController->Open(
@@ -1453,6 +1453,7 @@ private:
 public:
     TKqpWriteTask(
             const ui64 cookie,
+            const ui64 deleteCookie,
             const i64 priority,
             const TPathId pathId,
             const NKikimrDataEvents::TEvWrite::TOperation::EOperationType operationType,
@@ -1460,6 +1461,7 @@ public:
             std::vector<TPathLookupInfo> lookups,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
         : Cookie(cookie)
+        , DeleteCookie(deleteCookie)
         , Priority(priority)
         , PathId(pathId)
         , OperationType(operationType)
@@ -1612,6 +1614,7 @@ private:
             rowsBatcher->AddRow();
         });
 
+        size_t writeOnlyRows = 0;
         if (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE) {
             for (const auto& [key, index] : KeyToIndex) {
                 const auto& inputCells = ProcessCells[index];
@@ -1628,17 +1631,15 @@ private:
                     Memory += sizeof(TCell);
                 }
                 rowsBatcher->AddRow();
+                ++writeOnlyRows;
             }
         }
+        KeyToIndex.clear();
 
         Writes.push_back(TWrite{
             .Batch = rowsBatcher->Flush(),
-            .WriteOnlyRows = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE)
-                ? 0
-                : KeyToIndex.size(),
+            .WriteOnlyRows = writeOnlyRows,
         });
-
-        KeyToIndex.clear();
 
         if (PathLookupInfo.size() > 1) {
             // Need to lookup unique indexes
@@ -1663,11 +1664,13 @@ private:
     }
 
     void WriteBatchToActors(IDataBatchPtr batch, size_t writeOnlySuffixRows) {
+        const bool updateWithoutLookup = (OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE && !PathLookupInfo.contains(PathId));
         for (auto& [actorPathId, actorInfo] : PathWriteInfo) {
             // At first, write to indexes
             if (PathId != actorPathId) {
                 if (OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT) {
+                        && OperationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                        && !updateWithoutLookup) {
                     AFL_ENSURE(actorInfo.DeleteProjection);
                     const auto& rowsCount = batch->GetRowsCount();
                     AFL_ENSURE(rowsCount >= writeOnlySuffixRows);
@@ -1676,11 +1679,11 @@ private:
                         actorInfo.DeleteProjection->Fill(batch, rowsCount - writeOnlySuffixRows);
                         auto preparedKeyBatch = actorInfo.DeleteProjection->Flush();
                         actorInfo.WriteActor->Write(
-                            Cookie,
+                            DeleteCookie,
                             NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE,
                             std::move(preparedKeyBatch));
                     }
-                    actorInfo.WriteActor->FlushBuffer(Cookie);
+                    actorInfo.WriteActor->FlushBuffer(DeleteCookie);
                 }
                 AFL_ENSURE(actorInfo.Projection);
                 actorInfo.Projection->Fill(batch);
@@ -1689,7 +1692,9 @@ private:
                     Cookie,
                     OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
                         ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE
-                        : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT,
+                        : (updateWithoutLookup
+                            ? NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                            : NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT),
                     preparedBatch);
                 actorInfo.WriteActor->FlushBuffer(Cookie);
             }
@@ -1711,13 +1716,17 @@ private:
     }
 
     void CloseWrite() {
-        for (auto& [_, actorInfo] : PathWriteInfo) {
+        for (auto& [pathId, actorInfo] : PathWriteInfo) {
             actorInfo.WriteActor->Close(Cookie);
+            if (pathId != PathId) {
+                actorInfo.WriteActor->Close(DeleteCookie);
+            }
         }
         State = EState::FINISHED;
     }
 
     const ui64 Cookie;
+    const ui64 DeleteCookie;
     const i64 Priority;
     const TPathId PathId;
     const NKikimrDataEvents::TEvWrite::TOperation::EOperationType OperationType;
@@ -2413,13 +2422,17 @@ public:
 
             EnableStreamWrite &= settings.EnableStreamWrite;
 
-            token = TWriteToken{settings.TableId.PathId, CurrentWriteToken++};
+            token = TWriteToken{settings.TableId.PathId, CurrentWriteToken};
+            CurrentWriteToken += 2;
+            // Cookie -- for operations with main table and writes to indexes
+            // Cookie+1 -- for deletes from indexes
 
             std::vector<TKqpWriteTask::TPathWriteInfo> writes;
             std::vector<TKqpWriteTask::TPathLookupInfo> lookups;
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
+                AFL_ENSURE(settings.Priority == 0);
                 auto projection = CreateDataBatchProjection(
                     settings.Columns,
                     settings.WriteIndex,
@@ -2443,9 +2456,16 @@ public:
 
                 writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
                     token.Cookie,
-                    std::move(indexSettings.KeyColumns),
-                    std::move(indexSettings.Columns),
-                    std::move(indexSettings.WriteIndex),
+                    indexSettings.KeyColumns,
+                    indexSettings.Columns,
+                    indexSettings.WriteIndex,
+                    settings.Priority);
+
+                writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor->Open(
+                    token.Cookie + 1,
+                    indexSettings.KeyColumns,
+                    indexSettings.KeyColumns,
+                    keyWriteIndex,
                     settings.Priority);
 
                 writes.emplace_back(TKqpWriteTask::TPathWriteInfo{
@@ -2498,6 +2518,7 @@ public:
                 token.Cookie,
                 TKqpWriteTask{
                     token.Cookie,
+                    token.Cookie + 1,
                     settings.Priority,
                     settings.TableId.PathId,
                     settings.OperationType,

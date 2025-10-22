@@ -16,7 +16,7 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
-    void RunTest(TString query, TString mainResult, TString indexResult, bool exists, bool indexOverlap) {
+    void RunTest(TString query, TString mainResult, TString indexResult, bool exists, bool indexOverlap, bool pkOverlap = false, bool cover = false) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
@@ -31,10 +31,10 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
                 Col1 Uint64,
                 Col2 Uint64,
                 Col3 Uint64,
-                INDEX idx GLOBAL ON (Col2 %s),
-                PRIMARY KEY (Col1)
+                INDEX idx GLOBAL ON (Col2 %s) %s,
+                PRIMARY KEY (Col1 %s)
             );
-        )", indexOverlap ? ", Col1" : "");
+        )", indexOverlap ? ", Col1" : "",  cover ? "COVER (Col3)" : "", pkOverlap ? ", Col2" : "");
 
         auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
@@ -68,7 +68,7 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
 
         {
             auto it = client.StreamExecuteQuery(R"(
-                SELECT Col1, Col2 FROM `/Root/DataShard/idx/indexImplTable`;
+                SELECT * FROM `/Root/DataShard/idx/indexImplTable`;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), TExecuteQuerySettings().ClientTimeout(TDuration::MilliSeconds(1000))).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
             TString output = StreamResultToYson(it);
@@ -264,6 +264,29 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
             false,
             overlap);
     }
+
+    Y_UNIT_TEST_TWIN(TestUpdateOn, overlap) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 1u AS Col2, 0u AS Col3;",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u]]])",
+            true,
+            false,
+            overlap,
+            false);
+    }
+
+    Y_UNIT_TEST_TWIN(TestUpdateOnCover, overlap) {
+        RunTest(
+            "UPDATE `/Root/DataShard` ON SELECT 0u AS Col1, 1u AS Col2, 0u AS Col3;",
+            R"([[[0u];[1u];[0u]]])",
+            R"([[[0u];[1u];[0u]]])",
+            true,
+            false,
+            overlap,
+            true);
+    }
+
 }
 }
 }

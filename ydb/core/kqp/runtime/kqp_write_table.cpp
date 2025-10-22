@@ -810,6 +810,7 @@ public:
                     Columns[index].PTypeMod);
             }
             auto cells = rowBuilder.BuildCells();
+            AFL_ENSURE(cells.size() == Columns.size());
             RowBatcher.AddRow(cells);
         });
     }
@@ -870,6 +871,7 @@ public:
                 TRowsBatcher(Columns.size(), DataShardMaxOperationBytes, Alloc));
         }
 
+        AFL_ENSURE(row.size() == Columns.size());
         Batchers.at(shardIter->ShardId).AddRow(row);
         ShardIds.insert(shardIter->ShardId);
     }
@@ -885,6 +887,7 @@ public:
         auto rows = datashardBatch->Extract();
 
         for (const auto& row : rows) {
+            AFL_ENSURE(row.size() == Columns.size());
             AddRow(
                 row,
                 Partitioning);
@@ -1508,8 +1511,11 @@ public:
         AFL_ENSURE(!info.Closed);
         AFL_ENSURE(info.Serializer);
         AFL_ENSURE(operationType != NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED);
-        AFL_ENSURE(info.Metadata.OperationType == operationType || info.Serializer->IsEmpty());
+        AFL_ENSURE(info.Metadata.OperationType == operationType
+            || (info.Serializer->IsEmpty()
+                && info.Metadata.OperationType == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UNSPECIFIED));
         info.Metadata.OperationType = operationType;
+        // TODO: move operation type to open
 
         if (!data->AttachedAlloc()) {
             AFL_ENSURE(!Settings.Inconsistent);

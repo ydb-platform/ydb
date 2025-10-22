@@ -551,15 +551,15 @@ private:
                 ClusterInfo.SetName(systemState.GetClusterName());
             }
             ClusterInfo.SetMemoryUsed(ClusterInfo.GetMemoryUsed() + systemState.GetMemoryUsed());
-            if (systemState.HasMemoryStats()) {
-                TMemoryStats& stats = memoryStats[systemState.GetHost()];
-                if (systemState.GetMemoryLimit() > 0) {
-                    stats.Limit += systemState.GetMemoryLimit();
-                } else {
-                    stats.Total = systemState.GetMemoryStats().GetMemTotal();
-                }
-            } else {
-                ClusterInfo.SetMemoryTotal(ClusterInfo.GetMemoryTotal() + systemState.GetMemoryLimit());
+            TMemoryStats& stats = memoryStats[systemState.GetHost()];
+            if (systemState.GetMemoryLimit() > 0) {
+                stats.Limit += systemState.GetMemoryLimit();
+            }
+            if (systemState.GetMemoryStats().GetMemTotal() > 0) {
+                stats.Total = systemState.GetMemoryStats().GetMemTotal();
+            }
+            if (stats.Limit > 0 && stats.Total > 0) {
+                stats.Limit = std::min(stats.Limit, stats.Total);
             }
             if (!node.Disconnected && node.SystemState.HasSystemState()) {
                 ClusterInfo.SetNodesAlive(ClusterInfo.GetNodesAlive() + 1);

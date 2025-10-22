@@ -235,7 +235,8 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
-        if self.module is not None:
+        # The --module option was added after stable-25-3-1, check if binary supports it
+        if self.module is not None and self.__binary_supports_module_option():
             command.append(
                 "--module=%s" % self.module
             )
@@ -291,6 +292,36 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def get_config_version(self):
         config = self.read_node_config()
         return config.get('metadata', {}).get('version', 0)
+
+    def get_node_binary_version(self):
+        version_output = yatest.common.execute([self.binary_path, '-V']).std_out.decode('utf-8')
+        version_info = []
+        for line in version_output.splitlines():
+            if not line.strip():
+                break
+            version_info.append(line)
+        return '\n'.join(version_info)
+
+    def __binary_supports_module_option(self):
+        try:
+            help_output = yatest.common.execute([self.binary_path, 'server', '--help']).std_out.decode('utf-8')
+            return '--module' in help_output
+        except Exception:
+            # If we can't check, assume it doesn't support it (safer for old binaries)
+            return False
+
+    def enable_config_dir(self):
+        self.__use_config_store = True
+        self.update_command(self.__make_run_command())
+
+    def make_config_dir(self, source_config_yaml_path, target_config_dir_path):
+        if not os.path.exists(source_config_yaml_path):
+            raise RuntimeError("Source config file not found: %s" % source_config_yaml_path)
+
+        try:
+            os.makedirs(target_config_dir_path, exist_ok=True)
+        except Exception as e:
+            raise RuntimeError("Unexpected error initializing config for node %s: %s" % (str(self.node_id), str(e)))
 
 
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):

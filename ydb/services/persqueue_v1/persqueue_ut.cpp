@@ -5877,7 +5877,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ServiceType: "data-streams"
       Version: 0
       Type: CONSUMER_TYPE_STREAMING
-      Id: 1
     }
     Consumers {
       Name: "consumer"
@@ -5893,7 +5892,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Version: 567
       Important: true
       Type: CONSUMER_TYPE_STREAMING
-      Id: 2
     }
   }
   ErrorCode: OK

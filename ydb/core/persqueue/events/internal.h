@@ -199,7 +199,6 @@ struct TEvPQ {
         EvMirrorTopicDescription,
         EvBroadcastPartitionError,
         EvForceCompaction,
-        EvMLPRestartActor,
         EvMLPGetPartitionRequest,
         EvMLPGetPartitionResponse,
         EvMLPErrorResponse,
@@ -1305,11 +1304,7 @@ struct TEvPQ {
         ui32 PartitionId = 0;
     };
 
-    struct TEvMLPRestartActor : TEventLocal<TEvMLPRestartActor, EvMLPRestartActor> {
-        TEvMLPRestartActor() = default;
-    };
-
-        //
+    //
     // Request to the PQRB. It asks him which partition is ready for reading.
     //
     struct TEvMLPGetPartitionRequest : TEventPB<TEvMLPGetPartitionRequest, NKikimrPQ::TEvMLPGetPartitionRequest, EvMLPGetPartitionRequest> {

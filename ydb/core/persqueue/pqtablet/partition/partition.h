@@ -672,7 +672,6 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
-            hFuncTraced(TEvPQ::TEvMLPRestartActor, Handle);
             hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
@@ -1198,8 +1197,6 @@ private:
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-
-    void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>

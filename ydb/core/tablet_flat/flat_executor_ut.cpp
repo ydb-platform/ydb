@@ -4230,8 +4230,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Cold) {
             // Restart tablet, so cold tables are loaded at boot time
             // Also start it "reassigned" to test there is no history cutting (owner would fail)
             struct TTestStarter : NFake::TStarter {
-                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                    auto *info = TStarter::MakeTabletInfo(tablet);
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                    auto *info = TStarter::MakeTabletInfo(tablet, channels);
                     info->Channels[1].History.emplace_back(3, 1);
                     return info;
                 }
@@ -7700,7 +7700,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
             ui32 room = NTable::TScheme::DefaultRoom + 1;
             ui32 family = NTable::TColumn::LeaderFamily + 3;
             txc.DB.Alter()
-                .SetRoom(TRowsModel::TableId, room, 2, 2, 2)
+                .SetRoom(TRowsModel::TableId, room, 2, {2}, 2)
                 .AddFamily(TRowsModel::TableId, family, room)
                 .AddColumnToFamily(TRowsModel::TableId, TRowsModel::ColumnValueId, family)
                 .SetFamilyBlobs(TRowsModel::TableId, family, 128, -1);
@@ -7716,8 +7716,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     Y_UNIT_TEST(TestCutTabletHistory) {
         struct TTestStarter : NFake::TStarter {
-            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                auto *info = TStarter::MakeTabletInfo(tablet);
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
                 info->Channels[1].History.emplace_back(1, 0);
                 info->Channels[1].History.emplace_back(2, 1);
                 return info;
@@ -7766,8 +7766,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     Y_UNIT_TEST(TestDoNotCutBeforeGc) {
         struct TTestStarter : NFake::TStarter {
-            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                auto *info = TStarter::MakeTabletInfo(tablet);
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
                 info->Channels[1].History.emplace_back(1, 0);
                 info->Channels[1].History.emplace_back(2, 1);
                 info->Channels[2].History.emplace_back(1, 0);
@@ -7827,8 +7827,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     Y_UNIT_TEST(TestSeeOuterBlobs) {
         struct TTestStarter : NFake::TStarter {
-            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet) noexcept override {
-                auto *info = TStarter::MakeTabletInfo(tablet);
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
                 info->Channels[1].History.emplace_back(3, 1);
                 info->Channels[2].History.emplace_back(1, 0);
                 info->Channels[2].History.emplace_back(2, 2);
@@ -8988,4 +8988,3 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Truncate) {
 
 }
 }
->>>>>>> main

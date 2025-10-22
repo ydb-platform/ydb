@@ -193,7 +193,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
     Y_ENSURE(success, "IPageCollection queued twice for loading");
 
     Cerr << "LoadPages ";
-    SeenBlob(req->PageCollection->Label());
+    SeenBlob(fetch.PageCollection->Label());
 
     Ops->Send(
         NSharedCache::MakeSharedPageCacheId(),
@@ -338,13 +338,13 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
                 SeenBlob(glob.Logo);
             }
         }
-        if (table.ColdBorrow) {
+        /*if (table.ColdBorrow) {
             for (const auto& [_, room] : table.Rooms) {
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Blobs);
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Outer);
             }
-        }
+        }*/
     }
     return Result_;
 }

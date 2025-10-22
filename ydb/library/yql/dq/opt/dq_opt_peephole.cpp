@@ -1050,7 +1050,18 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
         return ctx.DeepCopyLambda(prev.Ref());
     };
 
-    auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos()).Callable("FromFlow").Add(0, wideCombiner.Input().Ptr()).Seal().Build());
+    auto inputFromFlow = NNodes::TExprBase(ctx.Builder(node.Pos())
+        .Callable("WideToBlocks")
+        .Add(0, ctx.Builder(node.Pos())
+            .Callable("FromFlow")
+            .Add(0, wideCombiner.Input().Ptr())
+            .Seal()
+            .Build()
+        )
+        .Seal()
+        .Build()
+    );
+
     auto dqPhyCombine = Build<TDqPhyHashCombine>(ctx, node.Pos())
         .Input(inputFromFlow)
         .MemLimit(wideCombiner.MemLimit())
@@ -1063,9 +1074,12 @@ NNodes::TExprBase DqPeepholeRewriteWideCombiner([[maybe_unused]] const NNodes::T
     return NNodes::TExprBase(
         ctx.Builder(node.Pos())
             .Callable("ToFlow")
+            .Add(0, ctx.Builder(node.Pos())
+                .Callable("WideFromBlocks")
                 .Add(0, dqPhyCombine.Ptr())
             .Seal()
             .Build()
+        ).Seal().Build()
     );
 }
 

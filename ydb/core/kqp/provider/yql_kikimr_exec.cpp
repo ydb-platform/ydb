@@ -1301,12 +1301,6 @@ private:
             }
         }
 
-        if (fillSettings.DiscardInInvalidPlace && SessionCtx->Query().Type != EKikimrQueryType::Dml) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(res.Pos()), TIssuesIds::KIKIMR_BAD_OPERATION, TStringBuilder()
-                << "DISCARD can only be used at the top level, not inside subqueries"));
-            return SyncError();
-        }
-
         auto* runResult = SessionCtx->Query().Results.FindPtr(exec.Ref().UniqueId());
         if (!runResult) {
             ctx.AddError(TIssue(ctx.GetPosition(exec.Pos()), TStringBuilder() << "KiExecute run result not found."));

@@ -927,6 +927,13 @@ public:
         return IsStreamingService(Service_);
     }
 
+    // TWriteSettings GetWriteSettings() const override {
+    //     if (Source_) {
+    //         return Source_->GetWriteSettings();
+    //     }
+    //     return {};
+    // }
+
     TPtr DoClone() const final {
         return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, GetLabel());
     }
@@ -1179,10 +1186,6 @@ public:
         return Settings_;
     }
 
-    void SetDiscardInInvalidPlace() override {
-        Settings_.DiscardInInvalidPlace = true;
-    }
-
     bool HasSelectResult() const final {
         return !Settings_.Discard;
     }
@@ -1418,10 +1421,6 @@ public:
 
     TWriteSettings GetWriteSettings() const override {
         return Settings_;
-    }
-
-    void SetDiscardInInvalidPlace() override {
-        Settings_.DiscardInInvalidPlace = true;
     }
 
     bool HasSelectResult() const override {
@@ -1883,10 +1882,6 @@ public:
 
     TWriteSettings GetWriteSettings() const override {
         return Settings_;
-    }
-
-    void SetDiscardInInvalidPlace() override {
-        Settings_.DiscardInInvalidPlace = true;
     }
 
     TMaybe<bool> AddColumn(TContext& ctx, TColumnNode& column) override {
@@ -2563,10 +2558,6 @@ public:
         return Settings_;
     }
 
-    void SetDiscardInInvalidPlace() override {
-        Settings_.DiscardInInvalidPlace = true;
-    }
-
     TNodePtr DoClone() const final {
         return new TProcessSource(Pos_, Source_->CloneSource(), SafeClone(With_), WithExtFunction_,
                                   CloneContainer(Terms_), ListCall_, ProcessStream_, Settings_, CloneContainer(AssumeOrderBy_));
@@ -2930,10 +2921,6 @@ public:
         return Settings_;
     }
 
-    void SetDiscardInInvalidPlace() override {
-        Settings_.DiscardInInvalidPlace = true;
-    }
-
 private:
     TVector<TSourcePtr> Sources_;
     const TString Operator_;
@@ -3246,10 +3233,6 @@ public:
         auto settings = Y(Q(Y(Q("type"))));
         if (writeSettings.Discard) {
             settings = L(settings, Q(Y(Q("discard"))));
-        }
-
-        if (writeSettings.DiscardInInvalidPlace) {
-            settings = L(settings, Q(Y(Q("discardinvalidplace"))));
         }
 
         if (!writeSettings.Label.Empty()) {

@@ -16,15 +16,12 @@
 #endif
 
 namespace simdjson {
-template <typename T>
-constexpr bool require_custom_serialization = false;
 
 //////////////////////////////
 // Number deserialization
 //////////////////////////////
 
 template <std::unsigned_integral T>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept {
   using limits = std::numeric_limits<T>;
 
@@ -38,7 +35,6 @@ error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept {
 }
 
 template <std::floating_point T>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept {
   double x;
   SIMDJSON_TRY(val.get_double().get(x));
@@ -47,7 +43,6 @@ error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept {
 }
 
 template <std::signed_integral T>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept {
   using limits = std::numeric_limits<T>;
 
@@ -77,7 +72,6 @@ error_code tag_invoke(deserialize_tag, auto &val, char &out) noexcept {
 
 // any string-like type (can be constructed from std::string_view)
 template <concepts::constructible_from_string_view T, typename ValT>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(std::is_nothrow_constructible_v<T, std::string_view>) {
   std::string_view str;
   SIMDJSON_TRY(val.get_string().get(str));
@@ -94,7 +88,6 @@ error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(std::is_nothr
  * doc.get<std::vector<int>>().
  */
 template <concepts::appendable_containers T, typename ValT>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(false) {
   using value_type = typename std::remove_cvref_t<T>::value_type;
   static_assert(
@@ -140,7 +133,6 @@ error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(false) {
  * string-keyed types.
  */
  template <concepts::string_view_keyed_map T, typename ValT>
- requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(false) {
   using value_type = typename std::remove_cvref_t<T>::mapped_type;
   static_assert(
@@ -222,7 +214,6 @@ error_code tag_invoke(deserialize_tag, SIMDJSON_IMPLEMENTATION::ondemand::docume
  * @return status of the conversion
  */
 template <concepts::smart_pointer T, typename ValT>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(nothrow_deserializable<typename std::remove_cvref_t<T>::element_type, ValT>) {
   using element_type = typename std::remove_cvref_t<T>::element_type;
 
@@ -248,12 +239,13 @@ error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept(nothrow_deser
  * This CPO (Customization Point Object) will help deserialize into optional types.
  */
 template <concepts::optional_type T>
-  requires(!require_custom_serialization<T>)
 error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept(nothrow_deserializable<typename std::remove_cvref_t<T>::value_type, decltype(val)>) {
   using value_type = typename std::remove_cvref_t<T>::value_type;
 
   // Check if the value is null
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset(); // Set to nullopt
     return SUCCESS;
   }
@@ -272,7 +264,7 @@ error_code tag_invoke(deserialize_tag, auto &val, T &out) noexcept(nothrow_deser
 template <typename T>
 constexpr bool user_defined_type = (std::is_class_v<T>
 && !std::is_same_v<T, std::string> && !std::is_same_v<T, std::string_view> && !concepts::optional_type<T> &&
-!concepts::appendable_containers<T> && !require_custom_serialization<T>);
+!concepts::appendable_containers<T>);
 
 
 template <typename T, typename ValT>
@@ -284,18 +276,26 @@ error_code tag_invoke(deserialize_tag, ValT &val, T &out) noexcept {
   } else {
     SIMDJSON_TRY(val.get_object().get(obj));
   }
-  error_code e = simdjson::SUCCESS;
   template for (constexpr auto mem : std::define_static_array(std::meta::nonstatic_data_members_of(^^T, std::meta::access_context::unchecked()))) {
-        if constexpr (!std::meta::is_const(mem) && std::meta::is_public(mem)) {
+    if constexpr (!std::meta::is_const(mem) && std::meta::is_public(mem)) {
       constexpr std::string_view key = std::define_static_string(std::meta::identifier_of(mem));
-      // Note: removed static assert as optional types are now handled generically
-      // as long we are succesful or the field is not found, we continue
-      if(e == simdjson::SUCCESS || e == simdjson::NO_SUCH_FIELD) {
-        e = obj[key].get(out.[:mem:]);
+      if constexpr (concepts::optional_type<decltype(out.[:mem:])>) {
+        // for optional members, it's ok if the key is missing
+        auto error = obj[key].get(out.[:mem:]);
+        if (error && error != NO_SUCH_FIELD) {
+          if(error == NO_SUCH_FIELD) {
+            out.[:mem:].reset();
+            continue;
+          }
+          return error;
+        }
+      } else {
+        // for non-optional members, the key must be present
+        SIMDJSON_TRY(obj[key].get(out.[:mem:]));
       }
     }
   };
-  return e;
+  return simdjson::SUCCESS;
 }
 
 // Support for enum deserialization - deserialize from string representation using expand approach from P2996R12
@@ -361,7 +361,9 @@ error_code tag_invoke(deserialize_tag, simdjson_value &val, std::shared_ptr<T> &
 // Unique pointers
 ////////////////////////////////////////
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<bool> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -374,7 +376,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<bool> &out) no
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<int64_t> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -387,7 +391,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<int64_t> &out)
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<uint64_t> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -400,7 +406,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<uint64_t> &out
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<double> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -413,7 +421,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<double> &out) 
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<std::string_view> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -430,7 +440,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<std::string_vi
 // Shared pointers
 ////////////////////////////////////////
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<bool> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -443,7 +455,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<bool> &out) no
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<int64_t> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -456,7 +470,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<int64_t> &out)
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<uint64_t> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -469,7 +485,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<uint64_t> &out
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<double> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -482,7 +500,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<double> &out) 
 }
 
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<std::string_view> &out) noexcept {
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset();
     return SUCCESS;
   }
@@ -504,7 +524,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<std::string_vi
 ////////////////////////////////////////
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<std::string> &out) noexcept {
   // Check if the value is null
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset(); // Set to nullptr
     return SUCCESS;
   }
@@ -520,7 +542,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<std::string> &
 
 error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<std::string> &out) noexcept {
   // Check if the value is null
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset(); // Set to nullptr
     return SUCCESS;
   }
@@ -536,7 +560,9 @@ error_code tag_invoke(deserialize_tag, auto &val, std::shared_ptr<std::string> &
 
 error_code tag_invoke(deserialize_tag, auto &val, std::unique_ptr<int> &out) noexcept {
   // Check if the value is null
-  if (val.is_null()) {
+  bool is_null_value;
+  SIMDJSON_TRY( val.is_null().get(is_null_value) );
+  if (is_null_value) {
     out.reset(); // Set to nullptr
     return SUCCESS;
   }

@@ -62,6 +62,7 @@ Real-world usage
 - [WasmEdge](https://wasmedge.org)
 - [RonDB](https://github.com/logicalclocks/rondb)
 - [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
+- [mamba](https://github.com/mamba-org/mamba)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
@@ -117,6 +118,7 @@ Godbolt
 -------------
 
 Some users may want to browse code along with the compiled assembly. You want to check out the following lists of examples:
+* [C++26 reflection example](https://godbolt.org/z/K3Px64TqK)
 * [simdjson examples with errors handled through exceptions](https://godbolt.org/z/7G5qE4sr9)
 * [simdjson examples with errors without exceptions](https://godbolt.org/z/e9dWb9E4v)
 

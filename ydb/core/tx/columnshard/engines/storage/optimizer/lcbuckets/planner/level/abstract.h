@@ -332,7 +332,7 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
-    virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const = 0;
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
 
@@ -503,10 +503,13 @@ public:
         return DoGetBucketPositions(pkSchema);
     }
 
-    TCompactionTaskData GetOptimizationTask() const {
+    std::vector<TCompactionTaskData> GetOptimizationTasks() const {
         AFL_VERIFY(NextLevel);
-        TCompactionTaskData result = DoGetOptimizationTask();
-        AFL_VERIFY(!result.IsEmpty());
+        std::vector<TCompactionTaskData> result = DoGetOptimizationTasks();
+        AFL_VERIFY(!result.empty());
+        for (const auto& compactionTaskData: result) {
+            AFL_VERIFY(!compactionTaskData.IsEmpty());
+        }
         return result;
     }
 };

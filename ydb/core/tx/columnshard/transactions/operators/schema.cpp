@@ -160,6 +160,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
 NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     namespace NTypeIds = NScheme::NTypeIds;
     static const THashSet<NScheme::TTypeId> pkSupportedTypes = {
+        NTypeIds::Bool,
         NTypeIds::Timestamp,
         NTypeIds::Date32,
         NTypeIds::Datetime64,

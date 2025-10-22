@@ -23,7 +23,8 @@ public:
         TypeData = 'd',
         TypeTmpData = 'x',
         TypeMeta = 'i',
-        TypeTxMeta = 'I'
+        TypeTxMeta = 'I',
+        TypeMLPConsumerData = 'c',
     };
 
     enum EMark : char {

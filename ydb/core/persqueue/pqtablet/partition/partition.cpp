@@ -2664,14 +2664,14 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             return EProcessResult::Continue;
         }
         t->Predicate.ConstructInPlace(true);
-        return PreProcessImmediateTx(t->ProposeTransaction->GetRecord());
+        return PreProcessImmediateTx(*t);
 
     } else if (t->Tx) { // Distributed TX
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
         }
-        result = BeginTransaction(*t->Tx, t->Predicate, t->Message);
+        result = BeginTransactionData(*t);
         if (t->Predicate.Defined()) {
             ReplyToProposeOrPredicate(t, true);
         }
@@ -2680,7 +2680,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         if (!FirstEvent) {
             return EProcessResult::Blocked;
         }
-        t->Predicate = BeginTransaction(*t->ProposeConfig);
+        t->Predicate = BeginTransactionConfig(*t);
         ChangingConfig = true;
         PendingPartitionConfig = GetPartitionConfig(t->ProposeConfig->Config);
         //Y_VERIFY_DEBUG_S(PendingPartitionConfig, "Partition " << Partition << " config not found");
@@ -2739,9 +2739,12 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPredicate& tx,
-                                                        TMaybe<bool>& predicateOut, TString& issueMsg)
+TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t)
 {
+    const TEvPQ::TEvTxCalcPredicate& tx = *t.Tx;
+    TMaybe<bool>& predicateOut = t.Predicate;
+    TString& issueMsg = t.Message;
+
     if (tx.ForcePredicateFalse) {
         predicateOut = false;
         return EProcessResult::Continue;
@@ -2846,8 +2849,10 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
     return EProcessResult::Continue;
 }
 
-bool TPartition::BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event)
+bool TPartition::BeginTransactionConfig(TTransaction& t)
 {
+    const TEvPQ::TEvProposePartitionConfig& event = *t.ProposeConfig;
+
     ChangeConfig =
         MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
                                                           event.Config);
@@ -3259,8 +3264,10 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
     TxIdHasChanged = true;
 }
 
-TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx)
+TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t)
 {
+    const NKikimrPQ::TEvProposeTransaction& tx = t.ProposeTransaction->GetRecord();
+
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }

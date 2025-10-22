@@ -228,8 +228,15 @@ void TLeaderElection::Bootstrap() {
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
-         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath);
-    if (Config.GetLocalMode()) {
+         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath
+         << ", endpoint " << Config.GetDatabase().GetEndpoint());
+    bool localMode = Config.GetLocalMode();
+    if (Config.GetDatabase().GetEndpoint().empty()) {
+        LOG_ROW_DISPATCHER_WARN("No endpoint in config, swith to local mode");
+        localMode = true;
+    }
+    
+    if (localMode) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
     }

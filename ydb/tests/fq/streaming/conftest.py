@@ -31,9 +31,10 @@ class YdbClient:
         return self.session_pool.execute_with_retries_async(statement)
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def kikimr(request):
     local_checkpoints = request.param["local_checkpoints"]
+        
     def get_ydb_config():
         config = KikimrConfigGenerator(
             extra_feature_flags={
@@ -51,13 +52,16 @@ def kikimr(request):
         query_service_config = config.yaml_config.setdefault("query_service_config", {})
         query_service_config["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
 
+        #monitoring_config = config.yaml_config.setdefault("monitoring_config", {})
+        #monitoring_config["monitoring_port"] = 8765
+
         database_connection = query_service_config.setdefault("streaming_queries", {}).setdefault("external_storage", {}).setdefault("database_connection", {})
         if not local_checkpoints:
             database_connection["endpoint"] = os.getenv("YDB_ENDPOINT")
             database_connection["database"] = os.getenv("YDB_DATABASE")
 
         return config
-    
+
     ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
     logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
@@ -75,3 +79,29 @@ def kikimr(request):
     yield ydb_client
     ydb_client.stop()
     cluster.stop()
+
+
+# @classmethod
+#     def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None, counters: str = 'tablets') -> dict[str, dict[str, float]]:
+#         def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
+#             for k, v in labels.items():
+#                 if sensor.get('labels', {}).get(k, '') != v:
+#                     return False
+#             return True
+#         nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
+#         result = {}
+#         for node in nodes:
+#             url = f'http://{node.host}:{node.mon_port}/counters/'
+#             if counters:
+#                 url += f'counters={counters}/'
+#             url += 'json'
+#             response = requests.get(url)
+#             response.raise_for_status()
+#             sensor_values = {}
+#             for name, labels in metrics.items():
+#                 for sensor in response.json()['sensors']:
+#                     if sensor_has_labels(sensor, labels):
+#                         sensor_values.setdefault(name, 0.)
+#                         sensor_values[name] += sensor['value']
+#             result[node.slot] = sensor_values
+#         return result

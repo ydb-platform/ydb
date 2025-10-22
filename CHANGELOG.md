@@ -76,6 +76,14 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 27064:Block Hash Hoin utils: add hash tables for tuple layout rows. [#27064](https://github.com/ydb-platform/ydb/pull/27064) ([Vyacheslav Boev](https://github.com/spaikus))
+* 26930:Allow eviction of OLAP indexes to S3 with portions [#26930](https://github.com/ydb-platform/ydb/pull/26930) ([Semyon](https://github.com/swalrus1))
+* 26859:Integrate high level tuple layout conversion support into YDB. [#26859](https://github.com/ydb-platform/ydb/pull/26859) ([Alexander](https://github.com/san-kir-k))
+* 26796:Completion queue (CQ),  Queue Pair(QP) basic ibverbs primitives to perform rdma op. The code provides facility to work with it using actor interface. [#26796](https://github.com/ydb-platform/ydb/pull/26796) ([Daniil Cherednik](https://github.com/dcherednik))
+* 26747:Reduced the CPU usage when handling the periodic partition stats updates [#26747](https://github.com/ydb-platform/ydb/pull/26747) ([avpershin](https://github.com/avpershin))
+* 26696:Support passing checkpoint on streaming query manual restart (before it checkpoint always was lost when called `ALTER STREAMING QUERY`) [#26696](https://github.com/ydb-platform/ydb/pull/26696) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 25797:Group tasks per stage - with exact reasons for creating these tasks [#25797](https://github.com/ydb-platform/ydb/pull/25797) ([Ivan](https://github.com/abyss7))
+* 25758:Added backup and restore functionality for transfer-objects with testing [#25758](https://github.com/ydb-platform/ydb/pull/25758) ([Denis Zinchenko](https://github.com/denxc))
 
 ### Bug fixes
 
@@ -146,12 +154,15 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
+* None:CreateStreamingQueryMatchRecognize
+* 26938:When backing up using `tools dump`, objects for which the description retrieval method is not implemented/enabled will be skipped. [#26938](https://github.com/ydb-platform/ydb/pull/26938) ([Ilnaz Nizametdinov](https://github.com/CyberROFL))
+* 26868:Bugfix: correctly handle TablePathPrefix on view restoration even if written in lowercase. [#26868](https://github.com/ydb-platform/ydb/pull/26868) ([Daniil Demin](https://github.com/jepett0))
+* 26654:Fixes https://github.com/ydb-platform/ydb/issues/26565 [#26654](https://github.com/ydb-platform/ydb/pull/26654) ([Ilia Shakhov](https://github.com/pixcc))
+* 26552:Fixed ACK sending for sys view scan [#26552](https://github.com/ydb-platform/ydb/pull/26552) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 26497:Close [#22290](https://github.com/ydb-platform/ydb/issues/22290)
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+The KV tablet returned responses in the legacy format (TEvResponse) instead of the new format (TEvExecuteTransactionResponse) when a PUT operation fails. The response format is currently determined by the format of the incoming request. [#26497](https://github.com/ydb-platform/ydb/pull/26497) ([kruall](https://github.com/kruall))
+* 25678:Make bootstrap cluster with enabled authentication [#25678](https://github.com/ydb-platform/ydb/pull/25678) ([Andrey Molotkov](https://github.com/molotkov-and))
 
 ### YDB UI
 
@@ -178,4 +189,8 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 27002:Reduce volume of reads for deduplication on CS [#27002](https://github.com/ydb-platform/ydb/pull/27002) ([Semyon](https://github.com/swalrus1))
+* 25799:refactor TEvPut to store buffer as TRope to avoid excess buffer copying while writing blob to Blob Storage
+
+... [#25799](https://github.com/ydb-platform/ydb/pull/25799) ([Anton Myagkov](https://github.com/antonmyagkov))
 

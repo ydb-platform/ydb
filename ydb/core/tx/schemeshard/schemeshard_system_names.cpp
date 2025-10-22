@@ -100,6 +100,31 @@ bool CheckReservedName(const TString& name, const TAppData* appData, const NACLi
     return CheckReservedNameImpl(name, IsSystemUser(userToken), IsAdministrator(appData, userToken), explain);
 }
 
+bool IsBackupServiceReservedName(const TString& name) {
+    return name.StartsWith("__ydb_backup_");
+}
+
+bool CheckReservedName(
+    const TString& name,
+    const TAppData* appData,
+    const NACLib::TUserToken* userToken,
+    const TPathCreationContext& context,
+    TString& explain)
+{
+    if (IsBackupServiceReservedName(name)) {
+        if (context.IsInsideBackupCollection) {
+            return true;
+        }
+
+        explain += TStringBuilder()
+            << "path part '" << name << "', prefix is reserved by the system: '__ydb_backup_'"
+            << ", can only be used inside backup collections";
+        return false;
+    }
+
+    return CheckReservedNameImpl(name, IsSystemUser(userToken), IsAdministrator(appData, userToken), explain);
+}
+
 }  // namespace NKikimr::NSchemeShard
 
 

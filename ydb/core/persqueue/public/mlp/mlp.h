@@ -67,6 +67,7 @@ struct TReaderSettings {
     TDuration WaitTime = TDuration::Zero();
     TDuration VisibilityTimeout = TDuration::Seconds(30);
     ui32 MaxNumberOfMessage = 1;
+    bool UncompressMessages = false;
 
     // TODO check access
 };

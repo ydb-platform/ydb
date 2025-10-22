@@ -113,17 +113,20 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         }
 
         TString data;
-        if (proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
+        Ydb::Topic::Codec codec;
+        if (Settings.UncompressMessages &&proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1) {
             const NYdb::NTopic::ICodec* codecImpl = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
             data = codecImpl->Decompress(proto.GetData());
+            codec = static_cast<Ydb::Topic::Codec>(proto.codec() + 1);
         } else {
             data = std::move(*proto.MutableData());
+            codec = Ydb::Topic::CODEC_RAW;
         }
 
         response->Messages.push_back(TEvReadResponse::TMessage{
             .MessageId = {PartitionId, message.GetId().GetOffset()},
-            .Codec = Ydb::Topic::CODEC_RAW, // static_cast<Ydb::Topic::Codec>(proto.codec() + 1),
-            .Data = std::move(data) // TODO убрать разжатие
+            .Codec = codec,
+            .Data = std::move(data)
         });
     }
 

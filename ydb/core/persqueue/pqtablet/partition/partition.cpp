@@ -2721,13 +2721,12 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
         case ECommitState::Committed:
             break;
     }
-    const auto& ctx = ActorContext();
     if (t->ChangeConfig) {
         PQ_ENSURE(!ChangeConfig);
         PQ_ENSURE(ChangingConfig);
         ChangeConfig = t->ChangeConfig;
         SendChangeConfigReply = t->SendReply;
-        BeginChangePartitionConfig(ChangeConfig->Config, ctx);
+        BeginChangePartitionConfig(ChangeConfig->Config);
     } else if (t->ProposeConfig) {
         PQ_ENSURE(ChangingConfig);
         ChangeConfig = MakeSimpleShared<TEvPQ::TEvChangePartitionConfig>(TopicConverter,
@@ -2956,7 +2955,6 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
 void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
 {
-    const auto& ctx = ActorContext();
     if (t->Tx) {
         PQ_ENSURE(t->Predicate.Defined() && *t->Predicate);
 
@@ -3001,7 +2999,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
     } else if (t->ProposeConfig) {
         PQ_ENSURE(t->Predicate.Defined() && *t->Predicate);
 
-        BeginChangePartitionConfig(t->ProposeConfig->Config, ctx);
+        BeginChangePartitionConfig(t->ProposeConfig->Config);
         ExecChangePartitionConfig();
         ChangePlanStepAndTxId(t->ProposeConfig->Step, t->ProposeConfig->TxId);
 
@@ -3033,8 +3031,7 @@ void TPartition::RollbackTransaction(TSimpleSharedPtr<TTransaction>& t)
     }
 }
 
-void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
-                                            const TActorContext& ctx)
+void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config)
 {
     TSet<TString> hasReadRule;
     for (auto&& [consumer, info] : UsersInfoStorage->ViewAll()) {
@@ -3057,7 +3054,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
             auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer.GetName(), 0, "", 0, 0, 0, TActorId{},
                                         TEvPQ::TEvSetClientInfo::ESCI_INIT_READ_RULE, rrGen);
 
-            auto res = PreProcessUserAct(*act, ctx);
+            auto res = PreProcessUserAct(*act);
             ChangeConfigActs.emplace_back(std::move(act));
 
             PQ_ENSURE(res == EProcessResult::Continue);
@@ -3070,7 +3067,7 @@ void TPartition::BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& co
         auto act = MakeHolder<TEvPQ::TEvSetClientInfo>(0, consumer, 0, "", 0, 0, 0, TActorId{},
                                     TEvPQ::TEvSetClientInfo::ESCI_DROP_READ_RULE, 0);
 
-        auto res = PreProcessUserAct(*act, ctx);
+        auto res = PreProcessUserAct(*act);
         PQ_ENSURE(res == EProcessResult::Continue);
         ChangeConfigActs.emplace_back(std::move(act));
     }
@@ -3402,7 +3399,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }
-    return PreProcessUserAct(*act, ActorContext());
+    return PreProcessUserAct(*act);
 }
 
 bool TPartition::ExecUserActionOrTransaction(
@@ -3463,9 +3460,8 @@ bool TPartition::ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequ
     return true;
 }
 
-TPartition::EProcessResult TPartition::PreProcessUserAct(
-        TEvPQ::TEvSetClientInfo& act, const TActorContext&
-) {
+TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo& act)
+{
     PQ_ENSURE(!KVWriteInProgress);
 
     const TString& user = act.ClientId;

@@ -440,15 +440,13 @@ private:
                                                                         const TString& reason);
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
-    bool BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event);
     bool BeginTransactionConfig(TTransaction& t);
 
     void CommitTransaction(TSimpleSharedPtr<TTransaction>& t);
     void RollbackTransaction(TSimpleSharedPtr<TTransaction>& t);
 
 
-    void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config,
-                                    const TActorContext& ctx);
+    void BeginChangePartitionConfig(const NKikimrPQ::TPQTabletConfig& config);
     void ExecChangePartitionConfig();
 
     void OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx);
@@ -808,18 +806,14 @@ private:
     //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
 
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event);
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx);
     EProcessResult PreProcessUserActionOrTransaction(TMessage& msg);
 
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request);
-
-    bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPersQueue::TEvProposeTransaction>& event,
-                                     TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act, const TActorContext& ctx);
+    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act);
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
 
 
@@ -836,8 +830,6 @@ private:
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
-                                                  TMaybe<bool>& predicate, TString& issueMsg);
     [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t);
 
     EProcessResult ApplyWriteInfoResponse(TTransaction& tx);

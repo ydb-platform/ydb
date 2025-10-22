@@ -97,7 +97,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMWRITE,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
+                    *ActorSystem_, "StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
                 );
     }
 
@@ -122,7 +122,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
+                    *ActorSystem_, "StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
                 );
     }
 
@@ -147,7 +147,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMDIRECTREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
+                    *ActorSystem_, "StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
                 );
     }
 
@@ -161,7 +161,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Topic::V1::SVC::AsyncService::Request ## NAME, \
-        "TopicService/"#NAME, logger, getCounterBlock("topic", #NAME))->Run();
+        #NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
     ADD_REQUEST(CommitOffset, TopicService, CommitOffsetRequest, CommitOffsetResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx));

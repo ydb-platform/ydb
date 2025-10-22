@@ -3416,27 +3416,16 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 "DISCARD SELECT should return no result sets for query: " << query);
         }
         {
-            auto queries = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
+            auto multiLineQuery = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
                         SELECT MIN(Key) FROM `/Root/TwoShard`)";
 
-                auto result = db.ExecuteQuery(queries,
+                auto result = db.ExecuteQuery(multiLineQuery,
                         NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
                 "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
         }
-        // todo anely-d: somehow check that ensures calculated
-        {
-            auto ensureQuery = R"(DISCARD SELECT Ensure(Data, Data < 100, "Data value out of range") AS value FROM `/Root/EightShard`)";
 
-            auto result = db.ExecuteQuery(ensureQuery,
-                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
-                "got result sets: " << result.GetResultSets().size() << " instead of 0 for query: " << ensureQuery);
-        
-        }
-        
         for (const auto& query : invalidQueries) {
             auto result = db.ExecuteQuery(query,
                     NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -3452,17 +3441,47 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_C(result.GetResultSets().size() > 0,
-                    "DISCARD SELECT should return result sets for dml but got: " << result.GetResultSets().size() << " for query " << query);
+                    "DISCARD SELECT should return result sets for dml (backward compability) but got: " << result.GetResultSets().size() << " for query " << query);
             }
         }
 
         for (auto& query : queries) {
             auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            auto result = StreamResultToYson(it);
-            CompareYson(R"([])", result); // should be result
+            auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
+                "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
         }
 
+    }
+
+    Y_UNIT_TEST(DiscardSelectEnsureExecuted) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        auto failingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data > 1000000, "Data value too large") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result = db.ExecuteQuery(failingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(!result.IsSuccess(),
+            "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Data value too large");
+
+        auto passingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value out of range") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result2 = db.ExecuteQuery(passingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetResultSets().size(), 0,
+            "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
     }
 }
 

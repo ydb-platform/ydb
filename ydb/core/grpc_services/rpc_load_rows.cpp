@@ -161,6 +161,7 @@ public:
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded,
                 NWilson::TSpan(TWilsonKqp::BulkUpsertActor, request->GetWilsonTraceId(), name))
         , Request(request)
+        , Database(Request->GetDatabaseName().GetOrElse(""))
     {
     }
 
@@ -184,11 +185,11 @@ private:
         NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
-    TString GetDatabase() override {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return GetProtoRequest(Request.get())->table();
     }
 
@@ -307,6 +308,7 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
+    const TString Database;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
@@ -315,6 +317,7 @@ public:
     explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
         : TBase(std::make_shared<TVector<std::pair<TSerializedCellVec, TString>>>(), GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
+        , Database(Request->GetDatabaseName().GetOrElse(""))
     {
     }
 
@@ -349,11 +352,11 @@ private:
         NKikimr::NGRpcService::AuditContextAppend(Request.get(), *GetProtoRequest(Request.get()));
     }
 
-    TString GetDatabase() override {
-        return Request->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+    const TString& GetDatabase() const override {
+        return Database;
     }
 
-    const TString& GetTable() override {
+    const TString& GetTable() const override {
         return GetProtoRequest(Request.get())->table();
     }
 
@@ -512,6 +515,7 @@ private:
 
 private:
     std::unique_ptr<IRequestOpCtx> Request;
+    const TString Database;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
         return GetProtoRequest(Request.get())->csv_settings();

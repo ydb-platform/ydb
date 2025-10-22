@@ -134,7 +134,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     }));                                                                                     \
         },                                                                                                   \
         &NKikimrClient::TGRpcServer::AsyncService::Y_CAT(Request, methodName),                               \
-        "Legacy/" Y_STRINGIZE(methodName),                                                                   \
+        Y_STRINGIZE(methodName),                                                                             \
         logger,                                                                                              \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                   \
     )->Run()                                                                                                 \

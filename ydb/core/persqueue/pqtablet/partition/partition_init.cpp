@@ -496,14 +496,14 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-
-            FillBlobsMetaData(range, ctx);
+            Ranges.push_back(range);
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
-                PQ_INIT_ENSURE(range.PairSize());
                 RequestDataRange(ctx, Partition()->TabletActorId, PartitionId(), range.GetPair(range.PairSize() - 1).GetKey());
                 return;
             }
+
+            FillBlobsMetaData(ctx);
             FormHeadAndProceed();
 
             if (GetContext().StartOffset && *GetContext().StartOffset != Partition()->GetStartOffset()) {
@@ -528,15 +528,17 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
-THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+THashSet<TString> FilterBlobsMetaData(const TVector<NKikimrClient::TKeyValueResponse::TReadRangeResult>& ranges,
                                       const TPartitionId& partitionId)
 {
     TVector<TString> keys;
 
-    for (ui32 i = 0; i < range.PairSize(); ++i) {
-        const auto& pair = range.GetPair(i);
-        AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        keys.push_back(pair.GetKey());
+    for (const auto& range : ranges) {
+        for (ui32 i = 0; i < range.PairSize(); ++i) {
+            const auto& pair = range.GetPair(i);
+            AFL_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+            keys.push_back(pair.GetKey());
+        }
     }
 
     auto compare = [](const TString& lhs, const TString& rhs) {
@@ -641,7 +643,7 @@ static void CheckKeysTimestampOrder(const std::deque<TDataKey>& keys) {
     }
 }
 
-void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
+void TInitDataRangeStep::FillBlobsMetaData(const TActorContext&) {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
     auto& head = Partition()->BlobEncoder.Head;
@@ -653,48 +655,49 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     // If there are multiple keys for a message, then only the key that contains more messages remains.
     //
     // Extra keys will be added to the queue for deletion.
-    const auto actualKeys = FilterBlobsMetaData(range,
-                                                PartitionId());
+    const auto actualKeys = FilterBlobsMetaData(Ranges, PartitionId());
 
-    for (ui32 i = 0; i < range.PairSize(); ++i) {
-        const auto& pair = range.GetPair(i);
-        PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        PQ_LOG_D("check key " << pair.GetKey());
-        const auto k = TKey::FromString(pair.GetKey(), PartitionId());
-        if (!actualKeys.contains(pair.GetKey())) {
-            PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
-            Partition()->DeletedKeys->emplace_back(k.ToString());
-            continue;
-        }
-        if (dataKeysBody.empty()) { //no data - this is first pair of first range
-            head.Offset = endOffset = startOffset = k.GetOffset();
-            if (k.GetPartNo() > 0) {
-                ++startOffset;
+    for (const auto& range : Ranges) {
+        for (ui32 i = 0; i < range.PairSize(); ++i) {
+            const auto& pair = range.GetPair(i);
+            PQ_INIT_ENSURE(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+            PQ_LOG_D("check key " << pair.GetKey());
+            const auto k = TKey::FromString(pair.GetKey(), PartitionId());
+            if (!actualKeys.contains(pair.GetKey())) {
+                PQ_LOG_D("unknown key " << pair.GetKey() << " will be deleted");
+                Partition()->DeletedKeys->emplace_back(k.ToString());
+                continue;
             }
-            head.PartNo = 0;
-        } else {
-            PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
-            if (endOffset < k.GetOffset()) {
-                gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
-                gapSize += k.GetOffset() - endOffset;
+            if (dataKeysBody.empty()) { //no data - this is first pair of first range
+                head.Offset = endOffset = startOffset = k.GetOffset();
+                if (k.GetPartNo() > 0) {
+                    ++startOffset;
+                }
+                head.PartNo = 0;
+            } else {
+                PQ_INIT_ENSURE(endOffset <= k.GetOffset())("endOffset", endOffset)("key", pair.GetKey());
+                if (endOffset < k.GetOffset()) {
+                    gapOffsets.push_back(std::make_pair(endOffset, k.GetOffset()));
+                    gapSize += k.GetOffset() - endOffset;
+                }
             }
-        }
-        PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
-        PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
-        endOffset = k.GetOffset() + k.GetCount();
-        //at this point EndOffset > StartOffset
-        if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
-            bodySize += pair.GetValueSize();
-        }
+            PQ_INIT_ENSURE(k.GetCount() + k.GetInternalPartsCount() > 0);
+            PQ_INIT_ENSURE(k.GetOffset() >= endOffset);
+            endOffset = k.GetOffset() + k.GetCount();
+            //at this point EndOffset > StartOffset
+            if (!k.HasSuffix() || !k.IsHead()) { //head.Size will be filled after read or head blobs
+                bodySize += pair.GetValueSize();
+            }
 
-        PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
-                << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
-        );
-        dataKeysBody.emplace_back(k,
-                                  pair.GetValueSize(),
-                                  TInstant::Seconds(pair.GetCreationUnixTime()),
-                                  dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
-                                  Partition()->MakeBlobKeyToken(k.ToString()));
+            PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
+                     << " so " << startOffset << " eo " << endOffset << " " << pair.GetKey()
+                    );
+            dataKeysBody.emplace_back(k,
+                                      pair.GetValueSize(),
+                                      TInstant::Seconds(pair.GetCreationUnixTime()),
+                                      dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size,
+                                      Partition()->MakeBlobKeyToken(k.ToString()));
+        }
     }
     CheckKeysTimestampOrder(dataKeysBody);
 

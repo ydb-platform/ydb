@@ -25,9 +25,9 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         Become(&TThis::StateDescribe);
     }
 
-    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& backupRoot, TString& error) {
+    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& database, const TString& backupRoot, TString& error) {
         NYql::TIssues issues;
-        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), backupRoot, issues);
+        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), database, backupRoot, issues);
         if (!scheme) {
             error = issues.ToString();
         }
@@ -38,7 +38,7 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         const auto pathType = describeResult.GetPathDescription().GetSelf().GetPathType();
         switch (pathType) {
             case NKikimrSchemeOp::EPathTypeView: {
-                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
+                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, DatabaseRoot, error);
                 return !Scheme.empty();
             }
             default:

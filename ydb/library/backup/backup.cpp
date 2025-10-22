@@ -533,7 +533,7 @@ and writes it to the backup folder designated for this view.
 \param fsBackupDir the path on the file system to write the file with the CREATE VIEW statement to
 \param issues the accumulated backup issues container
 */
-void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
+void BackupView(TDriver driver, const TString& db, const TString& dbBackupRoot, const TString& dbPathRelativeToBackupRoot,
     const TFsPath& fsBackupDir, NYql::TIssues& issues
 ) {
     Y_ENSURE(!dbPathRelativeToBackupRoot.empty());
@@ -551,6 +551,7 @@ void BackupView(TDriver driver, const TString& dbBackupRoot, const TString& dbPa
         TFsPath(dbPathRelativeToBackupRoot).GetName(),
         dbPath,
         TString(viewDescription.GetQueryText()),
+        db,
         dbBackupRoot,
         issues
     );
@@ -592,7 +593,7 @@ static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusio
     return false;
 }
 
-void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
+void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix, TString path,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
@@ -636,7 +637,7 @@ void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& ba
                 }
             }
             if (dbIt.IsView()) {
-                BackupView(driver, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
+                BackupView(driver, database, dbIt.GetTraverseRoot(), dbIt.GetRelPath(), childFolderPath, issues);
             }
             dbIt.Next();
         }
@@ -759,7 +760,7 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
         TString dbPrefix = JoinDatabasePath(database, relDbPath);
         TString path;
         NYql::TIssues issues;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 

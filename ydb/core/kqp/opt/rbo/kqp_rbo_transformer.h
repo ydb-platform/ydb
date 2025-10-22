@@ -37,13 +37,12 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 class TKqpNewRBOTransformer : public TSyncTransformerBase {
   public:
     TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                          const TKikimrConfiguration::TPtr &config, TAutoPtr<IGraphTransformer> typeAnnTransformer,
-                          TAutoPtr<IGraphTransformer> peephole)
+                          TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peephole)
         : TypeCtx(typeCtx), KqpCtx(*kqpCtx),
           RBO(
               {// std::make_shared<TRenameStage>(),
                std::make_shared<TRuleBasedStage>(RuleStage1), std::make_shared<TRuleBasedStage>(RuleStage2)},
-              kqpCtx, typeCtx, config, typeAnnTransformer, peephole) {}
+              kqpCtx, typeCtx, typeAnnTransformer, peephole) {}
 
     // Main method of the transformer
     IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr &output, TExprContext &ctx) final;
@@ -56,7 +55,6 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
 };
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                                                       const TKikimrConfiguration::TPtr &config,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> peepholeTransformer);
 

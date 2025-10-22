@@ -559,6 +559,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     auto status = OptimizeExpr(
         output, output,
         [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+            Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
                 auto root = PlanConverter().ConvertRoot(node);
                 root.ComputeParents();
@@ -621,10 +622,9 @@ TAutoPtr<IGraphTransformer> CreateKqpPgRewriteTransformer(const TIntrusivePtr<TK
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext> &kqpCtx, TTypeAnnotationContext &typeCtx,
-                                                       const TKikimrConfiguration::TPtr &config,
                                                        TAutoPtr<IGraphTransformer> typeAnnTransformer,
                                                        TAutoPtr<IGraphTransformer> peephole) {
-    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, config, typeAnnTransformer, peephole);
+    return new TKqpNewRBOTransformer(kqpCtx, typeCtx, typeAnnTransformer, peephole);
 }
 
 TAutoPtr<IGraphTransformer> CreateKqpRBOCleanupTransformer(TTypeAnnotationContext &typeCtx) {

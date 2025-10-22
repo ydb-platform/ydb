@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_rbo_context.h"
 #include <cstddef>
 #include <iterator>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -236,6 +237,7 @@ class IOperator {
     const EOperator Kind;
     TPhysicalOpProps Props;
     TPositionHandle Pos;
+    const TTypeAnnotationNode* Type = nullptr;
     TVector<std::shared_ptr<IOperator>> Children;
     TVector<std::weak_ptr<IOperator>> Parents;
 };
@@ -244,7 +246,7 @@ class IOperator {
  * FIXME: This doesn't work correctly
  */
 template <class K> bool MatchOperator(const std::shared_ptr<IOperator> &op) {
-    auto dyn = std::dynamic_pointer_cast<K>(op);
+    auto dyn = std::static_pointer_cast<K>(op);
     if (dyn) {
         return true;
     } else {
@@ -367,6 +369,8 @@ class TOpRoot : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void ComputeParents();
+    IGraphTransformer::TStatus ComputeTypes(TRBOContext & ctx);
+
 
     TString PlanToString(TExprContext& ctx);
     void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs);

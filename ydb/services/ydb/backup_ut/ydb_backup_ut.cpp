@@ -556,15 +556,15 @@ void TestViewRelativeReferencesArePreserved(
 
 Y_UNIT_TEST_SUITE(BackupRestore) {
 
-    auto CreateBackupLambda(const TDriver& driver, const TFsPath& pathToBackup, bool schemaOnly = false) {
-        return [&driver, &pathToBackup, schemaOnly]() {
+    auto CreateBackupLambda(const TDriver& driver, const TFsPath& fsPath, bool schemaOnly = false, const TString& dbPath = ".", const TString& db = "/Root") {
+        return [=, &driver]() {
             // TO DO: implement NDump::TClient::Dump and call it instead of BackupFolder
-            NBackup::BackupFolder(driver, "/Root", ".", pathToBackup, {}, schemaOnly, false);
+            NBackup::BackupFolder(driver, db, dbPath, fsPath, {}, schemaOnly, false);
         };
     }
 
     auto CreateRestoreLambda(const TDriver& driver, const TFsPath& fsPath, const TString& dbPath = "/Root") {
-        return [&]() {
+        return [=, &driver]() {
             NDump::TClient backupClient(driver);
             const auto result = backupClient.Restore(fsPath, dbPath);
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -632,8 +632,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     }
 
     Y_UNIT_TEST(RestoreViewQueryText) {
-        TKikimrWithGrpcAndRootSchema server;
+        TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableViews(true);
+        // note: tenant is needed to work around the issue of "/Root" having a dir scheme entry type when described on restore
+        CreateDatabase(*server.Tenants_, "/Root/tenant", "ssd");
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
@@ -641,14 +643,14 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
 
-        constexpr const char* view = "/Root/view";
+        constexpr const char* view = "/Root/tenant/view";
 
         TestViewQueryTextIsPreserved(
             view,
             viewClient,
             session,
-            CreateBackupLambda(driver, pathToBackup),
-            CreateRestoreLambda(driver, pathToBackup)
+            CreateBackupLambda(driver, pathToBackup, false, ".", "/Root/tenant"),
+            CreateRestoreLambda(driver, pathToBackup, "/Root/tenant")
         );
     }
 
@@ -763,7 +765,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             restoredView,
             session,
-            CreateBackupLambda(driver, pathToBackup, "/Root/a/b/c"),
+            CreateBackupLambda(driver, pathToBackup, false, "a/b/c"),
             CreateRestoreLambda(driver, pathToBackup, "/Root/restore/point")
         );
     }
@@ -928,7 +930,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
     const TString DefaultS3Prefix = "";
 
     auto CreateBackupLambda(const TDriver& driver, ui16 s3Port, const TString& source = "/Root") {
-        return [&, s3Port]() {
+        return [=, &driver]() {
             const auto clientSettings = TCommonClientSettings().Database(source);
             TSchemeClient schemeClient(driver, clientSettings);
             NExport::TExportClient exportClient(driver, clientSettings);
@@ -961,7 +963,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     // to do: implement source item list expansion
     auto CreateRestoreLambda(const TDriver& driver, ui16 s3Port, const TVector<TString>& sourceItems, const TString& destinationPrefix = "/Root") {
-        return [&, s3Port]() {
+        return [=, &driver]() {
             const auto clientSettings = TCommonClientSettings().Database(destinationPrefix);
             NImport::TImportClient importClient(driver, clientSettings);
             NOperation::TOperationClient operationClient(driver, clientSettings);

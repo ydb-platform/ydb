@@ -334,11 +334,11 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
         return true;
     }
 
+    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
+
     if (backupRoot == restoreRoot) {
         return true;
     }
-
-    restorePathPrefix = RewriteAbsolutePath(backupPathPrefix, backupRoot, restoreRoot);
 
     constexpr TStringBuf pattern = "PRAGMA TablePathPrefix = \"\\S+\";";
     if (!re2::RE2::Replace(&query, pattern,

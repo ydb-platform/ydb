@@ -1268,15 +1268,51 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
-    if (!EnsureStreamType(*inputStream, ctx)) {
+    if (!inputStream->GetTypeAnn()) {
         return TStatus::Error;
     }
-    auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
-    auto multiType = streamType->GetItemType();
+
+    const TTypeAnnotationNode* multiType = nullptr;
+
+    if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Stream) {
+        auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
+        multiType = streamType->GetItemType();
+    } else if (inputStream->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Flow) {
+        auto flowType = inputStream->GetTypeAnn()->Cast<TFlowExprType>();
+        multiType = flowType->GetItemType();
+    } else {
+        return TStatus::Error;
+    }
+
     if (!EnsureMultiType(inputStream->Pos(), *multiType, ctx)) {
         return TStatus::Error;
     }
+
+    bool needBlockWrap = false;
+
     auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
+
+    auto firstInputColumn = itemTypes.at(0);
+    if (firstInputColumn->IsBlockOrScalar()) {
+        needBlockWrap = true;
+        TTypeAnnotationNode::TListType unwrappedTypes;
+        for (size_t i = 0; i < itemTypes.size() - 1; ++i) {
+            auto colType = itemTypes.at(i);
+            if (!EnsureBlockOrScalarType(inputStream->Pos(), *colType, ctx)) {
+                return TStatus::Error;
+            }
+            const TTypeAnnotationNode* blockContentType = nullptr;
+            if (colType->IsBlock()) {
+                blockContentType = colType->Cast<TBlockExprType>()->GetItemType();
+            } else if (colType->IsScalar()) {
+                blockContentType = colType->Cast<TScalarExprType>()->GetItemType();
+            } else {
+                YQL_ENSURE(false, "Block or scalar type expected after EnsureBlockOrScalarType");
+            }
+            unwrappedTypes.push_back(blockContentType);
+        }
+        itemTypes.swap(unwrappedTypes);
+    }
 
     // key extractor lambda
     auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
@@ -1360,7 +1396,15 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     // Derive the output type from the finishHandler
     TTypeAnnotationNode::TListType finishOutputTypes;
     for (ui32 i = 1; i < finishHandler->ChildrenSize(); ++i) {
-        finishOutputTypes.emplace_back(finishHandler->Child(i)->GetTypeAnn());
+        const auto colType = finishHandler->Child(i)->GetTypeAnn();
+        if (!needBlockWrap) {
+            finishOutputTypes.emplace_back(colType);
+        } else {
+            finishOutputTypes.emplace_back(ctx.MakeType<TBlockExprType>(colType));
+        }
+    }
+    if (needBlockWrap) {
+        finishOutputTypes.emplace_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(NUdf::EDataSlot::Uint64)));
     }
     auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
 

@@ -97,9 +97,31 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             // For fulltext indexes, we need to tokenize the text from the rows being deleted
             // and then delete the corresponding token rows from the index table
             
-            // Wrap deleteIndexKeys in a precompute node so it can be used as stage input
+            // Wrap deleteIndexKeys so it can be used as stage input
+            TExprBase deleteKeysConnection;
+            if (deleteIndexKeys.Maybe<TDqCnUnionAll>()) {
+                // Already a proper connection
+                deleteKeysConnection = deleteIndexKeys;
+            } else {
+                // Not a connection (e.g., TCoMap from ProjectColumns), wrap in a stage
+                deleteKeysConnection = Build<TDqCnUnionAll>(ctx, del.Pos())
+                    .Output()
+                        .Stage<TDqStage>()
+                            .Inputs()
+                                .Build()
+                            .Program()
+                                .Args({"stub"})
+                                .Body(deleteIndexKeys)
+                                .Build()
+                            .Settings().Build()
+                            .Build()
+                        .Index().Build("0")
+                        .Build()
+                    .Done();
+            }
+            
             auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                .Connection(deleteIndexKeys.Cast<TDqCnUnionAll>())
+                .Connection(deleteKeysConnection.Cast<TDqCnUnionAll>())
                 .Done();
             
             auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns,

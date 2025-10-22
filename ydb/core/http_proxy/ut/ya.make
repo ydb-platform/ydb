@@ -30,6 +30,7 @@ PEERDIR(
 )
 
 SRCS(
+    datastreams_fixture.cpp
     json_proto_conversion_ut.cpp
     datastreams_fixture.h
     http_ut.cpp

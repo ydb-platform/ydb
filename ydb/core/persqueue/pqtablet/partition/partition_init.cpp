@@ -1479,6 +1479,8 @@ static void RequestRange(const TActorContext& ctx, const TActorId& dst, const TP
         AddCmdDeleteRange(*request, TKeyPrefix::TypeTmpData, partition);
     }
 
+    PQ_LOG_D("Read range request. From " << from.ToString() << " to " << to.ToString());
+
     ctx.Send(dst, request.Release());
 }
 

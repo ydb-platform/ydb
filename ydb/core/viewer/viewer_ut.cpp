@@ -2111,34 +2111,72 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
     TKeepAliveHttpClient::THttpCode PostPutRecords(TKeepAliveHttpClient& httpClient,
                                                     const TString& token,
-                                                    const TString& database = "/Root",
-                                                    const TString& path = "/Root/topic1",
-                                                    const TString message = "adfnoanr",
-                                                    const i32 partition = 0) {
+                                                    const TString& database,
+                                                    const TString& path,
+                                                    const TString message,
+                                                    const std::optional<i32> partition = std::nullopt) {
         NJson::TJsonValue jsonRequest;
-        NJson::TJsonArray headersArray;
+        NJson::TJsonArray metadataArray;
         NJson::TJsonValue header1;
         NJson::TJsonValue header2;
         header1["key"] = "grey";
         header1["value"] = "bird";
         header2["key"] = "brown";
         header2["value"] = "dog";
-        headersArray.AppendValue(header1);
-        headersArray.AppendValue(header2);
+        metadataArray.AppendValue(header1);
+        metadataArray.AppendValue(header2);
 
         jsonRequest["database"] = database;
         jsonRequest["path"] = path;
-        jsonRequest["partition"] = partition;
+        if (partition.has_value()) {
+            jsonRequest["partition"] = *partition;
+        }
         jsonRequest["message"] = message;
-        jsonRequest["seqno"] = 20;
-        jsonRequest["headers"] = headersArray;
-        // jsonRequest["headers"] = "[[\"key\", \"value\"], [\"key2\", \"value2\"]]";
+        jsonRequest["metadata"] = metadataArray;
         TStringStream responseStream;
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
         headers["Authorization"] = token;
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/put_records", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
+    }
+    ui64 GetMessagesCount(std::shared_ptr<NYdb::NTopic::IReadSession> readSession) {
+        auto getMessagesFromTopic = [&](auto& reader) {
+            TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> result;
+            while (true) {
+                auto event = reader->GetEvent(false);
+                if (!event)
+                    return result;
+                if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    dataEvent->Commit();
+                    result = *dataEvent;
+
+                    break;
+                } else if (auto *lockEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    lockEv->Confirm();
+                } else if (auto *releaseEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    releaseEv->Confirm();
+                } else if (auto *closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    Cerr << "Session closed event\n";
+                    return result;
+                }
+            }
+            return result;
+        };
+        ui64 totalTries = 5;
+        ui64 totalMessages = 0;
+        while(totalTries) {
+            auto result = getMessagesFromTopic(readSession);
+            if (!result) {
+                --totalTries;
+                Sleep(TDuration::MilliSeconds(500));
+                continue;
+            } else {
+                totalTries = 5;
+                totalMessages += result->GetMessages().size();
+            }
+        }
+        return totalMessages;
     }
 
     Y_UNIT_TEST(PutRecordsViewer) {
@@ -2169,8 +2207,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         TTestActorRuntime& runtime = *server.GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::PRI_TRACE);
-        runtime.SetLogPriority(NKikimrServices::PQ_TX, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
@@ -2182,64 +2219,94 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NYdb::TDriver ydbDriver{driverCfg};
 
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
-        auto res = topicClient.CreateTopic(topicPath).GetValueSync();
+        auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
+                        .BeginAddConsumer(consumerName).EndAddConsumer()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", topicPath, message);
+        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
         Cerr << postReturnCode1 << Endl;
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_OK);
 
-        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = "consumer1"};
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({topicPath});
         auto readSession = topicClient.CreateReadSession(rSSettings);
-        auto getMessagesFromTopic = [&](auto& reader) {
-            TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> result;
-            while (true) {
-                auto event = reader->GetEvent(false);
-                if (!event)
-                    return result;
-                if (auto dataEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
-                    dataEvent->Commit();
-                    result = *dataEvent;
+        ui64 messageCount = GetMessagesCount(readSession);
+        Cerr << "Total messages: " << messageCount << Endl;
+        UNIT_ASSERT_EQUAL(messageCount, 1);
+    }
 
-                    break;
-                } else if (auto *lockEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
-                    lockEv->Confirm();
-                } else if (auto *releaseEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
-                    releaseEv->Confirm();
-                } else if (auto *closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
-                    Cerr << "Session closed event\n";
-                    return result;
-                }
-            }
-            return result;
-        };
-        ui64 totalTries = 5;
-        ui64 totalMessages = 0;
-        THashSet<TString> keysFound;
-        while(totalTries) {
-            auto result = getMessagesFromTopic(readSession);
-            if (!result) {
-                --totalTries;
-                Sleep(TDuration::MilliSeconds(500));
-                continue;
-            }
-            if (result) {
-                totalTries = 5;
-                for (const auto& message : result->GetMessages()) {
-                    TStringBuilder msg;
-                    msg << "Got message from offset " << message.GetOffset() << " and size: " << message.GetData().size() << Endl;
-                    // keysFound.emplace(message.GetMessageMeta()->Fields[0].second);
-                    totalMessages++;
-                    // msg << " with meta: " << message.GetMessageMeta()->Fields[0].first << ":" << message.GetMessageMeta()->Fields[0].second << Endl;
-                    // Cerr << msg;
-                    // UNIT_ASSERT(!message.GetMessageMeta()->Fields.empty());
-                    // UNIT_ASSERT(message.GetData().size() > 0);
-                }
-            }
-        }
-        Cerr << "Total messages: " << totalMessages << Endl;
-        UNIT_ASSERT_EQUAL(totalMessages, 1);
+    Y_UNIT_TEST(PutRecordsViewerAutosplitTopic) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(port, 1);
+        settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        TServer server{settings};
+        server.EnableGRpc(grpcSettings);
+        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        client->InitRoot();
+        client->InitSourceIds();
+        NYdb::TDriverConfig driverCfg;\
+        TString message = "message_Ira";
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        TClient client1(settings);
+        client1.InitRootScheme();
+        GrantConnect(client1);
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead); // удалить
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite); // удалить
+        TKeepAliveHttpClient httpClient("localhost", monPort);
+        TString consumerName = "consumer1";
+        NYdb::TDriver ydbDriver{driverCfg};
+
+
+        auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
+
+        TString autoscalingTopic = "/Root/autoscalit-topic";
+        NYdb::NTopic::TCreateTopicSettings createSettings;
+        createSettings.BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(5)
+                    .MaxActivePartitions(100)
+                    .BeginConfigureAutoPartitioningSettings()
+                        .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+                    .EndConfigureAutoPartitioningSettings()
+                .EndConfigurePartitioningSettings()
+                .BeginAddConsumer(consumerName).EndAddConsumer();
+        // createSettings.RetentionStorageMb(0);
+        auto result = topicClient.CreateTopic(autoscalingTopic, createSettings).GetValueSync();
+        Cerr << result.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+        NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message);
+        Cerr << postReturnCode1 << Endl;
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
+
+        auto postReturnCode2 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
+        Cerr << postReturnCode2 << Endl;
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
+        rSSettings.AppendTopics({autoscalingTopic});
+        auto readSession = topicClient.CreateReadSession(rSSettings);
+        ui64 messageCount = GetMessagesCount(readSession);
+        Cerr << "Total messages: " << messageCount << Endl;
+        UNIT_ASSERT_EQUAL(messageCount, 1);
+
     }
 }

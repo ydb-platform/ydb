@@ -11,12 +11,15 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/core/persqueue/public/partition_key_range/partition_key_range.h>
+#include <ydb/services/lib/sharding/sharding.h>
+#include <library/cpp/digest/md5/md5.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 namespace NKikimr::NViewer {
 
     struct THeader {
         TString Key;
-        TString Value; // bytes
+        TArrayRef<const char> Value; // bytes
     };
 
 class TPutRecords : public TViewerPipeClient {
@@ -38,19 +41,17 @@ public:
 
 private:
     TString TopicPath;
-    ui32 Partition;
-    TStringBuf Message;
-    TStringBuf Key;
-    // TVector<std::pair<TString, TStringBuf>> Headers;
+    std::optional<ui32> Partition;
+    TString Message;
+    // TArrayRef<const char> Key;
+    TString Key;
     ui32 Cookie = 1;
-    TVector<THeader> Headers;
+    TVector<THeader> Metadata;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     bool IsAutoScaledTopic = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     ui64 TabletId;
     TActorId WriteActorId;
-    ui64 SeqNo = 0;
-    TString SourceId = "1";
 
 public:
     STATEFN(StateWork) {
@@ -61,9 +62,9 @@ public:
         }
     }
     void Bootstrap() override {
-        if (!Params.Has("path") || !Params.Has("message") || !Params.Has("seqno")) {
+        if (!Params.Has("path") || !Params.Has("message")) {
             TBase::Become(&TThis::StateWork);
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "fields 'path','message' and 'seqno' are required and should not be empty"));
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "fields 'path' and 'message' are required and should not be empty"));
         }
 
         TopicPath = Params.Get("path");
@@ -75,10 +76,9 @@ public:
         }
 
         if (Params.Has("key")) {
-            Key = Params.Get("key");
+            Key = TStringBuf(Params.Get("key").data(), Params.Get("key").size());
         }
 
-        SeqNo = std::stoull(Params.Get("seqno"));
         if (Params.Has("headers")) {
             int num = Params.NumOfValues("headers");
             for (int i = 0; i < num; i++) {
@@ -88,29 +88,12 @@ public:
                 if (!headerMap.contains("key") || !headerMap.contains("value")) {
                     ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'headeers' must be key-value pairs"));
                 }
-                // auto& key = headerMap.at("key");
-                // auto& value = headerMap.at("value");
-                Headers.emplace_back(headerMap.at("key").GetStringRobust(), headerMap.at("value").GetStringRobust());
+                Metadata.emplace_back(headerMap.at("key").GetStringRobust(), headerMap.at("value").GetStringRobust());
             }
         }
 
-
         SendSchemeCacheRequest(ActorContext());
         TBase::Become(&TThis::StateWork);
-        // нужно ли проверять topic existance
-        // const auto& pqDescription = PQGroupInfo->Description;
-        // auto chooser = NPQ::CreatePartitionChooser(pqDescription, true);
-        // NPQ::TPartitionWriterOpts opts;
-        // opts.WithDeduplication(false)
-        //     .WithSourceId(SourceId)
-        //     .WithTopicPath(topicPartition.TopicPath)
-        //     .WithCheckRequestUnits(topicInfo.MeteringMode, Context->RlContext)
-        //     .WithKafkaProducerInstanceId(producerInstanceId);
-        // auto* writerActor = CreatePartitionWriter(SelfId(), partition->TabletId, topicPartition.PartitionId, opts);
-
-        // auto writer = PartitionWriter({TopicPath, static_cast<ui32>(Partition)}, producerInstanceId, transactionalId, ctx);
-
-        // ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }
 
     THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> FormWriteRequest() {
@@ -118,12 +101,13 @@ public:
         auto& request = ev->Record;
         auto* partitionRequest = request.MutablePartitionRequest();
         partitionRequest->SetTopic(TopicPath);
-        partitionRequest->SetPartition(Partition);
+        partitionRequest->SetPartition(*Partition);
         partitionRequest->SetCookie(Cookie);
+        partitionRequest->SetIsDirectWrite(true);
 
         NKikimrPQClient::TDataChunk proto;
         proto.set_codec(NPersQueueCommon::RAW);
-        for(auto& h : Headers) {
+        for(auto& h : Metadata) {
             auto res = proto.AddMessageMeta();
             if (h.Key) {
                 res->set_key(static_cast<const char*>(h.Key.data()), h.Key.size());
@@ -144,27 +128,22 @@ public:
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
+        // w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
 
         w->SetData(str);
-        // create timestamp?? какой ставить?
         w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
         w->SetUncompressedSize(Message ? Message.size() : 0);
         // w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
-        w->SetSeqNo(1);
-        // w->SetSeqNo(SeqNo);
         ui64 totalSize = Message ? Message.size() : 0;
         partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
         return std::move(ev);
-
     }
 
     void SendSchemeCacheRequest(const TActorContext& ctx) {
         auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        // KAFKA_LOG_D("Produce actor: Describe topic '" << topicPath << "'");
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = NKikimr::SplitPath(TopicPath);
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
@@ -196,17 +175,16 @@ public:
                 ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "You must provide partition id you want to put records to for autoscaled topic."));
                 return;
             }
-            // auto chooser = NPQ::CreatePartitionChooser(pqDescription, true); // without hash?
-            // if (record.explicit_hash_key().empty()) {
-            //     return HexBytesToDecimal(MD5::Calc(Key));
-            // } else {
-            //     return BytesToDecimal(record.explicit_hash_key());
-            // }
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "NOT IMPLEMENTED partition chooser"));
-                return;
+            auto chooser = NPQ::CreatePartitionChooser(pqDescription, false); // without hash?
+            NYql::NDecimal::TUint128 hash;
+            if (Key.empty()) {
+                hash = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(Key));
+            } else {
+                hash = NDataStreams::V1::BytesToDecimal(Key);
+            }
+            auto* partition = chooser->GetPartition(hash % pqDescription.GetPartitions().size());
+            Partition = partition->PartitionId;
         }
-            // TString hashKey = NPQ::AsKeyBound(GetHashKey(Message));
-            // auto* partition = chooser->GetPartition(hashKey);
 
         if (Event->Get()->UserToken.empty()) {
             if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
@@ -220,9 +198,6 @@ public:
             };
         }
 
-        // SetMeteringMode(PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode());
-
-
         if (!AppData(this->ActorContext())->PQConfig.GetTopicsAreFirstClassCitizen() && !pqDescription.GetPQTabletConfig().GetLocalDC()) {
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "LocalDC is not set fot federation."));
             return;
@@ -232,21 +207,16 @@ public:
             auto partitionId = partition.GetPartitionId();
             if (partitionId == Partition) {
                 TabletId = partition.GetTabletId();
-                // SendPQReadRequest();
-                // RequestDone();
             }
         }
         NPQ::TPartitionWriterOpts opts;
         opts.WithDeduplication(false)
-            .WithTopicPath(TopicPath)
-            .WithSourceId(SourceId);
-            // .WithCheckRequestUnits(MeteringMode, Context->RlContext)
+            .WithTopicPath(TopicPath);
 
-        auto* writerActor = CreatePartitionWriter(SelfId(), TabletId, Partition, opts);
+        auto* writerActor = CreatePartitionWriter(SelfId(), TabletId, *Partition, opts);
         WriteActorId = ctx.RegisterWithSameMailbox(writerActor);
         auto writeEvent = FormWriteRequest();
         Send(WriteActorId, std::move(writeEvent));
-        // ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "field 'path' is required and should not be empty"));
     }
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
@@ -307,7 +277,7 @@ public:
                 description: max size of single message (default = 1_MB)
                 required: false
                 type: integer
-              - name: headers
+              - name: metadata
                 description: message metadata
                 required: false
                 in: query

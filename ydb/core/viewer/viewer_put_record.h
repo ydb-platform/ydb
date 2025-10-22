@@ -22,18 +22,18 @@ namespace NKikimr::NViewer {
         TArrayRef<const char> Value; // bytes
     };
 
-class TPutRecords : public TViewerPipeClient {
+class TPutRecord : public TViewerPipeClient {
     using TBase = TViewerPipeClient;
-    using TThis = TPutRecords;
+    using TThis = TPutRecord;
     using TBase::ReplyAndPassAway;
     using TBase::GetHTTPBADREQUEST;
 
 public:
-    TPutRecords(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TPutRecord(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
         : TViewerPipeClient(viewer, ev)
     {}
 
-    TPutRecords(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
+    TPutRecord(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
         InitConfig(Params);
@@ -43,7 +43,6 @@ private:
     TString TopicPath;
     std::optional<ui32> Partition;
     TString Message;
-    // TArrayRef<const char> Key;
     TString Key;
     ui32 Cookie = 1;
     TVector<THeader> Metadata;
@@ -86,7 +85,7 @@ public:
                 NJson::ReadJsonTree(Params.Get("headers", i), &headerJson, true);
                 auto& headerMap = headerJson.GetMap();
                 if (!headerMap.contains("key") || !headerMap.contains("value")) {
-                    ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'headeers' must be key-value pairs"));
+                    ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'metadata' must be key-value pairs"));
                 }
                 Metadata.emplace_back(headerMap.at("key").GetStringRobust(), headerMap.at("value").GetStringRobust());
             }
@@ -128,13 +127,10 @@ public:
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-        // w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(SourceId));
-
         w->SetData(str);
         w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
         w->SetUncompressedSize(Message ? Message.size() : 0);
-        // w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
         ui64 totalSize = Message ? Message.size() : 0;
@@ -188,12 +184,12 @@ public:
 
         if (Event->Get()->UserToken.empty()) {
             if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
+                ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get(), "text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
                 return;
             }
         } else {
             if (!info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, NACLib::TUserToken(Event->Get()->UserToken))) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
+                ReplyAndPassAway(Viewer->GetHTTPFORBIDDEN(Event->Get(), "text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
                 return;
             };
         }

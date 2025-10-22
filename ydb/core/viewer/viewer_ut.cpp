@@ -2109,7 +2109,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(response.StartsWith("Conversion error"), response);
     }
 
-    TKeepAliveHttpClient::THttpCode PostPutRecords(TKeepAliveHttpClient& httpClient,
+    TKeepAliveHttpClient::THttpCode PostPutRecord(TKeepAliveHttpClient& httpClient,
                                                     const TString& token,
                                                     const TString& database,
                                                     const TString& path,
@@ -2179,7 +2179,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         return totalMessages;
     }
 
-    Y_UNIT_TEST(PutRecordsViewer) {
+    Y_UNIT_TEST(PutRecordViewer) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -2203,7 +2203,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;
         TString topicPath = "/Root/topic1";
-        TString message = "message_Ira";
+        TString message = "message_test";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         TTestActorRuntime& runtime = *server.GetRuntime();
@@ -2211,32 +2211,39 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead); // удалить
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite); // удалить
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
 
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
         auto res = topicClient.CreateTopic(topicPath, NYdb::NTopic::TCreateTopicSettings()
-                        .BeginAddConsumer(consumerName).EndAddConsumer()).GetValueSync();
+                        .BeginAddConsumer(consumerName).EndAddConsumer().BeginConfigurePartitioningSettings()
+                    .MinActivePartitions(5).EndConfigurePartitioningSettings()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
-        Cerr << postReturnCode1 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_OK);
+        // checking that user with no UpdateRow rights cannot put record to topic
+        auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+
+        // checking put record with partition chooser
+        auto postReturnCode3 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({topicPath});
         auto readSession = topicClient.CreateReadSession(rSSettings);
         ui64 messageCount = GetMessagesCount(readSession);
         Cerr << "Total messages: " << messageCount << Endl;
-        UNIT_ASSERT_EQUAL(messageCount, 1);
+        UNIT_ASSERT_EQUAL(messageCount, 2);
     }
 
-    Y_UNIT_TEST(PutRecordsViewerAutosplitTopic) {
+    Y_UNIT_TEST(PutRecordViewerAutosplitTopic) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
         ui16 grpcPort = tp.GetPort(2135);
@@ -2267,9 +2274,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericRead); // удалить
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::GenericWrite); // удалить
+
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
@@ -2287,19 +2292,24 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     .EndConfigureAutoPartitioningSettings()
                 .EndConfigurePartitioningSettings()
                 .BeginAddConsumer(consumerName).EndAddConsumer();
-        // createSettings.RetentionStorageMb(0);
         auto result = topicClient.CreateTopic(autoscalingTopic, createSettings).GetValueSync();
         Cerr << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
 
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        auto postReturnCode1 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message);
-        Cerr << postReturnCode1 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
 
-        auto postReturnCode2 = PostPutRecords(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
-        Cerr << postReturnCode2 << Endl;
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+        // checking that user with no UpdateRow rights cannot put record to topic
+        auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 0);
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
+
+        // checking that request for autosplit topic without specifying partition is forbidden
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message);
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_BAD_REQUEST);
+
+        auto postReturnCode3 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({autoscalingTopic});
@@ -2307,6 +2317,5 @@ Y_UNIT_TEST_SUITE(Viewer) {
         ui64 messageCount = GetMessagesCount(readSession);
         Cerr << "Total messages: " << messageCount << Endl;
         UNIT_ASSERT_EQUAL(messageCount, 1);
-
     }
 }

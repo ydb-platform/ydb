@@ -83,4 +83,18 @@ ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION "lz4";
 ALTER TABLE series_with_families ALTER FAMILY default SET COMPRESSION_LEVEL 5;
 ```
 
+### Изменение режима кэширования
+
+{% if oss == true and backend_name == "YDB" %}
+
+{% include [OLTP_only_allow_note](../../../../_includes/only_allow_for_oltp_note.md) %}
+
+{% endif %}
+
+Приведённый ниже код для группы колонок `default` в таблице `series_with_families` сменит [режим кэширования](../../../../concepts/datamodel/table.md#cache-modes) на `in_memory`:
+
+```yql
+ALTER TABLE series_with_families ALTER FAMILY default SET CACHE_MODE "in_memory";
+```
+
 Могут быть указаны все параметры группы колонок, описанные в команде [`CREATE TABLE`](../create_table/secondary_index.md)

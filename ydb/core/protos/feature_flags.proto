@@ -236,4 +236,5 @@ message TFeatureFlags {
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = false];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
+    optional bool EnablePDiskLogForSmallDisks = 213 [default = false];
 }

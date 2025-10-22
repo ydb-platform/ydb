@@ -1648,24 +1648,34 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
                 params.TotalChunks = Format.DiskSizeChunks();
                 params.ExpectedOwnerCount = Cfg->ExpectedSlotCount;
                 params.SysLogSize = Format.SystemChunkCount; // sysLogSize = chunk 0 + additional SysLog chunks
-                params.SeparateCommonLog = true;
                 params.CommonLogSize = LogChunks.size();
 
-                if (Format.DiskSize > SmallDiskSizeLogBoundary) {
+                if (Cfg->FeatureFlags.GetEnablePDiskLogForSmallDisks()) {
+                    params.SeparateCommonLog = true;
+                    if (Format.DiskSize > SmallDiskSizeLogBoundary) {
+                        params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
+                        params.CommonStaticLogChunks = Cfg->CommonStaticLogChunks;
+                    } else if (Format.DiskSize < TinyDiskSizeLogBoundary) {
+                        params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks;
+                        params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks;
+                    } else {
+                        params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks +
+                            (Format.DiskSize - TinyDiskSizeLogBoundary) *
+                            (Cfg->MaxCommonLogChunks - TinyDiskMaxCommonLogChunks) /
+                            (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+                        params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks +
+                            (Format.DiskSize - TinyDiskSizeLogBoundary) *
+                            (Cfg->CommonStaticLogChunks - TinyDiskCommonStaticLogChunks) /
+                            (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
+                    }
+                } else {
+                    if (Format.IsDiskSmall() && Cfg->FeatureFlags.GetEnableSmallDiskOptimization()) {
+                        params.SeparateCommonLog = false;
+                    } else {
+                        params.SeparateCommonLog = true;
+                    }
                     params.MaxCommonLogChunks = Cfg->MaxCommonLogChunks;
                     params.CommonStaticLogChunks = Cfg->CommonStaticLogChunks;
-                } else if (Format.DiskSize < TinyDiskSizeLogBoundary) {
-                    params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks;
-                    params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks;
-                } else {
-                    params.MaxCommonLogChunks = TinyDiskMaxCommonLogChunks +
-                        (Format.DiskSize - TinyDiskSizeLogBoundary) *
-                        (Cfg->MaxCommonLogChunks - TinyDiskMaxCommonLogChunks) /
-                        (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
-                    params.CommonStaticLogChunks = TinyDiskCommonStaticLogChunks +
-                        (Format.DiskSize - TinyDiskSizeLogBoundary) *
-                        (Cfg->CommonStaticLogChunks - TinyDiskCommonStaticLogChunks) /
-                        (SmallDiskSizeLogBoundary - TinyDiskSizeLogBoundary);
                 }
 
                 params.SpaceColorBorder = GetColorBorderIcb();

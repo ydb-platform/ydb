@@ -22,6 +22,7 @@ PEERDIR(
 
 SRCS(
     ../kinesis_ut.cpp
+    ../kinesis2_ut.cpp
     ../ymq_ut.cpp
     inside_ydb_ut.cpp
 )

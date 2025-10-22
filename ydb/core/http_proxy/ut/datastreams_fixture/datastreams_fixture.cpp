@@ -17,12 +17,12 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
     InitAll();
 }
 
-void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering) {
+void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool extendedQueueUrl) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(yandexCloudMode, enableMetering);
+    InitKikimr(yandexCloudMode, enableMetering, extendedQueueUrl);
     InitAccessServiceService();
-    InitHttpServer(yandexCloudMode);
+    InitHttpServer(yandexCloudMode, extendedQueueUrl);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) {
@@ -341,7 +341,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
+void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableExtendedQueueUrl) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -354,6 +354,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
+    appConfig.MutableSqsConfig()->SetExtendedQueueUrlEnabled(enableExtendedQueueUrl);
 
     if (enableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
@@ -693,7 +694,7 @@ void THttpProxyTestMock::InitAccessServiceService() {
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableExtendedQueueUrl) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -706,6 +707,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode) {
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
     config.MutableHttpConfig()->SetYmqEnabled(true);
+    config.MutableHttpConfig()->SetExtendedQueueUrlEnabled(enableExtendedQueueUrl);
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 

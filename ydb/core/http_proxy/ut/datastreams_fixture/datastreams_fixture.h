@@ -75,7 +75,7 @@ public:
 
     void SetUp(NUnitTest::TTestContext&) override;
 
-    void InitAll(bool yandexCloudMode = true, bool enableMetering = false);
+    void InitAll(bool yandexCloudMode = true, bool enableMetering = false, bool extendedQueueUrl = false);
 
     static TString FormAuthorizationStr(const TString& region);
 
@@ -214,11 +214,11 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering);
+    void InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableExtendedQueueUrl);
 
     void InitAccessServiceService();
 
-    void InitHttpServer(bool yandexCloudMode = true);
+    void InitHttpServer(bool yandexCloudMode, bool enableExtendedQueueUrl);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -252,5 +252,17 @@ class THttpProxyTestMockForSQS : public THttpProxyTestMock {
 class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(true, true);
+    }
+};
+
+class THttpProxyTestMockForSQSExtQueueUrl : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(false, false, true);
+    }
+};
+
+class THttpProxyTestMockForCloudExtQueueUrl : public THttpProxyTestMock {
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(true, false, true);
     }
 };

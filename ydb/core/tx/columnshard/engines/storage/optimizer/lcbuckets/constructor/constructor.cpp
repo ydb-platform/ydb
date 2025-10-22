@@ -70,7 +70,7 @@ TConclusion<std::shared_ptr<IOptimizerPlanner>> TOptimizerPlannerConstructor::Do
 
                 levels.emplace_back(std::make_shared<TZeroLevelPortions>(
                     0, levels.back(), counters->GetLevelCounters(0),
-                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 8 * (1ull << 30)),
+                    std::make_shared<TLimitsOverloadChecker>(1ull << 20, 16 * (1ull << 30)),
                     TDuration::Minutes(1), 1ull << 20, 2,
                     selectors, defaultSelectorName, ui64(1) << 63, true /* compactAtLevel */
                 ));

@@ -354,5 +354,39 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
+{
+    // Validate text argument - should be a string or optional string
+    const auto& textType = text.GetStaticType();
+    const TDataType* textDataType = nullptr;
+    
+    if (textType->IsOptional()) {
+        auto optionalType = static_cast<const TOptionalType*>(textType);
+        auto itemType = optionalType->GetItemType();
+        MKQL_ENSURE(itemType->IsData(), "Expected data type inside optional for text.");
+        textDataType = static_cast<const TDataType*>(itemType);
+    } else {
+        MKQL_ENSURE(textType->IsData(), "Expected data or optional data type for text.");
+        textDataType = static_cast<const TDataType*>(textType);
+    }
+    
+    MKQL_ENSURE(textDataType->GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for text.");
+
+    // Validate settings argument - should be a string (serialized proto)
+    const auto& settingsType = settings.GetStaticType();
+    MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
+    const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
+    MKQL_ENSURE(settingsTypeData.GetSchemeType() == NUdf::TDataType<char*>::Id, "Expected string for settings.");
+
+    // Return type: List<String>
+    auto stringType = TDataType::Create(NUdf::TDataType<char*>::Id, Env);
+    auto listType = TListType::Create(stringType, Env);
+
+    TCallableBuilder callableBuilder(Env, __func__, listType);
+    callableBuilder.Add(text);
+    callableBuilder.Add(settings);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 } // namespace NMiniKQL
 } // namespace NKikimr

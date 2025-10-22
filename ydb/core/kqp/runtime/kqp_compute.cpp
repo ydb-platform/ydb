@@ -1,5 +1,6 @@
 #include "kqp_compute.h"
 #include "kqp_stream_lookup_join_helpers.h"
+#include "kqp_fulltext_analyze.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>

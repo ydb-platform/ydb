@@ -106,8 +106,7 @@ NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDesc
     bool withData,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table,
-    const NYql::TIndexDescription* indexDesc);
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc);
 
 NYql::NNodes::TExprBase BuildVectorIndexPrefixRows(const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
     bool withData, const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
@@ -117,5 +116,11 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
     const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexTableColumns,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+TVector<TStringBuf> BuildFulltextIndexColumns(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc);
 
 } // NKikimr::NKqp::NOpt

@@ -90,7 +90,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMWRITE,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
+                    *ActorSystem_, "StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
                 );
     }
 
@@ -115,7 +115,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
+                    *ActorSystem_, "StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
                 );
     }
 
@@ -140,7 +140,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMDIRECTREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
+                    *ActorSystem_, "StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
                 );
     }
 

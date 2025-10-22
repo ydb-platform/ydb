@@ -51,7 +51,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
                     },
-                    *ActorSystem_, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true), nullptr
+                    *ActorSystem_, "StreamingWrite", getCounterBlock("persistent_queue", "WriteSession", true), nullptr
                 );
     }
 
@@ -71,7 +71,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
                     },
-                    *ActorSystem_, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true), nullptr
+                    *ActorSystem_, "MigrationStreamingRead", getCounterBlock("persistent_queue", "MigrationReadSession", true), nullptr
                 );
     }
 

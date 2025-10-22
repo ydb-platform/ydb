@@ -593,7 +593,7 @@ static bool IsExcluded(const TString& path, const TVector<TRegExMatch>& exclusio
     return false;
 }
 
-void BackupFolderImpl(TDriver driver, const TString& dbPrefix, const TString& backupPrefix, TString path,
+void BackupFolderImpl(TDriver driver, const TString& database, const TString& dbPrefix, const TString& backupPrefix, TString path,
         const TFsPath folderPath, const TVector<TRegExMatch>& exclusionPatterns,
         bool schemaOnly, bool useConsistentCopyTable, bool avoidCopy, bool preservePoolKinds, bool ordered,
         NYql::TIssues& issues
@@ -760,7 +760,7 @@ void BackupFolder(TDriver driver, const TString& database, const TString& relDbP
         TString dbPrefix = JoinDatabasePath(database, relDbPath);
         TString path;
         NYql::TIssues issues;
-        BackupFolderImpl(driver, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
+        BackupFolderImpl(driver, database, dbPrefix, tmpDbFolder, path, folderPath, exclusionPatterns,
             schemaOnly, useConsistentCopyTable, avoidCopy, preservePoolKinds, ordered, issues
         );
 

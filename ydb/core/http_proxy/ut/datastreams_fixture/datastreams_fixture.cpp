@@ -693,7 +693,7 @@ void THttpProxyTestMock::InitAccessServiceService() {
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode = true) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");

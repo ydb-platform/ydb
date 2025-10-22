@@ -1,8 +1,5 @@
-UNITTEST_FOR(ydb/core/http_proxy)
+LIBRARY()
 
-SIZE(MEDIUM)
-
-FORK_SUBTESTS()
 
 PEERDIR(
     contrib/restricted/nlohmann_json
@@ -10,7 +7,6 @@ PEERDIR(
     library/cpp/http/misc
     ydb/core/base
     ydb/core/http_proxy
-    ydb/core/http_proxy/ut/datastreams_fixture
     ydb/core/testlib/default
     ydb/core/tx/datashard/ut_common
     ydb/library/aclib
@@ -31,23 +27,10 @@ PEERDIR(
 )
 
 SRCS(
-    json_proto_conversion_ut.cpp
-    http_ut.cpp
-)
-
-RESOURCE(
-    internal_counters.json internal_counters.json
-    proxy_counters.json proxy_counters.json
+    datastreams_fixture.cpp
 )
 
 YQL_LAST_ABI_VERSION()
 
 END()
 
-RECURSE_FOR_TESTS(
-    inside_ydb_ut
-)
-
-RECURSE(
-    datastreams_fixture
-)

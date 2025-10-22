@@ -168,7 +168,12 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
-    Cout << "SkipLookup " << settings.SkipLookup << Endl;
+    if (settings.SkipLookup) {
+        auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
+        return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
+            return ProjectColumns(del.Input(), indexTableColumns, ctx);
+        }, ctx, kqpCtx);
+    }
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})

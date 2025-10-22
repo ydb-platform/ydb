@@ -174,7 +174,7 @@ void TGRpcYdbDummyService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 ActorSystem_->Send(GRpcRequestProxyId_, new TEvBiStreamPingRequest(context));
             },
             *ActorSystem_,
-            "DummyService/BiStreamPing",
+            "BiStreamPing",
             getCounterBlock("dummy", "biStreamPing", true),
             nullptr);
     }

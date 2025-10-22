@@ -1,5 +1,7 @@
 #include "kqp_operator.h"
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using TStatus = NYql::IGraphTransformer::TStatus;
 
@@ -31,6 +33,7 @@ std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode*
 TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     auto table = ResolveTable(read->TableCallable.Get(), ctx.ExprCtx, ctx.KqpCtx.Cluster, *ctx.KqpCtx.Tables);
     if (!table.second) {
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not resolve table";
         return TStatus::Error;
     }
 
@@ -48,6 +51,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
     const TTypeAnnotationNode* rowType = GetReadTableRowType(ctx.ExprCtx, *ctx.KqpCtx.Tables, ctx.KqpCtx.Cluster, 
         table.first, columnsList, ctx.KqpCtx.Config->SystemColumnsEnabled());
     if (!rowType) {
+        YQL_CLOG(TRACE, CoreDq) << "Type annotation for Read, did not get row type";
         return TStatus::Error;
     }
 
@@ -81,15 +85,39 @@ TStatus ComputeTypes(std::shared_ptr<TOpFilter> filter, TRBOContext & ctx) {
     auto& lambda = filter->FilterLambda;
 
     if (!UpdateLambdaAllArgumentsTypes(lambda, {itemType}, ctx.ExprCtx)) {
+        YQL_CLOG(TRACE, CoreDq) << "Could not update lambda arg types";
         return IGraphTransformer::TStatus::Error;
     }
 
+    ctx.TypeAnnTransformer->Rewind();
+    IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+    do {
+        status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+
+    } while (status == IGraphTransformer::TStatus::Repeat);
+
     auto lambdaType = lambda->GetTypeAnn();
     if (!lambdaType) {
-        return IGraphTransformer::TStatus::Repeat;
+        YQL_CLOG(TRACE, CoreDq) << "Could not infer lambda types, status = " << status;
+        return IGraphTransformer::TStatus::Error;
     }
 
-    if(!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.ExprCtx, false)) {
+    if (!IsDataOrOptionalOfDataOrPg(lambdaType)) {
+        ctx.ExprCtx.AddError(TIssue(ctx.ExprCtx.GetPosition(filter->Pos), TStringBuilder() << "Expected data or pg type, but got " << *lambdaType));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    lambdaType = RemoveOptionalType(lambdaType);
+
+    const TPgExprType* pgType = nullptr;
+    if (IsPg(lambdaType, pgType)) {
+        if (pgType->GetName() != "bool") {
+            ctx.ExprCtx.AddError(TIssue(ctx.ExprCtx.GetPosition(filter->Pos), TStringBuilder() << "Expected pgbool type, but got " << *lambdaType));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    else if(!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx.ExprCtx, true)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -114,7 +142,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
         }
     }
 
-    for (auto mapEl : map->MapElements) {
+    for (auto & mapEl : map->MapElements) {
         if (std::holds_alternative<TInfoUnit>(mapEl.second)) {
             TInfoUnit from = std::get<TInfoUnit>(mapEl.second);
             auto typeIt = std::find_if(typeItems.begin(), typeItems.end(), [&from](const TItemExprType* t){
@@ -126,10 +154,18 @@ TStatus ComputeTypes(std::shared_ptr<TOpMap> map, TRBOContext & ctx) {
             resStructItemTypes.push_back(renameType);
         }
         else {
-            auto lambda = std::get<TExprNode::TPtr>(mapEl.second);
+            auto & lambda = std::get<TExprNode::TPtr>(mapEl.second);
             if (!UpdateLambdaAllArgumentsTypes(lambda, {structType}, ctx.ExprCtx)) {
                 return IGraphTransformer::TStatus::Error;
             }
+
+            ctx.TypeAnnTransformer->Rewind();
+            IGraphTransformer::TStatus status(IGraphTransformer::TStatus::Ok);
+            do {
+                status = ctx.TypeAnnTransformer->Transform(lambda, lambda, ctx.ExprCtx);
+
+            } while (status == IGraphTransformer::TStatus::Repeat);
+
             auto lambdaType = lambda->GetTypeAnn();
             Y_ENSURE(lambdaType);
 
@@ -218,8 +254,8 @@ namespace NKikimr {
 namespace NKqp {
 
 TStatus TOpRoot::ComputeTypes(TRBOContext & ctx) {
-    for (auto it : *this) {
-        auto status = ::ComputeTypes(it.Current, ctx);
+    for (auto it = begin(); it != end(); it++) {
+        auto status = ::ComputeTypes((*it).Current, ctx);
         if (status != TStatus::Ok) {
             return status;
         }

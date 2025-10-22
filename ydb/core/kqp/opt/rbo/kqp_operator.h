@@ -246,7 +246,7 @@ class IOperator {
  * FIXME: This doesn't work correctly
  */
 template <class K> bool MatchOperator(const std::shared_ptr<IOperator> &op) {
-    auto dyn = std::static_pointer_cast<K>(op);
+    auto dyn = std::dynamic_pointer_cast<K>(op);
     if (dyn) {
         return true;
     } else {

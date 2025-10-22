@@ -74,7 +74,7 @@ void TRuleBasedStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot &root, TExprContext &ctx) {
     YQL_CLOG(TRACE, CoreDq) << "Original plan:\n" << root.PlanToString(ctx);
 
-    auto context = TRBOContext(KqpCtx,ctx,TypeCtx);
+    auto context = TRBOContext(KqpCtx,ctx,TypeCtx, RBOTypeAnnTransformer);
 
     for (size_t idx = 0; idx < Stages.size(); idx++) {
         YQL_CLOG(TRACE, CoreDq) << "Running stage: " << idx;

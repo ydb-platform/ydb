@@ -30,6 +30,7 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
 
     TSaverContext saverContext(StoragesManager);
     std::vector<std::shared_ptr<TColumnEngineChanges>> results;
+    bool hasOneLayer = false;
     for (const auto& [weight, level]: LevelsByWeight) {
         if (weight == 0) {
             break;
@@ -39,7 +40,9 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             if (data.IsEmpty()) {
                 continue;
             }
-            if (!results.empty() && (dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]) || dynamic_pointer_cast<TOneLayerPortions>(level))) {
+            hasOneLayer |= (dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]) != nullptr) 
+                            || (dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr);
+            if (!results.empty() && hasOneLayer) {
                 return results;
             }
             std::shared_ptr<NCompaction::TGeneralCompactColumnEngineChanges> result;

@@ -8244,13 +8244,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                                 return IGraphTransformer::TStatus::Error;
                             }
                         }
-                        auto sett = ctx.Expr.Builder(setting->Pos()).List()
-                            .Atom(0, "layers");
-                        size_t idx = 1;
-                        for (const auto& nameStr: setting->Child(1)->Children()) {
-                            sett.Atom(idx++, nameStr->Child(0)->Content());
-                        }
-                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, sett.Seal().Build()));
+                        auto sett = ctx.Expr.Builder(setting->Pos())
+                            .List()
+                                .Do([&setting](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    parent.Atom(0, "layers");
+                                    size_t idx = 1;
+                                    for (const auto& nameStr: setting->Child(1)->Children()) {
+                                        parent.Atom(idx++, nameStr->Child(0)->Content());
+                                    }
+                                    return parent;
+                                })
+                            .Seal().Build();
+                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, std::move(sett)));
                         return IGraphTransformer::TStatus::Repeat;
                     }
                 }

@@ -1511,12 +1511,13 @@ private:
     ui64 OperationsToForget = 0;
 };
 
-// Start new query execution and forget previous execution according to TStreamingQueriesConfig
+// Start new query execution and forget previous executions
 
 class TStartStreamingQueryTableActor final : public TActionActorBase<TStartStreamingQueryTableActor> {
     using TBase = TActionActorBase<TStartStreamingQueryTableActor>;
     using TRetryPolicy = IRetryPolicy<>;
 
+    inline static constexpr ui64 MAX_QUERY_EXECUTIONS = 3;
     inline static constexpr TDuration START_REQUEST_TIMEOUT = TDuration::Seconds(30);
 
 public:
@@ -1524,7 +1525,6 @@ public:
 
     struct TSettings {
         NKikimrKqp::TStreamingQueryState InitialState;
-        NKikimrConfig::TStreamingQueriesConfig Config;
         TPathId QueryPathId;
         ui64 QueryTextRevision = 0;
     };
@@ -1578,7 +1578,7 @@ public:
     }
 
     void HandlePrepare(TEvForgetScriptExecutionOperationResponse::TPtr& ev) {
-        const ui64 toCleanup = State.PreviousExecutionIdsSize() - Settings.Config.GetMaxQueryExecutions();
+        const ui64 toCleanup = State.PreviousExecutionIdsSize() - MAX_QUERY_EXECUTIONS;
         Y_ABORT_UNLESS(ev->Cookie < toCleanup);
 
         const auto& executionId = State.GetPreviousExecutionIds(ev->Cookie);
@@ -1718,9 +1718,9 @@ private:
             return;
         }
 
-        if (const auto maxExecutions = Settings.Config.GetMaxQueryExecutions(); State.PreviousExecutionIdsSize() > maxExecutions) {
-            const auto toCleanup = State.PreviousExecutionIdsSize() - maxExecutions;
-            LOG_D("Cleanup #" << toCleanup << " previous executions (max executions: " << maxExecutions << ")");
+        if (State.PreviousExecutionIdsSize() > MAX_QUERY_EXECUTIONS) {
+            const auto toCleanup = State.PreviousExecutionIdsSize() - MAX_QUERY_EXECUTIONS;
+            LOG_D("Cleanup #" << toCleanup << " previous executions (max executions: " << MAX_QUERY_EXECUTIONS << ")");
 
             for (ui64 i = 0; i < toCleanup; ++i) {
                 const auto& executionId = State.GetPreviousExecutionIds(i);
@@ -1896,7 +1896,6 @@ public:
     struct TSettings {
         NKikimrKqp::TStreamingQueryState InitialState;
         std::optional<TSchemeInfo> SchemeInfo;  // nullopt if query does not exists in schemeshard
-        NKikimrConfig::TStreamingQueriesConfig Config;
     };
 
     TSyncStreamingQueryTableActor(const TExternalContext& context, const TString& queryPath, const TSettings& settings)
@@ -2113,7 +2112,6 @@ private:
 
         const auto& startActorId = Register(new TStartStreamingQueryTableActor(Context, QueryPath, {
             .InitialState = State,
-            .Config = Settings.Config,
             .QueryPathId = SchemeInfo.PathId,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
         }));
@@ -2166,9 +2164,9 @@ private:
 //// Request handlers
 
 // Common request handling pipeline:
-// FetchConfiguration -> Describe -> Lock -> (perform actions) -> Unlock
-//                                                    |
-//                                 TableActors / RequestActors / SchemeActors
+// Describe -> Lock -> (perform actions) -> Unlock
+//                             |
+//          TableActors / RequestActors / SchemeActors
 
 template <typename TDerived>
 class TRequestHandlerBase : public TActionActorBase<TDerived> {
@@ -2189,43 +2187,16 @@ public:
     void Bootstrap() {
         LOG_D("Bootstrap. Fetch config");
 
-        QueryServiceConfig = AppData()->QueryServiceConfig;
-        TBase::Send(NConsole::MakeConfigsDispatcherID(TBase::SelfId().NodeId()), new NConsole::TEvConfigsDispatcher::TEvGetConfigRequest(
-            NKikimrConsole::TConfigItem::QueryServiceConfigItem
-        ), IEventHandle::FlagTrackDelivery);
-
         TBase::Become(&TDerived::StateFunc);
+        DescribeQuery("start handling");
     }
 
     STRICT_STFUNC(StateFuncBase,
-        hFunc(TEvents::TEvUndelivered, Handle);
-        hFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse, Handle);
         hFunc(TEvPrivate::TEvDescribeStreamingQueryResult, Handle);
         hFunc(TEvPrivate::TEvLockStreamingQueryResult, Handle);
         hFunc(TEvPrivate::TEvUnlockStreamingQueryResult, Handle);
         hFunc(TEvPrivate::TEvCheckAliveRequest, Handle);
     )
-
-    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
-        if (ev->Sender != NConsole::MakeConfigsDispatcherID(TBase::SelfId().NodeId())) {
-            TBase::FatalError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Got unexpected undelivered from: " << ev->Sender);
-            return;
-        }
-
-        LOG_N("Failed to get console configs, got undelivered with reason " << ev->Get()->Reason);
-        DescribeQuery("start handling");
-    }
-
-    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigResponse::TPtr& ev) {
-        const auto config = ev->Get()->Config;
-        LOG_D("Got configs response, has config " << (config ? "yes" : "no"));
-
-        if (config) {
-            QueryServiceConfig = config->GetQueryServiceConfig();
-        }
-
-        DescribeQuery("start handling");
-    }
 
     void Handle(TEvPrivate::TEvDescribeStreamingQueryResult::TPtr& ev) {
         if (TBase::HandleResult(ev, "Describe streaming query")) {
@@ -2362,7 +2333,6 @@ protected:
     const TInstant StartedAt;
     const TExternalContext Context;
     NKikimrSchemeOp::TModifyScheme SchemeTx;
-    NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
     bool IsLockCreated = false;
     std::optional<TSchemeInfo> SchemeInfo;
     NKikimrKqp::TStreamingQueryState QueryState;
@@ -2401,7 +2371,6 @@ public:
         const auto& syncActorId = TBase::Register(new TSyncStreamingQueryTableActor(TBase::Context, TBase::QueryPath, {
             .InitialState = TBase::QueryState,
             .SchemeInfo = TBase::SchemeInfo,
-            .Config = TBase::QueryServiceConfig.GetStreamingQueries(),
         }));
         LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " (sync previous state)");
     }
@@ -2508,7 +2477,6 @@ protected:
             const auto& syncActorId = Register(new TSyncStreamingQueryTableActor(Context, QueryPath, {
                 .InitialState = QueryState,
                 .SchemeInfo = *SchemeInfo,
-                .Config = QueryServiceConfig.GetStreamingQueries(),
             }));
             LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish creation");
         }
@@ -2603,7 +2571,6 @@ public:
                     .Version = SchemeInfo->Version + 1,
                     .PathId = SchemeInfo->PathId,
                 },
-                .Config = QueryServiceConfig.GetStreamingQueries(),
             }));
             LOG_D("Start TSyncStreamingQueryTableActor " << syncActorId << " to finish alter");
         }

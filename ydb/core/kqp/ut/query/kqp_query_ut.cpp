@@ -14,6 +14,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/functools.h>
 
 namespace NKikimr {
 namespace NKqp {

@@ -553,9 +553,9 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             }
             auto writeSettings = source->GetWriteSettings();
             if (writeSettings.Discard) {
-                // Mark DISCARD as being in invalid place (subquery), but don't fail here
-                // The error will be raised in KQP for non-DML queries
-                source->SetDiscardInInvalidPlace();
+                Ctx_.Warning(source->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                    out << "DISCARD can only be used at the top level, not inside subqueries";
+                });
             }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
         }
@@ -1324,10 +1324,11 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind& no
             res.Settings.Discard = settings.Discard;
             res.Settings.DiscardPos = settings.DiscardPos;
         } else if (settings.Discard) {
-            // Mark DISCARD as being in invalid place (non-first subquery in UNION ALL), but don't fail here
-            // The error will be raised in KQP for non-DML queries
+            auto discardPos = Ctx_.TokenPosition(node.GetBlock1().GetToken1());
+            Ctx_.Warning(discardPos, TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                out << "DISCARD within UNION ALL is only allowed before first subquery";
+            });
             res.Settings.Discard = true;
-            res.Settings.DiscardInInvalidPlace = true;
         }
 
         if (placement->IsLastInSelectOp) {

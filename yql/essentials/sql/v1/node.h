@@ -874,7 +874,6 @@ struct TWriteSettings {
     bool Discard = false;
     TPosition DiscardPos;
     TDeferredAtom Label;
-    bool DiscardInInvalidPlace = false;
 };
 
 class TColumnNode final: public INode {

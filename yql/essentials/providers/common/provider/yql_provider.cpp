@@ -206,7 +206,6 @@ IDataProvider::TFillSettings GetFillSettings(const TExprNode& node) {
     fillSettings.Format = (IDataProvider::EResultFormat)FromString<ui32>(node.Child(5)->Content());
     fillSettings.FormatDetails = node.Child(3)->Content();
     fillSettings.Discard = FromString<bool>(node.Child(7)->Content());
-    fillSettings.DiscardInInvalidPlace = HasResOrPullOption(node, "discardinvalidplace");
 
     return fillSettings;
 }

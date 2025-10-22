@@ -6,41 +6,41 @@
 
 namespace NYdbWorkload {
 
-    class TWorkloadCommandIndexBase : public NYdb::NConsoleClient::TYdbCommand {
-    private:
-        THolder<NYdb::TDriver> Driver;
-        THolder<NYdb::NTable::TTableClient> TableClient;
+class TWorkloadCommandIndexBase : public NYdb::NConsoleClient::TYdbCommand {
+private:
+    THolder<NYdb::TDriver> Driver;
+    THolder<NYdb::NTable::TTableClient> TableClient;
 
-    protected:
-        NYdbWorkload::TVectorWorkloadParams& Params;
-        bool DryRun = false;
+protected:
+    NYdbWorkload::TVectorWorkloadParams& Params;
+    bool DryRun = false;
 
-    public:
-        TWorkloadCommandIndexBase(NYdbWorkload::TVectorWorkloadParams& params, const TString& name, const TString& description = TString());
+    void HandleQuery(const TString& query);
 
-        virtual void Config(TConfig& config) override;
-        virtual void DoConfig(TConfig& config) = 0;
+public:
+    TWorkloadCommandIndexBase(NYdbWorkload::TVectorWorkloadParams& params, const TString& name, const TString& description = TString());
 
-        virtual int Run(TConfig& config) override;
-        virtual int DoRun() = 0;
+    virtual void Config(TConfig& config) override;
+    virtual void DoConfig(TConfig& config) = 0;
 
-        void HandleQuery(const TString& query);
-    };
+    virtual int Run(TConfig& config) override;
+    virtual int DoRun() = 0;
+};
 
-    class TWorkloadCommandBuildIndex final : public TWorkloadCommandIndexBase {
-    public:
-        TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWorkloadParams& params);
+class TWorkloadCommandBuildIndex final : public TWorkloadCommandIndexBase {
+public:
+    TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWorkloadParams& params);
 
-        virtual void DoConfig(TConfig& config) override;
-        virtual int DoRun() override;
-    };
+    virtual void DoConfig(TConfig& config) override;
+    virtual int DoRun() override;
+};
 
-    class TWorkloadCommandDropIndex final : public TWorkloadCommandIndexBase {
-    public:
-        TWorkloadCommandDropIndex(NYdbWorkload::TVectorWorkloadParams& params);
+class TWorkloadCommandDropIndex final : public TWorkloadCommandIndexBase {
+public:
+    TWorkloadCommandDropIndex(NYdbWorkload::TVectorWorkloadParams& params);
 
-        virtual void DoConfig(TConfig& config) override;
-        virtual int DoRun() override;
-    };
+    virtual void DoConfig(TConfig& config) override;
+    virtual int DoRun() override;
+};
 
 } // namespace NYdbWorkload

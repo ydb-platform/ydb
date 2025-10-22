@@ -112,6 +112,7 @@ public:
             auto& featureFlags = *AppConfig->MutableFeatureFlags();
             featureFlags.SetEnableStreamingQueries(true);
             featureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
+            featureFlags.SetEnableResourcePools(true);
 
             auto& queryServiceConfig = *AppConfig->MutableQueryServiceConfig();
             queryServiceConfig.SetEnableMatchRecognize(true);
@@ -2746,7 +2747,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 .TableName = ydbTable,
                 .Columns = columns,
                 .DescribeCount = 2,
-                .ListSplitsCount = 4,
+                .ListSplitsCount = 5,
                 .ValidateListSplitsArgs = false
             });
 

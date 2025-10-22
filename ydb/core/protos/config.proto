@@ -852,6 +852,7 @@ message THttpProxyConfig {
     optional bool YandexCloudMode = 11 [default = false];
     optional bool DataStreamsEnabled = 12 [default = true];
     optional bool YmqEnabled = 13 [default = false];
+    optional bool SqsTopicEnabled = 14 [default = false];
 }
 
 message TS3ProxyResolverConfig {
@@ -1076,6 +1077,7 @@ message TSqsConfig {
     optional TYdbAuthConfig AuthConfig = 67;
     optional uint64 StartLocalLeaderInflightMax = 71 [default = 500];
     optional TCloudEventsConfig CloudEventsConfig = 73;
+    optional bool SqsTopicEnabled = 74 [default = false];
 }
 
 message TConfigsDispatcherConfig {

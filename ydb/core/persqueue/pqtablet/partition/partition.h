@@ -439,6 +439,7 @@ private:
     THolder<TEvPQ::TEvTxCommitDone> MakeCommitDone(ui64 step, ui64 txId);
 
     bool BeginTransaction(const TEvPQ::TEvProposePartitionConfig& event);
+    bool BeginTransactionConfig(TTransaction& t);
 
     void CommitTransaction(TSimpleSharedPtr<TTransaction>& t);
     void RollbackTransaction(TSimpleSharedPtr<TTransaction>& t);
@@ -818,7 +819,7 @@ private:
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
 
 
-    [[nodiscard]] EProcessResult PreProcessImmediateTx(const NKikimrPQ::TEvProposeTransaction& tx);
+    [[nodiscard]] EProcessResult PreProcessImmediateTx(TTransaction& t);
     void ExecImmediateTx(TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
@@ -833,6 +834,7 @@ private:
 
     [[nodiscard]] EProcessResult BeginTransaction(const TEvPQ::TEvTxCalcPredicate& event,
                                                   TMaybe<bool>& predicate, TString& issueMsg);
+    [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t);
 
     EProcessResult ApplyWriteInfoResponse(TTransaction& tx);
 

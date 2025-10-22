@@ -126,12 +126,6 @@ private:
             return;
         }
 
-        // if feature flag is not set -- return only for self node
-        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
-            PendingNodesInitialized = true;
-            PendingNodes.emplace_back(SelfId().NodeId());
-        }
-
         if (AckReceived) {
             StartScan();
         }

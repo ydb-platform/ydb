@@ -5,17 +5,18 @@
 
 namespace NYdb::NConsoleClient {
 
-    class TWorkloadCommandBuildIndex final : public TYdbCommand {
+    class TWorkloadCommandIndexBase : public TYdbCommand {
     private:
-        NYdbWorkload::TVectorWorkloadParams& Params;
-        bool DryRun = false;
-
         THolder<TDriver> Driver;
         THolder<NTable::TTableClient> TableClient;
 
+    protected:
+        NYdbWorkload::TVectorWorkloadParams& Params;
+        bool DryRun = false;
+
     public:
-        TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWorkloadParams& params)
-            : TYdbCommand("build-index", {}, "Create and initialize an index table for the workload")
+        TWorkloadCommandIndexBase(NYdbWorkload::TVectorWorkloadParams& params, const TString& name, const TString& description = TString())
+            : TYdbCommand(name, {}, description)
             , Params(params)
         {}
 
@@ -26,9 +27,10 @@ namespace NYdb::NConsoleClient {
             config.Opts->AddLongOption("dry-run", "Dry run")
                 .Optional().StoreTrue(&DryRun);
 
-            Params.ConfigureCommonOpts(config.Opts->GetOpts());
-            Params.ConfigureIndexOpts(config.Opts->GetOpts());
+            DoConfig(config);
         }
+
+        virtual void DoConfig(TConfig& config) = 0;
 
         virtual int Run(TConfig& config) override {
             Params.DbPath = config.Database;
@@ -37,6 +39,35 @@ namespace NYdb::NConsoleClient {
             TableClient = MakeHolder<NTable::TTableClient>(*Driver);
             Params.SetClients(nullptr, nullptr, TableClient.Get(), nullptr);
 
+            return DoRun();
+        }
+
+        virtual int DoRun() = 0;
+
+        void HandleQuery(const TString& query) {
+            if (DryRun) {
+                Cout << query << Endl;
+            } else {
+                auto result = TableClient->RetryOperationSync([query](NTable::TSession session) {
+                    return session.ExecuteSchemeQuery(query.c_str()).GetValueSync();
+                });
+                NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+            }
+        }
+    };
+
+    class TWorkloadCommandBuildIndex final : public TWorkloadCommandIndexBase {
+    public:
+        TWorkloadCommandBuildIndex(NYdbWorkload::TVectorWorkloadParams& params)
+            : TWorkloadCommandIndexBase(params, "build-index", "Create and initialize an index table for the workload")
+        {}
+
+        virtual void DoConfig(TConfig& config) override {
+            Params.ConfigureCommonOpts(config.Opts->GetOpts());
+            Params.ConfigureIndexOpts(config.Opts->GetOpts());
+        }
+
+        virtual int DoRun() override {
             const TString ddlQuery = std::format(R"_(
                     ALTER TABLE `{0}/{1}`
                     ADD INDEX `{2}`
@@ -62,14 +93,7 @@ namespace NYdb::NConsoleClient {
 
             if (!ddlQuery.empty()) {
                 Cout << "Init vector index ..."  << Endl;
-                if (DryRun) {
-                    Cout << ddlQuery << Endl;
-                } else {
-                    auto result = TableClient->RetryOperationSync([ddlQuery](NTable::TSession session) {
-                        return session.ExecuteSchemeQuery(ddlQuery.c_str()).GetValueSync();
-                    });
-                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-                }
+                HandleQuery(ddlQuery);
                 Cout << "Init vector index ...Ok"  << Endl;
             }
 
@@ -77,37 +101,17 @@ namespace NYdb::NConsoleClient {
         }
     };
 
-    class TWorkloadCommandDropIndex final : public TYdbCommand {
-    private:
-        NYdbWorkload::TVectorWorkloadParams& Params;
-        bool DryRun = false;
-
-        THolder<TDriver> Driver;
-        THolder<NTable::TTableClient> TableClient;
-    
+    class TWorkloadCommandDropIndex final : public TWorkloadCommandIndexBase {
     public:
         TWorkloadCommandDropIndex(NYdbWorkload::TVectorWorkloadParams& params)
-            : TYdbCommand("drop-index", {}, "Drop the index table created for the workload")
-            , Params(params)
+            : TWorkloadCommandIndexBase(params, "drop-index", "Drop the index table created for the workload")
         {}
 
-        virtual void Config(TConfig& config) override {
-            TYdbCommand::Config(config);
-
-            config.Opts->SetFreeArgsNum(0);
-            config.Opts->AddLongOption("dry-run", "Dry run")
-                .Optional().StoreTrue(&DryRun);
-
+        virtual void DoConfig(TConfig& config) override {
             Params.ConfigureCommonOpts(config.Opts->GetOpts());
         }
 
-        virtual int Run(TConfig& config) override {
-            Params.DbPath = config.Database;
-
-            Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
-            TableClient = MakeHolder<NTable::TTableClient>(*Driver);
-            Params.SetClients(nullptr, nullptr, TableClient.Get(), nullptr);
-
+        virtual int DoRun() override {
             const TString ddlQuery = std::format(R"_(
                     ALTER TABLE `{0}/{1}`
                     DROP INDEX `{2}`;
@@ -117,19 +121,10 @@ namespace NYdb::NConsoleClient {
                 Params.IndexName.c_str()
             );
 
-
             if (!ddlQuery.empty()) {
                 Cout << "Drop vector index ..."  << Endl;
-                if (DryRun) {
-                    Cout << ddlQuery << Endl;
-                } else {
-                    auto result = TableClient->RetryOperationSync([ddlQuery](NTable::TSession session) {
-                        return session.ExecuteSchemeQuery(ddlQuery.c_str()).GetValueSync();
-                    });
-                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-                }
+                HandleQuery(ddlQuery);
                 Cout << "Drop vector index ...Ok"  << Endl;
-
             }
 
             return EXIT_SUCCESS;

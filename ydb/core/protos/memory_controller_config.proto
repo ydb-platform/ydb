@@ -28,4 +28,6 @@ message TMemoryControllerConfig {
 
     optional float CompactionLimitPercent = 130 [default = 10];
     optional uint64 CompactionLimitBytes = 131;
+
+    optional uint64 MaxTxInFly = 132 [default = 10000];
 }

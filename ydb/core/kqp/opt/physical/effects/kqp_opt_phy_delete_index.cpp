@@ -1,5 +1,6 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
+#include <ydb/core/base/fulltext.h>
 
 namespace NKikimr::NKqp::NOpt {
 
@@ -92,6 +93,27 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 .Done();
 
             effects.emplace_back(indexDelete);
+        } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+            // For fulltext indexes, we need to tokenize the text from the rows being deleted
+            // and then delete the corresponding token rows from the index table
+            THashSet<TStringBuf> inputColumnsSet;
+            for (const auto& column : indexTableColumns) {
+                inputColumnsSet.emplace(column);
+            }
+
+            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, inputColumnsSet, indexTableColumns,
+                del.Pos(), ctx);
+            // Update columns to reflect transformation: text column -> __ydb_token
+            indexTableColumns = BuildFulltextIndexColumns(table, indexDesc);
+
+            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+                .Table(tableNode)
+                .Input(fulltextIndexRows)
+                .ReturningColumns<TCoAtomList>().Build()
+                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+                .Done();
+
+            effects.emplace_back(indexDelete);
         } else {
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
                 .Table(tableNode)
@@ -149,6 +171,15 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     for (const auto& pair : indexes) {
         for (const auto& col : pair.second->KeyColumns) {
             keyColumns.emplace(col);
+        }
+        
+        // For fulltext indexes, we also need the text column to tokenize
+        if (pair.second->Type == TIndexDescription::EType::GlobalFulltext) {
+            const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&pair.second->SpecializedIndexDescription);
+            YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
+            const auto& settings = fulltextDesc->GetSettings();
+            YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
+            keyColumns.emplace(settings.columns().at(0).column());
         }
     }
 

@@ -1197,7 +1197,7 @@ private:
     TVector<TNodePtr> Args_;
     TNodePtr Udf_;
     TNodePtr Having_;
-    TWriteSettings Settings_;
+    const TWriteSettings Settings_;
     TVector<TSortSpecificationPtr> AssumeOrderBy_;
     const bool ListCall_;
 };
@@ -1460,7 +1460,7 @@ private:
     TSourcePtr OriginalSource_;
     TNodePtr Flatten_;
     TNodePtr PreFlattenMap_;
-    TWriteSettings Settings_;
+    const TWriteSettings Settings_;
     TVector<TSourcePtr> Subselects_;
     TVector<TNodePtr> Grouping_;
     TVector<TNodePtr> GroupByExpr_;
@@ -2325,7 +2325,7 @@ private:
     bool OrderByInit_ = false;
     TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec_;
     const bool SelectStream_;
-    TWriteSettings Settings_;
+    const TWriteSettings Settings_;
     const TColumnsSets UniqueSets_, DistinctSets_;
     TMap<TString, TNodePtr> ExtraSortColumns_;
 };
@@ -2579,7 +2579,7 @@ private:
     TVector<TNodePtr> Terms_;
     const bool ListCall_;
     const bool ProcessStream_;
-    TWriteSettings Settings_;
+    const TWriteSettings Settings_;
     TVector<TSortSpecificationPtr> AssumeOrderBy_;
 };
 

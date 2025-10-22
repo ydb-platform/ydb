@@ -786,6 +786,10 @@ public:
 
         ui32 resultIdx = 0; // to skip discard results
 
+        // For backward compatibility: ignore discard flag for Data and Scan queries
+        bool ignoreDiscard = (querySettings.Type == EPhysicalQueryType::Data ||
+                              querySettings.Type == EPhysicalQueryType::Scan);
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -805,7 +809,7 @@ public:
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
 
-            bool isDiscard = (i < resultDiscardFlags.size() && resultDiscardFlags[i]); // is it not always true?: i < resultDiscardFlags.size()
+            bool isDiscard = !ignoreDiscard && (i < resultDiscardFlags.size() && resultDiscardFlags[i]); // is it not always true?: i < resultDiscardFlags.size()
             if (!isDiscard) {
                 txResult.SetQueryResultIndex(resultIdx);
                 resultIdx++;

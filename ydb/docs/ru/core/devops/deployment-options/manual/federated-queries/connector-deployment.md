@@ -217,7 +217,7 @@
 | `datasources.clickhouse.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
 | `datasources.clickhouse.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.mysql` | Опциональная секция. Содержит настройки, специфичные для источника данных MySQL. ||
-| `datasources.mysql.result_chan_capacity` | Ёмкость буфера для извлечённых строк из сетевого соединения с базой. | `512` строк |
+| `datasources.mysql.result_chan_capacity` | Ёмкость буфера для извлечённых строк из сетевого соединения с базой. | 512 строк |
 | `datasources.mysql.open_connection_timeout` | Таймаут открытия соединения с MySQL. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
 | `datasources.mysql.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
 | `datasources.mysql.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |

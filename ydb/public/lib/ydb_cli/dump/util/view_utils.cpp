@@ -61,7 +61,7 @@ struct TPathRewriter {
             return TString(path);
         }
 
-        return TStringBuilder() << '`' << NDump::RewriteAbsolutePath(path.Skip(1).Chop(1), BackupRoot, RestoreRoot) << '`';
+        return TStringBuilder() << '`' << ::RewriteAbsolutePath(path.Skip(1).Chop(1), BackupRoot, RestoreRoot) << '`';
     }
 
     TPathSplitUnix BuildAbsolutePath(TStringBuf path) const {
@@ -297,7 +297,7 @@ bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues
     return formatter->Format(query, formattedQuery, issues);
 }
 
-bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues);
+bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(query, queryProto, issues)) {
         return false;

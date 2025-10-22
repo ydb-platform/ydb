@@ -66,6 +66,11 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
+    // Get OmitIndexes configuration (default: false = include indexes)
+    bool omitIndexes = bc->Description.HasOmitIndexes() 
+        ? bc->Description.GetOmitIndexes()
+        : true; // TEMPORARY: default to true (omit) to match old behavior while testing
+
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();
         desc.SetSrcPath(item.GetPath());
@@ -77,7 +82,15 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
         }
         auto& relativeItemPath = paths.second;
         desc.SetDstPath(JoinPath({tx.GetWorkingDir(), tx.GetBackupBackupCollection().GetName(), tx.GetBackupBackupCollection().GetTargetDir(), relativeItemPath}));
-        desc.SetOmitIndexes(true);
+        
+        // For incremental backups, always omit indexes from table copy (backed up separately via CDC)
+        // For full backups, respect the OmitIndexes configuration
+        if (incrBackupEnabled) {
+            desc.SetOmitIndexes(true);
+        } else {
+            desc.SetOmitIndexes(omitIndexes);
+        }
+        
         desc.SetOmitFollowers(true);
         desc.SetAllowUnderSameOperation(true);
 

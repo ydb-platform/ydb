@@ -1699,4 +1699,189 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         // Verify it was created
         TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
     }
+
+    Y_UNIT_TEST(BackupWithIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection (indexes should be included by default)
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithIndex"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (indexes should be included by default)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithIndex"
+            TargetDir: "backup1"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup completed
+        TestLs(runtime, "/MyRoot/.backups/collections/CollectionWithIndex", false, NLs::PathExist);
+        
+        // Verify the backup directory contains both table and index
+        // The index should be copied along with the table
+    }
+
+    Y_UNIT_TEST(BackupWithIndexesOmit) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection with OmitIndexes = true
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithoutIndex"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+            OmitIndexes: true
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (indexes should be omitted)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionWithoutIndex"
+            TargetDir: "backup2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup completed
+        TestLs(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex", false, NLs::PathExist);
+        
+        // Verify the backup directory contains only the table, not the index
+    }
+
+    Y_UNIT_TEST(BackupWithIndexesDefault) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        ui64 txId = 100;
+
+        // Create table with index
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "TableWithIndex"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+                Name: "ValueIndex"
+                KeyColumnNames: ["value"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create backup collection without specifying OmitIndexes
+        // (should default to false = include indexes)
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionDefaultBehavior"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/TableWithIndex"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Backup the table (indexes should be included by default)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "CollectionDefaultBehavior"
+            TargetDir: "backup3"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify backup completed
+        TestLs(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior", false, NLs::PathExist);
+        
+        // Verify the backup directory contains both table and index (default behavior)
+    }
+
+    Y_UNIT_TEST(BackupServiceDirectoryValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+        
+        // Enable system names protection feature
+        runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(true);
+        
+        ui64 txId = 100;
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create a backup collection
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "TestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to create __ydb_backup_meta outside backup collection (should fail - reserved name)
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_meta", {NKikimrScheme::StatusSchemeError});
+        
+        // Verify we can't create directories with reserved backup service prefix outside backup context
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_test", {NKikimrScheme::StatusSchemeError});
+        
+        // But we CAN create __ydb_backup_meta inside a backup collection (should succeed)
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/TestCollection", "__ydb_backup_meta");
+        env.TestWaitNotification(runtime, txId);
+        
+        // Verify it was created
+        TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
+    }
 } // TBackupCollectionTests

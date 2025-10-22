@@ -102,6 +102,7 @@ public:
     TMaybe<NACLib::TUserToken> UserToken;
     TString PeerName;
     bool IsAllowedPrivateTables = false;
+    bool IsBackupRestoreContext = false;  // Allow reserved backup service directory names
 
 private:
     NTabletFlatExecutor::TTransactionContext& Txc;

@@ -2326,6 +2326,10 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    // When false (default), indexes are included in backups
+    // When true, indexes are omitted from backups
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

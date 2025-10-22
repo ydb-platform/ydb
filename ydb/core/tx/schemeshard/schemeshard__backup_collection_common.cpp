@@ -102,7 +102,6 @@ std::optional<THashMap<TString, THashSet<TString>>> GetBackupRequiredPaths(
             .IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
-            .NotUnderOperation()
             .IsBackupCollection();
 
         if (!checks) {
@@ -151,7 +150,6 @@ std::optional<THashMap<TString, THashSet<TString>>> GetRestoreRequiredPaths(
             .IsAtLocalSchemeShard()
             .IsResolved()
             .NotUnderDeleting()
-            .NotUnderOperation()
             .IsBackupCollection();
 
         if (!checks) {

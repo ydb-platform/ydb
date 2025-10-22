@@ -171,8 +171,20 @@ public:
             }
 
             if (checks) {
+                // Check if we're creating a directory under a backup collection
+                // The parent itself might be a backup collection, or it might be under one
+                bool isUnderBackupCollection = false;
+                if (parentPath.IsResolved()) {
+                    // Check if parent is a backup collection
+                    if (parentPath.Base()->IsBackupCollection()) {
+                        isUnderBackupCollection = true;
+                    } else {
+                        // Check if any ancestor is a backup collection
+                        isUnderBackupCollection = parentPath.IsUnderBackupCollection();
+                    }
+                }
                 checks
-                    .IsValidLeafName(context.UserToken.Get())
+                    .IsValidLeafName(context.UserToken.Get(), isUnderBackupCollection)
                     .IsValidACL(acl);
             }
 

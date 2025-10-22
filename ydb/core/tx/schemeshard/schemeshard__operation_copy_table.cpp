@@ -345,18 +345,47 @@ public:
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
         TPath parent = TPath::Resolve(parentPath, context.SS);
+        
+        // For backup operations, the parent directory might not exist yet but will be created
+        // in the same transaction. We need to find the nearest resolved parent to validate.
+        bool isUnderBackupCollection = false;
+        if (!parent.IsResolved()) {
+            TPath resolvedAncestor = parent;
+            while (!resolvedAncestor.IsResolved() && resolvedAncestor.Parent()) {
+                resolvedAncestor.Rise();
+            }
+            if (resolvedAncestor.IsResolved()) {
+                isUnderBackupCollection = resolvedAncestor.Base()->IsBackupCollection() || resolvedAncestor.IsUnderBackupCollection();
+            }
+        }
+        
         {
             TPath::TChecker checks = parent.Check();
             checks
                 .NotEmpty()
                 .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved()
-                .NotDeleted()
-                .NotUnderDeleting()
+                .IsAtLocalSchemeShard();
+            
+            // Allow unresolved parent paths if they're being created under a backup collection
+            if (!isUnderBackupCollection) {
+                checks
+                    .IsResolved()
+                    .NotDeleted()
+                    .NotUnderDeleting();
+            } else if (parent.IsResolved()) {
+                // If parent is resolved (even under backup collection), check it's not deleted
+                checks
+                    .NotDeleted()
+                    .NotUnderDeleting();
+            }
+            
+            checks
                 .FailOnRestrictedCreateInTempZone(Transaction.GetAllowCreateInTempDir());
 
-            if (checks) {
+            // Only check parent properties if it's resolved
+            // For unresolved parents under backup collections, skip these checks as the directory
+            // will be created in a previous phase of the same operation
+            if (checks && parent.IsResolved()) {
                 if (parent.Base()->IsTableIndex()) {
                     checks
                         .IsInsideTableIndexPath()
@@ -397,7 +426,7 @@ public:
                 .NotUnderTheSameOperation(OperationId.GetTxId())
                 .NotUnderOperation();
 
-            if (checks) {
+            if (checks && parent.IsResolved()) {
                 if (parent.Base()->IsTableIndex()) {
                     checks.IsInsideTableIndexPath(); //copy imp index table as index index table, not a separate one
                 } else {
@@ -438,7 +467,7 @@ public:
             }
 
             if (checks) {
-                if (!parent.Base()->IsTableIndex() && !isBackup) {
+                if (parent.IsResolved() && !parent.Base()->IsTableIndex() && !isBackup) {
                     checks.DepthLimit();
                 }
 
@@ -449,7 +478,7 @@ public:
                     .IsValidACL(acl);
             }
 
-            if (checks && !isBackup) {
+            if (checks && !isBackup && parent.IsResolved()) {
                 checks
                     .PathsLimit()
                     .DirChildrenLimit()
@@ -464,10 +493,21 @@ public:
 
         // TODO: cdc checks
 
-        auto domainInfo = parent.DomainInfo();
+        // For unresolved parents under backup collections, use the resolved ancestor's domain
+        TPath domainCheckPath = parent.IsResolved() || !isUnderBackupCollection 
+            ? parent 
+            : [&]() {
+                TPath resolved = parent;
+                while (!resolved.IsResolved() && resolved.Parent()) {
+                    resolved.Rise();
+                }
+                return resolved;
+            }();
+
+        auto domainInfo = domainCheckPath.DomainInfo();
         bool transactionSupport = domainInfo->IsSupportTransactions();
         if (domainInfo->GetAlter()) {
-            TPathId domainPathId = parent.GetPathIdForDomain();
+            TPathId domainPathId = domainCheckPath.GetPathIdForDomain();
             Y_ABORT_UNLESS(context.SS->PathsById.contains(domainPathId));
             TPathElement::TPtr domainPath = context.SS->PathsById.at(domainPathId);
             Y_ABORT_UNLESS(domainPath->PlannedToCreate() || domainPath->HasActiveChanges());

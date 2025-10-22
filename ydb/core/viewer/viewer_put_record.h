@@ -17,9 +17,9 @@
 
 namespace NKikimr::NViewer {
 
-    struct THeader {
+    struct TMetadataItem {
         TString Key;
-        TArrayRef<const char> Value; // bytes
+        TString Value;
     };
 
 class TPutRecord : public TViewerPipeClient {
@@ -45,7 +45,7 @@ private:
     TString Message;
     TString Key;
     ui32 Cookie = 1;
-    TVector<THeader> Metadata;
+    TVector<TMetadataItem> Metadata;
     NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     bool IsAutoScaledTopic = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
@@ -78,16 +78,16 @@ public:
             Key = TStringBuf(Params.Get("key").data(), Params.Get("key").size());
         }
 
-        if (Params.Has("headers")) {
-            int num = Params.NumOfValues("headers");
+        if (Params.Has("metadata")) {
+            int num = Params.NumOfValues("metadata");
             for (int i = 0; i < num; i++) {
-                NJson::TJsonValue headerJson;
-                NJson::ReadJsonTree(Params.Get("headers", i), &headerJson, true);
-                auto& headerMap = headerJson.GetMap();
-                if (!headerMap.contains("key") || !headerMap.contains("value")) {
+                NJson::TJsonValue metadataJson;
+                NJson::ReadJsonTree(Params.Get("metadata", i), &metadataJson, true);
+                auto& metadataMap = metadataJson.GetMap();
+                if (!metadataMap.contains("key") || !metadataMap.contains("value")) {
                     ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'metadata' must be key-value pairs"));
                 }
-                Metadata.emplace_back(headerMap.at("key").GetStringRobust(), headerMap.at("value").GetStringRobust());
+                Metadata.emplace_back(metadataMap.at("key").GetStringRobust(), metadataMap.at("value").GetStringRobust());
             }
         }
 
@@ -171,7 +171,7 @@ public:
                 ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "You must provide partition id you want to put records to for autoscaled topic."));
                 return;
             }
-            auto chooser = NPQ::CreatePartitionChooser(pqDescription, false); // without hash?
+            auto chooser = NPQ::CreatePartitionChooser(pqDescription, false);
             NYql::NDecimal::TUint128 hash;
             if (Key.empty()) {
                 hash = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(Key));

@@ -2114,7 +2114,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                                                     const TString& database,
                                                     const TString& path,
                                                     const TString message,
-                                                    const std::optional<i32> partition = std::nullopt) {
+                                                    const std::optional<i32> partition = std::nullopt,
+                                                    const std::optional<TString> key = std::nullopt) {
         NJson::TJsonValue jsonRequest;
         NJson::TJsonArray metadataArray;
         NJson::TJsonValue header1;
@@ -2131,6 +2132,9 @@ Y_UNIT_TEST_SUITE(Viewer) {
         if (partition.has_value()) {
             jsonRequest["partition"] = *partition;
         }
+        if (key.has_value()) {
+            jsonRequest["key"] = *key;
+        }
         jsonRequest["message"] = message;
         jsonRequest["metadata"] = metadataArray;
         TStringStream responseStream;
@@ -2140,7 +2144,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/put_records", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
     }
-    ui64 GetMessagesCount(std::shared_ptr<NYdb::NTopic::IReadSession> readSession) {
+    std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> GetMessagesCount(std::shared_ptr<NYdb::NTopic::IReadSession> readSession) {
         auto getMessagesFromTopic = [&](auto& reader) {
             TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> result;
             while (true) {
@@ -2164,7 +2168,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             return result;
         };
         ui64 totalTries = 5;
-        ui64 totalMessages = 0;
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages;
         while(totalTries) {
             auto result = getMessagesFromTopic(readSession);
             if (!result) {
@@ -2173,10 +2177,12 @@ Y_UNIT_TEST_SUITE(Viewer) {
                 continue;
             } else {
                 totalTries = 5;
-                totalMessages += result->GetMessages().size();
+                for (const auto& message : result->GetMessages()) {
+                    messages.push_back(message);
+                }
             }
         }
-        return totalMessages;
+        return messages;
     }
 
     Y_UNIT_TEST(PutRecordViewer) {
@@ -2227,7 +2233,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
 
         client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
-        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0, "some_key");
         UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
 
         // checking put record with partition chooser
@@ -2238,9 +2244,27 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({topicPath});
         auto readSession = topicClient.CreateReadSession(rSSettings);
-        ui64 messageCount = GetMessagesCount(readSession);
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages = GetMessagesCount(readSession);
+        ui64 messageCount = static_cast<ui64>(messages.size());
         Cerr << "Total messages: " << messageCount << Endl;
         UNIT_ASSERT_EQUAL(messageCount, 2);
+        for (size_t i = 0; i < messages.size(); i++) {
+            auto& messageItem = messages[i];
+            auto metaFields = messageItem.GetMessageMeta()->Fields;
+            for (size_t j = 0; j < metaFields.size(); j++) {
+                const auto& [key, value] = metaFields[j];
+                if (j == 0) {
+                    UNIT_ASSERT_EQUAL(key, "grey");
+                    UNIT_ASSERT_EQUAL(value, "bird");
+                } else if (j == 1) {
+                    UNIT_ASSERT_EQUAL(key, "brown");
+                    UNIT_ASSERT_EQUAL(value, "dog");
+                } else {
+                    UNIT_ASSERT_EQUAL(key, "__key");
+                    UNIT_ASSERT_EQUAL(value, "some_key");
+                }
+            }
+        }
     }
 
     Y_UNIT_TEST(PutRecordViewerAutosplitTopic) {
@@ -2279,7 +2303,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
 
-
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         TString autoscalingTopic = "/Root/autoscalit-topic";
@@ -2314,8 +2337,22 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({autoscalingTopic});
         auto readSession = topicClient.CreateReadSession(rSSettings);
-        ui64 messageCount = GetMessagesCount(readSession);
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages = GetMessagesCount(readSession);
+        ui64 messageCount = static_cast<ui64>(messages.size());
         Cerr << "Total messages: " << messageCount << Endl;
         UNIT_ASSERT_EQUAL(messageCount, 1);
+        auto& messageItem = messages[0];
+
+        auto metaFields = messageItem.GetMessageMeta()->Fields;
+        for (size_t j = 0; j < metaFields.size(); j++) {
+            const auto& [key, value] = metaFields[j];
+            if (j == 0) {
+                UNIT_ASSERT_EQUAL(key, "grey");
+                UNIT_ASSERT_EQUAL(value, "bird");
+            } else {
+                UNIT_ASSERT_EQUAL(key, "brown");
+                UNIT_ASSERT_EQUAL(value, "dog");
+            }
+        }
     }
 }

@@ -234,3 +234,18 @@ message SelfCheckResult {
     repeated DatabaseStatus database_status = 3;
     LocationNode location = 4;
 }
+
+message ClusterStateRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+    uint32 duration_seconds = 2;
+    uint32 period_seconds = 3;
+}
+
+message ClusterStateResponse {
+    // After successfull completion must contain ClusterStateResult.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ClusterStateResult {
+    string result = 1;
+}

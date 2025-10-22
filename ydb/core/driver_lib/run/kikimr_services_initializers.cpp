@@ -70,7 +70,9 @@
 
 #include <ydb/core/blob_depot/blob_depot.h>
 
+#include <ydb/core/counters_info/counters_info.h>
 #include <ydb/core/health_check/health_check.h>
+
 
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
@@ -2513,7 +2515,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
             protoLink.SetWeight(1);
             protoWorkersPool.SetDefaultFractionOfThreadsCount(0.4);
         }
-        
+
         NKikimrConfig::TCompositeConveyorConfig::TCategory& protoCategory = *result.AddCategories();
         protoCategory.SetName(::ToString(NConveyorComposite::ESpecialTaskCategory::Deduplication));
         NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& protoWorkersPool = *result.AddWorkerPools();
@@ -2919,6 +2921,18 @@ void THealthCheckInitializer::InitializeServices(TActorSystemSetup* setup, const
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NHealthCheck::MakeHealthCheckID(),
         TActorSetupCmd(NHealthCheck::CreateHealthCheckService(), TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
+TCountersInfoProviderInitializer::TCountersInfoProviderInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{
+}
+
+void TCountersInfoProviderInitializer::InitializeServices(TActorSystemSetup* setup, const TAppData* appData) {
+    IActor* actor = NKikimr::NCountersInfo::CreateCountersInfoProviderService(appData->Counters);
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NKikimr::NCountersInfo::MakeCountersInfoProviderServiceID(NodeId),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 
 TFederatedQueryInitializer::TFederatedQueryInitializer(const TKikimrRunConfig& runConfig, std::shared_ptr<TModuleFactories> factories, NFq::IYqSharedResources::TPtr yqSharedResources)

@@ -31,6 +31,8 @@ SRCS(
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
+    ydb_state.cpp
+    ydb_state.h
     ydb_storage_config.cpp
     ydb_tools_infer.cpp
     ydb_tools.cpp

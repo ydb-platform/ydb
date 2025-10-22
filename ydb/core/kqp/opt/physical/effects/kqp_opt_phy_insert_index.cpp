@@ -227,11 +227,9 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
-                    // For fulltext indexes, we need to tokenize the text and create index rows
+                    // For fulltext indexes, we need to tokenize the text and create index rows and refill index columns
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns,
                         insert.Pos(), ctx);
-                    // Update columns to reflect transformation: text column -> __ydb_token
-                    indexTableColumns = BuildFulltextIndexColumns(table, indexDesc);
                     break;
                 }
             }

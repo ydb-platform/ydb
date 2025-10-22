@@ -1,3 +1,4 @@
+#include <cstdint>
 #ifndef SIMDJSON_SRC_GENERIC_STAGE2_STRINGPARSING_H
 
 #ifndef SIMDJSON_CONDITIONAL_INCLUDE
@@ -237,6 +238,7 @@ simdjson_warn_unused simdjson_inline uint8_t *parse_wobbly_string(const uint8_t 
 }
 
 } // namespace stringparsing
+
 } // unnamed namespace
 } // namespace SIMDJSON_IMPLEMENTATION
 } // namespace simdjson

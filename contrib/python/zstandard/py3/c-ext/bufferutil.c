@@ -259,7 +259,7 @@ PyType_Slot ZstdBufferWithSegmentsSlots[] = {
 };
 
 PyType_Spec ZstdBufferWithSegmentsSpec = {
-    "zstd.BufferWithSegments",
+    "zstandard.backend_c.BufferWithSegments",
     sizeof(ZstdBufferWithSegments),
     0,
     Py_TPFLAGS_DEFAULT,
@@ -290,7 +290,7 @@ PyType_Slot ZstdBufferSegmentsSlots[] = {
 };
 
 PyType_Spec ZstdBufferSegmentsSpec = {
-    "zstd.BufferSegments",
+    "zstandard.backend_c.BufferSegments",
     sizeof(ZstdBufferSegments),
     0,
     Py_TPFLAGS_DEFAULT,
@@ -350,7 +350,7 @@ PyType_Slot ZstdBufferSegmentSlots[] = {
 };
 
 PyType_Spec ZstdBufferSegmentSpec = {
-    "zstd.BufferSegment",
+    "zstandard.backend_c.BufferSegment",
     sizeof(ZstdBufferSegment),
     0,
     Py_TPFLAGS_DEFAULT,
@@ -518,7 +518,7 @@ PyType_Slot ZstdBufferWithSegmentsCollectionSlots[] = {
 };
 
 PyType_Spec ZstdBufferWithSegmentsCollectionSpec = {
-    "zstd.BufferWithSegmentsCollection",
+    "zstandard.backend_c.BufferWithSegmentsCollection",
     sizeof(ZstdBufferWithSegmentsCollection),
     0,
     Py_TPFLAGS_DEFAULT,

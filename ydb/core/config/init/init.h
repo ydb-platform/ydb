@@ -119,7 +119,6 @@ struct TNodeRegistrationSettings {
     ui32 InterconnectPort;
     NActors::TNodeLocation Location;
     TString NodeRegistrationToken;
-    std::optional<TString> BridgePileName;
 };
 
 class INodeRegistrationResult {
@@ -178,6 +177,25 @@ public:
 
 // ===
 
+class IStorageConfigResult {
+public:
+    virtual ~IStorageConfigResult() {}
+    virtual const TString& GetMainYamlConfig() const = 0;
+    virtual const TString& GetStorageYamlConfig() const = 0;
+};
+
+class IConfigClient {
+public:
+    virtual ~IConfigClient() {}
+    virtual std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger) const = 0;
+};
+
+// ===
+
 struct TInitialConfiguratorDependencies {
     NConfig::IErrorCollector& ErrorCollector;
     NConfig::IProtoConfigFileProvider& ProtoConfigFileProvider;
@@ -185,6 +203,7 @@ struct TInitialConfiguratorDependencies {
     NConfig::IMemLogInitializer& MemLogInit;
     NConfig::INodeBrokerClient& NodeBrokerClient;
     NConfig::IDynConfigClient& DynConfigClient;
+    NConfig::IConfigClient& ConfigClient;
     NConfig::IEnv& Env;
     NConfig::IInitLogger& Logger;
 };
@@ -198,6 +217,7 @@ struct TRecordedInitialConfiguratorDeps {
             *MemLogInit,
             *NodeBrokerClient,
             *DynConfigClient,
+            *ConfigClient,
             *Env,
             *Logger
         };
@@ -209,6 +229,7 @@ struct TRecordedInitialConfiguratorDeps {
     std::unique_ptr<NConfig::IMemLogInitializer> MemLogInit;
     std::unique_ptr<NConfig::INodeBrokerClient> NodeBrokerClient;
     std::unique_ptr<NConfig::IDynConfigClient> DynConfigClient;
+    std::unique_ptr<NConfig::IConfigClient> ConfigClient;
     std::unique_ptr<NConfig::IEnv> Env;
     std::unique_ptr<NConfig::IInitLogger> Logger;
 };
@@ -261,11 +282,13 @@ std::unique_ptr<IErrorCollector> MakeDefaultErrorCollector();
 std::unique_ptr<IMemLogInitializer> MakeDefaultMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeDefaultNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeDefaultDynConfigClient();
+std::unique_ptr<IConfigClient> MakeDefaultConfigClient();
 std::unique_ptr<IInitLogger> MakeDefaultInitLogger();
 
 std::unique_ptr<IMemLogInitializer> MakeNoopMemLogInitializer();
 std::unique_ptr<INodeBrokerClient> MakeNoopNodeBrokerClient();
 std::unique_ptr<IDynConfigClient> MakeNoopDynConfigClient();
+std::unique_ptr<IConfigClient> MakeNoopConfigClient();
 std::unique_ptr<IInitLogger> MakeNoopInitLogger();
 
 void AddProtoConfigOptions(IProtoConfigFileProvider& out);

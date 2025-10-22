@@ -15,6 +15,41 @@ namespace NKikimr::NSchemeShard {
 
 class TSchemeShard;
 
+template<typename T>
+struct TEvSchemaChangedTraits;
+
+template<>
+struct TEvSchemaChangedTraits<TEvDataShard::TEvSchemaChanged::TPtr> {
+    static TActorId GetSource(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return TActorId{ev->Get()->GetSource()};
+    }
+    static std::optional<ui32> GetGeneration(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return {ev->Get()->GetGeneration()};
+    }
+    static bool HasOpResult(const TEvDataShard::TEvSchemaChanged::TPtr& ev) {
+        return ev->Get()->Record.HasOpResult();
+    }
+    static TString GetName() {
+        return "TEvDataShard::TEvSchemaChanged";
+    }
+};
+
+template<>
+struct TEvSchemaChangedTraits<TEvColumnShard::TEvNotifyTxCompletionResult::TPtr> {
+    static TActorId GetSource(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev) {
+        return TActorId{ev->Sender};
+    }
+    static std::optional<ui32> GetGeneration(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
+        return std::nullopt; //TODO consider to add generation to TEvColumnShard::TEvNotifyTxCompletionResult
+    }
+    static bool HasOpResult(const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& /* ev */) {
+        return false;
+    }
+    static TString GetName() {
+        return "TEvColumnShard::TEvNotifyTxCompletionResult";
+    }
+};
+
 TSet<ui32> AllIncomingEvents();
 
 void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
@@ -37,6 +72,7 @@ namespace NTableState {
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context);
 bool CollectProposeTransactionResults(const TOperationId& operationId, const TEvColumnShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context);
 bool CollectSchemaChanged(const TOperationId& operationId, const TEvDataShard::TEvSchemaChanged__HandlePtr& ev, TOperationContext& context);
+bool CollectSchemaChanged(const TOperationId& operationId, const TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev, TOperationContext& context);
 
 void SendSchemaChangedNotificationAck(const TOperationId& operationId, TActorId ackTo, TShardIdx shardIdx, TOperationContext& context);
 void AckAllSchemaChanges(const TOperationId& operationId, TTxState& txState, TOperationContext& context);
@@ -59,12 +95,15 @@ private:
                 << "NTableState::TProposedWaitParts"
                 << " operationId# " << OperationId;
     }
+    template<typename TEvent>
+    bool HandleReplyImpl(const TEvent& ev, TOperationContext& context);
 
 public:
     TProposedWaitParts(TOperationId id, TTxState::ETxState nextState = TTxState::Done);
 
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvSchemaChanged__HandlePtr& ev, TOperationContext& context) override;
+    bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult__HandlePtr& ev, TOperationContext& context) override;
 };
 
 } // namespace NTableState
@@ -245,7 +284,7 @@ public:
     bool ProgressState(TOperationContext& context) override;
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult__HandlePtr& ev, TOperationContext& context) override;
 
-private:
+protected:
     const TOperationId OperationId;
 }; // TConfigurePartsAtTable
 

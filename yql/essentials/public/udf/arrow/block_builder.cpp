@@ -4,4 +4,4 @@ namespace NYql {
 namespace NUdf {
 
 }
-}
+} // namespace NYql

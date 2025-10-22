@@ -29,12 +29,14 @@ std::shared_ptr<TPortionInfo> TPortionInfoConstructor::Build() {
 
         if (RemoveSnapshot) {
             AFL_VERIFY(RemoveSnapshot->Valid());
-            result->RemoveSnapshot = *RemoveSnapshot;
+            result->SetRemoveSnapshot(*RemoveSnapshot);
         }
+
         AFL_VERIFY(SchemaVersion && *SchemaVersion);
         result->SchemaVersion = *SchemaVersion;
         result->ShardingVersion = ShardingVersion;
     }
+
     static TAtomicCounter countValues = 0;
     static TAtomicCounter sumValues = 0;
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("memory_size", result->GetMemorySize())("data_size", result->GetDataSize())(
@@ -60,7 +62,10 @@ std::shared_ptr<TPortionInfo> TWrittenPortionInfoConstructor::BuildPortionImpl(T
 }
 
 std::shared_ptr<TPortionInfo> TCompactedPortionInfoConstructor::BuildPortionImpl(TPortionMeta&& meta) {
-    return std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    auto result = std::make_shared<TCompactedPortionInfo>(std::move(meta));
+    AFL_VERIFY(AppearanceSnapshot);
+    result->AppearanceSnapshot = *AppearanceSnapshot;
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

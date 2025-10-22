@@ -6,6 +6,8 @@
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 
+#include <util/stream/output.h>
+
 namespace NKikimr {
 
 namespace {
@@ -675,8 +677,17 @@ void DbgPrintValue(TString &res, const TCell &r, NScheme::TTypeInfo typeInfo) {
         case NScheme::NTypeIds::Bool:
             res += r.AsValue<bool>() ? "true" : "false";
             break;
+        case NScheme::NTypeIds::Int8:
+            res += ToString(r.AsValue<i8>());
+            break;
         case NScheme::NTypeIds::Byte:
             res += ToString(r.AsValue<ui8>());
+            break;
+        case NScheme::NTypeIds::Int16:
+            res += ToString(r.AsValue<i16>());
+            break;
+        case NScheme::NTypeIds::Uint16:
+            res += ToString(r.AsValue<ui16>());
             break;
         case NScheme::NTypeIds::Int32:
             res += ToString(r.AsValue<i32>());
@@ -736,3 +747,17 @@ size_t GetCellHeaderSize() {
 }
 
 } // namespace NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::ETriBool, out, value) {
+    switch (value) {
+        case NKikimr::ETriBool::True:
+            out << "True";
+            break;
+        case NKikimr::ETriBool::False:
+            out << "False";
+            break;
+        case NKikimr::ETriBool::Null:
+            out << "Null";
+            break;
+    }
+}

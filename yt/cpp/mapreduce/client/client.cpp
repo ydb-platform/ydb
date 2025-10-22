@@ -65,18 +65,13 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-THashMap<TString, TString> ParseProxyUrlAliasingRules(TString envConfig)
+void ApplyProxyUrlAliasingRules(
+    TString& url,
+    const THashMap<TString, TString>& proxyUrlAliasingRules)
 {
-    if (envConfig.empty()) {
-        return {};
-    }
-    return NYTree::ConvertTo<THashMap<TString, TString>>(NYson::TYsonString(envConfig));
-}
-
-void ApplyProxyUrlAliasingRules(TString& url)
-{
-    static auto rules = ParseProxyUrlAliasingRules(GetEnv("YT_PROXY_URL_ALIASING_CONFIG"));
-    if (auto ruleIt = rules.find(url); ruleIt != rules.end()) {
+    if (auto ruleIt = proxyUrlAliasingRules.find(url);
+        ruleIt != proxyUrlAliasingRules.end()
+    ) {
         url = ruleIt->second;
     }
 }
@@ -880,13 +875,15 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     const TRichYPath& path,
     const TTableReaderOptions& options,
     const ISkiffRowSkipperPtr& skipper,
-    const NSkiff::TSkiffSchemaPtr& schema)
+    const NSkiff::TSkiffSchemaPtr& requestedSchema,
+    const NSkiff::TSkiffSchemaPtr& parserSchema)
 {
     auto skiffOptions = TCreateSkiffSchemaOptions().HasRangeIndex(true);
-    auto resultSchema = NYT::NDetail::CreateSkiffSchema(TVector{schema}, skiffOptions);
+    auto resultRequestedSchema = NYT::NDetail::CreateSkiffSchema(TVector{requestedSchema}, skiffOptions);
+    auto resultParserSchema = NYT::NDetail::CreateSkiffSchema(TVector{parserSchema}, skiffOptions);
     return new TSkiffRowTableReader(
-        CreateClientReader(path, NYT::NDetail::CreateSkiffFormat(resultSchema), options),
-        resultSchema,
+        CreateClientReader(path, NYT::NDetail::CreateSkiffFormat(resultRequestedSchema), options),
+        resultParserSchema,
         {skipper},
         std::move(skiffOptions));
 }
@@ -919,13 +916,16 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
     const TString& cookie,
     const TTablePartitionReaderOptions& options,
     const ISkiffRowSkipperPtr& skipper,
-    const NSkiff::TSkiffSchemaPtr& schema)
+    const NSkiff::TSkiffSchemaPtr& requestedSchema,
+    const NSkiff::TSkiffSchemaPtr& parserSchema)
 {
     auto skiffOptions = TCreateSkiffSchemaOptions().HasRangeIndex(true);
-    auto resultSchema = NYT::NDetail::CreateSkiffSchema(TVector{schema}, skiffOptions);
+    auto resultRequestedSchema = NYT::NDetail::CreateSkiffSchema(TVector{requestedSchema}, skiffOptions);
+    auto resultParserSchema = NYT::NDetail::CreateSkiffSchema(TVector{parserSchema}, skiffOptions);
+
     return new TSkiffRowTableReader(
-        CreateRawTablePartitionReader(cookie, NYT::NDetail::CreateSkiffFormat(resultSchema), options),
-        resultSchema,
+        CreateRawTablePartitionReader(cookie, NYT::NDetail::CreateSkiffFormat(resultRequestedSchema), options),
+        resultParserSchema,
         {skipper},
         std::move(skiffOptions));
 }
@@ -1560,12 +1560,59 @@ void TClient::CheckShutdown() const
     }
 }
 
+const TNode::TMapType& TClient::GetDynamicConfiguration(const TString& configProfile)
+{
+    auto g = Guard(ClusterConfigLock_);
+
+    if (!ClusterConfig_) {
+        TNode clusterConfigNode;
+
+        TYPath clusterConfigPath = Context_.Config->ConfigRemotePatchPath + "/" + configProfile;
+        YT_LOG_DEBUG(
+            "Fetching cluster config (ConfigPath: %v, ConfigProfile: %v)",
+            Context_.Config->ConfigRemotePatchPath,
+            configProfile);
+
+        try {
+            clusterConfigNode = Get(clusterConfigPath, TGetOptions());
+        } catch (const TErrorResponse& error) {
+            if (!error.IsResolveError()) {
+                throw;
+            }
+
+            ClusterConfig_.emplace();
+            YT_LOG_WARNING(
+                "Could not resolve, saved empty cluster config (ConfigPath: %v, ConfigProfile: %v)",
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        }
+
+        if (clusterConfigNode.IsMap()) {
+            ClusterConfig_ = clusterConfigNode.UncheckedAsMap();
+            YT_LOG_DEBUG(
+                "Saved cluster config (ConfigPath: %v, ConfigProfile: %v)",
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        } else if (!ClusterConfig_.has_value()) {
+            ClusterConfig_.emplace();
+            YT_LOG_WARNING(
+                "Config node has incorrect type, saved empty cluster config (NodeType: %v, ConfigPath: %v, ConfigProfile: %v)",
+                clusterConfigNode.GetType(),
+                Context_.Config->ConfigRemotePatchPath,
+                configProfile);
+        }
+    }
+
+    return *ClusterConfig_;
+}
+
 void SetupClusterContext(
     TClientContext& context,
     const TString& serverName)
 {
     context.ServerName = serverName;
-    ApplyProxyUrlAliasingRules(context.ServerName);
+    context.MultiproxyTargetCluster = serverName;
+    ApplyProxyUrlAliasingRules(context.ServerName, context.Config->ProxyUrlAliasingRules);
 
     if (context.ServerName.find('.') == TString::npos &&
         context.ServerName.find(':') == TString::npos &&
@@ -1612,18 +1659,13 @@ TClientContext CreateClientContext(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
-    context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
-    context.MultiproxyTargetCluster = options.MultiproxyTargetCluster_;
+    context.JobProxySocketPath = options.JobProxySocketPath_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
     }
 
-    if (!options.UseProxyUnixDomainSocket_) {
-        SetupClusterContext(context, serverName);
-    } else {
-        context.ServerName = serverName;
-    }
+    SetupClusterContext(context, serverName);
 
     if (context.Config->HttpProxyRole && context.Config->Hosts == DefaultHosts) {
         context.Config->Hosts = "hosts?role=" + context.Config->HttpProxyRole;

@@ -115,12 +115,13 @@ def main():
         table_client = ydb.TableClient(driver, tc_settings)
 
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
-        default_start_date = datetime.date(2025, 2, 28)
+        default_start_date = datetime.date.today() - datetime.timedelta(days=7)
 
         with ydb.SessionPool(driver) as pool:
             create_tables(pool, table_path)
 
-        # geting last date from history
+        # Getting last date from history
+        print(f"Checking existing flaky history data for branch '{branch}' and build_type '{build_type}'...")
         last_date_query = f"""select max(date_window) as max_date_window from `{table_path}`
             where build_type = '{build_type}' and branch = '{branch}'"""
         query = ydb.ScanQuery(last_date_query, {})
@@ -136,18 +137,71 @@ def main():
         if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
             last_datetime = results[0].get(
                 'max_date_window', default_start_date)
+            print(f"Found existing history data, last date: {last_datetime}")
 
         else:
-            last_datetime = default_start_date
+            # If no data exists, try to find when this branch was created
+            print(f"No flaky history data exist for branch '{branch}' - checking when branch was created...")
+            
+            # Try to find the earliest date when this branch had any test runs
+            print(f"Querying test_runs_column for earliest test run in branch '{branch}'...")
+            query_branch_creation = f"""
+                SELECT MIN(run_timestamp) as earliest_run
+                FROM `test_results/test_runs_column`
+                WHERE branch = '{branch}' AND build_type = '{build_type}'
+            """
+            query = ydb.ScanQuery(query_branch_creation, {})
+            it = table_client.scan_query(query)
+            branch_creation_date = None
+            
+            while True:
+                try:
+                    result = next(it)
+                    if result.result_set.rows and result.result_set.rows[0]['earliest_run']:
+                        earliest_run = result.result_set.rows[0]['earliest_run']
+                        print(f"Raw earliest_run value: {earliest_run}")
+                        
+                        try:
+                            # Convert timestamp to datetime
+                            if earliest_run > 1000000000000000:  # Microseconds
+                                timestamp_seconds = earliest_run / 1000000
+                                branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                print(f"Converted from microseconds: {branch_creation_date}")
+                            else:  # Seconds or milliseconds
+                                if earliest_run > 1000000000000:  # Milliseconds
+                                    timestamp_seconds = earliest_run / 1000
+                                    branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                                    print(f"Converted from milliseconds: {branch_creation_date}")
+                                else:  # Seconds
+                                    branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                                    print(f"Converted from seconds: {branch_creation_date}")
+                        except (OverflowError, OSError, ValueError) as e:
+                            print(f"Error converting timestamp {earliest_run}: {e}")
+                            branch_creation_date = None
+                        break
+                except StopIteration:
+                    break
+            
+            # Use branch creation date if found, otherwise fall back to default date
+            if branch_creation_date:
+                last_datetime = branch_creation_date
+                print(f"✓ Found branch creation date: {branch_creation_date}")
+            else:
+                last_datetime = default_start_date
+                print(f"⚠ No test runs found for branch '{branch}', using default date: {default_start_date}")
 
         last_date = last_datetime.strftime('%Y-%m-%d')
 
-        print(f'last hisotry date: {last_date}')
-        # getting history for dates >= last_date
-
+        print(f'Last history date: {last_date}')
+        print(f'Default start date: {default_start_date}')
+        
+        # Getting history for dates >= last_date
         today = datetime.date.today()
         date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
+        print(f'Will process {len(date_list)} dates: from {min(date_list)} to {max(date_list)}')
+        
         for date in sorted(date_list):
+            print(f'\n--- Processing date: {date} ---')
             query_get_history = f"""
 
         select
@@ -235,9 +289,14 @@ def main():
                 except StopIteration:
                     break
             end_time = time.time()
-            print(f'transaction duration: {end_time - start_time}')
+            print(f'Transaction duration: {end_time - start_time:.2f}s')
 
-            print(f'history data captured, {len(results)} rows')
+            print(f'History data captured: {len(results)} rows')
+            if len(results) == 0:
+                print(f'⚠ No test data found for date {date} - this might be normal for new branches')
+            else:
+                print(f'✓ Successfully found test data for date {date}')
+                
             for row in results:
                 row['count'] = dict(zip(list(row['history_list']), [list(
                     row['history_list']).count(i) for i in list(row['history_list'])]))   
@@ -258,15 +317,23 @@ def main():
                     'fail_count': row['count'].get('failure', 0),
                     'skip_count': row['count'].get('skipped', 0),
                 })
-            print(f'upserting history for date {date}')
+            print(f'Upserting history for date {date}...')
             with ydb.SessionPool(driver) as pool:
 
                 create_tables(pool, table_path)
                 full_path = posixpath.join(DATABASE_PATH, table_path)
+                print(f'Upserting {len(prepared_for_update_rows)} rows to {full_path}')
                 bulk_upsert(driver.table_client, full_path,
                             prepared_for_update_rows)
+                print(f'✓ Successfully upserted data for date {date}')
 
-        print('history updated')
+        print('\n' + '='*50)
+        print('✓ Flaky tests history collection completed successfully!')
+        print(f'  Branch: {branch}')
+        print(f'  Build type: {build_type}')
+        print(f'  Date range: {min(date_list)} to {max(date_list)}')
+        print(f'  Total dates processed: {len(date_list)}')
+        print('='*50)
 
 
 if __name__ == "__main__":

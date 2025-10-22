@@ -188,7 +188,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [](const TActorContext&) {
             });
             Manager->Start(Manager);
-            Manager->ActivateTiers(ExpectedTiers);
+            Manager->ActivateTiers(ExpectedTiers, false);
         }
 
         TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)
@@ -462,8 +462,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         UNIT_ASSERT(batchSize < 8 * 1024 * 1024);
 
         {
-            TAtomic unusedPrev;
-            runtime.GetAppData().Icb->SetValue("ColumnShardControls.GranuleIndexedPortionsCountLimit", 1, unusedPrev);
+            TControlBoard::SetValue(1, runtime.GetAppData().Icb->ColumnShardControls.GranuleIndexedPortionsCountLimit);
         }
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);

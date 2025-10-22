@@ -3,7 +3,7 @@
 #include "grpc_request_base.h"
 #include "logger.h"
 
-#include <ydb/public/sdk/cpp/src/library/grpc/common/constants.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/grpc_common/constants.h>
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/ptr.h>
@@ -24,6 +24,7 @@ namespace NMonitoring {
 
 namespace NYdbGrpc {
 
+static std::atomic<int> GrpcDead = 0;
 struct TSslData {
     TString Cert;
     TString Key;
@@ -77,7 +78,7 @@ struct TServerOptions {
     DECLARE_FIELD(GRpcShutdownDeadline, TDuration, TDuration::Seconds(30));
 
     //! In/Out message size limit
-    DECLARE_FIELD(MaxMessageSize, size_t, DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
+    DECLARE_FIELD(MaxMessageSize, size_t, NYdb::NGrpc::DEFAULT_GRPC_MESSAGE_SIZE_LIMIT);
 
     //! Use GRpc keepalive
     DECLARE_FIELD(KeepAliveEnable, TMaybe<bool>, TMaybe<bool>());

@@ -42,9 +42,8 @@ protected:
 template <NKikimr::NUdf::EDataSlot Slot>
 class TTopFreqData
     : public TTopFreqBase<
-        NKikimr::NUdf::TUnboxedValueHash<Slot>,
-        NKikimr::NUdf::TUnboxedValueEquals<Slot>>
-{
+          NKikimr::NUdf::TUnboxedValueHash<Slot>,
+          NKikimr::NUdf::TUnboxedValueEquals<Slot>> {
 public:
     using TBase = TTopFreqBase<
         NKikimr::NUdf::TUnboxedValueHash<Slot>,
@@ -72,24 +71,22 @@ struct TGenericEquals {
 
     bool operator()(
         const NKikimr::NUdf::TUnboxedValuePod& left,
-        const NKikimr::NUdf::TUnboxedValuePod& right) const
-    {
+        const NKikimr::NUdf::TUnboxedValuePod& right) const {
         return Equate->Equals(left, right);
     }
 };
 
 class TTopFreqGeneric
-    : public TTopFreqBase<TGenericHash, TGenericEquals>
-{
+    : public TTopFreqBase<TGenericHash, TGenericEquals> {
 public:
     using TBase = TTopFreqBase<TGenericHash, TGenericEquals>;
 
     TTopFreqGeneric(const NKikimr::NUdf::TUnboxedValuePod& value, const ui32 minSize, const ui32 maxSize,
-        NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
+                    NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
     TTopFreqGeneric(const TTopFreqGeneric& topFreq1, const TTopFreqGeneric& topFreq2,
-        NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
+                    NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
     TTopFreqGeneric(const NKikimr::NUdf::TUnboxedValuePod& serialized,
-        NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
+                    NKikimr::NUdf::IHash::TPtr hash, NKikimr::NUdf::IEquate::TPtr equate);
 
     NKikimr::NUdf::TUnboxedValue Serialize(const NKikimr::NUdf::IValueBuilder* builder);
     NKikimr::NUdf::TUnboxedValue Get(const NKikimr::NUdf::IValueBuilder* builder, ui32 resultSize);

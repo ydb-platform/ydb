@@ -92,7 +92,7 @@ TWriteMessage Msg(const TString& data, ui64 seqNo) {
     return msg;
 }
 
-TTopicSdkTestSetup CreateSetup() {
+TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     NKikimrConfig::TFeatureFlags ff;
     ff.SetEnableTopicSplitMerge(true);
     ff.SetEnablePQConfigTransactionsAtSchemeShard(true);
@@ -105,19 +105,22 @@ TTopicSdkTestSetup CreateSetup() {
 
     auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
 
-    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, NActors::NLog::PRI_TRACE);
-    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, NActors::NLog::PRI_TRACE);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_READ_PROXY, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRRORER, priority);
+    setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_MIRROR_DESCRIBER, priority);
 
     setup.GetRuntime().GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     setup.GetRuntime().GetAppData().PQConfig.SetUseSrcIdMetaMappingInFirstClass(true);
     setup.GetRuntime().GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+    setup.GetRuntime().GetAppData().PQConfig.SetACLRetryTimeoutSec(1);
 
     return setup;
 }
 
-std::shared_ptr<ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
+std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> CreateWriteSession(TTopicClient& client, const TString& producer, std::optional<ui32> partition, TString topic, bool useCodec) {
     auto writeSettings = TWriteSessionSettings()
                     .Path(topic)
                     .ProducerId(producer);
@@ -185,7 +188,7 @@ struct TTestReadSession : public ITestReadSession {
         std::optional<std::unordered_map<TString, std::set<size_t>>> ExpectedPartitions;
 
         std::set<size_t> EndedPartitions;
-        std::vector<TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
+        std::vector<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent> EndedPartitionEvents;
 
         TMutex Lock;
         TSemaphore Semaphore;
@@ -244,7 +247,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.SimpleDataHandlers(
         [impl=Impl, expectedMessagesCount=settings.ExpectedMessagesCount]
-        (TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+        (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
         auto& messages = ev.GetMessages();
         for (size_t i = 0u; i < messages.size(); ++i) {
             auto& message = messages[i];
@@ -275,7 +278,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.StartPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStartPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -292,7 +295,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.StopPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TStopPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -303,7 +306,7 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.PartitionSessionClosedHandler(
             [impl=Impl]
-            (TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TPartitionSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 auto topic = ev.GetPartitionSession()->GetTopicPath();
@@ -313,13 +316,13 @@ std::shared_ptr<TTestReadSession<SdkVersion::Topic>::TSdkReadSession> TTestReadS
 
     readSettings.EventHandlers_.SessionClosedHandler(
                     [impl=Impl]
-            (const TSessionClosedEvent& ev) mutable {
+            (const NYdb::NTopic::TSessionClosedEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TSessionClosedEvent message " << ev.DebugString() << Endl << Flush;
     });
 
     readSettings.EventHandlers_.EndPartitionSessionHandler(
             [impl=Impl]
-            (TReadSessionEvent::TEndPartitionSessionEvent& ev) mutable {
+            (NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& ev) mutable {
                 Cerr << ">>>>> " << impl->Name << " Received TEndPartitionSessionEvent message " << ev.DebugString() << Endl << Flush;
                 auto partitionId = ev.GetPartitionSession()->GetPartitionId();
                 impl->EndedPartitions.insert(partitionId);

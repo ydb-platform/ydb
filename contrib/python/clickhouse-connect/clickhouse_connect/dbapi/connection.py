@@ -29,6 +29,8 @@ class Connection:
                                     secure=secure,
                                     dsn=dsn,
                                     generic_args=kwargs)
+
+        self.client._add_integration_tag("sqlalchemy")
         self.timezone = self.client.server_tz
 
     def close(self):

@@ -46,7 +46,7 @@ struct TJobCountersProvider : public NKikimr::NUdf::ICountersProvider, public NK
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class TYqlJobBase: public NYT::IRawJob {
+class TYqlJobBase {
 protected:
     TYqlJobBase() = default;
     virtual ~TYqlJobBase();
@@ -79,16 +79,15 @@ public:
         LangVer = langver;
     }
 
-    void Do(const NYT::TRawJobContext& jobContext) override;
-    void Save(IOutputStream& stream) const override;
-    void Load(IInputStream& stream) override;
+    virtual void Save(IOutputStream& stream) const;
+    virtual void Load(IInputStream& stream);
 
 protected:
-    NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr) const;
+    NKikimr::NMiniKQL::TCallableVisitFuncProvider MakeTransformProvider(THashMap<TString, NKikimr::NMiniKQL::TRuntimeNode>* extraArgs = nullptr, const TString& prefix = "Yt") const;
 
     void Init();
 
-    virtual void DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles) = 0;
+    void Finish();
 
 protected:
     // Serializable part (don't forget to add new members to Save/Load)

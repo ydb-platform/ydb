@@ -8,6 +8,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <ydb/core/base/nodestate.h>
 
 namespace NKikimr::NCms::NSentinel {
 
@@ -39,7 +40,7 @@ private:
     mutable EPDiskState PrevState = State;
     ui64 StateCounter;
     TMaybe<EPDiskStatus> ForcedStatus;
-    
+
     mutable bool HadBadStateRecently = false;
 
 }; // TPDiskStatusComputer
@@ -108,9 +109,31 @@ private:
 
 }; // TPDiskInfo
 
-struct TNodeInfo {
+struct TNodeStatusComputer {
+    using ENodeState = ::NKikimr::ENodeState;
+
+    ENodeState CurrentState = ENodeState::GOOD;
+    ENodeState ActualState = ENodeState::GOOD;
+    ui64 StateCounter = 0;
+    ui32 BadStateLimit;
+    ui32 GoodStateLimit;
+    ui32 PrettyGoodStateLimit;
+
+    ui32 GetCurrentNodeState() const;
+    bool Compute();
+    void AddState(ENodeState newState);
+
+    bool MaybeBad() const { return CurrentState == ENodeState::BAD && StateCounter < BadStateLimit; }
+    bool DefinitelyBad() const { return CurrentState == ENodeState::BAD && StateCounter >= BadStateLimit; }
+    bool MaybeGood() const { return CurrentState == ENodeState::GOOD && StateCounter < PrettyGoodStateLimit; }
+    bool PrettyGood() const { return CurrentState == ENodeState::GOOD && StateCounter >= PrettyGoodStateLimit; }
+    bool DefinitelyGood() const { return CurrentState == ENodeState::GOOD && StateCounter >= GoodStateLimit; }
+};
+
+struct TNodeInfo : public TNodeStatusComputer {
     TString Host;
     NActors::TNodeLocation Location;
+    TMaybeFail<ui32> PileId;
     THashSet<NKikimrCms::EMarker> Markers;
 
     bool HasFaultyMarker() const;
@@ -140,6 +163,8 @@ struct TSentinelState: public TSimpleRefCount<TSentinelState> {
     TMap<TPDiskID, TPDiskInfo::TPtr> ChangeRequests;
     ui32 StatusChangeAttempt = 0;
     ui32 ChangeRequestId = 0;
+    bool NeedSelfHealStateStorage = false;
+    TInstant LastStateStorageSelfHeal = TInstant::Zero();
 };
 
 class TClusterMap {
@@ -153,6 +178,7 @@ public:
     TDistribution ByDataCenter;
     TDistribution ByRoom;
     TDistribution ByRack;
+    TDistribution ByPile;
     THashMap<TString, TNodeIDSet> NodeByRack;
     TDistribution BadByNode;
 
@@ -172,7 +198,8 @@ class TGuardian : public TClusterMap {
     }
 
 public:
-    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100, ui32 rackRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
+    explicit TGuardian(TSentinelState::TPtr state, ui32 dataCenterRatio = 100, ui32 roomRatio = 100,
+                       ui32 rackRatio = 100, ui32 pileRatio = 100, ui32 faultyPDisksThresholdPerNode = 0);
 
     TPDiskIDSet GetAllowedPDisks(const TClusterMap& all, TString& issues, TPDiskIgnoredMap& disallowed) const;
 
@@ -180,6 +207,7 @@ private:
     const ui32 DataCenterRatio;
     const ui32 RoomRatio;
     const ui32 RackRatio;
+    const ui32 PileRatio;
     const ui32 FaultyPDisksThresholdPerNode;
 
 }; // TGuardian

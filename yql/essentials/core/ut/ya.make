@@ -2,6 +2,7 @@ UNITTEST_FOR(yql/essentials/core)
 
 SRCS(
     yql_column_order_ut.cpp
+    yql_default_valid_value_ut.cpp
     yql_expr_constraint_ut.cpp
     yql_expr_optimize_ut.cpp
     yql_library_compiler_ut.cpp
@@ -26,6 +27,7 @@ PEERDIR(
     yql/essentials/core/type_ann
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/schema/parser
+    yql/essentials/providers/pure
     yql/essentials/providers/result/provider
     yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/minikql/invoke_builtins/llvm16

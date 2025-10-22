@@ -28,6 +28,10 @@ bool IsPassthroughLambda(const NNodes::TCoLambda& lambda, TMaybe<THashSet<TStrin
 bool IsTablePropsDependent(const TExprNode& node);
 bool IsNoPush(const TExprNode& node);
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns);
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns);
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx);
+
 bool HasOnlyOneJoinType(const TExprNode& joinTree, TStringBuf joinType);
 
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx);
@@ -37,6 +41,7 @@ TExprNode::TPtr KeepColumnOrder(const TColumnOrder& order, const TExprNode::TPtr
 template<class TFieldsSet>
 bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TFieldsSet& usedFields, const TParentsMap& parentsMap,
                     bool allowDependsOn = true);
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType);
 
 template<class TFieldsSet>
 TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& input, const TFieldsSet& subsetFields,
@@ -45,6 +50,7 @@ TExprNode::TPtr FilterByFields(TPositionHandle position, const TExprNode::TPtr& 
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx);
 
 bool IsDepended(const TExprNode& from, const TExprNode& to);
+bool AreAllDependedOnAny(const TExprNode::TChildrenType& from, const TNodeSet& to);
 bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps);
 bool IsEmpty(const TExprNode& node, const TTypeAnnotationContext& typeCtx);
 bool IsEmptyContainer(const TExprNode& node);
@@ -76,6 +82,9 @@ using MemberUpdaterFunc = std::function<bool (TString& memberName, const TTypeAn
 bool UpdateStructMembers(TExprContext& ctx, const TExprNode::TPtr& node, const TStringBuf& goal, TExprNode::TListType& members,
     MemberUpdaterFunc updaterFunc = MemberUpdaterFunc(), const TTypeAnnotationNode* nodeType = nullptr);
 
+void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
+void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms);
+
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx);
 TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandRemoveMembers(const TExprNode::TPtr& node, TExprContext& ctx);
@@ -88,11 +97,14 @@ TExprNode::TPtr ExpandReplaceMember(const TExprNode::TPtr& node, TExprContext& c
 TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandCastStruct(const TExprNode::TPtr& node, TExprContext& ctx);
 TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& ctx);
+TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types);
 
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns);
 inline void ExtractSimpleKeys(const TExprNode& keySelectorLambda, TVector<TStringBuf>& columns) {
     ExtractSimpleKeys(keySelectorLambda.Child(1), keySelectorLambda.Child(0)->Child(0), columns);
 }
+
+TSet<TStringBuf> GetFilteredMembers(const NNodes::TCoFilterNullMembersBase& node);
 
 TExprNode::TPtr MakeNull(TPositionHandle position, TExprContext& ctx);
 TExprNode::TPtr MakeConstMap(TPositionHandle position, const TExprNode::TPtr& input, const TExprNode::TPtr& value, TExprContext& ctx);
@@ -156,6 +168,7 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
 TExprNode::TPtr KeepUniqueDistinct(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx);
 bool HasMissingWorlds(const TExprNode::TPtr& node, const TExprNode& src, const TTypeAnnotationContext& types);
 TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& types);
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx);
 
 void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, const TParentsMap& parentsMap,
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
@@ -170,7 +183,7 @@ template<bool Ordered = false>
 TPartOfConstraintBase::TSetType GetPathsToKeys(const TExprNode& body, const TExprNode& arg);
 
 // generates column names with pattern "prefixN" that do not clash with source columns
-// prefix should start with "_yql"
+// prefix should start with "_yql" or "<alias>._yql"
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count);
 
 bool CheckSupportedTypes(
@@ -196,5 +209,23 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
 extern const char KeepWorldOptName[];
 
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
+
+template<typename C>
+TExprNode::TPtr MakeAtomList(TPositionHandle pos, const C& container, TExprContext& ctx) {
+    TExprNodeList atoms;
+    for (auto& atom : container) {
+        atoms.push_back(ctx.NewAtom(pos, atom));
+    }
+    return ctx.NewList(pos, std::move(atoms));
+}
+
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx);
+
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap);
+bool IsNormalizedDependsOn(const TExprNode& node);
+
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types);
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types);
 
 }

@@ -10,10 +10,6 @@ VERSION(24.3.25)
 
 ORIGINAL_SOURCE(https://github.com/google/flatbuffers/archive/v24.3.25.tar.gz)
 
-PEERDIR(
-    contrib/restricted/abseil-cpp/absl/base
-)
-
 ADDINCL(
     contrib/libs/flatbuffers/include
 )

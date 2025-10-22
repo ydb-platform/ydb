@@ -55,23 +55,23 @@ inline std::optional<i64> NearbyIntImpl(double value, decltype(FE_DOWNWARD) mode
     if (res < double(std::numeric_limits<i64>::min() + 513) || res > double(std::numeric_limits<i64>::max() - 512)) {
         return {};
     }
-   
+
     return static_cast<i64>(res);
 }
 
 inline std::optional<i64> NearbyInt(double value, ui32 mode) {
     switch (mode) {
-    case 0:
-        return NearbyIntImpl(value, FE_DOWNWARD);
-    case 1:
-        return NearbyIntImpl(value, FE_TONEAREST);
-    case 2:
-        return NearbyIntImpl(value, FE_TOWARDZERO);
-    case 3:
-        return NearbyIntImpl(value, FE_UPWARD);
-    default:
-        return {};
+        case 0:
+            return NearbyIntImpl(value, FE_DOWNWARD);
+        case 1:
+            return NearbyIntImpl(value, FE_TONEAREST);
+        case 2:
+            return NearbyIntImpl(value, FE_TOWARDZERO);
+        case 3:
+            return NearbyIntImpl(value, FE_UPWARD);
+        default:
+            return {};
     }
 }
 
-}
+} // namespace NMathUdf

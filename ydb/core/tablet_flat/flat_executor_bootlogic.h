@@ -4,6 +4,7 @@
 #include "flat_boot_cookie.h"
 #include "flat_boot_util.h"
 #include "flat_load_blob_queue.h"
+#include "flat_part_loader.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -36,7 +37,7 @@ namespace NBoot {
         TAutoPtr<TExecutorBorrowLogic> Loans;
         THashMap<ui32, NTable::TRowVersionRanges> RemovedRowVersions;
 
-        TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+        TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
         bool ShouldSnapshotScheme = false;
     };
 }
@@ -77,6 +78,7 @@ private:
     TAutoPtr<NBoot::TRoot> Steps;
     TActorId LeaseWaiter;
 
+    const ui64 BootAttempt;
     TMonotonic BootTimestamp;
 
     const TIntrusiveConstPtr<TTabletStorageInfo> Info;
@@ -97,7 +99,7 @@ private:
     ui32 GetBSGroupFor(const TLogoBlobID &logo) const;
     ui32 GetBSGroupID(ui32 channel, ui32 generation);
     void LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs>);
-    NBoot::TSpawned LoadPages(NBoot::IStep*, TAutoPtr<NPageCollection::TFetch> req);
+    NBoot::TSpawned LoadPages(NBoot::IStep*, NTable::TLoader::TFetch&& fetch);
 
     void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override;
 
@@ -105,7 +107,7 @@ private:
     inline NBoot::TBack& State() const noexcept { return *State_; }
 
 public:
-    TExecutorBootLogic(IOps*, const TActorId&, TTabletStorageInfo *info, ui64 maxBytesInFly);
+    TExecutorBootLogic(IOps*, const TActorId&, ui64 bootAttempt, TTabletStorageInfo *info, ui64 maxBytesInFly);
     ~TExecutorBootLogic();
 
     void Describe(IOutputStream&) const;

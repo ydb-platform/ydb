@@ -21,6 +21,10 @@ from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 PDISK_SIZE_STR = os.getenv("YDB_PDISK_SIZE", str(64 * 1024 * 1024 * 1024))
 if PDISK_SIZE_STR.endswith("GB"):
     PDISK_SIZE = int(PDISK_SIZE_STR[:-2]) * 1024 * 1024 * 1024
@@ -134,6 +138,7 @@ class KikimrConfigGenerator(object):
             enable_pqcd=True,
             enable_metering=False,
             enable_audit_log=False,
+            audit_log_config=None,
             grpc_tls_data_path=None,
             fq_config_path=None,
             public_http_config_path=None,
@@ -148,8 +153,10 @@ class KikimrConfigGenerator(object):
             enable_alter_database_create_hive_first=False,
             overrided_actor_system_config=None,
             default_users=None,  # dict[user]=password
-            extra_feature_flags=None,  # list[str]
-            extra_grpc_services=None,  # list[str]
+            extra_feature_flags=None,     # list[str]
+            disabled_feature_flags=None,  # list[str]
+            extra_grpc_services=None,     # list[str]
+            disabled_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
             enforce_user_token_requirement=False,
@@ -163,7 +170,9 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            grouped_memory_limiter_config=None,
+            scan_grouped_memory_limiter_config=None,
+            comp_grouped_memory_limiter_config=None,
+            deduplication_grouped_memory_limiter_config=None,
             query_service_config=None,
             domain_login_only=None,
             use_self_management=False,
@@ -171,15 +180,29 @@ class KikimrConfigGenerator(object):
             breakpad_minidumps_path=None,
             breakpad_minidumps_script=None,
             explicit_hosts_and_host_configs=False,
+            table_service_config=None,  # dict[name]=value
+            bridge_config=None,
+            memory_controller_config=None,
+            verbose_memory_limit_exception=False,
+            enable_static_auth=False,
+            cms_config=None,
+            explicit_statestorage_config=None
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
+        if disabled_feature_flags is None:
+            disabled_feature_flags = []
         if extra_grpc_services is None:
             extra_grpc_services = []
+        if disabled_grpc_services is None:
+            disabled_grpc_services = []
 
+        self.explicit_statestorage_config = explicit_statestorage_config
+        self.cms_config = cms_config
         self.use_log_files = use_log_files
         self.use_self_management = use_self_management
         self.simple_config = simple_config
+        self.bridge_config = bridge_config
         self.suppress_version_check = suppress_version_check
         self.explicit_hosts_and_host_configs = explicit_hosts_and_host_configs
         if use_self_management:
@@ -210,14 +233,7 @@ class KikimrConfigGenerator(object):
         self._rings_count = rings_count
         self.__node_ids = list(range(1, nodes + 1))
         self.n_to_select = n_to_select
-        if self.n_to_select is None:
-            if erasure == Erasure.MIRROR_3_DC:
-                self.n_to_select = 9
-            else:
-                self.n_to_select = min(5, nodes)
         self.state_storage_rings = state_storage_rings
-        if self.state_storage_rings is None:
-            self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if erasure == Erasure.MIRROR_3_DC else 8])
         self.__use_in_memory_pdisks = _use_in_memory_pdisks_var(pdisk_store_path, use_in_memory_pdisks)
         self.__pdisks_directory = os.getenv('YDB_PDISKS_DIRECTORY')
         self.static_erasure = erasure
@@ -264,14 +280,28 @@ class KikimrConfigGenerator(object):
             self.yaml_config["self_management_config"] = dict()
             self.yaml_config["self_management_config"]["enabled"] = True
 
+        if self.cms_config:
+            self.yaml_config["cms_config"] = self.cms_config
+
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
 
         if "table_service_config" not in self.yaml_config:
             self.yaml_config["table_service_config"] = {}
 
+        if verbose_memory_limit_exception:
+            self.yaml_config["table_service_config"]["resource_manager"]["verbose_memory_limit_exception"] = True
+
+        if table_service_config:
+            self.yaml_config["table_service_config"].update(table_service_config)
+
         if os.getenv('YDB_KQP_ENABLE_IMMEDIATE_EFFECTS', 'false').lower() == 'true':
             self.yaml_config["table_service_config"]["enable_kqp_immediate_effects"] = True
+
+        # disable kqp pattern cache on darwin platform to avoid using llvm versions of computational
+        # nodes. These compute nodes are not properly tested and maintained on darwin platform.
+        if sys.platform == "darwin":
+            self.yaml_config["table_service_config"]["resource_manager"]["kqp_pattern_cache_compiled_capacity_bytes"] = 0
 
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
@@ -295,6 +325,8 @@ class KikimrConfigGenerator(object):
             self.yaml_config["feature_flags"]["enable_resource_pools"] = enable_resource_pools
         for extra_feature_flag in extra_feature_flags:
             self.yaml_config["feature_flags"][extra_feature_flag] = True
+        for disabled_feature_flag in disabled_feature_flags:
+            self.yaml_config["feature_flags"][disabled_feature_flag] = False
         if enable_alter_database_create_hive_first:
             self.yaml_config["feature_flags"]["enable_alter_database_create_hive_first"] = enable_alter_database_create_hive_first
         self.yaml_config['pqconfig']['enabled'] = enable_pq
@@ -314,7 +346,10 @@ class KikimrConfigGenerator(object):
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
 
-        self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
+        self.yaml_config['grpc_config']['services'] = [
+            item for item in (self.yaml_config['grpc_config']['services'] + extra_grpc_services)
+            if item not in disabled_grpc_services
+        ]
 
         # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
@@ -330,7 +365,7 @@ class KikimrConfigGenerator(object):
             self.__set_enable_metering()
 
         if enable_audit_log:
-            self.__set_enable_audit_log()
+            self.__set_audit_log(audit_log_config)
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
@@ -393,11 +428,14 @@ class KikimrConfigGenerator(object):
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 
-        if grouped_memory_limiter_config:
-            self.yaml_config["grouped_memory_limiter_config"] = grouped_memory_limiter_config
+        if scan_grouped_memory_limiter_config:
+            self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config
+        if comp_grouped_memory_limiter_config:
+            self.yaml_config["comp_grouped_memory_limiter_config"] = comp_grouped_memory_limiter_config
+        if deduplication_grouped_memory_limiter_config:
+            self.yaml_config["deduplication_grouped_memory_limiter_config"] = deduplication_grouped_memory_limiter_config
 
         self.__build()
-
         if self.grpc_ssl_enable:
             self.yaml_config["grpc_config"]["ca"] = self.grpc_tls_ca_path
             self.yaml_config["grpc_config"]["cert"] = self.grpc_tls_cert_path
@@ -426,15 +464,19 @@ class KikimrConfigGenerator(object):
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
+
         if os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"):
-            self.yaml_config["memory_controller_config"] = {"hard_limit_bytes": int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))}
+            if "memory_controller_config" not in self.yaml_config:
+                self.yaml_config["memory_controller_config"] = {}
+            self.yaml_config["memory_controller_config"]["hard_limit_bytes"] = int(os.getenv("YDB_HARD_MEMORY_LIMIT_BYTES"))
 
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
-            self.yaml_config["table_service_config"]["index_auto_choose_mode"] = 'max_used_prefix'
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_pg_syntax'] = True
@@ -477,17 +519,21 @@ class KikimrConfigGenerator(object):
 
         if kafka_api_port is not None:
             kafka_proxy_config = dict()
-            kafka_proxy_config["enable_kafka_proxy"] = True
+            kafka_proxy_config['enable_kafka_proxy'] = True
             kafka_proxy_config["listening_port"] = kafka_api_port
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
+
+        if bridge_config is not None:
+            self.yaml_config["bridge_config"] = bridge_config
 
         self.full_config = dict()
         if self.explicit_hosts_and_host_configs:
             self._add_host_config_and_hosts()
             self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
-            self.yaml_config["domains_config"].pop("security_config")
+            if "security_config" in self.yaml_config["domains_config"]:
+                self.yaml_config["domains_config"].pop("security_config")
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
@@ -505,6 +551,15 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("table_service_config")
             self.yaml_config.pop("kqpconfig")
 
+        if self.explicit_statestorage_config:
+            if "domains_config" not in self.yaml_config:
+                self.yaml_config["domains_config"] = dict()
+            if "state_storage" in self.yaml_config["domains_config"]:
+                del self.yaml_config["domains_config"]["state_storage"]
+            self.yaml_config["domains_config"]["explicit_state_storage_config"] = self.explicit_statestorage_config["explicit_state_storage_config"]
+            self.yaml_config["domains_config"]["explicit_state_storage_board_config"] = self.explicit_statestorage_config["explicit_state_storage_board_config"]
+            self.yaml_config["domains_config"]["explicit_scheme_board_config"] = self.explicit_statestorage_config["explicit_scheme_board_config"]
+
         if metadata_section:
             self.full_config["metadata"] = metadata_section
             self.full_config["config"] = self.yaml_config
@@ -519,6 +574,11 @@ class KikimrConfigGenerator(object):
             security_config = self.yaml_config["domains_config"]["security_config"]
             security_config.setdefault("administration_allowed_sids", []).append(self.__default_clusteradmin)
             security_config.setdefault("default_access", []).append('+F:{}'.format(self.__default_clusteradmin))
+        self.__enable_static_auth = enable_static_auth
+
+    @property
+    def enable_static_auth(self):
+        return self.__enable_static_auth
 
     @property
     def default_clusteradmin(self):
@@ -576,15 +636,23 @@ class KikimrConfigGenerator(object):
             metering_file.write('')
         self.yaml_config['metering_config'] = {'metering_file_path': metering_file_path}
 
-    def __set_enable_audit_log(self):
-        audit_file_path = os.path.join(self.__working_dir, 'audit.txt')
-        with open(audit_file_path, "w") as audit_file:
-            audit_file.write('')
-        self.yaml_config['audit_config'] = dict(
-            file_backend=dict(
-                file_path=audit_file_path,
-            )
-        )
+    def __set_audit_log(self, audit_log_config):
+        if audit_log_config is None:
+            cfg = dict(file_backend=dict())
+        else:
+            cfg = audit_log_config.copy()
+        file_backend_cfg = cfg.get('file_backend')
+
+        # Generate path for audit file
+        if file_backend_cfg is not None:
+            file_path = file_backend_cfg.get('file_path')
+            if file_path is None:
+                audit_file = tempfile.NamedTemporaryFile('w', prefix="audit_log.", suffix=".txt",
+                                                         dir=self.__working_dir)
+                file_backend_cfg['file_path'] = audit_file.name
+                with audit_file:
+                    audit_file.write('')
+        self.yaml_config['audit_config'] = cfg
 
     @property
     def metering_file_path(self):
@@ -678,9 +746,17 @@ class KikimrConfigGenerator(object):
         return self.__node_ids
 
     def _add_state_storage_config(self):
+        if self.use_self_management and self.n_to_select is None and self.state_storage_rings is None:
+            return
+        if self.n_to_select is None:
+            if self.static_erasure == Erasure.MIRROR_3_DC:
+                self.n_to_select = 9
+            else:
+                self.n_to_select = min(5, len(self.__node_ids))
+        if self.state_storage_rings is None:
+            self.state_storage_rings = copy.deepcopy(self.__node_ids[: 9 if self.static_erasure == Erasure.MIRROR_3_DC else 8])
         self.yaml_config["domains_config"]["state_storage"] = []
         self.yaml_config["domains_config"]["state_storage"].append({"ssid" : 1, "ring" : {"nto_select" : self.n_to_select, "ring" : []}})
-
         for ring in self.state_storage_rings:
             self.yaml_config["domains_config"]["state_storage"][0]["ring"]["ring"].append({"node" : ring if isinstance(ring, list) else [ring], "use_ring_specific_node_selection" : True})
 
@@ -757,13 +833,16 @@ class KikimrConfigGenerator(object):
                     "drive": drive,
                 }
             )
-            hosts.append(
-                {
-                    "host": "localhost",
-                    "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
-                    "host_config_id": host_config_id,
-                }
-            )
+            host_dict = {
+                "host": "localhost",
+                "port": self.port_allocator.get_node_port_allocator(node_id).ic_port,
+                "host_config_id": host_config_id,
+            }
+            if self.bridge_config:
+                host_dict["location"] = {"bridge_pile_name": self.bridge_config.get("piles", [])[(node_id - 1) % len(self.bridge_config.get("piles", []))].get("name")}
+            elif self.static_erasure == Erasure.MIRROR_3_DC:
+                host_dict["location"] = {"data_center": "zone-%d" % (node_id % 3)}
+            hosts.append(host_dict)
 
         self.yaml_config["host_configs"] = host_configs
         self.yaml_config["hosts"] = hosts

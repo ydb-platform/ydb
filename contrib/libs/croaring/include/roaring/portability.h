@@ -372,9 +372,9 @@ static inline int roaring_hamming(uint64_t x) {
 
 // Allow unaligned memory access
 #if defined(__GNUC__) || defined(__clang__)
-#define ALLOW_UNALIGNED __attribute__((no_sanitize("alignment")))
+#define CROARING_ALLOW_UNALIGNED __attribute__((no_sanitize("alignment")))
 #else
-#define ALLOW_UNALIGNED
+#define CROARING_ALLOW_UNALIGNED
 #endif
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_BIG_ENDIAN__)
@@ -585,6 +585,12 @@ static inline uint32_t croaring_refcount_get(const croaring_refcount_t *val) {
 #else
 #define CROARING_ZERO_INITIALIZER \
     { 0 }
+#endif
+
+#if defined(__cplusplus)
+#define CROARING_STATIC_ASSERT(x, y) static_assert(x, y)
+#else
+#define CROARING_STATIC_ASSERT(x, y) _Static_assert(x, y)
 #endif
 
 // We need portability.h to be included first,

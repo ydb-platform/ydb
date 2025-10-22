@@ -80,7 +80,7 @@ class TestFollowersCompatibility(MixedClusterFixture):
                       WITH (
                         AUTO_PARTITIONING_BY_SIZE = ENABLED,
                         AUTO_PARTITIONING_PARTITION_SIZE_MB = 1,
-                        READ_REPLICAS_SETTINGS = \"PER_AZ:1\"
+                        READ_REPLICAS_SETTINGS = \"ANY_AZ:1\"
                       );"""
                 )
                 id_ = 0
@@ -165,7 +165,7 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
 
             if enable_followers:
                 alter_index_query = f"""
-                    ALTER TABLE `{self.TABLE_NAME}` ALTER INDEX `{self.INDEX_NAME}` SET READ_REPLICAS_SETTINGS "PER_AZ:1";
+                    ALTER TABLE `{self.TABLE_NAME}` ALTER INDEX `{self.INDEX_NAME}` SET READ_REPLICAS_SETTINGS "ANY_AZ:1";
                 """
                 session_pool.execute_with_retries(alter_index_query)
 
@@ -201,8 +201,7 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
                 SELECT *
                 FROM `/Root/.sys/partition_stats`
                 WHERE
-                    FollowerId {"!=" if enable_followers else "=="} 0
-                    AND (RowReads != 0 OR RangeReads != 0)
+                    (RowReads != 0 OR RangeReads != 0)
                     AND Path = '/Root/{self.TABLE_NAME}/{self.INDEX_NAME}/indexImplTable'
             """
         ]

@@ -3,7 +3,7 @@
 
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/common/simple/services.h>
@@ -92,9 +92,10 @@ public:
         }
     };
 
-    TSessionsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() == 1 && !cellsFrom[0].IsNull()) {
@@ -294,10 +295,11 @@ private:
     NKikimrKqp::TEvListSessionsResponse LastResponse;
 };
 
-THolder<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+THolder<NActors::IActor> CreateSessionsScan(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TSessionsScan>(ownerId, scanId, tableId, tableRange, columns);
+    return MakeHolder<TSessionsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

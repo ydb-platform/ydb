@@ -419,4 +419,37 @@ DEFINE_REFCOUNTED_TYPE(TYamlFormatConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TArrowFormatConfig
+    : public NYTree::TYsonStruct
+{
+    //! Return the timezone as index.
+    bool EnableTzIndex;
+
+    //! Write YSON-encoded complex types as Arrow types.
+    bool EnableComplexTypes;
+
+    REGISTER_YSON_STRUCT(TArrowFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TArrowFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TBlobFormatConfig
+    : public NYTree::TYsonStruct
+{
+    std::optional<std::string> PartIndexColumnName;
+    std::optional<std::string> DataColumnName;
+
+    REGISTER_YSON_STRUCT(TBlobFormatConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TBlobFormatConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NFormats

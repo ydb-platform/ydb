@@ -41,9 +41,6 @@
     "test_init.TestTpcdsInit.test_s1_column_decimal": {
         "uri": "file://test_init.TestTpcdsInit.test_s1_column_decimal/s1_column_decimal"
     },
-    "test_init.TestTpcdsInit.test_s1_column_decimal_ydb": {
-        "uri": "file://test_init.TestTpcdsInit.test_s1_column_decimal_ydb/s1_column_decimal_ydb"
-    },
     "test_init.TestTpcdsInit.test_s1_row": {
         "uri": "file://test_init.TestTpcdsInit.test_s1_row/s1_row"
     },
@@ -58,9 +55,6 @@
     },
     "test_init.TestTpchInit.test_s1_column_decimal": {
         "uri": "file://test_init.TestTpchInit.test_s1_column_decimal/s1_column_decimal"
-    },
-    "test_init.TestTpchInit.test_s1_column_decimal_ydb": {
-        "uri": "file://test_init.TestTpchInit.test_s1_column_decimal_ydb/s1_column_decimal_ydb"
     },
     "test_init.TestTpchInit.test_s1_row": {
         "uri": "file://test_init.TestTpchInit.test_s1_row/s1_row"

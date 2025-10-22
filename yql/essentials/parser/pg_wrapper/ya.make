@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 PROVIDES(
     yql_pg_runtime
 )
@@ -80,6 +82,7 @@ ENDIF()
 PEERDIR(
     library/cpp/resource
     library/cpp/yson
+    library/cpp/string_utils/base64
     yql/essentials/core
     yql/essentials/minikql/arrow
     yql/essentials/minikql/computation
@@ -161,6 +164,10 @@ FILES(
     source.patch
     vars.txt
     verify.sh
+)
+
+SUPPRESSIONS(
+    ubsan.supp
 )
 
 END()

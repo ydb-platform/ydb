@@ -33,12 +33,15 @@ public:
         , Config(config)
     {
 #define HNDL(name) "KqpLogical-"#name, Hndl(&TKqpLogicalOptTransformer::name)
+        AddHandler(0, &TCoTop::Match, HNDL(TopSortSelectIndex));
+        AddHandler(0, &TCoTopSort::Match, HNDL(TopSortSelectIndex));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(0, &TCoAggregate::Match, HNDL(RewriteAggregate));
         AddHandler(0, &TCoAggregateCombine::Match, HNDL(PushdownOlapGroupByKeys));
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteStreamEquiJoinWithLookup));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
@@ -102,6 +105,12 @@ public:
     }
 
 protected:
+    TMaybeNode<TExprBase> TopSortSelectIndex(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpTopSortSelectIndex(node, ctx, KqpCtx);
+        DumpAppliedRule("KqpTopSortSelectIndex", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> PushExtractedPredicateToReadTable(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
         TExprBase output = KqpPushExtractedPredicateToReadTable(node, ctx, KqpCtx, TypesCtx, *getParents());
         DumpAppliedRule("PushExtractedPredicateToReadTable", node.Ptr(), output.Ptr(), ctx);
@@ -129,7 +138,7 @@ protected:
                 input.Cast(),
                 false,              // analyticsHopping
                 TDuration::MilliSeconds(TDqSettings::TDefault::WatermarksLateArrivalDelayMs),
-                true,               // defaultWatermarksMode
+                false,               // defaultWatermarksMode
                 true);              // syncActor
         } else {
             NDq::TSpillingSettings spillingSettings(KqpCtx.Config->GetEnabledSpillingNodes());
@@ -159,13 +168,19 @@ protected:
         return output;
     }
 
+    TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
+        DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
         auto maxDPhypDPTableSize = Config->MaxDPHypDPTableSize.Get().GetOrElse(TDqSettings::TDefault::MaxDPHypDPTableSize);
         auto optLevel = Config->CostBasedOptimizationLevel.Get().GetOrElse(Config->DefaultCostBasedOptimizationLevel);
         bool enableShuffleElimination = KqpCtx.Config->OptShuffleElimination.Get().GetOrElse(KqpCtx.Config->DefaultEnableShuffleElimination);
         auto providerCtx = TKqpProviderContext(KqpCtx, optLevel);
         auto stats = TypesCtx.GetStats(node.Raw());
-        TTableAliasMap* tableAliases = nullptr;
+        TTableAliasMap* tableAliases = stats? stats->TableAliases.Get(): nullptr;
         auto opt = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(providerCtx, maxDPhypDPTableSize, ctx, enableShuffleElimination, TypesCtx.OrderingsFSM, tableAliases));
         TExprBase output = DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, optLevel,
             *opt, [](auto& rels, auto label, auto node, auto stat) {
@@ -173,7 +188,8 @@ protected:
             },
             KqpCtx.EquiJoinsCount,
             KqpCtx.GetOptimizerHints(),
-            enableShuffleElimination
+            enableShuffleElimination,
+            &KqpCtx.ShufflingOrderingsByJoinLabels
         );
         DumpAppliedRule("OptimizeEquiJoinWithCosts", node.Ptr(), output.Ptr(), ctx);
         return output;

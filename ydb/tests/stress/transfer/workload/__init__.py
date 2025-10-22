@@ -7,13 +7,14 @@ import uuid
 
 
 class Workload(unittest.TestCase):
-    def __init__(self, endpoint, database, duration, mode):
+    def __init__(self, endpoint, database, duration, mode, topic):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
         self.pool = ydb.QuerySessionPool(self.driver)
         self.duration = duration
         self.mode = mode
+        self.topic = topic
         self.id = f"{uuid.uuid1()}".replace("-", "_")
         self.table_name = f"transfer_target_table_{mode}_{self.id}"
         self.topic_name = f"transfer_source_topic_{mode}_{self.id}"
@@ -51,6 +52,8 @@ class Workload(unittest.TestCase):
                 };
         '''
 
+        cs = "" if self.topic == "local" else f"CONNECTION_STRING = '{self.endpoint}/?database={self.database}',"
+
         self.pool.execute_with_retries(
             f"""
                 {lmb}
@@ -58,7 +61,7 @@ class Workload(unittest.TestCase):
                 CREATE TRANSFER {self.transfer_name}
                 FROM {self.topic_name} TO {self.table_name} USING $l
                 WITH (
-                    CONNECTION_STRING = '{self.endpoint}/?database={self.database}',
+                    {cs}
                     FLUSH_INTERVAL = Interval('PT1S'),
                     BATCH_SIZE_BYTES = 8388608
                 );

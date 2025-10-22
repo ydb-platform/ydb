@@ -2,12 +2,14 @@ LIBRARY()
 
 SRCS(
     control.cpp
+    kqp_batch_operations.cpp
     kqp_event_ids.h
     kqp_event_impl.cpp
     kqp_lwtrace_probes.cpp
     kqp_lwtrace_probes.h
     kqp_resolve.cpp
     kqp_resolve.h
+    kqp_row_builder.cpp
     kqp_ru_calc.cpp
     kqp_script_executions.cpp
     kqp_timeouts.cpp
@@ -25,42 +27,47 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/json/writer
+    library/cpp/lwtrace
+    library/cpp/protobuf/json
     ydb/core/base
     ydb/core/engine
-    ydb/core/kqp/expr_nodes
-    ydb/core/kqp/common/simple
-    ydb/core/kqp/common/batch
+    ydb/core/grpc_services/cancelation
     ydb/core/kqp/common/compilation
     ydb/core/kqp/common/events
     ydb/core/kqp/common/shutdown
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/expr_nodes
     ydb/core/kqp/provider
+    ydb/core/protos
+    ydb/core/scheme
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/sharding
-    ydb/library/yql/dq/expr_nodes
     ydb/library/aclib
-    yql/essentials/core/issue
-    yql/essentials/core/services
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/common
-    yql/essentials/core/dq_integration
-    yql/essentials/parser/pg_wrapper/interface
+    ydb/library/yql/dq/expr_nodes
+    ydb/public/api/protos
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/library/operation_id/protos
-    ydb/core/grpc_services/cancelation
-    library/cpp/lwtrace
-    #library/cpp/lwtrace/protos
+    yql/essentials/core/dq_integration
+    yql/essentials/core/issue
+    yql/essentials/core/services
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()
 
 GENERATE_ENUM_SERIALIZATION(kqp_tx_info.h)
 GENERATE_ENUM_SERIALIZATION(kqp_yql.h)
+GENERATE_ENUM_SERIALIZATION(kqp_resolve.h)
 
 END()
 
 RECURSE(
-    batch
     compilation
     events
     simple
+    result_set_format
 )

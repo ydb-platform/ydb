@@ -17,6 +17,7 @@ namespace NYT::NSkiffExt {
 extern const TString SparseColumnsName;
 extern const TString OtherColumnsName;
 extern const TString KeySwitchColumnName;
+extern const TString RemainingRowBytesColumnName;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -56,6 +57,7 @@ struct TSkiffTableDescription
 
     std::optional<size_t> RowIndexFieldIndex;
     std::optional<size_t> RangeIndexFieldIndex;
+    std::optional<size_t> RemainingRowBytesFieldIndex;
 
     // $row_index/$range_index field can be written in several modes.
     ERowRangeIndexMode RowIndexMode = ERowRangeIndexMode::Incremental;

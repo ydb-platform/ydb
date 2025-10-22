@@ -23,19 +23,22 @@ namespace NKikimr::NStorage {
         TEvNodeConfigReversePush() = default;
 
         TEvNodeConfigReversePush(ui32 rootNodeId, const NKikimrBlobStorage::TStorageConfig *committedConfig,
-                bool recurseConfigUpdate) {
+                std::optional<ui64> requestStorageConfigGeneration) {
             Record.SetRootNodeId(rootNodeId);
             if (committedConfig) {
                 Record.MutableCommittedStorageConfig()->CopyFrom(*committedConfig);
             }
-            if (recurseConfigUpdate) {
-                Record.SetRecurseConfigUpdate(recurseConfigUpdate);
+            if (requestStorageConfigGeneration) {
+                Record.SetRequestStorageConfigGeneration(*requestStorageConfigGeneration);
             }
         }
 
-        static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected() {
+        static std::unique_ptr<TEvNodeConfigReversePush> MakeRejected(const NKikimrBlobStorage::TStorageConfig *config) {
             auto res = std::make_unique<TEvNodeConfigReversePush>();
             res->Record.SetRejected(true);
+            if (config) {
+                res->Record.MutableCommittedStorageConfig()->CopyFrom(*config);
+            }
             return res;
         }
     };
@@ -65,6 +68,19 @@ namespace NKikimr::NStorage {
     struct TEvNodeWardenQueryBaseConfig
         : TEventLocal<TEvNodeWardenQueryBaseConfig, TEvBlobStorage::EvNodeWardenQueryBaseConfig>
     {};
+
+    struct TEvNodeWardenNotifyConfigMismatch
+        : TEventLocal<TEvNodeWardenNotifyConfigMismatch, TEvBlobStorage::EvNodeWardenNotifyConfigMismatch> {
+        ui32 NodeId;
+        ui64 ClusterStateGeneration;
+        ui64 ClusterStateGuid;
+
+        TEvNodeWardenNotifyConfigMismatch(ui32 nodeId, ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : NodeId(nodeId)
+            , ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
+        {}
+    };
 
     struct TEvNodeWardenBaseConfig
         : TEventLocal<TEvNodeWardenBaseConfig, TEvBlobStorage::EvNodeWardenBaseConfig>
@@ -151,6 +167,36 @@ namespace NKikimr::NStorage {
         TEvNodeWardenUnsubscribeFromCache(TString key)
             : Key(std::move(key))
         {}
+    };
+
+    struct TEvNodeWardenUpdateConfigFromPeer
+        : TEventLocal<TEvNodeWardenUpdateConfigFromPeer, TEvBlobStorage::EvNodeWardenUpdateConfigFromPeer>
+    {
+        NKikimrBlobStorage::TStorageConfig Config;
+
+        TEvNodeWardenUpdateConfigFromPeer(NKikimrBlobStorage::TStorageConfig config)
+            : Config(std::move(config))
+        {}
+    };
+
+    struct TEvNodeWardenNotifySyncerFinished
+        : TEventLocal<TEvNodeWardenNotifySyncerFinished, TEvBlobStorage::EvNodeWardenNotifySyncerFinished>
+    {
+        const TGroupId BridgeProxyGroupId;
+        const ui32 BridgeProxyGroupGeneration;
+        const TGroupId SourceGroupId;
+        const TGroupId TargetGroupId;
+        std::optional<TString> ErrorReason;
+
+        TEvNodeWardenNotifySyncerFinished(TGroupId bridgeProxyGroupId, ui32 bridgeProxyGroupGeneration,
+                TGroupId sourceGroupId, TGroupId targetGroupId, std::optional<TString> errorReason)
+            : BridgeProxyGroupId(bridgeProxyGroupId)
+            , BridgeProxyGroupGeneration(bridgeProxyGroupGeneration)
+            , SourceGroupId(sourceGroupId)
+            , TargetGroupId(targetGroupId)
+            , ErrorReason(errorReason)
+        {}
+
     };
 
 } // NKikimr::NStorage

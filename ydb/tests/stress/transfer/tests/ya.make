@@ -1,6 +1,6 @@
 IF (NOT WITH_VALGRIND)
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 ENV(YDB_ERASURE=mirror_3_dc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
@@ -17,13 +17,13 @@ ENDIF()
 SIZE(MEDIUM)
 
 DEPENDS(
-    ydb/apps/ydbd
     ydb/apps/ydb
     ydb/tests/stress/transfer
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/stress
     ydb/tests/stress/transfer/workload
 )
 

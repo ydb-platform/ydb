@@ -1,0 +1,18 @@
+--- contrib/libs/libevent/include/event2/event-config-linux.h	(index)
++++ contrib/libs/libevent/include/event2/event-config-linux.h	(working tree)
+@@ -30,13 +30,13 @@
+ /* #undef EVENT__HAVE_AFUNIX_H */
+ 
+ /* Define to 1 if you have the `arc4random' function. */
+-#define EVENT__HAVE_ARC4RANDOM 1
++/* #undef EVENT__HAVE_ARC4RANDOM */
+ 
+ /* Define to 1 if you have the `arc4random_addrandom' function. */
+ /* #undef EVENT__HAVE_ARC4RANDOM_ADDRANDOM */
+ 
+ /* Define to 1 if you have the `arc4random_buf' function. */
+-#define EVENT__HAVE_ARC4RANDOM_BUF 1
++/* #undef EVENT__HAVE_ARC4RANDOM_BUF */
+ 
+ /* Define to 1 if you have the <arpa/inet.h> header file. */
+ #define EVENT__HAVE_ARPA_INET_H 1

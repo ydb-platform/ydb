@@ -10,15 +10,17 @@ namespace NYql::NDq {
 struct TColumnInfo {
     TString Name;
     ui32 Index;
-    NKikimr::NMiniKQL::TType* Type;
+    NKikimr::NMiniKQL::TType* OriginalType; // may be optional
+    NKikimr::NMiniKQL::TType* DataType;     // optionality removed
     TMaybe<bool> IsScalar; // defined only on block types
 
     TColumnInfo(TString name, ui32 index, NKikimr::NMiniKQL::TType* type, TMaybe<bool> isScalar)
         : Name(name)
         , Index(index)
-        , Type(type)
+        , OriginalType(type)
         , IsScalar(isScalar)
     {
+        DataType = (type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Optional) ? static_cast<NKikimr::NMiniKQL::TOptionalType&>(*type).GetItemType() : type;
     }
 
     bool IsBlockOrScalar() const {
@@ -26,8 +28,8 @@ struct TColumnInfo {
     }
 
     NUdf::TDataTypeId GetTypeId() const {
-        YQL_ENSURE(Type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);
-        return static_cast<NKikimr::NMiniKQL::TDataType&>(*Type).GetSchemeType();
+        YQL_ENSURE(DataType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);
+        return static_cast<NKikimr::NMiniKQL::TDataType&>(*DataType).GetSchemeType();
     }
 };
 

@@ -32,7 +32,7 @@ public:
                 "portion_id", portionInfo.GetPortionInfo().GetAddress().DebugString());
             auto copy = portionInfo.GetPortionInfo().MakeCopy();
             copy->SetRemoveSnapshot(TSnapshot(1, 1));
-            db.WritePortion(*copy);
+            db.WritePortion({}, *copy);
         }
         if (BrokenPortions.size()) {
             NIceDb::TNiceDb db(txc.DB);

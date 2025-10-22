@@ -70,7 +70,7 @@ namespace NKikimr::NBsController {
         auto *group = Groups.ConstructInplaceNewEntry(TGroupId::FromValue(groupId.GetRaw()), TGroupId::FromValue(groupId.GetRaw()), 0u, 0u,
             TBlobStorageGroupType::ErasureNone, 0u, NKikimrBlobStorage::TVDiskKind::Default,
             pool.EncryptionMode.GetOrElse(TBlobStorageGroupInfo::EEM_NONE), TBlobStorageGroupInfo::ELCP_INITIAL,
-            TString(), TString(), 0u, 0u, false, false, storagePoolId, 0u, 0u, 0u);
+            TString(), TString(), 0u, 0u, false, false, 0u, TBridgePileId(), storagePoolId, 0u, 0u, 0u);
 
         // bind group to storage pool
         ++pool.NumGroups;
@@ -457,10 +457,11 @@ namespace NKikimr::NBsController {
             Y_ABORT_UNLESS(group->Database);
             Y_ABORT_UNLESS(!group->HiveId);
             const TString& database = *group->Database;
+            TString domainPath;
 
             const auto& domainsInfo = AppData()->DomainsInfo;
             if (const auto& domain = domainsInfo->Domain) {
-                const TString domainPath = TStringBuilder() << '/' << domain->Name;
+                domainPath = TStringBuilder() << '/' << domain->Name;
                 if (database == domainPath || database.StartsWith(TStringBuilder() << domainPath << '/')) {
                     RootHiveId = domainsInfo->GetHive();
                     if (RootHiveId == TDomainsInfo::BadTabletId) {
@@ -470,6 +471,8 @@ namespace NKikimr::NBsController {
             }
 
             auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+            req->DatabaseName = domainPath;
+
             auto& item = req->ResultSet.emplace_back();
             item.Path = NKikimr::SplitPath(database);
             item.RedirectRequired = false;
@@ -803,7 +806,7 @@ namespace NKikimr::NBsController {
             if (Expired()) {
                 return PassAway();
             }
-            switch (const ui32 type = ev->GetTypeRewrite()) {
+            switch ([[maybe_unused]] const ui32 type = ev->GetTypeRewrite()) {
                 cFunc(TEvents::TSystem::Poison, PassAway);
                 cFunc(TEvents::TSystem::Bootstrap, Bootstrap);
                 hFunc(TEvTabletPipe::TEvClientConnected, Handle);

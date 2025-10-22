@@ -1,6 +1,7 @@
 #include "mkql_block_transport.h"
 #include "mkql_block_builder.h"
 
+#include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/memory_pool.h>
@@ -13,24 +14,21 @@ namespace {
 using NYql::TChunkedBuffer;
 
 TChunkedBuffer MakeChunkedBufferAndUntrack(const std::shared_ptr<const arrow::Buffer>& owner, const char* data, size_t size) {
-    MKQLArrowUntrack(owner->data(), owner->capacity());
+    MKQLArrowUntrack(owner->data());
     return TChunkedBuffer(TStringBuf{data, size}, owner);
 }
 
-class TOwnedArrowBuffer : public arrow::Buffer {
+class TOwnedArrowBuffer: public arrow::Buffer {
 public:
     TOwnedArrowBuffer(TStringBuf span, const std::shared_ptr<const void>& owner)
         : arrow::Buffer(reinterpret_cast<const uint8_t*>(span.data()), span.size())
         , Owner_(owner)
     {
     }
+
 private:
     const std::shared_ptr<const void> Owner_;
 };
-
-std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
-    return std::make_shared<arrow::Buffer>(nullptr, 0);
-}
 
 bool HasArrrowAlignment(const void* buf) {
     return AlignUp(buf, NYql::NUdf::ArrowMemoryAlignment) == buf;
@@ -44,7 +42,7 @@ std::shared_ptr<arrow::Buffer> MakeZeroBuffer(size_t byteLen) {
 
     constexpr size_t NullWordCount = (MaxBlockSizeInBytes + sizeof(ui64) - 1) / sizeof(ui64);
     constexpr size_t ExtraAlignWords = (ArrowMemoryAlignment > sizeof(ui64)) ? (ArrowMemoryAlignment / sizeof(ui64) - 1) : 0;
-    static const ui64 nulls[NullWordCount + ExtraAlignWords] = { 0 };
+    static const ui64 nulls[NullWordCount + ExtraAlignWords] = {0};
 
     // round all buffer length to 64 bytes
     size_t capacity = AlignUp(byteLen, size_t(64));
@@ -82,7 +80,8 @@ void StoreNullsSizes(const arrow::ArrayData& data, const IBlockSerializer::TMeta
 }
 
 void LoadNullsSizes(const IBlockDeserializer::TMetadataSource& metaSource, TMaybe<ui64>& nullsCount, TMaybe<ui64>& nullsSize) {
-    YQL_ENSURE(!nullsCount.Defined() && !nullsSize.Defined(), "Attempt to load null sizes twice (most likely LoadArray() is not called)");
+    YQL_ENSURE(!nullsCount.Defined() && !nullsSize.Defined(),
+               "Attempt to load null sizes twice (most likely LoadArray() is not called)");
     nullsCount = metaSource();
     nullsSize = metaSource();
 }
@@ -149,36 +148,49 @@ std::shared_ptr<arrow::Buffer> LoadNullsBitmap(TChunkedBuffer& source, TMaybe<ui
     return LoadBuffer(source, bitmapSize);
 }
 
-class TBlockSerializerBase : public IBlockSerializer {
+class TBlockSerializerBase: public IBlockSerializer {
 public:
     explicit TBlockSerializerBase(const TBlockSerializerParams& params)
-        : Pool_(params.Pool)
-        , MinFillPercentage_(params.MinFillPercentage)
+        : Pool_(params.Pool())
+        , MinFillPercentage_(params.MinFillPercentage())
+        , ShouldSerializeOffset_(params.ShouldSerializeOffset())
     {
         YQL_ENSURE(!MinFillPercentage_ || *MinFillPercentage_ <= 100);
+    }
+
+    size_t OffsetMetadataCount() const {
+        return ShouldSerializeOffset_ ? 1 : 0;
     }
 
 protected:
     arrow::MemoryPool* Pool_;
     const TMaybe<ui8> MinFillPercentage_;
+    bool ShouldSerializeOffset_;
 };
 
-class TBlockDeserializerBase : public IBlockDeserializer {
+class TBlockDeserializerBase: public IBlockDeserializer {
 public:
-    TBlockDeserializerBase() = default;
+    TBlockDeserializerBase(const TBlockSerializerParams& params)
+        : ShouldLoadOffset_(params.ShouldSerializeOffset())
+    {
+    }
 
     virtual void SetArrowType(const std::shared_ptr<arrow::DataType>& type) {
         ArrowType_ = type;
     }
 
     void LoadMetadata(const TMetadataSource& metaSource) final {
+        if (ShouldLoadOffset_) {
+            OffsetReminder_ = metaSource();
+            YQL_ENSURE(OffsetReminder_ < 8, "Unexpected offset value. Actual offset is: " << *OffsetReminder_);
+        }
         if (IsNullable()) {
             LoadNullsSizes(metaSource, NullsCount_, NullsSize_);
         }
         DoLoadMetadata(metaSource);
     }
 
-    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, ui64 offset) final {
+    virtual std::shared_ptr<arrow::ArrayData> LoadArray(TChunkedBuffer& src, ui64 blockLen, TMaybe<size_t> offset) final {
         YQL_ENSURE(blockLen > 0, "Should be handled earlier");
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
@@ -204,11 +216,11 @@ public:
         DoResetMetadata();
     }
 
-    std::shared_ptr<arrow::ArrayData> MakeDefaultValue(ui64 blockLen, ui64 offset) const {
+    std::shared_ptr<arrow::ArrayData> MakeDefaultValue(ui64 blockLen, TMaybe<size_t> offset) const {
         std::shared_ptr<arrow::Buffer> nulls;
         i64 nullsCount = 0;
         if (IsNullable()) {
-            nulls = MakeZeroBitmap(blockLen + offset);
+            nulls = MakeZeroBitmap(blockLen + GetOffset(offset));
             nullsCount = blockLen;
         }
         return DoMakeDefaultValue(nulls, nullsCount, blockLen, offset);
@@ -218,26 +230,50 @@ protected:
     virtual void DoLoadMetadata(const TMetadataSource& metaSource) = 0;
     virtual void DoResetMetadata() = 0;
     virtual bool IsNullable() const = 0;
-    virtual std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const = 0;
-    virtual std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) = 0;
+    virtual std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const = 0;
+    virtual std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) = 0;
+
+    ui64 GetOffset(TMaybe<size_t> providedOffset) const {
+        if (!ShouldLoadOffset_) {
+            YQL_ENSURE(providedOffset.Defined(), "Offset must be provided explicitly in arguments.");
+            return *providedOffset;
+        }
+        YQL_ENSURE(OffsetReminder_.Defined(), "Offset must be specified in metadata.");
+        return *OffsetReminder_;
+    }
 
     std::shared_ptr<arrow::DataType> ArrowType_;
     TMaybe<ui64> NullsCount_;
     TMaybe<ui64> NullsSize_;
+    TMaybe<ui64> OffsetReminder_;
+    bool ShouldLoadOffset_;
 };
 
-template<size_t ObjectSize, bool Nullable>
-class TFixedSizeBlockSerializer final : public TBlockSerializerBase {
+template <size_t ObjectSize, bool Nullable>
+class TFixedSizeBlockSerializer final: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
 
 public:
     using TBase::TBase;
 
     size_t ArrayMetadataCount() const final {
-        return Nullable ? 3 : 1;
+        return OffsetMetadataCount() + (Nullable ? 3 : 1);
     }
 
     void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        const ui64 offsetReminder = data.offset % 8;
+        if (ShouldSerializeOffset_) {
+            metaSink(offsetReminder);
+        }
         if constexpr (Nullable) {
             StoreNullsSizes(data, metaSink);
             if (data.GetNullCount() == data.length) {
@@ -245,8 +281,7 @@ public:
                 return;
             }
         }
-        const ui64 desiredOffset = data.offset % 8;
-        size_t dataBytes = ((size_t)data.length + desiredOffset) * ObjectSize;
+        size_t dataBytes = ((size_t)data.length + offsetReminder) * ObjectSize;
         metaSink(dataBytes);
     }
 
@@ -265,10 +300,16 @@ public:
     }
 };
 
-template<size_t ObjectSize, bool Nullable>
-class TFixedSizeBlockDeserializer final : public TBlockDeserializerBase {
+template <size_t ObjectSize, bool Nullable>
+class TFixedSizeBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
 public:
-    TFixedSizeBlockDeserializer() = default;
+    TFixedSizeBlockDeserializer(const TBlockSerializerParams& params)
+        : TBase(params)
+    {
+    }
+
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
         LoadBufferSize(metaSource, DataSize_);
@@ -278,14 +319,25 @@ private:
         return Nullable;
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
-        auto data = MakeZeroBuffer((blockLen + offset) * ObjectSize);
-        return arrow::ArrayData::Make(ArrowType_, blockLen, { nulls, data }, nullsCount, offset);
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
+        auto data = MakeZeroBuffer((blockLen + GetOffset(offset)) * ObjectSize);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls, data}, nullsCount, GetOffset(offset));
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
         auto data = LoadBuffer(src, DataSize_);
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls, data}, nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls, data}, nullsCount, GetOffset(offset));
     }
 
     void DoResetMetadata() final {
@@ -295,8 +347,8 @@ private:
     TMaybe<ui64> DataSize_;
 };
 
-template<typename TStringType, bool Nullable>
-class TStringBlockSerializer final : public TBlockSerializerBase {
+template <typename TStringType, bool Nullable>
+class TStringBlockSerializer final: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
     using TOffset = typename TStringType::offset_type;
 
@@ -305,10 +357,14 @@ public:
 
 private:
     size_t ArrayMetadataCount() const final {
-        return Nullable ? 4 : 2;
+        return OffsetMetadataCount() + (Nullable ? 4 : 2);
     }
 
     void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        const ui64 offsetReminder = data.offset % 8;
+        if (ShouldSerializeOffset_) {
+            metaSink(offsetReminder);
+        }
         if constexpr (Nullable) {
             StoreNullsSizes(data, metaSink);
             if (data.GetNullCount() == data.length) {
@@ -318,13 +374,12 @@ private:
             }
         }
 
-        const ui64 desiredOffset = data.offset % 8;
-        size_t offsetsSize = ((size_t)data.length + 1 + desiredOffset) * sizeof(TOffset);
+        size_t offsetsSize = ((size_t)data.length + 1 + offsetReminder) * sizeof(TOffset);
         metaSink(offsetsSize);
 
         if (ShouldTrimArray(data)) {
-            const TOffset* offsetData = data.GetValues<TOffset>(1) - desiredOffset;
-            metaSink(offsetData[data.length + desiredOffset] - offsetData[0]);
+            const TOffset* offsetData = data.GetValues<TOffset>(1) - offsetReminder;
+            metaSink(offsetData[data.length + offsetReminder] - offsetData[0]);
         } else {
             metaSink(data.buffers[2]->size());
         }
@@ -377,35 +432,55 @@ private:
             trimmedOffsetBufferData[i] = offsetData[i] - offsetData[0];
         }
 
-        MKQLArrowUntrack(data.buffers[1]->data(), data.buffers[1]->capacity());
-        dst.Append(MakeChunkedBufferAndUntrack(std::move(trimmedOffsetBuffer), reinterpret_cast<const char*>(trimmedOffsetBufferData), offsetsSize));
+        MKQLArrowUntrack(data.buffers[1]->data());
+        dst.Append(MakeChunkedBufferAndUntrack(
+            std::move(trimmedOffsetBuffer),
+            reinterpret_cast<const char*>(trimmedOffsetBufferData),
+            offsetsSize));
 
         const char* mainData = reinterpret_cast<const char*>(data.buffers[2]->data() + offsetData[0]);
-        dst.Append(MakeChunkedBufferAndUntrack(data.buffers[2], mainData, trimmedOffsetBufferData[offsetsLength - 1]));
+        dst.Append(MakeChunkedBufferAndUntrack(
+            data.buffers[2],
+            mainData,
+            trimmedOffsetBufferData[offsetsLength - 1]));
     }
 };
 
-template<typename TStringType, bool Nullable>
-class TStringBlockDeserializer final : public TBlockDeserializerBase {
+template <typename TStringType, bool Nullable>
+class TStringBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
     using TOffset = typename TStringType::offset_type;
+
 public:
-    TStringBlockDeserializer() = default;
+    using TBase::TBase;
+
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
         LoadBufferSize(metaSource, OffsetsSize_);
         LoadBufferSize(metaSource, DataSize_);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
-        auto offsets = MakeZeroBuffer((blockLen + 1 + offset) * sizeof(TOffset));
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
+        auto offsets = MakeZeroBuffer((blockLen + 1 + GetOffset(offset)) * sizeof(TOffset));
         auto data = MakeEmptyBuffer();
-        return arrow::ArrayData::Make(ArrowType_, blockLen, { nulls, offsets, data }, nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls, offsets, data}, nullsCount, GetOffset(offset));
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
         auto offsets = LoadBuffer(src, OffsetsSize_);
         auto data = LoadBuffer(src, DataSize_);
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls, offsets, data }, nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls, offsets, data}, nullsCount, GetOffset(offset));
     }
 
     bool IsNullable() const final {
@@ -420,7 +495,7 @@ private:
     TMaybe<ui64> DataSize_;
 };
 
-class TExtOptionalBlockSerializer final : public TBlockSerializerBase {
+class TExtOptionalBlockSerializer final: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
 
 public:
@@ -432,10 +507,13 @@ public:
 
 private:
     size_t ArrayMetadataCount() const final {
-        return 2 + Inner_->ArrayMetadataCount();
+        return OffsetMetadataCount() + 2 + Inner_->ArrayMetadataCount();
     }
 
     void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        if (ShouldSerializeOffset_) {
+            metaSink(data.offset % 8);
+        }
         StoreNullsSizes(data, metaSink);
         if (data.GetNullCount() == data.length) {
             auto innerCount = Inner_->ArrayMetadataCount();
@@ -457,23 +535,38 @@ private:
     const std::unique_ptr<IBlockSerializer> Inner_;
 };
 
-class TExtOptionalBlockDeserializer final : public TBlockDeserializerBase {
+class TExtOptionalBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
 public:
-    explicit TExtOptionalBlockDeserializer(std::unique_ptr<TBlockDeserializerBase>&& inner)
-        : Inner_(std::move(inner))
+    explicit TExtOptionalBlockDeserializer(std::unique_ptr<TBlockDeserializerBase>&& inner, const TBlockSerializerParams& params)
+        : TBase(params)
+        , Inner_(std::move(inner))
     {
     }
+
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
         Inner_->LoadMetadata(metaSource);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, { Inner_->MakeDefaultValue(blockLen, offset) }, nullsCount, offset);
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, {Inner_->MakeDefaultValue(blockLen, offset)}, nullsCount, GetOffset(offset));
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, { Inner_->LoadArray(src, blockLen, offset) }, nullsCount, offset);
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, {Inner_->LoadArray(src, blockLen, offset)}, nullsCount, GetOffset(offset));
     }
 
     bool IsNullable() const final {
@@ -493,7 +586,8 @@ private:
     const std::unique_ptr<TBlockDeserializerBase> Inner_;
 };
 
-class TSingularTypeBlockSerializer final : public TBlockSerializerBase {
+template <bool IsNull>
+class TSingularTypeBlockSerializer final: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
 
 public:
@@ -501,11 +595,13 @@ public:
 
 private:
     size_t ArrayMetadataCount() const final {
-        return 0;
+        return OffsetMetadataCount();
     }
 
     void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
-        Y_UNUSED(data, metaSink);
+        if (ShouldSerializeOffset_) {
+            metaSink(data.offset % 8);
+        }
     }
 
     void StoreArray(const arrow::ArrayData& data, TChunkedBuffer& dst) const final {
@@ -513,24 +609,39 @@ private:
     }
 };
 
+template <bool IsNull>
 class TSingularTypeBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
+public:
+    using TBase::TBase;
+
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
         Y_UNUSED(metaSource);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
         Y_UNUSED(offset);
         Y_ENSURE(nullsCount == 0);
         Y_ENSURE(!nulls || nulls->size() == 0);
-        return arrow::NullArray(blockLen).data();
+        return NYql::NUdf::MakeSingularArray(IsNull, blockLen);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
         Y_UNUSED(offset, src);
         Y_ENSURE(nullsCount == 0);
         Y_ENSURE(!nulls || nulls->size() == 0);
-        return arrow::NullArray(blockLen).data();
+        return NYql::NUdf::MakeSingularArray(IsNull, blockLen);
     }
 
     bool IsNullable() const final {
@@ -541,8 +652,8 @@ private:
     }
 };
 
-template<bool Nullable, typename TDerived>
-class TTupleBlockSerializerBase : public TBlockSerializerBase {
+template <bool Nullable, typename TDerived>
+class TTupleBlockSerializerBase: public TBlockSerializerBase {
     using TBase = TBlockSerializerBase;
 
 public:
@@ -554,10 +665,14 @@ private:
         if constexpr (Nullable) {
             result += 2;
         }
+        result += OffsetMetadataCount();
         return result;
     }
 
     void StoreMetadata(const arrow::ArrayData& data, const IBlockSerializer::TMetadataSink& metaSink) const final {
+        if (ShouldSerializeOffset_) {
+            metaSink(data.offset % 8);
+        }
         if constexpr (Nullable) {
             StoreNullsSizes(data, metaSink);
         }
@@ -581,15 +696,16 @@ private:
     }
 };
 
-template<bool Nullable>
-class TTupleBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTupleBlockSerializer<Nullable>> {
+template <bool Nullable>
+class TTupleBlockSerializer final: public TTupleBlockSerializerBase<Nullable, TTupleBlockSerializer<Nullable>> {
     using TBase = TTupleBlockSerializerBase<Nullable, TTupleBlockSerializer<Nullable>>;
 
 public:
     TTupleBlockSerializer(TVector<std::unique_ptr<IBlockSerializer>>&& children, const TBlockSerializerParams& params)
         : TBase(params)
         , Children_(std::move(children))
-    {}
+    {
+    }
 
     size_t GetChildrenMetaCount() const {
         size_t result = 0;
@@ -600,8 +716,7 @@ public:
     }
 
     void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data,
-        const IBlockSerializer::TMetadataSink& metaSink) const {
-
+                               const IBlockSerializer::TMetadataSink& metaSink) const {
         for (size_t i = 0; i < Children_.size(); ++i) {
             Children_[i]->StoreMetadata(*child_data[i], metaSink);
         }
@@ -617,8 +732,8 @@ private:
     const TVector<std::unique_ptr<IBlockSerializer>> Children_;
 };
 
-template<typename TDate, bool Nullable>
-class TTzDateBlockSerializer final : public TTupleBlockSerializerBase<Nullable, TTzDateBlockSerializer<TDate, Nullable>> {
+template <typename TDate, bool Nullable>
+class TTzDateBlockSerializer final: public TTupleBlockSerializerBase<Nullable, TTzDateBlockSerializer<TDate, Nullable>> {
     using TBase = TTupleBlockSerializerBase<Nullable, TTzDateBlockSerializer<TDate, Nullable>>;
 
 public:
@@ -626,14 +741,15 @@ public:
         : TBase(params)
         , DateSerialiser_(params)
         , TzSerialiser_(params)
-    {}
+    {
+    }
 
     size_t GetChildrenMetaCount() const {
         return DateSerialiser_.ArrayMetadataCount() + TzSerialiser_.ArrayMetadataCount();
     }
 
     void StoreChildrenMetadata(const std::vector<std::shared_ptr<arrow::ArrayData>>& child_data,
-        const IBlockSerializer::TMetadataSink& metaSink) const {
+                               const IBlockSerializer::TMetadataSink& metaSink) const {
         DateSerialiser_.StoreMetadata(*child_data[0], metaSink);
         TzSerialiser_.StoreMetadata(*child_data[1], metaSink);
     }
@@ -650,13 +766,17 @@ private:
     TFixedSizeBlockSerializer<sizeof(NYql::NUdf::TTimezoneId), false> TzSerialiser_;
 };
 
-template<bool Nullable>
-class TTupleBlockDeserializer final : public TBlockDeserializerBase {
+template <bool Nullable>
+class TTupleBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
 public:
-    explicit TTupleBlockDeserializer(TVector<std::unique_ptr<TBlockDeserializerBase>>&& children)
-        : Children_(std::move(children))
+    explicit TTupleBlockDeserializer(TVector<std::unique_ptr<TBlockDeserializerBase>>&& children, const TBlockSerializerParams& params)
+        : TBase(params)
+        , Children_(std::move(children))
     {
     }
+
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
         for (auto& child : Children_) {
@@ -664,20 +784,31 @@ private:
         }
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         for (auto& child : Children_) {
             childData.emplace_back(child->MakeDefaultValue(blockLen, offset));
         }
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, GetOffset(offset));
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         for (auto& child : Children_) {
             childData.emplace_back(child->LoadArray(src, blockLen, offset));
         }
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, GetOffset(offset));
     }
 
     void DoResetMetadata() final {
@@ -701,10 +832,17 @@ private:
     const TVector<std::unique_ptr<TBlockDeserializerBase>> Children_;
 };
 
-template<typename TDate, bool Nullable>
-class TTzDateBlockDeserializer final : public TBlockDeserializerBase {
+template <typename TDate, bool Nullable>
+class TTzDateBlockDeserializer final: public TBlockDeserializerBase {
+    using TBase = TBlockDeserializerBase;
+
 public:
-    TTzDateBlockDeserializer() = default;
+    explicit TTzDateBlockDeserializer(const TBlockSerializerParams& params)
+        : TBase(params)
+        , DateDeserialiser_(params)
+        , TzDeserialiser_(params)
+    {
+    }
 
 private:
     void DoLoadMetadata(const TMetadataSource& metaSource) final {
@@ -712,18 +850,29 @@ private:
         TzDeserialiser_.LoadMetadata(metaSource);
     }
 
-    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) const final {
+    std::shared_ptr<arrow::ArrayData> DoMakeDefaultValue(
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) const final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         childData.emplace_back(DateDeserialiser_.MakeDefaultValue(blockLen, offset));
         childData.emplace_back(TzDeserialiser_.MakeDefaultValue(blockLen, offset));
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, GetOffset(offset));
     }
 
-    std::shared_ptr<arrow::ArrayData> DoLoadArray(TChunkedBuffer& src, const std::shared_ptr<arrow::Buffer>& nulls, i64 nullsCount, ui64 blockLen, ui64 offset) final {
+    std::shared_ptr<arrow::ArrayData> DoLoadArray(
+        TChunkedBuffer& src,
+        const std::shared_ptr<arrow::Buffer>& nulls,
+        i64 nullsCount,
+        ui64 blockLen,
+        TMaybe<size_t> offset) final {
         std::vector<std::shared_ptr<arrow::ArrayData>> childData;
         childData.emplace_back(DateDeserialiser_.LoadArray(src, blockLen, offset));
         childData.emplace_back(TzDeserialiser_.LoadArray(src, blockLen, offset));
-        return arrow::ArrayData::Make(ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, offset);
+        return arrow::ArrayData::Make(
+            ArrowType_, blockLen, {nulls}, std::move(childData), nullsCount, GetOffset(offset));
     }
 
     void DoResetMetadata() final {
@@ -757,12 +906,16 @@ struct TSerializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockSerializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockSerializer;
-    template<typename TTzDateType, bool Nullable>
+    template <typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockSerializer<TTzDateType, Nullable>;
-    using TSingularType = TSingularTypeBlockSerializer;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockSerializer<IsNull>;
     constexpr static bool PassType = false;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, const TBlockSerializerParams& params) {
+    static std::unique_ptr<TResult> MakePg(
+        const NUdf::TPgTypeDescription& desc,
+        const NUdf::IPgBuilder* pgBuilder,
+        const TBlockSerializerParams& params) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
             return std::make_unique<TFixedSize<ui64, true>>(params);
@@ -775,11 +928,12 @@ struct TSerializerTraits {
         ythrow yexception() << "Serializer not implemented for block resources";
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const TBlockSerializerParams& params) {
-        return std::make_unique<TSingularType>(params);
+        return std::make_unique<TSingularType<IsNull>>(params);
     }
 
-    template<typename TTzDateType>
+    template <typename TTzDateType>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const TBlockSerializerParams& params) {
         if (isOptional) {
             return std::make_unique<TTzDate<TTzDateType, true>>(params);
@@ -798,52 +952,59 @@ struct TDeserializerTraits {
     template <typename TStringType, bool Nullable, NUdf::EDataSlot TOriginal = NUdf::EDataSlot::String>
     using TStrings = TStringBlockDeserializer<TStringType, Nullable>;
     using TExtOptional = TExtOptionalBlockDeserializer;
-    template<typename TTzDateType, bool Nullable>
+    template <typename TTzDateType, bool Nullable>
     using TTzDate = TTzDateBlockDeserializer<TTzDateType, Nullable>;
-    using TSingularType = TSingularTypeBlockDeserializer;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockDeserializer<IsNull>;
 
     constexpr static bool PassType = false;
 
-    static std::unique_ptr<TResult> MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder) {
+    static std::unique_ptr<TResult> MakePg(
+        const NUdf::TPgTypeDescription& desc,
+        const NUdf::IPgBuilder* pgBuilder,
+        const TBlockSerializerParams& params) {
         Y_UNUSED(pgBuilder);
         if (desc.PassByValue) {
-            return std::make_unique<TFixedSize<ui64, true>>();
+            return std::make_unique<TFixedSize<ui64, true>>(params);
         }
-        return std::make_unique<TStrings<arrow::BinaryType, true>>();
+        return std::make_unique<TStrings<arrow::BinaryType, true>>(params);
     }
 
-    static std::unique_ptr<TResult> MakeResource(bool isOptional) {
-        Y_UNUSED(isOptional);
+    static std::unique_ptr<TResult> MakeResource(bool isOptional, const TBlockSerializerParams& params) {
+        Y_UNUSED(isOptional, params);
         ythrow yexception() << "Deserializer not implemented for block resources";
     }
 
-    static std::unique_ptr<TResult> MakeSingular() {
-        return std::make_unique<TSingularType>();
+    template <bool IsNull>
+    static std::unique_ptr<TResult> MakeSingular(const TBlockSerializerParams& params) {
+        return std::make_unique<TSingularType<IsNull>>(params);
     }
 
-    template<typename TTzDateType>
-    static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
+    template <typename TTzDateType>
+    static std::unique_ptr<TResult> MakeTzDate(bool isOptional, const TBlockSerializerParams& params) {
         if (isOptional) {
-            return std::make_unique<TTzDate<TTzDateType, true>>();
-        }
-        else {
-            return std::make_unique<TTzDate<TTzDateType, false>>();
+            return std::make_unique<TTzDate<TTzDateType, true>>(params);
+        } else {
+            return std::make_unique<TTzDate<TTzDateType, false>>(params);
         }
     }
 };
 
 } // namespace
 
-
-std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type, const TBlockSerializerParams& params) {
+std::unique_ptr<IBlockSerializer> MakeBlockSerializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
+                                                      const NYql::NUdf::TType* type,
+                                                      const TBlockSerializerParams& params) {
     return NYql::NUdf::DispatchByArrowTraits<TSerializerTraits>(typeInfoHelper, type, nullptr, params);
 }
 
-std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper, const NYql::NUdf::TType* type) {
-    std::unique_ptr<TBlockDeserializerBase> result =  NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(typeInfoHelper, type, nullptr);
+std::unique_ptr<IBlockDeserializer> MakeBlockDeserializer(const NYql::NUdf::ITypeInfoHelper& typeInfoHelper,
+                                                          const NYql::NUdf::TType* type,
+                                                          const TBlockSerializerParams& params) {
+    std::unique_ptr<TBlockDeserializerBase> result = NYql::NUdf::DispatchByArrowTraits<TDeserializerTraits>(
+        typeInfoHelper, type, nullptr, params);
     result->SetArrowType(NYql::NUdf::GetArrowType(typeInfoHelper, type));
     return std::move(result);
 }
-
 
 } // namespace NKikimr::NMiniKQL

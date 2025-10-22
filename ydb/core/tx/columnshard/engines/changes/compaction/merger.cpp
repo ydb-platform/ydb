@@ -187,6 +187,8 @@ public:
                     }
                 }
                 if (!colStatsOpt) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_COMPACTION)("event", "incorrect_case_stat")("stat", Stats->DebugString())(
+                        "column_id", c)("schema", resultFiltered->DebugString());
                     chunks = NArrow::NSplitter::TSimilarPacker::SplitWithExpected(p, settings.GetExpectedRecordsCountOnPage());
                 } else {
                     chunks = colStatsOpt->SplitRecords(
@@ -239,7 +241,7 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
         NArrow::NMerger::TMergePartialStream mergeStream(
-            resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames(), std::nullopt);
+            resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {

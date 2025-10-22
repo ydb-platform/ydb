@@ -20,8 +20,11 @@ class YdbClient:
     def wait_connection(self, timeout=5):
         self.driver.wait(timeout, fail_fast=True)
 
-    def query(self, statement):
-        return self.session_pool.execute_with_retries(statement)
+    def query(self, statement, request_settings=None):
+        return self.session_pool.execute_with_retries(query=statement, settings=request_settings)
+
+    def query_async(self, statement, request_settings=None):
+        return self.session_pool.execute_with_retries_async(query=statement, settings=request_settings)
 
     def bulk_upsert(self, table_path, column_types: ydb.BulkUpsertColumns, data_slice):
         self.driver.table_client.bulk_upsert(
@@ -37,3 +40,9 @@ class YdbClient:
         process = yatest.common.process.execute(cmd, check_exit_code=False)
         if process.exit_code != 0:
             assert False, f'Command\n{cmd}\n finished with exit code {process.exit_code}, stderr:\n\n{process.std_err}\n\nstdout:\n{process.std_out}'
+
+    def session_acquire(self):
+        return self.session_pool.acquire()
+
+    def session_release(self, session):
+        return self.session_pool.release(session)

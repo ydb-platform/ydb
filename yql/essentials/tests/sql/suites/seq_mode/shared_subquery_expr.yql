@@ -1,0 +1,6 @@
+pragma SeqMode;
+pragma config.flags("DisableEarlyExpandSeq");
+$a = select 1;
+select * from $a;
+select * from $a;
+

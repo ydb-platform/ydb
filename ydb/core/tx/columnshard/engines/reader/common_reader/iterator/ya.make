@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    columns_set.cpp
     GLOBAL sub_columns_fetching.cpp
     GLOBAL default_fetching.cpp
     constructor.cpp
@@ -20,6 +19,6 @@ PEERDIR(
     ydb/core/util/evlog
 )
 
-GENERATE_ENUM_SERIALIZATION(columns_set.h)
+GENERATE_ENUM_SERIALIZATION(source.h)
 
 END()

@@ -29,8 +29,8 @@ class RemoveComprehension(Transformation):
     """
 
     def __init__(self):
+        super().__init__()
         self.count = 0
-        Transformation.__init__(self)
 
     def visit_Module(self, node):
         self.has_dist_comp = False

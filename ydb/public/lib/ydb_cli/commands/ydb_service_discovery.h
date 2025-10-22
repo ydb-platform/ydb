@@ -21,6 +21,8 @@ public:
 
 private:
     void PrintResponse(NDiscovery::TListEndpointsResult& result);
+
+    bool OutputPilesInfo = false;
 };
 
 class TCommandWhoAmI : public TYdbSimpleCommand {

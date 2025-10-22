@@ -6,6 +6,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
+
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
@@ -39,8 +41,18 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     };
     TMaybe<TMatchedRead> matched;
 
+    bool stageContainsSimpleProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms;
+
     VisitExpr(stage.Program().Body().Ptr(), [&](const TExprNode::TPtr& node) {
             TExprBase expr(node);
+            if (expr.Maybe<TCoFlatMapBase>() && NYql::IsFilterFlatMap(expr.Cast<TCoFlatMapBase>().Lambda())) {
+                stageContainsSimpleProgram = false;
+            }
+
+            if (expr.Maybe<TCoCombineByKey>()) {
+                stageContainsSimpleProgram = false;
+            }
+
             if (auto cast = expr.Maybe<TKqpReadTable>()) {
                 Y_ENSURE(!matched || matched->Expr.Raw() == node.Get());
                 auto read = cast.Cast();
@@ -72,12 +84,18 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         return node;
     }
 
+    bool stageContainsEmptyProgram = kqpCtx.Config->EnableSimpleProgramsSinglePartitionOptimization;
+    if (stage.Program().Body().Raw() != matched->Expr.Raw()) {
+        stageContainsEmptyProgram = false;
+    }
+
     auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, matched->Table.Path());
     if (!UseSource(kqpCtx, tableDesc)) {
         return node;
     }
 
     auto settings = TKqpReadTableSettings::Parse(matched->Settings);
+
     auto selectColumns = matched->Columns;
     TVector<TCoAtom> skipNullColumns;
     TExprNode::TPtr limit;
@@ -107,6 +125,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         settings.ItemsLimit = nullptr;
 
         matched->Settings = settings.BuildNode(ctx, matched->Settings.Pos());
+        stageContainsEmptyProgram = false;
     }
 
     if (kqpCtx.Config->HasMaxSequentialReadsInFlight()) {
@@ -141,6 +160,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
             .Ptr();
 
     if (skipNullColumns) {
+        stageContainsEmptyProgram = false;
         replaceExpr =
             Build<TCoExtractMembers>(ctx, node.Pos())
                 .Members(selectColumns)
@@ -152,6 +172,7 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
     }
 
     if (limit) {
+        stageContainsEmptyProgram = false;
         limit = ctx.ReplaceNodes(std::move(limit), argReplaces);
         replaceExpr =
             Build<TCoTake>(ctx, node.Pos())
@@ -177,10 +198,20 @@ TExprBase KqpRewriteReadTable(TExprBase node, TExprContext& ctx, const TKqpOptim
         .Done();
     inputs.insert(inputs.begin(), TExprBase(ctx.ReplaceNodes(source.Ptr(), sourceReplaces)));
 
+    if (settings.IsSorted()) {
+        stageContainsEmptyProgram = false;
+        stageContainsSimpleProgram = false;
+    }
+
+    TDqStageSettings newSettings = TDqStageSettings::Parse(stage);
+    if (stageContainsEmptyProgram || stageContainsSimpleProgram) {
+        newSettings.SetPartitionMode(TDqStageSettings::EPartitionMode::Single);
+    }
+
     return Build<TDqStage>(ctx, stage.Pos())
         .Inputs().Add(inputs).Build()
         .Outputs(stage.Outputs())
-        .Settings(stage.Settings())
+        .Settings(newSettings.BuildNode(ctx, stage.Pos()))
         .Program()
             .Args(args)
             .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), argReplaces))

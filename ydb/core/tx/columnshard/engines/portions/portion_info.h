@@ -7,12 +7,14 @@
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/thread_safe_optional.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
 
 #include <util/generic/hash_set.h>
+
 
 namespace NKikimrColumnShardDataSharingProto {
 class TPortionInfo;
@@ -80,7 +82,6 @@ public:
     };
 
 private:
-    friend class TPortionDataAccessor;
     friend class TPortionInfoConstructor;
     friend class TCompactedPortionInfo;
     friend class TWrittenPortionInfo;
@@ -90,12 +91,53 @@ private:
 
     TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
-    TSnapshot RemoveSnapshot = TSnapshot::Zero();
+    TThreadSafeOptional<TSnapshot> RemoveSnapshot;
     ui64 SchemaVersion = 0;
     std::optional<ui64> ShardingVersion;
 
     TPortionMeta Meta;
     TRuntimeFeatures RuntimeFeatures = 0;
+
+    virtual void DoSaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const = 0;
+
+    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
+    virtual TString DoDebugString(const bool /*withDetails*/) const {
+        return "";
+    }
+
+public:
+    struct TPortionAddressComparator {
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            return left->GetAddress() < right->GetAddress();
+        }
+    };
+
+    class TReversablePortionAddressComparator {
+    private:
+        const bool Reverse = false;
+
+    public:
+        TReversablePortionAddressComparator(const bool reverse)
+            : Reverse(reverse) {
+        }
+        bool operator()(const TPortionInfo::TConstPtr& left, const TPortionInfo::TConstPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+        bool operator()(const TPortionInfo::TPtr& left, const TPortionInfo::TPtr& right) const {
+            if (!Reverse) {
+                return left->GetAddress() < right->GetAddress();
+            } else {
+                return right->GetAddress() < left->GetAddress();
+            }
+        }
+    };
 
     void FullValidation() const {
         AFL_VERIFY(PathId);
@@ -106,14 +148,6 @@ private:
 
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto);
 
-    virtual void DoSaveMetaToDatabase(NIceDb::TNiceDb& db) const = 0;
-
-    virtual bool DoIsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot) const = 0;
-    virtual TString DoDebugString(const bool /*withDetails*/) const {
-        return "";
-    }
-
-public:
     virtual EPortionType GetPortionType() const = 0;
     virtual bool IsCommitted() const = 0;
     NPortion::TPortionInfoForCompaction GetCompactionInfo() const {
@@ -149,16 +183,12 @@ public:
         return (GetRecordsCount() / 10000 + 1) * sizeof(TColumnRecord) * columnsCount;
     }
 
-    void SaveMetaToDatabase(NIceDb::TNiceDb& db) const {
+    void SaveMetaToDatabase(const std::vector<TUnifiedBlobId>& blobIds, NIceDb::TNiceDb& db) const {
         FullValidation();
-        DoSaveMetaToDatabase(db);
+        DoSaveMetaToDatabase(blobIds, db);
     }
 
-    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata, const bool withMetadataBlobs) const = 0;
-
-    const std::vector<TUnifiedBlobId>& GetBlobIds() const {
-        return Meta.GetBlobIds();
-    }
+    virtual std::unique_ptr<TPortionInfoConstructor> BuildConstructor(const bool withMetadata) const = 0;
 
     ui32 GetCompactionLevel() const {
         return GetMeta().GetCompactionLevel();
@@ -185,8 +215,8 @@ public:
     }
 
     void SetRemoveSnapshot(const TSnapshot& snap) {
-        AFL_VERIFY(!RemoveSnapshot.Valid());
-        RemoveSnapshot = snap;
+        AFL_VERIFY(!HasRemoveSnapshot());
+        RemoveSnapshot.Set(snap);
     }
 
     void SetRemoveSnapshot(const ui64 planStep, const ui64 txId) {
@@ -227,18 +257,6 @@ public:
         return (RuntimeFeatures & (TRuntimeFeatures)feature);
     }
 
-    const TBlobRange RestoreBlobRange(const TBlobRangeLink16& linkRange) const {
-        return linkRange.RestoreRange(GetBlobId(linkRange.GetBlobIdxVerified()));
-    }
-
-    const TUnifiedBlobId& GetBlobId(const TBlobRangeLink16::TLinkId linkId) const {
-        return Meta.GetBlobId(linkId);
-    }
-
-    ui32 GetBlobIdsCount() const {
-        return Meta.GetBlobIdsCount();
-    }
-
     ui64 GetTxVolume() const {
         return 1024;
     }
@@ -246,7 +264,7 @@ public:
     ui64 GetApproxChunksCount(const ui32 schemaColumnsCount) const;
     ui64 GetMetadataMemorySize() const;
 
-    void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
+    void SerializeToProto(const std::vector<TUnifiedBlobId>& blobIds, NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
     TInternalPathId GetPathId() const {
         return PathId;
@@ -323,7 +341,7 @@ public:
     TString DebugString(const bool withDetails = false) const;
 
     bool HasRemoveSnapshot() const {
-        return RemoveSnapshot.Valid();
+        return RemoveSnapshot.Has();
     }
 
     bool IsRemovedFor(const TSnapshot& snapshot) const {
@@ -360,12 +378,12 @@ public:
 
     const TSnapshot& GetRemoveSnapshotVerified() const {
         AFL_VERIFY(HasRemoveSnapshot());
-        return RemoveSnapshot;
+        return RemoveSnapshot.Get();
     }
 
     std::optional<TSnapshot> GetRemoveSnapshotOptional() const {
-        if (RemoveSnapshot.Valid()) {
-            return RemoveSnapshot;
+        if (HasRemoveSnapshot()) {
+            return RemoveSnapshot.Get();
         } else {
             return {};
         }
@@ -377,8 +395,7 @@ public:
     }
 
     bool IsVisible(const TSnapshot& snapshot, const bool checkCommitSnapshot = true) const {
-
-        const bool visible = (!RemoveSnapshot.Valid() || snapshot < RemoveSnapshot) && DoIsVisible(snapshot, checkCommitSnapshot);
+        const bool visible = (!HasRemoveSnapshot() || snapshot < GetRemoveSnapshotVerified()) && DoIsVisible(snapshot, checkCommitSnapshot);
 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "IsVisible")("analyze_portion", DebugString())("visible", visible)(
             "snapshot", snapshot.DebugString());

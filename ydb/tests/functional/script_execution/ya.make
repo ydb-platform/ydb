@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 PEERDIR(
     ydb/public/api/protos
@@ -11,7 +11,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 TEST_SRCS(

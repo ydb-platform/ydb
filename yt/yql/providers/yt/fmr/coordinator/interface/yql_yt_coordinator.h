@@ -18,6 +18,7 @@ struct THeartbeatRequest {
 struct THeartbeatResponse {
     std::vector<TTask::TPtr> TasksToRun;
     std::unordered_set<TString> TaskToDeleteIds;
+    bool NeedToRestart = false;
 };
 
 struct TStartOperationRequest {
@@ -62,6 +63,10 @@ struct TGetFmrTableInfoResponse {
     std::vector<TFmrError> ErrorMessages = {};
 };
 
+struct TClearSessionRequest {
+    TString SessionId;
+};
+
 class IFmrCoordinator: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<IFmrCoordinator>;
@@ -77,6 +82,8 @@ public:
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 
     virtual NThreading::TFuture<TGetFmrTableInfoResponse> GetFmrTableInfo(const TGetFmrTableInfoRequest& request) = 0;
+
+    virtual NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) = 0;
 };
 
 } // namespace NYql::NFmr

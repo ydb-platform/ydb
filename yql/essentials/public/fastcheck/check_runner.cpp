@@ -27,5 +27,5 @@ TCheckResponse TCheckRunnerBase::Run(const TChecksRequest& request) {
     return response;
 }
 
-}
-}
+} // namespace NFastCheck
+} // namespace NYql

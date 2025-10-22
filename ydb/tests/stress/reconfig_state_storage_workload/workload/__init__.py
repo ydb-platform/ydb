@@ -8,6 +8,7 @@ import logging
 from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
+from ydb.tests.stress.common.common import YdbClient
 
 logger = logging.getLogger(__name__)
 
@@ -47,13 +48,12 @@ supported_types = supported_pk_types + [
 
 class WorkloadTablesCreateDrop(WorkloadBase):
     class TableStatus(Enum):
-        CREATING = "Creating",
-        AVAILABLE = "Available",
-        DELITING = "Deleting"
+        CREATING = "Creating"
+        AVAILABLE = "Available"
+        DELETING = "Deleting"
 
-    def __init__(self, client, prefix, stop, allow_nullables_in_pk):
+    def __init__(self, client, prefix, stop):
         super().__init__(client, prefix, "create_drop", stop)
-        self.allow_nullables_in_pk = allow_nullables_in_pk
         self.created = 0
         self.deleted = 0
         self.tables = {}
@@ -75,21 +75,19 @@ class WorkloadTablesCreateDrop(WorkloadBase):
         with self.lock:
             for n, s in self.tables.items():
                 if s == WorkloadTablesCreateDrop.TableStatus.AVAILABLE:
-                    self.tables[n] = WorkloadTablesCreateDrop.TableStatus.DELITING
+                    self.tables[n] = WorkloadTablesCreateDrop.TableStatus.DELETING
                     return n
         return None
 
     def create_table(self, table):
         path = self.get_table_path(table)
-        column_n = random.randint(1, 10000)
+        column_n = random.randint(1, 10)
         primary_key_column_n = random.randint(1, column_n)
-        partition_key_column_n = random.randint(1, primary_key_column_n)
         column_defs = []
         for i in range(column_n):
             if i < primary_key_column_n:
                 c = random.choice(supported_pk_types)
-                if not self.allow_nullables_in_pk or random.choice([False, True]):
-                    c += " NOT NULL"
+                c += " NOT NULL"
             else:
                 c = random.choice(supported_types)
                 if random.choice([False, True]):
@@ -101,37 +99,39 @@ class WorkloadTablesCreateDrop(WorkloadBase):
                     {", ".join(["c" + str(i) + " " + column_defs[i] for i in range(column_n)])},
                     PRIMARY KEY({", ".join(["c" + str(i) for i in range(primary_key_column_n)])})
                 )
-                PARTITION BY HASH({", ".join(["c" + str(i) for i in range(partition_key_column_n)])})
-                WITH (
-                    STORE = COLUMN
-                )
             """
         self.client.query(stmt, True)
 
     def _create_tables_loop(self):
+        logger.debug("starting")
         while not self.is_stop_requested():
             n = self._generate_new_table_n()
             self.create_table(str(n))
             with self.lock:
                 self.tables[n] = WorkloadTablesCreateDrop.TableStatus.AVAILABLE
                 self.created += 1
+                logger.debug(f"iteration {self.created}")
+        with self.lock:
+            logger.debug(f"exiting after {self.created} iterations")
 
     def _delete_tables_loop(self):
+        logger.debug("starting")
         while not self.is_stop_requested():
             n = self._get_table_to_delete()
             if n is None:
                 logger.info("create_drop: No tables to delete")
-                time.sleep(10)
+                time.sleep(5)
                 continue
             self.client.drop_table(self.get_table_path(str(n)))
             with self.lock:
                 del self.tables[n]
                 self.deleted += 1
+                logger.debug(f"iteration {self.deleted}")
+        with self.lock:
+            logger.debug(f"exiting after {self.deleted} iterations")
 
     def get_workload_thread_funcs(self):
-        r = [self._create_tables_loop for x in range(0, 10)]
-        r.append(self._delete_tables_loop)
-        return r
+        return [self._create_tables_loop] * 3 + [self._delete_tables_loop] * 2
 
 
 class WorkloadInsertDelete(WorkloadBase):
@@ -147,6 +147,7 @@ class WorkloadInsertDelete(WorkloadBase):
             return f"Inserted: {self.inserted}, Current: {self.current}"
 
     def _loop(self):
+        logger.debug("starting")
         table_path = self.get_table_path(self.table_name)
         self.client.query(
             f"""
@@ -155,15 +156,12 @@ class WorkloadInsertDelete(WorkloadBase):
                 i64Val Int64,
                 PRIMARY KEY(id)
                 )
-                PARTITION BY HASH(id)
-                WITH (
-                    STORE = COLUMN
-                )
         """,
             True,
         )
         i = 1
         while not self.is_stop_requested():
+            logger.debug(f"iteration {i}")
             self.client.query(
                 f"""
                 INSERT INTO `{table_path}` (`id`, `i64Val`)
@@ -195,6 +193,7 @@ class WorkloadInsertDelete(WorkloadBase):
             with self.lock:
                 self.inserted += 2
                 self.current = actual["cnt"]
+        logger.debug(f"exiting after {i} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -203,11 +202,12 @@ class WorkloadInsertDelete(WorkloadBase):
 class WorkloadReconfigStateStorage(WorkloadBase):
     config_name = "StateStorage"
     loop_cnt = 0
+    wait_for = 1
 
-    def __init__(self, client, cluster, prefix, stop, config_name):
+    def __init__(self, client, http_endpoint, prefix, stop, config_name):
         super().__init__(client, prefix, "reconfig_statestorage", stop)
         self.ringGroupActorIdOffset = 1
-        self.cluster = cluster
+        self.http_endpoint = http_endpoint
         self.lock = threading.Lock()
         self.config_name = config_name
 
@@ -216,7 +216,7 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             return f"Reconfig: {self.loop_cnt}"
 
     def do_request(self, json_req):
-        url = f'http://{self.cluster.nodes[1].host}:{self.cluster.nodes[1].mon_port}/actors/nodewarden?page=distconf'
+        url = f'{self.http_endpoint}/actors/nodewarden?page=distconf'
         return requests.post(url, headers={'content-type': 'application/json'}, json=json_req).json()
 
     def do_request_config(self):
@@ -225,8 +225,9 @@ class WorkloadReconfigStateStorage(WorkloadBase):
         return res
 
     def _loop(self):
+        logger.debug("starting")
         while not self.is_stop_requested():
-            time.sleep(3)
+            time.sleep(self.wait_for)
             cfg = self.do_request_config()[f"{self.config_name}Config"]
             defaultRingGroup = [cfg["Ring"]] if "Ring" in cfg else cfg["RingGroups"]
             newRingGroup = [
@@ -238,20 +239,20 @@ class WorkloadReconfigStateStorage(WorkloadBase):
                 newRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                 "RingGroups": defaultRingGroup + newRingGroup}}}))
-            time.sleep(3)
+            time.sleep(self.wait_for)
             for i in range(len(newRingGroup)):
                 newRingGroup[i]["WriteOnly"] = False
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                 "RingGroups": defaultRingGroup + newRingGroup}}}))
-            time.sleep(3)
+            time.sleep(self.wait_for)
             for i in range(len(defaultRingGroup)):
                 defaultRingGroup[i]["WriteOnly"] = True
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                 "RingGroups": newRingGroup + defaultRingGroup}}}))
-            time.sleep(3)
+            time.sleep(self.wait_for)
             logger.info(self.do_request({"ReconfigStateStorage": {f"{self.config_name}Config": {
                 "RingGroups": newRingGroup}}}))
-            time.sleep(3)
+            time.sleep(self.wait_for)
             curConfig = self.do_request_config()[f"{self.config_name}Config"]
             expectedConfig = {"Ring": newRingGroup[0]} if len(newRingGroup) == 1 else {"RingGroups": newRingGroup}
             if curConfig != expectedConfig:
@@ -260,6 +261,9 @@ class WorkloadReconfigStateStorage(WorkloadBase):
             with self.lock:
                 logger.info(f"Reconfig {self.loop_cnt} finished")
                 self.loop_cnt += 1
+                logger.debug(f"iteration {self.loop_cnt}")
+        with self.lock:
+            logger.debug(f"exiting after {self.loop_cnt} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -267,9 +271,9 @@ class WorkloadReconfigStateStorage(WorkloadBase):
 
 class WorkloadDiscovery(WorkloadBase):
 
-    def __init__(self, client, cluster, prefix, stop):
+    def __init__(self, client, grpc_endpoint, prefix, stop):
         super().__init__(client, prefix, "discovery", stop)
-        self.cluster = cluster
+        self.grpc_endpoint = grpc_endpoint
         self.lock = threading.Lock()
         self.cnt = 0
 
@@ -278,8 +282,8 @@ class WorkloadDiscovery(WorkloadBase):
             return f"Discovery: {self.cnt}"
 
     def _loop(self):
-        url = "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port)
-        driver_config = ydb.DriverConfig(url, self.client.database)
+        logger.debug("starting")
+        driver_config = ydb.DriverConfig(self.grpc_endpoint, self.client.database)
         while not self.is_stop_requested():
             time.sleep(3)
             resolver = ydb.DiscoveryEndpointsResolver(driver_config)
@@ -290,6 +294,9 @@ class WorkloadDiscovery(WorkloadBase):
                 logger.info(f"Len = {len(result.endpoints)} Endpoints: {result.endpoints}")
             with self.lock:
                 self.cnt += 1
+                logger.debug(f"iteration {self.cnt}")
+        with self.lock:
+            logger.debug(f"exiting after {self.cnt} iterations")
 
     def get_workload_thread_funcs(self):
         return [self._loop]
@@ -298,13 +305,14 @@ class WorkloadDiscovery(WorkloadBase):
 class WorkloadRunner:
     config_name = "StateStorage"
 
-    def __init__(self, client, cluster, path, duration, allow_nullables_in_pk, config_name):
-        self.client = client
+    def __init__(self, grpc_endpoint, http_endpoint, database, path, duration, config_name):
+        self.client = YdbClient(grpc_endpoint, database, True)
+        self.client.wait_connection()
+        self.grpc_endpoint = grpc_endpoint
+        self.http_endpoint = http_endpoint
         self.name = path
-        self.cluster = cluster
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
-        self.allow_nullables_in_pk = allow_nullables_in_pk
         self.config_name = config_name
         ydb.interceptor.monkey_patch_event_handler()
 
@@ -323,11 +331,12 @@ class WorkloadRunner:
     def run(self):
         stop = threading.Event()
 
+        reconfigWorkload = WorkloadReconfigStateStorage(self.client, self.http_endpoint, self.name, stop, self.config_name)
         workloads = [
-            # WorkloadTablesCreateDrop(self.client, self.name, stop, self.allow_nullables_in_pk),
+            WorkloadTablesCreateDrop(self.client, self.name, stop),
             WorkloadInsertDelete(self.client, self.name, stop),
-            WorkloadReconfigStateStorage(self.client, self.cluster, self.name, stop, self.config_name),
-            WorkloadDiscovery(self.client, self.cluster, self.name, stop)
+            reconfigWorkload,
+            WorkloadDiscovery(self.client, self.grpc_endpoint, self.name, stop)
         ]
         for w in workloads:
             w.start()
@@ -339,6 +348,17 @@ class WorkloadRunner:
             time.sleep(5)
         stop.set()
         logger.info("Waiting for stop...")
+        failed_to_stop = []
         for w in workloads:
-            w.join()
+            logger.debug(f"Waiting for {w.name} to stop...")
+            w.join(timeout=30)
+            if w.is_alive():
+                logger.error(f"Workload {w.name} failed to stop within 30 seconds!")
+                failed_to_stop.append(w.name)
+            else:
+                logger.debug(f"{w.name} stopped")
+
+        if failed_to_stop:
+            raise Exception(f"The following workloads failed to stop: {failed_to_stop}")
         logger.info("Waiting for stop... stopped")
+        return reconfigWorkload.loop_cnt

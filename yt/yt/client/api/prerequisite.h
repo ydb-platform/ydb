@@ -35,8 +35,6 @@ struct IPrerequisite
     virtual TFuture<void> Ping(const TPrerequisitePingOptions& options = {}) = 0;
     virtual TFuture<void> Abort(const TPrerequisiteAbortOptions& options = {}) = 0;
 
-    virtual void Detach() = 0;
-
     virtual NPrerequisiteClient::TPrerequisiteId GetId() const = 0;
 
     //! Verified dynamic casts to a more specific interface.

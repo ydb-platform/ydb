@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -156,7 +157,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 
     REGISTER_SETTING(*this, DefaultCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
@@ -165,7 +166,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             UseNativeYtTypes = value;
         })
-        .Warning("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
+        .Deprecated("Pragma UseTypeV2 is deprecated. Use UseNativeYtTypes instead");
     REGISTER_SETTING(*this, UseNativeYtTypes);
     REGISTER_SETTING(*this, UseNativeDescSort);
     REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
@@ -283,6 +284,41 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             LayerPaths[cluster] = value;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, LayerCaches)
+        .Parser([](const TString& v) {
+            NJson::TJsonValue val;
+            if (!NJson::ReadJsonTree(v, &val)) {
+                throw yexception() << "yt.LayerCaches must be a valid JSON string";
+            };
+            if (!val.Has("name")) {
+                throw yexception() << "yt.LayerCaches must contain layer name";
+            }
+            if (!val.Has("paths")) {
+                throw yexception() << "yt.LayerCaches must contain layer paths";
+            }
+            if (!val["paths"].IsArray()) {
+                throw yexception() << "yt.LayerCaches's paths must be an array";
+            }
+            for (const auto& path: val["paths"].GetArray()) {
+                if (!path.IsString()) {
+                    throw yexception() << "yt.LayerCaches's path must be a string";
+                }
+            }
+            THashMap<TString, TVector<TString>> res;
+            TVector<TString> paths;
+            paths.reserve(val["paths"].GetArray().size());
+            for (const auto& path: val["paths"].GetArray()) {
+                paths.emplace_back(path.GetString());
+            }
+            res[val["name"].GetString()] = std::move(paths);
+            return res;
+        })
+        .ValueSetter([this](const TString& cluster, const THashMap<TString, TVector<TString>>& val) {
+            for (const auto& [name, paths]: val) {
+                LayerCaches[cluster][name] = paths;
+            }
+        });
+
     REGISTER_SETTING(*this, DockerImage).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TString& value) {
             DockerImage[cluster] = value;
@@ -295,7 +331,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             Y_UNUSED(cluster);
             MaxInputTables = value;
         })
-        .Warning("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
+        .Deprecated("Pragma ExtendTableLimit is deprecated. Use MaxInputTables instead");
     REGISTER_SETTING(*this, CommonJoinCoreLimit);
     REGISTER_SETTING(*this, CombineCoreLimit).Lower(1_MB); // Min 1Mb
     REGISTER_SETTING(*this, SwitchLimit).Lower(1_MB); // Min 1Mb
@@ -312,6 +348,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
     REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
+    REGISTER_SETTING(*this, ConvertDynamicTablesToStatic).Parser([](const TString& v) { return FromString<EConvertDynamicTablesToStatic>(v); });
+    REGISTER_SETTING(*this, KeepMergeWithDynamicInput);
     REGISTER_SETTING(*this, DisableOptimizers);
     REGISTER_SETTING(*this, MaxInputTables).Lower(2).Upper(3000); // 3000 - default max limit on YT clusters
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
@@ -334,7 +372,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
                 JoinCollectColumnarStatistics = EJoinCollectColumnarStatisticsMode::Disable;
             }
         })
-        .Warning("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
+        .Deprecated("Pragma JoinUseColumnarStatistics is deprecated. Use JoinCollectColumnarStatistics instead");
     REGISTER_SETTING(*this, JoinCollectColumnarStatistics)
         .Parser([](const TString& v) { return FromString<EJoinCollectColumnarStatisticsMode>(v); });
     REGISTER_SETTING(*this, JoinColumnarStatisticsFetcherMode)
@@ -459,6 +497,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
     REGISTER_SETTING(*this, NetworkProject);
+    REGISTER_SETTING(*this, StaticNetworkProject);
     REGISTER_SETTING(*this, FileCacheTtl);
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
@@ -467,6 +506,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
+    REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
+    REGISTER_SETTING(*this, UseNativeYtDefaultColumnOrder);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -544,14 +585,14 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             if (cluster != "$all") {
                 throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
             }
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
     REGISTER_SETTING(*this, DefaultRuntimeCluster)
         .Validator([this] (const TString&, TString value) {
-            if (!ValidClusters.contains(value)) {
+            if (!GetValidClusters().contains(value)) {
                 throw yexception() << "Unknown cluster name: " << value;
             }
         });
@@ -587,6 +628,11 @@ size_t TYtVersionedConfiguration::FindNodeVer(const TExprNode& node) {
     }
     NodeIdToVer.emplace(node.UniqueId(), ver);
     return ver;
+}
+
+void TYtVersionedConfiguration::CopyNodeVer(const TExprNode& from, const TExprNode& to) {
+    const size_t ver = FindNodeVer(from);
+    NodeIdToVer.emplace(to.UniqueId(), ver);
 }
 
 void TYtVersionedConfiguration::FreezeZeroVersion() {

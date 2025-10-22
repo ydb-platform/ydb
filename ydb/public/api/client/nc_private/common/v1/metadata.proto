@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package nebius.common.v1;
+
+//import "ydb/public/api/client/nc_private/buf/validate/validate.proto";
+import "google/protobuf/timestamp.proto";
+import "ydb/public/api/client/nc_private/annotations.proto";
+
+option java_multiple_files = true;
+option java_outer_classname = "MetadataProto";
+option java_package = "ai.nebius.common.v1";
+
+// Common resource metadata.
+message ResourceMetadata {
+  // option (message_visibility) = PUBLIC; // This option conflicts with other options by its number
+
+  // Identifier for the resource, unique for its resource type.
+  // @exclude Using NID is STRONGLY recommended because NID is URL- and DNS-safe and reasonably human-readable.
+  string id = 1 [(field_behavior) = IDENTIFIER];
+
+  // Identifier of the parent resource to which the resource belongs.
+  // @exclude Parent resource is typically an IAM container, but not required to be so.
+  // @exclude Parent ID can be IMMUTABLE in some APIs, but allowed to be modified by user in others
+  // @exclude (e.g., Move VPC network to another IAM container).
+  // @exclude Parent is IMMUTABLE by default.
+  // @exclude If API supports `move` then use custom annotation on resource level (resource_behavior) = MOVABLE
+  string parent_id = 2; // [(buf.validate.field).required = true];
+
+  // Human readable name for the resource.
+  // @exclude If the resource is not marked with ResourceBehavior.UNNAMED then name must be unique within resource_type and parent_id.
+  string name = 3;
+
+  // Version of the resource for safe concurrent modifications and consistent reads.
+  // Positive and monotonically increases on each resource spec change (but *not* on each change of the
+  // resource's container(s) or status).
+  // Service allows zero value or current.
+  //
+  // @exclude * A service MUST support resource_version on Update and MAY include it in other modifying requests, such as Delete
+  // @exclude * If a user in a modifying request (e.g., Update, Delete) sends back a resource_version that does not match the
+  // @exclude   current resource_version value, the service MUST respond with an error with code ABORTED.
+  // @exclude   (unless another failure takes precedence, such as INVALID_ARGUMENT).
+  // @exclude * If a user in a modifying request (e.g., Update, Delete) sends back a resource_version which matches the current
+  // @exclude   resource_version value or does not send a resource_version at all (that is, send 0), the service MUST permit the request
+  // @exclude   (unless there is some other reason for failure).
+  int64 resource_version = 4; // [
+  //   (buf.validate.field).int64.gte = 0
+  // ];
+
+  // Timestamp indicating when the resource was created.
+  google.protobuf.Timestamp created_at = 5 [(field_behavior) = OUTPUT_ONLY];
+
+  // Timestamp indicating when the resource was last updated.
+  google.protobuf.Timestamp updated_at = 6 [(field_behavior) = OUTPUT_ONLY];
+
+  // Labels associated with the resource.
+  //
+  // @exclude * Not for server-side logic. These labels are only intended for
+  // @exclude   user-defined labeling.
+  map<string, string> labels = 7;
+
+  // Internal labels.
+  //
+  // @exclude * For company internal purposes. May be used as a feature toggle
+  // @exclude   but as with `labels`, must conform to the declarative principle
+  // @exclude   of *what was sent will be received without changes*.
+  map<string, string> hidden_labels = 8 [(field_visibility) = PRIVATE];
+}
+
+// if service supports uniqueness of ResourceMetadata.name within tuple (scope) <resource_type, parent_id>
+// it also must have grpc method GetByName
+message GetByNameRequest {
+  // option (message_visibility) = PUBLIC; // This option conflicts with other options by its number
+
+  string parent_id = 1;
+  string name = 2;
+}

@@ -157,7 +157,7 @@ void PipeReaderToWriter(
     const IUnversionedRowsetWriterPtr& writer,
     const TPipeReaderToWriterOptions& options)
 {
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     TRowBatchReadOptions readOptions{
         .MaxRowsPerRead = options.BufferRowCount,
@@ -223,9 +223,9 @@ void PipeReaderToWriterByBatches(
     TDuration pipeDelay)
 {
     try {
-        TPeriodicYielder yielder(TDuration::Seconds(1));
+        auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
-        while (auto batch = reader->Read(options)) {
+        for (bool isFirstBatch = true; auto batch = reader->Read(options); isFirstBatch = false) {
             yielder.TryYield();
 
             if (batch->IsEmpty()) {
@@ -251,7 +251,7 @@ void PipeReaderToWriterByBatches(
                     .ThrowOnError();
             }
 
-            if (optionsUpdater) {
+            if (optionsUpdater && !isFirstBatch) {
                 options.MaxRowsPerRead = rowsRead;
                 optionsUpdater(&options, timer.GetElapsedTime());
             }
@@ -266,15 +266,17 @@ void PipeReaderToWriterByBatches(
     }
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     TBlob buffer(GetRefCountedTypeCookie<TWriteBufferTag>(), bufferBlockSize, /*initializeStorage*/ false);
 
-    TPeriodicYielder yielder(TDuration::Seconds(1));
+    auto yielder = CreatePeriodicYielder(TDuration::Seconds(1));
 
     while (true) {
         yielder.TryYield();
@@ -284,17 +286,23 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize)
 {
+    i64 totalBytes = 0;
+
     struct TWriteBufferTag { };
     auto buffer = TSharedMutableRef::Allocate<TWriteBufferTag>(bufferBlockSize, {.InitializeStorage = false});
 
@@ -306,16 +314,22 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += length;
+
         output->Write(buffer.Begin(), length);
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const IAsyncZeroCopyInputStreamPtr& input,
     IOutputStream* output)
 {
+    i64 totalBytes = 0;
+
     while (true) {
         auto data = WaitFor(input->Read())
             .ValueOrThrow();
@@ -324,10 +338,14 @@ void PipeInputToOutput(
             break;
         }
 
+        totalBytes += data.Size();
+
         output->Write(data.Begin(), data.Size());
     }
 
     output->Finish();
+
+    return totalBytes;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

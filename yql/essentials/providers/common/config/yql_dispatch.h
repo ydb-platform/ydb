@@ -22,7 +22,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/algorithm.h>
 
-
 namespace NYql {
 
 namespace NPrivate {
@@ -32,90 +31,66 @@ using TParser = std::function<TType(const TString&)>;
 
 template <typename TType>
 TParser<TType> GetDefaultParser() {
-    return [] (const TString&) -> TType { throw yexception() << "Unsupported parser"; };
+    return [](const TString&) -> TType { throw yexception() << "Unsupported parser"; };
 }
 
 template <>
 TParser<TString> GetDefaultParser<TString>();
 
-template<>
+template <>
 TParser<bool> GetDefaultParser<bool>();
 
 template <>
 TParser<TGUID> GetDefaultParser<TGUID>();
 
-template<>
+template <>
 TParser<NSize::TSize> GetDefaultParser<NSize::TSize>();
 
-template<>
+template <>
 TParser<TInstant> GetDefaultParser<TInstant>();
 
-
-#define YQL_PRIMITIVE_SETTING_PARSER_TYPES(XX)  \
-    XX(ui8)                                     \
-    XX(ui16)                                    \
-    XX(ui32)                                    \
-    XX(ui64)                                    \
-    XX(i8)                                      \
-    XX(i16)                                     \
-    XX(i32)                                     \
-    XX(i64)                                     \
-    XX(float)                                   \
-    XX(double)                                  \
+#define YQL_PRIMITIVE_SETTING_PARSER_TYPES(XX) \
+    XX(ui8)                                    \
+    XX(ui16)                                   \
+    XX(ui32)                                   \
+    XX(ui64)                                   \
+    XX(i8)                                     \
+    XX(i16)                                    \
+    XX(i32)                                    \
+    XX(i64)                                    \
+    XX(float)                                  \
+    XX(double)                                 \
     XX(TDuration)
 
-#define YQL_CONTAINER_SETTING_PARSER_TYPES(XX)  \
-    XX(TVector<TString>)                        \
-    XX(TSet<TString>)                           \
+#define YQL_CONTAINER_SETTING_PARSER_TYPES(XX) \
+    XX(TVector<TString>)                       \
+    XX(TSet<TString>)                          \
     XX(THashSet<TString>)
 
-#define YQL_DECLARE_SETTING_PARSER(type)    \
-    template<>                              \
+#define YQL_DECLARE_SETTING_PARSER(type) \
+    template <>                          \
     TParser<type> GetDefaultParser<type>();
 
 YQL_PRIMITIVE_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 YQL_CONTAINER_SETTING_PARSER_TYPES(YQL_DECLARE_SETTING_PARSER)
 
-#ifdef YQL_BETTER_CONF_SETTING_API
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::StaticPerCluster>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Dynamic>& setting, const TString& cluster) {
     return setting.Get(cluster);
 }
 
-template<typename TType>
+template <typename TType>
 TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, NCommon::EConfSettingType::Static>& setting, const TString& cluster) {
     Y_UNUSED(cluster);
     return setting.Get();
 }
-#else
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, false>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
 
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, true, true>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
-
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, true>& setting, const TString& cluster) {
-    return setting.Get(cluster);
-}
-
-template<typename TType>
-TMaybe<TType> GetValue(const NCommon::TConfSetting<TType, false, false>& setting, const TString& cluster) {
-    Y_UNUSED(cluster);
-    return setting.Get();
-}
-#endif
-
-}
+} // namespace NPrivate
 
 namespace NCommon {
 
@@ -141,7 +116,7 @@ public:
         }
 
         const TString& GetDisplayName() const {
-            return Name_ ;
+            return Name_;
         }
 
         virtual bool Handle(const TString& cluster, const TMaybe<TString>& value, bool validateOnly, const TErrorCallback& errorCallback) = 0;
@@ -149,28 +124,21 @@ public:
         virtual void Restore(const TString& cluster) = 0;
         virtual bool IsRuntime() const = 0;
         virtual bool IsPerCluster() const = 0;
+        virtual bool IsDeprecated() const = 0;
 
     protected:
         TString Name_;
     };
 
-#ifdef YQL_BETTER_CONF_SETTING_API
     template <typename TType, EConfSettingType SettingType>
-#else
-    template <typename TType, bool RUNTIME, bool PERCLUSTER>
-#endif
-    class TSettingHandlerImpl : public TSettingHandler {
+    class TSettingHandlerImpl: public TSettingHandler {
     public:
         using TValueCallback = std::function<void(const TString&, TType)>;
 
     private:
         friend class TSettingDispatcher;
 
-#ifdef YQL_BETTER_CONF_SETTING_API
         TSettingHandlerImpl(const TString& name, TConfSetting<TType, SettingType>& setting)
-#else
-        TSettingHandlerImpl(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting)
-#endif
             : TSettingHandler(name)
             , Setting_(setting)
             , Parser_(::NYql::NPrivate::GetDefaultParser<TType>())
@@ -185,7 +153,7 @@ public:
                 try {
                     TType v = Parser_(*value);
 
-                    for (auto& validate: Validators_) {
+                    for (auto& validate : Validators_) {
                         validate(cluster, v);
                     }
                     if (!validateOnly) {
@@ -208,17 +176,17 @@ public:
         }
 
         void FreezeDefault() override {
-            Defaul_ = Setting_;
+            Default_ = Setting_;
         }
 
         void Restore(const TString& cluster) override {
-            if (!Defaul_) {
+            if (!Default_) {
                 ythrow yexception() << "Cannot restore " << Name_.Quote() << " setting without freeze";
             }
             if (ALL_CLUSTERS == cluster) {
-                Setting_ = Defaul_.GetRef();
+                Setting_ = Default_.GetRef();
             } else {
-                if (auto value = NPrivate::GetValue(Defaul_.GetRef(), cluster)) {
+                if (auto value = NPrivate::GetValue(Default_.GetRef(), cluster)) {
                     Setting_[cluster] = *value;
                 } else {
                     Setting_.Clear();
@@ -233,6 +201,10 @@ public:
 
         bool IsPerCluster() const override {
             return Setting_.IsPerCluster();
+        }
+
+        bool IsDeprecated() const override {
+            return Deprecated_;
         }
 
         TSettingHandlerImpl& Lower(TType lower) {
@@ -284,7 +256,7 @@ public:
         }
 
         TSettingHandlerImpl& GlobalOnly() {
-            Validators_.push_back([] (const TString& cluster, TType) {
+            Validators_.push_back([](const TString& cluster, TType) {
                 if (cluster != NCommon::ALL_CLUSTERS) {
                     throw yexception() << "Option cannot be used with specific cluster";
                 }
@@ -323,8 +295,8 @@ public:
         }
 
         TSettingHandlerImpl& ValueSetterWithRestore(TValueCallback&& hook) {
-            ValueSetter_ = [this, hook = std::move(hook)] (const TString& cluster, TType value) {
-                if (Defaul_) {
+            ValueSetter_ = [this, hook = std::move(hook)](const TString& cluster, TType value) {
+                if (Default_) {
                     Restore(cluster);
                 }
                 hook(cluster, value);
@@ -333,8 +305,8 @@ public:
         }
 
         TSettingHandlerImpl& ValueSetterWithRestore(const TValueCallback& hook) {
-            ValueSetter_ = [this, hook] (const TString& cluster, TType value) {
-                if (Defaul_) {
+            ValueSetter_ = [this, hook](const TString& cluster, TType value) {
+                if (Default_) {
                     Restore(cluster);
                 }
                 hook(cluster, value);
@@ -347,23 +319,20 @@ public:
             return *this;
         }
 
-        TSettingHandlerImpl& Deprecated() {
-            Warning_ = TStringBuilder() << "Pragma \"" << Name_ << "\" is deprecated and has no effect";
+        TSettingHandlerImpl& Deprecated(const TString& message = {}) {
+            Warning_ = message ? message : (TStringBuilder() << "Pragma \"" << Name_ << "\" is deprecated and has no effect");
+            Deprecated_ = true;
             return *this;
         }
 
     private:
-#ifdef YQL_BETTER_CONF_SETTING_API
         TConfSetting<TType, SettingType>& Setting_;
-        TMaybe<TConfSetting<TType, SettingType>> Defaul_;
-#else
-        TConfSetting<TType, RUNTIME, PERCLUSTER>& Setting_;
-        TMaybe<TConfSetting<TType, RUNTIME, PERCLUSTER>> Defaul_;
-#endif
+        TMaybe<TConfSetting<TType, SettingType>> Default_;
         ::NYql::NPrivate::TParser<TType> Parser_;
         TValueCallback ValueSetter_;
         TVector<TValueCallback> Validators_;
         TString Warning_;
+        bool Deprecated_ = false;
     };
 
     TSettingDispatcher() = default;
@@ -385,21 +354,15 @@ public:
         ValidClusters.insert(cluster);
     }
 
-#ifdef YQL_BETTER_CONF_SETTING_API
     template <typename TType, EConfSettingType SettingType>
     TSettingHandlerImpl<TType, SettingType>& AddSetting(const TString& name, TConfSetting<TType, SettingType>& setting) {
         TIntrusivePtr<TSettingHandlerImpl<TType, SettingType>> handler = new TSettingHandlerImpl<TType, SettingType>(name, setting);
-#else
-    template <typename TType, bool RUNTIME, bool PERCLUSTER>
-    TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>& AddSetting(const TString& name, TConfSetting<TType, RUNTIME, PERCLUSTER>& setting) {
-        TIntrusivePtr<TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>> handler = new TSettingHandlerImpl<TType, RUNTIME, PERCLUSTER>(name, setting);
-#endif
-        if (!Handlers.insert({NormalizeName(name), handler}).second) {
+        if (!Handlers_.insert({NormalizeName(name), handler}).second) {
             ythrow yexception() << "Duplicate configuration setting name " << name.Quote();
         }
 
         if (!name.StartsWith('_')) {
-            Names.insert(name);
+            Names_.insert(name);
         }
 
         return *handler;
@@ -412,7 +375,7 @@ public:
     template <class TContainer, typename TFilter>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TFilter& filter) {
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v: clusterValues) {
+        for (auto& v : clusterValues) {
             if (filter(v)) {
                 Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
             }
@@ -422,7 +385,7 @@ public:
     template <class TContainer>
     void Dispatch(const TString& cluster, const TContainer& clusterValues) {
         auto errorCallback = GetDefaultErrorCallback();
-        for (auto& v: clusterValues) {
+        for (auto& v : clusterValues) {
             Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG, errorCallback);
         }
     }
@@ -444,9 +407,12 @@ public:
     void Enumerate(std::function<void(std::string_view)> callback);
 
 protected:
-    THashSet<TString> ValidClusters;
-    THashMap<TString, TSettingHandler::TPtr> Handlers;
-    TSet<TString> Names;
+    // FIXME switch usages to an acesssor
+    const THashSet<TString>& GetValidClusters() const;
+
+    THashSet<TString> ValidClusters; // NOLINT(readability-identifier-naming)
+    THashMap<TString, TSettingHandler::TPtr> Handlers_;
+    TSet<TString> Names_;
 };
 
 } // namespace NCommon

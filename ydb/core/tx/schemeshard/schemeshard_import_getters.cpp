@@ -1,17 +1,20 @@
 #include "schemeshard_import_getters.h"
+
 #include "schemeshard_import_helpers.h"
 #include "schemeshard_private.h"
+
+#include <ydb/public/api/protos/ydb_import.pb.h>
+#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/wrappers/retry_policy.h>
 #include <ydb/core/wrappers/s3_storage_config.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/public/api/protos/ydb_import.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
-#include <ydb/public/lib/ydb_cli/dump/files/files.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -137,11 +140,12 @@ protected:
     }
 
     void MaybeRetry(const Aws::S3::S3Error& error) {
-        if (Attempt < Retries && error.ShouldRetry()) {
+        const auto shouldRetry = NWrappers::ShouldRetry(error);
+        if (Attempt < Retries && shouldRetry) {
             Delay = Min(Delay * ++Attempt, MaxDelay);
             this->Schedule(Delay, new TEvents::TEvWakeup());
         } else {
-            Reply(error.ShouldRetry() ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
+            Reply(shouldRetry ? Ydb::StatusIds::EXTERNAL_ERROR : Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "S3 error: " << error.GetMessage().c_str());
         }
     }
 
@@ -347,10 +351,12 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             if (IsTable(SchemeKey)) {
                 // try search for a view
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateView().FileName);
+                SchemeFileType = NBackup::EBackupFileType::ViewCreate;
                 HeadObject(SchemeKey);
             } else if (IsView(SchemeKey)) {
                 // try search for a topic
                 SchemeKey = SchemeKeyFromSettings(*ImportInfo, ItemIdx, NYdb::NDump::NFiles::CreateTopic().FileName);
+                SchemeFileType = NBackup::EBackupFileType::TopicCreate;
                 HeadObject(SchemeKey);
             } else {
                 return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
@@ -475,7 +481,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
 
         TString content;
-        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema)) {
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
             return;
         }
 
@@ -671,7 +677,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         ChangefeedsPrefixes.reserve(objects.size());
 
         for (const auto& obj : objects) {
-            const TFsPath& path = obj.GetKey();
+            const TFsPath path = obj.GetKey();
             if (path.GetName() == "changefeed_description.pb") {
                 ChangefeedsPrefixes.push_back(path.Parent().GetName());
             }
@@ -693,7 +699,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void ListChangefeeds() {
         CreateClient();
-        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx));
+        ListObjects(ImportInfo->GetItemSrcPrefix(ItemIdx) + "/");
     }
 
     void DownloadMetadata() {
@@ -834,6 +840,7 @@ private:
 
     const TString MetadataKey;
     TString SchemeKey;
+    NBackup::EBackupFileType SchemeFileType = NBackup::EBackupFileType::TableSchema;
     const TString PermissionsKey;
     TVector<TString> ChangefeedsPrefixes;
     ui64 IndexDownloadedChangefeed = 0;

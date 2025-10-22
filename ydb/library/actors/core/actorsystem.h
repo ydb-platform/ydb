@@ -162,9 +162,9 @@ namespace NActors {
         TMutex ProxyCreationLock;
         mutable std::vector<TActorId> DynamicProxies;
 
-        bool StartExecuted;
-        bool StopExecuted;
-        bool CleanupExecuted;
+        std::atomic_bool StartExecuted = false;
+        std::atomic_bool StopExecuted = false;
+        std::atomic_bool CleanupExecuted = false;
 
         std::deque<std::function<void()>> DeferredPreStop;
     public:
@@ -175,6 +175,8 @@ namespace NActors {
         void Start();
         void Stop();
         void Cleanup();
+
+        static bool IsStopped();
 
         template <ESendingType SendingType = ESendingType::Common>
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType = TMailboxType::HTSwap, ui32 executorPool = 0,

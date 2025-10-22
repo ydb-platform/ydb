@@ -41,9 +41,12 @@ public:
 
     void EnsurePercentileIsValid() const;
     void EnsureWarmupSecIsValid() const;
+    void EnsureRatesIsValid() const;
 
     TString GetReadOnlyTableName() const;
     TString GetWriteOnlyTableName() const;
+
+    ui32 GetTopicMaxPartitionCount() const;
 
     TDuration TotalSec;
     TDuration WindowSec;
@@ -54,7 +57,7 @@ public:
     TString TopicName;
     ui32 TopicPartitionCount = 1;
     bool TopicAutoscaling = false;
-    ui32 TopicMaxPartitionCount = 100;
+    ui32 TopicMaxPartitionCount = 1;
     ui32 StabilizationWindowSeconds = 15;
     ui32 UpUtilizationPercent = 90;
     ui32 DownUtilizationPercent = 30;
@@ -64,8 +67,8 @@ public:
     bool Direct = false;
     TString ConsumerPrefix;
     size_t MessageSizeBytes;
-    size_t MessagesPerSec;
-    size_t BytesPerSec;
+    double MessagesPerSec;
+    double BytesPerSec;
     ui32 Codec;
     TString TableName;
     ui32 TablePartitionCount = 1;
@@ -76,8 +79,15 @@ public:
     bool OnlyTopicInTx = true;
     bool OnlyTableInTx = false;
     bool UseTableSelect = false;
+    TDuration RestartInterval = TDuration::Max();
+    bool ReadWithoutCommit = false;
     bool ReadWithoutConsumer = false;
     bool UseCpuTimestamp = false;
+    TMaybe<TString> KeyPrefix;
+    ui32 KeyCount = 0;
+    bool CleanupPolicyCompact = false;
+    std::optional<size_t> ConsumerMaxMemoryUsageBytes;
+    std::optional<size_t> ProducerMaxMemoryUsageBytes;
 
 protected:
     void CreateTopic(const TString& database,
@@ -88,7 +98,8 @@ protected:
                      ui32 maxPartitionCount = 100,
                      ui32 stabilizationWindowSeconds = 15,
                      ui32 upUtilizationPercent = 90,
-                     ui32 downUtilizationPercent = 30);
+                     ui32 downUtilizationPercent = 30,
+                     bool cleanupPolicyCompact = false);
     void DropTopic(const TString& database,
                    const TString& topic);
 
@@ -126,11 +137,12 @@ private:
                      ui32 maxPartitionCount,
                      ui32 stabilizationWindowSeconds,
                      ui32 upUtilizationPercent,
-                     ui32 downUtilizationPercent);
+                     ui32 downUtilizationPercent,
+                     bool cleanupPolicyCompact);
 
     static NTable::TSession GetSession(NTable::TTableClient& client);
 
-    static THolder<TLogBackend> MakeLogBackend(TClientCommand::TConfig::EVerbosityLevel level);
+    static THolder<TLogBackend> MakeLogBackend(ui32 level);
 
     void InitLog(TClientCommand::TConfig& config);
     void InitDriver(TClientCommand::TConfig& config);

@@ -25,6 +25,7 @@ SRCS(
     ut_common.cpp
     ut_counters.cpp
     ut_labeled.cpp
+    ut_registry.cpp
 )
 
 END()

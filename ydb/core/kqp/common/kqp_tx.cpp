@@ -174,6 +174,8 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool hasEffects = false;
     bool hasStreamLookup = false;
     bool hasSinkWrite = false;
+    bool hasSinkInsert = false;
+    bool hasVectorResolve = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -193,8 +195,21 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
         for (const auto &stage : tx.GetStages()) {
             hasSinkWrite |= !stage.GetSinks().empty();
 
+            for (const auto &sink : stage.GetSinks()) {
+                if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
+                    && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
+                {
+                    NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                    YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings));
+                    if (sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT) {
+                        hasSinkInsert = true;
+                    }
+                }
+            }
+
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
+                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
@@ -213,7 +228,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
     // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup) {
+    if (hasStreamLookup || hasVectorResolve) {
         return true;
     }
 
@@ -228,19 +243,15 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
             return true;
         }
         // ReadOnly transaction here
-    } else {
-        // We don't want snapshot when there are effects at the moment,
-        // because it hurts performance when there are multiple single-shard
-        // reads and a single distributed commit. Taking snapshot costs
-        // similar to an additional distributed transaction, and it's very
-        // hard to predict when that happens, causing performance
-        // degradation.
-        if (hasEffects) {
-            return false;
-        }
     }
 
-    YQL_ENSURE(!hasEffects && !hasStreamLookup);
+    if (hasSinkInsert && readPhases > 0) {
+        YQL_ENSURE(hasEffects);
+        // Insert operations create new read phases,
+        // so in presence of other reads we have to acquire snapshot.
+        // This is unique to INSERT operation, because it can fail.
+        return true;
+    }
 
     // We need snapshot when there are multiple table read phases, most
     // likely it involves multiple tables and we would have to use a
@@ -297,7 +308,6 @@ bool HasOltpTableReadInTx(const NKqpProto::TKqpPhyQuery& physicalQuery) {
             for (const auto &tableOp : stage.GetTableOps()) {
                 switch (tableOp.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kLookup:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges:
                         return true;
                     case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
@@ -346,7 +356,6 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
             for (const auto &tableOp : stage.GetTableOps()) {
                 switch (tableOp.GetTypeCase()) {
                     case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    case NKqpProto::TKqpPhyTableOperation::kLookup:
                     case NKqpProto::TKqpPhyTableOperation::kReadRanges: {
                         if (modifiedTables.contains(getTable(tableOp.GetTable()))) {
                             return true;
@@ -372,7 +381,9 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
+                case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kMap:
                 case NKqpProto::TKqpPhyConnection::kHashShuffle:
                 case NKqpProto::TKqpPhyConnection::kBroadcast:
@@ -381,6 +392,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 case NKqpProto::TKqpPhyConnection::kResult:
                 case NKqpProto::TKqpPhyConnection::kValue:
                 case NKqpProto::TKqpPhyConnection::kMerge:
+                case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
                 case NKqpProto::TKqpPhyConnection::TYPE_NOT_SET:
                     break;
                 }

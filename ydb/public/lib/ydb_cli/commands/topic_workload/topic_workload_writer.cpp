@@ -156,9 +156,6 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
 std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
     auto clock = NUnifiedAgent::TClock();
-    if (!clock.Configured()) {
-        clock.Configure();
-    }
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
     auto producer = std::make_shared<TTopicWorkloadWriterProducer>(
@@ -173,6 +170,9 @@ std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::Create
     settings.Codec((NYdb::NTopic::ECodec) Params.Codec);
     settings.Path(Params.TopicName);
     settings.ProducerId(producerId);
+    if (Params.MaxMemoryUsageBytes.has_value()) {
+        settings.MaxMemoryUsage(Params.MaxMemoryUsageBytes.value());
+    }
 
     NYdb::NTopic::TWriteSessionSettings::TEventHandlers eventHandlers;
     eventHandlers.AcksHandler(

@@ -6,7 +6,6 @@ SRCS(
     auth_mocks.cpp
     auth_multi_factory.cpp
     attributes_md5.cpp
-    cfg.cpp
     change_visibility.cpp
     count_queues.cpp
     cleanup_queue_data.cpp
@@ -89,11 +88,14 @@ PEERDIR(
     ydb/library/http_proxy/authorization
     ydb/library/http_proxy/error
     ydb/library/mkql_proto/protos
+    ydb/library/security
     ydb/public/lib/scheme_types
     ydb/public/lib/value
     ydb/public/sdk/cpp/src/client/types/credentials
     yql/essentials/minikql
     ydb/public/lib/deprecated/client
+    ydb/core/ymq/actor/cloud_events
+    ydb/core/ymq/actor/cfg
 )
 
 YQL_LAST_ABI_VERSION()
@@ -108,7 +110,11 @@ GENERATE_ENUM_SERIALIZATION(queue_schema.h)
 
 END()
 
+RECURSE(
+    cfg
+    cloud_events
+)
+
 RECURSE_FOR_TESTS(
-    ut
     yc_search_ut
 )

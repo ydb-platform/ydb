@@ -1,17 +1,14 @@
-#include "schemeshard__operation_part.h"
-#include "schemeshard__operation_common.h"
-#include "schemeshard_impl.h"
 #include "schemeshard__op_traits.h"
-
+#include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for IsAllowedKeyType
-
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/datashard_config.pb.h>
-
-#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
+#include <ydb/core/protos/datashard_config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>  // for IsAllowedKeyType
 
 namespace {
 
@@ -161,6 +158,25 @@ void ApplyPartitioning(TTxId txId,
     ss->SetPartitioning(pathId, tableInfo, std::move(partitions));
 }
 
+std::optional<TString> InferDefaultPoolKind(const TStoragePools& storagePools, const NKikimrSchemeOp::TPartitionConfig& changes) {
+    // Refuse to infer the default pool kind if any column family in the requested changes has a legacy Storage parameter
+    for (const auto& changesFamily : changes.GetColumnFamilies()) {
+        if (changesFamily.HasStorage()) {
+            return std::nullopt;
+        }
+    }
+
+    // If all pool kinds are the same in storagePools we can infer the one pool kind and use it in default StorageConfig
+    std::optional<TString> result = std::nullopt;
+    for (const auto& storagePool : storagePools) {
+        if (!result) {
+            result = storagePool.GetKind();
+        } else if (*result != storagePool.GetKind()) {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
 
 class TConfigureParts: public TSubOperationState {
 private:
@@ -500,7 +516,7 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    .IsValidLeafName(context.UserToken.Get())
                     .PathsLimit()
                     .DirChildrenLimit()
                     .IsValidACL(acl);
@@ -562,8 +578,9 @@ public:
             return result;
         }
 
+        std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -804,9 +821,11 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateTable>(id, state);
 }
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    TCreateTable *createTable = static_cast<TCreateTable*>(obj.Get());
+    createTable->SetAllowShadowDataForBuildIndex();
+    createTable->SetLocalSequences(localSequences);
     return obj;
 }
 

@@ -10,6 +10,10 @@ enum ESimpleCounters {
     COUNTER_EPOCH_SIZE_BYTES = 0            [(CounterOpts) = {Name: "EpochSizeBytes"}];
     COUNTER_EPOCH_DELTAS_SIZE_BYTES = 1     [(CounterOpts) = {Name: "EpochDeltasSizeBytes"}];
     COUNTER_UPDATE_NODES_LOG_SIZE_BYTES = 2 [(CounterOpts) = {Name: "UpdateNodesLogSizeBytes"}];
+    COUNTER_EPOCH_VERSION = 3               [(CounterOpts) = {Name: "EpochVersion"}];
+    COUNTER_ACTIVE_NODES = 4                [(CounterOpts) = {Name: "ActiveNodes"}];
+    COUNTER_EXPIRED_NODES = 5               [(CounterOpts) = {Name: "ExpiredNodes"}];
+    COUNTER_REMOVED_NODES = 6               [(CounterOpts) = {Name: "RemovedNodes"}];
 }
 
 enum ECumulativeCounters {

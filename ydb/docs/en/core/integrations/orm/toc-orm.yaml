@@ -7,3 +7,5 @@ items:
   href: jooq.md
 - name: Dapper
   href: dapper.md
+- name: Entity Framework
+  href: entity-framework.md

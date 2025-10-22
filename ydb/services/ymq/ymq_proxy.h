@@ -7,7 +7,6 @@
 
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 
 
 namespace NKikimr {

@@ -32,7 +32,7 @@ public:
     }
 
     void Init(bool localMode = false) {
-        NConfig::TRowDispatcherCoordinatorConfig config;
+        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig config;
         config.SetCoordinationNodePath("row_dispatcher");
         config.SetLocalMode(localMode);
         auto& database = *config.MutableDatabase();
@@ -45,7 +45,7 @@ public:
             Coordinator1,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -55,7 +55,7 @@ public:
             Coordinator2,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());
@@ -65,7 +65,7 @@ public:
             Coordinator3,
             config,
             NKikimr::CreateYdbCredentialsProviderFactory,
-            YqSharedResources,
+            YqSharedResources->UserSpaceYdbDriver,
             "/tenant",
             MakeIntrusive<NMonitoring::TDynamicCounters>()
             ).release());

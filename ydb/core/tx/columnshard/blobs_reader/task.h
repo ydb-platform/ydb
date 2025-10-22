@@ -1,18 +1,54 @@
 #pragma once
-#include <ydb/library/accessor/accessor.h>
-#include <ydb/library/conclusion/status.h>
+#include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/read.h>
-#include <ydb/library/signals/object_counter.h>
-#include <ydb/core/protos/base.pb.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/conclusion/status.h>
+#include <ydb/library/signals/object_counter.h>
 
 namespace NKikimr::NOlap::NBlobOperations::NRead {
 
 class TCompositeReadBlobs {
 private:
     THashMap<TString, TActionReadBlobs> BlobsByStorage;
+
+    void TakeDataFrom(TCompositeReadBlobs&& item) {
+        BlobsByStorage = std::move(item.BlobsByStorage);
+        item.BlobsByStorage.clear();
+    }
+
 public:
+    class TGuard: TNonCopyable {
+    private:
+        TCompositeReadBlobs* Blobs;
+
+        THashMap<TString, THashSet<TBlobRange>> Ranges;
+
+    public:
+        TGuard(TCompositeReadBlobs* blobs)
+            : Blobs(blobs) {
+        }
+
+        TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
+            Ranges[storageId].emplace(range);
+            return Blobs->GetBlobRangeVerified(storageId, range);
+        }
+
+        ~TGuard() {
+            for (auto&& i : Ranges) {
+                for (auto&& b : i.second) {
+                    Blobs->ExtractVerified(i.first, b);
+                }
+            }
+        }
+    };
+
+    TGuard BuildGuard() {
+        return TGuard(this);
+    }
+
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";
@@ -63,14 +99,29 @@ public:
         }
         return it->second.GetBlobRangeOptional(range);
     }
-    TString Extract(const TString& storageId, const TBlobRange& range) {
+    const TString& GetBlobRangeVerified(const TString& storageId, const TBlobRange& range) const {
         auto it = BlobsByStorage.find(storageId);
-        AFL_VERIFY(it != BlobsByStorage.end())("range", range.ToString())("storage_id", storageId);
-        auto result = it->second.Extract(range);
+        AFL_VERIFY(it != BlobsByStorage.end());
+        return it->second.GetBlobRangeVerified(range);
+    }
+    std::optional<TString> ExtractOptional(const TString& storageId, const TBlobRange& range) {
+        auto it = BlobsByStorage.find(storageId);
+        if (it == BlobsByStorage.end()) {
+            return std::nullopt;
+        }
+        auto result = it->second.ExtractOptional(range);
+        if (!result) {
+            return std::nullopt;
+        }
         if (it->second.IsEmpty()) {
             BlobsByStorage.erase(it);
         }
         return result;
+    }
+    TString ExtractVerified(const TString& storageId, const TBlobRange& range) {
+        auto result = ExtractOptional(storageId, range);
+        AFL_VERIFY(result)("range", range.ToString())("storage_id", storageId);
+        return std::move(*result);
     }
 
     ui64 GetTotalBlobsSize() const {
@@ -80,6 +131,24 @@ public:
         }
         return result;
     }
+
+    TCompositeReadBlobs() = default;
+
+    ~TCompositeReadBlobs() {
+        AFL_VERIFY(IsEmpty());
+    }
+
+    TCompositeReadBlobs& operator=(TCompositeReadBlobs&& item) noexcept {
+        TakeDataFrom(std::move(item));
+        return *this;
+    }
+
+    TCompositeReadBlobs(TCompositeReadBlobs&& item) noexcept {
+        TakeDataFrom(std::move(item));
+    }
+
+    TCompositeReadBlobs(const TCompositeReadBlobs&) = delete;
+    TCompositeReadBlobs& operator=(const TCompositeReadBlobs&) = delete;
 };
 
 class ITask: public NColumnShard::TMonitoringObjectsCounter<ITask> {
@@ -96,6 +165,7 @@ private:
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
     i64 BlobsWaitingCount = 0;
     bool ResultsExtracted = false;
+
 protected:
     bool IsFetchingStarted() const {
         return BlobsFetchingStarted;
@@ -112,6 +182,7 @@ protected:
     virtual TString DoDebugString() const {
         return "";
     }
+
 public:
     i64 GetWaitingRangesCount() const {
         return BlobsWaitingCount;
@@ -148,17 +219,17 @@ public:
     private:
         using TBase = NResourceBroker::NSubscribe::ITask;
         std::shared_ptr<NRead::ITask> Task;
+
     protected:
         virtual void DoOnAllocationSuccess(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& guard) override;
+
     public:
         TReadSubscriber(const std::shared_ptr<NRead::ITask>& readTask, const ui32 cpu, const ui64 memory, const TString& name,
             const NResourceBroker::NSubscribe::TTaskContext& context)
             : TBase(cpu, memory, name, context)
-            , Task(readTask)
-        {
-
+            , Task(readTask) {
         }
     };
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations::NRead

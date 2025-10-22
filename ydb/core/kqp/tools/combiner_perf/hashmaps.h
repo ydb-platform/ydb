@@ -42,24 +42,62 @@ struct TRobinHoodMapImplBase
         bool isNew = false;
         auto ptr = map.Insert(key, isNew);
         if (isNew) {
+#if defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
+            auto* payloadPtr = map.GetMutablePayloadPtr(ptr);
+            WriteUnaligned<V>(payloadPtr, delta);
+#else 
             *(V*)map.GetMutablePayload(ptr) = delta;
+#endif // defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
             map.CheckGrow();
         } else {
+#if defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
+            auto* payloadPtr = map.GetMutablePayloadPtr(ptr);
+            auto newValue =
+                ReadUnaligned<V>(payloadPtr);
+            newValue += delta;
+            WriteUnaligned<V>(payloadPtr, newValue);
+#else
             *(V*)map.GetMutablePayload(ptr) += delta;
+#endif // defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
         }
+    }
+
+    static void AggregateByExistingKey(TMapType& map, const K& key, const V& delta)
+    {
+        auto existingPtr = map.Lookup(key);
+        if (existingPtr == nullptr) {
+            return;
+        }
+#if defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
+        auto* payloadPtr = map.GetMutablePayloadPtr(existingPtr);
+        auto newValue =
+            ReadUnaligned<V>(payloadPtr);
+        newValue += delta;
+        WriteUnaligned<V>(payloadPtr, newValue);
+#else
+        *(V*)map.GetMutablePayload(existingPtr) += delta;
+#endif // defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
     }
 
     template<typename Callback>
     static void IteratePairs(const TMapType& map, Callback&& callback)
     {
-        // TODO: GetPayload and IsValid should be const
         for (const char* iter = map.Begin(); iter != map.End(); map.Advance(iter)) {
+#if defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
+            if (!map.IsValid(iter)) {
+                continue;
+            }
+            const auto& key = map.GetKeyValue(iter);
+            const auto& value = ReadUnaligned<V>(map.GetPayloadPtr(iter));
+            callback(key, value);
+#else 
             if (!const_cast<TMapType&>(map).IsValid(iter)) {
                 continue;
             }
             const auto& key = map.GetKey(iter);
             const auto& value = *(V*)(const_cast<TMapType&>(map)).GetPayload(iter);
             callback(key, value);
+#endif // defined(MKQL_RH_HASH_MOVE_API_TO_NEW_VERSION)
         }
     }
 
@@ -106,6 +144,12 @@ struct TRobinHoodMapImpl<std::string, V>
     {
         NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
         TRealBase::AggregateByKey(map, ub, delta);
+    }
+
+    static void AggregateByExistingKey(TMapType& map, const std::string& key, const V& delta)
+    {
+        NYql::NUdf::TUnboxedValuePod ub = NYql::NUdf::TUnboxedValuePod::Embedded(NYql::NUdf::TStringRef(key));
+        TRealBase::AggregateByExistingKey(map, ub, delta);
     }
 
     template<typename Callback>

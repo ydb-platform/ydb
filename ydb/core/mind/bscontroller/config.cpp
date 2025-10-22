@@ -40,7 +40,7 @@ namespace NKikimr::NBsController {
 
                 if (CacheUpdate.KeyValuePairsSize()) {
                     State.Outbox.emplace_back(Self->SelfId().NodeId(), std::make_unique<NStorage::TEvNodeWardenUpdateCache>(
-                        std::move(CacheUpdate)), 0);
+                        std::move(CacheUpdate)), 0, true);
                 }
             }
 
@@ -81,8 +81,11 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyPDiskDiff(const TPDiskId &pdiskId, const TPDiskInfo &prev, const TPDiskInfo &cur) {
-                if (prev.Mood != cur.Mood) {
-                    // PDisk's mood has changed
+                if (prev.Mood != cur.Mood ||
+                        prev.ExpectedSlotCount != cur.ExpectedSlotCount ||
+                        prev.SlotSizeInUnits != cur.SlotSizeInUnits ||
+                        prev.InferPDiskSlotCountFromUnitSize != cur.InferPDiskSlotCountFromUnitSize ||
+                        prev.InferPDiskSlotCountMax != cur.InferPDiskSlotCountMax) {
                     CreatePDiskEntry(pdiskId, cur);
                 }
             }
@@ -115,6 +118,8 @@ namespace NKikimr::NBsController {
                 pdisk->SetPDiskCategory(pdiskInfo.Kind.GetRaw());
                 pdisk->SetExpectedSerial(pdiskInfo.ExpectedSerial);
                 pdisk->SetManagementStage(Self->SerialManagementStage);
+                pdisk->SetInferPDiskSlotCountFromUnitSize(pdiskInfo.InferPDiskSlotCountFromUnitSize);
+                pdisk->SetInferPDiskSlotCountMax(pdiskInfo.InferPDiskSlotCountMax);
                 if (pdiskInfo.PDiskConfig && !pdisk->MutablePDiskConfig()->ParseFromString(pdiskInfo.PDiskConfig)) {
                     // TODO(alexvru): report this somehow
                 }
@@ -196,6 +201,7 @@ namespace NKikimr::NBsController {
 
                 if (const TGroupInfo *group = State.Groups.Find(vslotInfo.GroupId); group && mood != TMood::Delete) {
                     item.SetStoragePoolName(State.StoragePools.Get().at(group->StoragePoolId).Name);
+                    item.SetGroupSizeInUnits(group->GroupSizeInUnits);
 
                     const TVSlotFinder vslotFinder{[this](TVSlotId vslotId, auto&& callback) {
                         if (const TVSlotInfo *vslot = State.VSlots.Find(vslotId)) {
@@ -214,7 +220,7 @@ namespace NKikimr::NBsController {
             }
 
             void ApplyVSlotDeleted(const TVSlotId& vslotId, const TVSlotInfo& vslotInfo) {
-                if (DeletedPDiskIds.count(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
+                if (DeletedPDiskIds.contains(vslotId.ComprisingPDiskId()) && vslotInfo.IsBeingDeleted()) {
                     // the slot has been deleted along with its PDisk; although it is useless to slay slots over PDisk
                     // that is being stopped, we issue this command to terminate VDisk actors correctly
                     AddVSlotToProtobuf(vslotId, vslotInfo, TMood::Delete);
@@ -239,7 +245,8 @@ namespace NKikimr::NBsController {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void ApplyGroupCreated(const TGroupId& groupId, const TGroupInfo &groupInfo) {
-                if (!groupInfo.VDisksInGroup && groupInfo.VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                if (!groupInfo.VDisksInGroup && groupInfo.VirtualGroupState &&
+                        groupInfo.VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
                     return; // do not report virtual groups that are not properly created yet
                 }
 
@@ -331,6 +338,33 @@ namespace NKikimr::NBsController {
                 TTransactionContext& txc, TString *errorDescription, NKikimrBlobStorage::TConfigResponse *response) {
             NIceDb::TNiceDb db(txc.DB);
 
+            // when bridged non-proxy groups get updated, we update parent group too
+            THashSet<TGroupId> updates;
+            for (TGroupId groupId : state.GroupContentChanged) {
+                if (const TGroupInfo *group = state.Groups.Find(groupId)) {
+                    if (group->BridgeProxyGroupId && !state.GroupContentChanged.contains(*group->BridgeProxyGroupId)) {
+                        updates.insert(*group->BridgeProxyGroupId);
+                    }
+                }
+            }
+            state.GroupContentChanged.insert(updates.begin(), updates.end());
+
+            // also do the reverse: when bridged proxy group gets changed, all its descendants change too
+            updates.clear();
+            for (TGroupId groupId : state.GroupContentChanged) {
+                if (const TGroupInfo *group = state.Groups.Find(groupId); group && group->BridgeGroupInfo) {
+                    for (const auto& pile : group->BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+                        const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                        if (!state.GroupContentChanged.contains(groupId)) {
+                            updates.insert(groupId);
+                        }
+                    }
+                }
+            }
+            state.GroupContentChanged.insert(updates.begin(), updates.end());
+
+            // spin generation for every changed group
+            THashSet<TGroupId> bridgeProxyGroupIds;
             for (TGroupId groupId : state.GroupContentChanged) {
                 TGroupInfo *group = state.Groups.FindForUpdate(groupId);
                 Y_ABORT_UNLESS(group);
@@ -341,6 +375,26 @@ namespace NKikimr::NBsController {
                         Y_ABORT_UNLESS(mutableSlot);
                         mutableSlot->GroupGeneration = group->Generation;
                     }
+                }
+                if (group->BridgeGroupInfo) {
+                    bridgeProxyGroupIds.insert(groupId);
+                }
+            }
+
+            // now adjust referenced groups for bridge mode groups
+            for (TGroupId bridgeProxyGroupId : bridgeProxyGroupIds) {
+                TGroupInfo *group = state.Groups.FindForUpdate(bridgeProxyGroupId);
+                Y_ABORT_UNLESS(group);
+                Y_ABORT_UNLESS(group->BridgeGroupInfo);
+
+                // set correct generations for bridge groups
+                for (auto& pile : *group->BridgeGroupInfo->MutableBridgeGroupState()->MutablePile()) {
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    Y_ABORT_UNLESS(state.GroupContentChanged.contains(groupId));
+                    const TGroupInfo *referenced = state.Groups.Find(groupId);
+                    Y_ABORT_UNLESS(referenced);
+                    Y_DEBUG_ABORT_UNLESS(pile.GetGroupGeneration() + 1 == referenced->Generation);
+                    pile.SetGroupGeneration(referenced->Generation);
                 }
             }
 
@@ -359,7 +413,7 @@ namespace NKikimr::NBsController {
                             disintegratedByExpectedStatus.push_back(overlay->first);
                             errors = true;
                         }
-                     }
+                    }
                 }
             }
 
@@ -416,7 +470,7 @@ namespace NKikimr::NBsController {
                 if (!degraded.empty()) {
                     msg << "Degraded GroupIds# " << FormatList(degraded) << ' ';
                     if (response) {
-                        for (const auto& id: degraded) { 
+                        for (const auto& id: degraded) {
                             response->MutableGroupsGetDegraded()->Add(id.GetRawId());
                         }
                     }
@@ -535,6 +589,7 @@ namespace NKikimr::NBsController {
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
             CommitShredUpdates(state);
+            CommitSyncerUpdates(state, txc);
 
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
@@ -563,6 +618,13 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            THashSet<TGroupId> groupIds;
+            for (auto&& [base, overlay] : state.Groups.Diff()) {
+                if (base) {
+                    groupIds.emplace(overlay->first);
+                }
+            }
+
             TNodeWardenUpdateNotifier(this, state).Execute();
 
             state.CheckConsistency();
@@ -570,6 +632,7 @@ namespace NKikimr::NBsController {
             ValidateInternalState();
 
             ScheduleVSlotReadyUpdate();
+            UpdateWaitingGroups(groupIds);
 
             return true;
         }
@@ -591,12 +654,20 @@ namespace NKikimr::NBsController {
                     TGroupInfo *prev = std::exchange(it->second, overlay->second.Get());
                     Y_ABORT_UNLESS(prev == base->second.Get());
                     if (base->second->Generation != overlay->second->Generation) {
-                        sh->GroupsToUpdate[groupId].emplace();
+                        if (overlay->second->VDisksInGroup) {
+                            // this group still contains VDisks
+                            sh->GroupsToUpdate[groupId].emplace();
+                        } else if (base->second->VDisksInGroup) {
+                            // delete group without VDisks from SelfHeal
+                            sh->GroupsToUpdate[groupId].reset();
+                        }
                     }
                 } else { // a new item was inserted
                     auto&& [it, inserted] = GroupLookup.emplace(groupId, overlay->second.Get());
                     Y_ABORT_UNLESS(inserted);
-                    sh->GroupsToUpdate[groupId].emplace();
+                    if (overlay->second->VDisksInGroup) {
+                        sh->GroupsToUpdate[groupId].emplace();
+                    }
                     ev->Created.push_back(groupId);
                 }
             }
@@ -701,6 +772,9 @@ namespace NKikimr::NBsController {
             }
             for (const auto& [base, overlay] : state.Groups.Diff()) {
                 SysViewChangedGroups.insert(overlay->first);
+                if (overlay->second && overlay->second->BridgeProxyGroupId) {
+                    SysViewChangedGroups.insert(*overlay->second->BridgeProxyGroupId);
+                }
             }
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 SysViewChangedStoragePools.insert(cur ? cur->first : prev->first);
@@ -708,8 +782,12 @@ namespace NKikimr::NBsController {
         }
 
         ui64 TBlobStorageController::TConfigState::ApplyConfigUpdates() {
-            for (auto& [nodeId, ev, cookie] : Outbox) {
-                Self.SendToWarden(nodeId, std::move(ev), cookie);
+            for (TOutgoingMessage& msg : Outbox) {
+                if (msg.ToLocalWarden) {
+                    Self.Send(MakeBlobStorageNodeWardenID(Self.SelfId().NodeId()), std::move(msg.Event), 0, msg.Cookie);
+                } else {
+                    Self.SendToWarden(msg.NodeId, std::move(msg.Event), msg.Cookie);
+                }
             }
             for (auto& ev : StatProcessorOutbox) {
                 Self.SelfId().Send(Self.StatProcessorActorId, ev.release());
@@ -775,7 +853,11 @@ namespace NKikimr::NBsController {
             // remove slot info from the PDisk
             TPDiskInfo *pdisk = PDisks.FindForUpdate(vslotId.ComprisingPDiskId());
             Y_ABORT_UNLESS(pdisk);
-            --pdisk->NumActiveSlots;
+            const TGroupInfo *group = Groups.Find(mutableSlot->GroupId);
+            Y_ABORT_UNLESS(group);
+            pdisk->NumActiveSlots -= TPDiskConfig::GetOwnerWeight(
+                group->GroupSizeInUnits,
+                pdisk->SlotSizeInUnits);
 
             if (UncommittedVSlots.erase(vslotId)) {
                 const ui32 erased = pdisk->VSlotsOnPDisk.erase(vslotId.VSlotId);
@@ -805,7 +887,11 @@ namespace NKikimr::NBsController {
                     const TVSlotInfo *vslotInTable = VSlots.Find(TVSlotId(pdiskId, vslotId));
                     Y_ABORT_UNLESS(vslot == vslotInTable);
                     Y_ABORT_UNLESS(vslot->PDisk == &pdisk);
-                    numActiveSlots += !vslot->IsBeingDeleted();
+                    if (!vslot->IsBeingDeleted()) {
+                        const TGroupInfo *group = Groups.Find(vslot->GroupId);
+                        Y_ABORT_UNLESS(group);
+                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk.SlotSizeInUnits);
+                    }
                 }
                 Y_ABORT_UNLESS(pdisk.NumActiveSlots == numActiveSlots);
             });
@@ -890,6 +976,8 @@ namespace NKikimr::NBsController {
                 drive.SetSharedWithOs(value.SharedWithOs);
                 drive.SetReadCentric(value.ReadCentric);
                 drive.SetKind(value.Kind);
+                drive.SetInferPDiskSlotCountFromUnitSize(value.InferPDiskSlotCountFromUnitSize);
+                drive.SetInferPDiskSlotCountMax(value.InferPDiskSlotCountMax);
 
                 if (const auto& config = value.PDiskConfig) {
                     NKikimrBlobStorage::TPDiskConfig& pb = *drive.MutablePDiskConfig();
@@ -976,6 +1064,9 @@ namespace NKikimr::NBsController {
             pb->SetKind(pool.Kind);
             pb->SetNumGroups(pool.NumGroups);
             pb->SetRandomizeGroupMapping(pool.RandomizeGroupMapping);
+            if (pool.DefaultGroupSizeInUnits != 0) {
+                pb->SetDefaultGroupSizeInUnits(pool.DefaultGroupSizeInUnits);
+            }
 
             for (const auto &userId : pool.UserIds) {
                 pb->AddUserId(std::get<2>(userId));
@@ -1025,6 +1116,12 @@ namespace NKikimr::NBsController {
             pb->SetLastSeenSerial(pdisk.LastSeenSerial);
             pb->SetReadOnly(pdisk.Mood == TPDiskMood::ReadOnly);
             pb->SetMaintenanceStatus(pdisk.MaintenanceStatus);
+            if (pdisk.InferPDiskSlotCountFromUnitSize) {
+                pb->SetInferPDiskSlotCountFromUnitSize(pdisk.InferPDiskSlotCountFromUnitSize);
+            }
+            if (pdisk.InferPDiskSlotCountMax) {
+                pb->SetInferPDiskSlotCountMax(pdisk.InferPDiskSlotCountMax);
+            }
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TVSlotId *pb, TVSlotId id) {
@@ -1070,7 +1167,8 @@ namespace NKikimr::NBsController {
             pb->SetReadOnly(vslot.Mood == TMood::ReadOnly);
         }
 
-        void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group) {
+        void TBlobStorageController::Serialize(NKikimrBlobStorage::TBaseConfig::TGroup *pb, const TGroupInfo &group,
+                const TGroupInfo::TGroupFinder& finder, const TBridgeInfo *bridgeInfo) {
             pb->SetGroupId(group.ID.GetRawId());
             pb->SetGroupGeneration(group.Generation);
             pb->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(group.ErasureSpecies));
@@ -1080,10 +1178,17 @@ namespace NKikimr::NBsController {
             pb->SetBoxId(std::get<0>(group.StoragePoolId));
             pb->SetStoragePoolId(std::get<1>(group.StoragePoolId));
             pb->SetSeenOperational(group.SeenOperational);
+            if (group.GroupSizeInUnits != 0) {
+                pb->SetGroupSizeInUnits(group.GroupSizeInUnits);
+            }
 
-            const auto& status = group.Status;
+            const auto& status = group.GetStatus(finder, bridgeInfo);
             pb->SetOperatingStatus(status.OperatingStatus);
             pb->SetExpectedStatus(status.ExpectedStatus);
+
+            if (group.BridgeGroupInfo) {
+                pb->SetIsProxyGroup(true);
+            }
 
             if (group.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE || group.VirtualGroupState) {
                 auto *vgi = pb->MutableVirtualGroupInfo();
@@ -1207,23 +1312,35 @@ namespace NKikimr::NBsController {
             if (groupInfo.DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::NONE) {
                 group->SetDecommitStatus(groupInfo.DecommitStatus);
             }
+
+            if (groupInfo.GroupSizeInUnits != 0) {
+                group->SetGroupSizeInUnits(groupInfo.GroupSizeInUnits);
+            }
+
+            if (groupInfo.BridgeGroupInfo) {
+                group->MergeFrom(*groupInfo.BridgeGroupInfo);
+            }
+            if (groupInfo.BridgeProxyGroupId) {
+                groupInfo.BridgeProxyGroupId->CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgeProxyGroupId);
+            }
+            groupInfo.BridgePileId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::SetBridgePileId);
         }
 
         void TBlobStorageController::SerializeSettings(NKikimrBlobStorage::TUpdateSettings *settings) {
-            settings->SetDefaultMaxSlots(DefaultMaxSlots);
-            settings->SetEnableSelfHeal(SelfHealEnable);
-            settings->SetEnableDonorMode(DonorMode);
-            settings->SetScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
-            settings->SetPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
-            settings->SetGroupReserveMin(GroupReserveMin);
-            settings->SetGroupReservePartPPM(GroupReservePart);
-            settings->SetMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
-            settings->SetPDiskSpaceColorBorder(PDiskSpaceColorBorder);
-            settings->SetEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
-            // TODO: settings->SetSerialManagementStage(SerialManagementStage);
-            settings->SetAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
-            settings->SetUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
-            settings->SetTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddDefaultMaxSlots(DefaultMaxSlots);
+            settings->AddEnableSelfHeal(SelfHealEnable);
+            settings->AddEnableDonorMode(DonorMode);
+            settings->AddScrubPeriodicitySeconds(ScrubPeriodicity.Seconds());
+            settings->AddPDiskSpaceMarginPromille(PDiskSpaceMarginPromille);
+            settings->AddGroupReserveMin(GroupReserveMin);
+            settings->AddGroupReservePartPPM(GroupReservePart);
+            settings->AddMaxScrubbedDisksAtOnce(MaxScrubbedDisksAtOnce);
+            settings->AddPDiskSpaceColorBorder(PDiskSpaceColorBorder);
+            settings->AddEnableGroupLayoutSanitizer(GroupLayoutSanitizerEnabled);
+            // TODO: settings->AddSerialManagementStage(SerialManagementStage);
+            settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
+            settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
+            settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

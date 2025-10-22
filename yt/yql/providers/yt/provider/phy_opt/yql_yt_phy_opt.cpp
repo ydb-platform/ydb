@@ -61,7 +61,10 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(0, &TCoAssumeDistinct::Match, HNDL(AssumeConstraints));
     AddHandler(0, &TYtDqWrite::Match, HNDL(YtDqWrite));
     AddHandler(0, &TYtDqProcessWrite::Match, HNDL(YtDqProcessWrite));
+    AddHandler(0, &TYtTransientOpBase::Match, HNDL(ConvertDynamicTablesToStatic<TYtTransientOpBase>));
+    AddHandler(0, &TYtReadTable::Match, HNDL(ConvertDynamicTablesToStatic<TYtReadTable>));
     AddHandler(0, &TYtEquiJoin::Match, HNDL(EarlyMergeJoin));
+    AddHandler(0, &TYtEquiJoin::Match, HNDL(AddPruneKeys));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(TableContentWithSettings));
     AddHandler(0, &TYtOutputOpBase::Match, HNDL(NonOptimalTableContent));
 
@@ -101,6 +104,7 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     AddHandler(2, &TYtMap::Match, HNDL(PushDownYtMapOverSortedMerge));
     AddHandler(2, &TYtMerge::Match, HNDL(ForceTransform));
     AddHandler(2, &TYtMerge::Match, HNDL(MergeToCopy));
+    AddHandler(2, &TYtMap::Match, HNDL(UnessentialFilter));
 #undef HNDL
 }
 

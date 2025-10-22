@@ -35,7 +35,6 @@
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/string.h
   - sys/membarrier.h:
     - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/membarrier.h
-    - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/membarrier.h
   - sys/mman.h:
     - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/mman.h
     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/mman.h
@@ -138,7 +137,6 @@
   - iconv.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/iconv.h
 
   # Rest of libc headers
-  - aio.h:                  contrib/restricted/emscripten/system/lib/libc/musl/include/aio.h
   - alloca.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/alloca.h
   - ar.h:                   contrib/restricted/emscripten/system/lib/libc/musl/include/ar.h
   - arpa/inet.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/arpa/inet.h
@@ -215,19 +213,15 @@
   - strings.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/strings.h
   - stropts.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/stropts.h
   - sys/acct.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/acct.h
-  - sys/cachectl.h:         contrib/restricted/emscripten/system/lib/libc/musl/include/sys/cachectl.h
   - sys/dir.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/dir.h
   - sys/epoll.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/epoll.h
   - sys/errno.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/errno.h
+  - sys/eventfd.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/eventfd.h
   - sysexits.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sysexits.h
   - sys/fcntl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/fcntl.h
   - sys/file.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/file.h
-  - sys/fsuid.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/fsuid.h
-  - sys/inotify.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/inotify.h
   - sys/ioctl.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ioctl.h
-  - sys/io.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/sys/io.h
   - sys/ipc.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ipc.h
-  - sys/kd.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/sys/kd.h
   - syslog.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/syslog.h
   - sys/mman.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/mman.h
   - sys/mount.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/mount.h
@@ -236,14 +230,11 @@
   - sys/param.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/param.h
   - sys/poll.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/poll.h
   - sys/procfs.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/procfs.h
-  - sys/ptrace.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ptrace.h
-  - sys/quota.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/quota.h
 
   - sys/random.h:
       - contrib/restricted/emscripten/system/include/compat/sys/random.h
       - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/random.h
 
-  - sys/reboot.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/reboot.h
   - sys/resource.h:         contrib/restricted/emscripten/system/lib/libc/musl/include/sys/resource.h
   - sys/select.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/select.h
   - sys/sem.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/sem.h
@@ -253,15 +244,14 @@
     - contrib/restricted/emscripten/system/lib/libc/musl/arch/generic/bits/shm.h
     - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/shm.h
 
-  - sys/signalfd.h:         contrib/restricted/emscripten/system/lib/libc/musl/include/sys/signalfd.h
   - sys/signal.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/signal.h
   - sys/socket.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/socket.h
-  - sys/soundcard.h:        contrib/restricted/emscripten/system/lib/libc/musl/include/sys/soundcard.h
   - sys/statfs.h:           contrib/restricted/emscripten/system/lib/libc/musl/include/sys/statfs.h
   - sys/socketvar.h:        contrib/restricted/emscripten/system/include/compat/sys/socketvar.h
 
   - sys/stat.h:
      - contrib/restricted/emscripten/system/include/compat/sys/stat.h
+     - contrib/restricted/emscripten/system/lib/libc/musl/src/include/sys/stat.h
      - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/stat.h
 
   - sys/statvfs.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/statvfs.h
@@ -277,9 +267,7 @@
      - contrib/restricted/emscripten/system/lib/libc/musl/include/sys/timeb.h
 
   - sys/time.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/time.h
-  - sys/timerfd.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/timerfd.h
   - sys/times.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/times.h
-  - sys/timex.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/timex.h
   - sys/ttydefaults.h:      contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ttydefaults.h
   - sys/types.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/types.h
   - sys/ucontext.h:         contrib/restricted/emscripten/system/lib/libc/musl/include/sys/ucontext.h
@@ -288,9 +276,9 @@
   - sys/user.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/user.h
   - sys/utsname.h:          contrib/restricted/emscripten/system/lib/libc/musl/include/sys/utsname.h
   - sys/vfs.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/sys/vfs.h
-  - sys/vt.h:               contrib/restricted/emscripten/system/lib/libc/musl/include/sys/vt.h
   - sys/wait.h:             contrib/restricted/emscripten/system/lib/libc/musl/include/sys/wait.h
   - sys/xattr.h:            contrib/restricted/emscripten/system/lib/libc/musl/include/sys/xattr.h
+  - sys/queue.h:            contrib/libs/libc_compat/queue/sys/queue.h
   - tar.h:                  contrib/restricted/emscripten/system/lib/libc/musl/include/tar.h
   - termios.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/termios.h
   - threads.h:              contrib/restricted/emscripten/system/lib/libc/musl/include/threads.h

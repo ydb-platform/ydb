@@ -78,6 +78,10 @@ enum aws_platform_os aws_get_platform_build_os(void);
 AWS_COMMON_API
 size_t aws_system_info_processor_count(void);
 
+/* Returns the system page size in bytes. */
+AWS_COMMON_API
+size_t aws_system_info_page_size(void);
+
 /**
  * Returns the logical processor groupings on the system (such as multiple numa nodes).
  */

@@ -2,6 +2,9 @@
 
 LIBRARY()
 
+# Ensure this library is mutually exclusive with "system stl" mode
+NO_BUILD_IF(USE_STL_SYSTEM)
+
 LICENSE(
     Apache-2.0 AND
     Apache-2.0 WITH LLVM-exception AND
@@ -26,14 +29,14 @@ ADDINCL(
 CXXFLAGS(-D_LIBCPP_BUILDING_LIBRARY)
 
 IF (OS_ANDROID)
-    SET(CXX_RT "libcxxabi_dynamic")
+    SET(CXX_RT "libcxxabi")
 ELSEIF (OS_IOS)
     SET(CXX_RT "libcxxabi_dynamic")
     # Yet take builtins library from Arcadia
     PEERDIR(
         contrib/libs/cxxsupp/builtins
     )
-ELSEIF (OS_LINUX OR OS_DARWIN)
+ELSEIF (OS_LINUX OR OS_DARWIN OR OS_FREEBSD)
     IF (ARCH_ARM6 OR ARCH_ARM7)
         # libcxxrt support for ARM is currently broken, use libcxxabi instead
         SET(CXX_RT "libcxxabi")

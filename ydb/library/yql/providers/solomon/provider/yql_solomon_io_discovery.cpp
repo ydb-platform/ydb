@@ -1,6 +1,7 @@
 #include "yql_solomon_provider_impl.h"
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/expr_nodes/yql_solomon_expr_nodes.h>
 #include <ydb/library/yql/providers/solomon/scheme/yql_solomon_scheme.h>
 
@@ -23,22 +24,44 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     return {};
 }
 
-TVector<TCoAtom> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings) {
+TMaybe<TString> ExtractUserLabels(TPositionHandle pos, TExprContext& ctx, TExprNode::TListType& settings, TVector<TCoAtom>& names, TVector<TCoAtom>& aliases) {
+    names.clear();
+    aliases.clear();
+    
     for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
         if (const auto item = *it; item->Head().IsAtom("labels")) {
-            TVector<TCoAtom> result;
-            auto labels = StringSplitter(TString(item->Tail().Content())).Split(',').SkipEmpty().ToList<TString>();
-            result.reserve(labels.size());
-            for (TString& label : labels) {
-                auto v = Build<TCoAtom>(ctx, pos).Value(StripString(label)).Done();
-                result.emplace_back(std::move(v));
+            TVector<TString> stringNames;
+            TVector<TString> stringAliases;
+            if (auto error = NSo::ParseLabelNames(TString(item->Tail().Content()), stringNames, stringAliases)) {
+                return error;
             }
+
+            names.reserve(stringNames.size());
+            aliases.reserve(stringAliases.size());
+            for (size_t i = 0; i < stringNames.size(); ++i) {
+                auto name = Build<TCoAtom>(ctx, pos).Value(stringNames[i]).Done();
+                auto alias = Build<TCoAtom>(ctx, pos).Value(stringAliases[i]).Done();
+
+                names.emplace_back(std::move(name));
+                aliases.emplace_back(std::move(alias));
+            }
+
             settings.erase(it);
-            return result;
+            return {};
         }
     }
 
     return {};
+}
+
+bool HasSetting(TExprNode::TListType& settings, const TString& name) {
+    for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
+        if (const auto item = *it; item->Head().IsAtom(name)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 const TStructExprType* BuildScheme(TPositionHandle pos, const TVector<TCoAtom>& userLabels, TExprContext& ctx, TVector<TCoAtom>& systemColumns) {
@@ -133,11 +156,24 @@ public:
                 auto settings = read.Ref().Child(4);
                 auto settingsList = read.Ref().Child(4)->ChildrenList();
                 auto userSchema = ExtractSchema(settingsList);
-                TVector<TCoAtom> userLabels = ExtractUserLabels(settings->Pos(), ctx, settingsList);
+                TVector<TCoAtom> userLabels;
+                TVector<TCoAtom> userLabelAliases;
+                if (auto error = ExtractUserLabels(settings->Pos(), ctx, settingsList, userLabels, userLabelAliases)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(settings->Pos()), TStringBuilder() << "Invalid label names: " << *error));
+                    return {};
+                }
 
-                auto newSettings = Build<TCoNameValueTupleList>(ctx, settings->Pos())
-                                        .Add(settingsList)
-                                    .Done();
+                auto newSettingsBuilder = Build<TCoNameValueTupleList>(ctx, settings->Pos())
+                                        .Add(settingsList);
+
+                if (!HasSetting(settingsList, "program") && !HasSetting(settingsList, "selectors")) {
+                    newSettingsBuilder.Add<TCoNameValueTuple>()
+                        .Name<TCoAtom>().Build("selectors")
+                        .Value<TCoAtom>().Build("{}")
+                        .Build();
+                }
+
+                auto newSettings = newSettingsBuilder.Done();
 
                 auto soObject = Build<TSoObject>(ctx, read.Pos())
                                   .Project<TCoAtom>().Build(project)
@@ -145,7 +181,7 @@ public:
                                 .Done();
                 
                 TVector<TCoAtom> systemColumns;
-                auto* scheme = BuildScheme(settings->Pos(), userLabels, ctx, systemColumns);
+                auto* scheme = BuildScheme(settings->Pos(), userLabelAliases, ctx, systemColumns);
                 if (!scheme) {
                     return {};
                 }
@@ -158,6 +194,10 @@ public:
                 auto labelNamesNode = Build<TCoAtomList>(ctx, read.Pos())
                                             .Add(userLabels)
                                         .Done();
+                
+                auto labelNameAliasesNode = Build<TCoAtomList>(ctx, read.Pos())
+                                            .Add(userLabelAliases)
+                                        .Done();
 
                 return userSchema.back()
                     ? Build<TSoReadObject>(ctx, read.Pos())
@@ -166,6 +206,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .LabelNameAliases(labelNameAliasesNode)
                         .RequiredLabelNames().Build()
                         .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)
@@ -177,6 +218,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .LabelNameAliases(labelNameAliasesNode)
                         .RequiredLabelNames().Build()
                         .TotalMetricsCount().Build()
                         .RowType(rowTypeNode)

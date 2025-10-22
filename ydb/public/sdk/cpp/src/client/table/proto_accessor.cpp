@@ -20,6 +20,10 @@ const Ydb::Table::DescribeExternalTableResult& TProtoAccessor::GetProto(const NT
     return description.GetProto();
 }
 
+const Ydb::Table::DescribeSystemViewResult& TProtoAccessor::GetProto(const NTable::TSystemViewDescription& description) {
+    return description.GetProto();
+}
+
 NTable::TQueryStats TProtoAccessor::FromProto(const Ydb::TableStats::QueryStats& queryStats) {
     return NTable::TQueryStats(queryStats);
 }

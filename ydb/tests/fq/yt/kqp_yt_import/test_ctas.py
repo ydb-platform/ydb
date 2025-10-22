@@ -23,5 +23,5 @@ class TestYtCtas:
             ORDER BY subkey
         """)
 
-        result = kqp_run.yql_exec(verbose=True)
+        result = kqp_run.yql_exec(verbose=True, user='root@system')
         validate_sample_result(result.results)

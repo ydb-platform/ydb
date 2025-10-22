@@ -90,7 +90,7 @@ public:
         const auto& request = GetProtoRequest();
 
         if (request->operation_params().operation_mode() == Ydb::Operations::OperationParams::SYNC) {
-            issues.AddIssue("ExecuteScript must be asyncronous operation");
+            issues.AddIssue("ExecuteScript must be asynchronous operation");
             return Reply(Ydb::StatusIds::BAD_REQUEST, issues);
         }
 

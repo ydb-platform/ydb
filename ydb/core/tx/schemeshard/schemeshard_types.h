@@ -2,10 +2,11 @@
 
 #include "schemeshard_identificators.h"
 
+#include <ydb/core/base/row_version.h>
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
-#include <ydb/core/base/row_version.h>
 
 #include <util/generic/fwd.h>
 
@@ -55,8 +56,9 @@ struct TSchemeLimits {
     ui64 MaxExports = 10;
     ui64 MaxImports = 10;
 
-    static TSchemeLimits FromProto(const NKikimrScheme::TSchemeLimits& proto);
-    NKikimrScheme::TSchemeLimits AsProto() const;
+    static TSchemeLimits FromProto(const NKikimrSubDomains::TSchemeLimits& proto);
+    void MergeFromProto(const NKikimrSubDomains::TSchemeLimits& proto);
+    NKikimrSubDomains::TSchemeLimits AsProto() const;
 };
 
 using ETabletType = TTabletTypes;
@@ -163,7 +165,7 @@ struct TTempDirInfo {
     TActorId TempDirOwnerActorId;
 };
 
-enum class EDataErasureStatus : ui32 {
+enum class EShredStatus : ui32 {
     UNSPECIFIED = 0,
     COMPLETED = 1,
     IN_PROGRESS = 2,

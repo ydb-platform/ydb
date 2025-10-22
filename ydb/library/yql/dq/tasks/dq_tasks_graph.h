@@ -5,6 +5,7 @@
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
 #include <yql/essentials/ast/yql_expr.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <ydb/library/actors/core/actorid.h>
 
@@ -65,6 +66,8 @@ struct TStageInfo : private TMoveOnly {
     ui32 InputsCount = 0;
     ui32 OutputsCount = 0;
 
+    // Describes step-by-step the decisions leading to this exact number of tasks - in human-readable way.
+    TVector<TString> Introspections; // TODO(#20120): maybe find a better place?
     TVector<ui64> Tasks;
     TStageInfoMeta Meta;
 
@@ -159,14 +162,6 @@ struct TTaskOutputType {
     };
 };
 
-namespace NHashKind {
-    enum : ui32 {
-        EUndefined = 0,
-        EHashV1 = 1,
-        EColumnShardHashV1 = 2,
-    };
-};
-
 template <class TOutputMeta>
 struct TTaskOutput {
     ui32 Type = TTaskOutputType::Undefined;
@@ -177,8 +172,8 @@ struct TTaskOutput {
     TString SinkType;
     TOutputMeta Meta;
     TMaybe<TTransform> Transform;
-    
-    ui32 HashKind = NHashKind::EUndefined; // defined only for Type = TTaskOutputType::HashPartition
+
+    std::optional<EHashShuffleFuncType> HashKind; // defined only for Type = TTaskOutputType::HashPartition
 };
 
 template <class TStageInfoMeta, class TTaskMeta, class TInputMeta, class TOutputMeta>
@@ -316,6 +311,142 @@ public:
         StagesInfo.clear();
         Tasks.clear();
         Channels.clear();
+    }
+
+    bool IsEgressTask(const TTaskType& task) const {
+        for (const auto& output : task.Outputs) {
+            for (ui64 channelId : output.Channels) {
+                if (GetChannel(channelId).DstTask) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    bool IsIngress(const TTaskType& task) const {
+        // No inputs at all or there is no input channels with checkpoints.
+
+        if (!task.Inputs) {
+            return true;
+        }
+
+        bool hasSource = false;
+        for (const auto& input : task.Inputs) {
+            if (input.SourceType) {
+                hasSource = true;
+                continue;
+            }
+
+            for (ui64 channelId : input.Channels) {
+                if (GetChannel(channelId).CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                    return false;
+                }
+            }
+        }
+
+        return hasSource;
+    }
+
+    static bool IsInfiniteSourceType(const TString& sourceType) {
+        return sourceType == "PqSource"; // Now it is the only infinite source type. Others are finite.
+    }
+
+    void BuildCheckpointingAndWatermarksMode(bool enableCheckpoints, bool enableWatermarks) {
+        std::stack<TTaskType*> tasksStack;
+        std::vector<bool> processedTasks(GetTasks().size());
+        for (TTaskType& task : GetTasks()) {
+            if (IsEgressTask(task)) {
+                tasksStack.push(&task);
+            }
+        }
+
+        while (!tasksStack.empty()) {
+            TTaskType& task = *tasksStack.top();
+            Y_ABORT_UNLESS(task.Id && task.Id <= processedTasks.size());
+            if (processedTasks[task.Id - 1]) {
+                tasksStack.pop();
+                continue;
+            }
+
+            // Make sure that all input tasks are processed
+            bool allInputsAreReady = true;
+            for (const auto& input : task.Inputs) {
+                for (ui64 channelId : input.Channels) {
+                    const NDq::TChannel& channel = GetChannel(channelId);
+                    Y_ABORT_UNLESS(channel.SrcTask && channel.SrcTask <= processedTasks.size());
+                    if (!processedTasks[channel.SrcTask - 1]) {
+                        allInputsAreReady = false;
+                        tasksStack.push(&GetTask(channel.SrcTask));
+                    }
+                }
+            }
+            if (!allInputsAreReady) {
+                continue;
+            }
+
+            // Current task has all inputs processed, so determine its checkpointing and watermarks mode now.
+            NDqProto::ECheckpointingMode checkpointingMode = NDqProto::CHECKPOINTING_MODE_DISABLED;
+            if (enableCheckpoints) {
+                for (const auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (IsInfiniteSourceType(input.SourceType)) {
+                            checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+                            break;
+                        }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = GetChannel(channelId);
+                            if (channel.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
+                                checkpointingMode = NDqProto::CHECKPOINTING_MODE_DEFAULT;
+                                break;
+                            }
+                        }
+                        if (checkpointingMode == NDqProto::CHECKPOINTING_MODE_DEFAULT) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            NDqProto::EWatermarksMode watermarksMode = NDqProto::WATERMARKS_MODE_DISABLED;
+            if (enableWatermarks) {
+                for (auto& input : task.Inputs) {
+                    if (input.SourceType) {
+                        if (IsInfiniteSourceType(input.SourceType)) {
+                            watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            input.WatermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                            break;
+                        }
+                    } else {
+                        for (ui64 channelId : input.Channels) {
+                            const NDq::TChannel& channel = GetChannel(channelId);
+                            if (channel.WatermarksMode != NDqProto::WATERMARKS_MODE_DEFAULT) {
+                                watermarksMode = NDqProto::WATERMARKS_MODE_DEFAULT;
+                                break;
+                            }
+                        }
+                        if (watermarksMode == NDqProto::WATERMARKS_MODE_DEFAULT) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Apply mode to task and its outputs.
+            task.CheckpointingMode = checkpointingMode;
+            task.WatermarksMode = watermarksMode;
+            for (const auto& output : task.Outputs) {
+                for (ui64 channelId : output.Channels) {
+                    auto& channel = GetChannel(channelId);
+                    channel.CheckpointingMode = checkpointingMode;
+                    channel.WatermarksMode = watermarksMode;
+                }
+            }
+
+            processedTasks[task.Id - 1] = true;
+            tasksStack.pop();
+        }
     }
 
 private:

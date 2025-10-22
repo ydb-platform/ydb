@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/protos/follower_group.pb.h>
@@ -242,7 +243,7 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
     for (const auto& drop : req->drop_changefeeds()) {
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpDropCdcStream);
         auto op = modifyScheme->MutableDropCdcStream();
-        op->SetStreamName(drop);
+        op->AddStreamName(drop);
         op->SetTableName(name);
     }
 
@@ -539,12 +540,14 @@ void FillColumnDescriptionImpl(TYdbProto& out,
         }
     }
 
-    if (in.HasTTLSettings()) {
-        if (in.GetTTLSettings().HasEnabled()) {
-            Ydb::StatusIds::StatusCode code;
-            TString error;
-            if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
-                ythrow yexception() << "invalid TTL settings: " << error;
+    if constexpr (!std::is_same_v<TYdbProto, Ydb::Table::DescribeSystemViewResult>) {
+        if (in.HasTTLSettings()) {
+            if (in.GetTTLSettings().HasEnabled()) {
+                Ydb::StatusIds::StatusCode code;
+                TString error;
+                if (!FillTtlSettings(*out.mutable_ttl_settings(), in.GetTTLSettings().GetEnabled(), code, error)) {
+                    ythrow yexception() << "invalid TTL settings: " << error;
+                }
             }
         }
     }
@@ -552,6 +555,11 @@ void FillColumnDescriptionImpl(TYdbProto& out,
 
 void FillColumnDescription(Ydb::Table::DescribeTableResult& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
+    FillColumnDescriptionImpl(out, splitKeyType, in);
+}
+
+void FillColumnDescription(Ydb::Table::DescribeSystemViewResult& out, const NKikimrSchemeOp::TTableDescription& in) {
+    NKikimrMiniKQL::TType splitKeyType;
     FillColumnDescriptionImpl(out, splitKeyType, in);
 }
 
@@ -808,6 +816,11 @@ bool FillColumnFamily(
     }
     if (from.has_compression_level()) {
         to->SetColumnCodecLevel(from.compression_level());
+    }
+    if (from.cache_mode() != Ydb::Table::ColumnFamily::CACHE_MODE_UNSPECIFIED) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << from.name() << "'";
+        return false;
     }
     return true;
 }
@@ -1069,14 +1082,25 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
                 FillGlobalIndexSettings(
                     *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
                     tableIndex.GetIndexImplTableDescriptions(2)
-                );                    
+                );
             }
 
             *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
 
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            FillGlobalIndexSettings(
+                *index->mutable_global_fulltext_index()->mutable_settings(),
+                tableIndex.GetIndexImplTableDescriptions(0)
+            );
+
+            *index->mutable_global_fulltext_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
+
+            break;
         default:
+            Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(tableIndex.GetType()));
+ 
             break;
         };
 
@@ -1129,7 +1153,6 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
         }
 
         // specific fields
-        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptionsVector;
         switch (index.type_case()) {
         case Ydb::Table::TableIndex::kGlobalIndex:
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
@@ -1147,17 +1170,23 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
             indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
             *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
             break;
+            
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex:
+            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext);
+            *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            break;
 
-        default:
-            // pass through
-            // TODO: maybe return BAD_REQUEST?
+        case Ydb::Table::TableIndex::TYPE_NOT_SET:
+            // FIXME: python sdk can create a table with a secondary index without a type
+            // so it's not possible to return an invalid index type error here for now
             break;
         }
 
-        if (!FillIndexTablePartitioning(indexImplTableDescriptionsVector, index, status, error)) {
+        std::vector<NKikimrSchemeOp::TTableDescription> indexImplTableDescriptions;
+        if (!FillIndexTablePartitioning(indexImplTableDescriptions, index, status, error)) {
             return false;
         }
-        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptionsVector.begin(), indexImplTableDescriptionsVector.end()};
+        *indexDesc->MutableIndexImplTableDescriptions() = {indexImplTableDescriptions.begin(), indexImplTableDescriptions.end()};
     }
 
     return true;
@@ -1405,6 +1434,10 @@ void FillStorageSettingsImpl(TYdbProto& out,
                 if (externalThreshold != 0 && externalThreshold != Max<ui32>()) {
                     settings->set_store_external_blobs(Ydb::FeatureFlag::ENABLED);
                 }
+
+                if (const auto externalChannelsCount = family.GetStorageConfig().GetExternalChannelsCount(); externalChannelsCount > 1U) {
+                    settings->set_external_data_channels_count(externalChannelsCount);
+                }
             }
 
             // Check legacy settings for enabled external blobs
@@ -1481,6 +1514,17 @@ void FillColumnFamily(Ydb::Table::ColumnFamily& out, const NKikimrSchemeOp::TFam
     if (in.GetInMemory() || in.GetColumnCache() == NKikimrSchemeOp::ColumnCacheEver) {
         out.set_keep_in_memory(Ydb::FeatureFlag::ENABLED);
     }
+
+    if (!isColumnTable && in.HasColumnCacheMode()) {
+        switch (in.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                out.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                out.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+                break;
+        }
+    }
 }
 
 template <typename TYdbProto>
@@ -1537,6 +1581,11 @@ void FillColumnFamilies(Ydb::Table::CreateTableRequest& out,
 }
 
 void FillAttributes(Ydb::Table::DescribeTableResult& out,
+        const NKikimrSchemeOp::TPathDescription& in) {
+    FillAttributesImpl(out, in);
+}
+
+void FillAttributes(Ydb::Table::DescribeSystemViewResult& out,
         const NKikimrSchemeOp::TPathDescription& in) {
     FillAttributesImpl(out, in);
 }

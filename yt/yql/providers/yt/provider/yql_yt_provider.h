@@ -87,8 +87,9 @@ private:
 };
 
 
-struct TYtState : public TThrRefBase {
-    using TPtr = TIntrusivePtr<TYtState>;
+struct TYtState {
+    using TPtr = std::shared_ptr<TYtState>;
+    using TWeakPtr = std::weak_ptr<TYtState>;
 
     void Reset();
     void EnterEvaluation(ui64 id);
@@ -131,6 +132,8 @@ struct TYtState : public TThrRefBase {
     IOptimizerFactory::TPtr OptimizerFactory_;
     IDqHelper::TPtr DqHelper;
     bool IsDqTimeout = false;
+    NLayers::ILayersIntegrationPtr LayersIntegration_;
+    THashMap<TString, THashMap<TString, std::pair<TString, ui64>>> LayersSnapshots;
 private:
     std::unordered_map<ui64, TYtVersionedConfiguration::TState> ConfigurationEvalStates_;
     std::unordered_map<ui64, ui32> EpochEvalStates_;
@@ -138,7 +141,7 @@ private:
 
 
 class TYtGatewayConfig;
-std::pair<TIntrusivePtr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
+std::pair<std::shared_ptr<TYtState>, TStatWriter> CreateYtNativeState(IYtGateway::TPtr gateway, const TString& userName, const TString& sessionId,
     const TYtGatewayConfig* ytGatewayConfig, TIntrusivePtr<TTypeAnnotationContext> typeCtx,
     const IOptimizerFactory::TPtr& optFactory, const IDqHelper::TPtr& helper);
 TIntrusivePtr<IDataProvider> CreateYtDataSource(TYtState::TPtr state);

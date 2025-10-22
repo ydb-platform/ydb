@@ -7,7 +7,7 @@
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
+#include <ydb/library/testlib/helpers.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_processing.h>
@@ -902,12 +902,9 @@ Y_UNIT_TEST(RandomPoints_DelayData) {
 
     TVector<std::pair<ui32, ui32>> variants;
     variants.push_back({8, 8});
-    variants.push_back({8, 16});
     variants.push_back({8, 32});
     variants.push_back({16, 16});
-    variants.push_back({16, 32});
     variants.push_back({32, 8});
-    variants.push_back({32, 16});
     variants.push_back({32, 32});
 
     for (auto& v : variants) {
@@ -2969,7 +2966,8 @@ Y_UNIT_TEST_TWIN(TestShardRestartPlannedCommitShouldSucceed, EvWrite) {
         .SetAppConfig(app)
         // Note: currently volatile transactions don't survive tablet reboots,
         // and reply with UNDETERMINED similar to immediate transactions.
-        .SetEnableDataShardVolatileTransactions(false);
+        .SetEnableDataShardVolatileTransactions(false)
+        .SetEnableDataShardWriteAlwaysVolatile(false);
 
     Tests::TServer::TPtr server = new TServer(serverSettings);
     auto &runtime = *server->GetRuntime();

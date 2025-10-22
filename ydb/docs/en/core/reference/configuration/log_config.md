@@ -1,4 +1,4 @@
-# `log_config` configuration section
+# log_config
 
 The `log_config` section controls how {{ ydb-short-name }} server processes and manages its logs. It allows you to customize logging levels for different components, as well as global log formats and output methods.
 
@@ -21,7 +21,7 @@ Logging is a critical part of the {{ ydb-short-name }} [observability](../observ
 
 - **To stderr**: by default, {{ ydb-short-name }} sends all logs to stderr.
 - **To file**: logs can be written to a file using the `backend_file_name` parameter.
-- **To syslog**: when the `sys_log: true` parameter is enabled, logs are redirected to the syslog and stop being output to stderr. Logs are sent using `/dev/log` socket.
+- **To syslog**: when the `sys_log: true` parameter is enabled, logs are redirected to the syslog and stop being output to stderr. Logs are sent using the `/dev/log` socket.
 - **To Unified Agent**: when configuring the `uaclient_config` section, logs are sent to [Unified Agent](https://yandex.cloud/en/docs/monitoring/concepts/data-collection/unified-agent/) and stop being output to stderr.
 
 When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will be sent to both syslog and Unified Agent. If you need to continue outputting logs to stderr while using other methods, activate `sys_log_to_stderr: true`.

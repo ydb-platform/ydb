@@ -1,16 +1,11 @@
 #include "retryful_writer.h"
 
-#include "retry_heavy_write_request.h"
-
 #include <yt/cpp/mapreduce/http/requests.h>
 
 #include <yt/cpp/mapreduce/interface/errors.h>
 #include <yt/cpp/mapreduce/interface/finish_or_die.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
-
-#include <yt/cpp/mapreduce/http_client/raw_client.h>
-#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <util/generic/size_literals.h>
 
@@ -21,6 +16,10 @@ namespace NYT {
 TRetryfulWriter::~TRetryfulWriter()
 {
     NDetail::FinishOrDie(this, AutoFinish_, "TRetryfulWriter");
+    if (WriterState_ == Ok) {
+        Y_ABORT_IF(AutoFinish_); // if AutoFinish_, FinishOrDie would have called Finish
+        Abort();
+    }
 }
 
 void TRetryfulWriter::CheckWriterState()
@@ -113,9 +112,9 @@ void TRetryfulWriter::Send(const TBuffer& buffer)
             std::visit([this, &attemptTx, &stream] (const auto& options) -> void {
                 using TType = std::decay_t<decltype(options)>;
                 if constexpr (std::is_same_v<TType, TFileWriterOptions>) {
-                    stream = NDetail::NRawClient::WriteFile(Context_, attemptTx.GetId(), Path_, options);
+                    stream = RawClient_->WriteFile(attemptTx.GetId(), Path_, options);
                 } else if constexpr (std::is_same_v<TType, TTableWriterOptions>) {
-                    stream = NDetail::NRawClient::WriteTable(Context_, attemptTx.GetId(), Path_, Format_, options);
+                    stream = RawClient_->WriteTable(attemptTx.GetId(), Path_, Format_, options);
                 } else {
                     static_assert(TDependentFalse<TType>);
                 }

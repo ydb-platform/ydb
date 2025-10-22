@@ -17,10 +17,6 @@ public:
     bool EnableSsl = true;
     TString Token;
     TString TokenFile;
-    TString CaCertsFile;
-    TString ClientCertFile;
-    TString ClientCertPrivateKeyFile;
-    TString ClientCertPrivateKeyPasswordFile;
 
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;

@@ -39,57 +39,57 @@ protected:
     void SetGlobal(size_t step);
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, const TGetParents&)) {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& parents) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, const TGetParents&)) {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& parents) {
             return (static_cast<TDerived*>(this)->*handler)(node, ctx, parents);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, const TGetParents&) const) const {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& parents) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, const TGetParents&) const) const {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& parents) {
             return (static_cast<const TDerived*>(this)->*handler)(node, ctx, parents);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&, const TGetParents&)) {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& parents) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&, const TGetParents&)) {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& parents) {
             return (static_cast<TDerived*>(this)->*handler)(node, ctx, optCtx, parents);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&, const TGetParents&) const) const {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& parents) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&, const TGetParents&) const) const {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& parents) {
             return (static_cast<const TDerived*>(this)->*handler)(node, ctx, optCtx, parents);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&)) {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& /*parents*/) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&)) {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& /*parents*/) {
             return (static_cast<TDerived*>(this)->*handler)(node, ctx, optCtx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&) const) const {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& /*parents*/) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&, IOptimizationContext&) const) const {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& /*parents*/) {
             return (static_cast<const TDerived*>(this)->*handler)(node, ctx, optCtx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&)) {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& /*parents*/) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&)) {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& /*parents*/) {
             return (static_cast<TDerived*>(this)->*handler)(node, ctx);
         };
     }
 
     template <class TDerived>
-    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase>(TDerived::* handler)(NNodes::TExprBase, TExprContext&) const) const {
-        return [this, handler] (NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& /*parents*/) {
+    THandler Hndl(NNodes::TMaybeNode<NNodes::TExprBase> (TDerived::*handler)(NNodes::TExprBase, TExprContext&) const) const {
+        return [this, handler](NNodes::TExprBase node, TExprContext& ctx, IOptimizationContext& /*optCtx*/, const TGetParents& /*parents*/) {
             return (static_cast<const TDerived*>(this)->*handler)(node, ctx);
         };
     }
@@ -105,10 +105,14 @@ protected:
         TVector<TOptInfo> Optimizers;
         bool Global = false;
     };
-    TTypeAnnotationContext* Types;
-    const NLog::EComponent LogComponent;
-    TSet<TString> DisabledOpts;
-    TVector<TStep> Steps;
+
+    TTypeAnnotationContext* GetTypes() const;
+
+    // FIXME switch to an accessor
+    TTypeAnnotationContext* Types; // NOLINT(readability-identifier-naming)
+    const NLog::EComponent LogComponent_;
+    TSet<TString> DisabledOpts_;
+    TVector<TStep> Steps_;
 };
 
-} // NYql
+} // namespace NYql

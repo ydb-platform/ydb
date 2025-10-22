@@ -31,4 +31,8 @@ PY_NAMESPACE(yt_proto.yt.core)
 
 EXCLUDE_TAGS(GO_PROTO)
 
+INCLUDE_TAGS(
+    DOCS_PROTO
+)
+
 END()

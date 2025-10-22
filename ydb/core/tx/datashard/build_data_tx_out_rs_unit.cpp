@@ -63,7 +63,7 @@ EExecutionStatus TBuildDataTxOutRSUnit::Execute(TOperation::TPtr op,
     TDataShardLocksDb locksDb(DataShard, txc);
     TSetupSysLocks guardLocks(op, DataShard, &locksDb);
 
-    tx->GetDataTx()->SetReadVersion(DataShard.GetReadWriteVersions(tx).ReadVersion);
+    tx->GetDataTx()->SetMvccVersion(DataShard.GetMvccVersion(tx));
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
     try {
         auto &outReadSets = op->OutReadSets();

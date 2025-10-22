@@ -1,0 +1,20 @@
+--- contrib/restricted/abseil-cpp-tstring/y_absl/status/internal/status_internal.h	(index)
++++ contrib/restricted/abseil-cpp-tstring/y_absl/status/internal/status_internal.h	(working tree)
+@@ -32,16 +32,7 @@
+ // Disabled for SWIG as it doesn't parse attributes correctly.
+ namespace y_absl {
+ Y_ABSL_NAMESPACE_BEGIN
+-// Returned Status objects may not be ignored. Codesearch doesn't handle ifdefs
+-// as part of a class definitions (b/6995610), so we use a forward declaration.
+-//
+-// TODO(b/176172494): Y_ABSL_MUST_USE_RESULT should expand to the more strict
+-// [[nodiscard]]. For now, just use [[nodiscard]] directly when it is available.
+-#if Y_ABSL_HAVE_CPP_ATTRIBUTE(nodiscard)
+-class [[nodiscard]] Y_ABSL_ATTRIBUTE_TRIVIAL_ABI Status;
+-#else
+-class Y_ABSL_MUST_USE_RESULT Y_ABSL_ATTRIBUTE_TRIVIAL_ABI Status;
+-#endif
++class Y_ABSL_ATTRIBUTE_TRIVIAL_ABI Status;
+ Y_ABSL_NAMESPACE_END
+ }  // namespace y_absl
+ #endif  // !SWIG

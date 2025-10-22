@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: platformdirs
-Version: 4.3.8
+Version: 4.4.0
 Summary: A small Python package for determining appropriate platform-specific dirs, e.g. a `user data dir`.
 Project-URL: Changelog, https://github.com/tox-dev/platformdirs/releases
 Project-URL: Documentation, https://platformdirs.readthedocs.io

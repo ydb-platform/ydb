@@ -54,23 +54,23 @@ def wait_timeout(process, timeout):
 def execute_command_with_output_on_hosts(list_of_hosts, command, per_host_timeout=60, username=None):
     full_output = []
     full_retcode = 0
-    pool = futures.ProcessPoolExecutor(8)
-    fs = []
-    for host in list_of_hosts:
-        fs.append(
-            pool.submit(
-                execute_command_with_output_single_host,
-                host, command,
-                timeout=per_host_timeout,
-                username=username
+    with futures.ProcessPoolExecutor(8) as pool:
+        fs = []
+        for host in list_of_hosts:
+            fs.append(
+                pool.submit(
+                    execute_command_with_output_single_host,
+                    host, command,
+                    timeout=per_host_timeout,
+                    username=username
+                )
             )
-        )
 
-    for f in fs:
-        retcode, output = f.result()
-        if retcode:
-            full_retcode = retcode
-        full_output.extend(output)
+        for f in fs:
+            retcode, output = f.result()
+            if retcode:
+                full_retcode = retcode
+            full_output.extend(output)
     return full_retcode, full_output
 
 

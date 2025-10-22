@@ -10,6 +10,9 @@ class ListObjectsInS3ExportResult;
 }
 
 namespace NYdb::inline Dev {
+
+class TProtoAccessor;
+
 namespace NImport {
 
 /// Common
@@ -99,6 +102,8 @@ struct TListObjectsInS3ExportSettings : public TOperationRequestSettings<TListOb
 };
 
 class TListObjectsInS3ExportResult : public TStatus {
+    friend class NYdb::TProtoAccessor;
+
 public:
     struct TItem {
         // S3 object prefix
@@ -110,7 +115,13 @@ public:
         void Out(IOutputStream& out) const;
     };
 
-    TListObjectsInS3ExportResult(TStatus&& status, const ::Ydb::Import::ListObjectsInS3ExportResult& proto);
+    TListObjectsInS3ExportResult(TStatus&& status, const Ydb::Import::ListObjectsInS3ExportResult& proto);
+    TListObjectsInS3ExportResult(TListObjectsInS3ExportResult&&);
+    TListObjectsInS3ExportResult(const TListObjectsInS3ExportResult&);
+    ~TListObjectsInS3ExportResult();
+
+    TListObjectsInS3ExportResult& operator=(TListObjectsInS3ExportResult&&);
+    TListObjectsInS3ExportResult& operator=(const TListObjectsInS3ExportResult&);
 
     const std::vector<TItem>& GetItems() const;
     const std::string& NextPageToken() const { return NextPageToken_; }
@@ -118,8 +129,12 @@ public:
     void Out(IOutputStream& out) const;
 
 private:
+    const Ydb::Import::ListObjectsInS3ExportResult& GetProto() const;
+
+private:
     std::vector<TItem> Items_;
     std::string NextPageToken_;
+    std::unique_ptr<Ydb::Import::ListObjectsInS3ExportResult> Proto_;
 };
 
 using TAsyncListObjectsInS3ExportResult = NThreading::TFuture<TListObjectsInS3ExportResult>;

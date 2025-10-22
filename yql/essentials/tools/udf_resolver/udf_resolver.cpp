@@ -28,71 +28,70 @@
 #include <util/string/builder.h>
 
 #ifdef _linux_
-#include <sys/types.h>
-#include <sys/prctl.h>
-#include <sys/resource.h>
-#include <sys/syscall.h>
-#include <sys/socket.h>
-#include <sys/stat.h>
-#ifndef GRND_RANDOM
-#include <sys/random.h>
-#endif
+    #include <sys/types.h>
+    #include <sys/prctl.h>
+    #include <sys/resource.h>
+    #include <sys/syscall.h>
+    #include <sys/socket.h>
+    #include <sys/stat.h>
+    #ifndef GRND_RANDOM
+        #include <sys/random.h>
+    #endif
 
-#include <linux/filter.h>
-#include <linux/seccomp.h>
-#include <linux/audit.h>
-#ifndef GRND_RANDOM
-#include <linux/random.h>
-#endif
+    #include <linux/filter.h>
+    #include <linux/seccomp.h>
+    #include <linux/audit.h>
+    #ifndef GRND_RANDOM
+        #include <linux/random.h>
+    #endif
 
-#ifndef __SI_MAX_SIZE
-#define __SI_MAX_SIZE        128
-#endif
+    #ifndef __SI_MAX_SIZE
+        #define __SI_MAX_SIZE 128
+    #endif
 
-#ifndef __SI_PAD_SIZE
-#if __WORDSIZE == 64
-# define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 4)
-#else
-# define __SI_PAD_SIZE        ((__SI_MAX_SIZE / sizeof (int)) - 3)
-#endif
-#endif
+    #ifndef __SI_PAD_SIZE
+        #if __WORDSIZE == 64
+            #define __SI_PAD_SIZE ((__SI_MAX_SIZE / sizeof(int)) - 4)
+        #else
+            #define __SI_PAD_SIZE ((__SI_MAX_SIZE / sizeof(int)) - 3)
+        #endif
+    #endif
 
+    #if !defined(SYS_newfstatat)
+        #if defined(__x86_64__)
+            #define SYS_newfstatat 262
+        #elif defined(__i386__)
+            #error Unsupported syscall
+        #elif defined(__aarch64__)
+            #define SYS_newfstatat 79
+        #elif defined(__arm__)
+            #error Unsupported syscall
+        #elif defined(__powerpc__)
+            #define SYS_newfstatat 291
+        #else
+            #error Unsupported platform
+        #endif
+    #endif
 
-#if !defined(SYS_newfstatat)
-#if defined(__x86_64__)
-    #define SYS_newfstatat 262
-#elif defined(__i386__)
-    #error Unsupported syscall
-#elif defined(__aarch64__)
-    #define SYS_newfstatat 79
-#elif defined(__arm__)
-    #error Unsupported syscall
-#elif defined(__powerpc__)
-    #define SYS_newfstatat 291
-#else
-#error Unsupported platform
-#endif
-#endif
+    #if !defined(SYS_clone3)
+        #define SYS_clone3 435
+    #endif
 
-#if !defined(SYS_clone3)
-    #define SYS_clone3 435
-#endif
-
-#if !defined(SYS_rseq)
-#if defined(__x86_64__)
-    #define SYS_rseq 334
-#elif defined(__i386__)
-    #define SYS_rseq 386
-#elif defined(__aarch64__)
-    #define SYS_rseq 293
-#elif defined(__arm__)
-    #define SYS_rseq 398
-#elif defined(__powerpc__)
-    #define SYS_rseq 387
-#else
-#error Unsupported platform
-#endif
-#endif
+    #if !defined(SYS_rseq)
+        #if defined(__x86_64__)
+            #define SYS_rseq 334
+        #elif defined(__i386__)
+            #define SYS_rseq 386
+        #elif defined(__aarch64__)
+            #define SYS_rseq 293
+        #elif defined(__arm__)
+            #define SYS_rseq 398
+        #elif defined(__powerpc__)
+            #define SYS_rseq 387
+        #else
+            #error Unsupported platform
+        #endif
+    #endif
 
 #endif
 
@@ -136,10 +135,10 @@ void ResolveUDFs() {
             if (inserted) {
                 THashSet<TString> modules;
                 newRegistry->LoadUdfs(import.GetPath(),
-                                    {},
-                                    NUdf::IRegistrator::TFlags::TypesOnly,
-                                    import.GetCustomUdfPrefix(),
-                                    &modules);
+                                      {},
+                                      NUdf::IRegistrator::TFlags::TypesOnly,
+                                      import.GetCustomUdfPrefix(),
+                                      &modules);
 
                 NUdfResolver::FillImportResultModules(modules, *importRes);
                 it->second = modules;
@@ -168,17 +167,17 @@ void ResolveUDFs() {
                 mkqlUserType = NYql::NCommon::ParseTypeFromYson(TStringBuf{udf.GetUserType()}, pgmBuilder, err);
                 if (!mkqlUserType) {
                     udfRes->SetError(TStringBuilder() << "Invalid user type for function: "
-                        << udf.GetName() << ", error: " << err.Str());
+                                                      << udf.GetName() << ", error: " << err.Str());
                     continue;
                 }
             }
 
             TFunctionTypeInfo funcInfo;
             auto status = newRegistry->FindFunctionTypeInfo(udf.GetLangVer(), env, typeInfoHelper, nullptr,
-                udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
+                                                            udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
-                    << ", reason: " << status.GetError());
+                                                  << ", reason: " << status.GetError());
                 continue;
             }
 
@@ -198,8 +197,8 @@ void ResolveUDFs() {
             udfRes->SetMaxLangVer(funcInfo.MaxLangVer);
         } catch (yexception& e) {
             udfRes->SetError(TStringBuilder()
-                << "Internal error was found when udf metadata is loading for function: " << udf.GetName()
-                << ", reason: " << e.what());
+                             << "Internal error was found when udf metadata is loading for function: " << udf.GetName()
+                             << ", reason: " << e.what());
         }
     }
 
@@ -210,7 +209,7 @@ void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
     auto funcRegistry = CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
-       NUdf::IRegistrator::TFlags::TypesOnly);
+                                               NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {
         auto path = *funcRegistry->FindUdfPath(m);
@@ -220,43 +219,40 @@ void ListModules(const TString& dir) {
 
 // NOLINTBEGIN(readability-identifier-naming)
 #ifdef _linux_
-struct my_siginfo_t
-  {
-    int si_signo;                /* Signal number.  */
-#if __SI_ERRNO_THEN_CODE
-    int si_errno;                /* If non-zero, an errno value associated with
-                                   this signal, as defined in <errno.h>.  */
-    int si_code;                /* Signal code.  */
-#else
+struct my_siginfo_t {
+    int si_signo; /* Signal number.  */
+    #if __SI_ERRNO_THEN_CODE
+    int si_errno; /* If non-zero, an errno value associated with
+                    this signal, as defined in <errno.h>.  */
+    int si_code;  /* Signal code.  */
+    #else
     int si_code;
     int si_errno;
-#endif
-#if __WORDSIZE == 64
-    int __pad0;                        /* Explicit padding.  */
-#endif
-    union
-      {
+    #endif
+    #if __WORDSIZE == 64
+    int __pad0; /* Explicit padding.  */
+    #endif
+    union {
         int _pad[__SI_PAD_SIZE];
         struct
-          {
-            void *_call_addr;        /* Calling user insn.  */
-            int _syscall;        /* Triggering system call number.  */
+        {
+            void* _call_addr;   /* Calling user insn.  */
+            int _syscall;       /* Triggering system call number.  */
             unsigned int _arch; /* AUDIT_ARCH_* of syscall.  */
-          } _sigsys;
+        } _sigsys;
 
-      } _sifields;
-  };
+    } _sifields;
+};
 // NOLINTEND(readability-identifier-naming)
 
-void SigSysHandler(int sig, my_siginfo_t *info, void *) {
-    Cerr << "SigSysHandler: " << sig << ", code: " << info->si_code << ", errno: " <<
-        info->si_errno << ", call: " << info->_sifields._sigsys._syscall << ", arch:" << info->_sifields._sigsys._arch << "\n";
+void SigSysHandler(int sig, my_siginfo_t* info, void*) {
+    Cerr << "SigSysHandler: " << sig << ", code: " << info->si_code << ", errno: " << info->si_errno << ", call: " << info->_sifields._sigsys._syscall << ", arch:" << info->_sifields._sigsys._arch << "\n";
     // repeat SIGSYS signal (this will kill current process)
     raise(sig);
 }
 #endif
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 
@@ -265,11 +261,11 @@ int main(int argc, char **argv) {
         struct sigaction sa;
         memset(&sa, 0, sizeof(sa));
         sa.sa_flags = SA_RESETHAND | SA_SIGINFO;
-        typedef void (*TSigSysHandler)(int, siginfo_t *, void *);
+        typedef void (*TSigSysHandler)(int, siginfo_t*, void*);
         sa.sa_sigaction = (TSigSysHandler)SigSysHandler;
         sigfillset(&sa.sa_mask);
         if (sigaction(SIGSYS, &sa, nullptr) == -1) {
-           ythrow TSystemError() << "Cannot set handler for signal " << strsignal(SIGSYS);
+            ythrow TSystemError() << "Cannot set handler for signal " << strsignal(SIGSYS);
         }
 #endif
 
@@ -344,26 +340,26 @@ int main(int argc, char **argv) {
         if (res.Has("filter-syscalls")) {
 #ifdef _linux_
 
-#define ArchField offsetof(struct seccomp_data, arch) // NOLINT(readability-identifier-naming)
+    #define ArchField offsetof(struct seccomp_data, arch) // NOLINT(readability-identifier-naming)
 
-// NOLINTNEXTLINE(readability-identifier-naming)
-#define Allow(syscall) \
-    BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, SYS_##syscall, 0, 1), \
-    BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ALLOW)
+    // NOLINTNEXTLINE(readability-identifier-naming)
+    #define Allow(syscall)                                        \
+        BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, SYS_##syscall, 0, 1), \
+            BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_ALLOW)
 
             struct sock_filter filter[] = {
                 /* validate arch */
-                BPF_STMT(BPF_LD+BPF_W+BPF_ABS, ArchField),
-                BPF_JUMP( BPF_JMP+BPF_JEQ+BPF_K, AUDIT_ARCH_X86_64, 1, 0),
-                BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRAP),
+                BPF_STMT(BPF_LD + BPF_W + BPF_ABS, ArchField),
+                BPF_JUMP(BPF_JMP + BPF_JEQ + BPF_K, AUDIT_ARCH_X86_64, 1, 0),
+                BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_TRAP),
 
                 /* load syscall */
-                BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, nr)),
+                BPF_STMT(BPF_LD + BPF_W + BPF_ABS, offsetof(struct seccomp_data, nr)),
 
-                /* list of allowed syscalls */
-#ifndef _arm64_
+            /* list of allowed syscalls */
+    #ifndef _arm64_
                 Allow(access),
-#endif
+    #endif
                 Allow(brk),
                 Allow(chdir),
                 Allow(clock_gettime),
@@ -371,13 +367,13 @@ int main(int argc, char **argv) {
                 Allow(clone),
                 Allow(clone3),
                 Allow(close),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(creat),
-#endif
+    #endif
                 Allow(dup),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(dup2),
-#endif
+    #endif
                 Allow(dup3),
                 Allow(eventfd2),
                 Allow(exit),
@@ -391,18 +387,18 @@ int main(int argc, char **argv) {
                 Allow(futex),
                 Allow(get_robust_list),
                 Allow(getcwd),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(getdents),
-#endif
+    #endif
                 Allow(getdents64),
                 Allow(getegid),
                 Allow(geteuid),
                 Allow(getgid),
                 Allow(getgroups),
                 Allow(getpgid),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(getpgrp),
-#endif
+    #endif
                 Allow(getpid),
                 Allow(getppid),
                 Allow(getpriority),
@@ -416,21 +412,21 @@ int main(int argc, char **argv) {
                 Allow(getxattr),
                 Allow(ioctl),
                 Allow(lgetxattr),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(link),
-#endif
+    #endif
                 Allow(listxattr),
                 Allow(llistxattr),
                 Allow(lremovexattr),
                 Allow(lseek),
                 Allow(lsetxattr),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(lstat),
-#endif
+    #endif
                 Allow(madvise),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(mkdir),
-#endif
+    #endif
                 Allow(mkdirat),
                 Allow(mlock),
                 Allow(mlockall),
@@ -441,27 +437,27 @@ int main(int argc, char **argv) {
                 Allow(munmap),
                 Allow(nanosleep),
                 Allow(newfstatat),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(open),
-#endif
+    #endif
                 Allow(openat),
                 Allow(pipe2),
                 Allow(prctl),
                 Allow(pread64),
                 Allow(pwrite64),
                 Allow(read),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(readlink),
-#endif
+    #endif
                 Allow(readv),
                 Allow(removexattr),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(rename),
-#endif
+    #endif
                 Allow(renameat),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(rmdir),
-#endif
+    #endif
                 Allow(rseq),
                 Allow(rt_sigaction),
                 Allow(rt_sigpending),
@@ -475,26 +471,25 @@ int main(int argc, char **argv) {
                 Allow(sched_setaffinity),
                 Allow(set_robust_list),
                 Allow(setxattr),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(stat),
-#endif
+    #endif
                 Allow(sysinfo),
                 Allow(sigaltstack),
                 Allow(uname),
-#ifndef _arm64_
+    #ifndef _arm64_
                 Allow(unlink),
-#endif
+    #endif
                 Allow(unlinkat),
                 Allow(write),
                 Allow(writev),
 
                 /* and if we don't match above, die */
-                BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_TRAP),
+                BPF_STMT(BPF_RET + BPF_K, SECCOMP_RET_TRAP),
             };
             struct sock_fprog filterprog = {
-                .len = sizeof(filter)/sizeof(filter[0]),
-                .filter = filter
-            };
+                .len = sizeof(filter) / sizeof(filter[0]),
+                .filter = filter};
 
             if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) == -1) {
                 ythrow yexception() << "prctl(PR_SET_NO_NEW_PRIVS, 1, ...) failed with: " << LastSystemErrorText();

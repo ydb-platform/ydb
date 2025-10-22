@@ -139,7 +139,9 @@ public:
         }
 
         auto config = loadEpoch ? State_->Configuration->GetSettingsVer(settingsVer) : State_->Configuration->Snapshot();
-        opts.Config(config).ReadOnly(State_->Types->IsReadOnly).Epoch(loadEpoch);
+        opts.Config(config)
+            .ReadOnly(State_->Types->IsReadOnly || State_->Types->EngineType == EEngineType::Ytflow)
+            .Epoch(loadEpoch);
 
         auto future = State_->Gateway->GetTableInfo(std::move(opts));
         auto loadCtx = LoadCtx;
@@ -169,7 +171,9 @@ public:
             return TStatus::Error;
         }
 
-        ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+        ctx.Step
+            .Repeat(TExprStep::ExpandApplyForLambdas)
+            .Repeat(TExprStep::ExpandSeq);
         THashMap<std::pair<TString, TString>, TYtTableDescription*> tableDescrs;
         for (size_t i = 0 ; i < LoadCtx->Result.Data.size(); ++i) {
             tableDescrs.emplace(LoadCtx->Tables[i]);

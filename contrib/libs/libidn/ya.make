@@ -6,9 +6,9 @@ LIBRARY()
 
 WITHOUT_LICENSE_TEXTS()
 
-VERSION(1.42)
+VERSION(1.43)
 
-ORIGINAL_SOURCE(mirror://gnu/libidn/libidn-1.42.tar.gz)
+ORIGINAL_SOURCE(mirror://gnu/libidn/libidn-1.43.tar.gz)
 
 LICENSE(Service-Dll-Harness)
 

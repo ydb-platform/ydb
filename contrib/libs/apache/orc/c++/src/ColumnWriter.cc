@@ -17,10 +17,14 @@
  */
 
 #include "orc/Int128.hh"
+#include "orc/Statistics.hh"
+#include "orc/Type.hh"
 #include "orc/Writer.hh"
 
+#include <memory>
 #include "ByteRLE.hh"
 #include "ColumnWriter.hh"
+#include "Dictionary.hh"
 #include "RLE.hh"
 #include "Statistics.hh"
 #include "Timezone.hh"
@@ -922,148 +926,6 @@ namespace orc {
     ColumnWriter::finishStreams();
     dataStream_->finishStream();
   }
-
-  /**
-   * Implementation of increasing sorted string dictionary
-   */
-  class SortedStringDictionary {
-   public:
-    struct DictEntry {
-      DictEntry(const char* str, size_t len) : data(str), length(len) {}
-      const char* data;
-      size_t length;
-    };
-
-    struct DictEntryWithIndex {
-      DictEntryWithIndex(const char* str, size_t len, size_t index)
-          : entry(str, len), index(index) {}
-      DictEntry entry;
-      size_t index;
-    };
-
-    SortedStringDictionary() : totalLength_(0) {}
-
-    // insert a new string into dictionary, return its insertion order
-    size_t insert(const char* str, size_t len);
-
-    // write dictionary data & length to output buffer
-    void flush(AppendOnlyBufferedStream* dataStream, RleEncoder* lengthEncoder) const;
-
-    // reorder input index buffer from insertion order to dictionary order
-    void reorder(std::vector<int64_t>& idxBuffer) const;
-
-    // get dict entries in insertion order
-    void getEntriesInInsertionOrder(std::vector<const DictEntry*>&) const;
-
-    // return count of entries
-    size_t size() const;
-
-    // return total length of strings in the dictioanry
-    uint64_t length() const;
-
-    void clear();
-
-   private:
-    struct LessThan {
-      bool operator()(const DictEntryWithIndex& l, const DictEntryWithIndex& r) {
-        const auto& left = l.entry;
-        const auto& right = r.entry;
-        int ret = memcmp(left.data, right.data, std::min(left.length, right.length));
-        if (ret != 0) {
-          return ret < 0;
-        }
-        return left.length < right.length;
-      }
-    };
-
-    mutable std::vector<DictEntryWithIndex> flatDict_;
-    std::unordered_map<std::string, size_t> keyToIndex_;
-    uint64_t totalLength_;
-
-    // use friend class here to avoid being bothered by const function calls
-    friend class StringColumnWriter;
-    friend class CharColumnWriter;
-    friend class VarCharColumnWriter;
-    // store indexes of insertion order in the dictionary for not-null rows
-    std::vector<int64_t> idxInDictBuffer_;
-  };
-
-  // insert a new string into dictionary, return its insertion order
-  size_t SortedStringDictionary::insert(const char* str, size_t len) {
-    size_t index = flatDict_.size();
-    auto ret = keyToIndex_.emplace(std::string(str, len), index);
-    if (ret.second) {
-      flatDict_.emplace_back(ret.first->first.data(), ret.first->first.size(), index);
-      totalLength_ += len;
-    }
-    return ret.first->second;
-  }
-
-  // write dictionary data & length to output buffer
-  void SortedStringDictionary::flush(AppendOnlyBufferedStream* dataStream,
-                                     RleEncoder* lengthEncoder) const {
-    std::sort(flatDict_.begin(), flatDict_.end(), LessThan());
-
-    for (const auto& entryWithIndex : flatDict_) {
-      const auto& entry = entryWithIndex.entry;
-      dataStream->write(entry.data, entry.length);
-      lengthEncoder->write(static_cast<int64_t>(entry.length));
-    }
-  }
-
-  /**
-   * Reorder input index buffer from insertion order to dictionary order
-   *
-   * We require this function because string values are buffered by indexes
-   * in their insertion order. Until the entire dictionary is complete can
-   * we get their sorted indexes in the dictionary in that ORC specification
-   * demands dictionary should be ordered. Therefore this function transforms
-   * the indexes from insertion order to dictionary value order for final
-   * output.
-   */
-  void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
-    // iterate the dictionary to get mapping from insertion order to value order
-    std::vector<size_t> mapping(flatDict_.size());
-    for (size_t i = 0; i < flatDict_.size(); ++i) {
-      mapping[flatDict_[i].index] = i;
-    }
-
-    // do the transformation
-    for (size_t i = 0; i != idxBuffer.size(); ++i) {
-      idxBuffer[i] = static_cast<int64_t>(mapping[static_cast<size_t>(idxBuffer[i])]);
-    }
-  }
-
-  // get dict entries in insertion order
-  void SortedStringDictionary::getEntriesInInsertionOrder(
-      std::vector<const DictEntry*>& entries) const {
-    std::sort(flatDict_.begin(), flatDict_.end(),
-              [](const DictEntryWithIndex& left, const DictEntryWithIndex& right) {
-                return left.index < right.index;
-              });
-
-    entries.resize(flatDict_.size());
-    for (size_t i = 0; i < flatDict_.size(); ++i) {
-      entries[i] = &(flatDict_[i].entry);
-    }
-  }
-
-  // return count of entries
-  size_t SortedStringDictionary::size() const {
-    return flatDict_.size();
-  }
-
-  // return total length of strings in the dictioanry
-  uint64_t SortedStringDictionary::length() const {
-    return totalLength_;
-  }
-
-  void SortedStringDictionary::clear() {
-    totalLength_ = 0;
-    keyToIndex_.clear();
-    flatDict_.clear();
-  }
-
   class StringColumnWriter : public ColumnWriter {
    public:
     StringColumnWriter(const Type& type, const StreamsFactory& factory,
@@ -1413,12 +1275,11 @@ namespace orc {
     dictionary.getEntriesInInsertionOrder(entries);
 
     // store each length of the data into a vector
-    const SortedStringDictionary::DictEntry* dictEntry = nullptr;
     for (uint64_t i = 0; i != dictionary.idxInDictBuffer_.size(); ++i) {
       // write one row data in direct encoding
-      dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer_[i])];
-      directDataStream->write(dictEntry->data, dictEntry->length);
-      directLengthEncoder->write(static_cast<int64_t>(dictEntry->length));
+      const auto& dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer_[i])];
+      directDataStream->write(dictEntry->data->data(), dictEntry->data->size());
+      directLengthEncoder->write(static_cast<int64_t>(dictEntry->data->size()));
     }
 
     deleteDictStreams();
@@ -2871,6 +2732,65 @@ namespace orc {
     }
   }
 
+  class GeospatialColumnWriter : public BinaryColumnWriter {
+   public:
+    GeospatialColumnWriter(const Type& type, const StreamsFactory& factory,
+                           const WriterOptions& options)
+        : BinaryColumnWriter(type, factory, options),
+          isGeometry_(type.getKind() == TypeKind::GEOMETRY) {}
+
+    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
+                     const char* incomingMask) override {
+      ColumnWriter::add(rowBatch, offset, numValues, incomingMask);
+
+      const StringVectorBatch* strBatch = dynamic_cast<const StringVectorBatch*>(&rowBatch);
+      if (strBatch == nullptr) {
+        throw InvalidArgument("Failed to cast to StringVectorBatch");
+      }
+      auto data = &strBatch->data[offset];
+      auto length = &strBatch->length[offset];
+      const char* notNull = strBatch->hasNulls ? strBatch->notNull.data() + offset : nullptr;
+
+      bool hasNull = false;
+      GeospatialColumnStatisticsImpl* geoStats = nullptr;
+      if (isGeometry_) {
+        geoStats = dynamic_cast<GeospatialColumnStatisticsImpl*>(colIndexStatistics.get());
+      }
+
+      uint64_t count = 0;
+      for (uint64_t i = 0; i < numValues; ++i) {
+        if (notNull == nullptr || notNull[i]) {
+          uint64_t len = static_cast<uint64_t>(length[i]);
+          directDataStream->write(data[i], len);
+
+          // update stats
+          if (geoStats) {
+            ++count;
+            geoStats->update(data[i], len);
+          }
+
+          if (enableBloomFilter) {
+            bloomFilter->addBytes(data[i], length[i]);
+          }
+        } else if (!hasNull) {
+          hasNull = true;
+          if (geoStats) {
+            geoStats->setHasNull(hasNull);
+          }
+        }
+      }
+
+      directLengthEncoder->add(length, numValues, notNull);
+
+      if (geoStats) {
+        geoStats->increase(count);
+      }
+    }
+
+   private:
+    bool isGeometry_;
+  };
+
   std::unique_ptr<ColumnWriter> buildWriter(const Type& type, const StreamsFactory& factory,
                                             const WriterOptions& options) {
     switch (static_cast<int64_t>(type.getKind())) {
@@ -2941,6 +2861,9 @@ namespace orc {
         return std::make_unique<MapColumnWriter>(type, factory, options);
       case UNION:
         return std::make_unique<UnionColumnWriter>(type, factory, options);
+      case GEOMETRY:
+      case GEOGRAPHY:
+        return std::make_unique<GeospatialColumnWriter>(type, factory, options);
       default:
         throw NotImplementedYet(
             "Type is not supported yet for creating "

@@ -9,7 +9,7 @@ from yql_utils import get_supported_providers, yql_binary_path, is_xfail, is_ski
     stable_result_file, stable_table_file, is_with_final_result_issues, log, is_unordered_result, is_sorted_table, \
     get_table_clusters
 
-from test_utils import get_config
+from test_utils import get_config, get_case_file
 from test_file_common import run_file, run_file_no_cache
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
@@ -34,7 +34,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     config = get_config(suite, case, cfg, data_path=DATA_PATH)
     cfg_postprocess = add_table_clusters(suite, config)
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = get_case_file(DATA_PATH, suite, case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 
@@ -98,6 +98,13 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
                         'OUT_TABLE_DIFFER: %(table)s\n' \
                         '%(dq_result_name)s table:\n %(dq_table_yson)s\n\n' \
                         '%(yqlrun_result_name)s table:\n %(yqlrun_table_yson)s\n' % locals()
+
+                    yqlrun_table_attr = yqlrun_tables_res[table].attr
+                    dq_table_attr = tables_res[table].attr
+                    assert yqlrun_table_attr == dq_table_attr, \
+                        'OUT_TABLE_ATTR_DIFFER: %(table)s\n' \
+                        '%(dq_result_name)s table attrs:\n %(dq_table_attr)s\n\n' \
+                        '%(yqlrun_result_name)s table attrs:\n %(yqlrun_table_attr)s\n' % locals()
 
     else:
         assert False, "Unexpected test mode %(what)s"

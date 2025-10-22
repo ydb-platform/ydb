@@ -15,7 +15,7 @@ public:
     {}
 
     void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
+        if (TBase::NeedToRedirect(false/* don't check auth for capabilities on purpose */)) {
             return;
         }
         ReplyAndPassAway();
@@ -37,6 +37,10 @@ public:
                     database["GraphShardExists"] = entry.DomainInfo->Params.GetGraphShard() != 0;
                 }
             }
+        }
+
+        if (AppData()->BridgeModeEnabled) {
+            json["Cluster"]["BridgeModeEnabled"] = true;
         }
         return json;
     }

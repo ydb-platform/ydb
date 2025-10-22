@@ -78,7 +78,7 @@ class UtilsTests(TestCase):
         for x in string_list:
             assert x in set_scope
 
-        self.assertRaises(ValueError, list_to_scope, object()) 
+        self.assertRaises(ValueError, list_to_scope, object())
 
     def test_scope_to_list(self):
         expected = ['foo', 'bar', 'baz']

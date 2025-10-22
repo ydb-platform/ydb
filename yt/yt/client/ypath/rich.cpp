@@ -25,10 +25,7 @@ using namespace NSecurityClient;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TRichYPath::TRichYPath()
-{ }
-
-TRichYPath::TRichYPath(const TRichYPath& other)
+TRichYPath::TRichYPath(const TRichYPath& other) noexcept
     : Path_(other.Path_)
     , Attributes_(other.Attributes_ ? other.Attributes_->Clone() : nullptr)
 { }
@@ -39,30 +36,34 @@ TRichYPath::TRichYPath(const char* path)
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(const TYPath& path)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path)
+    : Path_(std::move(path))
 {
     *this = Normalize();
 }
 
-TRichYPath::TRichYPath(TRichYPath&& other)
-    : Path_(std::move(other.Path_))
-    , Attributes_(std::move(other.Attributes_))
-{ }
-
-TRichYPath::TRichYPath(const TYPath& path, const IAttributeDictionary& attributes)
-    : Path_(path)
+TRichYPath::TRichYPath(TYPath path, const IAttributeDictionary& attributes)
+    : Path_(std::move(path))
     , Attributes_(attributes.Clone())
 { }
+
+TRichYPath& TRichYPath::operator=(const TRichYPath& other) noexcept
+{
+    if (this != &other) {
+        Path_ = other.Path_;
+        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
+    }
+    return *this;
+}
 
 const TYPath& TRichYPath::GetPath() const
 {
     return Path_;
 }
 
-void TRichYPath::SetPath(const TYPath& path)
+void TRichYPath::SetPath(TYPath path)
 {
-    Path_ = path;
+    Path_ = std::move(path);
 }
 
 const IAttributeDictionary& TRichYPath::Attributes() const
@@ -76,15 +77,6 @@ IAttributeDictionary& TRichYPath::Attributes()
         Attributes_ = CreateEphemeralAttributes();
     }
     return *Attributes_;
-}
-
-TRichYPath& TRichYPath::operator = (const TRichYPath& other)
-{
-    if (this != &other) {
-        Path_ = other.Path_;
-        Attributes_ = other.Attributes_ ? other.Attributes_->Clone() : nullptr;
-    }
-    return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -151,7 +143,7 @@ TYsonString FindAttributeYson(const TRichYPath& path, const std::string& key)
 
 } // namespace
 
-TRichYPath TRichYPath::Parse(const TString& str)
+TRichYPath TRichYPath::Parse(TStringBuf str)
 {
     return ParseRichYPathImpl(str);
 }

@@ -46,22 +46,21 @@ std::unique_ptr<cctz::ZoneInfoSource> DefaultFactory(
 // MinGW is GCC on Windows, so while it asserts __has_attribute(weak), the
 // Windows linker cannot handle that. Nor does the MinGW compiler know how to
 // pass "#pragma comment(linker, ...)" to the Windows linker.
-#if (__has_attribute(weak) || defined(__GNUC__)) && !defined(__MINGW32__) && !defined(_MSC_VER)
+#if (__has_attribute(weak) || defined(__GNUC__)) && !defined(__MINGW32__) && !defined(__CYGWIN__)
 ZoneInfoSourceFactory zone_info_source_factory
     __attribute__((weak)) = DefaultFactory;
-#elif defined(_MSC_VER) && !defined(__MINGW32__)
+#elif defined(_MSC_VER) && !defined(__MINGW32__) && !defined(_LIBCPP_VERSION)
 extern ZoneInfoSourceFactory zone_info_source_factory;
 extern ZoneInfoSourceFactory default_factory;
 ZoneInfoSourceFactory default_factory = DefaultFactory;
-#if defined(_M_IX86)
+#if defined(_M_IX86) || defined(_M_ARM)
 #pragma comment( \
     linker,      \
     "/alternatename:?zone_info_source_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@3@ABV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@@Z@3@@ZA=?default_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@3@ABV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@ABV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@@Z@3@@ZA")
-#elif defined(_M_IA_64) || defined(_M_AMD64) || defined(_M_ARM) || \
-    defined(_M_ARM64)
+#elif defined(_M_IA_64) || defined(_M_AMD64) || defined(_M_ARM64)
 #pragma comment( \
     linker,      \
-    "/alternatename:?zone_info_source_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@__y1@std@@@__y1@std@@AEBV?$basic_string@DU?$char_traits@D@__y1@std@@V?$allocator@D@23@@34@AEBV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@__y1@std@@@__y1@std@@AEBV?$basic_string@DU?$char_traits@D@__y1@std@@V?$allocator@D@23@@23@@Z@34@@ZEA=?default_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@__y1@std@@@__y1@std@@AEBV?$basic_string@DU?$char_traits@D@__y1@std@@V?$allocator@D@23@@34@AEBV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@__y1@std@@@__y1@std@@AEBV?$basic_string@DU?$char_traits@D@__y1@std@@V?$allocator@D@23@@23@@Z@34@@ZEA")
+    "/alternatename:?zone_info_source_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@3@AEBV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@@Z@3@@ZEA=?default_factory@cctz_extension@@3P6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@3@AEBV?$function@$$A6A?AV?$unique_ptr@VZoneInfoSource@cctz@@U?$default_delete@VZoneInfoSource@cctz@@@std@@@std@@AEBV?$basic_string@DU?$char_traits@D@std@@V?$allocator@D@2@@2@@Z@3@@ZEA")
 #else
 #error Unsupported MSVC platform
 #endif  // _M_<PLATFORM>

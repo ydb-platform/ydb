@@ -9,7 +9,6 @@ SRCS(
     common_data.cpp
     engine_logs.cpp
     indexation.cpp
-    insert_table.cpp
     req_tracer.cpp
     scan.cpp
     splitter.cpp
@@ -17,6 +16,7 @@ SRCS(
     writes_monitor.cpp
     portion_index.cpp
     duplicate_filtering.cpp
+    error_collector.cpp
 )
 
 PEERDIR(

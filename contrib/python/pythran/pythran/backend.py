@@ -42,9 +42,7 @@ class Python(Backend):
     print('hello world')
     '''
 
-    def __init__(self):
-        self.result = ''
-        super(Python, self).__init__()
+    ResultType = str
 
     def visit(self, node):
         output = io.StringIO()
@@ -98,7 +96,7 @@ def cxx_loop(visit):
                 res = visit(self, node)
             return res
 
-        break_handler = "__no_breaking{0}".format(id(node))
+        break_handler = "__no_breaking{0}".format(len(self.break_handlers))
         with pushpop(self.break_handlers, break_handler):
             res = visit(self, node)
 
@@ -108,7 +106,9 @@ def cxx_loop(visit):
             orelse_label = [Label(break_handler)]
         else:
             orelse_label = []
-        return Block([res] + orelse + orelse_label)
+        skip = [node.target.id] if isinstance(node, ast.For) else []
+        return self.process_locals(node, Block([res] + orelse + orelse_label),
+                                   *skip)
     return loop_visitor
 
 
@@ -116,25 +116,31 @@ class CachedTypeVisitor:
 
     def __init__(self, other=None):
         if other is None:
-            self.rcache = dict()
             self.mapping = dict()
+            self.typeid = dict()
+            self.combined = dict()
         else:
-            self.rcache = other.rcache.copy()
             self.mapping = other.mapping.copy()
+            self.typeid = other.typeid.copy()
+            self.combined = other.combined.copy()
 
     def __call__(self, node):
         if node not in self.mapping:
             t = node.generate(self)
             if node not in self.mapping:
-                if t in self.rcache:
-                    self.mapping[node] = self.rcache[t]
+                # Always re-evaluate LType as their evaluation depends on the
+                # callers (due to the recursion clause)
+                if type(node).__name__ == 'LType':
+                    return t
                 else:
-                    self.rcache[t] = len(self.mapping)
-                    self.mapping[node] = len(self.mapping)
-        return "__type{0}".format(self.mapping[node])
+                    if t not in self.typeid:
+                        self.typeid[t] = len(self.typeid)
+                    self.mapping[node] = (t, self.typeid[t])
+
+        return "__type{0}".format(self.mapping[node][1])
 
     def typedefs(self):
-        kv = sorted(self.rcache.items(), key=lambda x: x[1])
+        kv = sorted(set(self.mapping.values()), key=lambda x: x[1])
         L = list()
         for k, v in kv:
             typename = "__type" + str(v)
@@ -187,6 +193,7 @@ class CxxFunction(ast.NodeVisitor):
         self.used_break = set()
         self.ldecls = None
         self.openmp_deps = set()
+        self.unique_counter = 0
         if not (cfg.getboolean('backend', 'annotate') and
                 self.passmanager.code):
             self.add_line_info = self.skip_line_info
@@ -195,6 +202,10 @@ class CxxFunction(ast.NodeVisitor):
 
     def __getattr__(self, attr):
         return getattr(self.parent, attr)
+
+    def unique(self):
+        self.unique_counter += 1
+        return self.unique_counter
 
     # local declaration processing
     def process_locals(self, node, node_visited, *skipped):
@@ -209,7 +220,7 @@ class CxxFunction(ast.NodeVisitor):
             return node_visited  # no processing
 
         locals_visited = []
-        for varname in local_vars:
+        for varname in sorted(local_vars):
             vartype = self.typeof(varname)
             decl = Statement("{} {}".format(vartype, varname))
             locals_visited.append(decl)
@@ -336,13 +347,13 @@ class CxxFunction(ast.NodeVisitor):
             "typename {0}result_type".format(ffscope),
             "{0}::operator()".format(self.fname),
             formal_types, formal_args)
-        ctx = CachedTypeVisitor(self.lctx)
+
         operator_local_declarations = (
             [Statement("{0} {1}".format(
-                ctx(self.types[self.local_names[k]]), cxxid(k)))
-             for k in self.ldecls]
+                self.lctx(self.types[self.local_names[k]]), cxxid(k)))
+             for k in sorted(self.ldecls)]
         )
-        dependent_typedefs = ctx.typedefs()
+        dependent_typedefs = self.lctx.typedefs()
         operator_definition = FunctionBody(
             templatize(operator_signature, formal_types),
             Block(dependent_typedefs +
@@ -439,7 +450,9 @@ class CxxFunction(ast.NodeVisitor):
                     alltargets)
             else:
                 assert isinstance(self.types[targets[0]],
-                                  self.types.builder.Lazy)
+                                  (self.types.builder.Lazy,
+                                   self.types.builder.NamedType,
+                                   self.types.builder.ListType))
                 alltargets = '{} {}'.format(
                     self.types.builder.Lazy(
                         self.types.builder.NamedType(
@@ -502,7 +515,7 @@ class CxxFunction(ast.NodeVisitor):
         is removed for iterator in case of yields statement in function.
         """
         # Choose target variable for iterator (which is iterator type)
-        local_target = "__target{0}".format(id(node))
+        local_target = "__target{0}".format(self.unique())
         local_target_decl = self.typeof(
             self.types.builder.IteratorOfType(local_iter_decl))
 
@@ -592,7 +605,7 @@ class CxxFunction(ast.NodeVisitor):
         if self.is_in_collapse(node, args[upper_arg]):
             upper_bound = upper_value  # compatible with collapse
         else:
-            upper_bound = "__target{0}".format(id(node))
+            upper_bound = "__target{0}".format(self.unique())
 
         islocal = (node.target.id not in self.openmp_deps and
                    node.target.id in self.scope[node] and
@@ -764,7 +777,8 @@ class CxxFunction(ast.NodeVisitor):
         loop_body = Block([self.visit(stmt) for stmt in node.body])
 
         # Declare local variables at the top of the loop body
-        loop_body = self.process_locals(node, loop_body, node.target.id)
+        if not node.orelse:
+            loop_body = self.process_locals(node, loop_body, node.target.id)
         iterable = self.visit(node.iter)
 
         if self.can_use_c_for(node):
@@ -778,7 +792,7 @@ class CxxFunction(ast.NodeVisitor):
                 loop = [self.process_omp_attachements(node, autofor)]
             else:
                 # Iterator declaration
-                local_iter = "__iter{0}".format(id(node))
+                local_iter = "__iter{0}".format(self.unique())
                 local_iter_decl = self.types.builder.Assignable(
                     self.types[node.iter])
 
@@ -921,19 +935,12 @@ class CxxFunction(ast.NodeVisitor):
         if not node.elts:  # empty list
             return '{}(pythonic::types::empty_list())'.format(self.typeof(node))
         else:
-
+            node_type = self.types.builder.Assignable(self.types[node])
             elts = [self.visit(n) for n in node.elts]
-            node_type = self.types[node]
-
-            # constructor disambiguation, clang++ workaround
-            if len(elts) == 1:
-                return "{0}({1}, pythonic::types::single_value())".format(
-                    self.typeof(self.types.builder.Assignable(node_type)),
-                    elts[0])
-            else:
-                return "{0}({{{1}}})".format(
-                    self.typeof(self.types.builder.Assignable(node_type)),
-                    ", ".join(elts))
+            return "{0}({{{1}}})".format(
+                self.typeof(node_type),
+                ", ".join("static_cast<typename {}::value_type>({})"
+                          .format(self.typeof(node_type), elt) for elt in elts))
 
     def visit_Set(self, node):
         if not node.elts:  # empty set
@@ -941,17 +948,10 @@ class CxxFunction(ast.NodeVisitor):
         else:
             elts = [self.visit(n) for n in node.elts]
             node_type = self.types.builder.Assignable(self.types[node])
-
-            # constructor disambiguation, clang++ workaround
-            if len(elts) == 1:
-                return "{0}({1}, pythonic::types::single_value())".format(
-                    self.typeof(node_type),
-                    elts[0])
-            else:
-                return "{0}{{{{{1}}}}}".format(
-                    self.typeof(node_type),
-                    ", ".join("static_cast<typename {}::value_type>({})"
-                              .format(self.typeof(node_type), elt) for elt in elts))
+            return "{0}({{{1}}})".format(
+                self.typeof(node_type),
+                ", ".join("static_cast<typename {}::value_type>({})"
+                          .format(self.typeof(node_type), elt) for elt in elts))
 
     def visit_Dict(self, node):
         if not node.keys:  # empty dict
@@ -1249,7 +1249,7 @@ class CxxGenerator(CxxFunction):
                         [Statement("{0} {1}".format(
                             ctx(self.types[self.local_names[k]]),
                             k))
-                         for k in self.ldecls] +
+                         for k in sorted(self.ldecls)] +
                         [Statement("{0} {1}".format(v, k))
                          for k, v in self.extra_declarations] +
                         [Statement(
@@ -1354,7 +1354,8 @@ class CxxGenerator(CxxFunction):
         return super(CxxGenerator, self).make_assign("", local_iter, iterable)
 
 
-class Cxx(Backend):
+class Cxx(Backend[Dependencies, GlobalDeclarations, Types, Scope, RangeValues,
+                  PureExpressions, Immediates, Ancestors, StrictAliases]):
 
     """
     Produces a C++ representation of the AST.
@@ -1392,13 +1393,7 @@ class Cxx(Backend):
       }
     }
     """
-
-    def __init__(self):
-        """ Basic initialiser gathering analysis informations. """
-        self.result = None
-        super(Cxx, self).__init__(Dependencies, GlobalDeclarations, Types,
-                                  Scope, RangeValues, PureExpressions,
-                                  Immediates, Ancestors, StrictAliases)
+    ResultType = type(None)
 
     # mod
     def visit_Module(self, node):

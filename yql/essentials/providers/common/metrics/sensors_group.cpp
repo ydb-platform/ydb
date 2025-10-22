@@ -2,7 +2,6 @@
 
 #include <util/generic/singleton.h>
 
-
 namespace NYql {
 
 struct TSensorsRootGroup {
@@ -18,4 +17,4 @@ TSensorsGroupPtr GetSensorsRootGroup() {
     return Singleton<TSensorsRootGroup>()->Value;
 }
 
-} // namspace NYql
+} // namespace NYql

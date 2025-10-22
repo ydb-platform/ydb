@@ -14,7 +14,7 @@ EQUIVALENT_ITERATORS = {
 }
 
 
-class IterTransformation(Transformation):
+class IterTransformation(Transformation[PotentialIterator, Aliases]):
 
     """
     Replaces expressions by iterators when possible.
@@ -35,10 +35,6 @@ class IterTransformation(Transformation):
     def bar(n):
         return foo(n)
     """
-
-    def __init__(self):
-        """Gather required information."""
-        Transformation.__init__(self, PotentialIterator, Aliases)
 
     def find_matching_builtin(self, node):
         """

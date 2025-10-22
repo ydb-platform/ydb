@@ -36,16 +36,43 @@ enum class EStatsMode {
     Profile = 40,
 };
 
+enum class ESchemaInclusionMode {
+    Unspecified = 0,
+    Always = 1,
+    FirstOnly = 2,
+};
+
 std::optional<EStatsMode> ParseStatsMode(std::string_view statsMode);
 std::string_view StatsModeToString(const EStatsMode statsMode);
 
 enum class EExecStatus {
     Unspecified = 0,
     Starting = 10,
+    Running = 15,
     Aborted = 20,
     Canceled = 30,
     Completed = 40,
     Failed = 50,
+};
+
+struct TArrowFormatSettings {
+    using TSelf = TArrowFormatSettings;
+
+    struct TCompressionCodec {
+        using TSelf = TCompressionCodec;
+
+        enum class EType {
+            Unspecified = 0,
+            None = 1,
+            Zstd = 2,
+            Lz4Frame = 3,
+        };
+
+        FLUENT_SETTING_DEFAULT(EType, Type, EType::Unspecified);
+        FLUENT_SETTING_OPTIONAL(int32_t, Level);
+    };
+
+    FLUENT_SETTING_OPTIONAL(TCompressionCodec, CompressionCodec);
 };
 
 using TAsyncExecuteQueryPart = NThreading::TFuture<TExecuteQueryPart>;
@@ -83,6 +110,9 @@ struct TExecuteQuerySettings : public TRequestSettings<TExecuteQuerySettings> {
     FLUENT_SETTING_OPTIONAL(bool, ConcurrentResultSets);
     FLUENT_SETTING(std::string, ResourcePool);
     FLUENT_SETTING_OPTIONAL(std::chrono::milliseconds, StatsCollectPeriod);
+    FLUENT_SETTING_DEFAULT(ESchemaInclusionMode, SchemaInclusionMode, ESchemaInclusionMode::Unspecified);
+    FLUENT_SETTING_DEFAULT(TResultSet::EFormat, Format, TResultSet::EFormat::Unspecified);
+    FLUENT_SETTING_OPTIONAL(TArrowFormatSettings, ArrowFormatSettings);
 };
 
 struct TBeginTxSettings : public TRequestSettings<TBeginTxSettings> {};

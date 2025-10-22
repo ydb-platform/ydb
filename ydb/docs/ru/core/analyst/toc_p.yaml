@@ -1,0 +1,14 @@
+items:
+  - name: Быстрый старт
+    href: olap_quickstart.md
+  - name: Импорт датасетов
+    href: datasets/index.md
+    include:
+      mode: link
+      path: datasets/toc_p.yaml
+  - name: Практические руководства
+    include:
+      mode: link
+      path: practical-guides/toc_p.yaml
+  - name: Ограничения
+    href: limitations.md

@@ -22,6 +22,7 @@ SRCS(
     rpc_alter_table.cpp
     rpc_backup.cpp
     rpc_begin_transaction.cpp
+    rpc_bridge.cpp
     rpc_calls.cpp
     rpc_cancel_operation.cpp
     rpc_cms.cpp
@@ -35,6 +36,7 @@ SRCS(
     rpc_describe_external_data_source.cpp
     rpc_describe_external_table.cpp
     rpc_describe_path.cpp
+    rpc_describe_system_view.cpp
     rpc_describe_table.cpp
     rpc_describe_table_options.cpp
     rpc_discovery.cpp
@@ -89,6 +91,8 @@ SRCS(
     table_settings.cpp
 
     rpc_common/rpc_common_kqp_session.cpp
+
+    legacy/rpc_legacy.cpp
 
     query/rpc_execute_query.cpp
     query/rpc_execute_script.cpp
@@ -145,7 +149,9 @@ PEERDIR(
     yql/essentials/types/dynumber
     ydb/library/mkql_proto
     ydb/library/persqueue/topic_parser
+    ydb/library/protobuf_printer
     ydb/library/yaml_config
+    ydb/library/cloud_permissions
     yql/essentials/parser/pg_wrapper/interface
     yql/essentials/public/types
     yql/essentials/public/issue
@@ -171,4 +177,5 @@ RECURSE(
 
 RECURSE_FOR_TESTS(
     ut
+    grpc_request_check_actor_ut
 )

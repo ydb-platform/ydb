@@ -76,8 +76,9 @@ public:
         TStringStream outputStream;
 
         auto sendHeartbeatRequestFunc = [&]() {
-            httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            auto statusCode = httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
+            HandleHttpError(statusCode, serializedResponse);
             NProto::THeartbeatResponse protoHeartbeatResponse;
             YQL_ENSURE(protoHeartbeatResponse.ParseFromString(serializedResponse));
             return NThreading::MakeFuture(HeartbeatResponseFromProto(protoHeartbeatResponse));
@@ -102,6 +103,19 @@ public:
         return *DoWithRetry<NThreading::TFuture<TGetFmrTableInfoResponse>, yexception>(getFmrTableInfoRequestFunc, RetryPolicy_, true, OnFail_);
     }
 
+    NThreading::TFuture<void> ClearSession(const TClearSessionRequest& request) override {
+        NProto::TClearSessionRequest protoClearSessionRequest = ClearSessionRequestToProto(request);
+        TString clearSessionUrl = "/clear_session";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+        auto clearSessionFunc = [&]() {
+            httpClient.DoPost(clearSessionUrl, protoClearSessionRequest.SerializeAsStringOrThrow(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            return NThreading::MakeFuture();
+        };
+        return *DoWithRetry<NThreading::TFuture<void>, yexception>(clearSessionFunc, RetryPolicy_, true, OnFail_);
+    };
+
+
 private:
     TString Host_;
     ui16 Port_;
@@ -119,6 +133,14 @@ private:
     std::function<void(const yexception&)> OnFail_ = [](const yexception& exc) {
         YQL_CLOG(DEBUG, FastMapReduce) << "Got exception, retrying: " << exc.what();
     };
+
+    void HandleHttpError(TKeepAliveHttpClient::THttpCode statusCode, TString serializedResponse) {
+        if (statusCode = HTTP_OK) return;
+        NProto::TErrorResponse protoErrorResponse;
+        YQL_ENSURE(protoErrorResponse.ParseFromString(serializedResponse));
+        ythrow yexception() << protoErrorResponse.GetErrorMessage();
+    }
+
 };
 
 } // namespace

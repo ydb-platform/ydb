@@ -35,11 +35,38 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument.c.name"
+                                                "TopSortBy": "row.name"
                                             },
                                             {
                                                 "Condition": "c.a = ss.a.code",
@@ -64,11 +91,8 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/c",
                                                         "ReadColumns": [
-                                                            "a",
-                                                            "name"
-                                                        ],
-                                                        "ReadRanges": [
-                                                            "name (-\u221e, +\u221e)"
+                                                            "name (-\u221e, +\u221e)",
+                                                            "a"
                                                         ],
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Parallel",
@@ -111,9 +135,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/a",
                                                                         "ReadColumns": [
-                                                                            "code"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "code (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -147,6 +168,7 @@
                                                                         "PlanNodeId": 4,
                                                                         "Plans": [
                                                                             {
+                                                                                "HashFunc": "HashV2",
                                                                                 "KeyColumns": [
                                                                                     "a"
                                                                                 ],
@@ -179,9 +201,6 @@
                                                                                                         "Name": "TableFullScan",
                                                                                                         "Path": "/Root/postgres_jointest/join4.test_plan/b",
                                                                                                         "ReadColumns": [
-                                                                                                            "a"
-                                                                                                        ],
-                                                                                                        "ReadRanges": [
                                                                                                             "a (-\u221e, +\u221e)",
                                                                                                             "num (-\u221e, +\u221e)"
                                                                                                         ],
@@ -211,7 +230,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "c.name (Asc)"
+                                    "name (Asc)"
                                 ]
                             }
                         ]

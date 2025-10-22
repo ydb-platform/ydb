@@ -164,6 +164,15 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                 }
             }
 
+            ui64 sizeOfKey = 0;
+            for (auto x : KeyVals) {
+                sizeOfKey += x.Value.Size();
+            }
+
+            if (sizeOfKey > NLimits::MaxWriteKeySize) {
+                throw TKeySizeConstraintException();
+            }
+
             for (const auto tag : index.DataColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
                     needUpdate = true;

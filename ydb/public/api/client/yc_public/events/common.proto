@@ -50,9 +50,14 @@ message Authentication {
     FEDERATED_USER_ACCOUNT = 3;
   }
 
+  message IamTokenInfo {
+    string masked_iam_token = 1;
+  }
+
   bool authenticated = 1;
   SubjectType subject_type = 2;
   string subject_id = 3;
+  IamTokenInfo token_info = 4;
 }
 
 message Authorization {

@@ -24,9 +24,9 @@
          # We would like to read unicode here, but we cannot, because we are not
          # sure if it is a valid unicode file. Therefore just read whatever is
          # here.
-+        data = res.resfs_read(self.path)
-+        if data:
-+            return data
++        if not os.getenv("Y_PYTHON_SOURCE_ROOT"):
++            if data := res.resfs_read(self.path):
++                return data
          with open(self.path, 'rb') as f:
              return f.read()
  
@@ -39,15 +39,19 @@
  from typing import Generic, TypeVar, Union, Dict, Optional, Any
  from pathlib import Path
  
-@@ -252,12 +253,13 @@ def load_grammar(*, version: str = None, path: str = None):
+@@ -252,12 +253,17 @@ def load_grammar(*, version: str = None, path: str = None):
          return _loaded_grammars[path]
      except KeyError:
          try:
 -            with open(path) as f:
 -                bnf_text = f.read()
-+            bnf_text = pkgutil.get_data("parso", file).decode("utf-8")
-+            if bnf_text is None:
-+                raise FileNotFoundError
++            if os.getenv("Y_PYTHON_SOURCE_ROOT"):
++                with open(path) as f:
++                    bnf_text = f.read()
++            else:
++                bnf_text = pkgutil.get_data("parso", file).decode("utf-8")
++                if bnf_text is None:
++                    raise FileNotFoundError
  
              grammar = PythonGrammar(version_info, bnf_text)
              return _loaded_grammars.setdefault(path, grammar)

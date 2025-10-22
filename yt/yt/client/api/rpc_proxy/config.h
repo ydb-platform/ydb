@@ -15,6 +15,8 @@
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/config.h>
 
+#include <util/generic/hash.h>
+
 namespace NYT::NApi::NRpcProxy {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,6 +37,7 @@ struct TConnectionConfig
     NRpc::TServiceDiscoveryEndpointsConfigPtr ProxyEndpoints;
     std::optional<std::string> ProxyUnixDomainSocket;
     bool EnableProxyDiscovery;
+    THashMap<std::string, std::string> ProxyUrlAliasingRules;
 
     NRpc::TDynamicChannelPoolConfigPtr DynamicChannelPool;
 
@@ -55,6 +58,7 @@ struct TConnectionConfig
     TDuration DefaultTotalStreamingTimeout;
     TDuration DefaultStreamingStallTimeout;
     TDuration DefaultPingPeriod;
+    TDuration DefaultChaosLeaseTimeout;
 
     NBus::TBusConfigPtr BusClient;
     TDuration IdleChannelTtl;
@@ -79,6 +83,9 @@ struct TConnectionConfig
 
     //! If |true| select query will be added to tracing tags of SelectRows span.
     bool EnableSelectQueryTracingTag;
+
+    // Old heuristic cause pure locks to be dropped. Option is introduced to roll fix back in case of problems.
+    bool DoNotDropPureExclusiveLocks;
 
     REGISTER_YSON_STRUCT(TConnectionConfig);
 

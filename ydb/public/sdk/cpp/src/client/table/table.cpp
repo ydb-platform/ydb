@@ -1,17 +1,17 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 #include <ydb/public/sdk/cpp/src/client/table/impl/client_session.h>
@@ -102,6 +102,14 @@ std::optional<bool> TStorageSettings::GetStoreExternalBlobs() const {
     }
 }
 
+std::optional<std::uint32_t> TStorageSettings::GetExternalDataChannelsCount() const {
+    if (GetProto().has_external_data_channels_count()) {
+        return GetProto().external_data_channels_count();
+    } else {
+        return { };
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TColumnFamilyDescription::TImpl {
@@ -140,6 +148,17 @@ std::optional<EColumnFamilyCompression> TColumnFamilyDescription::GetCompression
             return EColumnFamilyCompression::None;
         case Ydb::Table::ColumnFamily::COMPRESSION_LZ4:
             return EColumnFamilyCompression::LZ4;
+        default:
+            return { };
+    }
+}
+
+std::optional<EColumnFamilyCacheMode> TColumnFamilyDescription::GetCacheMode() const {
+    switch (GetProto().cache_mode()) {
+        case Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR:
+            return EColumnFamilyCacheMode::Regular;
+        case Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY:
+            return EColumnFamilyCacheMode::InMemory;
         default:
             return { };
     }
@@ -995,6 +1014,11 @@ TStorageSettingsBuilder& TStorageSettingsBuilder::SetStoreExternalBlobs(bool ena
     return *this;
 }
 
+TStorageSettingsBuilder& TStorageSettingsBuilder::SetExternalDataChannelsCount(uint32_t count) {
+    Impl_->Proto.set_external_data_channels_count(count);
+    return *this;
+}
+
 TStorageSettings TStorageSettingsBuilder::Build() const {
     return TStorageSettings(Impl_->Proto);
 }
@@ -1070,6 +1094,18 @@ TColumnFamilyBuilder& TColumnFamilyBuilder::SetCompression(EColumnFamilyCompress
             break;
         case EColumnFamilyCompression::LZ4:
             Impl_->Proto.set_compression(Ydb::Table::ColumnFamily::COMPRESSION_LZ4);
+            break;
+    }
+    return *this;
+}
+
+TColumnFamilyBuilder& TColumnFamilyBuilder::SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+    switch (cacheMode) {
+        case EColumnFamilyCacheMode::Regular:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            break;
+        case EColumnFamilyCacheMode::InMemory:
+            Impl_->Proto.set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
             break;
     }
     return *this;
@@ -1802,6 +1838,12 @@ TAsyncDescribeExternalTableResult TSession::DescribeExternalTable(const std::str
     return Client_->DescribeExternalTable(path, settings);
 }
 
+TAsyncDescribeSystemViewResult TSession::DescribeSystemView(const std::string& path,
+        const TDescribeSystemViewSettings& settings)
+{
+    return Client_->DescribeSystemView(path, settings);
+}
+
 TAsyncDataQueryResult TSession::ExecuteDataQuery(const std::string& query, const TTxControl& txControl,
     const TExecDataQuerySettings& settings)
 {
@@ -2508,7 +2550,7 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings;
+    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -3415,6 +3457,124 @@ TDescribeExternalTableResult::TDescribeExternalTableResult(TStatus&& status, Ydb
 TExternalTableDescription TDescribeExternalTableResult::GetExternalTableDescription() const {
     CheckStatusOk("TDescribeExternalTableResult::GetExternalTableDescription");
     return ExternalTableDescription_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TSystemViewDescription::TImpl {
+
+    TImpl(const Ydb::Table::DescribeSystemViewResult& proto)
+    {
+        // system view id
+        SysViewId_ = proto.sys_view_id();
+        SysViewName_ = proto.sys_view_name();
+
+        // primary key
+        for (const auto& pk : proto.primary_key()) {
+            PrimaryKey_.push_back(pk);
+        }
+
+        // columns
+        for (const auto& col : proto.columns()) {
+            std::optional<bool> not_null;
+            if (col.has_not_null()) {
+                not_null = col.not_null();
+            }
+
+            Columns_.emplace_back(col.name(), col.type(), "", not_null);
+        }
+
+        // attributes
+        for (auto [key, value] : proto.attributes()) {
+            Attributes_[key] = value;
+        }
+    }
+
+public:
+    TImpl() = default;
+
+    TImpl(Ydb::Table::DescribeSystemViewResult&& desc)
+        : TImpl(desc)
+    {
+        Proto_ = std::move(desc);
+    }
+
+    const Ydb::Table::DescribeSystemViewResult& GetProto() const {
+        return Proto_;
+    }
+
+    uint64_t GetSysViewId() const {
+        return SysViewId_;
+    }
+
+    const std::string& GetSysViewName() const {
+        return SysViewName_;
+    }
+
+    const std::vector<std::string>& GetPrimaryKeyColumns() const {
+        return PrimaryKey_;
+    }
+
+    const std::vector<TTableColumn>& GetColumns() const {
+        return Columns_;
+    }
+
+    const std::unordered_map<std::string, std::string>& GetAttributes() const {
+        return Attributes_;
+    }
+
+private:
+    Ydb::Table::DescribeSystemViewResult Proto_;
+
+    uint64_t SysViewId_;
+    std::string SysViewName_;
+    std::vector<std::string> PrimaryKey_;
+    std::vector<TTableColumn> Columns_;
+    std::unordered_map<std::string, std::string> Attributes_;
+};
+
+TSystemViewDescription::TSystemViewDescription()
+    : Impl_(new TImpl)
+{
+}
+
+TSystemViewDescription::TSystemViewDescription(Ydb::Table::DescribeSystemViewResult&& desc)
+    : Impl_(new TImpl(std::move(desc)))
+{
+}
+
+uint64_t TSystemViewDescription::GetSysViewId() const {
+    return Impl_->GetSysViewId();
+}
+
+const std::string& TSystemViewDescription::GetSysViewName() const {
+    return Impl_->GetSysViewName();
+}
+
+const std::vector<std::string>& TSystemViewDescription::GetPrimaryKeyColumns() const {
+    return Impl_->GetPrimaryKeyColumns();
+}
+
+std::vector<TTableColumn> TSystemViewDescription::GetTableColumns() const {
+    return Impl_->GetColumns();
+}
+
+const std::unordered_map<std::string, std::string>& TSystemViewDescription::GetAttributes() const {
+    return Impl_->GetAttributes();
+}
+
+const Ydb::Table::DescribeSystemViewResult& TSystemViewDescription::GetProto() const {
+    return Impl_->GetProto();
+}
+
+TDescribeSystemViewResult::TDescribeSystemViewResult(TStatus&& status, Ydb::Table::DescribeSystemViewResult&& desc)
+    : NScheme::TDescribePathResult(std::move(status), desc.self())
+    , SystemViewDescription_(std::move(desc))
+{}
+
+TSystemViewDescription TDescribeSystemViewResult::GetSystemViewDescription() const {
+    CheckStatusOk("TDescribeSystemViewResult::GetSystemViewDescription");
+    return SystemViewDescription_;
 }
 
 } // namespace NTable

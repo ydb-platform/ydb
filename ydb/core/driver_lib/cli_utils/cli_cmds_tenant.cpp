@@ -71,14 +71,16 @@ public:
                  << " (" << response.GetStatus().GetReason() << ")" << Endl;
     }
 
-    virtual void PrintResponse(const Ydb::Operations::Operation &response)
+    virtual bool PrintResponse(const Ydb::Operations::Operation &response)
     {
-        if (response.status() == Ydb::StatusIds::SUCCESS)
+        if (response.status() == Ydb::StatusIds::SUCCESS) {
             Cout << "OK" << Endl;
-        else {
+            return true;
+        } else {
             Cout << "ERROR: " << response.status() << Endl;
             for (auto &issue : response.issues())
                 Cout << issue.message() << Endl;
+            return false;
         }
     }
 
@@ -160,7 +162,10 @@ public:
             (ClientConfig, GRpcRequest, response, function, config.SecurityToken);
 
         if (!res) {
-            PrintResponse(response);
+            if (!PrintResponse(response)) {
+                return EXIT_FAILURE;
+            }
+            return res;
         }
 
         return res;
@@ -180,10 +185,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::ListDatabasesResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -191,6 +196,7 @@ public:
             Cout << "Databases:" << Endl;
             for (auto &path : result.paths())
                 Cout << "  " << path << Endl;
+            return true;
         }
     }
 };
@@ -208,10 +214,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::DescribeDatabaseOptionsResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -235,6 +241,7 @@ public:
                 for (auto &pr : unit.labels())
                     Cout << "     " << pr.first << ": " << pr.second << Endl;
             }
+            return true;
         }
     }
 };
@@ -264,10 +271,10 @@ public:
 
     using TTenantClientGRpcCommand::PrintResponse;
 
-    void PrintResponse(const Ydb::Operations::Operation &response) override
+    bool PrintResponse(const Ydb::Operations::Operation &response) override
     {
         if (response.status() != Ydb::StatusIds::SUCCESS) {
-            TTenantClientGRpcCommand::PrintResponse(response);
+            return TTenantClientGRpcCommand::PrintResponse(response);
         } else {
             Ydb::Cms::GetDatabaseStatusResult result;
             Y_ABORT_UNLESS(response.result().UnpackTo(&result));
@@ -309,6 +316,7 @@ public:
             }
             Cout << "  Data size hard quota: " << result.database_quotas().data_size_hard_quota() << Endl;
             Cout << "  Data size soft quota: " << result.database_quotas().data_size_soft_quota() << Endl;
+            return true;
         }
     }
 };

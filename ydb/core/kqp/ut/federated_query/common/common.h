@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 namespace NKikimr::NKqp::NFederatedQueryTest {
@@ -21,6 +22,10 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        bool EnableScriptExecutionBackgroundChecks = true;
+        TIntrusivePtr<NYql::IPqGateway> PqGateway;
+        TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
+        TTestLogSettings LogSettings;
     };
 
     std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
@@ -30,5 +35,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
         const TKikimrRunnerOptions& options = {});
+
+    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(
+        const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
 
 } // namespace NKikimr::NKqp::NFederatedQueryTest

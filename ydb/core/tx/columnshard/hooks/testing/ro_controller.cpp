@@ -5,7 +5,6 @@
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_tables.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
-#include <ydb/core/tx/columnshard/engines/changes/indexation.h>
 #include <ydb/core/tx/columnshard/engines/changes/ttl.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
@@ -31,9 +30,6 @@ bool TReadOnlyController::DoOnWriteIndexComplete(const NOlap::TColumnEngineChang
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLFinishedCounter.Inc();
     }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertFinishedCounter.Inc();
-    }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionFinishedCounter.Inc();
         AFL_VERIFY(CompactionsLimit.Dec() >= 0);
@@ -51,9 +47,6 @@ bool TReadOnlyController::DoOnWriteIndexStart(const ui64 tabletId, NOlap::TColum
     }
     if (change.TypeString() == NOlap::TTTLColumnEngineChanges::StaticTypeName()) {
         TTLStartedCounter.Inc();
-    }
-    if (change.TypeString() == NOlap::TInsertColumnEngineChanges::StaticTypeName()) {
-        InsertStartedCounter.Inc();
     }
     if (change.TypeString() == NOlap::TCompactColumnEngineChanges::StaticTypeName()) {
         CompactionStartedCounter.Inc();

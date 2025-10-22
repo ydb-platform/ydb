@@ -72,23 +72,23 @@ namespace types
 
     long size() const;
 
-    template <class E>
-    struct is_almost_same : std::false_type {
+    template <class E0, class E1>
+    struct is_almost_same : std::is_same<typename std::decay<E0>::type, typename std::decay<E1>::type> {
     };
-    template <class Argp>
-    struct is_almost_same<numpy_iexpr<Argp>>
-        : std::integral_constant<
-              bool, !std::is_same<Arg, Argp>::value &&
-                        std::is_same<typename std::decay<Arg>::type,
-                                     typename std::decay<Argp>::type>::value> {
+
+    template <class A0, class A1>
+    struct is_almost_same<numpy_iexpr<A0>, numpy_iexpr<A1>> : is_almost_same<A0, A1> {
+    };
+    template <class T, class S0, class S1>
+    struct is_almost_same<ndarray<T, S0>, ndarray<T, S1>> : std::integral_constant<bool, (std::tuple_size<S0>::value == std::tuple_size<S1>::value)> {
     };
 
     template <class E, class Requires = typename std::enable_if<
-                           !is_almost_same<E>::value, void>::type>
+                           !is_almost_same<numpy_iexpr, E>::value, void>::type>
     numpy_iexpr &operator=(E const &expr);
     template <class Argp,
               class Requires = typename std::enable_if<
-                  is_almost_same<numpy_iexpr<Argp>>::value, void>::type>
+                  is_almost_same<Arg, Argp>::value, void>::type>
     numpy_iexpr &operator=(numpy_iexpr<Argp> const &expr);
     numpy_iexpr &operator=(numpy_iexpr const &expr);
 
@@ -459,6 +459,11 @@ struct __combined<container<K>, pythonic::types::numpy_iexpr<E>> {
 
 template <class E, class K>
 struct __combined<pythonic::types::numpy_iexpr<E>, container<K>> {
+  using type = pythonic::types::numpy_iexpr<E>;
+};
+
+template <class E, class Arg, class...S>
+struct __combined<pythonic::types::numpy_iexpr<E>, pythonic::types::numpy_gexpr<Arg, S...>> {
   using type = pythonic::types::numpy_iexpr<E>;
 };
 template <class E0, class E1>

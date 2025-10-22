@@ -1280,8 +1280,8 @@ public:
     }
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
-        : TBase(pathId)
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::optional<ui64>& nodePortionsCountLimit)
+        : TBase(pathId, nodePortionsCountLimit)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)
         , StoragesManager(storagesManager) {

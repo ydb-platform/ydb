@@ -5,7 +5,6 @@
 
 #include <ydb/core/base/appdata.h>
 #include <library/cpp/time_provider/time_provider.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_iface.h>
 
 namespace NKikimr {

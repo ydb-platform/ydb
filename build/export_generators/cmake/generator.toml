@@ -235,8 +235,7 @@ attrs=[
     "conan-options",
     "conan-generators",
 ]
-copy=["cmake/conan1_deprecated.cmake", "cmake/conan_provider.cmake"]
-add_values=[{attr="includes", values=["cmake/conan1_deprecated.cmake"]}]
+copy=["cmake/conan_provider.cmake"]
 
 [[rules]]
 attrs=[

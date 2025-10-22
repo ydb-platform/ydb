@@ -1,5 +1,5 @@
 #include "mkql_coalesce.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -8,9 +8,10 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool Unpack>
-class TCoalesceWrapper : public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
+template <bool Unpack>
+class TCoalesceWrapper: public TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> {
     typedef TBinaryCodegeneratorNode<TCoalesceWrapper<Unpack>> TBaseComputation;
+
 public:
     TCoalesceWrapper(IComputationNode* left, IComputationNode* right, EValueRepresentation kind)
         : TBaseComputation(left, right, kind)
@@ -18,18 +19,18 @@ public:
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
-        if (auto left = this->Left->GetValue(compCtx)) {
+        if (auto left = this->Left_->GetValue(compCtx)) {
             return left.Release().template GetOptionalValueIf<Unpack>();
         }
 
-        return this->Right->GetValue(compCtx).Release();
+        return this->Right_->GetValue(compCtx).Release();
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
-        const auto left = GetNodeValue(this->Left, ctx, block);
+        const auto left = GetNodeValue(this->Left_, ctx, block);
 
         const auto null = BasicBlock::Create(context, "null", ctx.Func);
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -40,7 +41,7 @@ public:
         BranchInst::Create(good, null, IsExists(left, block, context), block);
 
         block = null;
-        const auto right = GetNodeValue(this->Right, ctx, block);
+        const auto right = GetNodeValue(this->Right_, ctx, block);
 
         result->addIncoming(right, block);
         BranchInst::Create(done, block);
@@ -57,7 +58,7 @@ public:
 #endif
 };
 
-}
+} // namespace
 
 IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -74,11 +75,12 @@ IComputationNode* WrapCoalesce(TCallable& callable, const TComputationNodeFactor
 
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
 
-    if (isRightOptional)
+    if (isRightOptional) {
         return new TCoalesceWrapper<false>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
-    else
+    } else {
         return new TCoalesceWrapper<true>(LocateNode(ctx.NodeLocator, callable, 0), LocateNode(ctx.NodeLocator, callable, 1), kind);
+    }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -1,4 +1,5 @@
 PROTO_LIBRARY(etcd-grpc)
+PROTOC_FATAL_WARNINGS()
 
 GRPC()
 

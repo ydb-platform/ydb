@@ -1,0 +1,11 @@
+<tmp_path>/program.sql:<main>: Error: Type annotation
+
+    <tmp_path>/program.sql:<main>:4:1: Error: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    	select
+	^
+        <tmp_path>/program.sql:<main>:6:15: Error: At function: Apply, Callable is produced by Udf: DateTime2.IntervalFromSeconds
+        	    DateTime::IntervalFromSeconds(`seconds`) as interval_from_seconds
+	              ^
+            <tmp_path>/program.sql:<main>:6:35: Error: Mismatch type argument #1, type diff: Int32!=Optional<Int64>
+            	    DateTime::IntervalFromSeconds(`seconds`) as interval_from_seconds
+	                                  ^

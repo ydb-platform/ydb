@@ -29,7 +29,7 @@ public:
         for (auto it = DataSetPtr->First(); it->IsValid(); it->Next()) {
             const auto &x = *it->Get();
             ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVPut(x.Id, TRope(x.Data),
-                    VDiskInfo.VDiskID, false, nullptr, TInstant::Max(), x.HandleClass));
+                    VDiskInfo.VDiskID, false, nullptr, TInstant::Max(), x.HandleClass, false));
         }
         Become(&TThis::StateFunc);
     }

@@ -154,6 +154,8 @@ private:
             WaitingResolveReply = true;
         } else {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
+
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = std::move(path);
             if (entry.Path.empty()) {
@@ -316,16 +318,18 @@ private:
 
         {
             TTableRange range(MinKey.GetCells(), MinKeyInclusive, MaxKey.GetCells(), MaxKeyInclusive);
-            TMaybe<NKikimrSysView::ESysViewType> sysViewType;
+            TMaybe<NKikimrSysView::TSysViewDescription> sysViewInfo;
             const auto& entry = ResolveNamesResult->ResultSet.front();
             if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindSysView) {
                 Y_ABORT_UNLESS(entry.SysViewInfo);
-                sysViewType = entry.SysViewInfo->Description.GetType();
+                sysViewInfo.ConstructInPlace();
+                sysViewInfo->SetType(entry.SysViewInfo->Description.GetType());
+                *sysViewInfo->MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
             }
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
                 entry.TableId,
                 JoinPath(entry.Path),
-                sysViewType,
+                sysViewInfo,
                 range,
                 columns,
                 Request->GetInternalToken(),

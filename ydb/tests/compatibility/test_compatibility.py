@@ -11,11 +11,10 @@ from decimal import Decimal
 class TestCompatibility(RestartToAnotherVersionFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        output_path = yatest.common.test_output_path()
-        self.output_f = open(os.path.join(output_path, "out.log"), "w")
         yield from self.setup_cluster(
             extra_feature_flags={
                 # "enable_table_datetime64": True # uncomment for 64 datetime in tpc-h/tpc-ds
+                "enable_parameterized_decimal": True,
                 },
             column_shard_config={
                 'disabled_on_scheme_shard': False,
@@ -38,6 +37,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
 
     @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple(self, store_type):
+        if store_type == "column" and min(self.versions) < (25, 1, 3):
+            pytest.skip("compatibility for column tables is not supported in < 25.1.3")
+
         def upsert_and_check_sum(self, iteration_count=1, start_index=0):
             id_ = start_index
 
@@ -88,12 +90,23 @@ class TestCompatibility(RestartToAnotherVersionFixture):
         upsert_and_check_sum(self, iteration_count=2, start_index=100)
         assert self.execute_scan_query('select count(*) as row_count from `sample_table`')[0]['row_count'] == 500, 'Expected 500 rows: update 100-200 rows and added 300 rows'
 
-    @pytest.mark.parametrize("store_type, date_args", [
-        pytest.param("row",    ["--datetime"], id="row"),
-        pytest.param("column", ["--datetime"], id="column"),
-        pytest.param("column", []            , id="column-date64")
+    @pytest.mark.parametrize("store_type, date64", [
+        pytest.param("row",    False, id="row"),
+        pytest.param("column", False, id="column"),
+        pytest.param("column", True,  id="column-date64")
     ])
-    def test_tpch1(self, store_type, date_args):
+    def test_tpch1(self, store_type, date64):
+        if date64 and min(self.versions) < (25, 1):
+            pytest.skip("date64 is not supported in 24-4")
+
+        if store_type == "column" and min(self.versions) < (25, 1) and max(self.versions) >= (25, 1):
+            pytest.skip("no compatibility with 24-4")
+
+        if date64:
+            date_args = ["--datetime-types=dt64"]
+        else:
+            date_args = ["--datetime-types=dt32"]
+
         result_json_path = os.path.join(yatest.common.test_output_path(), "result.json")
         query_output_path = os.path.join(yatest.common.test_output_path(), "query_output.json")
         init_command = [
@@ -109,8 +122,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "init",
             "--store={}".format(store_type),
             "--partition-size=25",
-        ] + date_args  # use 32 bit dates instead of 64 (not supported in 24-4)]
-
+        ] + date_args
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
             "--verbose",
@@ -123,7 +135,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "tpch",
             "import",
             "generator",
-            "--scale=1",
+            "--scale=0.1",
         ]
         run_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -136,9 +148,7 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "-p",
             "tpch",
             "run",
-            "--scale=1",
-            "--exclude",
-            "17",  # not working for row tables
+            "--scale=0.1",
             "--check-canonical",
             "--retries",
             "5",  # in row tables we have to retry query by design
@@ -160,9 +170,9 @@ class TestCompatibility(RestartToAnotherVersionFixture):
             "clean"
         ]
 
-        yatest.common.execute(init_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(import_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(init_command, wait=True)
+        yatest.common.execute(import_command, wait=True)
+        yatest.common.execute(run_command, wait=True)
         self.change_cluster_version()
-        yatest.common.execute(run_command, wait=True, stdout=self.output_f)
-        yatest.common.execute(clean_command, wait=True, stdout=self.output_f)
+        yatest.common.execute(run_command, wait=True)
+        yatest.common.execute(clean_command, wait=True)

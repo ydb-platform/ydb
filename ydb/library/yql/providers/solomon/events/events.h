@@ -1,8 +1,11 @@
 #pragma once
 
 #include <ydb/core/base/events.h>
+#include <ydb/library/yql/providers/solomon/common/util.h>
 #include <ydb/library/yql/providers/solomon/proto/metrics_queue.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
+
+#include <library/cpp/retry/retry_policy.h>
 
 namespace NYql::NDq {
 
@@ -21,6 +24,7 @@ struct TEvSolomonProvider {
         // read actor events
         EvPointsCountBatch,
         EvNewDataBatch,
+        EvRetryDataRequest,
 
         EvEnd
     };
@@ -51,11 +55,12 @@ struct TEvSolomonProvider {
         public NActors::TEventPB<TEvMetricsBatch, NSo::MetricQueue::TEvMetricsBatch, EvMetricsBatch> {
 
         TEvMetricsBatch() = default;
-        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, const NDqProto::TMessageTransportMeta& transportMeta) {
+        TEvMetricsBatch(std::vector<NSo::MetricQueue::TMetric> metrics, bool noMoreMetrics, ui64 downloadedBytes, const NDqProto::TMessageTransportMeta& transportMeta) {
             Record.MutableMetrics()->Assign(
                 metrics.begin(), 
                 metrics.end());
             Record.SetNoMoreMetrics(noMoreMetrics);
+            Record.SetDownloadedBytes(downloadedBytes);
             *Record.MutableTransportMeta() = transportMeta;
         }
     };
@@ -80,14 +85,18 @@ struct TEvSolomonProvider {
     };
     
     struct TEvNewDataBatch: public NActors::TEventLocal<TEvNewDataBatch, EvNewDataBatch> {
-        NSo::TMetric Metric;
-        TInstant From, To;
         NSo::TGetDataResponse Response;
-        TEvNewDataBatch(NSo::TMetric metric, TInstant from, TInstant to, const NSo::TGetDataResponse& response)
-            : Metric(metric)
-            , From(from)
-            , To(to)
-            , Response(response)
+        NSo::TMetricTimeRange Request;
+        TEvNewDataBatch(NSo::TGetDataResponse&& response, NSo::TMetricTimeRange&& request)
+            : Response(std::move(response))
+            , Request(std::move(request))
+        {}
+    };
+
+    struct TEvRetryDataRequest: public NActors::TEventLocal<TEvRetryDataRequest, EvRetryDataRequest> {
+        NSo::TMetricTimeRange Request;
+        explicit TEvRetryDataRequest(NSo::TMetricTimeRange&& request)
+            : Request(std::move(request))
         {}
     };
 };

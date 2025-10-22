@@ -18,8 +18,8 @@ public:
     TSingleQueueSchedulerThread(
         TInvokerQueuePtr<TQueueImpl> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        TString threadGroupName,
-        TString threadName,
+        std::string threadGroupName,
+        std::string threadName,
         NThreading::TThreadOptions options = {});
 
 protected:
@@ -44,8 +44,8 @@ public:
     TSuspendableSingleQueueSchedulerThread(
         TInvokerQueuePtr<TQueueImpl> queue,
         TIntrusivePtr<NThreading::TEventCount> callbackEventCount,
-        TString threadGroupName,
-        TString threadName,
+        std::string threadGroupName,
+        std::string threadName,
         NThreading::TThreadOptions options);
 
     TFuture<void> Suspend(bool immediately);

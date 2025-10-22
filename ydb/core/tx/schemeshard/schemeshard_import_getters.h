@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include "schemeshard_info_types.h"
 #include "schemeshard_import.h"
+#include "schemeshard_info_types.h"
 
 namespace NKikimr {
 namespace NSchemeShard {

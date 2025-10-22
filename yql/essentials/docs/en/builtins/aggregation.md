@@ -1,5 +1,11 @@
 # Aggregate functions
 
+{% note info %}
+
+Aggregate functions ignore `NULL` in their arguments, except for `COUNT` when `*` is specified as the argument, as well as `BOOL_AND` / `BOOL_OR` / `BOOL_XOR` functions, in which `NULL` is considered without omissions.
+
+{% endnote %}
+
 ## COUNT {#count}
 
 Counting the number of rows in the table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).

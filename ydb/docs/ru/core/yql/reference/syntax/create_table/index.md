@@ -20,8 +20,15 @@
         ...
         columnN typeN,
 {% if feature_secondary_index == true %}
-        INDEX index1_name GLOBAL ON ( column ),
-        INDEX index2_name GLOBAL ON ( column1, column2, ... ),
+        INDEX `<index_name>`
+          [GLOBAL|LOCAL]
+          [UNIQUE]
+          [SYNC|ASYNC]
+          [USING <index_type>]
+          ON ( <index_columns> )
+          [COVER ( <cover_columns> )]
+          [WITH ( <parameter_name> = <parameter_value>[, ...])]
+        ...
 {% endif %}
 {% if feature_map_tables %}
         PRIMARY KEY ( column, ... ),
@@ -32,6 +39,7 @@
     )
 {% if feature_map_tables %}
     WITH ( key = value, ... )
+    [AS SELECT ...]
 {% endif %}
 
 {% if oss == true and backend_name == "YDB" %}
@@ -60,7 +68,11 @@ WITH (
 
 {% endif %}
 
-{% include [table naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md) %}
+{% note info %}
+
+При выборе имени для таблицы учитывайте общие [правила именования схемных объектов](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+
+{% endnote %}
 
 ## Примеры создания таблиц
 
@@ -248,10 +260,12 @@ CREATE TABLE <table_name> (
 * [Векторный индекс](vector_index.md).
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 Для колоночных таблиц при их создании возможно задать:
 
 * [Группы колонок](family.md).
 * [Дополнительные параметры](with.md).
+* [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 
 {% endif %}

@@ -11,6 +11,8 @@ SRCS(
     board_lookup.cpp
     board_publish.cpp
     board_replica.cpp
+    bridge.h
+    bridge.cpp
     blobstorage.h
     blobstorage.cpp
     blobstorage_grouptype.cpp
@@ -26,10 +28,13 @@ SRCS(
     feature_flags.h
     feature_flags_service.cpp
     feature_flags_service.h
+    fulltext.cpp
+    fulltext.h
     group_stat.cpp
     group_stat.h
     hive.h
     interconnect_channels.h
+    kmeans_clusters.cpp
     local_user_token.cpp
     local_user_token.h
     localdb.cpp
@@ -39,6 +44,7 @@ SRCS(
     logoblob.h
     memory_controller_iface.h
     nameservice.h
+    nodestate.h
     path.cpp
     pool_stats_collector.cpp
     pool_stats_collector.h
@@ -89,13 +95,18 @@ PEERDIR(
     ydb/library/actors/wilson
     ydb/library/aclib
     library/cpp/deprecated/enum_codegen
+    library/cpp/dot_product
+    library/cpp/l1_distance
+    library/cpp/l2_distance
     library/cpp/logger
     library/cpp/lwtrace
     library/cpp/lwtrace/mon
     library/cpp/random_provider
     library/cpp/time_provider
+    ydb/core/audit/audit_config
     ydb/core/base/generated
     ydb/core/base/services
+    ydb/core/control/lib
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api

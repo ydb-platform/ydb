@@ -1,6 +1,7 @@
 #pragma once
 
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/fq/libs/grpc/fq_private_v1.grpc.pb.h>
 

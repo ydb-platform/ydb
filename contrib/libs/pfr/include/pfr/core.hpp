@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2023 Antony Polukhin
+// Copyright (c) 2016-2025 Antony Polukhin
 //
 // Distributed under the Boost Software License, Version 1.0. (See accompanying
 // file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -9,18 +9,22 @@
 
 #include <pfr/detail/config.hpp>
 
+#if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
+
 #include <pfr/detail/core.hpp>
 
 #include <pfr/detail/sequence_tuple.hpp>
 #include <pfr/detail/stdtuple.hpp>
-#include <pfr/detail/for_each_field_impl.hpp>
+#include <pfr/detail/for_each_field.hpp>
 #include <pfr/detail/make_integer_sequence.hpp>
 #include <pfr/detail/tie_from_structure_tuple.hpp>
 
+#include <pfr/tuple_size.hpp>
+
+#if !defined(PFR_INTERFACE_UNIT)
 #include <type_traits>
 #include <utility>      // metaprogramming stuff
-
-#include <pfr/tuple_size.hpp>
+#endif
 
 /// \file pfr/core.hpp
 /// Contains all the basic tuple-like interfaces \forcedlink{get}, \forcedlink{tuple_size}, \forcedlink{tuple_element_t}, and others.
@@ -28,6 +32,8 @@
 /// \b Synopsis:
 
 namespace pfr {
+
+PFR_BEGIN_MODULE_EXPORT
 
 /// \brief Returns reference or const reference to a field with index `I` in \aggregate `val`.
 /// Overload taking the type `U` returns reference or const reference to a field
@@ -140,7 +146,7 @@ using tuple_element_t = typename tuple_element<I, T>::type;
 ///     assert(get<0>(t) == 10);
 /// \endcode
 template <class T>
-constexpr auto structure_to_tuple(const T& val) noexcept {
+constexpr auto structure_to_tuple(const T& val) {
     return detail::make_stdtuple_from_tietuple(
         detail::tie_as_tuple(val),
         detail::make_index_sequence< tuple_size_v<T> >()
@@ -221,24 +227,7 @@ constexpr auto structure_tie(T&&, std::enable_if_t< std::is_rvalue_reference<T&&
 /// \endcode
 template <class T, class F>
 constexpr void for_each_field(T&& value, F&& func) {
-    constexpr std::size_t fields_count_val = pfr::detail::fields_count<std::remove_reference_t<T>>();
-
-    ::pfr::detail::for_each_field_dispatcher(
-        value,
-        [f = std::forward<F>(func)](auto&& t) mutable {
-            // MSVC related workaround. Its lambdas do not capture constexprs.
-            constexpr std::size_t fields_count_val_in_lambda
-                = pfr::detail::fields_count<std::remove_reference_t<T>>();
-
-            ::pfr::detail::for_each_field_impl(
-                t,
-                std::forward<F>(f),
-                detail::make_index_sequence<fields_count_val_in_lambda>{},
-                std::is_rvalue_reference<T&&>{}
-            );
-        },
-        detail::make_index_sequence<fields_count_val>{}
-    );
+    return ::pfr::detail::for_each_field(std::forward<T>(value), std::forward<F>(func));
 }
 
 /// \brief std::tie-like function that allows assigning to tied values from aggregates.
@@ -260,6 +249,10 @@ constexpr detail::tie_from_structure_tuple<Elements...> tie_from_structure(Eleme
     return detail::tie_from_structure_tuple<Elements...>(args...);
 }
 
+PFR_END_MODULE_EXPORT
+
 } // namespace pfr
+
+#endif  // #if !defined(PFR_USE_MODULES) || defined(PFR_INTERFACE_UNIT)
 
 #endif // PFR_CORE_HPP

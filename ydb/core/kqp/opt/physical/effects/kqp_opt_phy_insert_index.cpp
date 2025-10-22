@@ -1,3 +1,5 @@
+#include <ydb/core/base/table_index.h>
+
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
@@ -99,7 +101,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     const bool isSink = NeedSinks(table, kqpCtx);
 
-    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
@@ -188,14 +190,32 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
 
             for (const auto& column : indexDesc->DataColumns) {
-                if (inputColumnsSet.contains(column)) {
-                    YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
                     indexTableColumns.emplace_back(column);
                 }
             }
 
             auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
                 insert.Pos(), ctx, true);
+
+            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    // First resolve prefix IDs using StreamLookup
+                    const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                    if (prefixTable.Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                        auto res = BuildVectorIndexPrefixRowsWithNew(table, prefixTable, indexDesc, upsertIndexRows, indexTableColumns, insert.Pos(), ctx);
+                        upsertIndexRows = std::move(res.first);
+                        effects.emplace_back(std::move(res.second));
+                    } else {
+                        // Handle old prefixed vector index tables without the sequence
+                        upsertIndexRows = BuildVectorIndexPrefixRows(table, prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, insert.Pos(), ctx);
+                    }
+                }
+                upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
+                    upsertIndexRows, true, insert.Pos(), ctx);
+                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            }
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                 .Table(tableNode)

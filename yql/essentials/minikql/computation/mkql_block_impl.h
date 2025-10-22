@@ -29,17 +29,22 @@ arrow::compute::OutputType ConvertToOutputType(TType* output);
 
 NUdf::TUnboxedValuePod MakeBlockCount(const THolderFactory& holderFactory, const uint64_t count);
 
-class TBlockFuncNode : public TMutableComputationNode<TBlockFuncNode> {
-
+class TBlockFuncNode: public TMutableComputationNode<TBlockFuncNode> {
 public:
-    TBlockFuncNode(TComputationMutables& mutables, TStringBuf name, TComputationNodePtrVector&& argsNodes,
-        const TVector<TType*>& argsTypes, const arrow::compute::ScalarKernel& kernel,
-        std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
-        const arrow::compute::FunctionOptions* functionOptions = nullptr);
+    TBlockFuncNode(TComputationMutables& mutables,
+                   NYql::NUdf::EValidateDatumMode validateDatumMode,
+                   TStringBuf name,
+                   TComputationNodePtrVector&& argsNodes,
+                   const TVector<TType*>& argsTypes,
+                   TType* outputType,
+                   const arrow::compute::ScalarKernel& kernel,
+                   std::shared_ptr<arrow::compute::ScalarKernel> kernelHolder = {},
+                   const arrow::compute::FunctionOptions* functionOptions = nullptr);
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const;
+
 private:
-    class TArrowNode : public IArrowKernelComputationNode {
+    class TArrowNode: public IArrowKernelComputationNode {
     public:
         TArrowNode(const TBlockFuncNode* parent);
         TStringBuf GetKernelName() const final;
@@ -52,18 +57,20 @@ private:
     };
     friend class TArrowNode;
 
-    struct TState : public TComputationValue<TState> {
+    struct TState: public TComputationValue<TState> {
         using TComputationValue::TComputationValue;
 
-        TState(TMemoryUsageInfo* memInfo, const arrow::compute::FunctionOptions* options,
-               const arrow::compute::ScalarKernel& kernel, const std::vector<arrow::ValueDescr>& argsValuesDescr,
+        TState(TMemoryUsageInfo* memInfo,
+               const arrow::compute::FunctionOptions* options,
+               const arrow::compute::ScalarKernel& kernel,
+               const std::vector<arrow::ValueDescr>& argsValuesDescr,
                TComputationContext& ctx)
-               : TComputationValue(memInfo)
-               , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
-               , KernelContext(&ExecContext)
+            : TComputationValue(memInfo)
+            , ExecContext(&ctx.ArrowMemoryPool, nullptr, nullptr)
+            , KernelContext(&ExecContext)
         {
             if (kernel.init) {
-                State = ARROW_RESULT(kernel.init(&KernelContext, { &kernel, argsValuesDescr, options }));
+                State = ARROW_RESULT(kernel.init(&KernelContext, {&kernel, argsValuesDescr, options}));
                 KernelContext.SetState(State.get());
             }
         }
@@ -79,29 +86,33 @@ private:
     std::unique_ptr<IArrowKernelComputationNode> PrepareArrowKernelComputationNode(TComputationContext& ctx) const final;
 
 private:
-    const ui32 StateIndex;
-    const TComputationNodePtrVector ArgsNodes;
-    const std::vector<arrow::ValueDescr> ArgsValuesDescr;
-    const arrow::compute::ScalarKernel& Kernel;
-    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder;
-    const arrow::compute::FunctionOptions* const Options;
-    const bool ScalarOutput;
-    const TString Name;
+    NYql::NUdf::EValidateDatumMode ValidateDatumMode_ = NYql::NUdf::EValidateDatumMode::None;
+    const ui32 StateIndex_;
+    const TComputationNodePtrVector ArgsNodes_;
+    const std::vector<arrow::ValueDescr> ArgsValuesDescr_;
+    const TVector<TType*> ArgTypes_;
+    arrow::ValueDescr OutValueDescr_;
+    const TType* const OutputType_ = nullptr;
+    const arrow::compute::ScalarKernel& Kernel_;
+    const std::shared_ptr<arrow::compute::ScalarKernel> KernelHolder_;
+    const arrow::compute::FunctionOptions* const Options_;
+    const bool ScalarOutput_;
+    const TString Name_;
 };
 
-struct TBlockState : public TComputationValue<TBlockState> {
+struct TBlockState: public TComputationValue<TBlockState> {
     static constexpr i64 LAST_COLUMN_MARKER = -1;
 
     using TBase = TComputationValue<TBlockState>;
 
     ui64 Count = 0;
-    NUdf::TUnboxedValue* Pointer_ = nullptr;
+    NUdf::TUnboxedValue* Pointer = nullptr;
 
     TUnboxedValueVector Values;
     std::vector<std::deque<std::shared_ptr<arrow::ArrayData>>> Deques;
     std::vector<std::shared_ptr<arrow::ArrayData>> Arrays;
 
-    ui64 BlockLengthIndex_ = 0;
+    ui64 BlockLengthIndex = 0;
 
     TBlockState(TMemoryUsageInfo* memInfo, size_t width, i64 blockLengthIndex = LAST_COLUMN_MARKER);
 
@@ -113,4 +124,4 @@ struct TBlockState : public TComputationValue<TBlockState> {
 
     NUdf::TUnboxedValuePod Get(const ui64 sliceSize, const THolderFactory& holderFactory, const size_t idx) const;
 };
-} //namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

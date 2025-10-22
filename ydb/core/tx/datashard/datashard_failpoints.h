@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <library/cpp/threading/future/future.h>
+#include <atomic>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -160,9 +162,96 @@ struct TSkipReadIteratorResultFailPoint {
     }
 };
 
+// Allows blocking operations before they execute
+struct TBlockOperationsFailPoint {
+    class IBlockOperations {
+    protected:
+        ~IBlockOperations() = default;
+
+    public:
+        /**
+         * Operation is blocked on the returned future (unless not initialized).
+         */
+        virtual NThreading::TFuture<void> Block(ui64 tabletId, ui64 txId) = 0;
+    };
+
+    struct TBlocked {
+        const ui64 TabletId;
+        const ui64 TxId;
+        NThreading::TPromise<void> Promise = NThreading::NewPromise();
+
+        TBlocked(ui64 tabletId, ui64 txId)
+            : TabletId(tabletId)
+            , TxId(txId)
+        {}
+
+        void Unblock() {
+            Promise.SetValue();
+        }
+    };
+
+    class TGuard
+        : public std::list<TBlocked>
+        , private IBlockOperations
+    {
+    public:
+        TGuard();
+        TGuard(std::function<bool(ui64, ui64)> callback);
+        ~TGuard();
+
+        size_t Unblock(size_t maxCount = -1) {
+            size_t unblocked = 0;
+            auto it = this->begin();
+            while (it != this->end() && maxCount > 0) {
+                it->Unblock();
+                this->erase(it++);
+                ++unblocked;
+            }
+            return unblocked;
+        }
+
+        void Disable() {
+            Enabled = false;
+        }
+
+        void Enable() {
+            Enabled = true;
+        }
+
+    private:
+        NThreading::TFuture<void> Block(ui64 tabletId, ui64 txId) override {
+            if (!Enabled) {
+                return {};
+            }
+            if (Callback && !Callback(tabletId, txId)) {
+                return {};
+            }
+            auto& entry = this->emplace_back(tabletId, txId);
+            return entry.Promise.GetFuture();
+        }
+
+    private:
+        std::function<bool(ui64, ui64)> Callback;
+        IBlockOperations* const Prev;
+        bool Enabled = true;
+    };
+
+    std::atomic<IBlockOperations*> Chain{ nullptr };
+
+    NThreading::TFuture<void> Block(ui64 tabletId, ui64 txId) {
+        IBlockOperations* chain = Chain.load(std::memory_order_acquire);
+        if (!chain) [[likely]] {
+            return {};
+        }
+
+        return chain->Block(tabletId, txId);
+    }
+};
+
 
 extern TCancelTxFailPoint gCancelTxFailPoint;
 extern TSkipRepliesFailPoint gSkipRepliesFailPoint;
 extern TSkipReadIteratorResultFailPoint gSkipReadIteratorResultFailPoint;
+extern TBlockOperationsFailPoint gBlockOperationsFailPoint;
 
 }}

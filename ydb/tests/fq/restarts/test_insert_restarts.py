@@ -115,4 +115,4 @@ class TestS3(object):
             assert "Lease expired" in str(query.issue), str(query.issue)
             assert final_number_rows == 0 or final_number_rows == number_rows
 
-        assert len(list(bucket.multipart_uploads.all())) == 0, "Unexpected uncommited upload in bucket"
+        assert len(list(bucket.multipart_uploads.all())) == 0, "Unexpected uncommitted upload in bucket"

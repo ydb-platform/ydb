@@ -64,8 +64,19 @@ bool operator==(const TQueueAutoTrimConfig& lhs, const TQueueAutoTrimConfig& rhs
 struct TQueueStaticExportConfig
     : public NYTree::TYsonStruct
 {
-    //! Export will be performed at times that are multiple of this period.
-    TDuration ExportPeriod;
+    //! Export will be performed at times that are multiple of this period. Mutually exclusive
+    //! with ExportCronSchedule parameter.
+    std::optional<TDuration> ExportPeriod;
+
+    //! Export will be performed at schedule that is defined by this CRON expression. Mutually exclusive
+    //! with ExportPeriod parameter.
+    //! This CRON format supports features beyond the standard ones, allowing from 5 to 7 fields to be specified:
+    //!  - with 5 fields, it's a standard CRON
+    //!  - with 6 fields, the first field is interpreted as SECONDS
+    //!  - with 7 fields, the last field is interpreted as YEARS
+    //!
+    //! \note See library/cpp/cron_expression/readme.md.
+    std::optional<TString> ExportCronSchedule;
 
     //! Path to directory that will contain resulting static tables with exported data.
     NYPath::TYPath ExportDirectory;
@@ -91,6 +102,9 @@ struct TQueueStaticExportConfig
     //! data with timestamp <= T. In case of delays, some of the data can end up in latter tables. You should be especially careful with
     //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
     bool UseUpperBoundForTableNames;
+
+    // COMPAT(akozhikhov)
+    bool EnableExportFromQueueWithHunks;
 
     REGISTER_YSON_STRUCT(TQueueStaticExportConfig);
 

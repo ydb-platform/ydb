@@ -42,6 +42,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 uid Utf8 NOT NULL,
                 level Int32,
                 message Utf8,
+                new_column1 Uint64,
                 PRIMARY KEY (timestamp, uid)
             )
             PARTITION BY HASH(timestamp, uid)
@@ -88,8 +89,8 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
-            
-            
+
+
         }
         {
             auto alterQuery = TStringBuilder() <<
@@ -156,7 +157,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
-        TLocalHelper(kikimr).CreateTestOlapTableWithoutStore();
+        TLocalHelper(kikimr).CreateTestOlapStandaloneTable();
         auto tableClient = kikimr.GetTableClient();
         auto& client = kikimr.GetTestClient();
 
@@ -215,13 +216,13 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 10000);
-        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 70000);
-        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 110000);
+        WriteTestData(kikimr, "/Root/olapTable", 1000000, 300000000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1100000, 300100000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1200000, 300200000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 40000);
+        WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 280000);
+        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 440000);
 
         csController->WaitActualization(TDuration::Seconds(10));
 
@@ -246,28 +247,25 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             TAutoPtr<IEventHandle> handle;
 
-            size_t shard = 0;
-            std::set<NColumnShard::TInternalPathId> pathids;
+            std::optional<NColumnShard::TSchemeShardLocalPathId> schemeShardLocalPathId;
             for (auto&& i : csController->GetShardActualIds()) {
                 Cerr << ">>> shard actual id: " << i << Endl;
-                for (auto&& j : csController->GetPathIds(i)) {
-                    Cerr << ">>> path id: " << j << Endl;
-                    pathids.insert(j);
-                }
-                if (++shard == 3) {
-                    break;
+                const auto pathIds = csController->GetPathIdTranslator(i)->GetSchemeShardLocalPathIds();
+                UNIT_ASSERT(pathIds.size() == 1);
+                if (schemeShardLocalPathId.has_value()) {
+                    UNIT_ASSERT(schemeShardLocalPathId == *pathIds.begin());
+                } else {
+                    schemeShardLocalPathId = *pathIds.begin();
                 }
             }
 
-            UNIT_ASSERT(pathids.size() == 1);
-            const auto& pathId = *pathids.begin();
+            UNIT_ASSERT(schemeShardLocalPathId.has_value());
 
-            shard = 0;
-            for (auto&& i : csController->GetShardActualIds()) {
+            size_t shard = 0;
+            for (const auto& [tabletId, pathIdTranslator]: csController->GetActiveTablets()) {
                 auto request = std::make_unique<NStat::TEvStatistics::TEvStatisticsRequest>();
-                request->Record.MutableTable()->MutablePathId()->SetLocalId(pathId.GetRawValue());
-
-                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), i, false));
+                request->Record.MutableTable()->MutablePathId()->SetLocalId(schemeShardLocalPathId->GetRawValue());
+                runtime->Send(MakePipePerNodeCacheID(false), sender, new TEvPipeCache::TEvForward(request.release(), static_cast<ui64>(tabletId), false));
                 if (++shard == 3) {
                     break;
                 }
@@ -281,7 +279,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto& response = event->Record;
                 // Cerr << response << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrStat::TEvStatisticsResponse::STATUS_SUCCESS);
-                UNIT_ASSERT(response.ColumnsSize() == 5);
+                UNIT_ASSERT(response.ColumnsSize() == 6);
                 TString someData = response.GetColumns(0).GetStatistics(0).GetData();
                 *sketch += *std::unique_ptr<TCountMinSketch>(TCountMinSketch::FromString(someData.data(), someData.size()));
                 Cerr << ">>> sketch.GetElementCount() = " << sketch->GetElementCount() << Endl;
@@ -482,7 +480,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 filler(3000000, 100000000, 110000);
             }
 
-            ExecuteSQL(R"(SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
+            ExecuteSQL(R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
@@ -492,7 +492,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             AFL_VERIFY(csController->GetCompactionStartedCounter().Val() == 3)("count", csController->GetCompactionStartedCounter().Val());
 
             {
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%')",
                     "[[0u;]]");
@@ -502,7 +504,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151%')",
                     "[[0u;]]");
@@ -512,7 +516,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
             {
                 ResetZeroLevel(csController);
-                ExecuteSQL(R"(SELECT COUNT(*)
+                ExecuteSQL(R"(
+                    PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";
+                    SELECT COUNT(*)
                     FROM `/Root/olapStore/olapTable`
                     WHERE ((resource_id = '2' AND level = 222222) OR (resource_id = '1' AND level = 111111) OR (resource_id LIKE '%11dd%')) AND uid = '222')",
                     "[[0u;]]");
@@ -520,13 +526,15 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
                 AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() - ApproveStart < csController->GetIndexesSkippingOnSelect().Val() - SkipStart);
             }
+            constexpr std::string_view enablePushdownOlapAggregation = R"(PRAGMA Kikimr.OptEnableOlapPushdownAggregate = "true";)";
             {
                 ResetZeroLevel(csController);
                 ui32 requestsCount = 100;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res, const TString& uid, const ui32 level) {
+                    const auto query = [&](const TString& res, const TString& uid, const ui32 level) {
                         TStringBuilder sb;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE(" << Endl;
                         sb << "resource_id = '" << res << "' AND" << Endl;
@@ -546,8 +554,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "%'" << Endl;
@@ -564,8 +573,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '" << res << "%'" << Endl;
@@ -582,8 +592,9 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 ui32 requestsCount = 300;
                 for (ui32 i = 0; i < requestsCount; ++i) {
                     const ui32 idx = RandomNumber<ui32>(uids.size());
-                    const auto query = [](const TString& res) {
+                    const auto query = [&](const TString& res) {
                         TStringBuilder sb;
+                        sb << enablePushdownOlapAggregation << Endl;
                         sb << "SELECT COUNT(*) FROM `/Root/olapStore/olapTable`" << Endl;
                         sb << "WHERE" << Endl;
                         sb << "resource_id LIKE '%" << res << "'" << Endl;

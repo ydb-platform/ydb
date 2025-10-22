@@ -112,12 +112,13 @@ protected:
 
 class TTestEnv: public TBaseTestEnv {
 public:
-    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0)
+    TTestEnv(ui32 staticNodes = 1, ui32 dynamicNodes = 0, bool enableRealSystemViewPaths = false)
     {
         Settings = new Tests::TServerSettings(PortManager.GetPort(3534));
 
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
+        GetSettings().SetEnableRealSystemViewPaths(enableRealSystemViewPaths);
 
         Server = new Tests::TServer(Settings);
 
@@ -126,6 +127,10 @@ public:
 
         SetLogging();
         InitRoot();
+    }
+
+    TTestEnv(bool enableRealSystemViewPaths) : TTestEnv(1, 0, enableRealSystemViewPaths)
+    {
     }
 
     TStoragePools GetPools() {
@@ -213,7 +218,6 @@ public:
         GetSettings().SetNodeCount(staticNodes);
         GetSettings().SetDynamicNodeCount(dynamicNodes);
         GetSettings().SetEnableAlterDatabaseCreateHiveFirst(enableAlterDatabaseCreateHiveFirst);
-        GetSettings().SetEnableSystemViews(false);
 
         for (ui32 poolNum = 1; poolNum <= poolsCount; ++poolNum) {
             GetSettings().AddStoragePoolType("storage-pool-number-" + ToString(poolNum));

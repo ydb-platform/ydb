@@ -1,17 +1,21 @@
 #include "schemeshard_info_types.h"
+
+#include "schemeshard_impl.h"
 #include "schemeshard_path.h"
-#include "schemeshard_utils.h"  // for IsValidColumnName
+#include "schemeshard_utils.h"  // for IsValidColumnName, ValidateImportDstPath
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/channel_profiles.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/base/tx_processing.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/engine/mkql_proto.h>
+#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/util/pb.h>
-#include <ydb/core/protos/config.pb.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -94,6 +98,15 @@ void TSubDomainInfo::ApplyAuditSettings(const TSubDomainInfo::TMaybeAuditSetting
             AuditSettings = input;
         }
     }
+}
+
+void TSubDomainInfo::UpdateCounters(IQuotaCounters* counters) {
+    counters->SetPathCount(GetPathsInside());
+
+    const auto shardsTotal = GetShardsInside();
+    const auto backupShards = GetBackupShards();
+    Y_ABORT_UNLESS(shardsTotal >= backupShards);
+    counters->SetShardCount(shardsTotal - backupShards);
 }
 
 TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
@@ -353,9 +366,9 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 return nullptr;
             }
 
-            bool isDropNotNull = col.HasNotNull(); // if has, then always false
+            bool isChangeNotNullConstraint = col.HasNotNull();
 
-            if (!isDropNotNull && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
+            if (!isChangeNotNullConstraint && !columnFamily && !col.HasDefaultFromSequence() && !col.HasEmptyDefault()) {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;
             }
@@ -383,7 +396,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             const TTableInfo::TColumn& sourceColumn = source->Columns[colId];
 
             if (sourceColumn.DefaultKind == ETableColumnDefaultKind::FromSequence) {
-                if (isDropNotNull || columnFamily) {
+                if (isChangeNotNullConstraint || columnFamily) {
                     errStr = Sprintf("Cannot alter serial column '%s'", colName.c_str());
                     return nullptr;
                 }
@@ -437,8 +450,27 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             TTableInfo::TColumn& column = alterData->Columns[colId];
             column = sourceColumn;
 
-            if (isDropNotNull) {
-                column.NotNull = false;
+            if (isChangeNotNullConstraint) {
+                if (col.GetNotNull()) { // SET NOT NULL
+                    if (!featureFlags.EnableSetColumnConstraint) {
+                        errStr = Sprintf("Type '%s' specified for column '%s', but support for SET NOT NULL is disabled (EnableSetColumnConstraint feature flag is off)", col.GetType().data(), colName.data());
+                        return nullptr;
+                    }
+
+                    /*
+                        Note that here we are setting the NotNull value to true, although we can't just leave it that way,
+                        because first we need to check the column for null values.
+
+                        Thus, after that, such a check will be started. Based on the results of this check, one of two decisions will be made:
+                        1. Leave the NotNull value as true if the column did not contain Nulls.
+                        2. Set NotNull back to false if there is at least one Null in the column.
+                    */
+
+                    column.NotNull = true;
+                } else { // DROP NOT NULL
+                    column.NotNull = false;
+                }
+
             }
 
             if (columnFamily) {
@@ -588,8 +620,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
 
     if (op.HasTTLSettings()) {
         for (const auto& indexDescription : op.GetTableIndexes()) {
-            if (indexDescription.GetType() == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                errStr = "Table with vector indexes doesn't support TTL";
+            if (!DoesIndexSupportTTL(indexDescription.GetType())) {
+                errStr = TStringBuilder() << "Table with " << indexDescription.GetType() << " index doesn't support TTL";
                 return nullptr;
             }
         }
@@ -805,11 +837,20 @@ inline THashMap<ui32, size_t> DeduplicateRepeatedById(
 
 }
 
-NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData) {
+NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TAppData* appData, const std::optional<TString>& defaultPoolKind) {
     NKikimrSchemeOp::TPartitionConfig cfg;
 
     TIntrusiveConstPtr<NLocalDb::TCompactionPolicy> compactionPolicy = appData->DomainsInfo->GetDefaultUserTablePolicy();
     compactionPolicy->Serialize(*cfg.MutableCompactionPolicy());
+
+    if (defaultPoolKind) {
+        auto& dafaultColumnFamily = *cfg.AddColumnFamilies();
+        dafaultColumnFamily.SetId(0);
+        auto& storageConfig = *dafaultColumnFamily.MutableStorageConfig();
+        storageConfig.MutableSysLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableLog()->SetPreferredPoolKind(*defaultPoolKind);
+        storageConfig.MutableData()->SetPreferredPoolKind(*defaultPoolKind);
+    }
 
     return cfg;
 }
@@ -1091,6 +1132,10 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
 
         if (changesFamily.HasColumnCache()) {
             dstFamily.SetColumnCache(changesFamily.GetColumnCache());
+        }
+
+        if (changesFamily.HasColumnCacheMode()) {
+            dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
         }
 
         if (changesFamily.HasStorage()) {
@@ -1793,9 +1838,13 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
     Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
 
-    auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
+    // NOTE: Updating the CPU usage buckets is essentially taking the maximum
+    //       of the latest update time for each bucket. Thus, updating new -> old
+    //       and old -> new are equivalent: the result is the same.
+    const auto oldTopCpuUsage = oldStats.TopCpuUsage;
     oldStats = newStats;
-    oldStats.TopUsage = std::move(topUsage);
+    oldStats.TopCpuUsage.Update(oldTopCpuUsage); // The left is new stats now!
+
     PartitionStatsUpdated++;
 
     // Rescan stats for aggregations only once in a while
@@ -1881,7 +1930,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                                    float cpuUsageThreshold, const TTableInfo* mainTableForIndex, 
+                                    float cpuUsageThreshold, const TTableInfo* mainTableForIndex,
                                     TString& reason) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
@@ -2045,23 +2094,34 @@ bool TTableInfo::CheckSplitByLoad(
         const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
-    if (IsBackup)
+    if (IsBackup) {
+        reason = "IsBackup";
         return false;
+    }
 
     // Don't split/merge restore tables
-    if (IsRestore)
+    if (IsRestore) {
+        reason = "IsRestore";
         return false;
+    }
 
-    if (!splitSettings.SplitByLoadEnabled)
+    if (!splitSettings.SplitByLoadEnabled) {
+        reason = "SplitByLoadDisabled";
         return false;
+    }
 
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(shardIdx))
+    if (!Stats.PartitionStats.contains(shardIdx)) {
+        reason = "UnknownDataShard";
         return false;
-    if (!Shard2PartitionIdx.contains(shardIdx))
+    }
+    if (!Shard2PartitionIdx.contains(shardIdx)) {
+        reason = "ShardNotInIndex";
         return false;
+    }
 
     if (!IsSplitByLoadEnabled(mainTableForIndex)) {
+        reason = "SplitByLoadNotEnabledForTable";
         return false;
     }
 
@@ -2087,12 +2147,26 @@ bool TTableInfo::CheckSplitByLoad(
         }
     }
 
+    // NOTE: Do not suggest splitting-by-load, if the expected number of partitions
+    //       (taking into account all in-flight split operations) already exceeds
+    //       the overall limit on the number of partitions. Using the maximum
+    //       between the current partition count and the expected partition count
+    //       prevents splitting-by-load when there are some in-flight merge
+    //       operations (which reduce the expected partition count).
+    const ui64 effectiveShardCount = Max(ExpectedPartitionCount, Stats.PartitionStats.size());
+
     const auto& stats = *Stats.PartitionStats.FindPtr(shardIdx);
     if (rowCount < MIN_ROWS_FOR_SPLIT_BY_LOAD ||
         dataSize < MIN_SIZE_FOR_SPLIT_BY_LOAD ||
-        Stats.PartitionStats.size() >= maxShards ||
+        effectiveShardCount >= maxShards ||
         stats.GetCurrentRawCpuUsage() < cpuUsageThreshold * 1000000)
     {
+        reason = TStringBuilder() << "ConditionsNotMet"
+            << " rowCount: " << rowCount << " minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD
+            << " shardSize: " << dataSize << " minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD
+            << " shardCount: " << Stats.PartitionStats.size()
+            << " expectedShardCount: " << ExpectedPartitionCount << " maxShardCount: " << maxShards
+            << " cpuUsage: " << stats.GetCurrentRawCpuUsage() << " cpuUsageThreshold: " << cpuUsageThreshold * 1000000;
         return false;
     }
 
@@ -2102,6 +2176,7 @@ bool TTableInfo::CheckSplitByLoad(
         << "shardSize: " << dataSize << ", "
         << "minShardSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
         << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "expectedShardCount: " << ExpectedPartitionCount << ", "
         << "maxShardCount: " << maxShards << ", "
         << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
         << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
@@ -2186,6 +2261,8 @@ TString TImportInfo::TItem::ToString(ui32 idx) const {
         << " State: " << State
         << " SubState: " << SubState
         << " WaitTxId: " << WaitTxId
+        << " SrcPath: " << SrcPath
+        << " SrcPrefix: " << SrcPrefix
         << " Issue: '" << Issue << "'"
     << " }";
 }
@@ -2203,10 +2280,9 @@ void TImportInfo::AddNotifySubscriber(const TActorId &actorId) {
     Subscribers.insert(actorId);
 }
 
-TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck, size_t shardsCount)
+TIndexBuildInfo::TShardStatus::TShardStatus(TSerializedTableRange range, TString lastKeyAck)
     : Range(std::move(range))
     , LastKeyAck(std::move(lastKeyAck))
-    , Index(shardsCount)
 {}
 
 void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndexBuildConfig* result) const {
@@ -2232,8 +2308,22 @@ void TIndexBuildInfo::SerializeToProto(TSchemeShard* ss, NKikimrSchemeOp::TIndex
         ImplTableDescriptions.end()
     };
 
-    if (IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-        *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+    switch (IndexType) {
+        case NKikimrSchemeOp::EIndexTypeGlobal:
+        case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+        case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+            // no specialized index description
+            Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+            *index.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+            *index.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(SpecializedIndexDescription);
+            break;
+        default:
+            Y_DEBUG_ABORT_S(InvalidIndexType(IndexType));
+            break;
     }
 }
 
@@ -2246,47 +2336,277 @@ void TIndexBuildInfo::SerializeToProto([[maybe_unused]] TSchemeShard* ss, NKikim
     }
 }
 
-void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
-    if (KMeans.Parent == 0) {
-        // For Parent == 0 only single kmeans needed, so there is only two options:
-        // 1. It fits entirely in the single shard => local kmeans for single shard
-        // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
-        return;
-    }
-    const auto [parentFrom, parentTo] = KMeans.RangeToBorders(range);
-    // TODO(mbkkt) We can make it more granular
+ui64 TIndexBuildInfo::TKMeans::ParentEnd() const noexcept {  // included
+    return ChildBegin - 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildEnd() const noexcept {  // included
+    return ChildBegin + ChildCount() - 1;
+}
 
-    // the new range does not intersect with other ranges, just add it with 1 shard
+ui64 TIndexBuildInfo::TKMeans::ParentCount() const noexcept {
+    return ParentEnd() - ParentBegin + 1;
+}
+ui64 TIndexBuildInfo::TKMeans::ChildCount() const noexcept {
+    return ParentCount() * K;
+}
+
+TString TIndexBuildInfo::TKMeans::DebugString() const {
+    return TStringBuilder()
+        << "{ "
+        << "State = " << State
+        << ", Level = " << Level << " / " << Levels
+        << ", K = " << K
+        << ", Round = " << Round
+        << (IsEmpty ? ", IsEmpty = true" : "")
+        << ", Parent = [" << ParentBegin << ".." << Parent << ".." << ParentEnd() << "]"
+        << ", Child = [" << ChildBegin << ".." << Child << ".." << ChildEnd() << "]"
+        << ", TableSize = " << TableSize
+        << " }";
+}
+
+bool TIndexBuildInfo::TKMeans::NeedsAnotherLevel() const noexcept {
+    return Level < Levels;
+}
+bool TIndexBuildInfo::TKMeans::NeedsAnotherParent() const noexcept {
+    return Parent < ParentEnd();
+}
+
+bool TIndexBuildInfo::TKMeans::NextParent() noexcept {
+    if (!NeedsAnotherParent()) {
+        return false;
+    }
+    ++Parent;
+    Child += K;
+    return true;
+}
+
+bool TIndexBuildInfo::TKMeans::NextLevel() noexcept {
+    if (!NeedsAnotherLevel()) {
+        return false;
+    }
+    NextLevel(ChildCount());
+    return true;
+}
+
+void TIndexBuildInfo::TKMeans::PrefixIndexDone(ui64 shards) {
+    Y_ENSURE(NeedsAnotherLevel());
+    // There's two worst cases, but in both one shard contains TableSize rows
+    // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
+    // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
+    // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
+    NextLevel((2 * TableSize) * shards);
+    Parent = ParentEnd();
+}
+
+void TIndexBuildInfo::TKMeans::Set(ui32 level,
+    NTableIndex::NKMeans::TClusterId parentBegin, NTableIndex::NKMeans::TClusterId parent,
+    NTableIndex::NKMeans::TClusterId childBegin, NTableIndex::NKMeans::TClusterId child,
+    ui32 state, ui64 tableSize, ui32 round, bool isEmpty) {
+    Level = level;
+    Round = round;
+    IsEmpty = isEmpty;
+    ParentBegin = parentBegin;
+    Parent = parent;
+    ChildBegin = childBegin;
+    Child = child;
+    State = static_cast<EState>(state);
+    TableSize = tableSize;
+}
+
+NKikimrTxDataShard::EKMeansState TIndexBuildInfo::TKMeans::GetUpload() const {
+    if (Level == 1) {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING;
+        }
+    } else {
+        if (NeedsAnotherLevel()) {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD;
+        } else {
+            return NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING;
+        }
+    }
+}
+
+TString TIndexBuildInfo::TKMeans::WriteTo(bool needsBuildTable) const {
+    using namespace NTableIndex::NKMeans;
+    TString name = PostingTable;
+    if (needsBuildTable || NeedsAnotherLevel()) {
+        name += Level % 2 != 0 ? BuildSuffix0 : BuildSuffix1;
+    }
+    return name;
+}
+
+TString TIndexBuildInfo::TKMeans::ReadFrom() const {
+    Y_ENSURE(Level > 1);
+    using namespace NTableIndex::NKMeans;
+    TString name = PostingTable;
+    name += Level % 2 != 0 ? BuildSuffix1 : BuildSuffix0;
+    return name;
+}
+
+std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId> TIndexBuildInfo::TKMeans::RangeToBorders(const TSerializedTableRange& range) const {
+    const NTableIndex::NKMeans::TClusterId minParent = ParentBegin;
+    const NTableIndex::NKMeans::TClusterId maxParent = ParentEnd();
+    const NTableIndex::NKMeans::TClusterId parentFrom = [&, from = range.From.GetCells()] {
+        if (!from.empty()) {
+            if (!from[0].IsNull()) {
+                return from[0].AsValue<NTableIndex::NKMeans::TClusterId>() + static_cast<NTableIndex::NKMeans::TClusterId>(from.size() == 1);
+            }
+        }
+        return minParent;
+    }();
+    const NTableIndex::NKMeans::TClusterId parentTo = [&, to = range.To.GetCells()] {
+        if (!to.empty()) {
+            if (!to[0].IsNull()) {
+                return to[0].AsValue<NTableIndex::NKMeans::TClusterId>() - static_cast<NTableIndex::NKMeans::TClusterId>(to.size() != 1 && to[1].IsNull());
+            }
+        }
+        return maxParent;
+    }();
+    Y_ENSURE(minParent <= parentFrom, "minParent(" << minParent << ") > parentFrom(" << parentFrom << ") " << DebugString());
+    Y_ENSURE(parentFrom <= parentTo, "parentFrom(" << parentFrom << ") > parentTo(" << parentTo << ") " << DebugString());
+    Y_ENSURE(parentTo <= maxParent, "parentTo(" << parentTo << ") > maxParent(" << maxParent << ") " << DebugString());
+    return {parentFrom, parentTo};
+}
+
+TString TIndexBuildInfo::TKMeans::RangeToDebugStr(const TSerializedTableRange& range) const {
+    auto toStr = [&](const TSerializedCellVec& v) -> TString {
+        const auto cells = v.GetCells();
+        if (cells.empty()) {
+            return "inf";
+        }
+        if (cells[0].IsNull()) {
+            return "-inf";
+        }
+        auto str = TStringBuilder{} << "{ count: " << cells.size();
+        if (Level > 1) {
+            str << ", parent: " << cells[0].AsValue<NTableIndex::NKMeans::TClusterId>();
+            if (cells.size() != 1 && cells[1].IsNull()) {
+                str << ", pk: null";
+            }
+        }
+        return str << " }";
+    };
+    return TStringBuilder{} << "{ From: " << toStr(range.From) << ", To: " << toStr(range.To) << " }";
+}
+
+void TIndexBuildInfo::TKMeans::NextLevel(ui64 childCount) noexcept {
+    ParentBegin = ChildBegin;
+    Parent = ParentBegin;
+    ChildBegin = ParentBegin + childCount;
+    Child = ChildBegin;
+    ++Level;
+}
+
+void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx shard) {
+    // For Parent == 0 only single kmeans needed, so there are two options:
+    // 1. It fits entirely in the single shard => local kmeans for single shard
+    // 2. It doesn't fit entirely in the single shard => global kmeans for all shards
+    auto [parentFrom, parentTo] = KMeans.Parent == 0
+        ? std::pair<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClusterId>{0, 0}
+        : KMeans.RangeToBorders(range);
+
     auto itFrom = Cluster2Shards.lower_bound(parentFrom);
     if (itFrom == Cluster2Shards.end() || parentTo < itFrom->second.From) {
+        // The new range does not intersect with other ranges, just add it with 1 shard
         Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
         return;
     }
 
-    // otherwise, this range has multiple shards and we need to merge all intersecting ranges
-    auto itTo = parentTo < itFrom->first ? itFrom : Cluster2Shards.lower_bound(parentTo);
-    if (itTo == Cluster2Shards.end()) {
-        itTo = Cluster2Shards.rbegin().base();
+    for (auto it = itFrom; it != Cluster2Shards.end() && it->second.From <= parentTo && it->first >= parentFrom; it++) {
+        // The new shard may only intersect with existing shards by its starting or ending edge
+        Y_ENSURE(it->second.From == parentTo || it->first == parentFrom);
     }
-    if (itTo->first < parentTo) {
-        const bool needsToReplaceFrom = itFrom == itTo;
-        auto node = Cluster2Shards.extract(itTo);
-        node.key() = parentTo;
-        itTo = Cluster2Shards.insert(Cluster2Shards.end(), std::move(node));
-        itFrom = needsToReplaceFrom ? itTo : itFrom;
-    }
-    auto& [toFrom, toShards] = itTo->second;
 
-    toFrom = std::min(toFrom, parentFrom);
-    toShards.emplace_back(shard);
-
-    while (itFrom != itTo) {
-        const auto& [fromFrom, fromShards] = itFrom->second;
-        toFrom = std::min(toFrom, fromFrom);
-        Y_ASSERT(!fromShards.empty());
-        toShards.insert(toShards.end(), fromShards.begin(), fromShards.end());
-        itFrom = Cluster2Shards.erase(itFrom);
+    if (parentFrom == itFrom->first) {
+        // Intersects by parentFrom
+        if (itFrom->second.From < itFrom->first) {
+            Cluster2Shards.emplace_hint(itFrom, itFrom->first-1, itFrom->second);
+            itFrom->second.From = parentFrom;
+        }
+        itFrom->second.Shards.push_back(shard);
+        // Increment to also check intersection by parentTo
+        itFrom++;
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentFrom++;
     }
+
+    if (itFrom != Cluster2Shards.end() && parentTo == itFrom->second.From) {
+        // Intersects by parentTo
+        if (itFrom->second.From < itFrom->first) {
+            auto endShards = itFrom->second.Shards;
+            endShards.push_back(shard);
+            Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentTo, .Shards = std::move(endShards)});
+            itFrom->second.From = parentTo+1;
+        } else {
+            itFrom->second.Shards.push_back(shard);
+        }
+        if (parentTo == parentFrom) {
+            return;
+        }
+        parentTo--;
+    }
+
+    // Add the remaining range
+    Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
+}
+
+bool TIndexBuildInfo::IsValidState(EState value)
+{
+    switch (value) {
+        case EState::Invalid:
+        case EState::AlterMainTable:
+        case EState::Locking:
+        case EState::GatheringStatistics:
+        case EState::Initiating:
+        case EState::Filling:
+        case EState::DropBuild:
+        case EState::CreateBuild:
+        case EState::LockBuild:
+        case EState::Applying:
+        case EState::Unlocking:
+        case EState::AlterSequence:
+        case EState::Done:
+        case EState::Cancellation_Applying:
+        case EState::Cancellation_Unlocking:
+        case EState::Cancellation_DroppingColumns:
+        case EState::Cancelled:
+        case EState::Rejection_Applying:
+        case EState::Rejection_Unlocking:
+        case EState::Rejection_DroppingColumns:
+        case EState::Rejected:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidSubState(ESubState value)
+{
+    switch (value) {
+        case ESubState::None:
+        case ESubState::UniqIndexValidation:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
+{
+    switch (value) {
+        case EBuildKind::BuildKindUnspecified:
+        case EBuildKind::BuildSecondaryIndex:
+        case EBuildKind::BuildVectorIndex:
+        case EBuildKind::BuildPrefixedVectorIndex:
+        case EBuildKind::BuildSecondaryUniqueIndex:
+        case EBuildKind::BuildColumns:
+        case EBuildKind::BuildFulltext:
+            return true;
+    }
+    return false;
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)
@@ -2457,39 +2777,6 @@ bool TTopicInfo::FillKeySchema(const TString& tabletConfig) {
     return FillKeySchema(proto, unused);
 }
 
-TBillingStats::TBillingStats(ui64 readRows, ui64 readBytes, ui64 uploadRows, ui64 uploadBytes)
-    : UploadRows{uploadRows}
-    , UploadBytes{uploadBytes}
-    , ReadRows{readRows}
-    , ReadBytes{readBytes}
-{
-}
-
-TBillingStats TBillingStats::operator -(const TBillingStats &other) const {
-    Y_ENSURE(UploadRows >= other.UploadRows);
-    Y_ENSURE(UploadBytes >= other.UploadBytes);
-    Y_ENSURE(ReadRows >= other.ReadRows);
-    Y_ENSURE(ReadBytes >= other.ReadBytes);
-
-    return {UploadRows - other.UploadRows, UploadBytes - other.UploadBytes,
-            ReadRows - other.ReadRows, ReadBytes - other.ReadBytes};
-}
-
-TBillingStats TBillingStats::operator +(const TBillingStats &other) const {
-    return {UploadRows + other.UploadRows, UploadBytes + other.UploadBytes,
-            ReadRows + other.ReadRows, ReadBytes + other.ReadBytes};
-}
-
-TString TBillingStats::ToString() const {
-    return TStringBuilder()
-            << "{"
-            << " upload rows: " << UploadRows
-            << ", upload bytes: " << UploadBytes
-            << ", read rows: " << ReadRows
-            << ", read bytes: " << ReadBytes
-            << " }";
-}
-
 TSequenceInfo::TSequenceInfo(
         ui64 alterVersion,
         NKikimrSchemeOp::TSequenceDescription&& description,
@@ -2615,6 +2902,142 @@ NProtoBuf::Timestamp SecondsToProtoTimeStamp(ui64 sec) {
     timestamp.set_seconds((i64)(sec));
     timestamp.set_nanos(0);
     return timestamp;
+}
+
+TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaMapping(TSchemeShard* ss) {
+    TFillItemsFromSchemaMappingResult result;
+
+    TString dstRoot;
+    if (Settings.destination_path().empty()) {
+        dstRoot = CanonizePath(ss->RootPathElements);
+    } else {
+        dstRoot = CanonizePath(Settings.destination_path());
+    }
+
+    TString sourcePrefix = NBackup::NormalizeExportPrefix(Settings.source_prefix());
+    if (sourcePrefix) {
+        sourcePrefix.push_back('/');
+    }
+
+    auto combineDstPath = [&](const TString& path, const TString& rootPath) -> TString {
+        TStringBuilder result;
+        result << rootPath;
+        if (TString objectPath = CanonizePath(path)) {
+            result << objectPath;
+        }
+        return std::move(result);
+    };
+
+    auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+        item.SrcPrefix = TStringBuilder() << sourcePrefix << NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix);
+        item.SrcPath = schemaMappingItem.ObjectPath;
+        item.ExportItemIV = schemaMappingItem.IV;
+    };
+
+    TVector<TImportInfo::TItem> items;
+    if (Items.empty()) { // Fill the whole list from schema mapping
+        for (const auto& schemaMappingItem : SchemaMapping->Items) {
+            TString dstPath = combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+            TString explain;
+            if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                result.AddError(explain);
+                continue;
+            }
+
+            auto& item = items.emplace_back(dstPath);
+            init(schemaMappingItem, item);
+        }
+    } else { // Take existing items from items list
+        using TMapping = THashMap<TString, std::vector<std::pair<size_t /* index in schema mapping */, TString /* path suffix */>>>;
+        TMapping schemaMappingPrefixIndex;
+        TMapping schemaMappingObjectPathIndex;
+        for (size_t i = 0; i < SchemaMapping->Items.size(); ++i) {
+            const auto& schemaMappingItem = SchemaMapping->Items[i];
+            schemaMappingPrefixIndex[NBackup::NormalizeItemPrefix(schemaMappingItem.ExportPrefix)].emplace_back(i, TString());
+            // Add path and parent paths to index
+            // It allows to specify filters by directories
+            TVector<TString> pathComponents = SplitPath(schemaMappingItem.ObjectPath);
+            const TString fullObjectPath = JoinPath(pathComponents);
+            TString currentPath = fullObjectPath;
+            while (!pathComponents.empty()) {
+                schemaMappingObjectPathIndex[currentPath].emplace_back(i, fullObjectPath.size() > currentPath.size() ? fullObjectPath.substr(currentPath.size() + 1) : TString());
+                pathComponents.pop_back();
+                currentPath = JoinPath(pathComponents);
+            }
+        }
+
+        for (auto& item : Items) {
+            TMapping::iterator mappingIt;
+            if (item.SrcPrefix) {
+                mappingIt = schemaMappingPrefixIndex.find(NBackup::NormalizeItemPrefix(item.SrcPrefix));
+                if (mappingIt == schemaMappingPrefixIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find prefix \"" << item.SrcPrefix << "\" in schema mapping");
+                }
+            } else if (item.SrcPath) {
+                mappingIt = schemaMappingObjectPathIndex.find(NBackup::NormalizeItemPath(item.SrcPath));
+                if (mappingIt == schemaMappingObjectPathIndex.end()) {
+                    result.AddError(TStringBuilder() << "cannot find source path \"" << item.SrcPath << "\" in schema mapping");
+                }
+            }
+
+            if (mappingIt) {
+                const bool isDstPathAbsolute = item.DstPathName && item.DstPathName.front() == '/';
+                for (const auto& [index, suffix] : mappingIt->second) {
+                    const auto& schemaMappingItem = SchemaMapping->Items[index];
+                    TStringBuilder dstPath;
+                    if (item.DstPathName) {
+                        if (isDstPathAbsolute) {
+                            dstPath << item.DstPathName;
+                        } else {
+                            dstPath << combineDstPath(item.DstPathName, dstRoot);
+                        }
+                        if (suffix) { // Exact filter matching
+                            if (dstPath.back() != '/') {
+                                dstPath << '/';
+                            }
+                            dstPath << suffix;
+                        }
+                    } else {
+                        dstPath << combineDstPath(schemaMappingItem.ObjectPath, dstRoot);
+                    }
+
+                    TString explain;
+                    if (!ValidateImportDstPath(dstPath, ss, explain)) {
+                        result.AddError(explain);
+                        continue;
+                    }
+
+                    auto& item = items.emplace_back(dstPath);
+                    init(schemaMappingItem, item);
+                }
+            }
+        }
+    }
+
+    if (items.size() < Items.size()) {
+        // Just in case: we already validate it, but double check
+        result.AddError("error: not all import items were found in schema mapping");
+    }
+
+    if (items.empty()) {
+        // Schema mapping should not be empty
+        result.AddError("no items to import");
+    }
+
+    Items.swap(items);
+
+    return result;
+}
+
+void TImportInfo::TFillItemsFromSchemaMappingResult::AddError(const TString& err) {
+    Success = false;
+    if (++ErrorsCount > 30) {
+        return;
+    }
+    if (ErrorMessage) {
+        ErrorMessage += '\n';
+    }
+    ErrorMessage += err;
 }
 
 } // namespace NSchemeShard

@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SET(PROTOC_TRANSITIVE_HEADERS "no")
 
@@ -36,6 +37,7 @@ SRCS(
     compaction.proto
     compile_service_config.proto
     config.proto
+    config_metrics.proto
     config_units.proto
     console.proto
     console_base.proto
@@ -89,6 +91,7 @@ SRCS(
     kafka.proto
     kesus.proto
     key.proto
+    kqp_compile_settings.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto
@@ -166,6 +169,7 @@ GENERATE_ENUM_SERIALIZATION(shared_cache.pb.h)
 PEERDIR(
     ydb/core/config/protos
     ydb/core/fq/libs/config/protos
+    ydb/core/protos/nbs
     ydb/core/protos/schemeshard
     ydb/core/scheme/protos
     ydb/core/tx/columnshard/common/protos
@@ -180,6 +184,7 @@ PEERDIR(
     ydb/library/yql/dq/actors/protos
     ydb/library/yql/dq/proto
     ydb/public/api/protos
+    ydb/public/api/protos/annotations
     yql/essentials/core/file_storage/proto
     yql/essentials/core/issue/protos
     yql/essentials/providers/common/proto

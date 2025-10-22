@@ -54,11 +54,9 @@ bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& 
     } else if (typeName == "ResourceType") {
         return left[1].AsString() == right[1].AsString();
     } else if (typeName == "TaggedType") {
-        return left[1].AsString() == right[1].AsString()
-            && EqualsYsonTypesIgnoreStructOrder(left[2], right[2]);
+        return left[1].AsString() == right[1].AsString() && EqualsYsonTypesIgnoreStructOrder(left[2], right[2]);
     } else if (typeName == "ErrorType") {
-        return left[1].AsInt64() == right[1].AsInt64() && left[2].AsInt64() == right[2].AsInt64()
-            && left[3].AsString() == right[3].AsString() && left[4].AsString() == right[4].AsString();
+        return left[1].AsInt64() == right[1].AsInt64() && left[2].AsInt64() == right[2].AsInt64() && left[3].AsString() == right[3].AsString() && left[4].AsString() == right[4].AsString();
     } else if (typeName == "StructType") {
         if (left[1].Size() != right[1].Size()) {
             return false;
@@ -92,8 +90,7 @@ bool EqualsYsonTypesIgnoreStructOrder(const NYT::TNode& left, const NYT::TNode& 
         }
         return true;
     } else if (typeName == "DictType") {
-        return EqualsYsonTypesIgnoreStructOrder(left[1], right[1])
-            && EqualsYsonTypesIgnoreStructOrder(left[2], right[2]);
+        return EqualsYsonTypesIgnoreStructOrder(left[1], right[1]) && EqualsYsonTypesIgnoreStructOrder(left[2], right[2]);
     } else if (typeName == "CallableType") {
         if (left[1].Size() != right[1].Size() || left[2].Size() != right[2].Size() || left[3].Size() != right[3].Size()) {
             return false;

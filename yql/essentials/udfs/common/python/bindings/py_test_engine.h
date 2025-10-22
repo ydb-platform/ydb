@@ -13,7 +13,6 @@
 
 #define PYTHON_TEST_TAG "Python2Test"
 
-
 using namespace NKikimr;
 using namespace NMiniKQL;
 
@@ -49,15 +48,14 @@ public:
         , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
     {
         HolderFactory_ = MakeHolder<THolderFactory>(
-                    Alloc_.Ref(),
-                    MemInfo_,
-                    nullptr);
+            Alloc_.Ref(),
+            MemInfo_,
+            nullptr);
         ValueBuilder_ = MakeHolder<TDefaultValueBuilder>(*HolderFactory_, NUdf::EValidatePolicy::Exception);
         BindTerminator_ = MakeHolder<TBindTerminator>(ValueBuilder_.Get());
         Singleton<TPyInitializer>();
         CastCtx_ = MakeIntrusive<TPyCastContext>(&GetValueBuilder(),
-            MakeIntrusive<TPyContext>(TypeInfoHelper_.Get(), NUdf::TStringRef::Of(PYTHON_TEST_TAG), NUdf::TSourcePosition())
-        );
+                                                 MakeIntrusive<TPyContext>(TypeInfoHelper_.Get(), NUdf::TStringRef::Of(PYTHON_TEST_TAG), NUdf::TSourcePosition()));
     }
 
     ~TPythonTestEngine() {
@@ -90,8 +88,8 @@ public:
 
     template <typename TChecker>
     void ToMiniKQLWithArg(
-            NUdf::TType* udfType, PyObject* argValue,
-            const TStringBuf& script, TChecker&& checker)
+        NUdf::TType* udfType, PyObject* argValue,
+        const TStringBuf& script, TChecker&& checker)
     {
         TPyObjectPtr args = Py_BuildValue("(O)", argValue);
 
@@ -108,18 +106,44 @@ public:
 
     template <typename TExpectedType, typename TChecker>
     void ToMiniKQLWithArg(
-            PyObject* argValue,
-            const TStringBuf& script, TChecker&& checker)
+        PyObject* argValue,
+        const TStringBuf& script, TChecker&& checker)
     {
         auto type = GetTypeBuilder().SimpleType<TExpectedType>();
         ToMiniKQLWithArg<TChecker>(type, argValue, script, std::move(checker));
     }
 
+    template <typename FunctionType,
+              typename TMiniKQLValueBuilder,
+              typename TChecker>
+    void UnsafeCall(TMiniKQLValueBuilder&& builder,
+                    const TStringBuf& script,
+                    TChecker&& checker)
+    {
+        TPyObjectPtr function = CompilePythonFunction(script);
+        const auto functionType = GetTypeBuilder().SimpleSignatureType<FunctionType>();
+        NUdf::TCallableTypeInspector inspector(*CastCtx_->PyCtx->TypeInfoHelper, functionType);
+        Y_ENSURE(inspector.GetArgsCount() == 1);
+        const TType* argType = static_cast<const TType*>(inspector.GetArgType(0));
+        NUdf::TUnboxedValue value = builder(argType, GetValueBuilder());
+        TPyObjectPtr pyArgs = ToPyArgs(CastCtx_, functionType, &value, inspector);
+        TPyObjectPtr resultObj = PyObject_CallObject(function.Get(), pyArgs.Get());
+
+        if (!resultObj) {
+            return checker(NUdf::TUnboxedValuePod::Invalid());
+        }
+
+        const auto returnType = inspector.GetReturnType();
+        Y_ENSURE(CastCtx_->PyCtx->TypeInfoHelper->GetTypeKind(returnType) != NUdf::ETypeKind::Stream);
+
+        checker(FromPyObject(CastCtx_, returnType, resultObj.Get()));
+    }
+
     template <typename TMiniKQLValueBuilder>
     TPyObjectPtr ToPython(
-                NUdf::TType* udfType,
-                TMiniKQLValueBuilder&& builder,
-                const TStringBuf& script)
+        NUdf::TType* udfType,
+        TMiniKQLValueBuilder&& builder,
+        const TStringBuf& script)
     {
         try {
             TType* type = static_cast<TType*>(udfType);
@@ -189,9 +213,7 @@ public:
     }
 
 private:
-    TPyObjectPtr RunPythonFunction(
-            const TStringBuf& script, PyObject* args = nullptr)
-    {
+    TPyObjectPtr CompilePythonFunction(const TStringBuf& script) {
         TString filename(TStringBuf("embedded:test.py"));
         TPyObjectPtr code(Py_CompileString(script.data(), filename.data(), Py_file_input));
         if (!code) {
@@ -211,6 +233,13 @@ private:
             PyErr_Print();
             UNIT_FAIL("function 'Test' is not found in module");
         }
+        return function;
+    }
+
+    TPyObjectPtr RunPythonFunction(
+        const TStringBuf& script, PyObject* args = nullptr)
+    {
+        TPyObjectPtr function(CompilePythonFunction(script));
         return PyObject_CallObject(function.Get(), args);
     }
 

@@ -107,12 +107,18 @@ message LoadAverageStatus {
     uint32 cores = 3;
 }
 
+message ClockSkewStatus {
+    StatusFlag.Status overall = 1;
+    float clock_skew = 2; // ms
+}
+
 message ComputeNodeStatus {
     string id = 1;
     StatusFlag.Status overall = 2;
     repeated ComputeTabletStatus tablets = 3;
     repeated ThreadPoolStatus pools = 4;
     LoadAverageStatus load = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message ComputeStatus {
@@ -121,12 +127,14 @@ message ComputeStatus {
     repeated ComputeTabletStatus tablets = 3;
     float paths_quota_usage = 4;
     float shards_quota_usage = 5;
+    ClockSkewStatus clock_skew = 6;
 }
 
 message LocationNode {
     uint32 id = 1;
     string host = 2;
     uint32 port = 3;
+    LocationBridgePile pile = 4;
 }
 
 message LocationStoragePDisk {
@@ -142,6 +150,7 @@ message LocationStorageVDisk {
 message LocationStorageGroup {
     repeated string id = 1;
     LocationStorageVDisk vdisk = 2;
+    LocationBridgePile pile = 3;
 }
 
 message LocationStoragePool {
@@ -169,11 +178,16 @@ message LocationComputeSchema {
     string path = 2;
 }
 
+message LocationBridgePile {
+    string name = 1;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
     LocationComputeSchema schema = 4;
+    LocationBridgePile pile = 5;
 }
 
 message LocationDatabase {

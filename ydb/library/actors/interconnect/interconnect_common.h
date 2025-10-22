@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -9,8 +11,6 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "poller_tcp.h"
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>
@@ -89,6 +89,7 @@ namespace NActors {
         double Utilization;
         ui64 ConnectTime;
         ui64 BytesWrittenToSocket;
+        TString PeerBridgePileName;
     };
 
     struct TChannelSettings {
@@ -128,6 +129,21 @@ namespace NActors {
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
+
+        std::atomic_uint64_t NumSessionsWithDataInQueue = 0;
+        std::atomic_uint64_t CyclesOnLastSwitch = 0;
+        std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
+        std::atomic_uint64_t CyclesWithZeroSessions = 0;
+
+        double CalculateNetworkUtilization() {
+            const ui64 sessions = NumSessionsWithDataInQueue.load();
+            const ui64 ts = GetCycleCountFast();
+            const ui64 prevts = CyclesOnLastSwitch.exchange(ts);
+            const ui64 passed = ts - prevts;
+            const ui64 zero = CyclesWithZeroSessions.exchange(0) + (sessions ? 0 : passed);
+            const ui64 nonzero = CyclesWithNonzeroSessions.exchange(0) + (sessions ? passed : 0);
+            return (double)nonzero / (zero + nonzero);
+        }
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

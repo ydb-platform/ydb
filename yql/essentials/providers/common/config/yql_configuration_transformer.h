@@ -12,10 +12,10 @@
 namespace NYql {
 namespace NCommon {
 
-class TProviderConfigurationTransformer : public TSyncTransformerBase {
+class TProviderConfigurationTransformer: public TSyncTransformerBase {
 public:
-    TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher,const TTypeAnnotationContext& types,
-        const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
+    TProviderConfigurationTransformer(TSettingDispatcher::TPtr dispatcher, const TTypeAnnotationContext& types,
+                                      const TString& provider, const THashSet<TStringBuf>& configureCallables = {});
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;
     void Rewind() final {
@@ -23,21 +23,23 @@ public:
 
 protected:
     virtual bool HandleAttr(TPositionHandle pos, const TString& cluster, const TString& name,
-        const TMaybe<TString>& value, TExprContext& ctx);
+                            const TMaybe<TString>& value, TExprContext& ctx);
     virtual bool HandleAuth(TPositionHandle pos, const TString& cluster, const TString& alias, TExprContext& ctx);
 
 protected:
-    TSettingDispatcher::TPtr Dispatcher;
-    const TTypeAnnotationContext& Types;
-    TString Provider;
-    THashSet<TStringBuf> ConfigureCallables;
+    // FIXME switch to an accessor
+    TSettingDispatcher::TPtr GetDispatcher() const;
+
+    TSettingDispatcher::TPtr Dispatcher; // NOLINT(readability-identifier-naming)
+    const TTypeAnnotationContext& Types_;
+    TString Provider_;
+    THashSet<TStringBuf> ConfigureCallables_;
 };
 
 THolder<IGraphTransformer> CreateProviderConfigurationTransformer(
     TSettingDispatcher::TPtr dispatcher,
     const TTypeAnnotationContext& types,
-    const TString& provider
-);
+    const TString& provider);
 
 } // namespace NCommon
 } // namespace NYql

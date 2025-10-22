@@ -188,6 +188,10 @@ void SetupServices(TTestActorRuntime &runtime,
         SetupSchemeCache(runtime, nodeIndex, DOMAIN_NAME);
     }
 
+    app.FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
+    app.FeatureFlags.SetEnableStableNodeNames(true);
+    app.FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
+
     runtime.Initialize(app.Unwrap());
 
     runtime.GetAppData().DynamicNameserviceConfig = new TDynamicNameserviceConfig;
@@ -195,9 +199,6 @@ void SetupServices(TTestActorRuntime &runtime,
     dnConfig->MaxStaticNodeId = 1023;
     dnConfig->MinDynamicNodeId = 1024;
     dnConfig->MaxDynamicNodeId = 1024 + (maxDynNodes - 1);
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerSingleDomainMode(true);
-    runtime.GetAppData().FeatureFlags.SetEnableStableNodeNames(true);
-    runtime.GetAppData().FeatureFlags.SetEnableNodeBrokerDeltaProtocol(enableNodeBrokerDeltaProtocol);
 
     if (!runtime.IsRealThreads()) {
         TDispatchOptions options;
@@ -905,6 +906,7 @@ void CheckAsyncResolveNode(TTestActorRuntime &runtime, ui32 nodeId, const TStrin
     UNIT_ASSERT(reply);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->NodeId, nodeId);
+    UNIT_ASSERT(!reply->Addresses.empty());
     UNIT_ASSERT_VALUES_EQUAL(reply->Addresses[0].GetAddress(), addr);
 }
 
@@ -4608,10 +4610,25 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         TVector<NKikimrNodeBroker::TResolveNode> resolveRequests;
 
         auto logRequests = [&](TAutoPtr<IEventHandle> &event) -> auto {
-            if (event->GetTypeRewrite() == TEvNodeBroker::EvListNodes)
-                listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
-            else if (event->GetTypeRewrite() == TEvNodeBroker::EvResolveNode)
-                resolveRequests.push_back(event->Get<TEvNodeBroker::TEvResolveNode>()->Record);
+            switch (event->GetTypeRewrite()) {
+                case TEvInterconnect::EvListNodes:
+                    if (runtime.FindActorName(event->Sender) == "TABLET_RESOLVER_ACTOR") {
+                        // block TEvListNodes from tablet resolver
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+
+                case TEvNodeBroker::EvListNodes:
+                    listRequests.push_back(event->Get<TEvNodeBroker::TEvListNodes>()->Record);
+                    break;
+
+                case TEvNodeBroker::EvResolveNode:
+                    resolveRequests.push_back(event->Get<TEvNodeBroker::TEvResolveNode>()->Record);
+                    break;
+
+                default:
+                    break;
+            }
             return TTestActorRuntime::EEventAction::PROCESS;
         };
 
@@ -4763,6 +4780,10 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         runtime.WaitFor("cache miss", [&]{return resolveBlock.size() >= 1 || syncBlock.size() >= 1; });
 
         // Reboot NodeBroker to break pipe
+        TBlockEvents<TEvTabletPipe::TEvClientConnected> connectBlock(runtime,
+            [&](auto& ev) {
+                return runtime.FindActorName(ev->GetRecipientRewrite()) == "NAMESERVICE";
+            });
         RebootTablet(runtime, MakeNodeBrokerID(), sender);
 
         // Resolve request is failed, because pipe was broken
@@ -4772,6 +4793,7 @@ Y_UNIT_TEST_SUITE(TDynamicNameserverTest) {
         resolveBlock.Stop();
         syncBlock.Stop();
         deltaBlock.Stop();
+        connectBlock.Stop().Unblock();
 
         // The following requests should be OK
         CheckResolveNode(runtime, sender, NODE1, "1.2.3.4");

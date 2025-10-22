@@ -6,8 +6,9 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/core/tx/conveyor/usage
     ydb/core/protos
+    ydb/core/tx/conveyor/usage
+    ydb/core/tx/conveyor/tracing
 )
 
 END()

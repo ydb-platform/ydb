@@ -1,7 +1,10 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     yql_co.h
+    yql_co_blocks.cpp
     yql_co_extr_members.cpp
     yql_flatmap_over_join.cpp
     yql_co_finalizers.cpp

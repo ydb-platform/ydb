@@ -167,9 +167,9 @@ public:
             return BatchReader->GetColumns();
         }
 
-        void UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId, ui64 waitOutputTime);
-        ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 waitOutputTime = 0);
-        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 waitOutputTime = 0);
+        void UpdateStats(size_t rows, size_t bytes, TMaybe<ui64> shardId, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
+        ui64 AddData(const TVector<TOwnedCellVec>& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
+        ui64 AddData(const TBatchDataAccessor& batch, TMaybe<ui64> shardId, const THolderFactory& holderFactory, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished);
 
         bool IsEmpty() const {
             return BatchReader->IsEmpty();
@@ -203,15 +203,21 @@ public:
             ui64 ExternalBytes = 0;
             ui64 FirstMessageMs = 0;
             ui64 LastMessageMs = 0;
+            ui64 CpuTimeUs = 0;
+            ui64 WaitTimeUs = 0;
             ui64 WaitOutputTimeUs = 0;
+            bool Finished = false;
 
             TExternalStats() = default;
-            TExternalStats(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs, ui64 waitOutputTime)
+            TExternalStats(ui64 externalRows, ui64 externalBytes, ui64 firstMessageMs, ui64 lastMessageMs, ui64 cpuTime, ui64 waitTime, ui64 waitOutputTime, bool finished)
                 : ExternalRows(externalRows)
                 , ExternalBytes(externalBytes)
                 , FirstMessageMs(firstMessageMs)
                 , LastMessageMs(lastMessageMs)
+                , CpuTimeUs(cpuTime)
+                , WaitTimeUs(waitTime)
                 , WaitOutputTimeUs(waitOutputTime)
+                , Finished(finished)
             {}
         };
 

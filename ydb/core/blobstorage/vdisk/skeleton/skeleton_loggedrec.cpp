@@ -24,15 +24,20 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass handleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
@@ -41,12 +46,16 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", id.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix << "TEvVPut: reply;"
                 << " id# " << Id
@@ -71,15 +80,20 @@ namespace NKikimr {
             const TLogoBlobID &id,
             const TIngress &ingress,
             TRope &&buffer,
+            std::optional<ui64> checksum,
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
             ui64 recipientCookie,
             NWilson::TTraceId traceId,
-            NKikimrBlobStorage::EPutHandleClass)
+            NKikimrBlobStorage::EPutHandleClass handleClass,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
         , Buffer(std::move(buffer))
+        , Checksum(checksum)
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
@@ -87,12 +101,16 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", Id.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
         TLogoBlobID genId(Id, 0);
-        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Seg.Point());
+        hull.AddLogoBlob(ctx, genId, Id.PartId(), Ingress, Buffer, Checksum, Seg.Point());
 
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVMultiPut: item reply;"
@@ -115,7 +133,10 @@ namespace NKikimr {
             TLsnSeg seg,
             bool confirmSyncLogAlso,
             const TActorId &hugeKeeperId,
-            TEvHullLogHugeBlob::TPtr ev)
+            TEvHullLogHugeBlob::TPtr ev,
+            const TVDiskID& vdiskId,
+            const TIntrusivePtr<TVDiskConfig>& config,
+            const TVDiskContextPtr& vctx)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
@@ -123,6 +144,11 @@ namespace NKikimr {
     {
         if (Span) {
             Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+            Span.Attribute("group_id", vctx->GroupId.GetRawId());
+            Span.Attribute("vdisk_id", vdiskId.ToString());
+            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(
+                    Ev->Get()->HandleClass));
         }
     }
 

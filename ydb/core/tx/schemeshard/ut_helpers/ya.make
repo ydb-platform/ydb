@@ -27,15 +27,13 @@ PEERDIR(
 )
 
 SRCS(
-    auditlog_helpers.cpp
-    auditlog_helpers.h
-    data_erasure_helpers.cpp
     export_reboots_common.cpp
     failing_mtpq.cpp
     helpers.cpp
     helpers.h
     ls_checks.cpp
     ls_checks.h
+    shred_helpers.cpp
     test_env.cpp
     test_env.h
     test_with_reboots.h

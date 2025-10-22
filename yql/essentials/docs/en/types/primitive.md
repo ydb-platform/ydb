@@ -51,7 +51,7 @@ To store numbers (JSON Number) in `JsonDocument`, as well as for arithmetic oper
 
 ## Date and time {#datetime}
 
-### Basic types
+### Basic types {#datetime-basic}
 
 Value range for all basic datetime types: From midnight<sup>1</sup> 01.01.1970 to midnight<sup>1</sup> 01.01.2106.
 Value range for basic interval type: from -136 years to +136 years.
@@ -68,7 +68,7 @@ Value range for basic interval type: from -136 years to +136 years.
 
 <sup>1</sup> Midnight is the particular time moment with all _time_ components being zero.
 
-### Extended types
+### Extended types {#datetime-extended}
 
 Value range for all basic datetime types: From midnight<sup>1</sup> 01.01.144169 BC to midnight<sup>1</sup> 01.01.148107.
 Value range for basic interval type: from -292277 years to +292277 years.

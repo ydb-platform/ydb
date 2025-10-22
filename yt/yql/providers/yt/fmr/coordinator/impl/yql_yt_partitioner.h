@@ -28,10 +28,12 @@ private:
         TString TableId;
         TTableRange TableRange;
         ui64 DataWeight;
+        std::vector<TString> Columns;
+        TString SerializedColumnGroups;
     };
 
     void HandleFmrPartition(
-        const TFmrTableId& fmrTable,
+        const TFmrTableRef& fmrTable,
         const TString& partId,
         const std::vector<TChunkStats> stats,
         ui64 maxDataWeightPerPart,

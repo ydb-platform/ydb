@@ -10,7 +10,7 @@ TConclusion<TCompiledGraph::IVisitor::EVisitStatus> TExecutionVisitor::DoOnExit(
             AFL_VERIFY(ExecutionNode->GetIdentifier() == node.GetIdentifier());
             ExecutionNode = nullptr;
             for (auto&& i : node.GetRemoveResourceIds()) {
-                Context.GetResources()->Remove(i, true);
+                Context.MutableResources().Remove(i, true);
             }
             return EVisitStatus::Finished;
         } else {

@@ -23,7 +23,7 @@ inline bool BasicCheck(const NKikimrClient::TResponse& response, TString& error,
     }
 
     if (mustHaveResponse && !response.HasPartitionResponse()) {
-        error = "Absent partition response";
+        error = TStringBuilder() << "Absent partition response: '" << response.DebugString() << "'";
         return false;
     }
 

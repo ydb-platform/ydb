@@ -8,6 +8,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/scheme_board/events.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 namespace {
 
@@ -15,13 +16,6 @@ using namespace NKikimr;
 
 void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
     static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
-    //full list of permissions for compatibility. remove old permissions later.
-    static const TVector<TString> permissions = {
-        "ydb.streams.write",
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect"
-    };
     TVector<std::pair<TString, TString>> attributes;
     attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
     for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
@@ -30,7 +24,8 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         }
     }
     if (!attributes.empty()) {
-        checker->SetEntries({{permissions, attributes}});
+        //full list of permissions for compatibility. remove old permissions later.
+        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}});
     }
 }
 
@@ -47,48 +42,48 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE) \
+#define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE, AUDIT_MODE) \
     MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
         (this, &Service_, CQ_,                                                                                                      \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                               \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                            \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR, AUDIT_MODE}));                  \
             }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                            \
             #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
-    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr, Off)
-    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr, Off)
-    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr, Off)
-    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr, Off)
-    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr, Off)
-    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuManual)
-    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuManual)
-    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuManual)
-    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr, Off)
-    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr, Off)
-    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr, Off)
-    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr, Off)
-    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr, Off)
-    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr, Off)
-    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr, Off)
-    ADD_REQUEST(UpdateStreamMode, DoDataStreamsUpdateStreamModeRequest, nullptr, Off)
-    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr, Off)
-    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr, Off)
-    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr, Off)
-    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr, Off)
-    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr, Off)
-    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr, Off)
-    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr, Off)
-    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr, Off)
-    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr, Off)
-    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr, Off)
-    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr, Off)
-    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr, Off)
-    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr, Off)
-    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr, Off)
-    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr, Off)
+    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
+    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuTopic, TAuditMode::NonModifying())
+    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(UpdateStreamMode, DoDataStreamsUpdateStreamModeRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr, Off, TAuditMode::NonModifying())
+    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
 
 #undef ADD_REQUEST
 }

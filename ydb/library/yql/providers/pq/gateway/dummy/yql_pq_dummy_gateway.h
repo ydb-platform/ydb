@@ -32,6 +32,8 @@ struct TDummyTopic {
 // Dummy Pq gateway for tests.
 class TDummyPqGateway : public IPqGateway {
 public:
+    explicit TDummyPqGateway(bool skipDatabasePrefix = false);
+
     TDummyPqGateway& AddDummyTopic(const TDummyTopic& topic);
     ~TDummyPqGateway() {}
 
@@ -68,20 +70,27 @@ public:
 
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
 
+    void AddCluster(const NYql::TPqClusterConfig& /*cluster*/) override {}
+
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
     IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
 
     using TClusterNPath = std::pair<TString, TString>;
+
+private:
+    TString CanonizeCluster(const TString& cluster, const TString& database) const;
+
 private:
     mutable TMutex Mutex;
+    const bool SkipDatabasePrefix = false;
     THashMap<TClusterNPath, TDummyTopic> Topics;
 
     THashSet<TString> OpenedSessions;
 };
 
-IPqGateway::TPtr CreatePqFileGateway();
+IPqGateway::TPtr CreatePqFileGateway(bool skipDatabasePrefix = false);
 
 IPqGatewayFactory::TPtr CreatePqFileGatewayFactory(const TDummyPqGateway::TPtr pqFileGateway);
 

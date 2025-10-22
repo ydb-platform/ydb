@@ -567,7 +567,7 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
 
             // Wait until KQP proxy is set up
             NYdb::EStatus scriptStatus;
-            NYdb::NQuery::TQueryClient client(connection);            
+            NYdb::NQuery::TQueryClient client(connection);
             do {
                 auto executeScrptsResult = client.ExecuteScript("SELECT 42").ExtractValueSync();
                 scriptStatus = executeScrptsResult.Status().GetStatus();
@@ -652,15 +652,16 @@ Y_UNIT_TEST_SUITE(KqpProxy) {
             promise.GetFuture().GetValueSync();
         };
 
-        const auto& dedicatedTennant = ydb->GetSettings().GetDedicatedTenantName();
-        checkCache(dedicatedTennant, dedicatedTennant, 2);
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+        checkCache(dedicatedTenant, dedicatedTenant, ydb->GetDedicatedTenantInfo().NodeIdx);
 
-        const auto& sharedTennant = ydb->GetSettings().GetSharedTenantName();
-        checkCache(sharedTennant, sharedTennant, 1);
+        const auto& sharedTenant = ydb->GetSettings().GetSharedTenantName();
+        checkCache(sharedTenant, sharedTenant, ydb->GetSharedTenantInfo().NodeIdx);
 
-        const auto& serverlessTennant = ydb->GetSettings().GetServerlessTenantName();
-        checkCache(serverlessTennant, TStringBuilder() << ":4:" << serverlessTennant, 1);
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        const auto& serverlessInfo = ydb->GetServerlessTenantInfo();
+        checkCache(serverlessTenant, TStringBuilder() << ":" << serverlessInfo.PathId << ":" << serverlessTenant, serverlessInfo.NodeIdx);
     }
 
-} // namspace NKqp
+} // namespace NKqp
 } // namespace NKikimr

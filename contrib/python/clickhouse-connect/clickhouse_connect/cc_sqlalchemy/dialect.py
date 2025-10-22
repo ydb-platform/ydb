@@ -1,4 +1,4 @@
-
+from sqlalchemy import text
 from sqlalchemy.engine.default import DefaultDialect
 
 from clickhouse_connect import dbapi
@@ -6,6 +6,7 @@ from clickhouse_connect import dbapi
 from clickhouse_connect.cc_sqlalchemy.inspector import ChInspector
 from clickhouse_connect.cc_sqlalchemy.sql import full_table
 from clickhouse_connect.cc_sqlalchemy.sql.ddlcompiler import ChDDLCompiler
+from clickhouse_connect.cc_sqlalchemy.sql.compiler import ChStatementCompiler
 from clickhouse_connect.cc_sqlalchemy import ischema_names, dialect_name
 from clickhouse_connect.cc_sqlalchemy.sql.preparer import ChIdentifierPreparer
 from clickhouse_connect.driver.binding import quote_identifier, format_str
@@ -26,28 +27,35 @@ class ClickHouseDialect(DefaultDialect):
     returns_unicode_strings = True
     postfetch_lastrowid = False
     ddl_compiler = ChDDLCompiler
+    statement_compiler = ChStatementCompiler
     preparer = ChIdentifierPreparer
     description_encoding = None
     max_identifier_length = 127
     ischema_names = ischema_names
     inspector = ChInspector
 
+    # SQA 1 compatibility
     # pylint: disable=method-hidden
     @classmethod
     def dbapi(cls):
         return dbapi
 
+    # SQA 2 compatibility
+    # pylint: disable=method-hidden
+    @classmethod
+    def import_dbapi(cls):
+        return dbapi
+
     def initialize(self, connection):
         pass
 
-    @staticmethod
-    def get_schema_names(connection, **_):
+    def get_schema_names(self, connection, **_):
         return [row.name for row in connection.execute('SHOW DATABASES')]
 
     @staticmethod
     def has_database(connection, db_name):
-        return (connection.execute('SELECT name FROM system.databases ' +
-                                   f'WHERE name = {format_str(db_name)}')).rowcount > 0
+        return (connection.execute(text('SELECT name FROM system.databases ' +
+                                   f'WHERE name = {format_str(db_name)}'))).rowcount > 0
 
     def get_table_names(self, connection, schema=None, **kw):
         cmd = 'SHOW TABLES'
@@ -87,13 +95,14 @@ class ClickHouseDialect(DefaultDialect):
         return []
 
     def has_table(self, connection, table_name, schema=None, **_kw):
-        result = connection.execute(f'EXISTS TABLE {full_table(table_name, schema)}')
+        result = connection.execute(text(f'EXISTS TABLE {full_table(table_name, schema)}'))
         row = result.fetchone()
         return row[0] == 1
 
     def has_sequence(self, connection, sequence_name, schema=None, **_kw):
         return False
 
+    # pylint: disable=duplicate-code
     def do_begin_twophase(self, connection, xid):
         raise NotImplementedError
 

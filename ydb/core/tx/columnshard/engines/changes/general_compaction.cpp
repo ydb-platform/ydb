@@ -59,7 +59,7 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
         std::shared_ptr<TFilteredSnapshotSchema> resultFiltered = context.BuildResultFiltered(accessors, seqDataColumnIds);
         std::shared_ptr<NArrow::NSplitter::TSerializationStats> stats = std::make_shared<NArrow::NSplitter::TSerializationStats>();
         for (auto&& accessor : accessors) {
-            stats->Merge(accessor.GetSerializationStat(*resultFiltered));
+            stats->Merge(accessor.GetSerializationStat(*resultFiltered, true));
         }
 
         std::vector<TReadPortionInfoWithBlobs> portions = TReadPortionInfoWithBlobs::RestorePortions(accessors, Blobs, context.SchemaVersions);
@@ -69,9 +69,19 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
             AFL_VERIFY(usedPortionIds.emplace(i.GetPortionInfo().GetPortionId()).second);
             currentToMerge.emplace_back(std::make_shared<TReadPortionToMerge>(std::move(i), GranuleMeta));
         }
+
+        const auto buildPortionsToMerge = [&](const std::vector<std::shared_ptr<ISubsetToMerge>>& toMerge, const bool useDeletion) {
+            std::vector<TPortionToMerge> result;
+            for (auto&& i : toMerge) {
+                auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds, useDeletion);
+                result.insert(result.end(), mergePortions.begin(), mergePortions.end());
+            }
+            return result;
+        };
+
         auto shardingActual = context.SchemaVersions.GetShardingInfoActual(GranuleMeta->GetPathId());
         while (true) {
-            std::vector<TPortionToMerge> toMerge;
+            std::vector<std::shared_ptr<ISubsetToMerge>> toMerge;
             ui64 sumMemory = 0;
             ui64 totalSumMemory = 0;
             std::vector<std::shared_ptr<ISubsetToMerge>> appendedToMerge;
@@ -80,9 +90,9 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 if (NYDBTest::TControllers::GetColumnShardController()->CheckPortionsToMergeOnCompaction(
                         sumMemory + i->GetColumnMaxChunkMemory(), subsetsCount) &&
                     subsetsCount > 1) {
-                    auto merged = BuildAppendedPortionsByChunks(context, std::move(toMerge), resultFiltered, stats);
+                    auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, false), resultFiltered, stats);
                     if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
                     }
                     toMerge.clear();
                     sumMemory = 0;
@@ -90,15 +100,14 @@ TConclusionStatus TGeneralCompactColumnEngineChanges::DoConstructBlobs(TConstruc
                 }
                 sumMemory += i->GetColumnMaxChunkMemory();
                 totalSumMemory += i->GetColumnMaxChunkMemory();
-                auto mergePortions = i->BuildPortionsToMerge(context, seqDataColumnIds, resultFiltered, usedPortionIds);
-                toMerge.insert(toMerge.end(), mergePortions.begin(), mergePortions.end());
+                toMerge.emplace_back(i);
                 ++subsetsCount;
             }
             if (toMerge.size()) {
-                auto merged = BuildAppendedPortionsByChunks(context, std::move(toMerge), resultFiltered, stats);
+                auto merged = BuildAppendedPortionsByChunks(context, buildPortionsToMerge(toMerge, appendedToMerge.empty()), resultFiltered, stats);
                 if (appendedToMerge.size()) {
                     if (merged.size()) {
-                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged)));
+                        appendedToMerge.emplace_back(std::make_shared<TWritePortionsToMerge>(std::move(merged), GranuleMeta));
                     }
                 } else {
                     context.Counters.OnCompactionCorrectMemory(totalSumMemory);

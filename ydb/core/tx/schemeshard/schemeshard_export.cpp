@@ -1,10 +1,12 @@
 #include "schemeshard_export.h"
+
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_impl.h"
 
-#include <util/generic/xrange.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_import.pb.h>
+
+#include <util/generic/xrange.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -150,7 +152,9 @@ void TSchemeShard::PersistCreateExport(NIceDb::TNiceDb& db, const TExportInfo& e
         NIceDb::TUpdate<Schema::Exports::DomainPathId>(exportInfo.DomainPathId.LocalPathId),
         NIceDb::TUpdate<Schema::Exports::Items>(exportInfo.Items.size()),
         NIceDb::TUpdate<Schema::Exports::EnableChecksums>(exportInfo.EnableChecksums),
-        NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions)
+        NIceDb::TUpdate<Schema::Exports::EnablePermissions>(exportInfo.EnablePermissions),
+        NIceDb::TUpdate<Schema::Exports::PeerName>(exportInfo.PeerName),
+        NIceDb::TUpdate<Schema::Exports::SanitizedToken>(exportInfo.SanitizedToken)
     );
 
     if (exportInfo.UserSID) {

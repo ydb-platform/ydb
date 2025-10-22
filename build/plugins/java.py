@@ -14,23 +14,25 @@ def split_args(s):  # TODO quotes, escapes
 
 
 def extract_macro_calls(unit, macro_value_name, macro_calls_delim):
-    if not unit.get(macro_value_name):
+    value = unit.get_subst(macro_value_name)
+    if not value:
         return []
 
     return list(
         filter(
             None,
-            map(split_args, unit.get(macro_value_name).replace('$' + macro_value_name, '').split(macro_calls_delim)),
+            map(split_args, value.strip().split(macro_calls_delim)),
         )
     )
 
 
 def extract_macro_calls2(unit, macro_value_name):
-    if not unit.get(macro_value_name):
+    value = unit.get_subst(macro_value_name)
+    if not value:
         return []
 
     calls = []
-    for call_encoded_args in unit.get(macro_value_name).strip().split():
+    for call_encoded_args in value.strip().split():
         call_args = json.loads(base64.b64decode(call_encoded_args))
         calls.append(call_args)
 
@@ -65,11 +67,11 @@ def onjava_module(unit, *args):
     }
     if unit.get('ENABLE_PREVIEW_VALUE') == 'yes' and (unit.get('JDK_VERSION') or unit.get('JDK_REAL_VERSION')) in (
         '17',
-        '20',
         '21',
         '22',
         '23',
         '24',
+        '25',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
@@ -195,7 +197,7 @@ def on_fill_jar_copy_resources_cmd(unit, *args):
     else:
         varname, srcdir, base_classes_dir, package, reslist = tuple(args)
     dest_dir = os.path.join(base_classes_dir, *package.split('.')) if package else base_classes_dir
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += ' && $FS_TOOLS copy_files {} {} {}'.format(
         srcdir if srcdir.startswith('"$') else '${CURDIR}/' + srcdir, dest_dir, reslist
     )
@@ -214,7 +216,7 @@ def on_fill_jar_gen_srcs(unit, *args):
     exclude_pos = args.index('EXCLUDE')
     globs = ' '.join(args[7:exclude_pos])
     excludes = ' '.join(args[exclude_pos + 1 :])
-    var = unit.get(varname)
+    var = unit.get_nosubst(varname)
     var += f' {args_delim} --append -d {srcdir} -s {java_list} -k {kt_list} -r {res_list} --include-patterns {globs}'
     if jar_type == 'SRC_JAR':
         var += ' --all-resources'
@@ -296,11 +298,11 @@ def on_jdk_version_macro_check(unit, *args):
     available_versions = (
         '11',
         '17',
-        '20',
         '21',
         '22',
         '23',
         '24',
+        '25',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(
@@ -325,19 +327,28 @@ def _maven_coords_for_project(unit, project_dir):
 
     pom_path = unit.resolve(os.path.join('$S', project_dir, 'pom.xml'))
     if os.path.exists(pom_path):
-        import xml.etree.ElementTree as et
-
         try:
-            with open(pom_path, 'rb') as f:
-                root = et.fromstring(f.read())
-            for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
-                artifact = root.find(xpath)
-                if artifact is not None:
-                    artifact = artifact.text
-                    if a != artifact and a.startswith(artifact):
-                        c = a[len(artifact) :].lstrip('-_')
-                        a = artifact
-                    break
+            # TODO(YMAKE-1694): xml is not currenly ready for Python subinterpreters, so we temporarily switch to parser implemented in ymake module
+            if hasattr(ymake, 'get_artifact_id_from_pom_xml'):
+                with open(pom_path, 'rb') as f:
+                    artifact = ymake.get_artifact_id_from_pom_xml(f.read())
+                    if artifact is not None:
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+            else:
+                import xml.etree.ElementTree as et
+
+                with open(pom_path, 'rb') as f:
+                    root = et.fromstring(f.read())
+                for xpath in ('./{http://maven.apache.org/POM/4.0.0}artifactId', './artifactId'):
+                    artifact = root.find(xpath)
+                    if artifact is not None:
+                        artifact = artifact.text
+                        if a != artifact and a.startswith(artifact):
+                            c = a[len(artifact) :].lstrip('-_')
+                            a = artifact
+                        break
         except Exception as e:
             raise Exception(f"Can't parse {pom_path}: {str(e)}") from None
 
@@ -363,11 +374,7 @@ def on_setup_project_coords_if_needed(unit, *args):
         return
 
     project_dir = args[0]
-    if project_dir.startswith(CONTRIB_JAVA_PREFIX):
-        value = '{}'.format(_get_classpath(unit, project_dir).rstrip(':'))
-    else:
-        value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
-    unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+    unit.set(['EXPORT_GRADLE_CLASSPATH', _get_classpath(unit, project_dir)])
 
 
 def on_java_resource_tar_validate_extract_root(unit, extract_root):

@@ -25,7 +25,7 @@ public:
     TString ToJson() const;
 
 private:
-    TStructuredToken Data;
+    TStructuredToken Data_;
 };
 
 class TStructuredTokenParser {
@@ -45,12 +45,13 @@ public:
     TStructuredTokenBuilder ToBuilder() const;
 
 private:
-    const TStructuredToken Data;
+    const TStructuredToken Data_;
 };
 
 TStructuredTokenParser CreateStructuredTokenParser(const TString& content);
 TString ComposeStructuredTokenJsonForServiceAccount(const TString& serviceAccountId, const TString& serviceAccountIdSignature, const TString& token);
 TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& serviceAccountId, const TString& serviceAccountIdSignatureSecretName, const TString& serviceAccountIdSignature);
+TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password);
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password);
 TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSecretName, const TString& token);
-}
+} // namespace NYql

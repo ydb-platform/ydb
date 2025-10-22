@@ -360,7 +360,7 @@ void ThrowErrorExceptionIfFailed(TErrorLike&& error);
 // NB: When given an error and a string as arguments, this macro automatically wraps
 // new error around the initial one.
 #define THROW_ERROR_EXCEPTION_IF_FAILED(error, ...) \
-    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__); \
+    ::NYT::NDetail::ThrowErrorExceptionIfFailed((error) __VA_OPT__(,) __VA_ARGS__) \
 
 #define THROW_ERROR_EXCEPTION_UNLESS(condition, head, ...) \
     if ((condition)) {\

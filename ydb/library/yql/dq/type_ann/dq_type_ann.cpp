@@ -5,6 +5,7 @@
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/utils/log/log.h>
+#include <util/string/join.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
@@ -580,7 +581,7 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 
     return GetDqJoinResultType<IsMapJoin>(join.Pos(), *leftStructType, leftTableLabels, *rightStructType,
         rightTableLabels, join.JoinType(), join.JoinKeys(), ctx, isMultiget);
-    }
+}
 
 } // unnamed
 
@@ -867,7 +868,7 @@ TStatus AnnotateDqCnMerge(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 2, 3, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 2, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -909,6 +910,16 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
                 TStringBuilder() << "Non-hashable key column: " << column->Content()));
             return TStatus::Error;
         }
+    }
+
+    if (TDqCnHashShuffle::idx_HashFunc < input->ChildrenSize()) {
+        TString hashFuncName = TString(input->Child(TDqCnHashShuffle::idx_HashFunc)->Content()); hashFuncName.to_lower();
+
+        static const auto allowableHashFuncs = { "columnshardhashv1", "hashv1", "hashv2" };
+        Y_ENSURE(
+            std::find(allowableHashFuncs.begin(), allowableHashFuncs.end(), hashFuncName) != allowableHashFuncs.end(),
+            TStringBuilder{} << "No such hash function: "  << hashFuncName << ", allowable: "  << "{" << JoinSeq(",", allowableHashFuncs) << "}"
+        );
     }
 
     input->SetTypeAnn(outputType);
@@ -988,21 +999,10 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (!EnsureTupleTypeSize(replicateInput->Pos(), inputItemType, 2, ctx)) {
+        if (!EnsureTupleType(replicateInput->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
 
-        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
     } else if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
@@ -1195,6 +1195,179 @@ TStatus AnnotateDqPhyLength(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
+    // BlockHashJoin expects 5 args: leftStream, rightStream, joinKind, leftKeys, rightKeys
+    if (!EnsureArgsCount(*node, 5, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    const auto& leftInputNode = *node->Child(0);
+    const auto& rightInputNode = *node->Child(1);
+    const auto& joinTypeNode = *node->Child(2);
+    auto& leftKeysNode = *node->Child(3);
+    auto& rightKeysNode = *node->Child(4);
+
+    if (!EnsureAtom(joinTypeNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    const auto joinType = joinTypeNode.Content();
+    if (joinType != "Inner") {
+        ctx.AddError(TIssue(ctx.GetPosition(joinTypeNode.Pos()), TStringBuilder() << "Unknown join kind: " << joinType
+                    << ", supported: Inner"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    TTypeAnnotationNode::TListType leftItemTypes;
+    if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    leftItemTypes.pop_back();
+
+    TTypeAnnotationNode::TListType rightItemTypes;
+    if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    // Remove length column
+    rightItemTypes.pop_back();
+
+    if (!EnsureTupleOfAtoms(leftKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+    if (!EnsureTupleOfAtoms(rightKeysNode, ctx)) {
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    if (leftKeysNode.ChildrenSize() != rightKeysNode.ChildrenSize()) {
+        ctx.AddError(TIssue(ctx.GetPosition(rightKeysNode.Pos()), TStringBuilder() << "Mismatch of key column count"));
+        return IGraphTransformer::TStatus(TStatus::Error);
+    }
+
+    std::vector<const TTypeAnnotationNode*> resultItems;
+
+    // Add left side columns
+    for (auto itemType : leftItemTypes) {
+        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    }
+
+    // Add right side columns
+    for (auto itemType : rightItemTypes) {
+        resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+    }
+
+    // Add scalar length column at the end
+    resultItems.push_back(ctx.MakeType<TScalarExprType>(ctx.MakeType<TDataExprType>(EDataSlot::Uint64)));
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TMultiExprType>(resultItems)));
+    return IGraphTransformer::TStatus(TStatus::Ok);
+}
+
+TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (!EnsureArgsCount(*input, 6, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
+    if (!EnsureStreamType(*inputStream, ctx)) {
+        return TStatus::Error;
+    }
+    auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
+    auto multiType = streamType->GetItemType();
+    if (!EnsureMultiType(inputStream->Pos(), *multiType, ctx)) {
+        return TStatus::Error;
+    }
+    auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
+
+    // key extractor lambda
+    auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
+    auto status = ConvertToLambda(keyExtractor, ctx, itemTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(keyExtractor, itemTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!keyExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    TTypeAnnotationNode::TListType keyTypes;
+    for (ui32 i = 1; i < keyExtractor->ChildrenSize(); ++i) {
+        auto childType = keyExtractor->Child(i)->GetTypeAnn();
+        keyTypes.emplace_back(childType);
+        if (!EnsureHashableKey(keyExtractor->Child(i)->Pos(), childType, ctx)) {
+            return TStatus::Error;
+        }
+        if (!EnsureEquatableKey(keyExtractor->Child(i)->Pos(), childType, ctx)) {
+            return TStatus::Error;
+        }
+    }
+
+    // state init lambda
+    auto& initHandler = input->ChildRef(TDqPhyHashCombine::idx_InitHandler);
+    TTypeAnnotationNode::TListType initArgTypes = keyTypes;
+    initArgTypes.insert(initArgTypes.end(), itemTypes.begin(), itemTypes.end());
+    status = ConvertToLambda(initHandler, ctx, initArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(initHandler, initArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!initHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    TTypeAnnotationNode::TListType stateTypes;
+    for (ui32 i = 1; i < initHandler->ChildrenSize(); ++i) {
+        auto childType = initHandler->Child(i)->GetTypeAnn();
+        stateTypes.emplace_back(childType);
+        if (!EnsureComputableType(initHandler->Child(i)->Pos(), *childType, ctx)) {
+            return TStatus::Error;
+        }
+    }
+
+    // state update lambda
+    auto& updateHandler = input->ChildRef(TDqPhyHashCombine::idx_UpdateHandler);
+    TTypeAnnotationNode::TListType updateArgTypes = keyTypes;
+    updateArgTypes.insert(updateArgTypes.end(), itemTypes.begin(), itemTypes.end());
+    updateArgTypes.insert(updateArgTypes.end(), stateTypes.begin(), stateTypes.end());
+    status = ConvertToLambda(updateHandler, ctx, updateArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(updateHandler, updateArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!updateHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    // finalize output lambda
+    auto& finishHandler = input->ChildRef(TDqPhyHashCombine::idx_FinishHandler);
+    TTypeAnnotationNode::TListType finishArgTypes = keyTypes;
+    finishArgTypes.insert(finishArgTypes.end(), stateTypes.begin(), stateTypes.end());
+    status = ConvertToLambda(finishHandler, ctx, finishArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(finishHandler, finishArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!finishHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    // Derive the output type from the finishHandler
+    TTypeAnnotationNode::TListType finishOutputTypes;
+    for (ui32 i = 1; i < finishHandler->ChildrenSize(); ++i) {
+        finishOutputTypes.emplace_back(finishHandler->Child(i)->GetTypeAnn());
+    }
+    auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
+
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
+    return TStatus::Ok;
+}
+
 THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationContext& typesCtx) {
     auto coreTransformer = CreateExtCallableTypeAnnotationTransformer(typesCtx);
 
@@ -1205,6 +1378,11 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return MakeIntrusive<TIssue>(ctx.GetPosition(input->Pos()),
                     TStringBuilder() << "At function: " << input->Content());
             });
+
+            // Handle BlockHashJoinCore callable (from peephole)
+            if (input->Content() == "BlockHashJoinCore") {
+                return AnnotateDqBlockHashJoinCore(input, ctx);
+            }
 
             if (TDqStage::Match(input.Get())) {
                 return AnnotateDqStage(input, ctx);
@@ -1219,6 +1397,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
             }
 
             if (TDqCnUnionAll::Match(input.Get())) {
+                return AnnotateDqConnection(input, ctx);
+            }
+
+            if (TDqCnParallelUnionAll::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
             }
 
@@ -1261,6 +1443,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }
 
+            if (TDqPhyBlockHashJoin::Match(input.Get())) {
+                return AnnotateDqMapOrDictJoin(input, ctx);
+            }
+
             if (TDqPhyMapJoin::Match(input.Get())) {
                 return AnnotateDqMapOrDictJoin(input, ctx);
             }
@@ -1299,6 +1485,10 @@ THolder<IGraphTransformer> CreateDqTypeAnnotationTransformer(TTypeAnnotationCont
 
             if (TDqPhyLength::Match(input.Get())) {
                 return AnnotateDqPhyLength(input, ctx);
+            }
+
+            if (TDqPhyHashCombine::Match(input.Get())) {
+                return AnnotateDqHashCombine(input, ctx);
             }
 
             return coreTransformer->Transform(input, output, ctx);

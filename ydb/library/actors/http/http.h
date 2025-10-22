@@ -35,6 +35,7 @@ TString CompressDeflate(TStringBuf source);
 TString DecompressDeflate(TStringBuf source);
 TString GetObfuscatedData(TString data, const THeaders& headers);
 TString ToHex(size_t value);
+bool IsReadableContent(TStringBuf contentType);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -83,10 +84,18 @@ struct TUrlParameters {
     THashMap<TStringBuf, TStringBuf> Parameters;
 
     TUrlParameters(TStringBuf url);
-    TString operator [](TStringBuf name) const;
+    const TString operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;
+};
+
+struct TUrlParametersBuilder : TUrlParameters {
+    TDeque<std::pair<TString, TString>> Data;
+
+    using TUrlParameters::TUrlParameters;
+    TUrlParametersBuilder();
+    void Set(TStringBuf name, TStringBuf data);
 };
 
 struct TCookies {
@@ -94,7 +103,7 @@ struct TCookies {
 
     TCookies(TStringBuf cookie);
     TCookies(const TCookies&) = delete;
-    TStringBuf operator [](TStringBuf name) const;
+    const TStringBuf operator [](TStringBuf name) const;
     bool Has(TStringBuf name) const;
     TStringBuf Get(TStringBuf name) const; // raw
     TString Render() const;
@@ -176,6 +185,7 @@ public:
     TStringBuf ContentLength;
     TStringBuf AcceptEncoding;
     TStringBuf TransferEncoding;
+    TStringBuf ContentEncoding;
 
     TStringBuf Body;
 
@@ -244,10 +254,10 @@ public:
 
     EParseStage Stage;
     EParseStage LastSuccessStage;
+    bool Streaming = false; // true if we are in streaming mode, i.e. don't collect all data in one buffer
     TStringBuf Line;
     TStringBuf& Header = Line;
     size_t ChunkLength = 0;
-    size_t ContentSize = 0;
     TString Content; // body storage
     std::optional<size_t> TotalSize;
 
@@ -258,7 +268,6 @@ public:
         , Line()
         , Header(Line)
         , ChunkLength(src.ChunkLength)
-        , ContentSize(src.ContentSize)
         , Content(src.Content)
     {}
 
@@ -307,7 +316,7 @@ public:
         return target.size() == size;
     }
 
-    bool ProcessHeader(TStringBuf& header) {
+    bool ProcessHeaderValue(TStringBuf& header) {
         TStringBuf name;
         TStringBuf value;
         if (!header.TrySplit(':', name, value)) {
@@ -321,6 +330,106 @@ public:
         }
         header.Clear();
         return true;
+    }
+
+    void ProcessHeader(TStringBuf& data) {
+        if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
+            if (Header.empty()) {
+                if (HasBody() && (HeaderType::ContentLength.empty() || HeaderType::ContentLength != "0")) {
+                    Stage = EParseStage::Body;
+                } else if (TotalSize.has_value() && !data.empty()) {
+                    Stage = EParseStage::Body;
+                } else {
+                    Stage = EParseStage::Done;
+                }
+                HeaderType::Headers = TStringBuf(HeaderType::Headers.data(), data.data() - HeaderType::Headers.data());
+            } else if (!ProcessHeaderValue(Header)) {
+                Stage = EParseStage::Error;
+            }
+        }
+    }
+
+    void ProcessBody(TStringBuf& data) {
+        if (IsChunkedEncoding()) {
+            Stage = EParseStage::ChunkLength;
+            Line = {};
+        } else if (!HeaderType::ContentLength.empty()) {
+            if (is_not_number(HeaderType::ContentLength)) {
+                // Invalid content length
+                Stage = EParseStage::Error;
+            } else if (ProcessData(HeaderType::Body, data, FromStringWithDefault(HeaderType::ContentLength, 0))) {
+                Stage = EParseStage::Done;
+                if (HeaderType::Body && HeaderType::ContentEncoding == "deflate") {
+                    Content = DecompressDeflate(HeaderType::Body);
+                    HeaderType::Body = Content;
+                }
+            }
+        } else if (TotalSize.has_value()) {
+            if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
+                HeaderType::Body = Content;
+                Stage = EParseStage::Done;
+                if (HeaderType::Body && HeaderType::ContentEncoding == "deflate") {
+                    Content = DecompressDeflate(HeaderType::Body);
+                    HeaderType::Body = Content;
+                }
+            }
+        } else {
+            // Invalid body encoding
+            Stage = EParseStage::Error;
+        }
+    }
+
+    void ProcessChunkLength(TStringBuf& data) {
+        if (ProcessData(Line, data, "\r\n", MaxChunkLengthSize)) {
+            if (!Line.empty()) {
+                ChunkLength = ParseHex(Line);
+                if (ChunkLength <= MaxChunkSize) {
+                    if (Content.size() + ChunkLength <= MaxChunkContentSize) {
+                        Stage = EParseStage::ChunkData;
+                        Line = {}; // clear line for chunk data
+                        if (Streaming) {
+                            HeaderType::Body = Content = {};
+                        }
+                    } else {
+                        // Invalid chunk content length
+                        Stage = EParseStage::Error;
+                    }
+                } else {
+                    // Invalid chunk length
+                    Stage = EParseStage::Error;
+                }
+            } else {
+                // Invalid body encoding
+                Stage = EParseStage::Error;
+            }
+        }
+    }
+
+    void ProcessChunkData(TStringBuf& data) {
+        if (ProcessData(Line, data, ChunkLength + 2)) {
+            if (Line.ends_with("\r\n")) {
+                Line.remove_suffix(2); // remove trailing \r\n
+                if (ChunkLength == 0) {
+                    Stage = EParseStage::Done;
+                } else {
+                    // append chunk data to content
+                    if (HeaderType::ContentEncoding == "deflate") {
+                        HeaderType::Body = Content += DecompressDeflate(Line);
+                    } else {
+                        if (HeaderType::Body.empty()) {
+                            HeaderType::Body = Line;
+                        } else {
+                            HeaderType::Body = Content = TString(HeaderType::Body) + Line;
+                        }
+                    }
+                    Stage = EParseStage::ChunkLength;
+                    Line = {}; // clear line for next chunk
+                }
+            } else {
+                // Invalid chunk data
+                Stage = EParseStage::Error;
+            }
+        }
     }
 
     size_t ParseHex(TStringBuf value) {
@@ -368,8 +477,15 @@ public:
 
     void ConnectionClosed();
 
+    size_t GetHeadersSize() const { // including request line
+        if (HeaderType::Headers.empty()) {
+            return TSocketBuffer::Size();
+        }
+        return HeaderType::Headers.end() - TSocketBuffer::Data();
+    }
+
     size_t GetBodySizeFromTotalSize() const {
-        return TotalSize.value() - (HeaderType::Headers.end() - TSocketBuffer::Data());
+        return TotalSize.value() - GetHeadersSize();
     }
 
     void Clear() {
@@ -392,8 +508,20 @@ public:
         return Stage == EParseStage::ChunkLength;
     }
 
-    bool HasNewDataChunk() const {
-        return IsStartOfChunk() && !Content.empty();
+    bool HasNewStreamingDataChunk() const {
+        return Streaming && IsStartOfChunk() && !HeaderType::Body.empty();
+    }
+
+    TString ExtractDataChunk() {
+        TString chunk;
+        if (!Content.empty()) {
+            chunk = std::move(Content);
+            Content.clear();
+        } else {
+            chunk = TString(HeaderType::Body);
+        }
+        HeaderType::Body = {};
+        return chunk;
     }
 
     TStringBuf GetErrorText() const {
@@ -462,6 +590,12 @@ public:
         return TEqNoCase()(HeaderType::TransferEncoding, "chunked");
     }
 
+    // switch to streaming mode, i.e. we will not collect all data in one buffer.
+    // instead we expect to receive data chunk by chunk. every chunk overwrites the previous one.
+    void SwitchToStreaming() {
+        Streaming = true;
+    }
+
     bool EnsureEnoughSpaceAvailable(size_t need = TSocketBuffer::BUFFER_MIN_STEP) {
         bool result = TSocketBuffer::EnsureEnoughSpaceAvailable(need);
         if (!result && !TSocketBuffer::Empty()) {
@@ -493,8 +627,16 @@ public:
         Advance(data.size());
     }
 
+    TString AsReadableString() const {
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
+    }
+
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
     }
 };
 
@@ -609,6 +751,13 @@ public:
         Stage = ERenderStage::Body;
     }
 
+    size_t GetHeadersSize() const { // including request line
+        if (HeaderType::Headers.empty()) {
+            return TSocketBuffer::Size();
+        }
+        return HeaderType::Headers.end() - TSocketBuffer::Data();
+    }
+
     void SetBody(TStringBuf body) {
         Y_DEBUG_ABORT_UNLESS(Stage == ERenderStage::Header);
         if (HeaderType::ContentLength.empty()) {
@@ -705,8 +854,16 @@ public:
         Y_ABORT_UNLESS(size == TSocketBuffer::Size());
     }
 
+    TString AsReadableString() const {
+        if (IsReadableContent(HeaderType::ContentType)) {
+            return TString(Data(), GetHeadersSize()) + HeaderType::Body;
+        } else {
+            return TString(Data(), GetHeadersSize());
+        }
+    }
+
     TString GetObfuscatedData() const {
-        return NHttp::GetObfuscatedData(AsString(), HeaderType::Headers);
+        return NHttp::GetObfuscatedData(AsReadableString(), HeaderType::Headers);
     }
 };
 
@@ -890,6 +1047,7 @@ public:
     static THttpOutgoingRequestPtr CreateRequest(TStringBuf method, TStringBuf url, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     static THttpOutgoingRequestPtr CreateHttpRequest(TStringBuf method, TStringBuf host, TStringBuf uri, TStringBuf contentType = TStringBuf(), TStringBuf body = TStringBuf());
     THttpOutgoingRequestPtr Duplicate();
+    THttpIncomingRequestPtr Reverse();
 
     bool IsConnectionClose() const {
         return TEqNoCase()(Connection, "close");
@@ -937,7 +1095,7 @@ public:
     }
 
     bool IsNeedBody() const {
-        return GetRequest()->Method != "HEAD" && Status != "204";
+        return GetRequest()->Method != "HEAD" && Status != "204" && Status != "202";
     }
 
     bool EnableCompression() {
@@ -983,6 +1141,7 @@ public:
     }
 
     THttpOutgoingResponsePtr Duplicate(THttpIncomingRequestPtr request);
+    THttpIncomingResponsePtr Reverse(THttpOutgoingRequestPtr request);
     THttpOutgoingDataChunkPtr CreateDataChunk(TStringBuf data = {}); // empty chunk means end of data
     THttpOutgoingDataChunkPtr CreateIncompleteDataChunk(); // to construct it later
 

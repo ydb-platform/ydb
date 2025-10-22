@@ -50,7 +50,7 @@ enum class EOperationBehaviour : ui32 {
 class TWriteOperation: public TMonitoringObjectsCounter<TWriteOperation> {
 private:
     YDB_READONLY(TString, Identifier, TGUID::CreateTimebased().AsGuidString());
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(TUnifiedPathId, PathId);
     YDB_READONLY(EOperationStatus, Status, EOperationStatus::Draft);
     YDB_READONLY_DEF(TInstant, CreatedAt);
     YDB_READONLY_DEF(TOperationWriteId, WriteId);
@@ -60,19 +60,18 @@ private:
     YDB_ACCESSOR(EOperationBehaviour, Behaviour, EOperationBehaviour::Undefined);
     YDB_READONLY_DEF(std::optional<ui32>, GranuleShardingVersionId);
     YDB_READONLY(NEvWrite::EModificationType, ModificationType, NEvWrite::EModificationType::Upsert);
-    bool WritePortions = false;
-    const std::shared_ptr<TAtomicCounter> Activity = std::make_shared<TAtomicCounter>(1);
+    YDB_READONLY_FLAG(Bulk, false);
+    const std::shared_ptr<NOlap::TActivityChecker> Activity = std::make_shared<NOlap::TActivityChecker>();
 
 public:
     using TPtr = std::shared_ptr<TWriteOperation>;
 
-    void StopWriting() const {
-        *Activity = 0;
+    void StopWriting(const TString& errorMessage) const {
+        Activity->StopWriting(errorMessage);
     }
 
-    TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
-        const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
-        const bool writePortions);
+    TWriteOperation(const TUnifiedPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+        const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool isBulk);
 
     void Start(
         TColumnShard& owner, const NEvWrite::IDataContainer::TPtr& data, const NActors::TActorId& source, const NOlap::TWritingContext& context);
@@ -83,7 +82,7 @@ public:
     void AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) const;
     void AbortOnComplete(TColumnShard& owner) const;
 
-    std::shared_ptr<const TAtomicCounter> GetActivityChecker() const {
+    std::shared_ptr<NOlap::TActivityChecker> GetActivityChecker() const {
         return Activity;
     }
 

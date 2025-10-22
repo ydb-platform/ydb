@@ -250,13 +250,20 @@ class TWorkloadServiceYdbSetup : public IYdbSetup {
 private:
     TAppConfig GetAppConfig() const {
         TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableResourcePools(Settings_.EnableResourcePools_);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
-        appConfig.MutableFeatureFlags()->SetEnableExternalDataSources(true);
-        appConfig.MutableFeatureFlags()->SetEnableResourcePoolsCounters(true);
         *appConfig.MutableWorkloadManagerConfig() = Settings_.WorkloadManagerConfig_;
+
+        auto& featureFlags = *appConfig.MutableFeatureFlags();
+        featureFlags.SetEnableResourcePools(Settings_.EnableResourcePools_);
+        featureFlags.SetEnableResourcePoolsOnServerless(Settings_.EnableResourcePoolsOnServerless_);
+        featureFlags.SetEnableMetadataObjectsOnServerless(Settings_.EnableMetadataObjectsOnServerless_);
+        featureFlags.SetEnableExternalDataSourcesOnServerless(Settings_.EnableExternalDataSourcesOnServerless_);
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableResourcePoolsCounters(true);
+        featureFlags.SetEnableStreamingQueries(true);
+
+        auto& queryServiceConfig = *appConfig.MutableQueryServiceConfig();
+        queryServiceConfig.SetAllExternalDataSourcesAreAvailable(true);
+        queryServiceConfig.SetProgressStatsPeriodMs(1000);
 
         appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         return appConfig;
@@ -280,13 +287,16 @@ private:
             .SetNodeCount(Settings_.NodeCount_)
             .SetDomainName(Settings_.DomainName_)
             .SetAppConfig(appConfig)
-            .SetFeatureFlags(appConfig.GetFeatureFlags());
+            .SetFeatureFlags(appConfig.GetFeatureFlags())
+            .SetInitializeFederatedQuerySetupFactory(true);
 
         if (Settings_.CreateSampleTenants_) {
+            const auto dedicatedPoolKind = SplitPath(Settings_.GetDedicatedTenantName()).back();
+            const auto sharedPoolKind = SplitPath(Settings_.GetSharedTenantName()).back();
             serverSettings
                 .SetDynamicNodeCount(2)
-                .AddStoragePoolType(Settings_.GetDedicatedTenantName())
-                .AddStoragePoolType(Settings_.GetSharedTenantName());
+                .AddStoragePool(dedicatedPoolKind, TStringBuilder() << Settings_.GetDedicatedTenantName() << ":" << dedicatedPoolKind)
+                .AddStoragePool(sharedPoolKind, TStringBuilder() << Settings_.GetSharedTenantName() << ":" << sharedPoolKind);
         }
 
         SetLoggerSettings(serverSettings);
@@ -298,7 +308,7 @@ private:
 
     void SetupResourcesTenant(Ydb::Cms::CreateDatabaseRequest& request, Ydb::Cms::StorageUnits* storage, const TString& name) {
         request.set_path(name);
-        storage->set_unit_kind(name);
+        storage->set_unit_kind(SplitPath(name).back());
         storage->set_count(1);
     }
 
@@ -307,12 +317,18 @@ private:
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_resources()->add_storage_units(), Settings_.GetDedicatedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetDedicatedTenantName());
+            DedicatedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
+            Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetDedicatedTenantName())[0], Settings_.GetDedicatedTenantName());
         }
 
         {  // Shared
             Ydb::Cms::CreateDatabaseRequest request;
             SetupResourcesTenant(request, request.mutable_shared_resources()->add_storage_units(), Settings_.GetSharedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetSharedTenantName());
+            SharedTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
+            Server_->EnableGRpc(PortManager_.GetPort(), Tenants_->List(Settings_.GetSharedTenantName())[0], Settings_.GetSharedTenantName());
         }
 
         {  // Serverless
@@ -320,6 +336,8 @@ private:
             request.set_path(Settings_.GetServerlessTenantName());
             request.mutable_serverless_resources()->set_shared_database_path(Settings_.GetSharedTenantName());
             Tenants_->CreateTenant(std::move(request));
+            const auto describeResult = Client_->Describe(GetRuntime(), Settings_.GetServerlessTenantName());
+            ServerlessTenantPathId = describeResult.GetPathDescription().GetDomainDescription().GetDomainKey().GetPathId();
         }
     }
 
@@ -485,11 +503,17 @@ public:
     TPoolStateDescription GetPoolDescription(TDuration leaseDuration = FUTURE_WAIT_TIMEOUT, const TString& poolId = "") const override {
         const auto& edgeActor = GetRuntime()->AllocateEdgeActor();
 
-        GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, CanonizePath(Settings_.DomainName_), poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
-        auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvRefreshPoolStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT);
-        UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
+        TInstant startAt = TInstant::Now();
+        while (true) {
+            GetRuntime()->Register(CreateRefreshPoolStateActor(edgeActor, CanonizePath(Settings_.DomainName_), poolId ? poolId : Settings_.PoolId_, leaseDuration, GetRuntime()->GetAppData().Counters));
+            auto response = GetRuntime()->GrabEdgeEvent<TEvPrivate::TEvRefreshPoolStateResponse>(edgeActor, FUTURE_WAIT_TIMEOUT - (TInstant::Now() - startAt));
+            if (TInstant::Now() < startAt + FUTURE_WAIT_TIMEOUT && response->Get()->Status != Ydb::StatusIds::SUCCESS) {
+                continue;
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(response->Get()->Status, Ydb::StatusIds::SUCCESS, response->Get()->Issues.ToOneLineString());
 
-        return response->Get()->PoolState;
+            return response->Get()->PoolState;
+        }
     }
 
     void WaitPoolState(const TPoolStateDescription& state, const TString& poolId = "") const override {
@@ -540,13 +564,39 @@ public:
         return response;
     }
 
-    // Coomon helpers
+    // Common helpers
+    ui64 GetGrpcPort() const override {
+        return Server_->GetGRpcServer().GetPort();
+    }
+
     TTestActorRuntime* GetRuntime() const override {
         return Server_->GetRuntime();
     }
 
     const TYdbSetupSettings& GetSettings() const override {
         return Settings_;
+    }
+
+    TTenantInfo GetDedicatedTenantInfo() const override {
+        return {
+            .PathId = DedicatedTenantPathId,
+            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetDedicatedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetDedicatedTenantName())[0]
+        };
+    }
+
+    TTenantInfo GetSharedTenantInfo() const override {
+        return {
+            .PathId = SharedTenantPathId,
+            .GrpcPort = Server_->GetTenantGRpcServer(Settings_.GetSharedTenantName()).GetPort(),
+            .NodeIdx = Tenants_->List(Settings_.GetSharedTenantName())[0]
+        };
+    }
+
+    TTenantInfo GetServerlessTenantInfo() const override {
+        auto sharedInfo = GetSharedTenantInfo();
+        sharedInfo.PathId = ServerlessTenantPathId;
+        return sharedInfo;
     }
 
 private:
@@ -614,6 +664,10 @@ private:
     std::unique_ptr<TClient> Client_;
     std::unique_ptr<TDriver> YdbDriver_;
     std::unique_ptr<TTenants> Tenants_;
+
+    TLocalPathId DedicatedTenantPathId;
+    TLocalPathId SharedTenantPathId;
+    TLocalPathId ServerlessTenantPathId;
 
     std::unique_ptr<NYdb::NTable::TTableClient> TableClient_;
     std::unique_ptr<NYdb::NTable::TSession> TableClientSession_;

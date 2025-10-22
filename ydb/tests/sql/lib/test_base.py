@@ -30,7 +30,8 @@ class TestBase(Query):
         cls.cluster = KiKiMR(KikimrConfigGenerator(erasure=cls.get_cluster_configuration(),
                                                    extra_feature_flags=["enable_resource_pools",
                                                                         "enable_external_data_sources",
-                                                                        "enable_tiering_in_column_shard"],
+                                                                        "enable_tiering_in_column_shard",
+                                                                        "enable_add_unique_index"],
                                                    column_shard_config={
                                                        'disabled_on_scheme_shard': False,
                                                        'lag_for_compaction_before_tierings_ms': 0,
@@ -109,7 +110,7 @@ class TpchTestBaseH1(TestBase):
         cls.teardown_tpch()
 
     def setup_tpch(cls):
-        cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'init', '--store=column', '--datetime'])
+        cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'init', '--store=column', '--datetime-types=dt32'])
         cls.run_cli(['workload', 'tpch', '-p', cls.tpch_default_path()+'/', 'import', 'generator', '--scale=1'])
 
     def teardown_tpch(cls):

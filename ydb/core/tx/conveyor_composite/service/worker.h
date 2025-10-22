@@ -27,8 +27,6 @@ private:
     const ui64 WorkersPoolId;
     std::optional<TDuration> ExecutionDuration;
     std::vector<TWorkerTaskResult> Results;
-    const ::NMonitoring::THistogramPtr SendFwdHistogram;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
     TDuration GetWakeupDuration() const;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
@@ -50,17 +48,14 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
-        const ui64 workersPoolId, const ::NMonitoring::THistogramPtr sendFwdHistogram,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
-        : TBase("CONVEYOR::" + conveyorName + "::WORKER")
+    TWorker(const TString& poolName, const double cpuHardLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
+        const ui64 workersPoolId)
+        : TBase("COMPOSITE_CONVEYOR::" + poolName + "::WORKER")
         , CPUHardLimit(cpuHardLimit)
         , CPUSoftLimit(cpuHardLimit)
         , DistributorId(distributorId)
         , WorkerIdx(workerIdx)
-        , WorkersPoolId(workersPoolId)
-        , SendFwdHistogram(sendFwdHistogram)
-        , SendFwdDuration(sendFwdDuration) {
+        , WorkersPoolId(workersPoolId) {
         AFL_VERIFY(0 < CPUHardLimit);
         AFL_VERIFY(CPUHardLimit <= 1);
     }

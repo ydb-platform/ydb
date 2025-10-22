@@ -1,5 +1,6 @@
 #include "hive_impl.h"
 #include "hive_log.h"
+#include "drain.h"
 
 namespace NKikimr {
 namespace NHive {
@@ -11,13 +12,16 @@ class TTxSwitchDrainOn : public TTransactionBase<THive> {
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     ui64 SeqNo;
     bool ShouldStartDrain = true;
+    ui64 Cookie;
+
 public:
-    TTxSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo, THive* hive)
+    TTxSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo, ui64 cookie, THive* hive)
         : TBase(hive)
         , NodeId(nodeId)
         , Settings(std::move(settings))
         , Initiator(initiator)
         , SeqNo(seqNo)
+        , Cookie(cookie)
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
@@ -41,6 +45,7 @@ public:
                         ++node->DrainSeqNo;
                     }
                     node->DrainSeqNo = std::max(node->DrainSeqNo, SeqNo);
+                    SeqNo = node->DrainSeqNo;
                     db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators, Schema::Node::DrainSeqNo>(node->Drain, node->DrainInitiators, node->DrainSeqNo);
                 }
                 if (Settings.DownPolicy != NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN) {
@@ -66,52 +71,69 @@ public:
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
         if (ShouldStartDrain) {
-            Self->StartHiveDrain(NodeId, std::move(Settings));
+            auto* node = Self->FindNode(NodeId);
+            if (node) {
+                Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
+                node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
+            }
+            if (Initiator) {
+                Self->Send(Initiator, new TEvHive::TEvDrainNodeAck(SeqNo), 0, Cookie);
+            }
         } else {
             if (Initiator) {
-                Self->Send(Initiator, new TEvHive::TEvDrainNodeResult(Status));
+                Self->Send(Initiator, new TEvHive::TEvDrainNodeResult(Status), 0, Cookie);
             }
         }
     }
 };
 
 class TTxSwitchDrainOff : public TTransactionBase<THive> {
-    TNodeId NodeId;
+    TDrainTarget Target;
     TDrainSettings Settings;
     NKikimrProto::EReplyStatus Status;
     ui32 Movements;
     TVector<TActorId> Initiators;
 
 public:
-    TTxSwitchDrainOff(TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements, THive* hive)
+    TTxSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements, THive* hive)
         : TBase(hive)
-        , NodeId(nodeId)
+        , Target(target)
         , Settings(std::move(settings))
         , Status(status)
         , Movements(movements)
     {}
 
+    template <typename TSchema, typename TTarget>
+    void SwitchDrainOff(NIceDb::TNiceDb& db, TTarget* target) {
+        if (target == nullptr) {
+            return;
+        }
+        Initiators.swap(target->DrainInitiators);
+        target->Drain = false;
+        db.Table<TSchema>().Key(target->GetId()).template Update<typename TSchema::Drain>(target->Drain);
+        if constexpr (requires { typename TSchema::DrainInitiators; }) {
+            db.Table<TSchema>().Key(target->Id).template Update<typename TSchema::DrainInitiators>(target->DrainInitiators);
+        }
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Execute Node: " << NodeId);
+        BLOG_D("THive::TTxSwitchDrainOff::Execute Target: " << Target);
         NIceDb::TNiceDb db(txc.DB);
-        TNodeInfo* node = Self->FindNode(NodeId);
-        if (node != nullptr) {
-            Initiators = std::move(node->DrainInitiators);
-            node->Drain = false;
-            node->DrainInitiators.clear();
-            db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Drain, Schema::Node::DrainInitiators>(node->Drain, node->DrainInitiators);
-            if (Settings.DownPolicy == NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN) {
-                // node->SetDown(false); // it has already been dropped by Drain actor
-                if (Settings.Persist) {
-                    db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Down>(false);
-                }
-            }
+
+        if (std::holds_alternative<TNodeId>(Target)) {
+            TNodeInfo* node = Self->FindNode(std::get<TNodeId>(Target));
+            SwitchDrainOff<Schema::Node>(db, node);
+        } else if (std::holds_alternative<TBridgePileId>(Target)) {
+            TBridgePileInfo& pile = Self->GetPile(std::get<TBridgePileId>(Target));
+            SwitchDrainOff<Schema::BridgePile>(db, &pile);
+        } else {
+            Y_DEBUG_ABORT("Unexpected value in TDrainTarget");
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Complete NodeId: " << NodeId
+        BLOG_D("THive::TTxSwitchDrainOff::Complete Target: " << Target
             << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
@@ -119,12 +141,12 @@ public:
     }
 };
 
-ITransaction* THive::CreateSwitchDrainOn(NHive::TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo) {
-    return new TTxSwitchDrainOn(nodeId, std::move(settings), initiator, seqNo, this);
+ITransaction* THive::CreateSwitchDrainOn(NHive::TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo, ui64 cookie) {
+    return new TTxSwitchDrainOn(nodeId, std::move(settings), initiator, seqNo, cookie, this);
 }
 
-ITransaction* THive::CreateSwitchDrainOff(NHive::TNodeId nodeId, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements) {
-    return new TTxSwitchDrainOff(nodeId, std::move(settings), status, movements, this);
+ITransaction* THive::CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements) {
+    return new TTxSwitchDrainOff(target, std::move(settings), status, movements, this);
 }
 
 } // NHive

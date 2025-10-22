@@ -1,4 +1,5 @@
 #include "schemeshard__operation_side_effects.h"
+
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
@@ -139,6 +140,13 @@ void TSideEffects::DeleteShard(TShardIdx idx) {
     ToDeleteShards.insert(idx);
 }
 
+void TSideEffects::DeleteSystemShard(TShardIdx idx) {
+    if (!idx) {
+        return; //KIKIMR-8507
+    }
+    ToDeleteSystemShards.insert(idx);
+}
+
 void TSideEffects::ToProgress(TIndexBuildId id) {
     IndexToProgress.push_back(id);
 }
@@ -186,6 +194,7 @@ void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransa
     DoPersistDependencies(ss,txc, ctx);
 
     DoPersistDeleteShards(ss, txc, ctx);
+    DoPersistDeleteSystemShards(ss, txc, ctx);
 
     SetupRoutingLongOps(ss, ctx);
 }
@@ -225,6 +234,7 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
     DoRegisterRelations(ss, ctx);
 
     DoTriggerDeleteShards(ss, ctx);
+    DoTriggerDeleteSystemShards(ss, ctx);
 
     ResumeLongOps(ss, ctx);
 }
@@ -477,6 +487,7 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
             if (subDomain->GetDatabaseQuotas()) {
                 message->Record.MutableDatabaseQuotas()->CopyFrom(*subDomain->GetDatabaseQuotas());
             }
+            message->Record.MutableSchemeLimits()->CopyFrom(subDomain->GetSchemeLimits().AsProto());
             if (const auto& auditSettings = subDomain->GetAuditSettings()) {
                 message->Record.MutableAuditSettings()->CopyFrom(*auditSettings);
             }
@@ -753,6 +764,10 @@ void TSideEffects::DoTriggerDeleteShards(TSchemeShard *ss, const TActorContext &
     ss->DoShardsDeletion(ToDeleteShards, ctx);
 }
 
+void TSideEffects::DoTriggerDeleteSystemShards(TSchemeShard *ss, const TActorContext &ctx) {
+    ss->DoDeleteSystemShards(ToDeleteSystemShards, ctx);
+}
+
 void TSideEffects::DoReleasePathState(TSchemeShard *ss, const TActorContext &) {
     for (auto& rec: ReleasePathStateRecs) {
         TOperationId opId = InvalidOperationId;
@@ -779,13 +794,18 @@ void TSideEffects::DoPersistDeleteShards(TSchemeShard *ss, NTabletFlatExecutor::
     ss->PersistShardsToDelete(db, ToDeleteShards);
 }
 
+void TSideEffects::DoPersistDeleteSystemShards(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &) {
+    NIceDb::TNiceDb db(txc.DB);
+    ss->PersistSystemShardsToDelete(db, ToDeleteSystemShards);
+}
+
 void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorContext &ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToMakeState) {
 
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
         auto& nodeStates = ss->TempDirsState.NodeStates;
 
-        const auto it = TempDirsByOwner.find(ownerActorId);
+        const auto it = tempDirsByOwner.find(ownerActorId);
 
         const auto nodeId = ownerActorId.NodeId();
 
@@ -799,12 +819,12 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
             itNodeStates->second.Owners.insert(ownerActorId);
         }
 
-        if (it == TempDirsByOwner.end()) {
+        if (it == tempDirsByOwner.end()) {
             ctx.Send(new IEventHandle(ownerActorId, ss->SelfId(),
                 new TEvSchemeShard::TEvOwnerActorAck(),
                 IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession));
 
-            auto& currentDirsTables = TempDirsByOwner[ownerActorId];
+            auto& currentDirsTables = tempDirsByOwner[ownerActorId];
 
             for (auto& pathId : tempDirs) {
                 currentDirsTables.insert(std::move(pathId));
@@ -820,9 +840,9 @@ void TSideEffects::DoUpdateTempDirsToMakeState(TSchemeShard* ss, const TActorCon
 
 void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& [ownerActorId, tempDirs]: TempDirsToRemoveState) {
-        auto& TempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
-        const auto it = TempDirsByOwner.find(ownerActorId);
-        if (it == TempDirsByOwner.end()) {
+        auto& tempDirsByOwner = ss->TempDirsState.TempDirsByOwner;
+        const auto it = tempDirsByOwner.find(ownerActorId);
+        if (it == tempDirsByOwner.end()) {
             continue;
         }
 
@@ -837,7 +857,7 @@ void TSideEffects::DoUpdateTempDirsToRemoveState(TSchemeShard* ss, const TActorC
         }
 
         if (it->second.empty()) {
-            TempDirsByOwner.erase(it);
+            tempDirsByOwner.erase(it);
 
             auto& nodeStates = ss->TempDirsState.NodeStates;
 

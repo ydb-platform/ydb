@@ -39,6 +39,7 @@ private:
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
+    bool CheckRotateCdcStream(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalRestoreSrc(TActiveTransaction *activeTx);
     bool CheckCreateIncrementalBackupSrc(TActiveTransaction *activeTx);
 
@@ -382,6 +383,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
         break;
     case TSchemaOperation::ETypeDropCdcStream:
         res = CheckDropCdcStream(activeTx);
+        break;
+    case TSchemaOperation::ETypeRotateCdcStream:
+        res = CheckRotateCdcStream(activeTx);
         break;
     case TSchemaOperation::ETypeCreateIncrementalRestoreSrc:
         res = CheckCreateIncrementalRestoreSrc(activeTx);
@@ -747,6 +751,19 @@ bool TCheckSchemeTxUnit::CheckDropCdcStream(TActiveTransaction *activeTx) {
 
     const auto &notice = activeTx->GetSchemeTx().GetDropCdcStreamNotice();
     if (!HasPathId(activeTx, notice, "DropCdcStream")) {
+        return false;
+    }
+
+    return CheckSchemaVersion(activeTx, notice);
+}
+
+bool TCheckSchemeTxUnit::CheckRotateCdcStream(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "RotateCdcStream", &TPipeline::HasRotateCdcStream)) {
+        return false;
+    }
+
+    const auto &notice = activeTx->GetSchemeTx().GetRotateCdcStreamNotice();
+    if (!HasPathId(activeTx, notice, "RotateCdcStream")) {
         return false;
     }
 

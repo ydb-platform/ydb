@@ -211,10 +211,10 @@ public:
         Underlying_->UnsubscribeAborted(handler);
     }
 
-    std::optional<TString> TryGetStickyProxyAddress() const override
+    std::optional<std::string> TryGetStickyProxyAddress() const override
     {
         const auto* derived = Underlying_->TryAs<NRpcProxy::TTransaction>();
-        return nullptr == derived ? std::nullopt : std::make_optional(derived->GetStickyProxyAddress());
+        return !derived ? std::nullopt : derived->GetStickyProxyAddress();
     }
 
     UNIMPLEMENTED_METHOD(TFuture<void>, SetNode, (const NYPath::TYPath&, const NYson::TYsonString&, const TSetNodeOptions&));
@@ -237,6 +237,7 @@ public:
     UNIMPLEMENTED_METHOD(IJournalReaderPtr, CreateJournalReader, (const NYPath::TYPath&, const TJournalReaderOptions&));
     UNIMPLEMENTED_METHOD(IJournalWriterPtr, CreateJournalWriter, (const NYPath::TYPath&, const TJournalWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingDistributedWriteSession, (const TSignedDistributedWriteSessionPtr, const TDistributedWriteSessionPingOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, Abort, (const TPrerequisiteAbortOptions&));
 
@@ -335,6 +336,8 @@ public:
 
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
 
+    const TClientOptions& GetOptions() override;
+
     ITransactionPtr AttachTransaction(NTransactionClient::TTransactionId, const TTransactionAttachOptions&) override;
 
     IPrerequisitePtr AttachPrerequisite(NPrerequisiteClient::TPrerequisiteId, const TPrerequisiteAttachOptions&) override;
@@ -354,7 +357,7 @@ public:
     void Terminate() override
     { }
 
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(const TGetCurrentUserOptions& options) override
+    TFuture<TGetCurrentUserResult> GetCurrentUser(const TGetCurrentUserOptions& options) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetCurrentUser(options);
@@ -396,6 +399,8 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterTable, (const NYPath::TYPath&, const TAlterTableOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterTableReplica, (NTabletClient::TTableReplicaId, const TAlterTableReplicaOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterReplicationCard, (NChaosClient::TReplicationCardId, const TAlterReplicationCardOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, StartChaosLease, (const TChaosLeaseStartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IPrerequisitePtr>, AttachChaosLease, (NChaosClient::TChaosLeaseId, const TChaosLeaseAttachOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const NYPath::TYPath&, const NTableClient::TNameTablePtr&, const TSharedRange<NTableClient::TUnversionedRow>&, const TGetInSyncReplicasOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<NTabletClient::TTableReplicaId>>, GetInSyncReplicas, (const NYPath::TYPath&, const TGetInSyncReplicasOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetTabletErrorsResult>, GetTabletErrors, (const NYPath::TYPath&, const TGetTabletErrorsOptions&));
@@ -431,6 +436,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TGetJobStderrResponse>, GetJobStderr, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobStderrOptions&));
     UNIMPLEMENTED_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (const NScheduler::TOperationIdOrAlias&, const TGetJobTraceOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TSharedRef>, GetJobFailContext, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobFailContextOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<std::vector<TOperationEvent>>, ListOperationEvents, (const NScheduler::TOperationIdOrAlias&, const TListOperationEventsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListOperationsResult>, ListOperations, (const TListOperationsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListJobsResult>, ListJobs, (const NScheduler::TOperationIdOrAlias&, const TListJobsOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NYson::TYsonString>, GetJob, (const NScheduler::TOperationIdOrAlias&, NJobTrackerClient::TJobId, const TGetJobOptions&));
@@ -480,6 +486,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TListQueriesResult>, ListQueries, (const TListQueriesOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AlterQuery, (NQueryTrackerClient::TQueryId, const TAlterQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TGetQueryTrackerInfoResult>, GetQueryTrackerInfo, (const TGetQueryTrackerInfoOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (const TGetQueryDeclaredParametersInfoOptions&));
     UNIMPLEMENTED_METHOD(TFuture<NBundleControllerClient::TBundleConfigDescriptorPtr>, GetBundleConfig, (const std::string&, const NBundleControllerClient::TGetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, SetBundleConfig, (const std::string&, const NBundleControllerClient::TBundleTargetConfigPtr&, const NBundleControllerClient::TSetBundleConfigOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableReaderPtr>, CreateTableReader, (const NYPath::TRichYPath&, const TTableReaderOptions&));
@@ -499,10 +506,11 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TGetFlowViewResult>, GetFlowView, (const NYPath::TYPath&, const NYPath::TYPath&, const TGetFlowViewOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TFlowExecuteResult>, FlowExecute, (const NYPath::TYPath&, const TString&, const NYson::TYsonString&, const TFlowExecuteOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TDistributedWriteSessionWithCookies>, StartDistributedWriteSession, (const NYPath::TRichYPath&, const TDistributedWriteSessionStartOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<void>, PingDistributedWriteSession, (const TSignedDistributedWriteSessionPtr, const TDistributedWriteSessionPingOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, FinishDistributedWriteSession, (const TDistributedWriteSessionWithResults&, const TDistributedWriteSessionFinishOptions&));
     UNIMPLEMENTED_METHOD(TFuture<ITableFragmentWriterPtr>, CreateTableFragmentWriter, (const TSignedWriteFragmentCookiePtr&, const TTableFragmentWriterOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TSignedShuffleHandlePtr>, StartShuffle, (const std::string& , int, NObjectClient::TTransactionId, const TStartShuffleOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<std::pair<int, int>>, const TShuffleReaderOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<IRowBatchReaderPtr>, CreateShuffleReader, (const TSignedShuffleHandlePtr&, int, std::optional<TIndexRange>, const TShuffleReaderOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IRowBatchWriterPtr>, CreateShuffleWriter, (const TSignedShuffleHandlePtr&, const std::string&, std::optional<int>, const TShuffleWriterOptions&));
 
 private:
@@ -755,6 +763,12 @@ const NTransactionClient::ITimestampProviderPtr& TClient::GetTimestampProvider()
 {
     auto [client, _] = GetActiveClient();
     return client->GetTimestampProvider();
+}
+
+const TClientOptions& TClient::GetOptions()
+{
+    auto [client, _] = GetActiveClient();
+    return client->GetOptions();
 }
 
 ITransactionPtr TClient::AttachTransaction(

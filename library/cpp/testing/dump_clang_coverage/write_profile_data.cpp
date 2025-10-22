@@ -118,8 +118,9 @@ void __attribute__((constructor)) premain() {
     if (getenv("YA_COVERAGE_DUMP_PROFILE_AND_EXIT")) {
         __llvm_profile_initialize_file();
         int rc = __llvm_profile_write_file();
-        if (!rc && getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE"))
+        if (!rc && getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE")) {
             rc = atoi(getenv("YA_COVERAGE_DUMP_PROFILE_EXIT_CODE"));
-        exit(rc);
+        }
+        _Exit(rc);
     }
 }

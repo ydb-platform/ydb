@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from libcpp.string cimport string
+
 cimport libc.time
 
 ctypedef          ssize_t   intptr_t
@@ -56,6 +58,28 @@ cdef extern from "<condition_variable>" namespace "std" nogil:
     void wait(unique_lock[mutex]&)
 
 # gRPC Core Declarations
+
+cdef extern from "src/core/lib/channel/call_tracer.h" namespace "grpc_core":
+    cdef cppclass ClientCallTracer:
+        pass
+
+    cdef cppclass ServerCallTracer:
+        string TraceId() nogil
+        string SpanId() nogil
+        bint IsSampled() nogil
+
+    cdef cppclass ServerCallTracerFactory:
+        @staticmethod
+        void RegisterGlobal(ServerCallTracerFactory* factory) nogil
+
+cdef extern from "src/core/lib/channel/context.h":
+  ctypedef enum grpc_context_index:
+    GRPC_CONTEXT_CALL_TRACER_ANNOTATION_INTERFACE
+
+cdef extern from "src/core/lib/surface/call.h":
+  void grpc_call_context_set(grpc_call* call, grpc_context_index elem,
+                             void* value, void (*destroy)(void* value)) nogil
+  void *grpc_call_context_get(grpc_call* call, grpc_context_index elem) nogil
 
 cdef extern from "grpc/support/alloc.h":
 
@@ -410,6 +434,12 @@ cdef extern from "grpc/grpc.h":
     grpc_channel *channel, grpc_call *parent_call, uint32_t propagation_mask,
     grpc_completion_queue *completion_queue, grpc_slice method,
     const grpc_slice *host, gpr_timespec deadline, void *reserved) nogil
+  void *grpc_channel_register_call(
+    grpc_channel *channel, const char *method, const char *host, void *reserved) nogil
+  grpc_call *grpc_channel_create_registered_call(
+    grpc_channel *channel, grpc_call *parent_call, uint32_t propagation_mask,
+    grpc_completion_queue *completion_queue, void* registered_call_handle,
+    gpr_timespec deadline, void *reserved) nogil
   grpc_connectivity_state grpc_channel_check_connectivity_state(
       grpc_channel *channel, int try_to_connect) nogil
   void grpc_channel_watch_connectivity_state(

@@ -153,6 +153,7 @@ class YQv2Extension(ExtensionPoint):
             'enable_external_data_sources',
             'enable_script_execution_operations',
             'enable_external_source_schema_inference',
+            'enable_pg_syntax',
         ]
         if self.is_replace_if_exists:
             extra_feature_flags.append('enable_replace_if_exists_for_external_entities')
@@ -194,6 +195,9 @@ class YQv2Extension(ExtensionPoint):
                         'connection': {
                             'endpoint': kikimr.tenants["/compute"].endpoint(),
                             'database': '/local'
+                        },
+                        'access_config': {
+                            'external_sources_access_sid' : ['account@as']
                         }
                     }
                 }

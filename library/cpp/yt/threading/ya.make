@@ -13,7 +13,6 @@ SRCS(
     public.cpp
     recursive_spin_lock.cpp
     rw_spin_lock.cpp
-    spin_lock_base.cpp
     spin_lock_count.cpp
     spin_lock.cpp
     spin_wait.cpp

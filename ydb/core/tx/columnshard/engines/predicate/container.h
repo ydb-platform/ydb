@@ -116,6 +116,14 @@ public:
         std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
+
+    size_t GetMemorySize() const {
+        size_t res = sizeof(TPredicateContainer);
+        res += Object ? sizeof(NOlap::TPredicate) : 0;
+        res += ReplaceKey ? ReplaceKey->GetMemorySize() : 0;
+        // Column names are cached, may be changed
+        return res;
+    }
 };
 
 }   // namespace NKikimr::NOlap

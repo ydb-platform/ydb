@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemon.h>
+#include <ydb/core/blobstorage/dsproxy/dsproxy_test_helpers.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
@@ -31,8 +32,8 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/affinity.h>
@@ -1431,7 +1432,7 @@ class TTestBlobStorageProxyVPutVGet : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                    new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                                               nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                                               nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 ctx.Send(Env->VDisks[vDiskIdx], vPut.Release());
                 break;
             }
@@ -1521,7 +1522,7 @@ class TTestBlobStorageProxyVPutVGetLimit : public TTestBlobStorageProxy {
 
                     TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(id, partSet.Parts[partIdx].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                     auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                     msgId.SetMsgId(i);
                     msgId.SetSequenceId(1);
@@ -1660,7 +1661,7 @@ private:
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                         new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[parametrs.PartId-1].OwnedString, *vDiskId,
-                            false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                            false, nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 ctx.Send(Env->VDisks[realVDiskIdx], vPut.Release());
                 break;
             }
@@ -1890,7 +1891,7 @@ class TTestBlobStorageProxyVBlockVPutVGet : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(0);
                 msgId.SetSequenceId(1);
@@ -2647,7 +2648,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                     new TEvBlobStorage::TEvVPut(from, partSet.Parts[0].OwnedString, vDiskId, false, nullptr,
-                                                TInstant::Max(), NKikimrBlobStorage::TabletLog));
+                                                TInstant::Max(), NKikimrBlobStorage::TabletLog, false));
                 auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(MsgIdx);
                 msgId.SetSequenceId(9990);
@@ -2685,7 +2686,7 @@ class TTestBlobStorageProxyLongTailDiscoverPut : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> vPut(
                     new TEvBlobStorage::TEvVPut(from, partSet.Parts[0].OwnedString, vDiskId, false, nullptr,
-                                                TInstant::Max(), NKikimrBlobStorage::TabletLog));
+                                                TInstant::Max(), NKikimrBlobStorage::TabletLog, false));
                 auto& msgId = *vPut->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(MsgIdx);
                 msgId.SetSequenceId(9990);
@@ -3311,7 +3312,7 @@ class TTestBlobStorageProxyVPutVCollectVGetRace : public TTestBlobStorageProxy {
 
                 TAutoPtr<TEvBlobStorage::TEvVPut> x(
                     new TEvBlobStorage::TEvVPut(logoblobid, partSet.Parts[0].OwnedString, vDiskId, false,
-                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob));
+                        nullptr, TInstant::Max(), NKikimrBlobStorage::AsyncBlob, false));
                 auto& msgId = *x->Record.MutableMsgQoS()->MutableMsgId();
                 msgId.SetMsgId(0);
                 msgId.SetSequenceId(1);
@@ -3433,32 +3434,29 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
 
         switch (TestStep) {
             case 0: {
-                TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched(2);
-                batched[0] = GetPut(blobIds[0], Data1);
-                batched[1] = GetPut(blobIds[1], Data2);
+                Batched[0] = GetPut(blobIds[0], Data1);
+                Batched[1] = GetPut(blobIds[1], Data2);
 
                 TMaybe<TGroupStat::EKind> kind = PutHandleClassToGroupStatKind(HandleClass);
-                IActor *reqActor = CreateBlobStorageGroupPutRequest(
-                        TBlobStorageGroupMultiPutParameters{
-                            .Common = {
-                                .GroupInfo = BsInfo,
-                                .GroupQueues = GroupQueues,
-                                .Mon = Mon,
-                                .Now = TMonotonic::Now(),
-                                .StoragePoolCounters = StoragePoolCounters,
-                                .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(batched),
-                                .LatencyQueueKind = kind,
-                            },
-                            .Events = batched,
-                            .TimeStatsEnabled = false,
-                            .Stats = PerDiskStatsPtr,
-                            .HandleClass = HandleClass,
-                            .Tactic = Tactic,
-                            .EnableRequestMod3x3ForMinLatency = false,
-                            .AccelerationParams = TAccelerationParams{},
-                        });
-
-                ctx.Register(reqActor);
+                ctx.Send(Proxy, new TEvExplicitMultiPut(TBlobStorageGroupMultiPutParameters{
+                        .Common = {
+                            .GroupInfo = BsInfo,
+                            .GroupQueues = GroupQueues,
+                            .Mon = Mon,
+                            .Now = TMonotonic::Now(),
+                            .StoragePoolCounters = StoragePoolCounters,
+                            .RestartCounter = TBlobStorageGroupMultiPutParameters::CalculateRestartCounter(Batched),
+                            .LatencyQueueKind = kind,
+                            .DoSendDeathNote = false,
+                        },
+                        .Events = Batched,
+                        .TimeStatsEnabled = false,
+                        .Stats = PerDiskStatsPtr,
+                        .HandleClass = HandleClass,
+                        .Tactic = Tactic,
+                        .EnableRequestMod3x3ForMinLatency = false,
+                        .AccelerationParams = TAccelerationParams{},
+                }));
                 break;
             }
             case 10:
@@ -3486,10 +3484,12 @@ class TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob : public TTe
     NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
     TString Data1;
     TString Data2;
+    TBatchedVec<TEvBlobStorage::TEvPut::TPtr> Batched;
 public:
     TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob(const TActorId &proxy, const TIntrusivePtr<TBlobStorageGroupInfo> &bsInfo,
             const TIntrusivePtr<TTestEnvironment> &env, const TIntrusivePtr<ITestParametrs> &parametrs)
         : TTestBlobStorageProxyForRequest(proxy, bsInfo, env, parametrs)
+        , Batched(2)
     {
         Data1.resize(MaxBatchedPutSize - 1, 'a');
         Data2.resize(1, 'a');

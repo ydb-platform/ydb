@@ -1,7 +1,5 @@
 # Vector Indexes
 
-{% include [limitations](../_includes/vector_index_limitations.md) %}
-
 [Vector indexes](../concepts/glossary.md#vector-index) are specialized data structures that enable efficient [vector search](../concepts/vector_search.md) in multidimensional spaces. Unlike [secondary indexes](../concepts/glossary.md#secondary-index), which optimize searching by equality or range, vector indexes allow similarity searching based on [similarity or distance functions](../yql/reference/udf/list/knn.md#functions).
 
 Data in a {{ ydb-short-name }} table is stored and sorted by the primary key, ensuring efficient searching by exact match and range scanning. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces.
@@ -40,7 +38,7 @@ Internally, a vector index consists of hidden index tables named `indexImpl*Tabl
 
 A vector index can be **covering**, meaning it includes additional columns to enable reading from the index without accessing the main table.
 
-Alternatively, it can be **prefixed**, allowing for additional columns to be used for quick filtering during reading.
+Alternatively, it can be **filtered**, allowing for additional columns to be used for quick filtering during reading.
 
 Below are examples of creating vector indexes of different types.
 
@@ -68,9 +66,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Prefixed Vector Index {#prefixed}
+### Filtered Vector Index {#filtered}
 
-A prefixed vector index, allowing filtering by the prefix column `user` during vector search:
+A filtered vector index, allowing filtering by the column `user` during vector search:
 
 ```yql
 ALTER TABLE my_table
@@ -80,9 +78,9 @@ ALTER TABLE my_table
   WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
 ```
 
-### Prefixed Vector Index with Covering Columns {#prefixed-covering}
+### Filtered Vector Index with Covering Columns {#filtered-covering}
 
-A prefixed vector index with covering columns:
+A filtered vector index with covering columns:
 
 ```yql
 ALTER TABLE my_table
@@ -101,13 +99,25 @@ Vector indexes can be created:
 
 ## Using Vector Indexes {#select}
 
-Queries to vector indexes are executed using the `VIEW` syntax in YQL. For prefixed indexes, specify the prefix columns in the `WHERE` clause:
+Queries to vector indexes are executed using the `VIEW` syntax in YQL:
 
 ```yql
 DECLARE $query_vector AS List<Uint8>;
 
 SELECT user, data
 FROM my_table VIEW my_index
+ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
+LIMIT 10;
+```
+
+For filtered indexes, specify the columns in the `WHERE` clause:
+
+```yql
+DECLARE $query_vector AS List<Uint8>;
+
+SELECT user, data
+FROM my_table VIEW my_index
+WHERE user = 'john'
 ORDER BY Knn::CosineSimilarity(embedding, $query_vector) DESC
 LIMIT 10;
 ```
@@ -122,3 +132,23 @@ It is recommended to check the optimality of the written query using [query stat
 
 {% endnote %}
 
+## Updating Vector Indexes {#update}
+
+When a table with a vector index is updated, its internal structure — a tree of clusters (groups of similar vectors) — is not recalculated. New or modified records are simply assigned to existing clusters.
+
+Over time, this can lead to index degradation, resulting in:
+
+1. Reduced completeness — the index may return fewer relevant results because clusters no longer reflect the actual data distribution.
+2. Reduced performance — unbalanced clusters (for example, one cluster containing too many records) can slow down search queries and, in the worst case, lead to full table scans.
+
+The extent of degradation depends on the nature of the updates:
+
+- If the index was built on a representative sample (e.g., a random 50% of the data) and the remaining records are added later, the index structure remains mostly relevant, and degradation is minimal.
+- If entire groups of similar vectors were absent from the initial dataset, the clustering may fail to partition the space effectively, leading to a significant drop in result relevance.
+
+A particularly problematic corner case arises when a vector index is created on an empty table. In this scenario, the index consists of a single cluster, and all new records are placed within it. As a result, searches using such an index are equivalent to full table scans.
+
+To prevent degradation:
+
+- Avoid creating a vector index on an empty table.
+- If a large volume of new data has been added, [build a new index](../yql/reference/syntax/alter_table/indexes.md) and [atomically replace](../reference/ydb-cli/commands/secondary_index.md#rename) the old index with the updated one.

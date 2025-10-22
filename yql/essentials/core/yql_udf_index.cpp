@@ -4,7 +4,9 @@
 namespace NYql {
 namespace {
 
-TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResult& resolveResult, const TMap<TString, TString>& pathsWithMd5, bool isTrusted) {
+TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResult& resolveResult,
+    const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted)
+{
     THashMap<TString, size_t> importIndex; // module => Imports index
     THashMap<TString, size_t> packageIndex; // package => Imports index
     THashMap<TString, TVector<TFunctionInfo>> functionIndex; // package => vector of functions
@@ -67,7 +69,8 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
         auto info = MakeIntrusive<TResourceInfo>();
         info->IsTrusted = isTrusted;
         auto md5 = pathsWithMd5.FindPtr(import.GetFileAlias());
-        info->Link = TDownloadLink::File(import.GetFileAlias(), md5 ? *md5 : "");
+        auto url = aliasToPath.FindPtr(import.GetFileAlias());
+        info->Link = TDownloadLink::File(url ? *url : import.GetFileAlias(), md5 ? *md5 : "");
         info->Modules.insert(import.GetModules().begin(), import.GetModules().end());
         info->SetFunctions(p.second);
 
@@ -77,8 +80,8 @@ TVector<TResourceInfo::TPtr> ConvertResolveResultToResources(const TResolveResul
     return result;
 }
 
-void AddResolveResultToRegistry(const TResolveResult& resolveResult, const TMap<TString, TString>& pathsWithMd5, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry) {
-    auto resources = ConvertResolveResultToResources(resolveResult, pathsWithMd5, isTrusted);
+void AddResolveResultToRegistry(const TResolveResult& resolveResult, const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry) {
+    auto resources = ConvertResolveResultToResources(resolveResult, pathsWithMd5, aliasToPath, isTrusted);
     registry.RegisterResources(resources, mode);
 }
 
@@ -298,42 +301,48 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TStr
     for (const auto& path : paths) {
         pathsWithMd5[path] = "";
     }
-    LoadRichMetadataToUdfIndex(resolver, pathsWithMd5, isTrusted, mode, registry, storage, logLevel);
+    LoadRichMetadataToUdfIndex(resolver, pathsWithMd5, {}, isTrusted, mode, registry, storage, logLevel);
 }
 
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString, TString>& pathsWithMd5, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel) {
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TMap<TString, TString>& pathsWithMd5, const TMap<TString, TString>& aliasToPath, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel) {
     TVector<TString> paths;
     paths.reserve(pathsWithMd5.size());
     for (const auto& p : pathsWithMd5) {
         paths.push_back(p.first);
     }
     const TResolveResult resolveResult = LoadRichMetadata(resolver, paths, storage, logLevel);
-    AddResolveResultToRegistry(resolveResult, pathsWithMd5, isTrusted, mode, registry);
+    AddResolveResultToRegistry(resolveResult, pathsWithMd5, aliasToPath, isTrusted, mode, registry);
 }
 
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel) {
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks,
+    bool isTrusted, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage,
+    NUdf::ELogLevel logLevel, const TVector<TStringBuf>& aliases)
+{
     TVector<TUserDataBlock> blocksResolve;
     blocksResolve.reserve(blocks.size());
     // we can work with file path only
     TMap<TString, TString> pathsWithMd5;
+    TMap<TString, TString> aliasToPath;
+    TVector<IUdfResolver::TImport> imports;
+    imports.reserve(blocks.size());
+    size_t i = 0;
     for (auto& b : blocks) {
         TString path;
+        TString md5;
         switch (b.Type) {
         case EUserDataType::URL:
             if (!b.FrozenFile) {
                 ythrow yexception() << "DataBlock for " << b.Data << " is not frozen";
             }
             path = b.FrozenFile->GetPath().GetPath();
-            pathsWithMd5.emplace(path, b.FrozenFile->GetMd5());
+            md5 = b.FrozenFile->GetMd5();
             break;
         case EUserDataType::PATH:
         {
-            TString md5;
             if (b.FrozenFile) {
                 md5 = b.FrozenFile->GetMd5();
             }
             path = b.Data;
-            pathsWithMd5.emplace(b.Data, md5);
             break;
         }
         default:
@@ -341,21 +350,28 @@ void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TVector<TUse
         }
 
         TUserDataBlock br;
-        br.Type = EUserDataType::PATH;
+        br.Type = b.Type;
         br.Data = path;
         br.Usage.Set(EUserDataBlockUsage::Udf);
         br.CustomUdfPrefix = b.CustomUdfPrefix;
         br.FrozenFile = b.FrozenFile;
         blocksResolve.emplace_back(br);
+        IUdfResolver::TImport import;
+        import.Block = &b;
+        import.FileAlias = aliases.empty() ? b.Data : aliases.at(i++);
+        aliasToPath[import.FileAlias] = path;
+        pathsWithMd5.emplace(import.FileAlias, md5);
+        imports.emplace_back(import);
     }
-    const TResolveResult resolveResult = LoadRichMetadata(resolver, blocksResolve, storage, logLevel);
-    AddResolveResultToRegistry(resolveResult, pathsWithMd5, isTrusted, mode, registry);
+
+    const TResolveResult resolveResult = resolver.LoadRichMetadata(imports, logLevel, storage);
+    AddResolveResultToRegistry(resolveResult, pathsWithMd5, aliasToPath, isTrusted, mode, registry);
 }
 
-void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel) {
+void LoadRichMetadataToUdfIndex(const IUdfResolver& resolver, const TUserDataBlock& block, TUdfIndex::EOverrideMode mode, TUdfIndex& registry, THoldingFileStorage& storage, NUdf::ELogLevel logLevel, const TStringBuf& aliases) {
     TVector<TUserDataBlock> blocks({ block });
     const bool isTrusted = false;
-    LoadRichMetadataToUdfIndex(resolver, blocks, isTrusted, mode, registry, storage, logLevel);
+    LoadRichMetadataToUdfIndex(resolver, blocks, isTrusted, mode, registry, storage, logLevel, {aliases});
 }
 
 } // namespace NYql

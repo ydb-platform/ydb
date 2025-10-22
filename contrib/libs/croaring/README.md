@@ -9,6 +9,38 @@
 
 Portable Roaring bitmaps in C (and C++) with full support for your favorite compiler (GNU GCC, LLVM's clang, Visual Studio, Apple Xcode, Intel oneAPI). Included in the [Awesome C](https://github.com/kozross/awesome-c) list of open source C software.
 
+# Table of Contents
+
+- [Introduction](#introduction)
+- [Objective](#objective)
+- [Requirements](#requirements)
+- [Quick Start](#quick-start)
+- [Packages](#packages)
+- [Using Roaring as a CPM dependency](#using-roaring-as-a-cpm-dependency)
+- [Using as a CMake dependency with FetchContent](#using-as-a-cmake-dependency-with-fetchcontent)
+- [Amalgamating](#amalgamating)
+- [API](#api)
+  - [Main API functions](#main-api-functions)
+  - [C++ API functions](#c-api-functions)
+- [Dealing with large volumes of data](#dealing-with-large-volumes-of-data)
+- [Running microbenchmarks](#running-microbenchmarks)
+- [Custom memory allocators](#custom-memory-allocators)
+- [Example (C)](#example-c)
+- [Compressed 64-bit Roaring bitmaps (C)](#compressed-64-bit-roaring-bitmaps-c)
+- [Conventional bitsets (C)](#conventional-bitsets-c)
+- [Example (C++)](#example-c-1)
+- [Building with cmake (Linux and macOS, Visual Studio users should see below)](#building-with-cmake-linux-and-macos-visual-studio-users-should-see-below)
+- [Building (Visual Studio under Windows)](#building-visual-studio-under-windows)
+  - [Usage (Using conan)](#usage-using-conan)
+  - [Usage (Using vcpkg on Windows, Linux and macOS)](#usage-using-vcpkg-on-windows-linux-and-macos)
+- [SIMD-related throttling](#simd-related-throttling)
+- [Thread safety](#thread-safety)
+- [How to best aggregate bitmaps?](#how-to-best-aggregate-bitmaps)
+- [Wrappers for Roaring Bitmaps](#wrappers-for-roaring-bitmaps)
+- [Mailing list/discussion group](#mailing-listdiscussion-group)
+- [Contributing](#contributing)
+- [References about Roaring](#references-about-roaring)
+
 # Introduction
 
 Bitsets, also called bitmaps, are commonly used as fast data structures. Unfortunately, they can use too much memory.
@@ -16,7 +48,7 @@ Bitsets, also called bitmaps, are commonly used as fast data structures. Unfortu
 
 Roaring bitmaps are compressed bitmaps which tend to outperform conventional compressed bitmaps such as WAH, EWAH or Concise.
 They are used by several major systems such as [Apache Lucene][lucene] and derivative systems such as [Solr][solr] and
-[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
+[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), [YDB](https://ydb.tech), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
 
 We published a peer-reviewed article on the design and evaluation of this library:
 
@@ -144,6 +176,12 @@ Linux or macOS users might follow the following instructions if they have a rece
     ```
 
 
+
+Packages
+------
+
+[![Packaging status](https://repology.org/badge/vertical-allrepos/croaring.svg)](https://repology.org/project/croaring/versions)
+
 # Using Roaring as a CPM dependency
 
 
@@ -243,11 +281,191 @@ The C interface is found in the files
 
 We also have a C++ interface:
 
-- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring.hh),
-- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring64map.hh).
+- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring.hh),
+- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring64map.hh).
 
 
-# Dealing with large volumes
+# Main API functions
+
+Below is an overview of the main functions provided by CRoaring in C, covering both 32-bit (`roaring.h`) and 64-bit (`roaring64.h`) bitmaps. For more details, see the header files in `include/roaring/` or the Doxygen documentation.
+
+## Creation and Destruction
+- `roaring_bitmap_t *roaring_bitmap_create(void);`  
+  Create a new empty 32-bit bitmap.
+- `roaring64_bitmap_t *roaring64_bitmap_create(void);`  
+  Create a new empty 64-bit bitmap.
+- `void roaring_bitmap_free(roaring_bitmap_t *r);`  
+  Free a 32-bit bitmap.
+- `void roaring64_bitmap_free(roaring64_bitmap_t *r);`  
+  Free a 64-bit bitmap.
+
+## Adding and Removing Values
+- `void roaring_bitmap_add(roaring_bitmap_t *r, uint32_t x);`  
+  Add value `x` to a 32-bit bitmap.
+- `void roaring64_bitmap_add(roaring64_bitmap_t *r, uint64_t x);`  
+  Add value `x` to a 64-bit bitmap.
+- `void roaring_bitmap_remove(roaring_bitmap_t *r, uint32_t x);`  
+  Remove value `x` from a 32-bit bitmap.
+- `void roaring64_bitmap_remove(roaring64_bitmap_t *r, uint64_t x);`  
+  Remove value `x` from a 64-bit bitmap.
+
+## Queries and Cardinality
+- `bool roaring_bitmap_contains(const roaring_bitmap_t *r, uint32_t x);`  
+  Check if `x` is present in a 32-bit bitmap.
+- `bool roaring64_bitmap_contains(const roaring64_bitmap_t *r, uint64_t x);`  
+  Check if `x` is present in a 64-bit bitmap.
+- `uint64_t roaring_bitmap_get_cardinality(const roaring_bitmap_t *r);`  
+  Get the number of elements in a 32-bit bitmap.
+- `uint64_t roaring64_bitmap_get_cardinality(const roaring64_bitmap_t *r);`  
+  Get the number of elements in a 64-bit bitmap.
+
+## Iteration
+- `bool roaring_iterate(const roaring_bitmap_t *r, roaring_iterator iterator, void *param);`  
+  Iterate over all values in a 32-bit bitmap, calling `iterator` for each value.
+- `bool roaring64_iterate(const roaring64_bitmap_t *r, roaring_iterator64 iterator, void *param);`  
+  Iterate over all values in a 64-bit bitmap.
+
+## Set Operations
+- `roaring_bitmap_t *roaring_bitmap_and(const roaring_bitmap_t *r1, const roaring_bitmap_t *r2);`  
+  Intersection (AND) of two 32-bit bitmaps.
+- `roaring64_bitmap_t *roaring64_bitmap_and(const roaring64_bitmap_t *r1, const roaring64_bitmap_t *r2);`  
+  Intersection (AND) of two 64-bit bitmaps.
+- `roaring_bitmap_t *roaring_bitmap_or(const roaring_bitmap_t *r1, const roaring_bitmap_t *r2);`  
+  Union (OR) of two 32-bit bitmaps.
+- `roaring64_bitmap_t *roaring64_bitmap_or(const roaring64_bitmap_t *r1, const roaring64_bitmap_t *r2);`  
+  Union (OR) of two 64-bit bitmaps.
+- `roaring_bitmap_t *roaring_bitmap_xor(const roaring_bitmap_t *r1, const roaring_bitmap_t *r2);`  
+  Symmetric difference (XOR) of two 32-bit bitmaps.
+- `roaring64_bitmap_t *roaring64_bitmap_xor(const roaring64_bitmap_t *r1, const roaring64_bitmap_t *r2);`  
+  Symmetric difference (XOR) of two 64-bit bitmaps.
+- `roaring_bitmap_t *roaring_bitmap_andnot(const roaring_bitmap_t *r1, const roaring_bitmap_t *r2);`  
+  Difference (r1 \ r2) for 32-bit bitmaps.
+- `roaring64_bitmap_t *roaring64_bitmap_andnot(const roaring64_bitmap_t *r1, const roaring64_bitmap_t *r2);`  
+  Difference (r1 \ r2) for 64-bit bitmaps.
+
+## Serialization and Deserialization
+- `size_t roaring_bitmap_portable_size_in_bytes(const roaring_bitmap_t *r);`  
+  Get the number of bytes required to serialize a 32-bit bitmap.
+- `size_t roaring64_bitmap_portable_size_in_bytes(const roaring64_bitmap_t *r);`  
+  Get the number of bytes required to serialize a 64-bit bitmap.
+- `size_t roaring_bitmap_portable_serialize(const roaring_bitmap_t *r, char *buf);`  
+  Serialize a 32-bit bitmap to a buffer (portable format).
+- `size_t roaring64_bitmap_portable_serialize(const roaring64_bitmap_t *r, char *buf);`  
+  Serialize a 64-bit bitmap to a buffer (portable format).
+- `roaring_bitmap_t *roaring_bitmap_portable_deserialize(const char *buf);`  
+  Deserialize a 32-bit bitmap from a buffer.
+- `roaring64_bitmap_t *roaring64_bitmap_portable_deserialize(const char *buf);`  
+  Deserialize a 64-bit bitmap from a buffer.
+- `roaring_bitmap_t *roaring_bitmap_portable_deserialize_safe(const char *buf, size_t maxbytes);`  
+  Safe deserialization of a 32-bit bitmap (will not read past `maxbytes`).
+- `roaring64_bitmap_t *roaring64_bitmap_portable_deserialize_safe(const char *buf, size_t maxbytes);`  
+  Safe deserialization of a 64-bit bitmap.
+- `size_t roaring_bitmap_portable_deserialize_size(const char *buf, size_t maxbytes);`  
+  Get the size of a serialized 32-bit bitmap (returns 0 if invalid).
+- `size_t roaring64_bitmap_portable_deserialize_size(const char *buf, size_t maxbytes);`  
+  Get the size of a serialized 64-bit bitmap (returns 0 if invalid).
+
+## Validation
+- `bool roaring_bitmap_internal_validate(const roaring_bitmap_t *r, const char **reason);`  
+  Validate the internal structure of a 32-bit bitmap. Returns `true` if valid, `false` otherwise. If invalid, `reason` points to a string describing the problem.
+- `bool roaring64_bitmap_internal_validate(const roaring64_bitmap_t *r, const char **reason);`  
+  Validate the internal structure of a 64-bit bitmap.
+
+## Notes
+- All memory allocated by the library must be freed using the corresponding `free` function.
+- The portable serialization format is cross-platform and can be shared between different languages and architectures.
+- Always validate bitmaps deserialized from untrusted sources before using them.
+
+
+
+# C++ API functions
+
+The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh` (64-bit) headers. These offer a modern, type-safe, and convenient API for manipulating Roaring bitmaps in C++.
+
+## Main Classes
+- `roaring::Roaring` — 32-bit Roaring bitmap
+- `roaring::Roaring64Map` — 64-bit Roaring bitmap
+
+## Common Methods (32-bit and 64-bit)
+- `Roaring()` / `Roaring64Map()`
+  - Construct an empty bitmap.
+- `Roaring(std::initializer_list<uint32_t> values)`
+  - Construct from a list of values.
+- `void add(uint32_t x)` / `void add(uint64_t x)`
+  - Add a value to the bitmap.
+- `void remove(uint32_t x)` / `void remove(uint64_t x)`
+  - Remove a value from the bitmap.
+- `bool contains(uint32_t x) const` / `bool contains(uint64_t x) const`
+  - Check if a value is present.
+- `uint64_t cardinality() const`
+  - Get the number of elements in the bitmap.
+- `bool isEmpty() const`
+  - Check if the bitmap is empty.
+- `void clear()`
+  - Remove all elements.
+- `void runOptimize()`
+  - Convert internal containers to run containers for better compression.
+- `void setCopyOnWrite(bool enable)`
+  - Enable or disable copy-on-write mode for fast/shallow copies.
+- `bool operator==(const Roaring&) const` / `bool operator==(const Roaring64Map&) const`
+  - Equality comparison.
+- `void swap(Roaring&)` / `void swap(Roaring64Map&)`
+  - Swap contents with another bitmap.
+
+## Set Operations
+- `Roaring operator|(const Roaring&) const` / `Roaring64Map operator|(const Roaring64Map&) const`
+  - Union (OR)
+- `Roaring operator&(const Roaring&) const` / `Roaring64Map operator&(const Roaring64Map&) const`
+  - Intersection (AND)
+- `Roaring operator^(const Roaring&) const` / `Roaring64Map operator^(const Roaring64Map&) const`
+  - Symmetric difference (XOR)
+- `Roaring operator-(const Roaring&) const` / `Roaring64Map operator-(const Roaring64Map&) const`
+  - Difference
+- In-place versions: `operator|=`, `operator&=`, `operator^=`, `operator-=`
+
+## Iteration
+- `Roaring::const_iterator` / `Roaring64Map::const_iterator`
+  - Standard C++ iterator support: `begin()`, `end()`
+- `void iterate(function, void* param)`
+  - Call a function for each value (C-style callback).
+
+## Serialization and Deserialization
+- `size_t getSizeInBytes() const`
+  - Get the size in bytes for serialization.
+- `void write(char* buf) const`
+  - Serialize the bitmap to a buffer.
+- `static Roaring read(const char* buf, bool portable = true)`
+  - Deserialize a bitmap from a buffer.
+- `static Roaring readSafe(const char* buf, size_t maxbytes, bool portable = true)`
+  - Safe deserialization (will not read past `maxbytes`).
+
+## Bulk Operations
+- `void addMany(size_t n, const uint32_t* values)` / `void addMany(size_t n, const uint64_t* values)`
+  - Add many values at once.
+- `void toUint32Array(uint32_t* out) const` / `void toUint64Array(uint64_t* out) const`
+  - Export all values to an array.
+
+## Example Usage
+```cpp
+#include "roaring/roaring.hh"
+using namespace roaring;
+
+Roaring r1;
+r1.add(42);
+if (r1.contains(42)) {
+    // ...
+}
+Roaring r2 = Roaring::bitmapOf(3, 1, 2, 3);
+Roaring r3 = r1 | r2;
+for (auto v : r3) {
+    // iterate over values
+}
+```
+
+For 64-bit values, use `#include "roaring64map.hh"` and the `Roaring64Map` class, which has a similar API.
+
+
+# Dealing with large volumes of data
 
 Some users have to deal with large volumes of data. It  may be important for these users to be aware of the `addMany` (C++) `roaring_bitmap_or_many` (C) functions as it is much faster and economical to add values in batches when possible. Furthermore, calling periodically the `runOptimize` (C++) or `roaring_bitmap_run_optimize` (C) functions may help.
 
@@ -703,7 +921,7 @@ int main() {
 
 
 
-# Building with cmake (Linux and macOS, Visual Studio users should see below)
+# Building with cmake (Linux and macOS, Visual Studio or OpenHarmony users should see below)
 
 CRoaring follows the standard cmake workflow. Starting from the root directory of
 the project (CRoaring), you can do:
@@ -821,6 +1039,11 @@ These commands will also print out instructions on how to use the library from M
 
 If you find the version of `roaring` shipped with `vcpkg` is out-of-date, feel free to report it to `vcpkg` community either by submiting an issue or by creating a PR.
 
+
+# Building (OpenHarmony)
+
+To build with OpenHarmony SDK please see the [OpenHarmony Cross Compile Guide](https://gitcode.com/openharmony-sig/tpc_c_cplusplus/blob/master/Cross-Compilation Guide for Open-Source Third-Party Libraries in OpenHarmony_en.md)
+
 # SIMD-related throttling
 
 Our AVX2 code does not use floating-point numbers or multiplications, so it is not subject to turbo frequency throttling on many-core Intel processors.
@@ -891,20 +1114,25 @@ later `roaring_bitmap_or_inplace` will be very fast.
 
 You should benchmark these alternatives on your own data to decide what is best.
 
-# Wrappers
+# Wrappers for Roaring Bitmaps
+
+This page lists several community-contributed wrappers for the Roaring Bitmap library, enabling its use in various programming languages and environments.
 
 ## Python
-Tom Cornebize wrote a Python wrapper available at https://github.com/Ezibenroc/PyRoaringBitMap
-Installing it is as easy as typing...
+
+Tom Cornebize developed a Python wrapper, **PyRoaringBitMap**, which can be found at [https://github.com/Ezibenroc/PyRoaringBitMap](https://github.com/Ezibenroc/PyRoaringBitMap).
+
+Installation is straightforward using pip:
 
 ```
 pip install pyroaring
 ```
 
-## JavaScript
+## JavaScript (Node.js)
 
-Salvatore Previti  wrote a Node/JavaScript wrapper available at https://github.com/SalvatorePreviti/roaring-node
-Installing it is as easy as typing...
+Salvatore Previti created a Node.js wrapper, **roaring-node**, available at [https://github.com/SalvatorePreviti/roaring-node](https://github.com/SalvatorePreviti/roaring-node).
+
+You can install it via npm with the following command:
 
 ```
 npm install roaring
@@ -912,33 +1140,31 @@ npm install roaring
 
 ## Swift
 
-Jérémie Piotte wrote a [Swift wrapper](https://github.com/RoaringBitmap/SwiftRoaring).
+Jérémie Piotte authored the [Swift wrapper](https://github.com/RoaringBitmap/SwiftRoaring).
 
+## C\#
 
-## C#
+There is a C\# wrapper, **CRoaring.Net**, located at [https://github.com/k-wojcik/Roaring.Net](https://github.com/k-wojcik/Roaring.Net). This wrapper is compatible with Windows and Linux on x64 processors.
 
-Brandon Smith wrote a C# wrapper available at https://github.com/RogueException/CRoaring.Net (works for Windows and Linux under x64 processors)
+## Go (Golang)
 
-
-## Go (golang)
-
-There is a Go (golang) wrapper available at https://github.com/RoaringBitmap/gocroaring
+A Go wrapper is available at the official RoaringBitmap GitHub organization: [https://github.com/RoaringBitmap/gocroaring](https://github.com/RoaringBitmap/gocroaring).
 
 ## Rust
 
-Saulius Grigaliunas wrote a Rust wrapper available at https://github.com/saulius/croaring-rs
+Saulius Grigaliunas developed a Rust wrapper, **croaring-rs**, which can be found at [https://github.com/saulius/croaring-rs](https://github.com/saulius/croaring-rs).
 
 ## D
 
-Yuce Tekol wrote a D wrapper available at https://github.com/yuce/droaring
+Yuce Tekol created a D wrapper, **droaring**, available at [https://github.com/yuce/droaring](https://github.com/yuce/droaring).
 
-## Redis
+## Redis Module
 
-Antonio Guilherme Ferreira Viggiano wrote a Redis Module available at https://github.com/aviggiano/redis-roaring
+Antonio Guilherme Ferreira Viggiano wrote a Redis Module integrating Roaring Bitmaps, available at [https://github.com/aviggiano/redis-roaring](https://github.com/aviggiano/redis-roaring).
 
 ## Zig
 
-Justin Whear wrote a Zig wrapper available at https://github.com/jwhear/roaring-zig
+Justin Whear contributed a Zig wrapper, located at [https://github.com/jwhear/roaring-zig](https://github.com/jwhear/roaring-zig).
 
 
 # Mailing list/discussion group
@@ -947,7 +1173,7 @@ https://groups.google.com/forum/#!forum/roaring-bitmaps
 
 # Contributing
 
-When contributing a change to the project, please run `tools/clang-format.sh` after making any changes. A github action runs on all PRs to ensure formatting is consistent with this.
+When contributing a change to the project, please run `tools/run-clangcldocker.sh` after making any changes. A github action runs on all PRs to ensure formatting is consistent with this.
 
 # References about Roaring
 

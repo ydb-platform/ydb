@@ -158,7 +158,7 @@ public:
                 dataSchema = indexInfo.GetColumnsSchemaByOrderedIndexes(indexes);
             }
             NArrow::NMerger::TMergePartialStream stream(context.GetActualSchema()->GetIndexInfo().GetReplaceKey(), dataSchema, false,
-                { IIndexInfo::GetWriteIdField()->name() }, std::nullopt);
+                { IIndexInfo::GetWriteIdField()->name() }, std::nullopt, std::nullopt);
             for (auto&& i : containers) {
                 stream.AddSource(i, nullptr, NArrow::NMerger::TIterationOrder::Forward(0));
             }
@@ -189,6 +189,7 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
     for (auto&& unit : WriteUnits) {
         const auto& originalBatch = unit.GetBatch();
         if (originalBatch->num_rows() == 0) {
+            unit.GetData()->GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::PackSlicesReady);
             writeResults.emplace_back(unit.GetData()->GetWriteMetaPtr(), unit.GetData()->GetSize(), nullptr, true, 0);
             continue;
         }
@@ -221,6 +222,10 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
         }
     }
     if (!cancelWritingReason) {
+        for (auto&& unit : WriteUnits) {
+            unit.GetData()->GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::PackSlicesReady);
+        }
+
         auto actions = WriteUnits.front().GetData()->GetBlobsAction();
         auto writeController =
             std::make_shared<TPortionWriteController>(Context.GetTabletActorId(), actions, std::move(writeResults), std::move(portionsToWrite));
@@ -231,6 +236,9 @@ void TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) 
             TActorContext::AsActorContext().Register(NColumnShard::CreateWriteActor(TabletId, writeController, TInstant::Max()));
         }
     } else {
+        for (auto&& unit : WriteUnits) {
+            unit.GetData()->GetWriteMetaPtr()->OnStage(NEvWrite::EWriteStage::PackSlicesError);
+        }
         for (auto&& i : writeResults) {
             i.SetErrorMessage(cancelWritingReason, false);
         }

@@ -8,6 +8,10 @@ namespace NYT::NCrypto {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+using TCertificatePathResolver = std::function<TString(const TString&)>;
+
+////////////////////////////////////////////////////////////////////////////////
+
 DECLARE_REFCOUNTED_STRUCT(TPemBlobConfig)
 DECLARE_REFCOUNTED_STRUCT(TSslContextCommand)
 DECLARE_REFCOUNTED_STRUCT(TSslContextConfig)

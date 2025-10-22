@@ -757,6 +757,7 @@ TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlo
                 /*isSlot*/ true,
                 slot->GetLevels(),
                 slot->GetEnqueueTime()));
+            HierarchicalScheduler_->TrimLog();
 
             EnqueueSlotSizeCounter_.Increment(slot->GetSize());
             EnqueueSlotCountCounter_.Increment();

@@ -9,9 +9,10 @@
 # obtain one at https://mozilla.org/MPL/2.0/.
 
 from collections import OrderedDict, abc
+from collections.abc import Sequence
 from copy import copy
 from datetime import datetime, timedelta
-from typing import Any, Generic, List, Optional, Sequence, Set, Union
+from typing import Any, Generic, Optional, Union
 
 import attr
 import numpy as np
@@ -127,7 +128,7 @@ def elements_and_dtype(elements, dtype, source=None):
             name = f"draw({prefix}elements)"
             try:
                 return np.array([value], dtype=dtype)[0]
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 raise InvalidArgument(
                     "Cannot convert %s=%r of type %s to dtype %s"
                     % (name, value, type(value).__name__, dtype.str)
@@ -389,7 +390,7 @@ def columns(
     elements: Optional[st.SearchStrategy[Ex]] = None,
     fill: Optional[st.SearchStrategy[Ex]] = None,
     unique: bool = False,
-) -> List[column[Ex]]:
+) -> list[column[Ex]]:
     """A convenience function for producing a list of :class:`column` objects
     of the same general shape.
 
@@ -400,7 +401,7 @@ def columns(
     create the columns.
     """
     if isinstance(names_or_number, (int, float)):
-        names: List[Union[int, str, None]] = [None] * names_or_number
+        names: list[Union[int, str, None]] = [None] * names_or_number
     else:
         names = list(names_or_number)
     return [
@@ -554,7 +555,7 @@ def data_frames(
     cols = try_convert(tuple, columns, "columns")
 
     rewritten_columns = []
-    column_names: Set[str] = set()
+    column_names: set[str] = set()
 
     for i, c in enumerate(cols):
         check_type(column, c, f"columns[{i}]")

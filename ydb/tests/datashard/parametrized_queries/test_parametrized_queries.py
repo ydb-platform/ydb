@@ -17,6 +17,7 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_three_sync_not_Bool,
     index_four_sync,
     index_zero_sync,
+    primitive_type,
 )
 
 # https://github.com/ydb-platform/ydb/issues/17178
@@ -24,41 +25,11 @@ unsupported_types = [
     "Decimal(15,0)",
     "Decimal(22,9)",
     "Decimal(35,10)",
-    "Date32",
-    "Datetime64",
-    "Timestamp64",
-    "Interval64",
 ]
 
 
 def filter_unsupported(type_map):
     return {k: v for k, v in type_map.items() if k not in unsupported_types}
-
-
-primitive_type = {
-    "Int64": ydb.PrimitiveType.Int64,
-    "Uint64": ydb.PrimitiveType.Uint64,
-    "Int32": ydb.PrimitiveType.Int32,
-    "Uint32": ydb.PrimitiveType.Uint32,
-    "Int16": ydb.PrimitiveType.Int16,
-    "Uint16": ydb.PrimitiveType.Uint16,
-    "Int8": ydb.PrimitiveType.Int8,
-    "Uint8": ydb.PrimitiveType.Uint8,
-    "Bool": ydb.PrimitiveType.Bool,
-    "DyNumber": ydb.PrimitiveType.DyNumber,
-    "String": ydb.PrimitiveType.String,
-    "Utf8": ydb.PrimitiveType.Utf8,
-    "UUID": ydb.PrimitiveType.UUID,
-    "Date": ydb.PrimitiveType.Date,
-    "Datetime": ydb.PrimitiveType.Datetime,
-    "Timestamp": ydb.PrimitiveType.Timestamp,
-    "Interval": ydb.PrimitiveType.Interval,
-    "Float": ydb.PrimitiveType.Float,
-    "Double": ydb.PrimitiveType.Double,
-    "Json": ydb.PrimitiveType.Json,
-    "JsonDocument": ydb.PrimitiveType.JsonDocument,
-    "Yson": ydb.PrimitiveType.Yson,
-}
 
 
 class TestParametrizedQueries(TestBase):

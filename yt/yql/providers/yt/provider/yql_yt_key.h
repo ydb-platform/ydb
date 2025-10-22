@@ -46,7 +46,7 @@ public:
                 && left.Attributes == right.Attributes;
         }
     };
-    
+
     struct TWalkFoldersArgs {
         TFolderList InitialFolder;
 
@@ -112,6 +112,10 @@ public:
         return WalkFolderImplArgs;
     }
 
+    TExprNode::TPtr GetExtraColumns() const {
+        return ExtraColumns;
+    }
+
     bool Parse(const TExprNode& key, TExprContext& ctx, bool isOutput = false);
 
 private:
@@ -124,6 +128,7 @@ private:
     TMaybe<TFolderList> Folder;
     TMaybe<TWalkFoldersArgs> WalkFolderArgs;
     TMaybe<TWalkFoldersImplArgs> WalkFolderImplArgs;
+    TExprNode::TPtr ExtraColumns;
 };
 
 class TYtInputKeys {

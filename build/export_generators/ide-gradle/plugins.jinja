@@ -1,10 +1,13 @@
 {#- empty string #}
 plugins {
-{%- if mainClass %}
+{%- if not(proto_template) and mainClass %}
     `application`
 {%- else %}
     `java-library`
 {%- endif %}
+{%- if proto_template %}
+    id("com.google.protobuf") version "{{ ver_protobuf }}"
+{%- endif -%}
 {%- if publish %}
     `maven-publish`
     `signing`
@@ -29,11 +32,11 @@ plugins {
 {%- endif -%}
 
 {%- if with_errorprone or with_test_errorprone %}
-    id("net.ltgt.errorprone") version "4.1.0"
+    id("net.ltgt.errorprone") version "{{ ver_errorprone }}"
 {%- endif -%}
 
 {%- if with_lombok_plugin %}
-    id("io.freefair.lombok") version "8.6"
+    id("io.freefair.lombok") version "{{ ver_lombok_plugin }}"
 {%- endif %}
 }
 

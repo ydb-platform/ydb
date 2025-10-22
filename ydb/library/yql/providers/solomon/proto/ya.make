@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 SRCS(
     dq_solomon_shard.proto

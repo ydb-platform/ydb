@@ -10,6 +10,7 @@ import socket
 import collections
 import itertools
 import queue
+import traceback
 import ydb
 from library.python.monlib.metric_registry import MetricRegistry
 
@@ -17,7 +18,7 @@ BLOB_MIN_SIZE = 128 * 1024
 
 
 def random_string(size):
-    return ''.join([random.choice(string.ascii_lowercase) for _ in range(size)])
+    return ''.join(random.choices(string.ascii_lowercase, k=size))
 
 
 def generate_blobs(count=32):
@@ -25,8 +26,12 @@ def generate_blobs(count=32):
 
 
 class EventKind(object):
-    ALTER_TABLE = 'alter_table'
+    CREATE_TABLE = 'create_table'
+    ADD_COLUMN = 'add_column'
     DROP_TABLE = 'drop_table'
+
+    ADD_COLUMN_DEFAULT = 'add_column_default'
+    DROP_COLUMN = 'drop_column'
 
     READ_TABLE = 'read_table'
 
@@ -34,16 +39,39 @@ class EventKind(object):
     REMOVE_OUTDATED = 'remove_outdated'
     FIND_OUTDATED = 'find_outdated'
 
+    BATCH_UPDATE = 'batch_update'
+    BATCH_DELETE = 'batch_delete'
+
     @classmethod
-    def periodic_tasks(cls):
+    def periodic_tasks_column(cls):
         return (
             cls.READ_TABLE,
         )
 
     @classmethod
+    def periodic_tasks_row(cls):
+        return (
+            cls.READ_TABLE,
+
+            cls.BATCH_DELETE,
+            cls.BATCH_UPDATE,
+        )
+
+    @classmethod
+    def basic_schema_row(cls):
+        return (
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
+        )
+
+    @classmethod
+    def basic_schema_column(cls):
+        return ()
+
+    @classmethod
     def rare(cls):
         return (
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
             cls.DROP_TABLE,
         )
 
@@ -51,13 +79,21 @@ class EventKind(object):
     def list(cls):
         return (
             cls.DROP_TABLE,
-            cls.ALTER_TABLE,
+            cls.ADD_COLUMN,
+
+            cls.ADD_COLUMN_DEFAULT,
+            cls.DROP_COLUMN,
 
             cls.READ_TABLE,
 
             cls.FIND_OUTDATED,
             cls.REMOVE_OUTDATED,
             cls.WRITE,
+
+            cls.BATCH_DELETE,
+            cls.BATCH_UPDATE,
+
+            cls.CREATE_TABLE
         )
 
 
@@ -198,6 +234,8 @@ class YdbQueue(object):
         # a set with keys that are ready to be removed
         self.outdated_keys = collections.deque()
         self.outdated_keys_max_size = 50
+        # a dict with table_name -> set of column ids
+        self.alter_column_ids = dict()
 
     def table_name_with_timestamp(self, working_dir=None):
         if working_dir is not None:
@@ -205,11 +243,8 @@ class YdbQueue(object):
         return os.path.join(self.working_dir, "queue_" + str(timestamp()))
 
     def prepare_new_queue(self, table_name=None):
-        session = self.pool.acquire()
         table_name = self.table_name_with_timestamp() if table_name is None else table_name
-        response = session.execute(get_table_description(table_name, self.mode), settings=self.ops)
-        self.update_stats('create')
-        return response
+        self.send_query(get_table_description(table_name, self.mode), parameters=None, event_kind=EventKind.CREATE_TABLE)
 
     def switch(self, switch_to):
         self.table_name = switch_to
@@ -219,15 +254,17 @@ class YdbQueue(object):
         self.stats.save_event(event)
 
     def send_query(self, query, parameters, event_kind):
-        session = self.pool.acquire()
         try:
-            response = session.transaction().execute(query, parameters=parameters, commit_tx=True, settings=self.ops)
+            result_list = self.pool.execute_with_retries(query, parameters=parameters, retry_settings=ydb.RetrySettings(max_retries=0), settings=self.ops)
             self.update_stats(event_kind)
-            self.pool.release(session)
-            return next(response)
+            return result_list
         except ydb.Error as e:
+            # print(f'{event_kind}: produced an error {e}')
             self.stats.save_event(event_kind, e.status)
-        return None
+            return None
+        except Exception as e:
+            # print(f'{event_kind}: produced an unxpected error {e}')
+            self.stats.save_event(event_kind, e.status)
 
     def process_dir_content(self, base, response, switch=True):
         tables = []
@@ -260,9 +297,15 @@ class YdbQueue(object):
             self.working_dir, response, switch=True,
         )
 
-    def read_table(self):
-        it = self.send_query("SELECT key FROM {}".format(self.table_name), None, EventKind.READ_TABLE)
+    def generate_alter_column_id(self):
+        val = random.randint(1, 100000)
+        while val in self.alter_column_ids.get(self.table_name, set()):
+            val = random.randint(1, 100000)
+        self.alter_column_ids.setdefault(self.table_name, set()).add(val)
+        return val
 
+    def read_table(self):
+        it = self.send_query("SELECT `key` FROM `{}`".format(self.table_name), None, EventKind.READ_TABLE)
         try:
             while it is not None:
                 self.update_stats(EventKind.READ_TABLE)
@@ -287,7 +330,7 @@ class YdbQueue(object):
             """.format(self.table_name)
 
         parameters = {
-            '$keys': keys_set
+            '$keys': (keys_set, ydb.ListType(ydb.StructType().add_member('key', ydb.PrimitiveType.Uint64)).proto)
         }
 
         self.send_query(query=query, event_kind=EventKind.REMOVE_OUTDATED, parameters=parameters)
@@ -325,25 +368,43 @@ class YdbQueue(object):
             """.format(self.table_name)
 
         parameters = {
-            '$key': current_timestamp,
-            '$value': blob,
-            '$timestamp': current_timestamp,
+            '$key': (current_timestamp, ydb.PrimitiveType.Uint64.proto),
+            '$value': (blob, ydb.PrimitiveType.Utf8.proto),
+            '$timestamp': (current_timestamp, ydb.PrimitiveType.Uint64.proto),
         }
 
         self.send_query(query=query, event_kind=EventKind.WRITE, parameters=parameters)
 
-    def alter_table(self):
-        session = self.pool.acquire()
+    def add_column(self):
         query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8".format(
             table_name=self.table_name,
-            val=random.randint(1, 100000),
+            val=self.generate_alter_column_id(),
         )
-        try:
-            session.execute(query, settings=self.ops)
-            self.update_stats(EventKind.ALTER_TABLE)
-            self.pool.release(session)
-        except ydb.Error as e:
-            self.stats.save_event(EventKind.ALTER_TABLE, e.status)
+
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN)
+
+    def add_column_default(self):
+        query = "ALTER TABLE `{table_name}` ADD COLUMN column_{val} Utf8 NOT NULL DEFAULT '{default_value}'".format(
+            table_name=self.table_name,
+            val=self.generate_alter_column_id(),
+            default_value=random_string(10),
+        )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.ADD_COLUMN_DEFAULT)
+
+    def drop_column(self):
+        if len(self.alter_column_ids.get(self.table_name, set())) == 0:
+            return
+
+        val = random.choice(list(self.alter_column_ids[self.table_name]))
+        self.alter_column_ids[self.table_name].remove(val)
+
+        query = "ALTER TABLE `{table_name}` DROP COLUMN column_{val}".format(
+            table_name=self.table_name,
+            val=val,
+        )
+
+        self.send_query(query, parameters=None, event_kind=EventKind.DROP_COLUMN)
 
     def drop_table(self):
         duplicates = set()
@@ -357,10 +418,24 @@ class YdbQueue(object):
             try:
                 session.drop_table(candidate, settings=self.ops)
                 self.update_stats(EventKind.DROP_TABLE)
-                self.pool.release(session)
             except ydb.Error as e:
                 self.stats.save_event(EventKind.DROP_TABLE, e.status)
+            finally:
                 self.pool.release(session)
+
+    def batch_update(self):
+        blob = next(self.blobs_iter)
+        parameters = {
+            "$value": blob,
+            "$timestamp": timestamp() - 10
+        }
+        self.send_query("BATCH UPDATE `{}` SET value = $value WHERE `timestamp` >= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_UPDATE)
+
+    def batch_delete(self):
+        parameters = {
+            "$timestamp": timestamp() - 20
+        }
+        self.send_query("BATCH DELETE FROM `{}` WHERE `timestamp` <= $timestamp;".format(self.table_name), parameters, EventKind.BATCH_DELETE)
 
 
 class Workload:
@@ -378,7 +453,7 @@ class Workload:
             YdbQueue(idx, database, self.workload_stats, self.driver, self.pool, self.mode)
             for idx in range(2)
         ]
-        self.pool_semaphore = threading.BoundedSemaphore(value=1000)
+        self.pool_semaphore = threading.BoundedSemaphore(value=100)
         self.worker_exception = []
 
     def random_points(self, size=1):
@@ -389,7 +464,7 @@ class Workload:
             if len(self.worker_exception) == 0:
                 f()
         except Exception as e:
-            self.worker_exception.append(e)
+            self.worker_exception.append(traceback.format_exc(e))
         finally:
             self.pool_semaphore.release()
 
@@ -416,12 +491,15 @@ class Workload:
             for op in EventKind.rare():
                 schedule.extend([(point, op) for point in self.random_points()])
 
-            for op in EventKind.periodic_tasks():
+            for op in EventKind.basic_schema_row() if self.mode == 'row' else EventKind.basic_schema_column():
+                schedule.extend([(point, op) for point in self.random_points(size=10)])
+
+            for op in EventKind.periodic_tasks_row() if self.mode == 'row' else EventKind.periodic_tasks_column():
                 schedule.extend([(point, op) for point in self.random_points(size=50)])
 
             schedule = collections.deque(list(sorted(schedule)))
 
-            print("Starting round_id %d" % round_id)
+            print(f"Starting round_id {round_id}")
             print("Round schedule %s" % schedule)
             for step_id in range(self.round_size):
 
@@ -455,8 +533,10 @@ class Workload:
     def start(self):
         pool = ThreadPoolExecutor()
         for lambda_call in self.loop():
-            if len(self.worker_exception) == 0 and self.pool_semaphore.acquire():
+            if len(self.worker_exception) == 0:
+                self.pool_semaphore.acquire()
                 pool.submit(self.wrapper, lambda_call)
             else:
                 assert False, f"Worker exceptions {self.worker_exception}"
         pool.shutdown(wait=True)
+        self.workload_stats.print_stats()

@@ -3,6 +3,7 @@
 #include "log_component.h"
 #include "log_level.h"
 #include "context.h"
+#include "format.h"
 #include "profile.h"
 
 #include <library/cpp/logger/global/common.h>
@@ -13,45 +14,43 @@
 
 #include <array>
 
-
-#define YQL_LOG_IMPL(logger, component, level, preprocessor, file, line) \
+#define YQL_LOG_IMPL(logger, component, level, preprocessor, file, line)       \
     logger.NeedToLog(component, level) && NPrivateGlobalLogger::TEatStream() | \
-        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
+                                              (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
 
 #define YQL_LOG_IF_IMPL(logger, component, level, preprocessor, condition, file, line) \
-    logger.NeedToLog(component, level) && (condition) && NPrivateGlobalLogger::TEatStream() | \
-        (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
+    logger.NeedToLog(component, level) && (condition) && NPrivateGlobalLogger::TEatStream() | (*preprocessor::Preprocess(logger.CreateLogElement(component, level, file, line)))
 
 // with component logger
 
-#define YQL_CLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\
-    ::NYql::NLog::YqlLogger(), \
-    ::NYql::NLog::EComponent::component, \
-    ::NYql::NLog::ELevel::level, \
-    preprocessor, \
+#define YQL_CLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL( \
+    ::NYql::NLog::YqlLogger(),                                      \
+    ::NYql::NLog::EComponent::component,                            \
+    ::NYql::NLog::ELevel::level,                                    \
+    preprocessor,                                                   \
     __FILE__, __LINE__)
 
 #define YQL_CLOG(level, component) \
     YQL_CLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor)
 
 #define YQL_CLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \
-    ::NYql::NLog::EComponent::component, \
+    ::NYql::NLog::EComponent::component,                                       \
     ::NYql::NLog::ELevel::level)
 
 // with component/level values logger
 
-#define YQL_CVLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL(\
-    ::NYql::NLog::YqlLogger(), \
-    component, \
-    level, \
-    preprocessor, \
+#define YQL_CVLOG_PREP(level, component, preprocessor) YQL_LOG_IMPL( \
+    ::NYql::NLog::YqlLogger(),                                       \
+    component,                                                       \
+    level,                                                           \
+    preprocessor,                                                    \
     __FILE__, __LINE__)
 
 #define YQL_CVLOG(level, component) \
     YQL_CVLOG_PREP(level, component, ::NYql::NLog::TContextPreprocessor)
 
 #define YQL_CVLOG_ACTIVE(level, component) ::NYql::NLog::YqlLogger().NeedToLog( \
-    component, \
+    component,                                                                  \
     level)
 
 // default logger
@@ -66,12 +65,12 @@
 
 // conditional logger
 
-#define YQL_CLOG_PREP_IF(level, component, preprocessor, condition) YQL_LOG_IF_IMPL(\
-    ::NYql::NLog::YqlLogger(), \
-    ::NYql::NLog::EComponent::component, \
-    ::NYql::NLog::ELevel::level, \
-    preprocessor, \
-    condition, \
+#define YQL_CLOG_PREP_IF(level, component, preprocessor, condition) YQL_LOG_IF_IMPL( \
+    ::NYql::NLog::YqlLogger(),                                                       \
+    ::NYql::NLog::EComponent::component,                                             \
+    ::NYql::NLog::ELevel::level,                                                     \
+    preprocessor,                                                                    \
+    condition,                                                                       \
     __FILE__, __LINE__)
 
 #define YQL_CLOG_IF(level, component, condition) \
@@ -83,17 +82,24 @@
 #define YQL_LOG_IF(level, condition) \
     YQL_LOG_PREP_IF(level, ::NYql::NLog::TContextPreprocessor, condition)
 
-
 namespace NYql {
 
 namespace NProto {
-    class TLoggingConfig;
-} // NProto
+class TLoggingConfig;
+} // namespace NProto
 
 namespace NLog {
 
+namespace NImpl {
+
+TString GetThreadId();
+
+TString GetLocalTime();
+
+} // namespace NImpl
+
 using TComponentLevels =
-        std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
+    std::array<ELevel, EComponentHelpers::ToInt(EComponent::MaxValue)>;
 
 void WriteLocalTime(IOutputStream* out);
 
@@ -125,9 +131,23 @@ public:
 
     TAutoPtr<TLogElement> CreateLogElement(EComponent component, ELevel level, TStringBuf file, int line) const;
 
-    void WriteLogPrefix(IOutputStream* out, EComponent component, ELevel level, TStringBuf file, int line) const;
+    void Contextify(TLogRecord& record, EComponent component, ELevel level, TStringBuf file, int line) const;
 
 private:
+    void Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const;
+
+    template <std::invocable<std::pair<TString, TString>> Action>
+    void Contextify(Action action, EComponent component, ELevel level, TStringBuf file, int line) const {
+        action(std::make_pair(TString(ToStringBuf(EContextKey::DateTime)), NImpl::GetLocalTime()));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Level)), TString(ELevelHelpers::ToString(level))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessName)), ProcName_));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ProcessID)), ToString(ProcId_)));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::ThreadID)), NImpl::GetThreadId()));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Component)), TString(EComponentHelpers::ToString(component))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::FileName)), TString(file.RAfter(LOCSLASH_C))));
+        action(std::make_pair(TString(ToStringBuf(EContextKey::Line)), ToString(line)));
+    }
+
     TString ProcName_;
     pid_t ProcId_;
     std::array<TAtomic, EComponentHelpers::ToInt(EComponent::MaxValue)> ComponentLevels_{0};
@@ -158,7 +178,7 @@ void InitLogger(const TString& log, bool startAsDaemon = false);
 
 /**
  * @brief Initialize logger with backends described in config.
-*/
+ */
 void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon = false);
 
 /**
@@ -166,14 +186,14 @@ void InitLogger(const NProto::TLoggingConfig& loggingConfig, bool startAsDaemon 
  *
  * @param backend - logger backend
  */
-void InitLogger(TAutoPtr<TLogBackend> backend);
+void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true);
 
 /**
  * @brief Initialize logger with concrete output stream.
  *
  * @param out - output stream
  */
-void InitLogger(IOutputStream* out);
+void InitLogger(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true);
 
 void CleanupLogger();
 
@@ -181,11 +201,21 @@ void ReopenLog();
 
 class YqlLoggerScope {
 public:
-    YqlLoggerScope(const TString& log, bool startAsDaemon = false) { InitLogger(log, startAsDaemon); }
-    YqlLoggerScope(TAutoPtr<TLogBackend> backend) { InitLogger(backend); }
-    YqlLoggerScope(IOutputStream* out) { InitLogger(out); }
+    YqlLoggerScope(const TString& log, bool startAsDaemon = false) {
+        InitLogger(log, startAsDaemon);
+    }
 
-    ~YqlLoggerScope() { CleanupLogger(); }
+    YqlLoggerScope(TAutoPtr<TLogBackend> backend, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+        InitLogger(backend, std::move(formatter), isStrictFormatting);
+    }
+
+    YqlLoggerScope(IOutputStream* out, TFormatter formatter = LegacyFormat, bool isStrictFormatting = true) {
+        InitLogger(out, std::move(formatter), isStrictFormatting);
+    }
+
+    ~YqlLoggerScope() {
+        CleanupLogger();
+    }
 };
 
 } // namespace NLog

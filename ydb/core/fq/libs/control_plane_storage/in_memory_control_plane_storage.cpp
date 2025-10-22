@@ -43,7 +43,7 @@ class TInMemoryControlPlaneStorageActor : public NActors::TActor<TInMemoryContro
         };
 
         struct TValue {
-            TRetryLimiter RetryLimiter;
+            NKikimr::NKqp::TRetryLimiter RetryLimiter;
             TString Owner;
             TInstant AssignedUntil;
             TInstant LastSeenAt;
@@ -439,11 +439,11 @@ private:
         if (ctx.Request.execute_mode() != FederatedQuery::SAVE) {
             AddEntity(Jobs, {ctx.Scope, queryId, jobId}, {job});
 
-            TRetryLimiter retryLimiter;
+            NKikimr::NKqp::TRetryLimiter retryLimiter;
             retryLimiter.Assign(0, ctx.StartTime, 0.0);
 
             AddEntity(PendingQueries, {
-                .Tenant = ctx.TenantInfo->Assign(ctx.CloudId, ctx.Scope, queryType, TenantName),
+                .Tenant = ctx.TenantInfo->Assign(ctx.CloudId, ctx.Scope, queryType, TenantName).TenantName,
                 .Scope = ctx.Scope,
                 .QueryId = queryId
             }, {.RetryLimiter = retryLimiter});
@@ -1081,7 +1081,7 @@ private:
     struct TTaskInternal {
         TTask Task;
         TString Owner;
-        TRetryLimiter RetryLimiter;
+        NKikimr::NKqp::TRetryLimiter RetryLimiter;
         TString TenantName;
         bool ShouldAbortTask;
     };
@@ -1151,9 +1151,9 @@ private:
         }
 
         if (const auto tenantInfo = ctx.Event.TenantInfo) {
-            const TString& newTenant = tenantInfo->Assign(task.Internal.cloud_id(), task.Scope, task.Query.content().type(), taskInternal.TenantName);
-            if (newTenant != taskInternal.TenantName) {
-                UpdateTaskState(ctx, taskInternal, newTenant);
+            const auto& mapResult = tenantInfo->Assign(task.Internal.cloud_id(), task.Scope, task.Query.content().type(), taskInternal.TenantName);
+            if (mapResult.TenantName != taskInternal.TenantName) {
+                UpdateTaskState(ctx, taskInternal, mapResult.TenantName);
                 return std::nullopt;
             }
             if (tenantInfo->TenantState.Value(taskInternal.TenantName, TenantState::Active) != TenantState::Active) {

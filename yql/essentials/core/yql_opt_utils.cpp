@@ -1,6 +1,7 @@
 #include "yql_opt_utils.h"
 #include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
+#include "yql_join.h"
 #include "yql_type_annotation.h"
 #include "yql_type_helpers.h"
 
@@ -90,6 +91,8 @@ const TExprNode& GetLiteralStructMember(const TExprNode& literal, const TExprNod
             return child->Tail();
     ythrow yexception() << "Member '" << member.Content() << "' not found in literal struct.";
 }
+
+const char ForbidConstantDependsOnFuseOptName[] = "ForbidConstantDependsOnFuse";
 
 }
 
@@ -359,6 +362,61 @@ bool IsNoPush(const TExprNode& node) {
     return node.IsCallable({"NoPush", "Likely"});
 }
 
+bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto distinct = node.GetConstraint<TDistinctConstraintNode>()) {
+        if (distinct->ContainsCompleteSet(std::vector<std::string_view>(columns.cbegin(), columns.cend()))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns) {
+    if (auto sorted = node.GetConstraint<TSortedConstraintNode>()) {
+        for (const auto& item : sorted->GetContent()) {
+            size_t foundItemNamesCount = 0;
+            bool found = false;
+            for (const auto& path : item.first) {
+                if (path.size() == 1 && columns.contains(path.front())) {
+                    foundItemNamesCount++;
+                    found = true;
+                    break;
+                }
+            }
+            if (foundItemNamesCount == columns.size()) {
+                return true;
+            }
+
+            // Required columns are not sorted by prefix.
+            if (!found) {
+                break;
+            }
+        }
+    }
+
+    return false;
+}
+
+TExprNode::TPtr MakePruneKeysExtractorLambda(const TExprNode& node, const THashSet<TString>& columns, TExprContext& ctx) {
+    return ctx.Builder(node.Pos())
+        .Lambda()
+            .Param("item")
+            .List(0)
+                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                    ui32 i = 0;
+                    for (const auto& column : columns) {
+                        parent.Callable(i++, "Member")
+                            .Arg(0, "item")
+                            .Atom(1, column)
+                        .Seal();
+                    }
+                    return parent;
+                })
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr KeepColumnOrder(const TExprNode::TPtr& node, const TExprNode& src, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
     auto columnOrder = typeCtx.LookupColumnOrder(src);
     if (!columnOrder) {
@@ -420,7 +478,7 @@ bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, TField
                 usedFields.emplace(parent->Tail().Content());
             else
                 usedFields.emplace(parent->Tail().Content(), parent->TailPtr());
-        } else if (allowDependsOn && parent->IsCallable("DependsOn")) {
+        } else if (allowDependsOn && IsDependsOnUsage(*parent, parentsMap)) {
             continue;
         } else {
             // unknown node
@@ -439,6 +497,22 @@ template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& ar
 template bool HaveFieldsSubset(const TExprNode::TPtr& start, const TExprNode& arg, std::map<std::string_view, TExprNode::TPtr>& usedFields,
                             const TParentsMap& parentsMap, bool allowDependsOn);
 
+bool IsFieldSubset(const TStructExprType& structType, const TStructExprType& sourceStructType) {
+    for (auto& item : structType.GetItems()) {
+        auto name = item->GetName();
+        auto type = item->GetItemType();
+        if (auto idx = sourceStructType.FindItem(name)) {
+            if (sourceStructType.GetItems()[*idx]->GetItemType() == type) {
+                continue;
+            }
+        }
+
+        return false;
+    }
+
+    return true;
+}
+
 TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNode& arg, TExprNode::TPtr&& members, const TParentsMap& parentsMap, TExprContext& ctx) {
     if (!members || !start || &arg == start.Get()) {
         return {};
@@ -454,7 +528,7 @@ TExprNode::TPtr AddMembersUsedInside(const TExprNode::TPtr& start, const TExprNo
 
     TNodeSet nodes;
     VisitExpr(start, [&](const TExprNode::TPtr& node) {
-        if (!node->IsCallable("DependsOn"))
+        if (!TCoDependsOnBase::Match(node.Get()))
             nodes.emplace(node.Get());
         return true;
     });
@@ -519,9 +593,43 @@ bool IsDependedImpl(const TExprNode* from, const TExprNode* to, TNodeMap<bool>& 
     return false;
 }
 
+bool IsDependedOnAnyImpl(const TExprNode* from, const TNodeSet& to, TNodeMap<bool>& deps) {
+    if (to.cend() != to.find(from)) {
+        return true;
+    }
+
+    auto [it, inserted] = deps.emplace(from, false);
+    if (!inserted) {
+        return it->second;
+    }
+
+    for (const auto& child : from->Children()) {
+        if (IsDependedOnAnyImpl(child.Get(), to, deps)) {
+            return it->second = true;
+        }
+    }
+
+    return false;
+}
+
 bool IsDepended(const TExprNode& from, const TExprNode& to) {
     TNodeMap<bool> deps;
     return IsDependedImpl(&from, &to, deps);
+}
+
+bool AreAllDependedOnAny(const TExprNode::TChildrenType& from, const TNodeSet& to) {
+    if (to.empty()) {
+        return false;
+    }
+
+    TNodeMap<bool> deps;
+    for (const auto& node : from) {
+        if (!IsDependedOnAnyImpl(node.Get(), to, deps)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 bool MarkDepended(const TExprNode& from, const TExprNode& to, TNodeMap<bool>& deps) {
@@ -712,6 +820,24 @@ EDictType SelectDictType(EDictType type, const TTypeAnnotationNode* keyType) {
 
     YQL_ENSURE(keyType->IsComparableInternal());
     return EDictType::Sorted;
+}
+
+void GetLogicalOpTerms(const std::string_view& op, const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    if (predicate->IsCallable(op)) {
+        for (auto& child : predicate->Children()) {
+            GetLogicalOpTerms(op, child, terms);
+        }
+    } else {
+        terms.push_back(predicate);
+    }
+}
+
+void GetAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("And", predicate, terms);
+}
+
+void GetOrTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& terms) {
+    GetLogicalOpTerms("Or", predicate, terms);
 }
 
 TExprNode::TPtr MakeSingleGroupRow(const TExprNode& aggregateNode, TExprNode::TPtr reduced, TExprContext& ctx) {
@@ -1163,8 +1289,10 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
                 .Seal()
                 .Build();
         } else {
-            isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
-            isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            if (mode != "optional") {
+                isList = flattenInfo.Type->GetKind() == ETypeAnnotationKind::List;
+                isDict = flattenInfo.Type->GetKind() == ETypeAnnotationKind::Dict;
+            }
         }
 
         if (isDict) {
@@ -1175,6 +1303,34 @@ TExprNode::TPtr ExpandFlattenByColumns(const TExprNode::TPtr& node, TExprContext
         }
 
         if (!isDict && !isList) {
+            bool knownNotNull = flattenInfo.Type->GetKind() != ETypeAnnotationKind::Optional && flattenInfo.Type->GetKind() != ETypeAnnotationKind::Null;
+
+            if (flattenInfo.Type->GetKind() == ETypeAnnotationKind::Pg) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("If")
+                        .Callable(0, "Exists")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(1, "Just")
+                            .Add(0, flattenInfo.ListMember)
+                        .Seal()
+                        .Callable(2, "Nothing")
+                            .Callable(0, "OptionalType")
+                                .Callable(0, "TypeOf")
+                                    .Add(0, flattenInfo.ListMember)
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build();
+            } else if (knownNotNull) {
+                flattenInfo.ListMember = ctx.Builder(structObj->Pos())
+                    .Callable("Just")
+                    .Add(0, flattenInfo.ListMember)
+                    .Seal()
+                    .Build();
+            }
+
             flattenPriority.push_back(&flattenInfo);
         } else {
             flattenPriority.push_front(&flattenInfo);
@@ -1264,6 +1420,51 @@ TExprNode::TPtr ExpandSkipNullFields(const TExprNode::TPtr& node, TExprContext& 
         .Seal().Build();
 }
 
+TExprNode::TListType ExpandAndOverOr(const TExprNode::TPtr& predicate, TExprContext& ctx, const TTypeAnnotationContext& types) {
+    if (!predicate->IsCallable("And")) {
+        return {};
+    }
+
+    TExprNode::TListType andTerms;
+    GetAndTerms(predicate, andTerms);
+    if (andTerms.size() == 1) {
+        return {};
+    }
+
+    TVector<TExprNode::TListType> orParts;
+    for (const auto& andTerm : andTerms) {
+        TExprNode::TListType orTerms;
+        GetOrTerms(andTerm, orTerms);
+        orParts.push_back(std::move(orTerms));
+    }
+    if (!AnyOf(orParts, [](const auto& orPart) { return orPart.size() > 1; })) {
+        return {};
+    }
+
+    TExprNode::TListType orArgs;
+    TVector<size_t> currTerm(orParts.size());
+    for (size_t termsCount = 0; currTerm[0] < orParts[0].size(); termsCount++) {
+        if (termsCount > types.AndOverOrExpansionLimit) {
+            return {};
+        }
+
+        TExprNode::TListType andArgs;
+        for (size_t i = 0; i < currTerm.size(); i++) {
+            andArgs.push_back(orParts[i][currTerm[i]]);
+        }
+
+        currTerm[currTerm.size() - 1]++;
+        for (size_t i = currTerm.size() - 1; i > 0 && currTerm[i] >= orParts[i].size(); i--) {
+            currTerm[i] = 0;
+            currTerm[i - 1]++;
+        }
+
+        orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs)));
+    }
+
+    return orArgs;
+}
+
 void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySelectorArg, TVector<TStringBuf>& columns) {
     if (keySelectorBody->IsList()) {
         for (auto& child: keySelectorBody->Children()) {
@@ -1276,6 +1477,25 @@ void ExtractSimpleKeys(const TExprNode* keySelectorBody, const TExprNode* keySel
     } else if (keySelectorBody->IsCallable("Member") && keySelectorBody->Child(0) == keySelectorArg) {
         columns.push_back(keySelectorBody->Child(1)->Content());
     }
+}
+
+TSet<TStringBuf> GetFilteredMembers(const TCoFilterNullMembersBase& node) {
+    TSet<TStringBuf> memberNames;
+    if (node.Members().IsValid()) {
+        for (const auto& atom : node.Members().Cast()) {
+            memberNames.insert(atom.Value());
+        }
+    } else {
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(node.Input(), false);
+        YQL_ENSURE(itemType);
+        const TStructExprType* structType = itemType->Cast<TStructExprType>();
+        for (auto entry : structType->GetItems()) {
+            if (entry->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                memberNames.insert(entry->GetName());
+            }
+        }
+    }
+    return memberNames;
 }
 
 const TExprNode& SkipCallables(const TExprNode& node, const std::initializer_list<std::string_view>& skipCallables) {
@@ -1554,17 +1774,14 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         return TExprNode::TPtr();
     }
 
-    if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Void) {
-        YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
-        auto res = MakeBool<false>(node->Pos(), ctx);
-        res = KeepWorld(res, *node, ctx, typeCtx);
-        return res;
-    }
-
     if (node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Null) {
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<false>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1572,6 +1789,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1587,6 +1808,10 @@ TExprNode::TPtr OptimizeExists(const TExprNode::TPtr& node, TExprContext& ctx, T
         YQL_CLOG(DEBUG, Core) << node->Content() << " over non-optional";
         auto res = MakeBool<true>(node->Pos(), ctx);
         res = KeepWorld(res, *node, ctx, typeCtx);
+        if (node->HasSideEffects()) {
+            res = ctx.NewCallable(node->Pos(), "Seq", { node->HeadPtr(), res });
+        }
+
         return res;
     }
 
@@ -1615,8 +1840,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
 
     auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-        if (TCoDependsOn::Match(node.Get()) && &node->Head() == arg) {
-            return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+        if (TCoDependsOnBase::Match(node.Get())) {
+            if (node->Head().IsList()) {
+                auto dependsOnArgs = node->Head().ChildrenList();
+                bool changed = false;
+                for (size_t i = 0; i < dependsOnArgs.size(); i++) {
+                    if (dependsOnArgs[i].Get() == arg) {
+                        dependsOnArgs[i] = placeHolder;
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    return ctx.ChangeChild(*node, 0, ctx.NewList(node->Pos(), std::move(dependsOnArgs)));
+                }
+            } else {
+                if (&node->Head() == arg) {
+                    return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+                }
+            }
         }
         return node;
     }, ctx, TOptimizeExprSettings{typeCtx});
@@ -1806,7 +2047,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
     auto depensOnFlow = [&flowSources](const TExprNode::TPtr& node) {
         return !!FindNode(node,
             [](const TExprNode::TPtr& n) {
-                return !TCoDependsOn::Match(n.Get());
+                return !TCoDependsOnBase::Match(n.Get());
             },
             [&flowSources](const TExprNode::TPtr& n) {
                 return flowSources.contains(n.Get());
@@ -1816,7 +2057,7 @@ TExprNode::TPtr FindNonYieldTransparentNodeImpl(const TExprNode::TPtr& root, con
 
     auto candidates = FindNodes(root,
         [&flowSources](const TExprNode::TPtr& node) {
-            if (flowSources.contains(node.Get()) || TCoDependsOn::Match(node.Get())) {
+            if (flowSources.contains(node.Get()) || TCoDependsOnBase::Match(node.Get())) {
                 return false;
             }
             if (node->ChildrenSize() > 0 && node->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
@@ -1933,7 +2174,7 @@ bool IsYieldTransparent(const TExprNode::TPtr& root, const TTypeAnnotationContex
 }
 
 TMaybe<bool> IsStrictNoRecurse(const TExprNode& node) {
-    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType"})) {
+    if (node.IsCallable({"Unwrap", "Ensure", "ScriptUdf", "Error", "ErrorType", "Unpickle", "FromDynamicLinear"})) {
         return false;
     }
     if (node.IsCallable("Udf")) {
@@ -1971,14 +2212,14 @@ bool HasDependsOn(const TExprNode::TPtr& root, const TExprNode::TPtr& arg) {
     size_t insideDependsOn = 0;
 
     VisitExpr(root, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             ++insideDependsOn;
         } else if (insideDependsOn && node == arg) {
             withDependsOn = true;
         }
         return !withDependsOn;
     }, [&](const TExprNode::TPtr& node) {
-        if (node->IsCallable("DependsOn")) {
+        if (TCoDependsOnBase::Match(node.Get())) {
             YQL_ENSURE(insideDependsOn > 0);
             --insideDependsOn;
         }
@@ -2062,12 +2303,17 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
     TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx,
     std::function<TExprNode::TPtr(const TExprNode::TPtr&, const TExprNode::TPtr&, const TParentsMap&, TExprContext&)> handler)
 {
+    auto kind = node->GetTypeAnn()->GetKind();
 
     // Ignore stream input, because it cannot be used multiple times
-    if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::List) {
+    if (!(kind == ETypeAnnotationKind::List || kind == ETypeAnnotationKind::Optional)) {
         return;
     }
-    auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+    auto itemType = kind == ETypeAnnotationKind::Optional ?
+        node->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+        node->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
     if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
         return;
     }
@@ -2094,6 +2340,9 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
                 usedFields.insert(member.Value());
             }
         }
+        else if (auto maybeMember = TMaybeNode<TCoMember>(parent)) {
+            usedFields.insert(maybeMember.Cast().Name().Value());
+        }
         else {
             return;
         }
@@ -2114,12 +2363,18 @@ void OptimizeSubsetFieldsForNodeWithMultiUsage(const TExprNode::TPtr& node, cons
 
     for (auto parent: it->second) {
         if (TCoExtractMembers::Match(parent)) {
-            if (parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
+            auto parentItemType = kind == ETypeAnnotationKind::Optional ?
+                parent->GetTypeAnn()->Cast<TOptionalExprType>()->GetItemType() :
+                parent->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+            if (parentItemType->Cast<TStructExprType>()->GetSize() == usedFields.size()) {
                 toOptimize[parent] = newInput;
             } else {
                 toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
             }
+        } else if (TCoMember::Match(parent)) {
+            toOptimize[parent] = ctx.ChangeChild(*parent, 0, TExprNode::TPtr(newInput));
         } else {
+            YQL_ENSURE(TCoFlatMapBase::Match(parent));
             toOptimize[parent] = ctx.Builder(parent->Pos())
                 .Callable(parent->Content())
                     .Add(0, newInput)
@@ -2225,7 +2480,12 @@ template TPartOfConstraintBase::TSetType GetPathsToKeys<true>(const TExprNode& b
 template TPartOfConstraintBase::TSetType GetPathsToKeys<false>(const TExprNode& body, const TExprNode& arg);
 
 TVector<TString> GenNoClashColumns(const TStructExprType& source, TStringBuf prefix, size_t count) {
-    YQL_ENSURE(prefix.StartsWith("_yql"));
+    if (!prefix.StartsWith("_yql")) {
+        YQL_ENSURE(prefix.Contains('.'));
+        TStringBuf table, column;
+        SplitTableName(prefix, table, column);
+        YQL_ENSURE(column.StartsWith("_yql"));
+    }
     TSet<size_t> existing;
     for (auto& item : source.GetItems()) {
         TStringBuf column = item->GetName();
@@ -2433,6 +2693,14 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     }
 }
 
+TExprNode::TPtr KeepSideEffects(TExprNode::TPtr node, TExprNode::TPtr src, TExprContext& ctx) {
+    if (!src->HasSideEffects()) {
+        return node;
+    }
+
+    return ctx.NewCallable(src->Pos(), "Seq", { src, node });
+}
+
 TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {
     auto pRoot = &root;
 
@@ -2452,8 +2720,10 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     auto status = IsWideSequenceBlockType(*rootType) ? TOperationProgress::EOpBlockStatus::Full : TOperationProgress::EOpBlockStatus::None;
     bool stop = false;
     VisitExpr(*pRoot, [&](const TExprNode& node) {
-        if (stop || node.IsLambda()) {
+        if (stop || node.IsArguments()) {
             return false;
+        } else if (node.IsLambda()) {
+            return true;
         }
 
         const TTypeAnnotationNode* nodeType = node.GetTypeAnn();
@@ -2479,6 +2749,117 @@ TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& 
     });
 
     return status;
+}
+
+TExprNode::TPtr ReplaceUnessentials(TExprNode::TPtr predicate, TExprNode::TPtr row, const TNodeSet& banned, TExprContext& ctx) {
+    YQL_ENSURE(row->IsArgument());
+
+    std::vector<TExprNode::TPtr> unessentials;
+    bool hasEssentialRowUsage = false;
+    VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+        if (banned.contains(node.Get())) {
+            return false;
+        } else if (node == row) {
+            hasEssentialRowUsage = true;
+            return false;
+        } else if (node->IsCallable(TCoUnessential::CallableName())) {
+            // AssumeAs is guaranteed to be complete
+            unessentials.push_back(node);
+            return false;
+        }
+
+        return true;
+    });
+    if (unessentials.empty()) {
+        return predicate;
+    }
+
+    // Consider predicate as unessential if all row usages across predicate are Unessential
+    // Drop all Unessential conditions (= replace with AssumeAs) in that case, or keep them (= replace with Predicate) otherwise
+
+    TNodeOnNodeOwnedMap replaces;
+    for (const auto& unessential : unessentials) {
+        replaces.emplace(unessential.Get(), hasEssentialRowUsage ? unessential->ChildPtr(TCoUnessential::idx_Predicate) : unessential->ChildPtr(TCoUnessential::idx_AssumeAs));
+    }
+
+    return ctx.ReplaceNodes(std::move(predicate), replaces);
+}
+
+bool IsDependsOnUsage(const TExprNode& node, const TParentsMap& parentsMap) {
+    if (TCoDependsOnBase::Match(&node)) {
+        return true;
+    } else if (node.IsList()) {
+        auto it = parentsMap.find(&node);
+        if (it != parentsMap.end()) {
+            auto& listUsages = it->second;
+            if (AllOf(listUsages.begin(), listUsages.end(), [](const TExprNode* usage) { return TCoDependsOnBase::Match(usage); })) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool IsNormalizedDependsOn(const TExprNode& node) {
+    YQL_ENSURE(TCoDependsOnBase::Match(&node));
+
+    if (TCoDataCtor::Match(&node.Head()) || node.Head().IsArgument()) {
+        return true;
+    }
+    if (node.Head().IsList() && AllOf(node.Head().Children(), [](const TExprNode::TPtr& child) { return TCoDataCtor::Match(child.Get()) || child->IsArgument(); })) {
+        return true;
+    }
+
+    return false;
+}
+
+bool CanFuseLambdas(const TExprNode& outer, const TExprNode& inner, const TTypeAnnotationContext& types) {
+    if (!IsOptimizerEnabled<ForbidConstantDependsOnFuseOptName>(types) || IsOptimizerDisabled<ForbidConstantDependsOnFuseOptName>(types)) {
+        return true;
+    }
+
+    if (outer.ChildrenSize() == 1) {
+        return true;
+    }
+
+    auto innerLambdaBody = GetLambdaBody(inner);
+    auto outerLambdaArgs = outer.Head().Children();
+
+    TNodeSet innerLambdaArgs;
+    inner.Head().ForEachChild([&](const TExprNode& arg) {
+        innerLambdaArgs.insert(&arg);
+    });
+
+    if (outerLambdaArgs.size() == innerLambdaBody.size()) {
+        // inner lambda bodies which used in DependsOn after fuse
+        TExprNode::TListType toCheck;
+        for (size_t i = 0; i < outerLambdaArgs.size(); i++) {
+            if (outerLambdaArgs[i]->IsUsedInDependsOn()) {
+                toCheck.push_back(innerLambdaBody[i]);
+            }
+        }
+        if (toCheck.empty()) {
+            return true;
+        }
+
+        return AreAllDependedOnAny(toCheck, innerLambdaArgs);
+    } else if (outerLambdaArgs.size() == 1) {
+        if (!outerLambdaArgs.front()->IsUsedInDependsOn()) {
+            return true;
+        }
+
+        // multimap - all inner lambda bodies are used in DependsOn after fuse
+        return AreAllDependedOnAny(innerLambdaBody, innerLambdaArgs);
+    } else {
+        YQL_ENSURE(false, "Incompatible lambdas for fuse");
+    }
+}
+
+bool CanApplyExtractMembersToPartitionsByKeys(const TTypeAnnotationContext* types) {
+    YQL_ENSURE(types);
+    static const char optName[] = "ExtractMembersForPartitionsByKeys";
+    return IsOptimizerEnabled<optName>(*types) && !IsOptimizerDisabled<optName>(*types);
 }
 
 }

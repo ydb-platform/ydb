@@ -10,6 +10,10 @@ private:
     THashMap<ui64, THashSet<ui64>> TxIdsFromCommitToBroken;
 
 public:
+    bool IsEmpty() const {
+        return TxIdsFromCommitToBroken.empty();
+    }
+
     THashMap<ui64, THashSet<ui64>>::const_iterator begin() const {
         return TxIdsFromCommitToBroken.begin();
     }

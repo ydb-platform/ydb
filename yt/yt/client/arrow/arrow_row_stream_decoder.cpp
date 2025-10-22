@@ -1,5 +1,7 @@
 #include "arrow_row_stream_decoder.h"
 
+#include <yt/yt/client/table_client/schema.h>
+
 namespace NYT::NArrow {
 
 using namespace NApi::NRpcProxy;

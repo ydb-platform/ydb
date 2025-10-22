@@ -5,7 +5,7 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
@@ -14,33 +14,53 @@ namespace NMiniKQL {
 
 namespace {
 
-class TWideSkipBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksWrapper>;
-public:
-    TWideSkipBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count), Width(size - 1U)
-    {}
+NUdf::TUnboxedValuePod SliceSkipBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
+    const auto& datum = TArrowBlock::From(block).GetDatum();
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
+}
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+NUdf::TUnboxedValuePod SliceTakeBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
+    const auto& datum = TArrowBlock::From(block).GetDatum();
+    return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
+}
+
+class TWideSkipBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipBlocksFlowWrapper>;
+
+public:
+    TWideSkipBlocksFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+        , Width(size - 1U)
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Count->GetValue(ctx);
         }
 
-        if (auto count = state.Get<ui64>()) while (true) {
-            if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One != result) {
-                state = NUdf::TUnboxedValuePod(count);
-                return result;
-            }
+        if (auto count = state.Get<ui64>()) {
+            while (true) {
+                if (const auto result = Flow->FetchValues(ctx, output); EFetchResult::One != result) {
+                    state = NUdf::TUnboxedValuePod(count);
+                    return result;
+                }
 
-            if (const auto blockSize = GetBlockCount(*output[Width]); count < blockSize) {
-                state = NUdf::TUnboxedValuePod::Zero();
-                *output[Width] = MakeBlockCount(ctx.HolderFactory, blockSize - count);
-                for (auto i = 0U; i < Width; ++i)
-                    if (const auto out = output[i])
-                        *out = SliceBlock(ctx.HolderFactory, *out, count);
-                return EFetchResult::One;
-            } else
-                count -= blockSize;
+                if (const auto blockSize = GetBlockCount(*output[Width]); count < blockSize) {
+                    state = NUdf::TUnboxedValuePod::Zero();
+                    *output[Width] = MakeBlockCount(ctx.HolderFactory, blockSize - count);
+                    for (auto i = 0U; i < Width; ++i) {
+                        if (const auto out = output[i]) {
+                            *out = SliceSkipBlock(ctx.HolderFactory, *out, count);
+                        }
+                    }
+                    return EFetchResult::One;
+                } else {
+                    count -= blockSize;
+                }
+            }
         }
 
         return Flow->FetchValues(ctx, output);
@@ -57,13 +77,13 @@ public:
         const auto offsetPtr = new AllocaInst(indexType, 0U, "offset_ptr", atTop);
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSkipBlocksWrapper::SliceBlock>());
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SliceSkipBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
+        const auto getCountType = FunctionType::get(indexType, {valueType}, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -112,11 +132,10 @@ public:
         const auto more = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, count, ConstantInt::get(indexType, 0), "more", block);
         BranchInst::Create(test, pass, more, block);
 
-
         block = test;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+        const auto height = CallInst::Create(getCount, {countValue}, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -156,7 +175,6 @@ public:
             const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
             const auto height = PHINode::Create(valueType, 2U, "state", exit);
-
 
             const auto count = new LoadInst(indexType, sizePtr, "count", block);
             const auto work = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGT, count, ConstantInt::get(indexType, 0), "work", block);
@@ -217,11 +235,6 @@ public:
     }
 #endif
 private:
-    static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        const auto& datum = TArrowBlock::From(block).GetDatum();
-        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), offset, datum.array()->length - offset));
-    }
-
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
@@ -233,14 +246,19 @@ private:
     const ui32 Width;
 };
 
-class TWideTakeBlocksWrapper : public TStatefulWideFlowCodegeneratorNode<TWideTakeBlocksWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeBlocksWrapper>;
-public:
-    TWideTakeBlocksWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count), Width(size - 1U)
-    {}
+class TWideTakeBlocksFlowWrapper: public TStatefulWideFlowCodegeneratorNode<TWideTakeBlocksFlowWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeBlocksFlowWrapper>;
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+public:
+    TWideTakeBlocksFlowWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+        , Width(size - 1U)
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = Count->GetValue(ctx);
         }
@@ -250,11 +268,14 @@ public:
                 if (const auto blockSize = GetBlockCount(*output[Width]); count < blockSize) {
                     state = NUdf::TUnboxedValuePod::Zero();
                     *output[Width] = MakeBlockCount(ctx.HolderFactory, count);
-                    for (auto i = 0U; i < Width; ++i)
-                        if (const auto out = output[i])
-                            *out = SliceBlock(ctx.HolderFactory, *out, count);
-                } else
+                    for (auto i = 0U; i < Width; ++i) {
+                        if (const auto out = output[i]) {
+                            *out = SliceTakeBlock(ctx.HolderFactory, *out, count);
+                        }
+                    }
+                } else {
                     state = NUdf::TUnboxedValuePod(ui64(count - blockSize));
+                }
                 return EFetchResult::One;
             } else {
                 return result;
@@ -275,13 +296,13 @@ public:
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(indexType, 0), sizePtr, atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTakeBlocksWrapper::SliceBlock>());
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&SliceTakeBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
         const auto name = "GetBlockCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBlockCount));
-        const auto getCountType = FunctionType::get(indexType, { valueType }, false);
+        const auto getCountType = FunctionType::get(indexType, {valueType}, false);
         const auto getCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getCountType);
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -326,7 +347,7 @@ public:
         block = good;
 
         const auto countValue = getres.second.back()(ctx, block);
-        const auto height = CallInst::Create(getCount, { countValue }, "height", block);
+        const auto height = CallInst::Create(getCount, {countValue}, "height", block);
 
         ValueCleanup(EValueRepresentation::Any, countValue, ctx, block);
 
@@ -413,11 +434,6 @@ public:
     }
 #endif
 private:
-    static NUdf::TUnboxedValuePod SliceBlock(const THolderFactory& holderFactory, NUdf::TUnboxedValuePod block, const uint64_t offset) {
-        const auto& datum = TArrowBlock::From(block).GetDatum();
-        return datum.is_scalar() ? block : holderFactory.CreateArrowBlock(DeepSlice(datum.array(), 0ULL, offset));
-    }
-
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
             DependsOn(flow, Count);
@@ -429,27 +445,139 @@ private:
     const ui32 Width;
 };
 
+template <bool Skip>
+class TWideTakeSkipBlocksStreamWrapper: public TMutableComputationNode<TWideTakeSkipBlocksStreamWrapper<Skip>> {
+    using TBaseComputation = TMutableComputationNode<TWideTakeSkipBlocksStreamWrapper<Skip>>;
+
+public:
+    TWideTakeSkipBlocksStreamWrapper(TComputationMutables& mutables, IComputationNode* stream, IComputationNode* count)
+        : TBaseComputation(mutables, EValueRepresentation::Embedded)
+        , Stream(stream)
+        , Count(count)
+    {
+    }
+
+    NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
+        return ctx.HolderFactory.Create<TStreamValue>(ctx.HolderFactory,
+                                                      std::move(Stream->GetValue(ctx)),
+                                                      Count->GetValue(ctx).Get<ui64>());
+    }
+
+private:
+    class TStreamValue: public TComputationValue<TStreamValue> {
+        using TBase = TComputationValue<TStreamValue>;
+
+    public:
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, ui64 count)
+            : TBase(memInfo)
+            , HolderFactory(holderFactory)
+            , Stream(std::move(stream))
+            , Count(count)
+        {
+        }
+
+        NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
+            if constexpr (Skip) {
+                return WideFetchSkip(output, width);
+            } else {
+                return WideFetchTake(output, width);
+            }
+        }
+
+        NUdf::EFetchStatus WideFetchTake(NUdf::TUnboxedValue* output, ui32 width) {
+            if (Count == 0) {
+                return NUdf::EFetchStatus::Finish;
+            }
+
+            if (const auto result = Stream.WideFetch(output, width); NUdf::EFetchStatus::Ok == result) {
+                if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
+                    output[width - 1] = MakeBlockCount(HolderFactory, Count);
+                    for (auto i = 0U; i < width - 1; ++i) {
+                        output[i] = SliceTakeBlock(HolderFactory, output[i], Count);
+                    }
+                    Count = 0;
+                } else {
+                    Count = Count - blockSize;
+                }
+                return NUdf::EFetchStatus::Ok;
+            } else {
+                return result;
+            }
+        }
+
+        NUdf::EFetchStatus WideFetchSkip(NUdf::TUnboxedValue* output, ui32 width) {
+            if (Count == 0) {
+                return Stream.WideFetch(output, width);
+            }
+            while (true) {
+                if (const auto result = Stream.WideFetch(output, width); NUdf::EFetchStatus::Ok != result) {
+                    return result;
+                }
+
+                if (const auto blockSize = GetBlockCount(output[width - 1]); Count < blockSize) {
+                    output[width - 1] = MakeBlockCount(HolderFactory, blockSize - Count);
+                    for (auto i = 0U; i < width - 1; ++i) {
+                        output[i] = SliceSkipBlock(HolderFactory, output[i], Count);
+                    }
+                    Count = 0;
+                    return NUdf::EFetchStatus::Ok;
+                } else {
+                    Count -= blockSize;
+                }
+            }
+
+            return Stream.WideFetch(output, width);
+        }
+
+    private:
+        const THolderFactory& HolderFactory;
+        NYql::NUdf::TUnboxedValue Stream;
+        ui64 Count;
+    };
+
+    void RegisterDependencies() const final {
+        this->DependsOn(Count);
+        this->DependsOn(Stream);
+    }
+
+    IComputationNode* const Stream;
+    IComputationNode* const Count;
+};
+
+template <bool Skip>
+IComputationNode* CreateNode(TComputationMutables& mutables, IComputationNode* streamOrFlow, IComputationNode* count, ui32 width) {
+    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(streamOrFlow);
+    if (!wideFlow) {
+        return new TWideTakeSkipBlocksStreamWrapper<Skip>(mutables, streamOrFlow, count);
+    }
+
+    if (Skip) {
+        return new TWideSkipBlocksFlowWrapper(mutables, wideFlow, count, width);
+    } else {
+        return new TWideTakeBlocksFlowWrapper(mutables, wideFlow, count, width);
+    }
+}
+
 IComputationNode* WrapSkipTake(bool skip, TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
 
-    const auto flowType = AS_TYPE(TFlowType, callable.GetInput(0).GetStaticType());
-    const auto flowWidth = GetWideComponentsCount(flowType);
-    MKQL_ENSURE(flowWidth > 0, "Expected at least one column");
-
-    auto wideFlow = dynamic_cast<IComputationWideFlowNode*>(LocateNode(ctx.NodeLocator, callable, 0));
-    MKQL_ENSURE(wideFlow != nullptr, "Expected wide flow node");
+    const auto streamOrFlowType = callable.GetInput(0).GetStaticType();
+    MKQL_ENSURE(streamOrFlowType->IsFlow() || streamOrFlowType->IsStream(), "Expected flow or stream type.");
+    const auto streamOrFlowWidth = GetWideComponentsCount(streamOrFlowType);
+    MKQL_ENSURE(streamOrFlowWidth > 0, "Expected at least one column");
 
     const auto count = LocateNode(ctx.NodeLocator, callable, 1);
     const auto countType = AS_TYPE(TDataType, callable.GetInput(1).GetStaticType());
     MKQL_ENSURE(countType->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected ui64");
 
     if (skip) {
-        return new TWideSkipBlocksWrapper(ctx.Mutables, wideFlow, count, flowWidth);
+        return CreateNode</*Skip=*/true>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), count, streamOrFlowWidth);
+    } else {
+        return CreateNode</*Skip=*/false>(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0), count, streamOrFlowWidth);
     }
-    return new TWideTakeBlocksWrapper(ctx.Mutables, wideFlow, count, flowWidth);
 }
 
-} //namespace
+} // namespace
 
 IComputationNode* WrapWideSkipBlocks(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     bool skip = true;
@@ -461,5 +589,5 @@ IComputationNode* WrapWideTakeBlocks(TCallable& callable, const TComputationNode
     return WrapSkipTake(skip, callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

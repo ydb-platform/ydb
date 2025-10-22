@@ -158,6 +158,11 @@ bool TClientRequest::IsAttachmentCompressionEnabled() const
     return attachmentCodecId != NCompression::ECodec::None;
 }
 
+bool TClientRequest::HasAttachments() const
+{
+    return !Attachments_.empty();
+}
+
 NCompression::ECodec TClientRequest::GetEffectiveAttachmentCompressionCodec() const
 {
     return EnableLegacyRpcCodecs_ ? NCompression::ECodec::None : RequestCodec_;
@@ -219,7 +224,7 @@ std::string TClientRequest::GetMethod() const
     return FromProto<std::string>(Header_.method());
 }
 
-const std::optional<std::string>& TClientRequest::GetRequestInfo() const
+const std::string& TClientRequest::GetRequestInfo() const
 {
     return RequestInfo_;
 }
@@ -340,21 +345,25 @@ TClientContextPtr TClientRequest::CreateClientContext()
         Header().set_user_agent(GetRpcUserAgent());
     }
 
+    auto requestId = GetRequestId();
+
     if (StreamingEnabled_) {
         RequestAttachmentsStream_ = New<TAttachmentsOutputStream>(
+            requestId,
             RequestCodec_,
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             BIND(&TClientRequest::OnPullRequestAttachmentsStream, MakeWeak(this)),
             ClientAttachmentsStreamingParameters_.WindowSize,
             ClientAttachmentsStreamingParameters_.WriteTimeout);
         ResponseAttachmentsStream_ = New<TAttachmentsInputStream>(
+            requestId,
             BIND(&TClientRequest::OnResponseAttachmentsStreamRead, MakeWeak(this)),
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             ClientAttachmentsStreamingParameters_.ReadTimeout);
     }
 
     return New<TClientContext>(
-        GetRequestId(),
+        requestId,
         std::move(traceContext),
         GetService(),
         GetMethod(),
@@ -363,6 +372,11 @@ TClientContextPtr TClientRequest::CreateClientContext()
         RequestAttachmentsStream_,
         ResponseAttachmentsStream_,
         MemoryUsageTracker_ ? MemoryUsageTracker_ : Channel_->GetChannelMemoryTracker());
+}
+
+void TClientRequest::SetRawRequestInfo(std::string requestInfo)
+{
+    RequestInfo_ = std::move(requestInfo);
 }
 
 void TClientRequest::OnPullRequestAttachmentsStream()

@@ -9,6 +9,7 @@ from pythran.passmanager import Transformation
 import pythran.graph as graph
 
 from collections import defaultdict
+from copy import deepcopy
 import gast as ast
 
 try:
@@ -45,7 +46,8 @@ class Remover(ast.NodeTransformer):
         return node
 
 
-class ForwardSubstitution(Transformation):
+class ForwardSubstitution(Transformation[LazynessAnalysis, UseDefChains, DefUseChains,
+                                         Ancestors, CFG, Literals]):
 
     """
     Replace variable that can be computed later.
@@ -80,12 +82,7 @@ class ForwardSubstitution(Transformation):
 
     def __init__(self):
         """ Satisfy dependencies on others analyses. """
-        super(ForwardSubstitution, self).__init__(LazynessAnalysis,
-                                                  UseDefChains,
-                                                  DefUseChains,
-                                                  Ancestors,
-                                                  CFG,
-                                                  Literals)
+        super().__init__()
         self.to_remove = None
 
     def visit_FunctionDef(self, node):
@@ -97,6 +94,31 @@ class ForwardSubstitution(Transformation):
         self.generic_visit(node)
         Remover(self.to_remove).visit(node)
         return node
+
+    def visit_AugAssign(self, node):
+        # Separate case for augassign, where we only handle situation where the
+        # def is a literal (any kind) with a single use (this AugAssign).
+        self.generic_visit(node)
+        if not isinstance(node.target, ast.Name):
+            return node
+
+        defs = self.use_def_chains[node.target]
+        name_defs = [dnode for dnode in defs if isinstance(dnode.node, ast.Name)]
+        if len(name_defs) != 1:
+            return node
+        name_def, = name_defs
+        dnode = name_def.node
+        parent = self.ancestors[dnode][-1]
+        if not isinstance(parent, ast.Assign):
+            return node
+
+        try:
+            ast.literal_eval(parent.value)
+        except ValueError:
+            return node
+
+        self.update = True
+        return ast.Assign([node.target], ast.BinOp(deepcopy(parent.value), node.op, node.value))
 
     def visit_Name(self, node):
         if not isinstance(node.ctx, ast.Load):

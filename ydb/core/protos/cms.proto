@@ -78,6 +78,7 @@ message THostState {
   repeated EMarker       Markers = 8;
   optional NActorsInterconnect.TNodeLocation Location = 9;
   optional uint32        StartTimeSeconds = 10;
+  optional uint32        PileId = 11;
 }
 
 message TClusterState {
@@ -108,6 +109,8 @@ message TAction {
     REPLACE_DEVICES = 8;
     REMOVE_DEVICES = 9;
     REBOOT_HOST = 10; // Same as SHUTDOWN_HOST, but forcibly allowed if host is down
+    DRAIN_NODE = 11;
+    CORDON_NODE = 12;
   }
 
   message TIssue {
@@ -133,6 +136,7 @@ message TAction {
   // If specified will be expanded to list of hosts.
   optional string Tenant = 6;
   optional TIssue Issue = 7;
+  optional string MaintenanceTaskContext = 8;
 }
 
 enum ETenantPolicy {
@@ -212,6 +216,7 @@ message TManageRequestRequest {
     LIST = 1;
     GET = 2;
     REJECT = 3;
+    APPROVE = 4;
   }
 
   optional string   User = 1;
@@ -233,6 +238,7 @@ message TManageRequestResponse {
 
   optional TStatus           Status = 1;
   repeated TScheduledRequest Requests = 2;
+  repeated TPermission       ManuallyApprovedPermissions = 3;
 }
 
 message TCheckRequest {
@@ -425,6 +431,19 @@ message TCmsConfig {
     }
 
     message TSentinelConfig {
+        message TStateStorageSelfHealConfig {
+            optional bool Enable = 1 [default = false];
+            optional uint32 NodeGoodStateLimit = 2 [default = 10];
+            optional uint32 NodePrettyGoodStateLimit = 3 [default = 7];
+            optional uint32 NodeBadStateLimit = 4 [default = 10];
+            optional uint32 WaitForConfigStep = 5 [default = 60000000];
+            optional uint32 RelaxTime = 6 [default = 600000000];
+            optional bool PileupReplicas = 7 [default = false];
+            optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
+            optional uint32 OverrideRingsCount = 9 [default = 0];
+            optional uint32 ReplicasSpecificVolume = 10 [default = 200]; // 1 additional replica in ring per ReplicasSpecificVolume nodes in cluster
+        }
+
         message TStateLimit {
             optional uint32 State = 1; // EPDiskState
             optional uint32 Limit = 2;
@@ -452,6 +471,7 @@ message TCmsConfig {
         optional uint32 DataCenterRatio = 10 [default = 50];
         optional uint32 RoomRatio = 11 [default = 70];
         optional uint32 RackRatio = 12 [default = 90];
+        optional uint32 PileRatio = 18 [default = 50];
         // Similar to *Ratio settings, but specified in absolute numbers and applied per storage node.
         // This limit helps prevent cascading overreaction when many disks go offline on a single host
         // (due to disk shelf disconnection).
@@ -464,8 +484,10 @@ message TCmsConfig {
         optional bool DryRun = 13;
         repeated TStateLimit StateLimits = 14;
         optional EEvictVDisksStatus EvictVDisksStatus = 15;
-        
+
         optional uint32 GoodStateLimit = 16 [default = 5];
+
+        optional TStateStorageSelfHealConfig StateStorageSelfHealConfig = 19;
     }
 
     message TLogConfig {
@@ -655,6 +677,7 @@ message TPDiskInfo {
         RATIO_BY_ROOM = 4;
         RATIO_BY_RACK = 5;
         TOO_MANY_FAULTY_PER_NODE = 6;
+        RATIO_BY_PILE = 7;
     }
 
     optional uint32 State = 1; // EPDiskState
@@ -699,9 +722,15 @@ message TConfigUpdaterState {
 }
 
 message TGetSentinelStateResponse {
+    message TNodeState {
+        optional uint32 NodeId = 1;
+        optional uint32 State = 2;
+    }
+
     optional TStatus Status = 1;
     optional TCmsConfig.TSentinelConfig SentinelConfig = 2;
     repeated TPDisk PDisks = 3;
     optional TStateUpdaterState StateUpdater = 4;
     optional TConfigUpdaterState ConfigUpdater = 5;
+    repeated TNodeState NodesState = 6;
 }

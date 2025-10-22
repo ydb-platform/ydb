@@ -64,6 +64,10 @@ public:
         return VersionColumns;
     }
 
+    ui64 GetPositionIndex() const {
+        return KeyColumns.GetPosition();
+    }
+
     TBatchIterator(TRWSortableBatchPosition&& keyColumns)
         : ControlPointFlag(true)
         , KeyColumns(std::move(keyColumns))
@@ -82,15 +86,14 @@ public:
         , ReverseSortKff(order.GetIsReversed() ? -1 : 1)
         , SourceId(sourceId)
         , Filter(filter) {
+        AFL_VERIFY(batch);
         AFL_VERIFY(KeyColumns.IsSameSortingSchema(keySchema))("batch", KeyColumns.DebugJson())("schema", keySchema.ToString());
         AFL_VERIFY(KeyColumns.IsSameDataSchema(dataSchema))("batch", KeyColumns.DebugJson())("schema", dataSchema.ToString());
         Y_ABORT_UNLESS(KeyColumns.InitPosition(GetPosition(order.GetStart())));
         Y_ABORT_UNLESS(VersionColumns.InitPosition(GetPosition(order.GetStart())));
         if (Filter) {
-            FilterIterator = std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(order.GetIsReversed(), RecordsCount));
-            if (order.GetStart()) {
-                FilterIterator->Next(order.GetStart());
-            }
+            FilterIterator =
+                std::make_shared<NArrow::TColumnFilter::TIterator>(Filter->GetIterator(order.GetIsReversed(), RecordsCount, order.GetStart()));
         }
     }
 

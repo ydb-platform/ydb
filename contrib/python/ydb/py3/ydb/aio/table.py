@@ -105,6 +105,7 @@ class Session(BaseSession):
         alter_partitioning_settings=None,
         set_key_bloom_filter=None,
         set_read_replicas_settings=None,
+        rename_indexes=None,
     ):  # pylint: disable=W0236,R0913,R0914
         return await super().alter_table(
             path,
@@ -123,6 +124,7 @@ class Session(BaseSession):
             alter_partitioning_settings,
             set_key_bloom_filter,
             set_read_replicas_settings,
+            rename_indexes,
         )
 
     def transaction(self, tx_mode=None, *, allow_split_transactions=None):
@@ -250,6 +252,7 @@ class TableClient(BaseTableClient):
         alter_partitioning_settings: Optional["ydb.PartitioningSettings"] = None,
         set_key_bloom_filter: Optional["ydb.FeatureFlag"] = None,
         set_read_replicas_settings: Optional["ydb.ReadReplicasSettings"] = None,
+        rename_indexes: Optional[List["ydb.RenameIndexItem"]] = None,
     ) -> "ydb.Operation":
         """
         Alter a YDB table.
@@ -269,6 +272,7 @@ class TableClient(BaseTableClient):
         :param set_compaction_policy: Compaction policy
         :param alter_partitioning_settings: ydb.PartitioningSettings to alter
         :param set_key_bloom_filter: ydb.FeatureFlag to set key bloom filter
+        :param rename_indexes: List of ydb.RenameIndexItem to rename
 
         :return: Operation or YDB error otherwise.
         """
@@ -293,6 +297,7 @@ class TableClient(BaseTableClient):
                 alter_partitioning_settings=alter_partitioning_settings,
                 set_key_bloom_filter=set_key_bloom_filter,
                 set_read_replicas_settings=set_read_replicas_settings,
+                rename_indexes=rename_indexes,
             )
 
         return await self._pool.retry_operation(callee)

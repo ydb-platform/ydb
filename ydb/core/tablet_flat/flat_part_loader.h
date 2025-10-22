@@ -24,11 +24,20 @@ namespace NTable {
             Result,
         };
 
-        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
+
+        struct TFetch : TMoveOnly {
+            TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
+            TVector<TPageId> Pages;
+
+            explicit operator bool() const {
+                return bool(Pages);
+            }
+        };
 
         struct TLoaderEnv : public IPages {
-            TLoaderEnv(TIntrusivePtr<TCache> cache)
-                : Cache(std::move(cache))
+            TLoaderEnv(TIntrusivePtr<TPageCollection> pageCollection)
+                : PageCollection(std::move(pageCollection))
             {
             }
 
@@ -56,7 +65,7 @@ namespace NTable {
                 auto savedPage = SavedPages.find(pageId);
                 
                 if (savedPage == SavedPages.end()) {
-                    if (auto cachedPage = Cache->GetPage(pageId); cachedPage) {
+                    if (auto cachedPage = PageCollection->FindPage(pageId); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
                             AddSavedPage(pageId, std::move(sharedPageRef));
@@ -78,24 +87,33 @@ namespace NTable {
                 Y_ENSURE(!NeedPages);
             }
 
-            TAutoPtr<NPageCollection::TFetch> GetFetch()
+            TFetch GetFetch()
             {
                 if (NeedPages) {
                     TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
                     std::sort(pages.begin(), pages.end());
-                    return new NPageCollection::TFetch{ 0, Cache->PageCollection, std::move(pages) };
+                    return {
+                        .PageCollection = PageCollection->PageCollection,
+                        .Pages = std::move(pages)
+                    };
                 } else {
-                    return nullptr;
+                    return {};
                 }
             }
 
-            void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded)
+            void Save(NSharedCache::TEvResult::TLoaded&& loaded)
             {
-                if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
-                    auto pageType = Cache->GetPageType(loaded.PageId);
-                    bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
-                    AddSavedPage(loaded.PageId, loaded.Page);
-                    Cache->Fill(loaded.PageId, std::move(loaded.Page), sticky);
+                auto pageType = PageCollection->GetPageType(loaded.PageId);
+
+                auto needed = NeedPages.erase(loaded.PageId);
+                Y_ENSURE(needed, "Got uknown " << pageType << " page " << loaded.PageId);
+                
+                bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
+                AddSavedPage(loaded.PageId, loaded.Page);
+                if (sticky) {
+                    PageCollection->AddStickyPage(loaded.PageId, std::move(loaded.Page));
+                } else {
+                    PageCollection->AddPage(loaded.PageId, std::move(loaded.Page));
                 }
             }
 
@@ -107,7 +125,7 @@ namespace NTable {
             }
 
             const TPart* Part = nullptr;
-            TIntrusivePtr<TCache> Cache;
+            TIntrusivePtr<TPageCollection> PageCollection;
             THashMap<TPageId, TSharedData> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
             THashSet<TPageId> NeedPages;
@@ -133,15 +151,15 @@ namespace NTable {
 
         }
 
-        TLoader(TVector<TIntrusivePtr<TCache>>, TString legacy, TString opaque,
+        TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
                 TVector<TString> deltas = { },
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
 
-        TVector<TAutoPtr<NPageCollection::TFetch>> Run(TRunOptions options)
+        TFetch Run(TRunOptions options)
         {
             while (Stage < EStage::Result) {
-                TAutoPtr<NPageCollection::TFetch> fetch;
+                TFetch fetch;
 
                 switch (Stage) {
                     case EStage::Meta:
@@ -166,10 +184,7 @@ namespace NTable {
                 }
 
                 if (fetch) {
-                    if (!fetch->Pages) {
-                        Y_TABLET_ERROR("TLoader is trying to fetch 0 pages");
-                    }
-                    return { fetch };
+                    return fetch;
                 }
 
                 Stage = EStage(ui8(Stage) + 1);
@@ -178,7 +193,7 @@ namespace NTable {
             return { };
         }
 
-        void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>);
+        void Save(TVector<NSharedCache::TEvResult::TLoaded>&& pages);
 
         constexpr static bool NeedIn(EPage page) noexcept
         {
@@ -202,9 +217,9 @@ namespace NTable {
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
             Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ENSURE(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents[0].PageCollection, "PartComponents should have a parsed meta pageCollectionComponent");
 
-            const auto &meta = pc.PageCollectionComponents[0].Packet->Meta;
+            const auto &meta = pc.PageCollectionComponents[0].PageCollection->Meta;
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -251,13 +266,13 @@ namespace NTable {
         }
 
         void StageParseMeta();
-        TAutoPtr<NPageCollection::TFetch> StageCreatePartView(bool preloadIndex);
-        TAutoPtr<NPageCollection::TFetch> StageSliceBounds();
+        TFetch StageCreatePartView(bool preloadIndex);
+        TFetch StageSliceBounds();
         void StageDeltas();
-        TAutoPtr<NPageCollection::TFetch> StagePreloadData();
+        TFetch StagePreloadData();
 
     private:
-        TVector<TIntrusivePtr<TCache>> Packs;
+        TVector<TIntrusivePtr<TPageCollection>> PageCollections;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;

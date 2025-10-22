@@ -9,31 +9,29 @@ namespace NYql {
 
 template <class T>
 class TLazyInitHolder
-    : public TPointerBase<TLazyInitHolder<T>, T>
-{
+    : public TPointerBase<TLazyInitHolder<T>, T> {
 public:
     using TFactory = std::function<THolder<T>()>;
 
     TLazyInitHolder(TFactory&& factory)
-        : Factory(std::move(factory))
+        : Factory_(std::move(factory))
     {
     }
 
     T* Get() const noexcept {
-        if (!Value) {
-            Value = Factory();
+        if (!Value_) {
+            Value_ = Factory_();
         }
-        return Value.Get();
+        return Value_.Get();
     }
 
     inline explicit operator bool() const noexcept {
-        return !!Value.Get();
+        return !!Value_.Get();
     }
 
 private:
-    TFactory Factory;
-    mutable THolder<T> Value;
-
+    TFactory Factory_;
+    mutable THolder<T> Value_;
 };
 
-} // NYql
+} // namespace NYql

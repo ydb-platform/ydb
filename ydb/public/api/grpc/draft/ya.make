@@ -1,4 +1,5 @@
 PROTO_LIBRARY(api-grpc-draft)
+PROTOC_FATAL_WARNINGS()
 
 MAVEN_GROUP_ID(com.yandex.ydb)
 
@@ -8,6 +9,7 @@ SRCS(
     dummy.proto
     fq_v1.proto
     ydb_backup_v1.proto
+    ydb_bridge_v1.proto
     ydb_clickhouse_internal_v1.proto
     ydb_datastreams_v1.proto
     ydb_dynamic_config_v1.proto

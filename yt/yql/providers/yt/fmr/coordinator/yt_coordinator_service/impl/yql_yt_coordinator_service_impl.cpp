@@ -31,8 +31,9 @@ public:
             auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
             TVector<NYT::TRichYPath> richPaths;
             for (auto& ytTable: ytTables ) {
-                TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
-                richPaths.emplace_back(NYT::TRichYPath(ytPath).Cluster(ytTable.Cluster));
+                auto richPath = ytTable.RichPath;
+                NormalizeRichPath(richPath);
+                richPaths.emplace_back(richPath);
             }
             try {
                 NYT::TMultiTablePartitions partitions = transaction->GetTablePartitions(richPaths, getTablePartitionsOptions);
@@ -49,7 +50,7 @@ public:
                 return {{}, false};
             }
         }
-        YQL_CLOG(INFO, FastMapReduce) << "partitioned input yt tables into " << ytPartitions.size() << " tasks";
+        YQL_CLOG(INFO, FastMapReduce) << "partitioned " << ytTables.size() << " input yt tables into " << ytPartitions.size() << " tasks";
         for (auto& task: ytPartitions) {
             YQL_CLOG(DEBUG, FastMapReduce) << task;
         }
@@ -69,7 +70,7 @@ private:
         std::vector<TGroupedYtTablesByCluster> tableGroups;
         std::unordered_map<TString, ui64> ytServerToGroups;
         for (auto& ytTable: ytTables) {
-            auto fmrTableId = TFmrTableId(ytTable.Cluster, ytTable.Path);
+            auto fmrTableId = TFmrTableId(ytTable.GetCluster(), ytTable.GetPath());
             auto clusterConnection = clusterConnections.at(fmrTableId);
             auto ytServerName = clusterConnection.YtServerName;
             if (!ytServerToGroups.contains(ytServerName)) {

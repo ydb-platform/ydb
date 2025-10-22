@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include "events.h"
 #include "log.h"
 #include "serviceid.h"

@@ -6,7 +6,7 @@
 #include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/persqueue/pq_database.h>
+#include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/services/metadata/service.h>
 
@@ -102,7 +102,7 @@ public:
         }
 
         KqpSessionId = record.GetResponse().GetSessionId();
-        Y_ABORT_UNLESS(!KqpSessionId.empty());
+        Y_ENSURE(!KqpSessionId.empty());
 
         return true;
     }
@@ -171,7 +171,7 @@ public:
 
         NYdb::TResultSetParser parser(record.GetResponse().GetYdbResults(0));
         TxId = record.GetResponse().GetTxMeta().id();
-        Y_ABORT_UNLESS(!TxId.empty());
+        Y_ENSURE(!TxId.empty());
 
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();

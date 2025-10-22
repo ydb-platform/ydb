@@ -1,4 +1,5 @@
 #include "events.h"
+#include "actor.h"
 
 #include <ydb/library/actors/protos/actors.pb.h>
 
@@ -12,6 +13,12 @@ namespace NActors {
         Y_DEBUG_ABORT_UNLESS(dest);
         dest->SetRawX1(src.RawX1());
         dest->SetRawX2(src.RawX2());
+    }
+
+    TEvents::TEvResumeRunnable::~TEvResumeRunnable() {
+        if (Item) {
+            Item->Run(nullptr);
+        }
     }
 
 } // NActors

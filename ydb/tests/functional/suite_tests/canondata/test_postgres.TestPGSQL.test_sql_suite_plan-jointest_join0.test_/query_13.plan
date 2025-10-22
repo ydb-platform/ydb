@@ -35,11 +35,23 @@
                                                 "Inputs": [
                                                     {
                                                         "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
+                                                    },
+                                                    {
+                                                        "InternalOperatorId": 1
                                                     }
                                                 ],
                                                 "Limit": "1001",
                                                 "Name": "TopSort",
-                                                "TopSortBy": "argument.foo1.join_key"
+                                                "TopSortBy": "row.foo1_id"
                                             },
                                             {
                                                 "Condition": "foo1.join_key = foo3.foo2.f1",
@@ -84,9 +96,6 @@
                                                                         "Name": "TableFullScan",
                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
                                                                         "ReadColumns": [
-                                                                            "f1"
-                                                                        ],
-                                                                        "ReadRanges": [
                                                                             "f1 (-\u221e, +\u221e)"
                                                                         ],
                                                                         "ReadRangesPointPrefixLen": "0",
@@ -116,9 +125,6 @@
                                                                                         "Name": "TableFullScan",
                                                                                         "Path": "/Root/postgres_jointest/join0.test_plan/tenk1",
                                                                                         "ReadColumns": [
-                                                                                            "unique2"
-                                                                                        ],
-                                                                                        "ReadRanges": [
                                                                                             "unique1 (-\u221e, +\u221e)",
                                                                                             "unique2 (-\u221e, +\u221e)"
                                                                                         ],
@@ -144,7 +150,7 @@
                                     }
                                 ],
                                 "SortColumns": [
-                                    "foo1.join_key (Asc)"
+                                    "foo1_id (Asc)"
                                 ]
                             }
                         ]

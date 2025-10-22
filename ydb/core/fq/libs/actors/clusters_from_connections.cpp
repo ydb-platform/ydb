@@ -120,6 +120,7 @@ void FillSolomonClusterConfig(NYql::TSolomonClusterConfig& clusterConfig,
     clusterConfig.MutablePath()->SetProject(monitoring.project());
     clusterConfig.MutablePath()->SetCluster(monitoring.cluster());
     clusterConfig.SetUseSsl(useSsl);
+
     FillClusterAuth(clusterConfig, monitoring.auth(), authToken, accountIdSignatures);
 }
 
@@ -222,13 +223,13 @@ NYql::TS3ClusterConfig CreateS3ClusterConfig(const TString& name,
 
 NYql::TSolomonClusterConfig CreateSolomonClusterConfig(const TString& name,
         const TString& authToken,
-        const TString& endpoint,
+        const TString& monitoringEndpoint,
         const TString& accountSignature,
         const FederatedQuery::Monitoring& monitoring) {
     NYql::TSolomonClusterConfig cluster;
     THashMap<TString, TString> accountIdSignatures;
     accountIdSignatures[monitoring.auth().service_account().id()] = accountSignature;
-    FillSolomonClusterConfig(cluster, name, authToken, endpoint, accountIdSignatures, monitoring);
+    FillSolomonClusterConfig(cluster, name, authToken, monitoringEndpoint, accountIdSignatures, monitoring);
     return cluster;
 }
 

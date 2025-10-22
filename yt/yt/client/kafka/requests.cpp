@@ -170,7 +170,7 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
         auto keySize = reader->ReadVarInt();
         YT_LOG_TRACE("Parsing Record (KeySize: %v)", keySize);
         if (keySize > 0) {
-            Key = TString{};
+            Key = std::string{};
             reader->ReadString(&(*Key), keySize);
         }
 
@@ -179,7 +179,7 @@ void TRecord::Deserialize(IKafkaProtocolReader* reader, int version)
 
         if (valueSize > 0) {
             YT_LOG_TRACE("Parsing Record (ValueSize: %v)", valueSize);
-            Value = TString{};
+            Value = std::string{};
             reader->ReadString(&(*Value), valueSize);
         }
 

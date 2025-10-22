@@ -1,9 +1,16 @@
 PROGRAM()
 
 PYTHON3_ADDINCL()
-PEERDIR(
-    contrib/tools/python3
-)
+
+IF (USE_PYTHON3_PREV)
+    PEERDIR(
+        contrib/tools/python3_prev
+    )
+ELSE()
+    PEERDIR(
+        contrib/tools/python3
+    )
+ENDIF()
 
 SRCS(main.cpp)
 

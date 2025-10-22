@@ -61,9 +61,9 @@ directory require at least one of the following TLS backends:
 - `quictls
   <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1w+quic>`_
 - GnuTLS >= 3.7.5
-- BoringSSL (commit 23018360710de333b3343e63cbb3bd2dceb3287d);
+- BoringSSL (commit 729648fb79df7bc46c145e49b0dfd8d2a24232f1);
   or aws-lc >= 1.39.0
-- Picotls (commit bbcdbe6dc31ec5d4b72a7beece4daf58098bad42)
+- Picotls (commit f350eab60742138ac62b42ee444adf04c7898b0d)
 - wolfSSL >= 5.5.0
 - LibreSSL >= v3.9.2
 - OpenSSL >= 3.5.0 (experimental)
@@ -82,13 +82,13 @@ Build with wolfSSL
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v5.7.6-stable https://github.com/wolfSSL/wolfssl
+   $ git clone --depth 1 -b v5.8.2-stable https://github.com/wolfSSL/wolfssl
    $ cd wolfssl
    $ autoreconf -i
    $ # For wolfSSL < v5.6.6, append --enable-quic.
    $ ./configure --prefix=$PWD/build \
        --enable-all --enable-aesni --enable-harden --enable-keylog-export \
-       --disable-ech
+       --disable-ech --enable-mlkem
    $ make -j$(nproc)
    $ make install
    $ cd ..
@@ -115,7 +115,7 @@ Build with BoringSSL
 
    $ git clone https://boringssl.googlesource.com/boringssl
    $ cd boringssl
-   $ git checkout 23018360710de333b3343e63cbb3bd2dceb3287d
+   $ git checkout 729648fb79df7bc46c145e49b0dfd8d2a24232f1
    $ cmake -B build -DCMAKE_POSITION_INDEPENDENT_CODE=ON
    $ make -j$(nproc) -C build
    $ cd ..
@@ -132,7 +132,7 @@ Build with BoringSSL
    $ # For Mac users who have installed libev with MacPorts, append
    $ # LIBEV_CFLAGS="-I/opt/local/include" LIBEV_LIBS="-L/opt/local/lib -lev"
    $ ./configure PKG_CONFIG_PATH=$PWD/../nghttp3/build/lib/pkgconfig \
-       BORINGSSL_LIBS="-L$PWD/../boringssl/build/ssl -lssl -L$PWD/../boringssl/build/crypto -lcrypto" \
+       BORINGSSL_LIBS="-L$PWD/../boringssl/build -lssl -lcrypto" \
        BORINGSSL_CFLAGS="-I$PWD/../boringssl/include" \
        --with-boringssl
    $ make -j$(nproc) check
@@ -142,7 +142,7 @@ Build with aws-lc
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v1.49.1 https://github.com/aws/aws-lc
+   $ git clone --depth 1 -b v1.58.1 https://github.com/aws/aws-lc
    $ cd aws-lc
    $ cmake -B build -DDISABLE_GO=ON
    $ make -j$(nproc) -C build
@@ -170,10 +170,10 @@ Build with libressl
 
 .. code-block:: shell
 
-   $ git clone --depth 1 -b v4.0.0 https://github.com/libressl/portable.git libressl
+   $ git clone --depth 1 -b v4.1.0 https://github.com/libressl/portable.git libressl
    $ cd libressl
    $ # Workaround autogen.sh failure
-   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.0.0"
+   $ export LIBRESSL_GIT_OPTIONS="-b libressl-v4.1.0"
    $ ./autogen.sh
    $ ./configure --prefix=$PWD/build
    $ make -j$(nproc) install
@@ -272,7 +272,8 @@ The header file exists under crypto/includes/ngtcp2 directory.
 Each library file is built for a particular TLS backend.  The
 available crypto helper libraries are:
 
-- libngtcp2_crypto_quictls: Use quictls and libressl as TLS backend
+- libngtcp2_crypto_quictls: Use quictls as TLS backend
+- libngtcp2_crypto_libressl: Use libressl as TLS backend
 - libngtcp2_crypto_gnutls: Use GnuTLS as TLS backend
 - libngtcp2_crypto_boringssl: Use BoringSSL and aws-lc as TLS backend
 - libngtcp2_crypto_picotls: Use Picotls as TLS backend
@@ -299,8 +300,12 @@ OpenSSL backend, your application must make sure that:
 If you cannot make sure neither of them, it is a good time to migrate
 your application to the other alternative (e.g., wolfSSL, aws-lc).
 
-libngtcp2_crypto_quictls and libngtcp2_crypto_ossl cannot be built at
-the same time.
+libngtcp2_crypto_quictls, libngtcp2_crypto_libressl and
+libngtcp2_crypto_ossl cannot be built at the same time.
+
+Although libressl has its own library libngtcp2_crypto_libressl, an
+application should include `ngtcp2/ngtcp2_crypto_quictls.h`.  There is
+no `ngtcp2/ngtcp2_crypto_libressl.h`.
 
 The examples directory contains client and server that are linked to
 those crypto helper libraries and TLS backends.  They are only built

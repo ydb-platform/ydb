@@ -2,6 +2,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <util/generic/bitops.h>
+
 #include <ranges>
 
 namespace NKikimr {
@@ -80,11 +82,97 @@ namespace NKikimr {
                 }
             }
 
+            ////////////////////////////////////////////////////////////////////////
+            // TChainLayoutBuilderV2
+            ////////////////////////////////////////////////////////////////////////
+            TChainLayoutBuilderV2::TChainLayoutBuilderV2(const TString& prefix, ui32 blockSize,
+                    ui32 blocksInChunk, ui32 left, ui32 right, ui32 stepsBetweenPowersOf2)
+                : VDiskLogPrefix(prefix)
+                , BlockSize(blockSize)
+                , BlocksInChunk(blocksInChunk)
+                , Left(left)
+                , Right(right)
+                , StepsBetweenPowersOf2(stepsBetweenPowersOf2)
+            {
+                Build();
+                Check();
+            }
+
+            void TChainLayoutBuilderV2::Build() {
+                double powerStep = std::pow(2.0, 1.0 / StepsBetweenPowersOf2);
+                ui32 powerOf2 = FastClp2(Left * BlockSize);
+
+                for (ui32 prevBlocks = Left; prevBlocks < Right; ) {
+                    ui32 size = powerOf2;
+                    for (ui32 step = 0; step < StepsBetweenPowersOf2 && prevBlocks < Right; ++step) {
+                        // adjust to the block boundary
+                        ui32 blocks = (size + BlockSize - 1) / BlockSize;
+                        // adjust to fit the same number of slots
+                        ui32 slotsInChunk = BlocksInChunk / blocks;
+                        ui32 finalBlocks = BlocksInChunk / slotsInChunk;
+
+                        if (finalBlocks != prevBlocks) {
+                            Layout.push_back({prevBlocks, finalBlocks});
+                            prevBlocks = finalBlocks;
+                        }
+                        size = (ui32)(size * powerStep);
+                    }
+                    powerOf2 *= 2;
+                }
+            }
+
+            void TChainLayoutBuilderV2::Check() {
+                Y_VERIFY_S(Layout.size() > 1, VDiskLogPrefix);
+                Y_VERIFY_S(Layout.begin()->Left <= Left, VDiskLogPrefix);
+                Y_VERIFY_S((Layout.end() - 1)->Right >= Right, VDiskLogPrefix);
+                for (size_t i = 1, s = Layout.size(); i < s; ++i) {
+                    Y_VERIFY_S(Layout[i - 1].Right == Layout[i].Left, VDiskLogPrefix);
+                }
+            }
+
         } // NPrivate
 
         ////////////////////////////////////////////////////////////////////////////
         // TChain
         ////////////////////////////////////////////////////////////////////////////
+        TChain::TChain(TString vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap::TChain& chain)
+            : VDiskLogPrefix(std::move(vdiskLogPrefix))
+        {
+            LoadFromProto(chain);
+        }
+
+        void TChain::SaveToProto(NKikimrVDiskData::THugeKeeperHeap::TChain& chain) const {
+            chain.SetSlotsInChunk(SlotsInChunk);
+            chain.SetSlotSize(SlotSize);
+            chain.SetAllocatedSlots(AllocatedSlots);
+
+            ForEachFreeSpaceChunk([&chain](const auto& x) {
+                const auto& [chunkId, item] = x;
+                auto& freeSpaceItem = *chain.AddFreeSpaceItems();
+                freeSpaceItem.SetChunkId(chunkId);
+                TStringStream str;
+                ::Save(&str, item.FreeSlots);
+                freeSpaceItem.SetMask(str.Str());
+            });
+        }
+
+        void TChain::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap::TChain& chain) {
+            SlotsInChunk = chain.GetSlotsInChunk();
+            SlotSize = chain.GetSlotSize();
+            AllocatedSlots = chain.GetAllocatedSlots();
+
+            ConstMask = BuildConstMask(VDiskLogPrefix, SlotsInChunk);
+
+            for (const auto& freeSpaceItem : chain.GetFreeSpaceItems()) {
+                TFreeSpaceItem item;
+                TStringInput in(freeSpaceItem.GetMask());
+                ::Load(&in, item.FreeSlots);
+                item.NumFreeSlots = item.FreeSlots.Count();
+                FreeSlotsInFreeSpace += item.NumFreeSlots;
+                FreeSpace.emplace(freeSpaceItem.GetChunkId(), std::move(item));
+            }
+        }
+
         THugeSlot TChain::Convert(const NPrivate::TChunkSlot& id) const {
             return THugeSlot(id.GetChunkId(), id.GetSlotId() * SlotSize, SlotSize);
         }
@@ -341,7 +429,7 @@ namespace NKikimr {
             HTML(str) {
                 TABLER() {
                     TABLED() {
-                        str << SlotSize << "/" << SlotsInChunk;
+                        str << SlotSize << " / " << SlotsInChunk;
                     }
                     TABLED() {
                         ForEachFreeSpaceChunk([&](const auto& value) {
@@ -407,26 +495,39 @@ namespace NKikimr {
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
                 ui32 milestoneBlobInBytes,
-                ui32 maxBlobInBytes,
-                ui32 overhead)
+                ui32 maxHugeBlobInBytes,
+                ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2)
             : VDiskLogPrefix(vdiskLogPrefix)
             , ChunkSize(chunkSize)
             , AppendBlockSize(appendBlockSize)
             , MinHugeBlobInBytes(minHugeBlobInBytes)
-            , MilestoneBlobInBytes(milestoneBlobInBytes)
-            , Overhead(overhead)
+            , MaxHugeBlobInBytes(maxHugeBlobInBytes)
             , MinHugeBlobInBlocks(MinHugeBlobInBytes / AppendBlockSize)
-            , MaxHugeBlobInBlocks(SizeToBlocks(maxBlobInBytes))
+            , MaxHugeBlobInBlocks(SizeToBlocks(MaxHugeBlobInBytes))
         {
             Y_VERIFY_S(MinHugeBlobInBytes &&
-                    MinHugeBlobInBytes <= MilestoneBlobInBytes &&
-                    MilestoneBlobInBytes < maxBlobInBytes,
+                    MinHugeBlobInBytes <= milestoneBlobInBytes &&
+                    milestoneBlobInBytes < MaxHugeBlobInBytes,
                             VDiskLogPrefix << "INVALID CONFIGURATION! (SETTINGS ARE:"
-                            << " MaxBlobInBytes# " << maxBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
-                            << " MilestoneBlobInBytes# " << MilestoneBlobInBytes << " ChunkSize# " << ChunkSize
+                            << " MaxHugeBlobInBytes# " << MaxHugeBlobInBytes << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
+                            << " MilestoneBlobInBytes# " << milestoneBlobInBytes << " ChunkSize# " << ChunkSize
                             << " AppendBlockSize# " << AppendBlockSize << ")");
 
-            BuildChains();
+            if (useBucketsV2) {
+                BuildChainsV2(stepsBetweenPowersOf2);
+            } else {
+                BuildChains(milestoneBlobInBytes, overhead);
+            }
+
+            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
+        }
+
+        TAllChains::TAllChains(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+            : VDiskLogPrefix(vdiskLogPrefix)
+        {
+            LoadFromProto(heap);
         }
 
         TChain *TAllChains::GetChain(ui32 size) {
@@ -529,6 +630,33 @@ namespace NKikimr {
             Chains = std::move(newChains);
         }
 
+        void TAllChains::SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const {
+            heap.SetChunkSize(ChunkSize);
+            heap.SetAppendBlockSize(AppendBlockSize);
+            heap.SetMinHugeBlobInBytes(MinHugeBlobInBytes);
+            heap.SetMaxHugeBlobInBytes(MaxHugeBlobInBytes);
+
+            heap.MutableChains()->Reserve(Chains.size());
+            for (const auto& chain : Chains) {
+                chain.SaveToProto(*heap.AddChains());
+            }
+        }
+
+        void TAllChains::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap) {
+            ChunkSize = heap.GetChunkSize();
+            AppendBlockSize = heap.GetAppendBlockSize();
+            MinHugeBlobInBytes = heap.GetMinHugeBlobInBytes();
+            MaxHugeBlobInBytes = heap.GetMaxHugeBlobInBytes();
+
+            MinHugeBlobInBlocks = MinHugeBlobInBytes / AppendBlockSize;
+            MaxHugeBlobInBlocks = SizeToBlocks(MaxHugeBlobInBytes);
+
+            Chains.reserve(heap.ChainsSize());
+            for (const auto& chain : heap.GetChains()) {
+                Chains.emplace_back(VDiskLogPrefix, chain);
+            }
+        }
+
         void TAllChains::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
             for (const TChain& chain : Chains) {
                 chain.GetOwnedChunks(chunks);
@@ -540,6 +668,7 @@ namespace NKikimr {
             str << "{ChunkSize# " << ChunkSize
                 << " AppendBlockSize# " << AppendBlockSize
                 << " MinHugeBlobInBytes# " << MinHugeBlobInBytes
+                << " MaxHugeBlobInBytes# " << MaxHugeBlobInBytes
                 << " MinHugeBlobInBlocks# " << MinHugeBlobInBlocks
                 << " MaxHugeBlobInBlocks# " << MaxHugeBlobInBlocks;
             for (const auto& chain : Chains) {
@@ -586,8 +715,8 @@ namespace NKikimr {
             }
         }
 
-        TVector<NPrivate::TChainLayoutBuilder::TSeg> TAllChains::GetLayout() const {
-            TVector<NPrivate::TChainLayoutBuilder::TSeg> res;
+        NPrivate::TLayout TAllChains::GetLayout() const {
+            TVector<NPrivate::TLayoutSegment> res;
             res.reserve(Chains.size());
             ui32 prevSlotSizeInBlocks = MinHugeBlobInBlocks;
             for (const auto& chain : Chains) {
@@ -613,22 +742,39 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains: Private
         ////////////////////////////////////////////////////////////////////////////
-        void TAllChains::BuildChains() {
+        void TAllChains::BuildChains(ui32 milestoneBlobInBytes, ui32 overhead) {
             const ui32 startBlocks = MinHugeBlobInBlocks;
-            const ui32 milestoneBlocks = MilestoneBlobInBytes / AppendBlockSize;
+            const ui32 milestoneBlocks = milestoneBlobInBytes / AppendBlockSize;
             const ui32 endBlocks = MaxHugeBlobInBlocks;
-
-            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix, startBlocks, milestoneBlocks, endBlocks, Overhead);
             const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
 
-            for (auto x : builder.GetLayout()) {
+            NPrivate::TChainLayoutBuilder builder(VDiskLogPrefix,
+                startBlocks, milestoneBlocks, endBlocks, overhead);
+            auto layout = builder.GetLayout();
+
+            for (const auto& x : layout) {
                 const ui32 slotSizeInBlocks = x.Right;
                 const ui32 slotSize = slotSizeInBlocks * AppendBlockSize;
                 const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
                 Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
             }
+        }
 
-            Y_VERIFY_S(!Chains.empty(), VDiskLogPrefix);
+        void TAllChains::BuildChainsV2(ui32 stepsBetweenPowersOf2) {
+            const ui32 startBlocks = MinHugeBlobInBlocks;
+            const ui32 endBlocks = MaxHugeBlobInBlocks;
+            const ui32 blocksInChunk = ChunkSize / AppendBlockSize;
+
+            NPrivate::TChainLayoutBuilderV2 builder(VDiskLogPrefix, AppendBlockSize,
+                blocksInChunk, startBlocks, endBlocks, stepsBetweenPowersOf2);
+            auto layout = builder.GetLayout();
+
+            for (const auto& x : layout) {
+                const ui32 slotSizeInBlocks = x.Right;
+                const ui32 slotSize = slotSizeInBlocks * AppendBlockSize;
+                const ui32 slotsInChunk = blocksInChunk / slotSizeInBlocks;
+                Chains.emplace_back(VDiskLogPrefix, slotsInChunk, slotSize);
+            }
         }
 
         void TAllChains::BuildSearchTable() {
@@ -689,15 +835,23 @@ namespace NKikimr {
                 ui32 appendBlockSize,
                 ui32 minHugeBlobInBytes,
                 ui32 mileStoneBlobInBytes,
-                ui32 maxBlobInBytes,
+                ui32 maxHugeBlobInBytes,
                 ui32 overhead,
+                ui32 stepsBetweenPowersOf2,
+                bool useBucketsV2,
                 ui32 freeChunksReservation)
             : VDiskLogPrefix(vdiskLogPrefix)
             , FreeChunksReservation(freeChunksReservation)
-            , FreeChunks()
             , Chains(vdiskLogPrefix, chunkSize, appendBlockSize, minHugeBlobInBytes, mileStoneBlobInBytes,
-                maxBlobInBytes, overhead)
+                maxHugeBlobInBytes, overhead, stepsBetweenPowersOf2, useBucketsV2)
         {}
+
+        THeap::THeap(const TString& vdiskLogPrefix, const NKikimrVDiskData::THugeKeeperHeap& heap)
+            : VDiskLogPrefix(vdiskLogPrefix)
+            , Chains(vdiskLogPrefix, heap)
+        {
+            LoadFromProto(heap);
+        }
 
         //////////////////////////////////////////////////////////////////////////////////////////
         // THeap: main functions
@@ -868,6 +1022,23 @@ namespace NKikimr {
             ::Load(&str, signature);
             ::Load(&str, FreeChunks);
             ::Load(&str, Chains);
+        }
+
+        void THeap::SaveToProto(NKikimrVDiskData::THugeKeeperHeap& heap) const {
+            Chains.SaveToProto(heap);
+            heap.MutableFreeChunks()->Reserve(FreeChunks.size());
+            for (auto chunk : FreeChunks) {
+                heap.AddFreeChunks(chunk);
+            }
+            heap.SetFreeChunksReservation(FreeChunksReservation);
+        }
+
+        void THeap::LoadFromProto(const NKikimrVDiskData::THugeKeeperHeap& heap) {
+            FreeChunks.clear();
+            for (auto chunk : heap.GetFreeChunks()) {
+                FreeChunks.insert(chunk);
+            }
+            FreeChunksReservation = heap.GetFreeChunksReservation();
         }
 
         bool THeap::CheckEntryPoint(const TString &serialized) {

@@ -52,7 +52,7 @@ public:
 
     TKqpQueryState(TEvKqp::TEvQueryRequest::TPtr& ev, ui64 queryId, const TString& database, const TMaybe<TString>& applicationName,
         const TString& cluster, TKqpDbCountersPtr dbCounters, bool longSession, const NKikimrConfig::TTableServiceConfig& tableServiceConfig,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, const TString& sessionId, TMonotonic startedAt, i32 runtimeParameterSizeLimit)
         : QueryId(queryId)
         , Database(database)
         , ApplicationName(applicationName)
@@ -61,6 +61,8 @@ public:
         , Sender(ev->Sender)
         , ProxyRequestId(ev->Cookie)
         , ParametersSize(ev->Get()->GetParametersSize())
+        , QueryPhysicalGraph(ev->Get()->GetQueryPhysicalGraph())
+        , Generation(ev->Get()->GetGeneration())
         , RequestActorId(ev->Get()->GetRequestActorId())
         , IsDocumentApiRestricted_(IsDocumentApiRestricted(ev->Get()->GetRequestType()))
         , StartTime(TInstant::Now())
@@ -68,14 +70,24 @@ public:
         , UserToken(ev->Get()->GetUserToken())
         , ClientAddress(ev->Get()->GetClientAddress())
         , StartedAt(startedAt)
+        , FormatsSettings(ev->Get()->GetResultSetFormat(), ev->Get()->GetSchemaInclusionMode(), ev->Get()->GetArrowFormatSettings())
+        , RuntimeParameterSizeLimit(runtimeParameterSizeLimit)
     {
         RequestEv.reset(ev->Release().Release());
         bool enableImplicitQueryParameterTypes = tableServiceConfig.GetEnableImplicitQueryParameterTypes() ||
             AppData()->FeatureFlags.GetEnableImplicitQueryParameterTypes();
+
         if (enableImplicitQueryParameterTypes && !RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
+
             for (const auto& [name, typedValue] : RequestEv->GetYdbParameters()) {
                 QueryParameterTypes->insert({name, typedValue.Gettype()});
+
+                if ((typedValue.type().has_list_type() || typedValue.type().has_tuple_type()) &&
+                    typedValue.value().items().size() > static_cast<i32>(runtimeParameterSizeLimit))
+                {
+                    RuntimeParameterSizeLimitSatisfied = false;
+                }
             }
         }
 
@@ -87,6 +99,9 @@ public:
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
+        if (KqpSessionSpan && AppData()) {
+            KqpSessionSpan.Attribute("database", AppData()->TenantName);
+        }
         if (RequestEv->GetUserRequestContext()) {
             UserRequestContext = RequestEv->GetUserRequestContext();
         } else {
@@ -95,6 +110,13 @@ public:
         UserRequestContext->PoolId = RequestEv->GetPoolId();
         UserRequestContext->PoolConfig = RequestEv->GetPoolConfig();
         UserRequestContext->DatabaseId = RequestEv->GetDatabaseId();
+
+        if (RequestEv->GetSaveQueryPhysicalGraph() && !QueryPhysicalGraph) {
+            YQL_ENSURE(QueryType == NKikimrKqp::EQueryType::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            YQL_ENSURE(QueryAction == NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
+            YQL_ENSURE(HasImplicitTx());
+            SaveQueryPhysicalGraph = true;
+        }
     }
 
     // the monotonously growing counter, the ordinal number of the query,
@@ -118,6 +140,9 @@ public:
     TQueryData::TPtr QueryData;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
+    bool SaveQueryPhysicalGraph = false;
+    std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    const i64 Generation = 0;
 
     TActorId RequestActorId;
 
@@ -129,6 +154,7 @@ public:
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
+    TString QueryAst;
     bool KeepSession = false;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TString ClientAddress;
@@ -171,6 +197,12 @@ public:
 
     TMaybe<TString> CommandTagName;
     THashSet<ui32> ParticipantNodes;
+
+    NFormats::TFormatsSettings FormatsSettings;
+
+    i32 RuntimeParameterSizeLimit = 0;
+    bool RuntimeParameterSizeLimitSatisfied = true;
+
 
     bool IsLocalExecution(ui32 nodeId) const {
         if (RequestEv->GetRequestCtx() == nullptr) {
@@ -250,6 +282,10 @@ public:
         return RequestEv->HasTopicOperations();
     }
 
+    bool HasKafkaApiOperations() const {
+        return RequestEv->HasKafkaApiOperations();
+    }
+
     bool GetQueryKeepInCache() const {
         return RequestEv->GetQueryKeepInCache();
     }
@@ -264,6 +300,10 @@ public:
 
     bool IsCreateTableAs() const {
         return IsSplitted();
+    }
+
+    const NFormats::TFormatsSettings& GetFormatsSettings() const {
+        return FormatsSettings;
     }
 
     // todo: gvit
@@ -334,6 +374,10 @@ public:
 
     const ::NKikimrKqp::TTopicOperationsRequest& GetTopicOperationsFromRequest() const {
         return RequestEv->GetTopicOperations();
+    }
+
+    const ::NKikimrKqp::TKafkaApiOperationsRequest& GetKafkaApiOperationsFromRequest() const {
+        return RequestEv->GetKafkaApiOperations();
     }
 
     bool NeedPersistentSnapshot() const {
@@ -432,11 +476,11 @@ public:
         return true;
     }
 
-    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(bool isBatchQuery, NMiniKQL::TTypeEnvironment& txTypeEnv) {
+    TKqpPhyTxHolder::TConstPtr GetCurrentPhyTx(NMiniKQL::TTypeEnvironment& txTypeEnv) {
         const auto& phyQuery = PreparedQuery->GetPhysicalQuery();
         auto tx = PreparedQuery->GetPhyTxOrEmpty(CurrentTx);
 
-        if (TxCtx->CanDeferEffects() && !isBatchQuery) {
+        if (TxCtx->CanDeferEffects()) {
             // Olap sinks require separate tnx with commit.
             while (tx && tx->GetHasEffects() && !TxCtx->HasOlapTable) {
                 QueryData->PrepareParameters(tx, PreparedQuery, txTypeEnv);
@@ -582,13 +626,14 @@ public:
     }
 
     //// Topic ops ////
-    void AddOffsetsToTransaction();
+    void FillTopicOperations();
     bool TryMergeTopicOffsets(const NTopic::TTopicOperations &operations, TString& message);
     std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> BuildSchemeCacheNavigate();
     bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
     bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response, TString& message);
 
     bool HasUserToken() const;
+
 };
 
 

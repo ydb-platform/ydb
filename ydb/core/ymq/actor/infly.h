@@ -1,5 +1,5 @@
 #pragma once
-#include "defs.h"
+#include <ydb/core/ymq/actor/cfg/defs.h>
 #include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
 
 #include <util/datetime/base.h>

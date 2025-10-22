@@ -1,9 +1,9 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/subdomain.h>
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -310,6 +310,8 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeView:
             case NKikimrSchemeOp::EPathType::EPathTypeResourcePool:
             case NKikimrSchemeOp::EPathType::EPathTypeSysView:
+            case NKikimrSchemeOp::EPathType::EPathTypeSecret:
+            case NKikimrSchemeOp::EPathType::EPathTypeStreamingQuery:
                 Y_ABORT_UNLESS(!path.Base()->IsRoot());
                 //no shards
                 break;

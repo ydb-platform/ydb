@@ -1,4 +1,5 @@
 #include "yql_yt_ytflow_integration.h"
+#include "yql_yt_provider.h"
 #include "yql_yt_table.h"
 
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -20,7 +21,7 @@ using namespace NNodes;
 
 class TYtYtflowIntegration: public IYtflowIntegration {
 public:
-    TYtYtflowIntegration(TYtState* state)
+    TYtYtflowIntegration(TYtState::TWeakPtr state)
         : State_(state)
     {
     }
@@ -78,11 +79,21 @@ public:
 
         auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
         auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
-        auto epoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
+        auto commitEpoch = TEpochInfo::Parse(maybeWriteTable.Cast().Table().CommitEpoch().Ref());
 
-        auto tableDesc = State_->TablesData->GetTable(cluster, tableName, epoch);
+        auto ytState = State_.lock();
+        YQL_ENSURE(ytState);
 
-        if (!tableDesc.Meta->IsDynamic) {
+        auto tableDesc = ytState->TablesData->GetTable(
+            cluster, tableName, 0);
+
+        auto commitTableDesc = ytState->TablesData->GetTable(
+            cluster, tableName, commitEpoch);
+
+        if (!tableDesc.Meta->IsDynamic
+            && tableDesc.Meta->DoesExist
+            && !(commitTableDesc.Intents & TYtTableIntent::Override)
+        ) {
             AddMessage(ctx, "write to static table");
             return false;
         }
@@ -145,14 +156,33 @@ public:
         auto maybeWriteTable = TMaybeNode<TYtWriteTable>(&sink);
         YQL_ENSURE(maybeWriteTable);
 
-        auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
-
-        auto* rowType = TYqlRowSpecInfo(table.RowSpec()).GetType();
-
         NYtflow::NProto::TQYTSinkMessage sinkSettings;
-        sinkSettings.SetCluster(table.Cluster().StringValue());
-        sinkSettings.SetPath(table.Name().StringValue());
-        sinkSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
+
+        {
+            auto table = maybeWriteTable.Cast().Table().Cast<TYtTable>();
+
+            sinkSettings.SetCluster(table.Cluster().StringValue());
+            sinkSettings.SetPath(table.Name().StringValue());
+
+            auto* rowType = maybeWriteTable.Cast().Content().Ref().GetTypeAnn()
+                ->Cast<TListExprType>()->GetItemType();
+
+            sinkSettings.SetRowType(NCommon::WriteTypeToYson(rowType));
+        }
+
+        {
+            auto cluster = TString(maybeWriteTable.Cast().DataSink().Cluster().Value());
+            auto tableName = TString(TYtTableInfo::GetTableLabel(maybeWriteTable.Cast().Table()));
+
+            auto ytState = State_.lock();
+            YQL_ENSURE(ytState);
+
+            auto tableDesc = ytState->TablesData->GetTable(
+                cluster, tableName, 0);
+
+            sinkSettings.SetDoesExist(tableDesc.Meta->DoesExist);
+            sinkSettings.SetTruncate(tableDesc.Intents & TYtTableIntent::Override);
+        }
 
         settings.PackFrom(sinkSettings);
     }
@@ -173,11 +203,11 @@ private:
     }
 
 private:
-    TYtState* State_;
+    TYtState::TWeakPtr State_;
 };
 
-THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState* state) {
-    Y_ABORT_UNLESS(state);
+THolder<IYtflowIntegration> CreateYtYtflowIntegration(TYtState::TWeakPtr state) {
+    YQL_ENSURE(!state.expired());
     return MakeHolder<TYtYtflowIntegration>(state);
 }
 

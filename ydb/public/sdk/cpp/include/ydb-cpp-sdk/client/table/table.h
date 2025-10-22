@@ -25,6 +25,7 @@ class Changefeed;
 class ChangefeedDescription;
 class DescribeExternalDataSourceResult;
 class DescribeExternalTableResult;
+class DescribeSystemViewResult;
 class DescribeTableResult;
 class ExplicitPartitions;
 class GlobalIndexSettings;
@@ -634,6 +635,7 @@ public:
     std::optional<std::string> GetTabletCommitLog1() const;
     std::optional<std::string> GetExternal() const;
     std::optional<bool> GetStoreExternalBlobs() const;
+    std::optional<std::uint32_t> GetExternalDataChannelsCount() const;
 
 private:
     class TImpl;
@@ -650,6 +652,7 @@ public:
     const std::string& GetName() const;
     std::optional<std::string> GetData() const;
     std::optional<EColumnFamilyCompression> GetCompression() const;
+    std::optional<EColumnFamilyCacheMode> GetCacheMode() const;
     std::optional<bool> GetKeepInMemory() const;
 
 private:
@@ -789,6 +792,7 @@ public:
     TStorageSettingsBuilder& SetTabletCommitLog1(const std::string& media);
     TStorageSettingsBuilder& SetExternal(const std::string& media);
     TStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled);
+    TStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count);
 
     TStorageSettings Build() const;
 
@@ -826,6 +830,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const std::string& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode);
     TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
     TColumnFamilyDescription Build() const;
@@ -863,6 +868,11 @@ public:
         return *this;
     }
 
+    TTableStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
+        return *this;
+    }
+
     TTableBuilder& EndStorageSettings();
 
 private:
@@ -884,6 +894,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+        Builder_.SetCacheMode(cacheMode);
         return *this;
     }
 
@@ -1082,6 +1097,7 @@ private:
 
 class TDescribeExternalDataSourceResult;
 class TDescribeExternalTableResult;
+class TDescribeSystemViewResult;
 
 using TAsyncCreateSessionResult = NThreading::TFuture<TCreateSessionResult>;
 using TAsyncDataQueryResult = NThreading::TFuture<TDataQueryResult>;
@@ -1090,6 +1106,7 @@ using TAsyncExplainDataQueryResult = NThreading::TFuture<TExplainQueryResult>;
 using TAsyncDescribeTableResult = NThreading::TFuture<TDescribeTableResult>;
 using TAsyncDescribeExternalDataSourceResult = NThreading::TFuture<TDescribeExternalDataSourceResult>;
 using TAsyncDescribeExternalTableResult = NThreading::TFuture<TDescribeExternalTableResult>;
+using TAsyncDescribeSystemViewResult = NThreading::TFuture<TDescribeSystemViewResult>;
 using TAsyncBeginTransactionResult = NThreading::TFuture<TBeginTransactionResult>;
 using TAsyncCommitTransactionResult = NThreading::TFuture<TCommitTransactionResult>;
 using TAsyncTablePartIterator = NThreading::TFuture<TTablePartIterator>;
@@ -1162,6 +1179,8 @@ struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSetting
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
+    google::protobuf::Arena* Arena_ = nullptr;
+    TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
@@ -1478,6 +1497,11 @@ public:
         return *this;
     }
 
+    TAlterStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
+        return *this;
+    }
+
     TAlterTableSettings& EndAlterStorageSettings();
 
 private:
@@ -1499,6 +1523,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+        Builder_.SetCacheMode(cacheMode);
         return *this;
     }
 
@@ -1716,6 +1745,8 @@ struct TDescribeExternalDataSourceSettings : public TOperationRequestSettings<TD
 
 struct TDescribeExternalTableSettings : public TOperationRequestSettings<TDescribeExternalTableSettings> {};
 
+struct TDescribeSystemViewSettings : public TOperationRequestSettings<TDescribeSystemViewSettings> {};
+
 struct TExplainDataQuerySettings : public TOperationRequestSettings<TExplainDataQuerySettings> {
     FLUENT_SETTING_DEFAULT(bool, WithCollectFullDiagnostics, false);
 };
@@ -1803,6 +1834,9 @@ public:
 
     TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path,
         const TDescribeExternalTableSettings& settings = {});
+
+    TAsyncDescribeSystemViewResult DescribeSystemView(const std::string& path,
+        const TDescribeSystemViewSettings& settings = {});
 
     TAsyncBeginTransactionResult BeginTransaction(const TTxSettings& txSettings = TTxSettings(),
         const TBeginTxSettings& settings = TBeginTxSettings());
@@ -2283,6 +2317,46 @@ public:
 
 private:
     TExternalTableDescription ExternalTableDescription_;
+};
+
+//! Represents system view description
+class TSystemViewDescription {
+public:
+    TSystemViewDescription(Ydb::Table::DescribeSystemViewResult&& desc);
+
+    // System view id
+    uint64_t GetSysViewId() const;
+    const std::string& GetSysViewName() const;
+
+    // Columns info
+    const std::vector<std::string>& GetPrimaryKeyColumns() const;
+    std::vector<TTableColumn> GetTableColumns() const;
+
+    // Attributes
+    const std::unordered_map<std::string, std::string>& GetAttributes() const;
+
+private:
+    TSystemViewDescription();
+
+    friend class NYdb::TProtoAccessor;
+    const Ydb::Table::DescribeSystemViewResult& GetProto() const;
+
+    class TImpl;
+    std::shared_ptr<TImpl> Impl_;
+};
+
+//! Represents the result of a DescribeSystemView call.
+class TDescribeSystemViewResult : public NScheme::TDescribePathResult {
+public:
+    TDescribeSystemViewResult(
+        TStatus&& status,
+        Ydb::Table::DescribeSystemViewResult&& desc
+    );
+
+    TSystemViewDescription GetSystemViewDescription() const;
+
+private:
+    TSystemViewDescription SystemViewDescription_;
 };
 
 } // namespace NTable

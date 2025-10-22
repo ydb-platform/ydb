@@ -57,3 +57,5 @@ $\mathrm{MaxUsage}$ и $\mathrm{MinUsage}$ — максимум и миниму�
 - [Hive web-viewer](../reference/embedded-ui/hive.md)
 - [Запуск таблеток](hive-booting.md)
 - [Управление группами хранения](hive-storage.md)
+
+{% include [career](./_includes/career.md) %}

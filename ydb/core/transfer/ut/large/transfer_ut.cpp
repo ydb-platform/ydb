@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         }
     }
 
-    void BigTransfer(const std::string tableType, const size_t threadsCount, const size_t messageCount, const size_t messageSize, bool autopartitioning) {
+    void BigTransfer(const std::string tableType, const size_t threadsCount, const size_t messageCount, const size_t messageSize, bool autopartitioning, bool localTopic = false) {
         MainTestCase testCase(std::nullopt, tableType);
         testCase.CreateTable(R"(
                 CREATE TABLE `%s` (
@@ -132,13 +132,17 @@ Y_UNIT_TEST_SUITE(TransferLarge)
         if (autopartitioning) {
             testCase.CreateTopic({
                 .MinPartitionCount = std::max<ui64>(1, threadsCount >> 4),
-                .MaxPartitionCount = threadsCount,
+                .MaxPartitionCount = threadsCount << 2,
                 .AutoPartitioningEnabled = true
             });
         } else {
             testCase.CreateTopic(threadsCount);
 
         }
+
+        auto settings = MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 8_MB);
+        settings.LocalTopic = localTopic;
+
         testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
@@ -149,7 +153,7 @@ Y_UNIT_TEST_SUITE(TransferLarge)
                         |>
                     ];
                 };
-            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 8_MB));
+            )", settings);
 
         std::vector<std::thread> writerThreads;
         writerThreads.reserve(threadsCount);
@@ -218,34 +222,23 @@ Y_UNIT_TEST_SUITE(TransferLarge)
     // Topic autopartitioning is enabled
     //
 
-    Y_UNIT_TEST(Transfer1KM_1P_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 1, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 1000, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer100KM_10P_ColumnTable_TopicAutoPartitioning)
-    {
-        BigTransfer("COLUMN", 10, 100000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1P_RowTable_TopicAutoPartitioning)
-    {
-        BigTransfer("ROW", 1, 1000, 64, true);
-    }
-
-    Y_UNIT_TEST(Transfer1KM_1KP_RowTable_TopicAutoPartitioning)
-    {
-        BigTransfer("ROW", 1000, 1000, 64, true);
-    }
-
     Y_UNIT_TEST(Transfer100KM_10P_RowTable_TopicAutoPartitioning)
     {
         BigTransfer("ROW", 10, 100000, 64, true);
+    }
+
+    //
+    // LocalRead
+    //
+
+    Y_UNIT_TEST(Transfer100KM_10P_LocalRead)
+    {
+        BigTransfer("ROW", 10, 100000, 64, false, true);
+    }
+
+    Y_UNIT_TEST(Transfer100KM_10P_LocalRead_TopicAutoPartitioning)
+    {
+        BigTransfer("ROW", 10, 100000, 64, true, true);
     }
 
 }

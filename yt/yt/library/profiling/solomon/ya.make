@@ -5,16 +5,16 @@ INCLUDE(${ARCADIA_ROOT}/yt/ya_cpp.make.inc)
 SRCS(
     config.cpp
     cube.cpp
+    encoder.cpp
     exporter.cpp
     helpers.cpp
-    percpu.cpp
     producer.cpp
     proxy.cpp
     GLOBAL registry.cpp
     remote.cpp
-    sensor.cpp
     sensor_service.cpp
     sensor_set.cpp
+    sensor.cpp
     tag_registry.cpp
 
     sensor_dump.proto

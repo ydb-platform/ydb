@@ -2,6 +2,10 @@
 
 #include <ydb/core/backup/common/proto/encrypted_file.pb.h>
 
+#ifndef NDEBUG
+#include <ydb/core/util/source_location.h>
+#endif
+
 #include <util/generic/hash.h>
 #include <util/generic/yexception.h>
 #include <util/generic/size_literals.h>
@@ -22,6 +26,14 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#if defined(__has_feature)
+#  if __has_feature(memory_sanitizer)
+#    include <sanitizer/msan_interface.h>
+#  else
+#    define __msan_unpoison(data, size)
+#  endif
+#endif
+
 #include <deque>
 
 namespace NKikimr::NBackup {
@@ -30,7 +42,7 @@ namespace {
 
 static constexpr size_t MAC_SIZE = 16;
 static constexpr size_t MAX_HEADER_SIZE = 16_KB; // Header does not contain much data
-static constexpr size_t MAX_BLOCK_SIZE = 30_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format.
+static constexpr size_t MAX_BLOCK_SIZE = 50_MB; // Max block size must always be at least size of table row (~8 MB) serialized into text csv format. // Real value is bound to 32 MB in TBackupTask.TScanSettings.BytesBatchSize setting.
 
 THashMap<TString, TString> AlgNames = {
     {"aes128gcm", "AES-128-GCM"},
@@ -312,9 +324,12 @@ public:
             int bufferSize = static_cast<int>(dst.Avail());
             Y_VERIFY(bufferSize >= static_cast<int>(size));
 
-            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
+            if (int err = EVP_EncryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize, data, static_cast<int>(size)); err <= 0) {
                 throw yexception() << "Failed to write unencrypted data: " << GetOpenSslErrorText(err);
             }
+
+            __msan_unpoison(dst.Pos(), bufferSize);
+
             dst.Advance(static_cast<size_t>(bufferSize));
         }
     }
@@ -330,9 +345,12 @@ public:
     void FinalizeAndWriteMAC(TBuffer& dst) {
         // Finalize
         int bufferSize = static_cast<int>(dst.Avail());
-        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &bufferSize); err <= 0) {
+        if (int err = EVP_EncryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &bufferSize); err <= 0) {
             throw yexception() << "Failed to finalize encryption: " << GetOpenSslErrorText(err);
         }
+
+        __msan_unpoison(dst.Pos(), bufferSize);
+
         dst.Advance(static_cast<size_t>(bufferSize));
 
         // Write MAC
@@ -496,6 +514,9 @@ public:
             if (int err = EVP_DecryptUpdate(Ctx.get(), reinterpret_cast<unsigned char*>(data), &outSize, reinterpret_cast<const unsigned char*>(GetCurrentBufferData()), toDecrypt); err <= 0) {
                 ThrowFileIsCorrupted();
             }
+
+            __msan_unpoison(data, outSize);
+
             Y_VERIFY(static_cast<size_t>(outSize) == toDecrypt);
             CurrentBufferPos += static_cast<size_t>(outSize);
             size -= static_cast<size_t>(outSize);
@@ -682,9 +703,12 @@ public:
     void FinalizeAndCheckMAC(TBuffer& dst) {
         ReadMAC();
         int outLen = dst.Avail();
-        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Data() + dst.Size()), &outLen); err <= 0) {
+        if (int err = EVP_DecryptFinal_ex(Ctx.get(), reinterpret_cast<unsigned char*>(dst.Pos()), &outLen); err <= 0) {
             ThrowFileIsCorrupted();
         }
+
+        __msan_unpoison(dst.Pos(), outLen);
+
         dst.Advance(outLen);
     }
 
@@ -746,9 +770,17 @@ public:
         }
     }
 
+#ifndef NDEBUG
+    static void ThrowFileIsCorrupted(const NKikimr::NCompat::TSourceLocation& location = NKikimr::NCompat::TSourceLocation::current()) {
+        throw yexception() << "File is corrupted:\n"
+            << NKikimr::NUtil::TrimSourceFileName(location.file_name()) << ":" << location.line()
+            << "\n" << location.function_name();
+    }
+#else
     static void ThrowFileIsCorrupted() {
         throw yexception() << "File is corrupted";
     }
+#endif
 
     TString GetState() const {
         TEncryptedFileDeserializerState state;

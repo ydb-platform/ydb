@@ -5,7 +5,7 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
@@ -58,10 +58,11 @@ public:
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
 
-    TShowCreate(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
+    TShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
+        const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TBase(ownerId, scanId, tableId, tableRange, columns)
+        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
         , Database(database)
         , UserToken(std::move(userToken))
     {
@@ -112,7 +113,7 @@ private:
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
-                TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
+                TStringBuilder() << "Sys view 'show_create' is not supported");
             return;
         }
 
@@ -537,10 +538,13 @@ private:
 
 }
 
-THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,
-    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database, TIntrusiveConstPtr<NACLib::TUserToken> userToken)
+THolder<NActors::IActor> CreateShowCreate(const NActors::TActorId& ownerId, ui32 scanId,
+    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
+    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns, const TString& database,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TShowCreate>(ownerId, scanId, tableId, tableRange, columns, database, std::move(userToken));
+    return MakeHolder<TShowCreate>(ownerId, scanId, sysViewInfo, tableRange, columns, database,
+        std::move(userToken));
 }
 
 } // NSysView

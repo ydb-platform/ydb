@@ -28,11 +28,14 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             ITransactionPtr&& transaction,
             THolder<TMkqlIOSpecs>&& specs,
             TRawTableWriterPtr&& outStream,
-            THolder<TMkqlWriterImpl>&& writer
+            THolder<TMkqlWriterImpl>&& writer,
+            size_t width,
+            IComputationWideFlowNode* flow
         )
             : TComputationValue<TWriterState>(memInfo)
-            , Client(std::move(client)), Transaction(std::move(transaction))
-            , Specs(std::move(specs)), OutStream(std::move(outStream)), Writer(std::move(writer))
+            , Client_(std::move(client)), Transaction_(std::move(transaction))
+            , Specs_(std::move(specs)), OutStream_(std::move(outStream)), Writer_(std::move(writer))
+            , Values_(width), Fields_(GetPointers(Values_)), Flow_(flow)
         {}
 
         ~TWriterState() override {
@@ -42,24 +45,38 @@ class TYtDqWideWriteWrapper final : public TStatefulFlowCodegeneratorNode<TYtDqW
             }
         }
 
-        void AddRow(const NUdf::TUnboxedValuePod* row) const {
-            Writer->AddFlatRow(row);
+        EFetchResult FetchRead(TComputationContext& ctx) {
+            switch(Flow_->FetchValues(ctx, Fields_.data())) {
+            case EFetchResult::One:
+                Writer_->AddFlatRow(Values_.data());
+                return EFetchResult::One;
+            case EFetchResult::Yield:
+                return EFetchResult::Yield;
+            case EFetchResult::Finish:
+                Finish();
+                return EFetchResult::Finish;
+            }
         }
 
         void Finish() {
-            if (!Finished) {
-                Writer->Finish();
-                OutStream->Finish();
+            if (!Finished_) {
+                Writer_->Finish();
+                OutStream_->Finish();
+                Values_.clear();
+                Fields_.clear();
             }
-            Finished = true;
+            Finished_ = true;
         }
     private:
-        bool Finished = false;
-        const IClientPtr Client;
-        const ITransactionPtr Transaction;
-        const THolder<TMkqlIOSpecs> Specs;
-        const TRawTableWriterPtr OutStream;
-        const THolder<TMkqlWriterImpl> Writer;
+        bool Finished_ = false;
+        const IClientPtr Client_;
+        const ITransactionPtr Transaction_;
+        const THolder<TMkqlIOSpecs> Specs_;
+        const TRawTableWriterPtr OutStream_;
+        const THolder<TMkqlWriterImpl> Writer_;
+        std::vector<NUdf::TUnboxedValue> Values_;
+        std::vector<NUdf::TUnboxedValue*> Fields_;
+        IComputationWideFlowNode* Flow_;
     };
 
 public:
@@ -82,117 +99,100 @@ public:
         , OutSpec(outSpec)
         , WriterOptions(writerOptions)
         , CodecCtx(std::move(codecCtx))
-        , Values(Representations.size()), Fields(GetPointers(Values))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
             return state;
-        } else if (state.IsInvalid())
+        } else if (state.IsInvalid()) {
             MakeState(ctx, state);
-
-        switch (const auto ptr = static_cast<TWriterState*>(state.AsBoxed().Get()); Flow->FetchValues(ctx, Fields.data())) {
+        }
+        auto result = static_cast<TWriterState*>(state.AsBoxed().Get())->FetchRead(ctx);
+        switch (result) {
             case EFetchResult::One:
-                ptr->AddRow(Values.data());
                 return NUdf::TUnboxedValuePod::Void();
             case EFetchResult::Yield:
                 return NUdf::TUnboxedValuePod::MakeYield();
             case EFetchResult::Finish:
-                ptr->Finish();
                 state = NUdf::TUnboxedValuePod::MakeFinish();
                 return state;
         }
     }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto indexType = Type::getInt32Ty(context);
         const auto structPtrType = PointerType::getUnqual(StructType::get(context));
-        const auto arrayType = ArrayType::get(valueType, Representations.size());
-        const auto values = new AllocaInst(arrayType, 0U, "values", &ctx.Func->getEntryBlock().back());
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
-        const auto work = BasicBlock::Create(context, "work", ctx.Func);
+        const auto returnOne = BasicBlock::Create(context, "returnOne", ctx.Func);
+        const auto returnYield = BasicBlock::Create(context, "returnYield", ctx.Func);
+        const auto returnFinish = BasicBlock::Create(context, "returnFinish", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
         const auto exit = BasicBlock::Create(context, "exit", ctx.Func);
 
-        const auto output = PHINode::Create(valueType, 4U, "output", exit);
-        output->addIncoming(GetFinish(context), block);
-
+        const auto output = PHINode::Create(valueType, 2U, "output", exit);
         const auto check = new LoadInst(valueType, statePtr, "check", block);
         const auto choise = SwitchInst::Create(check, next, 2U, block);
+        // if (state.IsFinish()) => goto returnFinish
+        choise->addCase(GetFinish(context), returnFinish);
+        // if (state.IsInvalid()) => goto MakeState(ctx, state)
         choise->addCase(GetInvalid(context), init);
-        choise->addCase(GetFinish(context), exit);
-
-        block = init;
-
-        const auto ptrType = PointerType::getUnqual(StructType::get(context));
-        const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtDqWideWriteWrapper::MakeState>());
-        const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
-        const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
-        CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
-
-        BranchInst::Create(next, block);
-
-        block = next;
-
-        const auto result = GetNodeValues(Flow, ctx, block);
-
-        output->addIncoming(GetYield(context), block);
-
-        const auto way = SwitchInst::Create(result.first, work, 2U, block);
-        way->addCase(ConstantInt::get(indexType, static_cast<i32>(EFetchResult::Yield)), exit);
-        way->addCase(ConstantInt::get(indexType, static_cast<i32>(EFetchResult::Finish)), done);
-
+        // Calling MakeState
         {
-            block = work;
+            block = init;
 
-            TSmallVec<Value*> fields;
-            fields.reserve(Representations.size());
-            for (ui32 i = 0U; i < Representations.size(); ++i) {
-                const auto pointer = GetElementPtrInst::CreateInBounds(arrayType, values, {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)}, (TString("ptr_") += ToString(i)).c_str(), block);
-                fields.emplace_back(result.second[i](ctx, block));
-                new StoreInst(fields.back(), pointer, block);
-            }
-
-            const auto state = new LoadInst(valueType, statePtr, "state", block);
-            const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
-            const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, structPtrType, "state_arg", block);
-
-            const auto addFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::AddRow>());
-            const auto addType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType(), values->getType()}, false);
-            const auto addPtr = CastInst::Create(Instruction::IntToPtr, addFunc, PointerType::getUnqual(addType), "write", block);
-            CallInst::Create(addType, addPtr, {stateArg, values}, "", block);
-
-            for (ui32 i = 0U; i < Representations.size(); ++i) {
-                ValueCleanup(Representations[i], fields[i], ctx, block);
-            }
-
-            output->addIncoming(GetFalse(context), block);
-            BranchInst::Create(exit, block);
+            const auto ptrType = PointerType::getUnqual(StructType::get(context));
+            const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
+            const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TYtDqWideWriteWrapper::MakeState>());
+            const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
+            const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "make_state", block);
+            CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
+            BranchInst::Create(next, block);
         }
 
         {
-            block = done;
-
+            // Calling state->FetchRead()
+            block = next;
             const auto state = new LoadInst(valueType, statePtr, "state", block);
             const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
             const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, structPtrType, "state_arg", block);
 
-            const auto finishFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::Finish>());
-            const auto finishType = FunctionType::get(Type::getVoidTy(context), {stateArg->getType()}, false);
-            const auto finishPtr = CastInst::Create(Instruction::IntToPtr, finishFunc, PointerType::getUnqual(finishType), "finish", block);
-            CallInst::Create(finishType, finishPtr, {stateArg}, "", block);
+            const auto statusType = Type::getInt32Ty(context);
 
-            UnRefBoxed(statePtr, ctx, block);
-            new StoreInst(GetFinish(context), statePtr, block);
+            const auto fetchFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWriterState::FetchRead>());
+            const auto fetchType = FunctionType::get(statusType, {stateArg->getType(), ctx.Ctx->getType()}, false);
+            const auto fetchFunPtr = CastInst::Create(Instruction::IntToPtr, fetchFunc, PointerType::getUnqual(fetchType), "fetch_function", block);
+            const auto fetchResult = CallInst::Create(fetchType, fetchFunPtr, {stateArg, ctx.Ctx}, "call_fetch_fun", block);
 
+            const auto way = SwitchInst::Create(fetchResult, returnOne, 2U, block);
+            way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Yield)), returnYield);
+            way->addCase(ConstantInt::get(statusType, static_cast<i32>(EFetchResult::Finish)), done);
+        }
+        {
+            block = returnOne;
+            output->addIncoming(GetFalse(context), block);
+            BranchInst::Create(exit, block);
+        }
+        {
+            block = returnYield;
+            output->addIncoming(GetYield(context), block);
+            BranchInst::Create(exit, block);
+        }
+        {
+            block = returnFinish;
             output->addIncoming(GetFinish(context), block);
             BranchInst::Create(exit, block);
+        }
+        {
+            block = done;
+            // state = MakeFinish()
+            UnRefBoxed(statePtr, ctx, block);
+            new StoreInst(GetFinish(context), statePtr, block);
+            BranchInst::Create(returnFinish, block);
         }
 
         block = exit;
@@ -225,7 +225,7 @@ private:
         auto writer = MakeHolder<TMkqlWriterImpl>(outStream, 4_MB);
         writer->SetSpecs(*specs);
 
-        state = ctx.HolderFactory.Create<TWriterState>(std::move(client), std::move(transaction), std::move(specs), std::move(outStream), std::move(writer));
+        state = ctx.HolderFactory.Create<TWriterState>(std::move(client), std::move(transaction), std::move(specs), std::move(outStream), std::move(writer), Representations.size(), Flow);
     }
 
     void RegisterDependencies() const final {

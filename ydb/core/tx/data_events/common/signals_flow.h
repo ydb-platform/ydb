@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/signals/owner.h>
+#include <ydb/library/signals/states.h>
 
 namespace NKikimr::NEvWrite {
 
@@ -9,39 +10,30 @@ enum class EWriteStage {
     Started,
     BuildBatch,
     WaitFlush,
-    BuildSlices,
-    BuildSlicesPack,
-    Result,
-    Finished,
+    SlicesConstruction,
+    SlicesReady,
+    SlicesError,
+    PackSlicesConstruction,
+    PackSlicesReady,
+    PackSlicesError,
+    SuccessWritingToLocalDB,
+    FailWritingToLocalDB,
+    Replied,
     Aborted,
-    Replied
+    Finished
 };
 
 class TWriteFlowCounters: public NColumnShard::TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
 
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> CountByWriteStage;
-    std::vector<NMonitoring::TDynamicCounters::TCounterPtr> WriteStageAdd;
-    std::vector<std::vector<NMonitoring::TDynamicCounters::TCounterPtr>> CountByStageMoving;
-    std::vector<std::vector<NMonitoring::TDynamicCounters::TCounterPtr>> CountByStageDuration;
-    std::vector<NMonitoring::THistogramPtr> DurationToStage;
     NMonitoring::TDynamicCounters::TCounterPtr DurationToFinish;
     NMonitoring::TDynamicCounters::TCounterPtr DurationToAbort;
+    NOlap::NCounters::TStateSignalsOperator<EWriteStage> Tracing;
 
 public:
-    void OnStageMove(const EWriteStage fromStage, const EWriteStage toStage, const TDuration d) const {
-        CountByWriteStage[(ui32)fromStage]->Sub(1);
-        CountByWriteStage[(ui32)toStage]->Add(1);
-        WriteStageAdd[(ui32)toStage]->Add(1);
-        DurationToStage[(ui32)toStage]->Collect(d.MilliSeconds());
-        CountByStageMoving[(ui32)fromStage][(ui32)toStage]->Add(1);
-        CountByStageDuration[(ui32)fromStage][(ui32)toStage]->Add(d.MilliSeconds());
-    }
-
-    void OnWritingStart(const EWriteStage stage) const {
-        WriteStageAdd[(ui32)stage]->Add(1);
-        CountByWriteStage[(ui32)stage]->Add(1);
+    NOlap::NCounters::TStateSignalsOperator<EWriteStage>& MutableTracing() {
+        return Tracing;
     }
 
     void OnWriteFinished(const TDuration d) const {

@@ -25,6 +25,41 @@
 #include <sstream>
 
 namespace orc {
+  NO_SANITIZE_ATTR
+  Int128& Int128::operator<<=(uint32_t bits) {
+    if (bits != 0) {
+      if (bits < 64) {
+        highbits_ <<= bits;
+        highbits_ |= (lowbits_ >> (64 - bits));
+        lowbits_ <<= bits;
+      } else if (bits < 128) {
+        highbits_ = static_cast<int64_t>(lowbits_) << (bits - 64);
+        lowbits_ = 0;
+      } else {
+        highbits_ = 0;
+        lowbits_ = 0;
+      }
+    }
+    return *this;
+  }
+
+  NO_SANITIZE_ATTR
+  Int128& Int128::operator>>=(uint32_t bits) {
+    if (bits != 0) {
+      if (bits < 64) {
+        lowbits_ >>= bits;
+        lowbits_ |= static_cast<uint64_t>(highbits_ << (64 - bits));
+        highbits_ = static_cast<int64_t>(static_cast<uint64_t>(highbits_) >> bits);
+      } else if (bits < 128) {
+        lowbits_ = static_cast<uint64_t>(highbits_ >> (bits - 64));
+        highbits_ = highbits_ >= 0 ? 0 : -1l;
+      } else {
+        highbits_ = highbits_ >= 0 ? 0 : -1l;
+        lowbits_ = static_cast<uint64_t>(highbits_);
+      }
+    }
+    return *this;
+  }
 
   Int128 Int128::maximumValue() {
     return Int128(0x7fffffffffffffff, 0xffffffffffffffff);

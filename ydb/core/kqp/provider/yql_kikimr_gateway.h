@@ -16,13 +16,15 @@
 #include <ydb/services/metadata/manager/abstract.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/kqp/query_data/kqp_query_data.h>
-#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
+#include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/sys_view_types.pb.h>
 #include <ydb/core/protos/yql_translation_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
@@ -45,6 +47,7 @@ namespace NKikimr {
 namespace NKikimrReplication {
     class TOAuthToken;
     class TStaticCredentials;
+    class TIamCredentials;
     class TConsistencySettings_TGlobalConsistency;
 }
 
@@ -69,6 +72,7 @@ struct TIndexDescription {
         GlobalAsync = 1,
         GlobalSyncUnique = 2,
         GlobalSyncVectorKMeansTree = 3,
+        GlobalFulltext = 4,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -88,7 +92,7 @@ struct TIndexDescription {
     const ui64 LocalPathId;
     const ui64 PathOwnerId;
 
-    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription>;
+    using TSpecializedIndexDescription = std::variant<std::monostate, NKikimrKqp::TVectorIndexKmeansTreeDescription, NKikimrKqp::TFulltextIndexDescription>;
     TSpecializedIndexDescription SpecializedIndexDescription;
 
     TIndexDescription(const TString& name, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns,
@@ -115,10 +119,27 @@ struct TIndexDescription {
         , LocalPathId(index.GetLocalPathId())
         , PathOwnerId(index.HasPathOwnerId() ? index.GetPathOwnerId() : 0ul)
     {
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
-            *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
-            SpecializedIndexDescription = vectorIndexDescription;
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalSyncVectorKMeansTree: {
+                NKikimrKqp::TVectorIndexKmeansTreeDescription vectorIndexDescription;
+                *vectorIndexDescription.MutableSettings() = index.GetVectorIndexKmeansTreeDescription().GetSettings();
+                SpecializedIndexDescription = std::move(vectorIndexDescription);
+                break;
+            }
+            case EType::GlobalFulltext: {
+                NKikimrKqp::TFulltextIndexDescription fulltextIndexDescription;
+                *fulltextIndexDescription.MutableSettings() = index.GetFulltextIndexDescription().GetSettings();
+                SpecializedIndexDescription = std::move(fulltextIndexDescription);
+                break;
+            }
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(Type));
         }
     }
 
@@ -132,8 +153,21 @@ struct TIndexDescription {
         , LocalPathId(message->GetLocalPathId())
         , PathOwnerId(message->GetPathOwnerId())
     {
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
+                break;
+            case EType::GlobalSyncVectorKMeansTree:
+                SpecializedIndexDescription = message->GetVectorIndexKmeansTreeDescription();
+                break;
+            case EType::GlobalFulltext:
+                SpecializedIndexDescription = message->GetFulltextIndexDescription();
+                break;
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(Type));
         }
     }
 
@@ -147,8 +181,10 @@ struct TIndexDescription {
                 return TIndexDescription::EType::GlobalSyncUnique;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree:
                 return TIndexDescription::EType::GlobalSyncVectorKMeansTree;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext:
+                return TIndexDescription::EType::GlobalFulltext;
             default:
-                YQL_ENSURE(false, "Unexpected NKikimrSchemeOp::EIndexType::EIndexTypeInvalid");
+                YQL_ENSURE(false, << NKikimr::NTableIndex::InvalidIndexType(indexType));
         }
     }
 
@@ -162,7 +198,15 @@ struct TIndexDescription {
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
             case NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
+            case NYql::TIndexDescription::EType::GlobalFulltext:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            default:
+                YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
+    }
+
+    static TString InvalidIndexType(TIndexDescription::EType indexType) {
+        return TStringBuilder() << "Invalid index type " << static_cast<int>(indexType);
     }
 
     void ToMessage(NKikimrKqp::TIndexDescriptionProto* message) const {
@@ -181,10 +225,20 @@ struct TIndexDescription {
             message->AddDataColumns(data);
         }
 
-        if (Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+        switch (Type) {
+            case EType::GlobalSync:
+            case EType::GlobalAsync:
+            case EType::GlobalSyncUnique:
+                // no specialized index description
+                Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
+                break;
+            case EType::GlobalSyncVectorKMeansTree:
+                *message->MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(SpecializedIndexDescription);
+                break;
+            case EType::GlobalFulltext:
+                *message->MutableFulltextIndexDescription() = std::get<NKikimrKqp::TFulltextIndexDescription>(SpecializedIndexDescription);
+                break;
         }
-
     }
 
     bool IsSameIndex(const TIndexDescription& other) const {
@@ -203,7 +257,13 @@ struct TIndexDescription {
             case EType::GlobalAsync:
                 return false;
             case EType::GlobalSyncVectorKMeansTree:
-                return false;
+                if (State != EIndexState::Ready) {
+                    // Do not try to update vector indexes until their build is finished
+                    return false;
+                }
+                return true;
+            case EType::GlobalFulltext:
+                return true;
         }
     }
 
@@ -217,6 +277,7 @@ struct TColumnFamily {
     TMaybe<TString> Data;
     TMaybe<TString> Compression;
     TMaybe<i32> CompressionLevel;
+    TMaybe<TString> CacheMode;
 };
 
 struct TTtlSettings {
@@ -254,6 +315,7 @@ struct TTableSettings {
     TResetableSetting<TTtlSettings, void> TtlSettings;
     TMaybe<TString> PartitionByHashFunction;
     TMaybe<TString> StoreExternalBlobs;
+    TMaybe<ui64> ExternalDataChannelsCount;
 
     // These parameters are only used for external sources
     TMaybe<TString> DataSourcePath;
@@ -487,7 +549,7 @@ struct TKikimrTableMetadata : public TThrRefBase {
     EKikimrTableKind Kind = EKikimrTableKind::Unspecified;
     ETableType TableType = ETableType::Table;
     EStoreType StoreType = EStoreType::Row;
-    TMaybe<NKikimrSysView::ESysViewType> SysViewType;
+    TMaybe<NKikimrSysView::TSysViewDescription> SysViewInfo;
     bool IsIndexImplTable = false;
 
     // If writes are disabled, query that writes to table must finish with error.
@@ -675,9 +737,12 @@ struct TKikimrTableMetadata : public TThrRefBase {
     }
 };
 
+using TSetColumnConstraintSettings = NKikimrSchemeOp::TSetColumnConstraintSettings;
+
 struct TAlterDatabaseSettings {
     TString DatabasePath;
     std::optional<TString> Owner;
+    std::optional<NKikimrSubDomains::TSchemeLimits> SchemeLimits;
 };
 
 struct TCreateUserSettings {
@@ -833,6 +898,14 @@ struct TReplicationSettingsBase {
         void Serialize(NKikimrReplication::TStaticCredentials& proto) const;
     };
 
+    struct TIamCredentials {
+        TString ServiceAccountId;
+        TOAuthToken InitialToken;
+        TString ResourceId;
+
+        void Serialize(NKikimrReplication::TIamCredentials& proto) const;
+    };
+
     struct TStateDone {
         enum class EFailoverMode: ui32 {
             Consistent = 1,
@@ -847,6 +920,8 @@ struct TReplicationSettingsBase {
     TMaybe<TString> Database;
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
+    TMaybe<TIamCredentials> IamCredentials;
+    TMaybe<TString> CaCert;
     TMaybe<TStateDone> StateDone;
     bool StatePaused = false;
     bool StateStandBy = false;
@@ -876,6 +951,14 @@ struct TReplicationSettingsBase {
         }
 
         return *StaticCredentials;
+    }
+
+    TIamCredentials& EnsureIamCredentials() {
+        if (!IamCredentials) {
+            IamCredentials = TIamCredentials();
+        }
+
+        return *IamCredentials;
     }
 };
 
@@ -942,6 +1025,8 @@ struct TTransferSettings : public TReplicationSettingsBase {
 
         return *Batching;
     }
+
+    TMaybe<TString> DirectoryPath;
 };
 
 struct TCreateTransferSettings {
@@ -997,6 +1082,12 @@ struct TDropBackupCollectionSettings {
 
 struct TBackupSettings {
     TString Name;
+};
+
+struct TSecretSettings {
+    TString Name;
+    TString Value;
+    bool InheritPermissions = false;
 };
 
 struct TKikimrListPathItem {
@@ -1087,6 +1178,7 @@ public:
     };
 
     struct TExecuteLiteralResult : public TGenericResult {
+        TString BinaryResult;
         NKikimrMiniKQL::TResult Result;
     };
 
@@ -1159,6 +1251,8 @@ public:
 
     virtual NThreading::TFuture<TTableMetadataResult> LoadTableMetadata(
         const TString& cluster, const TString& table, TLoadTableMetadataSettings settings) = 0;
+
+    virtual NThreading::TFuture<TGenericResult> SetConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) = 0;
 
     virtual NThreading::TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) = 0;
 
@@ -1261,9 +1355,12 @@ public:
 
     virtual TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() = 0;
 
-    virtual NThreading::TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
 
-    virtual TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) = 0;
+    //secrets
+    virtual NThreading::TFuture<TGenericResult> CreateSecret(const TString& cluster, const TSecretSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> AlterSecret(const TString& cluster, const TSecretSettings& settings) = 0;
+    virtual NThreading::TFuture<TGenericResult> DropSecret(const TString& cluster, const TSecretSettings& settings) = 0;
 
 public:
     using TCreateDirFunc = std::function<void(const TString&, const TString&, NThreading::TPromise<TGenericResult>)>;

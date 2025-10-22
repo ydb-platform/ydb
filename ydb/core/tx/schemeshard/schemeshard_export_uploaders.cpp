@@ -1,38 +1,31 @@
-#include "schemeshard.h"
 #include "schemeshard_export_uploaders.h"
 
-#include <ydb/core/backup/common/encryption.h>
-#include <ydb/core/backup/common/metadata.h>
-#include <ydb/core/backup/common/checksum.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/tx/datashard/export_common.h>
-#include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_private.h>
-#include <ydb/core/wrappers/abstract.h>
-#include <ydb/core/wrappers/s3_storage_config.h>
-#include <ydb/core/wrappers/s3_wrapper.h>
-#include <ydb/core/ydb_convert/topic_description.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/hfunc.h>
+#include "schemeshard.h"
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
+#include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/metadata.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/tx/datashard/export_common.h>
+#include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
+#include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/wrappers/abstract.h>
+#include <ydb/core/wrappers/retry_policy.h>
+#include <ydb/core/wrappers/s3_storage_config.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
+#include <ydb/core/ydb_convert/topic_description.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+
 #include <library/cpp/json/json_writer.h>
 
 namespace NKikimr::NSchemeShard {
-
-namespace {
-
-bool ShouldRetry(const Aws::S3::S3Error& error) {
-    if (error.ShouldRetry()) {
-        return true;
-    }
-    return error.GetExceptionName() == "TooManyRequests";
-}
-
-} // anonymous
 
 template <class TDerived>
 class TExportFilesUploader: public TActorBootstrapped<TDerived> {
@@ -140,7 +133,7 @@ protected:
     }
 
     void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
-        if (upload.Attempt < Settings.number_of_retries() && ShouldRetry(error)) {
+        if (upload.Attempt < Settings.number_of_retries() && NWrappers::ShouldRetry(error)) {
             Retry(upload);
         } else {
             Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
@@ -195,9 +188,9 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         Become(&TThis::StateDescribe);
     }
 
-    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& backupRoot, TString& error) {
+    static TString BuildViewScheme(const TString& path, const NKikimrSchemeOp::TViewDescription& viewDescription, const TString& database, const TString& backupRoot, TString& error) {
         NYql::TIssues issues;
-        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), backupRoot, issues);
+        auto scheme = NYdb::NDump::BuildCreateViewQuery(viewDescription.GetName(), path, viewDescription.GetQueryText(), database, backupRoot, issues);
         if (!scheme) {
             error = issues.ToString();
         }
@@ -235,7 +228,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader> {
         switch (PathType) {
             case NKikimrSchemeOp::EPathTypeView: {
                 SchemeFileType = NBackup::EBackupFileType::ViewCreate;
-                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, error);
+                Scheme = BuildViewScheme(describeResult.GetPath(), describeResult.GetPathDescription().GetViewDescription(), DatabaseRoot, DatabaseRoot, error);
                 return !Scheme.empty();
             }
             case NKikimrSchemeOp::EPathTypePersQueueGroup: {

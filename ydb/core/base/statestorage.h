@@ -29,6 +29,7 @@ struct TEvStateStorage {
         EvBoardInfoUpdate,
         EvPublishActorGone,
         EvRingGroupPassAway,
+        EvConfigVersionInfo,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -103,7 +104,7 @@ struct TEvStateStorage {
             , ProxyOptions(proxyOptions)
         {}
 
-        TEvLookup(const TEvLookup& ev)            
+        TEvLookup(const TEvLookup& ev)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProxyOptions(ev.ProxyOptions)
@@ -153,7 +154,7 @@ struct TEvStateStorage {
         {
         }
 
-        TEvUpdate(const TEvUpdate& ev) 
+        TEvUpdate(const TEvUpdate& ev)
             : TabletID(ev.TabletID)
             , Cookie(ev.Cookie)
             , ProposedLeader(ev.ProposedLeader)
@@ -161,7 +162,7 @@ struct TEvStateStorage {
             , ProposedGeneration(ev.ProposedGeneration)
             , ProposedStep(ev.ProposedStep)
             , Signature(ev.Signature)
-            , ProxyOptions(ev.ProxyOptions) 
+            , ProxyOptions(ev.ProxyOptions)
         {
         }
 
@@ -250,7 +251,7 @@ struct TEvStateStorage {
             , ProposedLeader(ev.ProposedLeader)
             , ProposedGeneration(ev.ProposedGeneration)
             , Signature(ev.Signature)
-            , ProxyOptions(ev.ProxyOptions) 
+            , ProxyOptions(ev.ProxyOptions)
         {
         }
 
@@ -265,6 +266,16 @@ struct TEvStateStorage {
             str << "}";
             return str.Str();
         }
+    };
+
+    struct TEvConfigVersionInfo : public TEventLocal<TEvConfigVersionInfo, EvConfigVersionInfo> {
+        const ui64 ClusterStateGeneration;
+        const ui64 ClusterStateGuid;
+
+        TEvConfigVersionInfo(ui64 clusterStateGeneration, ui64 clusterStateGuid)
+            : ClusterStateGeneration(clusterStateGeneration)
+            , ClusterStateGuid(clusterStateGuid)
+        {}
     };
 
     struct TEvInfo : public TEventLocal<TEvInfo, EvInfo> {
@@ -394,9 +405,11 @@ struct TEvStateStorage {
         TEvReplicaRegFollower()
         {}
 
-        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate)
+        TEvReplicaRegFollower(ui64 tabletId, TActorId follower, TActorId tablet, bool isCandidate, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
             ActorIdToProto(tablet, Record.MutableFollowerTablet());
             Record.SetCandidate(isCandidate);
@@ -407,9 +420,11 @@ struct TEvStateStorage {
         TEvReplicaUnregFollower()
         {}
 
-        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower)
+        TEvReplicaUnregFollower(ui64 tabletId, const TActorId &follower, ui64 clusterStateGeneration, ui64 clusterStateGuid)
         {
             Record.SetTabletID(tabletId);
+            Record.SetClusterStateGeneration(clusterStateGeneration);
+            Record.SetClusterStateGuid(clusterStateGuid);
             ActorIdToProto(follower, Record.MutableFollower());
         }
     };
@@ -455,6 +470,13 @@ struct TEvStateStorage {
     };
 };
 
+enum ERingGroupState {
+    PRIMARY,
+    SYNCHRONIZED,
+    NOT_SYNCHRONIZED,
+    DISCONNECTED
+};
+
 struct TStateStorageInfo : public TThrRefBase {
     struct TSelection {
         enum EStatus {
@@ -464,7 +486,7 @@ struct TStateStorageInfo : public TThrRefBase {
             StatusOutdated,
             StatusUnavailable,
         };
- 
+
         ui32 Sz;
         TArrayHolder<TActorId> SelectedReplicas;
         TArrayHolder<EStatus> Status;
@@ -489,6 +511,7 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRingGroup {
+        ERingGroupState State;
         bool WriteOnly = false;
         ui32 NToSelect = 0;
         TVector<TRing> Rings;
@@ -499,6 +522,8 @@ struct TStateStorageInfo : public TThrRefBase {
 
     TVector<TRingGroup> RingGroups;
 
+    ui64 ClusterStateGeneration;
+    ui64 ClusterStateGuid;
     ui32 StateStorageVersion;
     TVector<ui32> CompatibleVersions;
 
@@ -508,7 +533,10 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 RingGroupsSelectionSize() const;
 
     TStateStorageInfo()
-        : Hash(Max<ui64>())
+        : ClusterStateGeneration(0)
+        , ClusterStateGuid(0)
+        , StateStorageVersion(0)
+        , Hash(Max<ui64>())
     {}
 
     TString ToString() const;

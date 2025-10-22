@@ -5,7 +5,7 @@
 
 namespace NKikimr::NColumnShard {
 
-bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, const NEvWrite::IPayloadReader& payload) {
+bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite::TOperation& proto, const NEvWrite::IPayloadReader& payload) {
     if (proto.GetPayloadFormat() != NKikimrDataEvents::FORMAT_ARROW) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "invalid_payload_format")("payload_format", (ui64)proto.GetPayloadFormat());
         return false;
@@ -21,7 +21,7 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
     }
 
     if (proto.HasPayloadSchema()) {
-        PayloadSchema = NArrow::DeserializeSchema(proto.GetPayloadSchema());
+        Operation = proto;
     } else {
         std::vector<ui32> columns;
         for (auto&& columnId : proto.GetColumnIds()) {
@@ -43,8 +43,9 @@ bool TArrowData::Parse(const NKikimrDataEvents::TEvWrite_TOperation& proto, cons
 TConclusion<std::shared_ptr<arrow::RecordBatch>> TArrowData::ExtractBatch() {
     Y_ABORT_UNLESS(!!IncomingData);
     std::shared_ptr<arrow::RecordBatch> result;
-    if (PayloadSchema) {
-        result = NArrow::DeserializeBatch(IncomingData, PayloadSchema);
+    if (Operation.HasPayloadSchema()) {
+        auto payloadSchema = NArrow::DeserializeSchema(Operation.GetPayloadSchema());
+        result = NArrow::DeserializeBatch(IncomingData, payloadSchema);
     } else {
         result = NArrow::DeserializeBatch(IncomingData, std::make_shared<arrow::Schema>(BatchSchema->GetSchema()->fields()));
     }

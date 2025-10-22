@@ -82,16 +82,22 @@
                                         "PlanNodeType": "Connection",
                                         "Plans": [
                                             {
-                                                "Node Type": "TableFullScan",
+                                                "Node Type": "Aggregate-TableFullScan",
                                                 "Operators": [
+                                                    {
+                                                        "Inputs": [
+                                                            {
+                                                                "InternalOperatorId": 1
+                                                            }
+                                                        ],
+                                                        "Name": "Aggregate",
+                                                        "Phase": "Intermediate"
+                                                    },
                                                     {
                                                         "Inputs": [],
                                                         "Name": "TableFullScan",
                                                         "Path": "/local/clickbench/plans/column/hits",
                                                         "ReadColumns": [
-                                                            "EventDate"
-                                                        ],
-                                                        "ReadRanges": [
                                                             "CounterID (-\u221e, +\u221e)",
                                                             "EventDate (-\u221e, +\u221e)",
                                                             "UserID (-\u221e, +\u221e)",
@@ -102,45 +108,10 @@
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 106
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 6
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 4
-                                                                                }
-                                                                            },
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 107
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Arguments": [
-                                                                                        {
-                                                                                            "Id": 6
-                                                                                        }
-                                                                                    ],
-                                                                                    "Id": 3
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 106
-                                                                            },
-                                                                            {
-                                                                                "Id": 107
+                                                                                "Id": 6
                                                                             }
                                                                         ]
                                                                     }

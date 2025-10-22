@@ -8,14 +8,16 @@ PEERDIR(
     ydb/core/util
     ydb/core/base
     ydb/core/grpc_services
-    ydb/core/persqueue
     ydb/core/persqueue/events
+    ydb/core/persqueue/public/counters
+    ydb/core/persqueue/public/cluster_tracker
     ydb/core/protos
     ydb/core/scheme
     ydb/core/tx/scheme_cache
     ydb/core/ydb_convert
     ydb/library/aclib
     ydb/library/persqueue/topic_parser
+    ydb/library/cloud_permissions
     ydb/public/api/protos
     ydb/public/lib/base
     ydb/services/lib/actors

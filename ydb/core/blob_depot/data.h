@@ -309,6 +309,9 @@ namespace NKikimr::NBlobDepot {
                 Meta = item.GetMeta();
                 Public = false;
                 UncertainWrite = item.GetUncertainWrite();
+                if (item.GetIssueKeepFlag() && KeepState == EKeepState::Default) {
+                    KeepState = EKeepState::Keep;
+                }
 
                 ValueChain.Clear();
                 auto *chain = ValueChain.Add();

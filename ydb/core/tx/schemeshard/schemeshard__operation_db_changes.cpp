@@ -1,6 +1,6 @@
-#include "schemeshard_impl.h"
-
 #include "schemeshard__operation_db_changes.h"
+
+#include "schemeshard_impl.h"
 
 namespace NKikimr::NSchemeShard {
 
@@ -31,6 +31,14 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     for (const auto& pId : AlterSequences) {
         ss->PersistSequenceAlter(db, pId);
+    }
+
+    for (const auto& pathId : Secrets) {
+        ss->PersistSecret(db, pathId);
+    }
+
+    for (const auto& pathId : AlterSecrets) {
+        ss->PersistSecretAlter(db, pathId);
     }
 
     for (const auto& pId : ApplyIndexes) {
@@ -107,6 +115,18 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
 
     for (const auto& pId : SysViews) {
         ss->PersistSysView(db, pId);
+    }
+
+    for (const auto& op : LongIncrementalRestoreOps) {
+        ss->PersistLongIncrementalRestoreOp(db, op);
+    }
+
+    for (const auto& id : IncrementalBackups) {
+        ss->PersistIncrementalBackup(db, id);
+    }
+
+    for (const auto& pId : StreamingQueries) {
+        ss->PersistStreamingQuery(db, pId);
     }
 }
 

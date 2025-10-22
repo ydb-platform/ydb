@@ -1,10 +1,11 @@
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+
 #include <ydb/core/base/path.h>
 #include <ydb/core/change_exchange/change_exchange.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

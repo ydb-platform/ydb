@@ -289,6 +289,42 @@ SELECT
 FROM my_table;
 ```
 
+## Udf {#udf}
+
+Builds a `Callable` given a function name and optional `external user types`, `RunConfig` and `TypeConfig`.
+
+* `Udf(Foo::Bar)` — Function `Foo::Bar` without additional parameters.
+* `Udf(Foo::Bar)(1, 2, 'abc')` — Call udf `Foo::Bar`.
+* `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Call udf `Foo::Bar` with additional type `Int32` and specified `TypeConfig`.
+* `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
+* `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
+
+#### Signatures
+
+```yql
+Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
+```
+
+Where `T1`, `T2`, etc. are additional (`external`) user types.
+
+#### Examples
+
+```yql
+$IsoParser = Udf(DateTime2::ParseIso8601);
+SELECT $IsoParser("2022-01-01");
+```
+
+```yql
+SELECT Udf(Unicode::IsUtf)("2022-01-01")
+```
+
+```yql
+$config = @@{ 
+"name":"MessageFoo", 
+"meta": "..."
+}@@;
+SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
 
 ## CurrentUtc... {#current-utc}
 
@@ -751,7 +787,7 @@ Getting the path to the root of a directory with several "attached" files with t
 
 The argument is a string with a prefix among aliases.
 
-See also [PRAGMA File](../syntax/pragma.md#file) and [PRAGMA Folder](../syntax/pragma.md#folder).
+See also [PRAGMA File](../syntax/pragma/file.md#file) and [PRAGMA Folder](../syntax/pragma/file.md#folder).
 
 #### Examples
 
@@ -810,6 +846,8 @@ Arguments:
 
 To check the conditions based on the final calculation result, it's convenient to combine Ensure with [DISCARD SELECT](../syntax/discard.md).
 
+Ensure is not guaranteed to evaluate, if the program's result does not depend on its return value. In particular, you should not use singular types as the first argument to Ensure such as `Null`,`Void`,`EmptyList`,`EmptyDict` or empty `Struct`/`Tuple`.
+
 #### Examples
 
 ```yql
@@ -836,13 +874,52 @@ SELECT EnsureConvertibleTo(
 ) AS value FROM my_table;
 ```
 
+## WithSideEffects, WithSideEffectsMode {#side_effects}
+
+#### Signature
+
+```yql
+WithSideEffects(T)->T
+WithSideEffectsMode(T, mode:string)->T
+```
+
+The functions are available since version [2025.04](../changelog/2025.04.md).
+The `WithSideEffects` or `WithSideEffectsMode` function returns its first argument. The function is a requirement for the optimizer and marks the inner expression (usually a UDF call) as containing side effects.
+
+A side effect is:
+* An effect of one function call on another other than through passing data in arguments – for example, through some global state;
+* Observable behavior outside YQL during query execution – for example, reading/writing data in external systems.
+
+A side effect is not:
+* UDF counters and logs exposed by the ABI. In other words, optimizations are allowed that will change the values ​​of these counters or log entries at the expense of a different number of UDF calls;
+* Query execution error.
+
+The optimizer should not remove the evaluation of such an expression, and generally should not change the number of its evaluations, if it depends, for example, on each row of a table.
+
+Possible values ​​of mode:
+
+* `General` - all kinds of side effects are allowed, common subexpression removal is not possible;
+* `SemilatticeRT` - only idempotent and commutative side effects are allowed, and the expression result can be evaluated once and reused, which allows common subexpression removal;
+* `None` - no side effects are allowed outside the expression.
+
+The `WithSideEffects` function is a shorthand for calling the `WithSideEffectsMode` function with mode equal to `General`.
+
+A typical example of a `General` side effect is to perform an `UPDATE` to another system, and return the number of records changed as the expression result.
+A typical example of a `SemilatticeRT` side effect is to perform an `UPSERT` to a table with no non-key columns (which is an idempotent and commutative action), and return the number of records sent as the expression result.
+
+#### Example
+
+```yql
+SELECT WithSideEffects(MyModule::Func(...)) FROM table
+```
+
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 
 Evaluate an expression before the start of the main calculation and input its result to the query as a literal (constant). In many contexts, where only a constant would be expected in standard SQL (for example, in table names, in the number of rows in [LIMIT](../syntax/select/limit_offset.md), and so on), this functionality is implicitly enabled automatically.
 
 EvaluateExpr can be used where the grammar already expects an expression. For example, you can use it to:
 
-* Round the current time to days, weeks, or months and insert it into the query to ensure correct [query caching](../syntax/pragma.md#yt.querycachemode), although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
+* Round the current time to days, weeks, or months and insert it into the query to ensure correct query caching, although usually when [functions are used to get the current time](#current-utc), query caching is completely disabled.
 * Run a heavy calculation with a small result once per query instead of once per job.
 
 EvaluateAtom lets you dynamically create an [atom](../types/special.md), but since atoms are mainly controlled from a lower [s-expressions](/docs/s_expressions/functions) level, it's generally not recommended to use this function directly.

@@ -12,7 +12,7 @@ import gast as ast
 from functools import reduce
 
 
-class NormalizeMethodCalls(Transformation):
+class NormalizeMethodCalls(Transformation[Globals, Ancestors]):
     '''
     Turns built in method calls into function calls.
 
@@ -27,7 +27,7 @@ class NormalizeMethodCalls(Transformation):
     '''
 
     def __init__(self):
-        Transformation.__init__(self, Globals, Ancestors)
+        super().__init__()
         self.imports = {'builtins': 'builtins',
                         mangle('__dispatch__'): '__dispatch__'}
         self.to_import = set()

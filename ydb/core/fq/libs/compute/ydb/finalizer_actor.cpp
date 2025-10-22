@@ -14,7 +14,6 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -91,6 +90,7 @@ public:
                 return ::FederatedQuery::QueryMeta::COMPLETED;
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Running:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:
@@ -128,6 +128,7 @@ public:
                 return false;
             case NYdb::NQuery::EExecStatus::Unspecified:
             case NYdb::NQuery::EExecStatus::Starting:
+            case NYdb::NQuery::EExecStatus::Running:
             case NYdb::NQuery::EExecStatus::Aborted:
             case NYdb::NQuery::EExecStatus::Canceled:
             case NYdb::NQuery::EExecStatus::Failed:

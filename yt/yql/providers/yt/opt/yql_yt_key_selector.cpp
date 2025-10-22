@@ -309,7 +309,7 @@ void TKeySelectorBuilder::AddColumn(const TStringBuf memberName, const TTypeAnno
                     .Done();
             }
         }
-        
+
         columnType = presortColumnType;
     }
 
@@ -337,11 +337,16 @@ TVector<std::pair<TString, bool>> TKeySelectorBuilder::ForeignSortColumns() cons
     return res;
 }
 
-void TKeySelectorBuilder::FillRowSpecSort(TYqlRowSpecInfo& rowSpec) {
+void TKeySelectorBuilder::FillRowSpecSort(TYqlRowSpecInfo& rowSpec, bool useNativeYtDefaultColumnOrder) {
     rowSpec.SortMembers = Members_;
     rowSpec.SortedBy = Columns_;
     rowSpec.SortedByTypes = ColumnTypes_;
     rowSpec.SortDirections = SortDirections_;
+
+    if (useNativeYtDefaultColumnOrder && !NonStructInput && !rowSpec.GetColumnOrder() && rowSpec.GetNativeYtTypeFlags() != 0) {
+        // workaround for YQL-20213 - maintain column order with SortedBy columns first
+        rowSpec.SetColumnOrder(GetNativeYtDefaultColumnOrder(StructType, Members_));
+    }
 }
 
 }

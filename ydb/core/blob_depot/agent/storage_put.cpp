@@ -64,7 +64,7 @@ namespace NKikimr::NBlobDepot {
 
             void CheckBlocks() {
                 bool someBlocksMissing = false;
-                for (size_t i = 0; i <= Request.ExtraBlockChecks.size(); ++i) {
+                for (size_t i = Request.IgnoreBlock; i <= Request.ExtraBlockChecks.size(); ++i) {
                     const auto *blkp = i ? &Request.ExtraBlockChecks[i - 1] : nullptr;
                     const ui64 tabletId = blkp ? blkp->first : Request.Id.TabletID();
                     const ui32 generation = blkp ? blkp->second : Request.Id.Generation();
@@ -87,6 +87,12 @@ namespace NKikimr::NBlobDepot {
                     Y_ABORT_UNLESS(CommitBlobSeq.ItemsSize() == 0);
                     auto *commitItem = CommitBlobSeq.AddItems();
                     commitItem->SetKey(Request.Id.AsBinaryString());
+                    if (Request.IssueKeepFlag) {
+                        commitItem->SetIssueKeepFlag(true);
+                    }
+                    if (Request.IgnoreBlock) {
+                        commitItem->SetIgnoreBlock(true);
+                    }
                     for (const auto& [tabletId, generation] : Request.ExtraBlockChecks) {
                         auto *p = commitItem->AddExtraBlockChecks();
                         p->SetTabletId(tabletId);
@@ -141,7 +147,7 @@ namespace NKikimr::NBlobDepot {
                     footer.StoredBlobId = Request.Id;
                 }
 
-                auto put = [&](EBlobType type, TRcBuf&& buffer) {
+                auto put = [&](EBlobType type, TRope&& buffer) {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
@@ -156,17 +162,17 @@ namespace NKikimr::NBlobDepot {
 
                 if (SuppressFooter) {
                     // write the blob as is, we don't need footer for this kind
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
                 } else if (Request.Buffer.size() + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize) {
                     // write single blob with footer
                     TRope buffer = TRope(std::move(Request.Buffer));
                     buffer.Insert(buffer.End(), std::move(footerData));
                     buffer.Compact();
-                    put(EBlobType::VG_COMPOSITE_BLOB, TRcBuf(std::move(buffer)));
+                    put(EBlobType::VG_COMPOSITE_BLOB, std::move(buffer));
                 } else {
                     // write data blob and blob with footer
-                    put(EBlobType::VG_DATA_BLOB, TRcBuf(std::move(Request.Buffer)));
-                    put(EBlobType::VG_FOOTER_BLOB, TRcBuf(std::move(footerData)));
+                    put(EBlobType::VG_DATA_BLOB, std::move(Request.Buffer));
+                    put(EBlobType::VG_FOOTER_BLOB, TRope(std::move(footerData)));
                 }
 
                 if (IssueUncertainWrites) {

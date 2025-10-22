@@ -1,15 +1,19 @@
 #include "context.h"
 #include "openid_connect.h"
-#include "oidc_settings.h"
+
+#include <ydb/core/util/wildcard.h>
 #include <ydb/library/security/util.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
-#include <openssl/evp.h>
-#include <openssl/hmac.h>
-#include <openssl/sha.h>
+
 #include <util/random/random.h>
 #include <util/string/builder.h>
 #include <util/string/hex.h>
+
+#include <openssl/evp.h>
+#include <openssl/hmac.h>
+#include <openssl/sha.h>
 
 namespace NMVP::NOIDC {
 
@@ -100,7 +104,7 @@ NHttp::THttpOutgoingResponsePtr GetHttpOutgoingResponsePtr(const NHttp::THttpInc
     if (context.IsAjaxRequest()) {
         return CreateResponseForAjaxRequest(request, responseHeaders, redirectUrl);
     }
-    responseHeaders.Set("Location", redirectUrl);
+    responseHeaders.Set(LOCATION_HEADER, redirectUrl);
     return request->CreateResponse("302", "Authorization required", responseHeaders);
 }
 
@@ -256,6 +260,99 @@ TStringBuf GetCookie(const NHttp::TCookies& cookies, const TString& cookieName) 
         BLOG_D("Using cookie (" << cookieName << ": " << NKikimr::MaskTicket(cookieValue) << ")");
     }
     return cookieValue;
+}
+
+TString GetAddressWithoutPort(const TString& address) {
+    // IPv6 with brackets: [addr]:port -> addr
+    if (address.StartsWith('[')) {
+        auto end = address.find(']');
+        if (end != TString::npos) {
+            return address.substr(1, end - 1);
+        }
+    }
+
+    // IPv6 without brackets - leave unchanged just in case
+    if (std::count(address.begin(), address.end(), ':') > 1) {
+        return address;
+    }
+
+    // IPv4 with port: addr:port → addr
+    auto pos = address.rfind(':');
+    if (pos != TString::npos) {
+        return address.substr(0, pos);
+    }
+
+    return address;
+}
+
+// Append request address to X-Forwarded-For header
+// Useful for logging and audit
+TString MakeXForwardedFor(const TProxiedRequestParams& params) {
+    NHttp::THeaders headers(params.Request->Headers);
+
+    TStringBuilder forwarded;
+    forwarded << headers.Get(X_FORWARDED_FOR_HEADER);
+    if (params.Request->Address) {
+        auto address = GetAddressWithoutPort(params.Request->Address->ToString());
+        if (!address.empty()) {
+            if (!forwarded.empty()) {
+                forwarded << ", ";
+            }
+            forwarded << address;
+        }
+    }
+    return std::move(forwarded);
+}
+
+NHttp::THttpOutgoingRequestPtr CreateProxiedRequest(const TProxiedRequestParams& params) {
+    auto outRequest = NHttp::THttpOutgoingRequest::CreateRequest(params.Request->Method, params.ProtectedPage.Url);
+    NHttp::THeaders headers(params.Request->Headers);
+    for (const auto& header : params.Settings.REQUEST_HEADERS_WHITE_LIST) {
+        if (headers.Has(header)) {
+            outRequest->Set(header, headers.Get(header));
+        }
+    }
+    outRequest->Set("Accept-Encoding", "deflate");
+
+    if (!params.AuthHeader.empty()) {
+        outRequest->Set(AUTHORIZATION_HEADER, params.AuthHeader);
+    }
+
+    outRequest->Set(X_FORWARDED_FOR_HEADER, MakeXForwardedFor(params));
+
+    if (params.Request->HaveBody()) {
+        outRequest->SetBody(params.Request->Body);
+    }
+    if (params.ProtectedPage.Scheme.empty()) {
+        outRequest->Secure = params.Secure;
+    }
+
+    return outRequest;
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForbiddenHost(const NHttp::THttpIncomingRequestPtr request, const TCrackedPage& protectedPage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>403 Forbidden</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "403 Forbidden host: " << protectedPage.Host;
+    html << "</h1></center></body></html>";
+
+    return request->CreateResponse("403", "Forbidden", headers, html);
+}
+
+NHttp::THttpOutgoingResponsePtr CreateResponseForNotExistingResponseFromProtectedResource(const NHttp::THttpIncomingRequestPtr request, const TString& errorMessage) {
+    NHttp::THeadersBuilder headers;
+    headers.Set("Content-Type", "text/html");
+    SetCORS(request, &headers);
+
+    TStringBuilder html;
+    html << "<html><head><title>400 Bad Request</title></head><body bgcolor=\"white\"><center><h1>";
+    html << "400 Bad Request. Can not process request to protected resource: " << errorMessage;
+    html << "</h1></center></body></html>";
+    return request->CreateResponse("400", "Bad Request", headers, html);
 }
 
 } // NMVP::NOIDC

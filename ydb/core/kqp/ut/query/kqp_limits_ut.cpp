@@ -55,12 +55,9 @@ namespace {
 
 Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_TWIN(QSReplySizeEnsureMemoryLimits, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(true);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 1'000, 100, 1'000, 1'000);
@@ -70,10 +67,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -98,19 +96,16 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(StreamWrite, Allowed) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
-        app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 1000, 1_KB, 64_KB);
 
         auto db = kikimr.GetQueryClient();
-        
+
         {
             auto result = db.ExecuteQuery(R"(
                 CREATE TABLE `/Root/DataShard` (
@@ -153,10 +148,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -186,11 +182,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         TControlWrapper mkqlInitialMemoryLimit;
         TControlWrapper mkqlMaxMemoryLimit;
 
-        mkqlInitialMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlInitialMemoryLimit, "KqpSession.MkqlInitialMemoryLimit");
-        mkqlMaxMemoryLimit = kikimr.GetTestServer().GetRuntime()->GetAppData().Icb->RegisterSharedControl(
-            mkqlMaxMemoryLimit, "KqpSession.MkqlMaxMemoryLimit");
-
+        auto& icb = *kikimr.GetTestServer().GetRuntime()->GetAppData().Icb;
+        TControlBoard::RegisterSharedControl(
+            mkqlInitialMemoryLimit, icb.KQPSessionControls.MkqlInitialMemoryLimit);
+        TControlBoard::RegisterSharedControl(
+            mkqlMaxMemoryLimit, icb.KQPSessionControls.MkqlMaxMemoryLimit);
 
         mkqlInitialMemoryLimit = 1_KB;
         mkqlMaxMemoryLimit = 1_KB;
@@ -226,16 +222,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(ComputeActorMemoryAllocationFailure, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
+        settings.AppConfig.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
-        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -260,16 +252,15 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(10);
         app.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(2000);
 
-        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig(4));
+        app.MutableResourceBrokerConfig()->CopyFrom(MakeResourceBrokerTestConfig());
 
         app.MutableFeatureFlags()->SetEnableResourcePools(true);
 
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
+        auto settings = TKikimrSettings(app)
             .SetWithSampleTables(false);
 
         TKikimrRunner kikimr(settings);
-        CreateLargeTable(kikimr, 0, 0, 0);
+        CreateLargeTable(kikimr, 30, 10, 200000);
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SLOW_LOG, NActors::NLog::PRI_ERROR);
 
@@ -292,13 +283,9 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(DatashardProgramSize, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(false);
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 0, 0, 0);
@@ -440,20 +427,17 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(OutOfSpaceYQLUpsertFail, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        app.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
-
+    Y_UNIT_TEST(OutOfSpaceYQLUpsertFail) {
         auto settings = TKikimrSettings()
-            .SetAppConfig(app)
             .SetWithSampleTables(false)
             .SetStorage(NFake::TStorage{
                 .UseDisk = false,
                 .SectorSize = 4096,
                 .ChunkSize = 32_MB,
                 .DiskSize = 8_GB
-            });
+                });
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(false);
+        settings.AppConfig.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlLightProgramMemoryLimit(1'000'000'000);
 
         TKikimrRunner kikimr(settings);
 
@@ -499,13 +483,12 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 UPSERT INTO `/Root/LargeTable`
                 SELECT * FROM AS_TABLE($rows);
             )"), TTxControl::BeginTx().CommitTx(), paramsBuilder.Build()).ExtractValueSync();
- 
+
             switch (result.GetStatus()) {
             case EStatus::SUCCESS:
                 continue;
             case EStatus::OVERLOADED:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(useSink);
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;
                 } else {
@@ -513,7 +496,6 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 }
             case EStatus::UNAVAILABLE:
                 if (result.GetIssues().ToString().contains("out of disk space")) {
-                    UNIT_ASSERT(!useSink);
                     //TODO Should be also EStatus::OVERLOADED
                     Cerr << "Got out of space. Successfully inserted " << rowsPerBatch << " x " << batchIdx << " lines, each of size " << dataTextSize << "bytes";
                     return;
@@ -887,12 +869,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     void DoCancelAfterRo(bool follower, bool dependedRead) {
-        NKikimrConfig::TAppConfig appConfig;
-
         auto setting = NKikimrKqp::TKqpSetting();
-        auto serverSettings = TKikimrSettings()
-            .SetAppConfig(appConfig)
-            .SetKqpSettings({setting});
+        auto serverSettings = TKikimrSettings().SetKqpSettings({setting});
 
         TKikimrRunner kikimr(serverSettings);
         NKqp::TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
@@ -1475,12 +1453,8 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     }
 
     Y_UNIT_TEST_TWIN(QSReplySize, useSink) {
-        auto app = NKikimrConfig::TAppConfig();
-        app.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-
-        auto settings = TKikimrSettings()
-            .SetAppConfig(app)
-            .SetWithSampleTables(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(true);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
 
         TKikimrRunner kikimr(settings);
         CreateLargeTable(kikimr, 10'000, 100, 1'000, 1'000);

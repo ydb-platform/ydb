@@ -5,12 +5,12 @@
 using namespace NYql::NDom;
 
 TBinaryJsonTestBase::TBinaryJsonTestBase()
-    : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
-    , Alloc(__LOCATION__)
-    , Env(Alloc)
-    , MemInfo("Memory")
-    , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
-    , ValueBuilder(HolderFactory)
+    : FunctionRegistry_(CreateFunctionRegistry(CreateBuiltinRegistry()))
+    , Alloc_(__LOCATION__)
+    , Env_(Alloc_)
+    , MemInfo_("Memory")
+    , HolderFactory_(Alloc_.Ref(), MemInfo_, FunctionRegistry_.Get())
+    , ValueBuilder_(HolderFactory_)
 {
 }
 
@@ -19,11 +19,11 @@ TString TBinaryJsonTestBase::EntryToJsonText(const TEntryCursor& cursor) {
         return ContainerToJsonText(cursor.GetContainer());
     }
 
-    TUnboxedValue result = ReadElementToJsonDom(cursor, &ValueBuilder);
+    TUnboxedValue result = ReadElementToJsonDom(cursor, &ValueBuilder_);
     return SerializeJsonDom(result);
 }
 
 TString TBinaryJsonTestBase::ContainerToJsonText(const TContainerCursor& cursor) {
-    TUnboxedValue result = ReadContainerToJsonDom(cursor, &ValueBuilder);
+    TUnboxedValue result = ReadContainerToJsonDom(cursor, &ValueBuilder_);
     return SerializeJsonDom(result);
 }

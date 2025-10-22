@@ -8,7 +8,6 @@ import operator
 import time
 import types
 import warnings
-
 from typing import Callable, TypeVar
 
 import more_itertools
@@ -291,6 +290,26 @@ def invoke(f, /, *args, **kwargs):
     return f
 
 
+_T = TypeVar('_T')
+
+
+def passthrough(func: Callable[..., object]) -> Callable[[_T], _T]:
+    """
+    Wrap the function to always return the first parameter.
+
+    >>> passthrough(print)('3')
+    3
+    '3'
+    """
+
+    @functools.wraps(func)
+    def wrapper(first: _T, *args, **kwargs) -> _T:
+        func(first, *args, **kwargs)
+        return first
+
+    return wrapper
+
+
 class Throttler:
     """Rate-limit a function (or other callable)."""
 
@@ -422,6 +441,16 @@ def pass_none(func):
     return wrapper
 
 
+def none_as(value, replacement=None):
+    """
+    >>> none_as(None, 'foo')
+    'foo'
+    >>> none_as('bar', 'foo')
+    'bar'
+    """
+    return replacement if value is None else value
+
+
 def assign_params(func, namespace):
     """
     Assign parameters from namespace where func solicits.
@@ -488,7 +517,7 @@ def save_method_args(method):
     >>> my_ob._saved_method.args
     ()
     """
-    args_and_kwargs = collections.namedtuple('args_and_kwargs', 'args kwargs')
+    args_and_kwargs = collections.namedtuple('args_and_kwargs', 'args kwargs')  # noqa: PYI024 # Internal; stubs used for typing
 
     @functools.wraps(method)
     def wrapper(self, /, *args, **kwargs):

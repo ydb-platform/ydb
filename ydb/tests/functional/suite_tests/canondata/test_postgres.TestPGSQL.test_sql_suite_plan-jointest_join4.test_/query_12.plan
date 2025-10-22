@@ -51,14 +51,10 @@
                                                         "Name": "TableFullScan",
                                                         "Path": "/Root/postgres_jointest/join4.test_plan/qrt3",
                                                         "ReadColumns": [
-                                                            "x",
-                                                            "y"
-                                                        ],
-                                                        "ReadLimit": "1001",
-                                                        "ReadRanges": [
                                                             "x (-\u221e, +\u221e)",
                                                             "y (-\u221e, +\u221e)"
                                                         ],
+                                                        "ReadLimit": "1001",
                                                         "ReadRangesPointPrefixLen": "0",
                                                         "Scan": "Sequential",
                                                         "Table": "postgres_jointest/join4.test_plan/qrt3"

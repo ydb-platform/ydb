@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 PEERDIR(
     library/cpp/monlib/encode/legacy_protobuf/protos

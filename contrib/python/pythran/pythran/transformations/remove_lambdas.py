@@ -141,7 +141,7 @@ class _LambdaRemover(ast.NodeTransformer):
             return proxy_call
 
 
-class RemoveLambdas(Transformation):
+class RemoveLambdas(Transformation[GlobalDeclarations]):
 
     """
     Turns lambda into top-level functions.
@@ -158,9 +158,6 @@ class RemoveLambdas(Transformation):
     def foo_lambda0(y, x):
         return (y + x)
     """
-
-    def __init__(self):
-        super(RemoveLambdas, self).__init__(GlobalDeclarations)
 
     def visit_Module(self, node):
         self.lambda_functions = list()

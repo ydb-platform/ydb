@@ -298,6 +298,7 @@ namespace NMonitoring {
     }
 
     void TMetricRegistry::Took(TInstant time, IMetricConsumer* consumer) const {
+        consumer->OnStreamBegin();
         TReadGuard g{*Lock_};
 
         for (const auto& it: Metrics_) {
@@ -316,5 +317,6 @@ namespace NMonitoring {
             );
             metric->Reset();
         }
+        consumer->OnStreamEnd();
     }
 }

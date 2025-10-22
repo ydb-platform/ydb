@@ -22,12 +22,12 @@ public:
     void Destroy();
 
 private:
-    TFsPath Dir;
-    TRandGuid RandGuid;
-    THashMap<TString, TString> Mapping;
+    TFsPath Dir_;
+    TRandGuid RandGuid_;
+    THashMap<TString, TString> Mapping_;
 };
 
 THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir);
 
-}
-}
+} // namespace NCommon
+} // namespace NYql

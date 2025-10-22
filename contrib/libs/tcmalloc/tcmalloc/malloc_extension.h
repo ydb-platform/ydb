@@ -477,9 +477,11 @@ class MallocExtension final {
 
   // The old names to get and set profile sampling intervals used "rate" to
   // refer to intervals. Use of the below is deprecated to avoid confusion.
+  ABSL_DEPRECATE_AND_INLINE()
   static int64_t GetProfileSamplingRate() {
     return GetProfileSamplingInterval();
   }
+  ABSL_DEPRECATE_AND_INLINE()
   static void SetProfileSamplingRate(int64_t rate) {
     SetProfileSamplingInterval(rate);
   }
@@ -487,6 +489,7 @@ class MallocExtension final {
   static int64_t GetGuardedSamplingRate() {
     return GetGuardedSamplingInterval();
   }
+  ABSL_DEPRECATE_AND_INLINE()
   static void SetGuardedSamplingRate(int64_t rate) {
     SetGuardedSamplingInterval(rate);
   }
@@ -672,8 +675,24 @@ class MallocExtension final {
   using CreateSampleUserDataCallback = void*();
   using CopySampleUserDataCallback = void*(void*);
   using DestroySampleUserDataCallback = void(void*);
+  using ComputeSampleUserDataHashCallback = size_t(void*);
 
-  // Sets callbacks for lifetime control of custom user data attached to allocation samples
+  // Sets callbacks for lifetime control of custom user data attached to allocation samples.
+  // In general, create, copy and destroy callbacks are used with shared_ptr-like semantics:
+  // - Each non-null user_data returned will be result of the create or copy callbacks.
+  // - For each create or copy call (with result R), there will be matching destroy call with argument R.
+  // - Copy and compute_hash callbacks can be called concurrently, but any such call happens before matching destroy call.
+  // Provided functions must satisfy following requirements:
+  // - create and destroy callbacks may not call back into the allocator except for allocating or deallocating memory.
+  // - copy callback may not call back into the allocator at all.
+  // - only compute_hash may throw exceptions (TODO: can this be relaxed safely?)
+  static void SetSampleUserDataCallbacks(
+    CreateSampleUserDataCallback create,
+    CopySampleUserDataCallback copy,
+    DestroySampleUserDataCallback destroy,
+    ComputeSampleUserDataHashCallback compute_hash);
+
+  // Temporary compat shim. Use 4-argument overload instead.
   static void SetSampleUserDataCallbacks(
     CreateSampleUserDataCallback create,
     CopySampleUserDataCallback copy,

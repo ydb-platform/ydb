@@ -4,6 +4,7 @@
 #include "queue_schema.h"
 
 #include <util/string/join.h>
+#include <ydb/core/ymq/base/helpers.h>
 
 namespace NKikimr::NSQS {
 
@@ -32,6 +33,10 @@ private:
 
     void DoAction() override {
         Become(&TThis::StateFunc);
+        TString tagsJson = "";
+        if (QueueTags_.Defined()) {
+            tagsJson = TagsToJson(*QueueTags_);
+        }
 
         SchemaActor_ = Register(
             new TDeleteQueueSchemaActorV2(
@@ -40,7 +45,13 @@ private:
                 TablesFormat_.GetRef(),
                 SelfId(),
                 RequestId_,
-                UserCounters_
+                UserCounters_,
+                FolderId_,
+                tagsJson,
+                UserSID_,
+                MaskedToken_,
+                AuthType_,
+                Request().GetSourceAddress()
             )
         );
     }

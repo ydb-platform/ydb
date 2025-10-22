@@ -40,8 +40,7 @@ def quote_identifier(identifier: str):
 
 def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
                    server_tz: Optional[tzinfo] = None) -> str:
-    while query.endswith(';'):
-        query = query[:-1]
+    query = query.rstrip(";")
     if not parameters:
         return query
     if hasattr(parameters, 'items'):
@@ -52,8 +51,7 @@ def finalize_query(query: str, parameters: Optional[Union[Sequence, Dict[str, An
 # pylint: disable=too-many-locals,too-many-branches
 def bind_query(query: str, parameters: Optional[Union[Sequence, Dict[str, Any]]],
                server_tz: Optional[tzinfo] = None) -> Tuple[str, Dict[str, str]]:
-    while query.endswith(';'):
-        query = query[:-1]
+    query = query.rstrip(";")
     if not parameters:
         return query, {}
 

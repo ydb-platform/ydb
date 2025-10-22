@@ -234,6 +234,7 @@ message TClickHouseClusterConfig {
     optional bool NativeSecure = 12 [default = false];
     optional string Id = 13;
     repeated string GroupAllowed = 14;
+    optional bool ForceUseBalancer = 15 [default = false];
 }
 
 message TClickHouseGatewayConfig {
@@ -657,7 +658,7 @@ message TMongoDbDataSourceOptions {
         // Returns a key-value pair of ObjectID primary key and a JSON serialized document
         JSON = 3;
     };
-      
+
     // Ways of dealing with values read in ReadSplit whose types are inconsistent with types that were deduced in DescribeTable
     enum EUnexpectedTypeDisplayMode {
         UNEXPECTED_UNSPECIFIED = 0;
@@ -671,7 +672,7 @@ message TMongoDbDataSourceOptions {
         UNSUPPORTED_OMIT = 1;
         UNSUPPORTED_AS_STRING = 2;
     };
-    
+
     optional EReadingMode reading_mode = 1;
     optional EUnexpectedTypeDisplayMode unexpected_type_display_mode = 2;
     optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
@@ -851,7 +852,7 @@ message TGenericGatewayConfig {
 
     //
     // The list of Connectors.
-    // 
+    //
     // When a request is served, firstly this list is checked.
     // If the list has a connector for a request's EGenericDataSourceKind it will
     // be applied to that request; otherwise, the "Default Connector" is used.
@@ -868,6 +869,9 @@ message TGenericGatewayConfig {
     // Expected format:
     // [http|https]://host:port/ydbc/cloud-prod/
     optional string YdbMvpEndpoint = 7;
+
+    // Defines timeout for calling the Connector API method `DescribeTable`
+    optional uint64 DescribeTableTimeoutSeconds = 9;
 
     repeated TAttr DefaultSettings = 6;
 
@@ -915,6 +919,18 @@ message TYtflowGatewayConfig {
     repeated TAttr DefaultSettings = 102;
 }
 
+///////////////////////////// Fmr /////////////////////////////
+
+message TFmrConfig {
+    optional string Name = 1;
+    optional string CoordinatorUrl = 2;
+    repeated string AllowedGroups = 3;
+    optional bool EnableAuth = 4 [default = false];
+}
+
+message TFmrGatewayConfig {
+    repeated TFmrConfig FmrConfigurations = 1;
+}
 
 /////////////////////////////// Root ///////////////////////////////
 
@@ -943,4 +959,5 @@ message TGatewaysConfig {
     optional TRevisionFilterConfig RevisionFilter = 22;
     optional TDbResolverConfig DbResolver = 23;
     optional TYtflowGatewayConfig Ytflow = 24;
+    optional TFmrGatewayConfig Fmr = 25;
 }

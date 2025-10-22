@@ -30,6 +30,6 @@ public:
 
 IDqInputChannel::TPtr CreateDqInputChannel(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
     TCollectStatsLevel level, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion);
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion);
 
 } // namespace NYql::NDq

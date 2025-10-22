@@ -34,6 +34,7 @@ using namespace NThreading;
 using namespace NYql;
 using namespace NYql::NDq;
 
+
 class TKqpCompileActor : public TActorBootstrapped<TKqpCompileActor> {
 public:
     using TBase = TActorBootstrapped<TKqpCompileActor>;
@@ -162,7 +163,8 @@ private:
             .SetIsEnablePgConstsToParams(Config->EnablePgConstsToParams)
             .SetApplicationName(ApplicationName)
             .SetQueryParameters(QueryId.QueryParameterTypes)
-            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax());
+            .SetIsEnablePgSyntax(AppData(ctx)->FeatureFlags.GetEnablePgSyntax())
+            .SetFromConfig(*Config);
 
         return ParseStatements(QueryId.Text, QueryId.Settings.Syntax, QueryId.IsSql(), settingsBuilder, PerStatementResult);
     }
@@ -309,7 +311,7 @@ private:
         counters->TxProxyMon = new NTxProxy::TTxProxyMon(AppData(ctx)->Counters);
         std::shared_ptr<NYql::IKikimrGateway::IKqpTableMetadataLoader> loader =
             std::make_shared<TKqpTableMetadataLoader>(
-                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState);
+                QueryId.Cluster, TlsActivationContext->ActorSystem(), Config, true, TempTablesState, FederatedQuerySetup);
         Gateway = CreateKikimrIcGateway(QueryId.Cluster, QueryId.Settings.QueryType, QueryId.Database, QueryId.DatabaseId, std::move(loader),
             ctx.ActorSystem(), ctx.SelfID.NodeId(), counters, QueryServiceConfig);
         Gateway->SetToken(QueryId.Cluster, UserToken);
@@ -324,6 +326,8 @@ private:
         IKqpHost::TPrepareSettings prepareSettings;
         prepareSettings.DocumentApiRestricted = QueryId.Settings.DocumentApiRestricted;
         prepareSettings.IsInternalCall = QueryId.Settings.IsInternalCall;
+        prepareSettings.RuntimeParameterSizeLimit = QueryId.Settings.RuntimeParameterSizeLimit;
+        prepareSettings.RuntimeParameterSizeLimitSatisfied = QueryId.Settings.RuntimeParameterSizeLimitSatisfied;
 
         switch (QueryId.Settings.Syntax) {
             case Ydb::Query::Syntax::SYNTAX_YQL_V1:
@@ -425,10 +429,11 @@ private:
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TIssues& issues) {
+        auto meta = CollectMeta();
         if (!KqpCompileResult) {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(QueryId), std::move(QueryAst));
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
         } else {
-            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst));
+            KqpCompileResult = TKqpCompileResult::Make(Uid, status, issues, ETableReadType::Other, CompileCpuTime, std::move(KqpCompileResult->Query), std::move(KqpCompileResult->QueryAst), meta);
         }
 
         Reply();
@@ -518,10 +523,11 @@ private:
 
         auto kqpResult = std::move(AsyncCompileResult->GetResult());
         auto status = GetYdbStatus(kqpResult);
+        auto meta = CollectMeta();
 
         if (kqpResult.NeedToSplit) {
             KqpCompileResult = TKqpCompileResult::Make(
-                Uid, status, kqpResult.Issues(), ETableReadType::Other, std::move(QueryId), std::move(QueryAst), true);
+                Uid, status, kqpResult.Issues(), ETableReadType::Other, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta, true);
             Reply();
             return;
         }
@@ -539,7 +545,7 @@ private:
 
         auto queryType = QueryId.Settings.QueryType;
 
-        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, std::move(QueryId), std::move(QueryAst));
+        KqpCompileResult = TKqpCompileResult::Make(Uid, status, kqpResult.Issues(), maxReadType, CompileCpuTime, std::move(QueryId), std::move(QueryAst), meta);
         KqpCompileResult->CommandTagName = kqpResult.CommandTagName;
 
         if (status == Ydb::StatusIds::SUCCESS) {
@@ -578,6 +584,19 @@ private:
 
         NYql::TIssue issue(NYql::TPosition(), "Query compilation timed out.");
         return ReplyError(Ydb::StatusIds::TIMEOUT, {issue});
+    }
+
+    NJson::TJsonValue CollectMeta() {
+        NJson::TJsonValue meta;
+        meta.AppendValue("metadata");
+        NJson::TJsonValue parameters;
+        if (QueryId.QueryParameterTypes) {
+            for (const auto& [name, typedValue] : *QueryId.QueryParameterTypes) {
+                parameters[name] = Base64Encode(typedValue.SerializeAsString());
+            }
+        }
+        meta["parameters"] = parameters;
+        return meta;
     }
 
 private:
@@ -633,11 +652,11 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableKqpScanQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpScanQueryStreamIdxLookupJoin();
     kqpConfig.EnableKqpDataQueryStreamIdxLookupJoin = serviceConfig.GetEnableKqpDataQueryStreamIdxLookupJoin();
     kqpConfig.BindingsMode = RemapBindingsMode(serviceConfig.GetBindingsMode());
-    kqpConfig.IndexAutoChooserMode = serviceConfig.GetIndexAutoChooseMode();
     kqpConfig.EnablePgConstsToParams = serviceConfig.GetEnablePgConstsToParams() && serviceConfig.GetEnableAstCache();
     kqpConfig.ExtractPredicateRangesLimit = serviceConfig.GetExtractPredicateRangesLimit();
     kqpConfig.EnablePerStatementQueryExecution = serviceConfig.GetEnablePerStatementQueryExecution();
     kqpConfig.EnableCreateTableAs = serviceConfig.GetEnableCreateTableAs();
+    kqpConfig.EnableDataShardCreateTableAs = serviceConfig.GetEnableDataShardCreateTableAs();
     kqpConfig.AllowOlapDataQuery = serviceConfig.GetAllowOlapDataQuery();
     kqpConfig.EnableOlapSink = serviceConfig.GetEnableOlapSink();
     kqpConfig.EnableOltpSink = serviceConfig.GetEnableOltpSink();
@@ -658,6 +677,18 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
     kqpConfig.EnableOlapScalarApply = serviceConfig.GetEnableOlapScalarApply();
     kqpConfig.EnableOlapSubstringPushdown = serviceConfig.GetEnableOlapSubstringPushdown();
     kqpConfig.EnableIndexStreamWrite = serviceConfig.GetEnableIndexStreamWrite();
+    kqpConfig.EnableOlapPushdownProjections = serviceConfig.GetEnableOlapPushdownProjections();
+    kqpConfig.LangVer = serviceConfig.GetDefaultLangVer();
+    kqpConfig.EnableParallelUnionAllConnectionsForExtend = serviceConfig.GetEnableParallelUnionAllConnectionsForExtend();
+    kqpConfig.EnableTempTablesForUser = serviceConfig.GetEnableTempTablesForUser();
+    kqpConfig.EnableSimpleProgramsSinglePartitionOptimization = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimization();
+    kqpConfig.EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = serviceConfig.GetEnableSimpleProgramsSinglePartitionOptimizationBroadPrograms();
+
+    kqpConfig.EnableOlapPushdownAggregate = serviceConfig.GetEnableOlapPushdownAggregate();
+    kqpConfig.EnableOrderOptimizaionFSM = serviceConfig.GetEnableOrderOptimizaionFSM();
+    kqpConfig.EnableTopSortSelectIndex = serviceConfig.GetEnableTopSortSelectIndex();
+    kqpConfig.EnablePointPredicateSortAutoSelectIndex = serviceConfig.GetEnablePointPredicateSortAutoSelectIndex();
+    kqpConfig.EnableDqHashCombineByDefault = serviceConfig.GetEnableDqHashCombineByDefault();
 
     if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
         kqpConfig._KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
@@ -667,6 +698,15 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
         kqpConfig.FilterPushdownOverJoinOptionalSide = true;
         kqpConfig.YqlCoreOptimizerFlags.insert("fuseequijoinsinputmultilabels");
         kqpConfig.YqlCoreOptimizerFlags.insert("pullupflatmapoverjoinmultiplelabels");
+    }
+
+    switch(serviceConfig.GetDefaultHashShuffleFuncType()) {
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V1:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV1;
+            break;
+        case NKikimrConfig::TTableServiceConfig_EHashKind_HASH_V2:
+            kqpConfig.DefaultHashShuffleFuncType = NYql::NDq::EHashShuffleFuncType::HashV2;
+            break;
     }
 }
 

@@ -70,6 +70,7 @@ DECLARE_REFCOUNTED_STRUCT(IChannelFactory)
 DECLARE_REFCOUNTED_STRUCT(IRoamingChannelProvider)
 DECLARE_REFCOUNTED_STRUCT(IAuthenticator)
 DECLARE_REFCOUNTED_STRUCT(IResponseKeeper)
+DECLARE_REFCOUNTED_STRUCT(IOverloadController)
 
 DECLARE_REFCOUNTED_CLASS(TClientContext)
 DECLARE_REFCOUNTED_CLASS(TServiceBase)
@@ -77,6 +78,7 @@ DECLARE_REFCOUNTED_CLASS(TChannelWrapper)
 DECLARE_REFCOUNTED_CLASS(TStaticChannelFactory)
 DECLARE_REFCOUNTED_CLASS(TClientRequestControlThunk)
 DECLARE_REFCOUNTED_CLASS(TCachingChannelFactory)
+DECLARE_REFCOUNTED_CLASS(TCongestionController)
 
 DECLARE_REFCOUNTED_CLASS(TAttachmentsInputStream)
 DECLARE_REFCOUNTED_CLASS(TAttachmentsOutputStream)
@@ -127,6 +129,10 @@ DECLARE_REFCOUNTED_STRUCT(TThrottlingChannelDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TResponseKeeperConfig)
 DECLARE_REFCOUNTED_STRUCT(TDispatcherConfig)
 DECLARE_REFCOUNTED_STRUCT(TDispatcherDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TServiceMethodConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerMeanWaitTimeConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadTrackerBacklogQueueFillFractionConfig)
+DECLARE_REFCOUNTED_STRUCT(TOverloadControllerConfig)
 
 struct TRequestQueueThrottlerConfigs
 {
@@ -159,7 +165,7 @@ extern const std::string RootUserName;
 constexpr int TypicalMessagePartCount = 8;
 
 // COMPAT(nadya02): remove it when all timeouts are set
-constexpr TDuration DefaultRpcRequestTimeout = TDuration::Hours(24);
+constexpr TDuration HugeDoNotUseRpcRequestTimeout = TDuration::Hours(24);
 
 using TFeatureIdFormatter = const std::function<std::optional<TStringBuf>(int featureId)>*;
 

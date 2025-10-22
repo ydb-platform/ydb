@@ -66,13 +66,31 @@ public:
 
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source = NSo::FillSolomonSource(clusterDesc, soReadObject.Object().Project().StringValue());
-                
-                auto selectors = NSo::ExtractSelectorValues(*maybeSelectors);
-                if (source.GetClusterType() == NSo::NProto::CT_MONITORING) {
-                    selectors["cluster"] = source.GetCluster();
-                    selectors["service"] = soReadObject.Object().Project().StringValue();
+
+                TInstant from;
+                if (auto time = ExtractSetting(settings, "from")) {
+                    if (!TInstant::TryParseIso8601(*time, from)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
                 } else {
-                    selectors["project"] = source.GetProject();
+                    from = TInstant::Zero();
+                }
+                
+                TInstant to;
+                if (auto time = ExtractSetting(settings, "to")) {
+                    if (!TInstant::TryParseIso8601(*time, to)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
+                } else {
+                    to = TInstant::Now();
+                }
+                
+                NSo::TSelectors selectors;
+                if (auto error = NSo::BuildSelectorValues(source, *maybeSelectors, selectors)) {
+                    ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), *error));
+                    return TStatus::Error;
                 }
 
                 auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
@@ -83,8 +101,8 @@ public:
                 auto credentialsProvider = providerFactory->CreateProvider();
 
                 auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
-                auto labelNamesFuture = solomonClient->GetLabelNames(selectors);
-                auto listMetricsFuture = solomonClient->ListMetrics(selectors, 30, 0);
+                auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
+                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
 
                 LabelNamesRequests_[soReadObject.Raw()] = {
                     .SolomonClient = solomonClient,

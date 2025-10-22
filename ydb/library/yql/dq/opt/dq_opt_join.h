@@ -29,12 +29,15 @@ NNodes::TExprBase DqBuildJoin(
     EHashJoinMode hashJoin = EHashJoinMode::Off,
     bool shuffleMapJoin = true,
     bool useGraceCoreForMap = false,
+    bool useBlockHashJoin = false,
     bool shuffleElimination = false,
     bool shuffleEliminationWithMap = false,
     bool buildCollectStage=true
 );
 
-NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap);
+NNodes::TExprBase DqBuildHashJoin(const NNodes::TDqJoin& join, EHashJoinMode mode, TExprContext& ctx, IOptimizationContext& optCtx, bool shuffleElimination, bool shuffleEliminationWithMap, bool useBlockHashJoin = false);
+
+NNodes::TExprBase DqBuildBlockHashJoin(const NNodes::TDqJoin& join, TExprContext& ctx);
 
 NNodes::TExprBase DqBuildJoinDict(const NNodes::TDqJoin& join, TExprContext& ctx);
 
@@ -45,6 +48,8 @@ bool DqCollectJoinRelationsWithStats(
     TTypeAnnotationContext& typesCtx,
     const NNodes::TCoEquiJoin& equiJoin,
     const std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)>& collector);
+
+NNodes::TExprBase DqRewriteStreamEquiJoinWithLookup(const NNodes::TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typeCtx);
 
 } // namespace NDq
 } // namespace NYql

@@ -18,10 +18,12 @@ SRCS(
 
 PEERDIR(
     contrib/libs/fmt
-    ydb/core/testlib/default
+    library/cpp/streams/zstd
+    ydb/core/testlib/pg
     ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/public/lib/ydb_cli/dump
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export
     ydb/public/sdk/cpp/src/client/import
     ydb/public/sdk/cpp/src/client/operation

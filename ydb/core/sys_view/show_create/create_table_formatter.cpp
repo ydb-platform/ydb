@@ -179,7 +179,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Date32: {
             Stream << "DATE32(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32().time_since_epoch().count()));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -187,7 +187,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Datetime64: {
             Stream << "DATETIME64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64().time_since_epoch().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -195,7 +195,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Timestamp64: {
             Stream << "TIMESTAMP64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64().time_since_epoch().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -203,7 +203,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Interval64: {
             Stream << "INTERVAL64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64())));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64().count())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
@@ -514,6 +514,7 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
     EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
+    std::optional<FulltextIndexSettings> fulltextIndexSettings;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
             Stream << " GLOBAL SYNC ON ";
@@ -530,6 +531,11 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
         case TableIndex::kGlobalVectorKmeansTreeIndex: {
             Stream << " GLOBAL USING vector_kmeans_tree ON ";
             kMeansTreeSettings = index.global_vector_kmeans_tree_index().vector_settings();
+            break;
+        }
+        case Ydb::Table::TableIndex::kGlobalFulltextIndex: {
+            Stream << " GLOBAL USING fulltext ON ";
+            fulltextIndexSettings = index.global_fulltext_index().fulltext_settings();
             break;
         }
         case Ydb::Table::TableIndex::TYPE_NOT_SET:
@@ -622,6 +628,10 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         Stream << ")";
     }
+
+    if (fulltextIndexSettings) {
+        Y_ENSURE("todo not implemented");
+    }
 }
 
 bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
@@ -665,8 +675,20 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
+    TString cacheMode;
+    if (familyDesc.HasColumnCacheMode()) {
+        switch (familyDesc.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
     if (familyName == "default") {
-        if (!dataName && !compression) {
+        if (!dataName && !compression && !cacheMode) {
             return false;
         }
     }
@@ -685,6 +707,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";

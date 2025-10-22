@@ -30,9 +30,14 @@ struct TReplicationCardCacheConfig
 {
     bool EnableWatching;
 
+    TReplicationCardCacheConfigPtr ApplyDynamic(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig) const;
+
     REGISTER_YSON_STRUCT(TReplicationCardCacheConfig);
 
     static void Register(TRegistrar registrar);
+
+protected:
+    void ApplyDynamicInplace(const TReplicationCardCacheDynamicConfigPtr& dynamicConfig);
 };
 
 DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
@@ -40,7 +45,7 @@ DEFINE_REFCOUNTED_TYPE(TReplicationCardCacheConfig)
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TReplicationCardCacheDynamicConfig
-    : public virtual NYTree::TYsonStruct
+    : public TAsyncExpiringCacheDynamicConfig
 {
     std::optional<bool> EnableWatching;
 

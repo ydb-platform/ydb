@@ -568,11 +568,11 @@ private:
             return;
         }
 
-        THashSet<ui32> inputChannels;
+        TVector<ui32> inputChannels;
         for (auto& input : InputMap) {
             auto& channel = input.second;
             if (!channel.Requested && !channel.Finished) {
-                inputChannels.insert(channel.ChannelId);
+                inputChannels.push_back(channel.ChannelId);
             }
         }
 

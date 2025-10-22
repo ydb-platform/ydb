@@ -1,4 +1,4 @@
-# `security_config` configuration section
+# security_config
 
 The `security_config` section defines [authentication](../../security/authentication.md) modes, the initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
 
@@ -28,7 +28,7 @@ security_config:
   disable_builtin_access: false
 ```
 
-## Configuring authentication mode {#security-auth}
+## Configuring Authentication Mode {#security-auth}
 
 #|
 || Parameter | Description ||
@@ -110,11 +110,11 @@ flowchart TD
                 anonymous mode]
 ```
 
-## Bootstrapping security {#security-bootstrap}
+## Bootstrapping Security {#security-bootstrap}
 
 The `default_users`, `default_groups`, and `default_access` parameters affect the initial {{ ydb-short-name }} cluster configuration that occurs when {{ ydb-short-name }} starts for the first time. During subsequent runs, the initial configuration is not repeated, and these parameters are ignored.
 
-See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](index.md#domains-config) parameters.
+See [{#T}](../../security/builtin-security.md) and the related [`domains_config`](domains_config.md) parameters.
 
 #|
 || Parameter | Description ||
@@ -188,7 +188,7 @@ default_access:
 
 Errors in access right entries are logged but do not affect {{ ydb-short-name }} cluster startup. Access rights with errors will not be granted.
 
-## Configuring administrative and other privileges {#security-access-levels}
+## Configuring Administrative and Other Privileges {#security-access-levels}
 
 Access control in {{ ydb-short-name }} is divided into two segments:
 
@@ -252,7 +252,7 @@ For example:
 
 {% endnote %}
 
-## Built-in security configuration
+## Built-in Security Configuration
 
 The `disable_builtin_security`, `disable_builtin_groups`, and `disable_builtin_access` flags affect the built-in security configuration that occurs when {{ ydb-short-name }} starts for the first time.
 

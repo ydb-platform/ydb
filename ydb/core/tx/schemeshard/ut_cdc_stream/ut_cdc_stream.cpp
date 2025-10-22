@@ -1,9 +1,9 @@
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -70,6 +70,66 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(DropMultipleStreams) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream1"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream2"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify both streams exist
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
+
+        // Drop both streams in one go
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream1"
+            StreamName: "Stream2"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify both streams are deleted
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream1"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream2"), {NLs::PathNotExist});
     }
 
     Y_UNIT_TEST(VirtualTimestamps) {
@@ -1074,6 +1134,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
+            .EnableChangefeedInitialScan(true)
             .EnablePqBilling(serverless));
         ui64 txId = 100;
 
@@ -1082,6 +1143,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Name: "Shared"
         )");
         env.TestWaitNotification(runtime, txId);
+
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto subDomainPathId = describeResult.GetPathId();
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
@@ -1107,9 +1171,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard));
+        )", TTestTxConfig::SchemeShard, subDomainPathId));
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -1144,20 +1208,28 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Uint64" }
-            Columns { Name: "value" Type: "Uint64" }
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
             UniformPartitionsCount: 2
         )");
         env.TestWaitNotification(runtime, txId, schemeShard);
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
+        {
+            // should write at least 16MiB to exceed the non-metered limit of topic's partition
+            const TString value = TString(500_KB, 'x');
+            for (size_t i = 0; i < 100; ++i) {
+                WriteRow(runtime, schemeShard, ++txId, dbName + "/Table", 0, i, value);
+            }
+        }
+
         TVector<TString> meteringRecords;
         runtime.SetObserverFunc([&meteringRecords](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
                 return TTestActorRuntime::EEventAction::PROCESS;
             }
-
+            Cerr << "GOT METERING RECORD: " << ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson << Endl;
             meteringRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
             return TTestActorRuntime::EEventAction::PROCESS;
         });
@@ -1166,18 +1238,15 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
-              Mode: ECdcStreamModeKeysOnly
+              Mode: ECdcStreamModeNewImage
               Format: ECdcStreamFormatProto
+              State: ECdcStreamStateScan
             }
         )");
         env.TestWaitNotification(runtime, txId, schemeShard);
 
         for (int i = 0; i < 10; ++i) {
             env.SimulateSleep(runtime, TDuration::Seconds(10));
-        }
-
-        for (const auto& rec : meteringRecords) {
-            Cerr << "GOT METERING: " << rec << "\n";
         }
 
         UNIT_ASSERT_VALUES_EQUAL(meteringRecords.size(), (serverless ? 3 : 0));
@@ -1187,7 +1256,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
 
         NJson::TJsonValue json;
-        NJson::ReadJsonTree(meteringRecords[0], &json, true);
+        NJson::ReadJsonTree(meteringRecords.back(), &json, true);
         auto& map = json.GetMap();
         UNIT_ASSERT(map.contains("schema"));
         UNIT_ASSERT(map.contains("resource_id"));
@@ -1195,7 +1264,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT(map.find("tags")->second.GetMap().contains("ydb_size"));
         UNIT_ASSERT_VALUES_EQUAL(map.find("schema")->second.GetString(), "ydb.serverless.v1");
         UNIT_ASSERT_VALUES_EQUAL(map.find("resource_id")->second.GetString(), Sprintf("%s/Table/Stream/streamImpl", dbName.c_str()));
-        UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().find("ydb_size")->second.GetInteger(), 0);
+        UNIT_ASSERT_GT(map.find("tags")->second.GetMap().find("ydb_size")->second.GetInteger(), 0);
     }
 
     Y_UNIT_TEST(MeteringServerless) {
@@ -1928,6 +1997,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        const auto describeResult = DescribePath(runtime, "/MyRoot/Shared");
+        const auto subDomainPathId = describeResult.GetPathId();
+
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
             Name: "Shared"
             StoragePools {
@@ -1958,9 +2030,9 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
             Name: "Serverless"
             ResourcesDomainKey {
                 SchemeShard: %lu
-                PathId: 2
+                PathId: %lu
             }
-        )", TTestTxConfig::SchemeShard), attrs);
+        )", TTestTxConfig::SchemeShard, subDomainPathId), attrs);
         env.TestWaitNotification(runtime, txId);
 
         TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
@@ -2042,14 +2114,14 @@ Y_UNIT_TEST_SUITE(TCdcStreamWithInitialScanTests) {
                 runtime.DispatchEvents(opts);
             }
 
-            UNIT_ASSERT_STRINGS_EQUAL(meteringRecord, TBillRecord()
+            auto expectedBill = TBillRecord()
                 .Id("cdc_stream_scan-72075186233409549-3-72075186233409549-4")
                 .CloudId("CLOUD_ID_VAL")
                 .FolderId("FOLDER_ID_VAL")
                 .ResourceId("DATABASE_ID_VAL")
                 .SourceWt(TInstant::FromValue(0))
-                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)))
-                .ToString());
+                .Usage(TBillRecord::RequestUnits(1, TInstant::FromValue(0)));
+            MeteringDataEqual(meteringRecord, expectedBill.ToString());
         } else {
             for (int i = 0; i < 10; ++i) {
                 env.SimulateSleep(runtime, TDuration::Seconds(1));

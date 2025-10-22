@@ -1,0 +1,10 @@
+{
+    "test.test_purebench_smoke": [
+        {
+            "uri": "file://test.test_purebench_smoke/out"
+        },
+        {
+            "uri": "file://test.test_purebench_smoke/err"
+        }
+    ]
+}

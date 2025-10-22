@@ -31,7 +31,7 @@
 
 KEEP     Apache-2.0           44dc743c95835a9e71d7b3cca63dcc7c
 BELONGS ya.make
-FILE_INCLUDE NOTICE found in files: c++/include/orc/BloomFilter.hh at line 3, c++/include/orc/ColumnPrinter.hh at line 3, c++/include/orc/Common.hh at line 3, c++/include/orc/Exceptions.hh at line 3, c++/include/orc/Int128.hh at line 3, c++/include/orc/MemoryPool.hh at line 3, c++/include/orc/OrcFile.hh at line 3, c++/include/orc/Reader.hh at line 3, c++/include/orc/Statistics.hh at line 3, c++/include/orc/Type.hh at line 3, c++/include/orc/Vector.hh at line 3, c++/include/orc/Writer.hh at line 3, c++/include/orc/orc-config.hh at line 3, c++/include/orc/sargs/Literal.hh at line 3, c++/include/orc/sargs/SearchArgument.hh at line 3, c++/include/orc/sargs/TruthValue.hh at line 3, c++/src/Adaptor-linux.hh at line 3, c++/src/Adaptor.cc at line 3, c++/src/BlockBuffer.cc at line 3, c++/src/BlockBuffer.hh at line 3, c++/src/BloomFilter.cc at line 3, c++/src/BloomFilter.hh at line 3, c++/src/Bpacking.hh at line 3, c++/src/BpackingDefault.cc at line 3, c++/src/BpackingDefault.hh at line 3, c++/src/ByteRLE.cc at line 3, c++/src/ByteRLE.hh at line 3, c++/src/ColumnPrinter.cc at line 3, c++/src/ColumnReader.cc at line 3, c++/src/ColumnReader.hh at line 3, c++/src/ColumnWriter.cc at line 3, c++/src/ColumnWriter.hh at line 3, c++/src/Common.cc at line 3, c++/src/Compression.cc at line 3, c++/src/Compression.hh at line 3, c++/src/ConvertColumnReader.cc at line 3, c++/src/ConvertColumnReader.hh at line 3, c++/src/CpuInfoUtil.cc at line 3, c++/src/CpuInfoUtil.hh at line 3, c++/src/Dispatch.hh at line 3, c++/src/Exceptions.cc at line 3, c++/src/Int128.cc at line 3, c++/src/LzoDecompressor.hh at line 3, c++/src/MemoryPool.cc at line 3, c++/src/Murmur3.cc at line 3, c++/src/Murmur3.hh at line 3, c++/src/Options.hh at line 3, c++/src/OrcFile.cc at line 3, c++/src/RLE.cc at line 3, c++/src/RLE.hh at line 3, c++/src/RLEV2Util.hh at line 3, c++/src/RLEv1.cc at line 3, c++/src/RLEv1.hh at line 3, c++/src/RLEv2.hh at line 3, c++/src/Reader.cc at line 3, c++/src/Reader.hh at line 3, c++/src/RleDecoderV2.cc at line 3, c++/src/SchemaEvolution.cc at line 3, c++/src/SchemaEvolution.hh at line 3, c++/src/Statistics.cc at line 3, c++/src/Statistics.hh at line 3, c++/src/StripeStream.cc at line 3, c++/src/StripeStream.hh at line 3, c++/src/Timezone.cc at line 3, c++/src/Timezone.hh at line 3, c++/src/TypeImpl.cc at line 3, c++/src/TypeImpl.hh at line 3, c++/src/Utils.hh at line 3, c++/src/Vector.cc at line 3, c++/src/Writer.cc at line 3, c++/src/io/Cache.cc at line 3, c++/src/io/Cache.hh at line 3, c++/src/io/InputStream.cc at line 3, c++/src/io/InputStream.hh at line 3, c++/src/io/OutputStream.cc at line 3, c++/src/io/OutputStream.hh at line 3, c++/src/sargs/ExpressionTree.cc at line 3, c++/src/sargs/ExpressionTree.hh at line 3, c++/src/sargs/Literal.cc at line 3, c++/src/sargs/PredicateLeaf.cc at line 3, c++/src/sargs/PredicateLeaf.hh at line 3, c++/src/sargs/SargsApplier.cc at line 3, c++/src/sargs/SargsApplier.hh at line 3, c++/src/sargs/SearchArgument.cc at line 3, c++/src/sargs/SearchArgument.hh at line 3, c++/src/sargs/TruthValue.cc at line 3
+FILE_INCLUDE NOTICE found in files: c++/include/orc/BloomFilter.hh at line 3, c++/include/orc/ColumnPrinter.hh at line 3, c++/include/orc/Common.hh at line 3, c++/include/orc/Exceptions.hh at line 3, c++/include/orc/Geospatial.hh at line 3, c++/include/orc/Int128.hh at line 3, c++/include/orc/MemoryPool.hh at line 3, c++/include/orc/OrcFile.hh at line 3, c++/include/orc/Reader.hh at line 3, c++/include/orc/Statistics.hh at line 3, c++/include/orc/Type.hh at line 3, c++/include/orc/Vector.hh at line 3, c++/include/orc/Writer.hh at line 3, c++/include/orc/orc-config.hh at line 3, c++/include/orc/sargs/Literal.hh at line 3, c++/include/orc/sargs/SearchArgument.hh at line 3, c++/include/orc/sargs/TruthValue.hh at line 3, c++/src/Adaptor-linux.hh at line 3, c++/src/Adaptor.cc at line 3, c++/src/BlockBuffer.cc at line 3, c++/src/BlockBuffer.hh at line 3, c++/src/BloomFilter.cc at line 3, c++/src/BloomFilter.hh at line 3, c++/src/Bpacking.hh at line 3, c++/src/BpackingDefault.cc at line 3, c++/src/BpackingDefault.hh at line 3, c++/src/ByteRLE.cc at line 3, c++/src/ByteRLE.hh at line 3, c++/src/ColumnPrinter.cc at line 3, c++/src/ColumnReader.cc at line 3, c++/src/ColumnReader.hh at line 3, c++/src/ColumnWriter.cc at line 3, c++/src/ColumnWriter.hh at line 3, c++/src/Common.cc at line 3, c++/src/Compression.cc at line 3, c++/src/Compression.hh at line 3, c++/src/ConvertColumnReader.cc at line 3, c++/src/ConvertColumnReader.hh at line 3, c++/src/CpuInfoUtil.cc at line 3, c++/src/CpuInfoUtil.hh at line 3, c++/src/Dictionary.cc at line 3, c++/src/Dictionary.hh at line 3, c++/src/Dispatch.hh at line 3, c++/src/Exceptions.cc at line 3, c++/src/Geospatial.cc at line 3, c++/src/Geospatial.hh at line 4, c++/src/Int128.cc at line 3, c++/src/LzoDecompressor.hh at line 3, c++/src/MemoryPool.cc at line 3, c++/src/Murmur3.cc at line 3, c++/src/Murmur3.hh at line 3, c++/src/Options.hh at line 3, c++/src/OrcFile.cc at line 3, c++/src/RLE.cc at line 3, c++/src/RLE.hh at line 3, c++/src/RLEV2Util.hh at line 3, c++/src/RLEv1.cc at line 3, c++/src/RLEv1.hh at line 3, c++/src/RLEv2.hh at line 3, c++/src/Reader.cc at line 3, c++/src/Reader.hh at line 3, c++/src/RleDecoderV2.cc at line 3, c++/src/SchemaEvolution.cc at line 3, c++/src/SchemaEvolution.hh at line 3, c++/src/Statistics.cc at line 3, c++/src/Statistics.hh at line 3, c++/src/StripeStream.cc at line 3, c++/src/StripeStream.hh at line 3, c++/src/Timezone.cc at line 3, c++/src/Timezone.hh at line 3, c++/src/TypeImpl.cc at line 3, c++/src/TypeImpl.hh at line 3, c++/src/Utils.hh at line 3, c++/src/Vector.cc at line 3, c++/src/Writer.cc at line 3, c++/src/io/Cache.cc at line 3, c++/src/io/Cache.hh at line 3, c++/src/io/InputStream.cc at line 3, c++/src/io/InputStream.hh at line 3, c++/src/io/OutputStream.cc at line 3, c++/src/io/OutputStream.hh at line 3, c++/src/sargs/ExpressionTree.cc at line 3, c++/src/sargs/ExpressionTree.hh at line 3, c++/src/sargs/Literal.cc at line 3, c++/src/sargs/PredicateLeaf.cc at line 3, c++/src/sargs/PredicateLeaf.hh at line 3, c++/src/sargs/SargsApplier.cc at line 3, c++/src/sargs/SargsApplier.hh at line 3, c++/src/sargs/SearchArgument.cc at line 3, c++/src/sargs/SearchArgument.hh at line 3, c++/src/sargs/TruthValue.cc at line 3
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: Apache-2.0
@@ -43,6 +43,7 @@ FILE_INCLUDE NOTICE found in files: c++/include/orc/BloomFilter.hh at line 3, c+
         c++/include/orc/ColumnPrinter.hh [2:16]
         c++/include/orc/Common.hh [2:16]
         c++/include/orc/Exceptions.hh [2:16]
+        c++/include/orc/Geospatial.hh [2:16]
         c++/include/orc/Int128.hh [2:16]
         c++/include/orc/MemoryPool.hh [2:16]
         c++/include/orc/OrcFile.hh [2:16]
@@ -78,8 +79,12 @@ FILE_INCLUDE NOTICE found in files: c++/include/orc/BloomFilter.hh at line 3, c+
         c++/src/ConvertColumnReader.hh [2:16]
         c++/src/CpuInfoUtil.cc [2:16]
         c++/src/CpuInfoUtil.hh [2:16]
+        c++/src/Dictionary.cc [2:16]
+        c++/src/Dictionary.hh [2:16]
         c++/src/Dispatch.hh [2:16]
         c++/src/Exceptions.cc [2:16]
+        c++/src/Geospatial.cc [2:16]
+        c++/src/Geospatial.hh [3:17]
         c++/src/Int128.cc [2:16]
         c++/src/LzoDecompressor.hh [2:16]
         c++/src/MemoryPool.cc [2:16]
@@ -168,6 +173,19 @@ BELONGS ya.make
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
         LICENSE [277:301]
+
+KEEP     Apache-2.0           79a77c558a7457bc9605aaf522710501
+BELONGS ya.make
+    License text:
+         * The original code is licensed under the Apache License, Version 2.0.
+    Scancode info:
+        Original SPDX id: Apache-2.0
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.apache.org/licenses/, http://www.apache.org/licenses/LICENSE-2.0, https://spdx.org/licenses/Apache-2.0
+    Files with this license:
+        c++/include/orc/Geospatial.hh [25:25]
+        c++/src/Geospatial.cc [25:25]
 
 SKIP     LicenseRef-scancode-unknown-license-reference 82b9c91a8f717463c6871d82aa2b1ff8
 BELONGS ya.make

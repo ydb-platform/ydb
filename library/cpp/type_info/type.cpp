@@ -1,5 +1,6 @@
 #include "type.h"
 
+#include "error.h"
 #include "type_factory.h"
 #include "type_equivalence.h"
 
@@ -293,29 +294,6 @@ namespace NTi {
     TPrimitiveType::TPrimitiveType(TMaybe<ui64> hash, EPrimitiveTypeName primitiveTypeName) noexcept
         : TType(hash, ToTypeName(primitiveTypeName))
     {
-    }
-
-    TBoolType::TBoolType()
-        : TPrimitiveType({}, EPrimitiveTypeName::Bool)
-    {
-    }
-
-    TBoolTypePtr TBoolType::Instance() {
-        return InstanceRaw()->AsPtr();
-    }
-
-    const TBoolType* TBoolType::InstanceRaw() {
-        static auto singleton = TBoolType();
-        return &singleton;
-    }
-
-    const TBoolType* TBoolType::Clone(ITypeFactoryInternal& factory) const noexcept {
-        Y_UNUSED(factory);
-        return InstanceRaw();
-    }
-
-    void TBoolType::Drop(ITypeFactoryInternal& factory) noexcept {
-        Y_UNUSED(factory);
     }
 
     TInt8Type::TInt8Type()
@@ -1475,6 +1453,19 @@ namespace NTi {
         return NPrivate::GetDefaultHeapFactory()->Timestamp64();
     }
 
+    TTzDate32TypePtr TzDate32() {
+        return NPrivate::GetDefaultHeapFactory()->TzDate32();
+    }
+
+    TTzDatetime64TypePtr TzDatetime64() {
+        return NPrivate::GetDefaultHeapFactory()->TzDatetime64();
+    }
+
+    TTzTimestamp64TypePtr TzTimestamp64() {
+        return NPrivate::GetDefaultHeapFactory()->TzTimestamp64();
+    }
+
+
     TInterval64TypePtr Interval64() {
         return NPrivate::GetDefaultHeapFactory()->Interval64();
     }
@@ -1670,6 +1661,21 @@ Y_DECLARE_OUT_SPEC(, NTi::TDatetime64Type, o, v) {
 Y_DECLARE_OUT_SPEC(, NTi::TTimestamp64Type, o, v) {
     Y_UNUSED(v);
     o << "Timestamp64";
+}
+
+Y_DECLARE_OUT_SPEC(, NTi::TTzDate32Type, o, v) {
+    Y_UNUSED(v);
+    o << "TzDate32";
+}
+
+Y_DECLARE_OUT_SPEC(, NTi::TTzDatetime64Type, o, v) {
+    Y_UNUSED(v);
+    o << "TzDatetime64";
+}
+
+Y_DECLARE_OUT_SPEC(, NTi::TTzTimestamp64Type, o, v) {
+    Y_UNUSED(v);
+    o << "TzTimestamp64";
 }
 
 Y_DECLARE_OUT_SPEC(, NTi::TInterval64Type, o, v) {

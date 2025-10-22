@@ -6,7 +6,7 @@
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
@@ -142,6 +142,17 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
         if (family.CompressionLevel) {
             familyProto->set_compression_level(family.CompressionLevel.GetRef());
+        }
+        if (family.CacheMode) {
+            if (to_lower(family.CacheMode.GetRef()) == "regular") {
+                familyProto->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_REGULAR);
+            } else if (to_lower(family.CacheMode.GetRef()) == "in_memory") {
+                familyProto->set_cache_mode(Ydb::Table::ColumnFamily::CACHE_MODE_IN_MEMORY);
+            } else {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = TStringBuilder() << "Unknown cache mode '" << family.CacheMode.GetRef() << "' for a column family";
+                return false;
+            }
         }
     }
 
@@ -292,6 +303,10 @@ bool ConvertCreateTableSettingsToProto(NYql::TKikimrTableMetadataPtr metadata, Y
         }
     }
 
+    if (const auto count = metadata->TableSettings.ExternalDataChannelsCount) {
+        proto.mutable_storage_settings()->set_external_data_channels_count(*count);
+    }
+
     proto.set_temporary(metadata->Temporary);
 
     return true;
@@ -384,6 +399,11 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         if (family.Data.Defined()) {
             code = Ydb::StatusIds::BAD_REQUEST;
             error = TStringBuilder() << "Field `DATA` is not supported for OLAP tables in column family '" << family.Name << "'";
+            return false;
+        }
+        if (family.CacheMode.Defined()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Field `CACHE_MODE` is not supported for OLAP tables in column family '" << family.Name << "'";
             return false;
         }
         auto columnFamilyIt = columnFamiliesByName.find(family.Name);
@@ -543,6 +563,8 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
+    tableDesc.SetTemporary(metadata->Temporary);
+
     return true;
 }
 
@@ -559,6 +581,11 @@ static TFuture<TResult> PrepareSuccess() {
     TResult result;
     result.SetSuccess();
     return MakeFuture(result);
+}
+
+template<typename TResult>
+TFuture<TResult> InvalidCluster(const TString& cluster) {
+    return MakeFuture(ResultFromError<TResult>("Invalid cluster: " + cluster));
 }
 
 bool IsDdlPrepareAllowed(TKikimrSessionContext& sessionCtx) {
@@ -632,35 +659,110 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
-        CHECK_PREPARED_DDL(AlterDatabase);
+    TFuture<TGenericResult> SetConstraint(const TString& tablePath, TVector<TSetColumnConstraintSettings>&& settings) override {
+        try {
+            auto [dirname, tableName] = NSchemeHelpers::SplitPathByDirAndBaseNames(tablePath);
 
-        if (IsPrepare()) {
-            auto alterDatabasePromise = NewPromise<TGenericResult>();
+            if (tableName.empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Empty basename for setting constraint"));
+            }
 
-            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+            if (!IsStartWithSlash(tablePath)) {
+                dirname = JoinPath({GetDatabase(), dirname});
+            }
 
-            NKikimrSchemeOp::TModifyScheme schemeTx;
-            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
-            schemeTx.SetWorkingDir(dirname);
-            schemeTx.MutableModifyACL()->SetNewOwner(settings.Owner.value());
-            schemeTx.MutableModifyACL()->SetName(basename);
+            NKikimrSchemeOp::TSetColumnConstraintsInitiate setColumnConstraintsInitiate;
+            for (auto& setting : settings) {
+                auto* add = setColumnConstraintsInitiate.AddConstraintSettings();
+                add->Swap(&setting);
+            }
 
-            auto condition = schemeTx.AddApplyIf();
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+            setColumnConstraintsInitiate.SetTableName(tableName);
 
-            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-            auto& phyTx = *phyQuery.AddTransactions();
-            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            *modifyScheme.MutableSetColumnConstraintsInitiate() = std::move(setColumnConstraintsInitiate);
+            modifyScheme.SetWorkingDir(std::move(dirname));
+            modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateSetConstraintInitiate);
 
-            phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
+        }
+    }
+
+    TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
+        if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
+            TGenericResult result;
+            result.SetStatus(YqlStatusFromYdbStatus(error.GetCode()));
+            result.AddIssue(error);
+            return result;
+        }
+
+        const auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+        if (basename.empty()) {
+            TGenericResult result;
+            result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+            result.AddIssue(TIssue("Empty basename for ALTER DATABASE").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+            return result;
+        }
+
+        modifyScheme.SetWorkingDir(dirname);
+
+        if (settings.Owner) {
+            NSchemeHelpers::FillAlterDatabaseOwner(modifyScheme, basename, *settings.Owner);
+
             TGenericResult result;
             result.SetSuccess();
-            alterDatabasePromise.SetValue(result);
-            return alterDatabasePromise.GetFuture();
-        } else {
-            return Gateway->AlterDatabase(cluster, settings);
+            return result;
+        }
+
+        if (settings.SchemeLimits) {
+            NSchemeHelpers::FillAlterDatabaseSchemeLimits(modifyScheme, basename, *settings.SchemeLimits);
+
+            TGenericResult result;
+            result.SetSuccess();
+            return result;
+        }
+
+        TGenericResult result;
+        result.SetStatus(TIssuesIds_EIssueCode_KIKIMR_BAD_REQUEST);
+        result.AddIssue(TIssue("Cannot execute ALTER DATABASE with these settings.").SetCode(result.Status(), TSeverityIds_ESeverityId_S_ERROR));
+        return result;
+    }
+
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterDatabase);
+        try {
+            if (cluster != SessionCtx->GetCluster()) {
+                return InvalidCluster<TGenericResult>(cluster);
+            }
+
+            NKikimrSchemeOp::TModifyScheme modifyScheme;
+            auto preparation = PrepareAlterDatabase(settings, modifyScheme);
+            if (!preparation.Success()) {
+                return MakeFuture<TGenericResult>(preparation);
+            }
+            if (IsPrepare()) {
+                auto& phyTx = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery()->AddTransactions();
+                phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                auto& schemeOp = *phyTx.MutableSchemeOperation();
+
+                if (settings.Owner) {
+                    *schemeOp.MutableModifyPermissions() = modifyScheme;
+                }
+                if (settings.SchemeLimits) {
+                    *schemeOp.MutableAlterDatabase() = modifyScheme;
+                }
+
+                return MakeFuture<TGenericResult>(preparation);
+            }
+
+            return Gateway->ModifyScheme(std::move(modifyScheme));
+        }
+        catch (yexception& e) {
+            return MakeFuture(ResultFromException<TGenericResult>(e));
         }
     }
 
@@ -709,8 +811,19 @@ public:
                             indexDesc->AddDataColumnNames(col);
                         }
 
-                        if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                            *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                        switch (index.Type) {
+                            case TIndexDescription::EType::GlobalSync:
+                            case TIndexDescription::EType::GlobalAsync:
+                            case TIndexDescription::EType::GlobalSyncUnique:
+                                // no specialized index description
+                                Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
+                                break;
+                            case TIndexDescription::EType::GlobalSyncVectorKMeansTree:
+                                *indexDesc->MutableVectorIndexKmeansTreeDescription()->MutableSettings() = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
+                            case TIndexDescription::EType::GlobalFulltext:
+                                *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrKqp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
+                                break;
                         }
                     }
                     FillCreateTableColumnDesc(*tableDesc, pathPair.second, metadata);
@@ -1198,7 +1311,12 @@ public:
 
             for (const auto& currentPath : settings.Paths) {
                 auto [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(currentPath);
-                if (!dirname.empty() && !IsStartWithSlash(dirname)) {
+
+                if (basename.empty()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Empty basename for modify permissions"));
+                }
+
+                if (!IsStartWithSlash(currentPath)) {
                     dirname = JoinPath({GetDatabase(), dirname});
                 }
 
@@ -1228,7 +1346,7 @@ public:
 
         try {
             if (cluster != SessionCtx->GetCluster()) {
-                return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+                return InvalidCluster<TGenericResult>(cluster);
             }
 
             std::pair<TString, TString> pathPair;
@@ -1359,15 +1477,20 @@ public:
             }
 
             NKikimrSchemeOp::TModifyScheme tx;
-            tx.SetWorkingDir(GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem)));
             if (settings.Cascade) {
                 return MakeFuture(ResultFromError<TGenericResult>("Unimplemented"));
             } else {
                 tx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropBackupCollection);
             }
 
+            TString database = GetDatabase() ? GetDatabase() : NSchemeHelpers::GetDomainDatabase(AppData(ActorSystem));
+            tx.SetWorkingDir(JoinPath({database, ".backups", "collections"}));
+
             auto& op = *tx.MutableDrop();
-            op.SetName(pathPair.second);
+            op.SetName(settings.Name);
+            
+            auto& dropBackupOp = *tx.MutableDropBackupCollection();
+            dropBackupOp.SetName(settings.Name);
 
             if (IsPrepare()) {
                 auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
@@ -2454,11 +2577,21 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
+            }
             if (settings.Settings.RowConsistency) {
                 config.MutableConsistencySettings()->MutableRow();
             }
             if (const auto& consistency = settings.Settings.GlobalConsistency) {
                 consistency->Serialize(*config.MutableConsistencySettings()->MutableGlobal());
+            }
+
+            if (params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
             }
 
             auto& targets = *config.MutableSpecific();
@@ -2521,14 +2654,25 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2541,6 +2685,12 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 
@@ -2629,8 +2779,6 @@ public:
             op.SetName(pathPair.second);
 
             auto& config = *op.MutableConfig();
-
-
             auto& params = *config.MutableSrcConnectionParams();
             if (const auto& connectionString = settings.Settings.ConnectionString) {
                 const auto parseResult = NYdb::ParseConnectionString(*connectionString);
@@ -2650,6 +2798,16 @@ public:
             if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                 staticCreds->Serialize(*params.MutableStaticCredentials());
             }
+            if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                iamCreds->Serialize(*params.MutableIamCredentials());
+            }
+            if (const auto& caCert = settings.Settings.CaCert) {
+                params.SetCaCert(*caCert);
+            }
+
+            if (!params.GetEndpoint().empty() && params.GetDatabase().empty()) {
+                return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+            }
 
             {
                 const auto& [src, dst, lambda] = settings.Target;
@@ -2665,6 +2823,9 @@ public:
                 }
                 if (settings.Settings.ConsumerName) {
                     target.SetConsumerName(*settings.Settings.ConsumerName);
+                }
+                if (settings.Settings.DirectoryPath) {
+                    target.SetDirectoryPath(*settings.Settings.DirectoryPath);
                 }
             }
 
@@ -2720,6 +2881,10 @@ public:
                 }
             }
 
+            if (settings.Settings.DirectoryPath) {
+                op.MutableAlterTransfer()->SetDirectoryPath(*settings.Settings.DirectoryPath);
+            }
+
             if (const auto& done = settings.Settings.StateDone) {
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
@@ -2732,14 +2897,25 @@ public:
                 state.MutableStandBy();
             }
 
-            if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
-                    settings.Settings.OAuthToken || settings.Settings.StaticCredentials) {
+            if (settings.Settings.ConnectionString
+                || settings.Settings.Endpoint
+                || settings.Settings.Database
+                || settings.Settings.OAuthToken
+                || settings.Settings.StaticCredentials
+                || settings.Settings.IamCredentials
+                || settings.Settings.CaCert
+            ) {
                 auto& config = *op.MutableConfig();
                 auto& params = *config.MutableSrcConnectionParams();
                 if (const auto& connectionString = settings.Settings.ConnectionString) {
                     const auto parseResult = NYdb::ParseConnectionString(*connectionString);
                     params.SetEndpoint(TString{parseResult.Endpoint});
                     params.SetDatabase(TString{parseResult.Database});
+                    params.SetEnableSsl(parseResult.EnableSsl);
+
+                    if (params.GetDatabase().empty()) {
+                        return MakeFuture(ResultFromError<TGenericResult>("Database is not specified"));
+                    }
                 }
                 if (const auto& endpoint = settings.Settings.Endpoint) {
                     params.SetEndpoint(*endpoint);
@@ -2752,6 +2928,12 @@ public:
                 }
                 if (const auto& staticCreds = settings.Settings.StaticCredentials) {
                     staticCreds->Serialize(*params.MutableStaticCredentials());
+                }
+                if (const auto& iamCreds = settings.Settings.IamCredentials) {
+                    iamCreds->Serialize(*params.MutableIamCredentials());
+                }
+                if (const auto& caCert = settings.Settings.CaCert) {
+                    params.SetCaCert(*caCert);
                 }
             }
 
@@ -2851,20 +3033,185 @@ public:
         }
     }
 
+    template<class TSecretSchemaOp>
+    class TSecretSchemaModifier {
+    public:
+        TSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : Gateway_(gateway)
+            , SessionCtx_(sessionCtx)
+        {
+        }
+
+        TFuture<TGenericResult> StartModification(const TString& cluster, const NYql::TSecretSettings& settings) {
+            if (!SessionCtx_->Config().FeatureFlags.GetEnableSchemaSecrets()) {
+                return MakeErrorFuture<IKikimrGateway::TGenericResult>(
+                    std::make_exception_ptr(yexception() << "Secrets are disabled. Please contact your system administrator to enable it")
+                );
+            }
+
+            try {
+                if (cluster != SessionCtx_->GetCluster()) {
+                    return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
+                }
+
+                TString error;
+                std::pair<TString, TString> pathPair;
+                if (!NSchemeHelpers::SplitTablePath(settings.Name, SessionCtx_->GetDatabase(), pathPair, error, /* createDir */ false)) {
+                    return MakeFuture(ResultFromError<TGenericResult>(error));
+                }
+
+                NKikimrSchemeOp::TModifyScheme tx;
+                tx.SetWorkingDir(pathPair.first);
+                tx.SetOperationType(GetOperationType());
+
+                TSecretSchemaOp& op = GetSecretSchemaOp(tx);
+                op.SetName(pathPair.second);
+                FillSchemaOperation(settings, op);
+
+                if (SessionCtx_->Query().PrepareOnly) {
+                    auto& phyQuery = *SessionCtx_->Query().PreparingQuery->MutablePhysicalQuery();
+                    auto& phyTx = *phyQuery.AddTransactions();
+                    phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+                    FillKqpSchemeOperation(*phyTx.MutableSchemeOperation(), std::move(tx));
+
+                    TGenericResult result;
+                    result.SetSuccess();
+                    return MakeFuture(result);
+                } else {
+                    return Gateway_->ModifyScheme(std::move(tx));
+                }
+            } catch (yexception& e) {
+                return MakeFuture(ResultFromException<TGenericResult>(e));
+            }
+        }
+
+    protected:
+        virtual NKikimrSchemeOp::EOperationType GetOperationType() const = 0;
+        virtual void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const = 0;
+        virtual TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const = 0;
+        virtual void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const = 0;
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TCreateSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TCreateSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpCreateSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableCreateSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableCreateSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+            op.SetInheritPermissions(settings.InheritPermissions);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TAlterSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TAlterSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpAlterSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableAlterSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableAlterSecret();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings& settings, TSecretSchemaOp& op) const override {
+            op.SetValue(settings.Value);
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    template<class TSecretSchemaOp>
+    class TDropSecretSchemaModifier : public TSecretSchemaModifier<TSecretSchemaOp> {
+    public:
+        TDropSecretSchemaModifier(TIntrusivePtr<IKqpGateway> gateway, TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+            : TSecretSchemaModifier<TSecretSchemaOp>(gateway, sessionCtx)
+        {
+        }
+
+    protected:
+        NKikimrSchemeOp::EOperationType GetOperationType() const override {
+            return NKikimrSchemeOp::ESchemeOpDropSecret;
+        }
+
+        void FillKqpSchemeOperation(NKqpProto::TKqpSchemeOperation& op, NKikimrSchemeOp::TModifyScheme&& tx) const override {
+            op.MutableDropSecret()->Swap(&tx);
+        }
+
+        TSecretSchemaOp& GetSecretSchemaOp(NKikimrSchemeOp::TModifyScheme& tx) const override {
+            return *tx.MutableDrop();
+        }
+
+        void FillSchemaOperation(const NYql::TSecretSettings&, TSecretSchemaOp&) const override {
+        }
+
+    private:
+        TIntrusivePtr<IKqpGateway> Gateway_;
+        TIntrusivePtr<TKikimrSessionContext> SessionCtx_;
+    };
+
+    TFuture<TGenericResult> CreateSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(CreateSecret);
+
+        return TCreateSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> AlterSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterSecret);
+
+        return TAlterSecretSchemaModifier<NKikimrSchemeOp::TSecretSchemaOp>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
+    TFuture<TGenericResult> DropSecret(const TString& cluster, const NYql::TSecretSettings& settings) override {
+        CHECK_PREPARED_DDL(DropSecret);
+
+        return TDropSecretSchemaModifier<NKikimrSchemeOp::TDrop>(Gateway, SessionCtx).StartModification(cluster, settings);
+    }
+
     TVector<NKikimrKqp::TKqpTableMetadataProto> GetCollectedSchemeData() override {
         return Gateway->GetCollectedSchemeData();
     }
 
-    TFuture<TExecuteLiteralResult> ExecuteLiteral(const TString& program,
+    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program, ui32 langVer,
         const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
     {
-        return Gateway->ExecuteLiteral(program, resultType, txAlloc);
-    }
-
-    TExecuteLiteralResult ExecuteLiteralInstant(const TString& program,
-        const NKikimrMiniKQL::TType& resultType, NKikimr::NKqp::TTxAllocatorState::TPtr txAlloc) override
-    {
-        return Gateway->ExecuteLiteralInstant(program, resultType, txAlloc);
+        return Gateway->ExecuteLiteralInstant(program, langVer, resultType, txAlloc);
     }
 
 private:

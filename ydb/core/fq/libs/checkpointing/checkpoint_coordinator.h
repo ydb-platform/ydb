@@ -7,44 +7,32 @@
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpoint_storage/events/events.h>
 
-#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb/library/yql/providers/dq/actors/events.h>
-#include <ydb/library/yql/providers/dq/actors/task_controller_impl.h>
 
-#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 
 using namespace NActors;
 using namespace NFq::NConfig;
 
-class TCheckpointCoordinator : public NYql::TTaskControllerImpl<TCheckpointCoordinator> {
+class TCheckpointCoordinator : public NActors::TActor<TCheckpointCoordinator>  {
 public:
     TCheckpointCoordinator(TCoordinatorId coordinatorId,
                            const TActorId& storageProxy,
                            const TActorId& runActorId,
-                           const TCheckpointCoordinatorConfig& settings,
+                           const NKikimrConfig::TCheckpointsConfig& settings,
                            const ::NMonitoring::TDynamicCounterPtr& counters,
                            const NProto::TGraphParams& graphParams,
                            const FederatedQuery::StateLoadMode& stateLoadMode,
-                           const FederatedQuery::StreamingDisposition& streamingDisposition,
-                           // vvv TaskController temporary params vvv
-                           const TString& traceId,
-                           const NActors::TActorId& executerId,
-                           const NActors::TActorId& resultId,
-                           const NYql::TDqConfiguration::TPtr& tcSettings,
-                           const NYql::NCommon::TServiceCounters& serviceCounters,
-                           const TDuration& pingPeriod,
-                           const TDuration& aggrPeriod
+                           const FederatedQuery::StreamingDisposition& streamingDisposition
                            );
 
-    using NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnInternalError;
-
-    void Handle(NYql::NDqs::TEvReadyState::TPtr&);
+    void Handle(NFq::TEvCheckpointCoordinator::TEvReadyState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvRegisterCoordinatorResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvNewCheckpointCoordinatorAck::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse::TPtr&);
@@ -54,6 +42,7 @@ public:
     void Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusResponse::TPtr&);
     void Handle(const NYql::NDq::TEvDqCompute::TEvStateCommitted::TPtr&);
+    void Handle(const NYql::NDq::TEvDqCompute::TEvState::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr&);
     void Handle(const TEvCheckpointStorage::TEvAbortCheckpointResponse::TPtr&);
     void Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvRetry::TPtr& ev);
@@ -66,10 +55,7 @@ public:
 
 
     STRICT_STFUNC_EXC(DispatchEvent,
-        hFunc(NYql::NDqs::TEvReadyState, Handle)
-        hFunc(NYql::NDqs::TEvQueryResponse, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnQueryResult)
-        hFunc(NYql::NDqs::TEvDqFailure, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnResultFailure)
-
+        hFunc(TEvCheckpointCoordinator::TEvReadyState, Handle)
         hFunc(TEvCheckpointCoordinator::TEvScheduleCheckpointing, Handle)
         hFunc(TEvCheckpointCoordinator::TEvRunGraph, Handle)
 
@@ -84,13 +70,11 @@ public:
         hFunc(NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpointResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskStateResult, Handle)
         hFunc(NYql::NDq::TEvDqCompute::TEvStateCommitted, Handle)
-        hFunc(NYql::NDq::TEvDqCompute::TEvState, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnComputeActorState)
-        hFunc(NYql::NDq::TEvDq::TEvAbortExecution, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnAbortExecution)
+        hFunc(NYql::NDq::TEvDqCompute::TEvState, Handle);
 
         hFunc(NYql::NDq::TEvRetryQueuePrivate::TEvRetry, Handle)
 
-        hFunc(NActors::TEvents::TEvPoison, Handle)
-        hFunc(NActors::TEvents::TEvWakeup, NYql::TTaskControllerImpl<TCheckpointCoordinator>::OnWakeup)
+        sFunc(NActors::TEvents::TEvPoison, PassAway)
 
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, Handle)
         hFunc(NActors::TEvInterconnect::TEvNodeConnected, Handle)
@@ -109,6 +93,10 @@ private:
     void PassAway() override;
     void RestoreFromOwnCheckpoint(const TCheckpointMetadata& checkpoint);
     void TryToRestoreOffsetsFromForeignCheckpoint(const TCheckpointMetadata& checkpoint);
+    void StartAllTasks();
+
+    void OnError(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& message, const NYql::TIssues& subIssues);
+    void OnInternalError(const TString& message, const NYql::TIssues& subIssues = {});
 
     template <class TEvPtr>
     bool OnComputeActorEventReceived(TEvPtr& ev) {
@@ -167,12 +155,12 @@ private:
 
         NYql::NDq::TRetryEventsQueue EventsQueue;
     };
-
+    NActors::TActorId ControlId;
     const TCoordinatorId CoordinatorId;
     const TActorId StorageProxy;
     const TActorId RunActorId;
     std::unique_ptr<TCheckpointIdGenerator> CheckpointIdGenerator;
-    TCheckpointCoordinatorConfig Settings;
+    NKikimrConfig::TCheckpointsConfig Settings;
     const TDuration CheckpointingPeriod;
     ui64 CheckpointingSnapshotRotationPeriod = 0;
     ui64 CheckpointingSnapshotRotationIndex = 0;
@@ -200,25 +188,19 @@ private:
 
     FederatedQuery::StateLoadMode StateLoadMode;
     FederatedQuery::StreamingDisposition StreamingDisposition;
+
+    THashMap<TActorId, ui64> TaskIds;
+    THashSet<ui64> FinishedTasks;
 };
 
 THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const TCheckpointCoordinatorConfig& settings,
+    const NKikimrConfig::TCheckpointsConfig& settings,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
-    const FederatedQuery::StateLoadMode& stateLoadMode /* = FederatedQuery::StateLoadMode::FROM_LAST_CHECKPOINT */,
-    const FederatedQuery::StreamingDisposition& streamingDisposition /* = {} */,
-    // vvv TaskController temporary params vvv
-    const TString& traceId,
-    const NActors::TActorId& executerId,
-    const NActors::TActorId& resultId,
-    const NYql::TDqConfiguration::TPtr& tcSettings,
-    const NYql::NCommon::TServiceCounters& serviceCounters,
-    const TDuration& pingPeriod,
-    const TDuration& aggrPeriod
-    );
+    const FederatedQuery::StateLoadMode& stateLoadMode,
+    const FederatedQuery::StreamingDisposition& streamingDisposition);
 
 } // namespace NFq

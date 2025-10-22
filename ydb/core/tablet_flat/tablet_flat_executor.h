@@ -500,7 +500,8 @@ namespace NFlatExecutorSetup {
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
-        virtual void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx);
+        virtual void VacuumComplete(ui64 vacuumGeneration, const TActorContext& ctx);
+        virtual void BackupSnapshotComplete(const TActorContext &ctx); // would be no-op in default implementation
 
         virtual void ScanComplete(NTable::EStatus status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
@@ -521,6 +522,8 @@ namespace NFlatExecutorSetup {
 
         virtual void OnFollowerSchemaUpdated();
         virtual void OnFollowerDataUpdated();
+
+        virtual bool NeedBackup() const;
 
         // create transaction?
     protected:
@@ -654,7 +657,7 @@ namespace NFlatExecutorSetup {
 
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
 
-        virtual void CleanupData(ui64 dataCleanupGeneration) = 0;
+        virtual void StartVacuum(ui64 vacuumGeneration) = 0;
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

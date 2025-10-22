@@ -19,18 +19,22 @@ using namespace NYdb::NTable;
 
 namespace {
 
+std::string GetTablePath() {
+    return std::string(std::getenv("YDB_DATABASE")) + "/" + std::string(std::getenv("YDB_TEST_ROOT")) + "/sessions_test_table";
+}
+
 void CreateTestTable(NYdb::TDriver& driver) {
     NYdb::NTable::TTableClient client(driver);
     auto sessionResult = client.GetSession().ExtractValueSync();
     ASSERT_TRUE(sessionResult.IsSuccess());
     auto session = sessionResult.GetSession();
-    auto result = session.ExecuteSchemeQuery(R"___(
-        CREATE TABLE `/local/t` (
+    auto result = session.ExecuteSchemeQuery(std::format(R"___(
+        CREATE TABLE `{}` (
             Key Uint32,
             Value String,
             PRIMARY KEY (Key)
         );
-    )___").ExtractValueSync();
+    )___", GetTablePath())).ExtractValueSync();
     ASSERT_TRUE(result.IsSuccess());
     ASSERT_EQ(client.GetActiveSessionCount(), 1);
 }
@@ -51,9 +55,10 @@ void WarmPoolCreateSession(NYdb::NQuery::TQueryClient& client, std::string& sess
 void WaitForSessionsInPool(NYdb::NQuery::TQueryClient& client, std::int64_t expected) {
     int attempt = 10;
     while (attempt--) {
-        if (client.GetCurrentPoolSize() == expected)
+        if (client.GetCurrentPoolSize() == expected) {
             break;
-        Sleep(TDuration::MilliSeconds(100));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     ASSERT_EQ(client.GetCurrentPoolSize(), expected);
 }
@@ -217,7 +222,7 @@ TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryService) {
         auto session = sessionResponse.GetSession();
         ASSERT_EQ(session.GetId(), sessionId);
 
-        auto res = session.ExecuteQuery("SELECT * FROM `/local/t`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto res = session.ExecuteQuery(std::format("SELECT * FROM `{}`", GetTablePath()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         ASSERT_EQ(res.GetStatus(), EStatus::BAD_SESSION) << res.GetIssues().ToString();
     }
@@ -229,7 +234,7 @@ TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryService) {
         ASSERT_TRUE(sessionResponse.IsSuccess());
         auto session = sessionResponse.GetSession();
         ASSERT_NE(session.GetId(), sessionId);
-        auto res = session.ExecuteQuery("SELECT * FROM `/local/t`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto res = session.ExecuteQuery(std::format("SELECT * FROM `{}`", GetTablePath()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         ASSERT_EQ(res.GetStatus(), EStatus::SUCCESS) << res.GetIssues().ToString();
     }
@@ -265,7 +270,7 @@ TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall) {
         auto session = sessionResponse.GetSession();
         ASSERT_EQ(session.GetId(), sessionId);
 
-        auto it = session.StreamExecuteQuery("SELECT * FROM `/local/t`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto it = session.StreamExecuteQuery(std::format("SELECT * FROM `{}`", GetTablePath()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         ASSERT_EQ(it.GetStatus(), EStatus::SUCCESS) << it.GetIssues().ToString();
 
@@ -281,7 +286,7 @@ TEST(YdbSdkSessions, TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall) {
         auto session = sessionResponse.GetSession();
         ASSERT_NE(session.GetId(), sessionId);
 
-        auto res = session.ExecuteQuery("SELECT * FROM `/local/t`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        auto res = session.ExecuteQuery(std::format("SELECT * FROM `{}`", GetTablePath()), NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         ASSERT_EQ(res.GetStatus(), EStatus::SUCCESS) << res.GetIssues().ToString();
     }
@@ -305,13 +310,13 @@ TEST(YdbSdkSessions, TestActiveSessionCountAfterTransportError) {
         auto sessionResponse = client.GetSession().ExtractValueSync();
         ASSERT_TRUE(sessionResponse.IsSuccess());
         auto session = sessionResponse.GetSession();
-        auto result = session.ExecuteSchemeQuery(R"___(
-            CREATE TABLE `/local/t` (
+        auto result = session.ExecuteSchemeQuery(std::format(R"___(
+            CREATE TABLE `{}` (
                 Key Uint32,
                 Value String,
                 PRIMARY KEY (Key)
             );
-        )___").ExtractValueSync();
+        )___", GetTablePath())).ExtractValueSync();
         ASSERT_TRUE(result.IsSuccess());
         ASSERT_EQ(client.GetActiveSessionCount(), 1);
     }
@@ -322,7 +327,7 @@ TEST(YdbSdkSessions, TestActiveSessionCountAfterTransportError) {
         auto session = sessionResponse.GetSession();
 
         // Assume 10us is too small to execute query and get response
-        auto res = session.ExecuteDataQuery("SELECT COUNT(*) FROM `/local/t`;",
+        auto res = session.ExecuteDataQuery(std::format("SELECT COUNT(*) FROM `{}`;", GetTablePath()),
             TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx(),
             NYdb::NTable::TExecDataQuerySettings().ClientTimeout(TDuration::MicroSeconds(10))).GetValueSync();
         ASSERT_EQ(client.GetActiveSessionCount(), 1);

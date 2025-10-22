@@ -129,7 +129,7 @@ def save_canonical_data(data, fname):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_benchmark(store):
     path = "clickbench/benchmark/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime-types=dt32"])
     assert_that(ret.exit_code, is_(0))
 
     ret = run_cli(
@@ -149,7 +149,7 @@ def test_run_benchmark(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_run_determentistic(store):
     path = "clickbench/determentistic/{}/hits".format(store)
-    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime"])
+    ret = run_cli(["workload", "clickbench", "--path", path, "init", "--store", store, "--datetime-types=dt32"])
     assert_that(ret.exit_code, is_(0))
     ret = run_cli(
         [
@@ -179,7 +179,7 @@ def test_run_determentistic(store):
 @pytest.mark.parametrize("store", ["row", "column"])
 def test_plans(store):
     ret = run_cli(
-        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime"]
+        ["workload", "clickbench", "--path", "clickbench/plans/{}/hits".format(store), "init", "--store", store, "--datetime-types=dt32"]
     )
     assert_that(ret.exit_code, is_(0))
 

@@ -1,7 +1,12 @@
 import os
+import sys
 import requests
 from github import Github #pip3 install PyGithub
 from urllib.parse import quote_plus
+
+# Import shared GitHub issue utilities
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from github_issue_utils import parse_body
 
 
 ORG_NAME = 'ydb-platform'
@@ -397,40 +402,6 @@ def generate_github_issue_title_and_body(test_data):
     )
 
 
-def parse_body(body):
-    tests = []
-    branches = []
-    prepared_body = ''
-    start_mute_list = "<!--mute_list_start-->"
-    end_mute_list = "<!--mute_list_end-->"
-    start_branch_list = "<!--branch_list_start-->"
-    end_branch_list = "<!--branch_list_end-->"
-
-    # tests
-    if all(x in body for x in [start_mute_list, end_mute_list]):
-        idx1 = body.find(start_mute_list)
-        idx2 = body.find(end_mute_list)
-        lines = body[idx1 + len(start_mute_list) + 1 : idx2].split('\n')
-    else:
-        if body.startswith('Mute:'):
-            prepared_body = body.split('Mute:', 1)[1].strip()
-        elif body.startswith('Mute'):
-            prepared_body = body.split('Mute', 1)[1].strip()
-        elif body.startswith('ydb'):
-            prepared_body = body
-        lines = prepared_body.split('**Add line to')[0].split('\n')
-    tests = [line.strip() for line in lines if line.strip().startswith('ydb/')]
-
-    # branch
-    if all(x in body for x in [start_branch_list, end_branch_list]):
-        idx1 = body.find(start_branch_list)
-        idx2 = body.find(end_branch_list)
-        branches = body[idx1 + len(start_branch_list) + 1 : idx2].split('\n')
-    else:
-        branches = ['main']
-
-    return tests, branches
-
 
 def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
     issues = fetch_all_issues(ORG_NAME, PROJECT_ID)
@@ -484,22 +455,34 @@ def get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID):
 def get_muted_tests_from_issues():
     issues = get_issues_and_tests_from_project(ORG_NAME, PROJECT_ID)
     muted_tests = {}
+    
+    # First, collect all issues for each test
     for issue in issues:
         if issues[issue]["state"] != 'CLOSED':
             for test in issues[issue]['tests']:
                 if test not in muted_tests:
                     muted_tests[test] = []
-                    muted_tests[test].append(
-                        {
-                            'url': issues[issue]['url'],
-                            'createdAt': issues[issue]['createdAt'],
-                            'status_updated': issues[issue]['status_updated'],
-                            'status': issues[issue]['status'],
-                            'state': issues[issue]['state'],
-                            'branches': issues[issue]['branches'],
-                            'id': issue,
-                        }
-                    )
+                muted_tests[test].append(
+                    {
+                        'url': issues[issue]['url'],
+                        'createdAt': issues[issue]['createdAt'],
+                        'status_updated': issues[issue]['status_updated'],
+                        'status': issues[issue]['status'],
+                        'state': issues[issue]['state'],
+                        'branches': issues[issue]['branches'],
+                        'id': issue,
+                    }
+                )
+    
+    # Then, for each test, keep only the latest issue (by createdAt)
+    for test in muted_tests:
+        if len(muted_tests[test]) > 1:
+            # Sort by createdAt (most recent first) and keep only the first one
+            muted_tests[test] = sorted(
+                muted_tests[test], 
+                key=lambda x: x['createdAt'], 
+                reverse=True
+            )[:1]
 
     return muted_tests
 
@@ -740,10 +723,11 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
         do_not_close_issues (bool): If True, issues will NOT be closed. If False, issues will be closed.
         
     Returns:
-        list: List of dictionaries containing information about closed issues
+        tuple: (closed_issues, partially_unmuted_issues) - lists of dictionaries containing information about closed and partially unmuted issues
     """
     issues = get_muted_tests_from_issues()
     closed_issues = []
+    partially_unmuted_issues = []
     
     # Get status field ID and Unmuted option ID
     _, project_fields = get_project_v2_fields(ORG_NAME, PROJECT_ID)
@@ -760,7 +744,7 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
     
     if not status_field_id or not unmuted_option_id:
         print("Warning: Could not find status field or Unmuted option")
-        return closed_issues
+        return closed_issues, partially_unmuted_issues
     
     # First, group tests by issue ID
     tests_by_issue = {}
@@ -781,35 +765,40 @@ def close_unmuted_issues(muted_tests_set, do_not_close_issues=False):
         if issue_info['state'] != 'CLOSED':
             unmuted_tests = [test for test in issue_info['tests'] if test not in muted_tests_set]
             if unmuted_tests:
-                
-                # If all tests are unmuted, close the issue
+                existing_comments = get_issue_comments(issue_id)
                 if len(unmuted_tests) == len(issue_info['tests']):
+                    # Полностью размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
                         comment = "All tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
                         add_issue_comment(issue_id, comment)
-                    if not do_not_close_issues:
-                        close_issue(issue_id)
-                    closed_issues.append({
-                        'url': issue_info['url'],
-                        'tests': sorted(list(issue_info['tests']))
-                    })
-                    print(f"{'Would close' if do_not_close_issues else 'Closed'} issue as all its tests are no longer muted: {issue_info['url']}")
-                    print(f"Unmuted tests: {', '.join(sorted(unmuted_tests))}")
-                # If some tests are unmuted but not all, just add a comment if needed
-                else:
-                    # Get existing comments
-                    existing_comments = get_issue_comments(issue_id)
+                        if not do_not_close_issues:
+                            close_issue(issue_id)
+                        closed_issues.append({
+                            'url': issue_info['url'],
+                            'tests': sorted(list(issue_info['tests']))
+                        })
+                        print(f"{'Would close' if do_not_close_issues else 'Closed'} issue as all its tests are no longer muted: {issue_info['url']}")
+                        print(f"Unmuted tests: {', '.join(sorted(unmuted_tests))}")
+                    # Если комментарий уже был — ничего не добавлять!
+                elif 0 < len(unmuted_tests) < len(issue_info['tests']):
+                    # Частично размьючен
                     if not has_unmute_comment(existing_comments, unmuted_tests):
                         comment = "Some tests have been unmuted:\n" + "\n".join(f"- Test {test}" for test in sorted(unmuted_tests))
                         add_issue_comment(issue_id, comment)
                         print(f"Added comment about unmuted tests to issue: {issue_info['url']}")
-                    print(f"Unmuted tests: {', '.join(sorted(unmuted_tests))}")
+                        still_muted_tests = [test for test in issue_info['tests'] if test in muted_tests_set]
+                        partially_unmuted_issues.append({
+                            'url': issue_info['url'],
+                            'unmuted_tests': sorted(unmuted_tests),
+                            'still_muted_tests': sorted(still_muted_tests)
+                        })
+                    # Если комментарий уже был — ничего не добавлять!
     
     # Update status for all closed issues
     print("Updating status for all closed issues...")
     update_all_closed_issues_status(status_field_id, unmuted_option_id)
     
-    return closed_issues
+    return closed_issues, partially_unmuted_issues
 
 
 def main():

@@ -269,6 +269,13 @@ public:
         }
     }
 
+    /*
+     * Updates the left and right node sets of an existing edge in the hypergraph saving its invariants.
+     *
+     * This method is typically used during join optimization when we need to expand
+     * the scope of a join edge to include additional nodes (e.g., when applying
+     * join hints or reordering operations).
+     */
     void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
         auto& edge = Edges_[idx];
 
@@ -558,7 +565,7 @@ public:
             shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle, nullptr);
         }
 
-        TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
+        TOrderingsStateMachine orderingsFSM(std::move(fdStorage), TOrdering::EShuffle);
 
         for (std::size_t i = 0; i < edges.size(); ++i) {
             edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);

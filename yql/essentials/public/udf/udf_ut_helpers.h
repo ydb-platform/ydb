@@ -12,32 +12,35 @@
 namespace NYql {
 namespace NUdf {
 
-template<bool HasLength = true>
+template <bool HasLength = true>
 class TLazyList: public NUdf::TBoxedValue {
     struct TIterator: public NUdf::TBoxedValue {
         TIterator(i32 from, i32 to)
-            : From(from), To(to), Curr(Max<i32>())
+            : From_(from)
+            , To_(to)
+            , Curr_(Max<i32>())
         {
-            if (To >= From) {
-                To--; // exclude last
+            if (To_ >= From_) {
+                To_--; // exclude last
             } else {
-                From--; // exclude first
+                From_--; // exclude first
             }
         }
+
     private:
         bool Skip() override {
-            if (Curr == Max<i32>()) {
-                Curr = From;
+            if (Curr_ == Max<i32>()) {
+                Curr_ = From_;
                 return true;
             }
-            if (To >= From) {
-                if (Curr < To) {
-                    ++Curr;
+            if (To_ >= From_) {
+                if (Curr_ < To_) {
+                    ++Curr_;
                     return true;
                 }
             } else {
-                if (Curr > To) {
-                    --Curr;
+                if (Curr_ > To_) {
+                    --Curr_;
                     return true;
                 }
             }
@@ -45,16 +48,19 @@ class TLazyList: public NUdf::TBoxedValue {
         }
 
         bool Next(NUdf::TUnboxedValue& value) override {
-            if (!Skip())
+            if (!Skip()) {
                 return false;
-            value = NUdf::TUnboxedValuePod(Curr);
+            }
+            value = NUdf::TUnboxedValuePod(Curr_);
             return true;
         }
-        i32 From, To, Curr;
+        i32 From_, To_, Curr_;
     };
+
 public:
     TLazyList(i32 from, i32 to)
-        : From_(from), To_(to)
+        : From_(from)
+        , To_(to)
     {
     }
 
@@ -64,8 +70,9 @@ private:
     }
 
     ui64 GetListLength() const override {
-        if (HasLength)
+        if (HasLength) {
             return Abs(To_ - From_);
+        }
 
         Y_ABORT("No length!");
     }
@@ -109,5 +116,5 @@ private:
     i32 From_, To_;
 };
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

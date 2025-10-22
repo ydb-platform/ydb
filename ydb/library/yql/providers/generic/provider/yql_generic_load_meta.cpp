@@ -1,5 +1,6 @@
 // clang-format off
 #include "yql_generic_provider_impl.h"
+#include "yql_generic_describe_table.h"
 
 #include <library/cpp/json/json_reader.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
@@ -27,7 +28,7 @@ namespace NYql {
     using namespace NKikimr;
     using namespace NKikimr::NMiniKQL;
 
-    class TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
+    class [[deprecated("Now this transformer is represented by two transformers, it will be removed in the next version")]] TGenericLoadTableMetadataTransformer: public TGraphTransformerBase {
         struct TTableDescription {
             using TPtr = std::shared_ptr<TTableDescription>;
 
@@ -141,7 +142,7 @@ namespace NYql {
 
             Y_ENSURE(State_->GenericClient);
 
-            State_->GenericClient->DescribeTable(request).Subscribe(
+            State_->GenericClient->DescribeTable(request, State_->Configuration->DescribeTableTimeout).Subscribe(
                 [desc, tableAddress, promise,
                  client = State_->GenericClient](const NConnector::TDescribeTableAsyncResult& f1) mutable {
                     NConnector::TDescribeTableAsyncResult f2(f1);
@@ -598,6 +599,8 @@ namespace NYql {
                     auto* options = request.mutable_data_source_instance()->mutable_mongodb_options();
                     return SetMongoDBOptions(*options, clusterConfig);
                 } break;
+                case NYql::EGenericDataSourceKind::OPENSEARCH:
+                    break; 
                 default:
                     throw yexception() << "Unexpected data source kind: '"
                                        << NYql::EGenericDataSourceKind_Name(dataSourceKind) << "'";
@@ -633,7 +636,7 @@ namespace NYql {
     };
 
     THolder<IGraphTransformer> CreateGenericLoadTableMetadataTransformer(TGenericState::TPtr state) {
-        return MakeHolder<TGenericLoadTableMetadataTransformer>(std::move(state));
+        return CreateGenericDescribeTableTransformer(state);
     }
 
 } // namespace NYql

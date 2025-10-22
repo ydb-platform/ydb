@@ -136,6 +136,9 @@ message TTaskOutputBroadcast {
 message THashV1 {
 }
 
+message THashV2 {
+}
+
 message TColumnShardHashV1 {
     uint64 ShardCount = 1;
     repeated uint64 TaskIndexByHash = 2;
@@ -146,8 +149,9 @@ message TTaskOutputHashPartition {
     repeated string KeyColumns = 1;
     uint32 PartitionsCount = 2;
 
-    oneof THashKind {
+    oneof HashKind {
         THashV1 HashV1 = 3;
+        THashV2 HashV2 = 5;
         TColumnShardHashV1 ColumnShardHashV1 = 4;
     }
 }
@@ -227,4 +231,6 @@ message TDqTask {
     optional bool EnableSpilling = 19;
     optional uint32 ArrayBufferMinFillPercentage = 20;
     optional bool DisableMetering = 22;
+    optional uint64 BufferPageAllocSize = 23;
+    EValuePackerVersion ValuePackerVersion = 24;
 }

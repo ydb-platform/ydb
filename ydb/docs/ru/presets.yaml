@@ -17,13 +17,13 @@ default:
       position: Старший разработчик
       profile: https://www.linkedin.com/in/daniil-c-1110165b/
     dmitriev:
-      name: Алексей Дмитриев 
+      name: Алексей Дмитриев
       position: Технический менеджер
-      profile: https://www.linkedin.com/in/алексей-дмитриев-7914b535/ 
+      profile: https://www.linkedin.com/in/алексей-дмитриев-7914b535/
     gorshenin:
       name: Александр Горшенин
       position: Ведущий разработчик
-      profile: https://www.linkedin.com/in/agorshenin268/   
+      profile: https://www.linkedin.com/in/agorshenin268/
     gorbunov:
       name: Максим Горбунов
       position: Руководитель группы эксплуатации
@@ -32,17 +32,17 @@ default:
       name: Виталий Гриднев
       position: Ведущий разработчик
       profile: https://www.linkedin.com/in/gridnevvvit/
-    fomichev: 
+    fomichev:
       name: Андрей Фомичев
       position: Руководитель YDB
-      profile: https://www.linkedin.com/in/andrey-fomichev/  
+      profile: https://www.linkedin.com/in/andrey-fomichev/
     stankevichus:
-      name: Алексей Станкевичус 
-      position: Руководитель групп разработки распределенного хранилища YDB  
+      name: Алексей Станкевичус
+      position: Руководитель групп разработки распределенного хранилища YDB
       profile: https://github.com/the-ancient-1
     sokolov:
-      name: Иван Соколов 
-      position: Руководитель службы видеохостинга (Внешний Дзен) 
+      name: Иван Соколов
+      position: Руководитель службы видеохостинга (Внешний Дзен)
       profile:
     surin:
       name: Михаил Сурин
@@ -57,7 +57,7 @@ default:
       position: Технический эксперт
       profile: https://www.linkedin.com/in/alexander-smirnov-bb990434/
     novozhilova:
-      name: Софья Новожилова 
+      name: Софья Новожилова
       position: занимается развитием аналитического направления платформы YDB
       profile:
     nizametdinov:
@@ -71,7 +71,7 @@ default:
     kita:
       name: Максим Кита
       position: Разработчик
-      profile:     
+      profile:
     kulin:
       name: Тимофей Кулин
       position: Разработчик
@@ -88,10 +88,14 @@ default:
       name: Антон Коваленко
       position: Технический менеджер
       profile: https://www.linkedin.com/in/kovalad/
+    kalinina:
+      name: Елена Калинина
+      position: Технический менеджер
+      profile: https://www.linkedin.com/in/elena-kalinina-2907b398/
     ivanov:
       name: Евгений Иванов
       position: Старший разработчик
-      profile: https://www.linkedin.com/in/eivanov89/  
+      profile: https://www.linkedin.com/in/eivanov89/
     prudaev:
       name: Александр Прудаев
       position: Старший разработчик
@@ -111,12 +115,20 @@ default:
     zevaykin:
       name: Александр Зевайкин
       position: Руководитель группы
-      profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/   
+      profile: https://www.linkedin.com/in/alexander-zevaykin-6bb8162bb/
     zverev:
       name: Евгений Зверев
       position: Разработчик
-      profile:  
+      profile:
     zinal:
       name: Максим Зиналь
       profile: https://www.linkedin.com/in/maxzinal
-      position: Архитектор YDB       
+      position: Архитектор YDB
+    velikhov:
+      name: Павел Велихов
+      profile: https://github.com/pavelvelikhov
+      position: Руководитель команды оптимизатора запросов
+    nikolaevsky:
+      name: Алексей Николаевский
+      profile: https://github.com/alexnick88
+      position: Руководитель команды разработки стриминговых систем YDB

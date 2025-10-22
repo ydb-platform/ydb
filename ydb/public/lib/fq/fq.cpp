@@ -1,7 +1,7 @@
 #include "fq.h"
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>

@@ -5,7 +5,7 @@ namespace NKikimr::NColumnShard {
 
 class TColumnShard::TTxProposeCancel : public TTransactionBase<TColumnShard> {
 public:
-    TTxProposeCancel(TColumnShard* self, TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev)
+    TTxProposeCancel(TColumnShard* self, TEvDataShard::TEvCancelTransactionProposal::TPtr& ev)
         : TTransactionBase(self)
         , Ev(ev)
     { }
@@ -31,10 +31,10 @@ public:
     }
 
 private:
-    const TEvColumnShard::TEvCancelTransactionProposal::TPtr Ev;
+    const TEvDataShard::TEvCancelTransactionProposal::TPtr Ev;
 };
 
-void TColumnShard::Handle(TEvColumnShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx) {
+void TColumnShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxProposeCancel(this, ev), ctx);
 }
 

@@ -13,6 +13,10 @@ std::partial_ordering TSimpleRow::operator<=>(const TSimpleRow& item) const {
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema).GetResult();
 }
 
+bool TSimpleRow::operator==(const TSimpleRow& item) const {
+    return (*this <=> item) == std::partial_ordering::equivalent;
+}
+
 std::shared_ptr<arrow::RecordBatch> TSimpleRow::ToBatch() const {
     auto builders = NArrow::MakeBuilders(Schema);
     AddToBuilders(builders).Validate();
@@ -34,7 +38,7 @@ std::partial_ordering TSimpleRow::ComparePartNotNull(const TSimpleRow& item, con
 }
 
 std::partial_ordering TSimpleRow::CompareNotNull(const TSimpleRow& item) const {
-    AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema));
+    AFL_VERIFY_DEBUG(Schema->Equals(*item.Schema))("rowSchema", Schema->ToString(true))("itemSchema", item.Schema->ToString(true));
     AFL_VERIFY(GetColumnsCount() <= item.GetColumnsCount());
     return TSimpleRowViewV0(Data).Compare(TSimpleRowViewV0(item.Data), Schema).GetResult();
 }

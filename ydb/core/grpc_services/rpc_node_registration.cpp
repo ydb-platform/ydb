@@ -73,9 +73,6 @@ public:
             nodeBrokerRequest->Record.SetPath(request->path());
         }
         nodeBrokerRequest->Record.SetAuthorizedByCertificate(IsNodeAuthorizedByCertificate);
-        if (request->has_bridge_pile_name()) {
-            nodeBrokerRequest->Record.SetBridgePileName(request->bridge_pile_name());
-        }
 
         NTabletPipe::SendData(ctx, NodeBrokerPipe, nodeBrokerRequest.Release());
 
@@ -108,27 +105,12 @@ public:
 
         const TActorId nameserviceId = GetNameserviceActorId();
         ctx.Send(nameserviceId, new TEvInterconnect::TEvListNodes());
-        ctx.Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvNodeWardenQueryStorageConfig(false));
     }
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev, const TActorContext &ctx) {
         EvNodesInfo = ev;
-        if (EvNodesInfo && EvNodeWardenStorageConfig) {
-            Finish(ctx);
-        }
-    }
 
-    void Handle(TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx) {
-        EvNodeWardenStorageConfig = ev;
-        if (EvNodesInfo && EvNodeWardenStorageConfig) {
-            Finish(ctx);
-        }
-    }
-
-    void Finish(const TActorContext& ctx) {
         auto config = AppData()->DynamicNameserviceConfig;
-
-        auto& bridgeInfo = EvNodeWardenStorageConfig->Get()->BridgeInfo;
 
         for (const auto &node : EvNodesInfo->Get()->Nodes) {
             // Copy static nodes only.
@@ -142,17 +124,6 @@ public:
                 NActorsInterconnect::TNodeLocation location;
                 node.Location.Serialize(&location, true);
                 CopyNodeLocation(info.mutable_location(), location);
-                if (bridgeInfo) {
-                    auto& map = bridgeInfo->StaticNodeIdToPile;
-                    if (auto it = map.find(node.NodeId); it != map.end()) {
-                        it->second->BridgePileId.CopyToProto(&info, &std::decay_t<decltype(info)>::set_bridge_pile_id);
-                    } else {
-                        Y_DEBUG_ABORT("missing static node pile id");
-                    }
-                } else {
-                    // ensure no bridge mode is enabled
-                    Y_DEBUG_ABORT_UNLESS(!AppData()->BridgeConfig || !AppData()->BridgeConfig->PilesSize());
-                }
             }
         }
 
@@ -197,7 +168,6 @@ public:
             CFunc(TEvents::TEvUndelivered::EventType, Undelivered);
             HFunc(TEvNodeBroker::TEvRegistrationResponse, Handle);
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            HFunc(TEvNodeWardenStorageConfig, Handle);
             CFunc(TEvTabletPipe::EvClientDestroyed, Undelivered);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
         }
@@ -221,9 +191,6 @@ private:
         dst->set_address(src.GetAddress());
         CopyNodeLocation(dst->mutable_location(), src.GetLocation());
         dst->set_expire(src.GetExpire());
-        if (src.HasBridgePileId()) {
-            dst->set_bridge_pile_id(src.GetBridgePileId());
-        }
     }
 
     static void CopyNodeLocation(NActorsInterconnect::TNodeLocation* dst, const Ydb::Discovery::NodeLocation& src) {
@@ -241,6 +208,9 @@ private:
         }
         if (src.has_body()) {
             dst->SetBody(src.body());
+        }
+        if (src.has_bridge_pile_name()) {
+            dst->SetBridgePileName(src.bridge_pile_name());
         }
         if (src.has_data_center()) {
             dst->SetDataCenter(src.data_center());
@@ -272,6 +242,9 @@ private:
         if (src.HasBody()) {
             dst->set_body(src.GetBody());
         }
+        if (src.HasBridgePileName()) {
+            dst->set_bridge_pile_name(src.GetBridgePileName());
+        }
         if (src.HasDataCenter()) {
             dst->set_data_center(src.GetDataCenter());
         }
@@ -292,7 +265,6 @@ private:
     TActorId NodeBrokerPipe;
     bool IsNodeAuthorizedByCertificate = false;
     TEvInterconnect::TEvNodesInfo::TPtr EvNodesInfo;
-    TEvNodeWardenStorageConfig::TPtr EvNodeWardenStorageConfig;
 };
 
 void DoNodeRegistrationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

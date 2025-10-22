@@ -1,5 +1,5 @@
 PY3TEST()
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 ENV(YDB_USE_IN_MEMORY_PDISKS=true)
 
 TEST_SRCS(
@@ -15,7 +15,6 @@ ELSE()
 ENDIF()
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(

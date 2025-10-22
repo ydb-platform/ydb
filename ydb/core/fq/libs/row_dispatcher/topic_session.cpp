@@ -4,13 +4,12 @@
 #include <ydb/core/fq/libs/metrics/sanitize_label.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/format_handler.h>
-
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-
+#include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
-
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/queue.h>
@@ -61,6 +60,7 @@ struct TEvPrivate {
         EvCreateSession,
         EvSendStatistic,
         EvReconnectSession,
+        EvExecuteTopicEvent,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
@@ -70,13 +70,16 @@ struct TEvPrivate {
     struct TEvCreateSession : public TEventLocal<TEvCreateSession, EvCreateSession> {};
     struct TEvSendStatistic : public TEventLocal<TEvSendStatistic, EvSendStatistic> {};
     struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
+    struct TEvExecuteTopicEvent : public NYql::TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
+        using TTopicEventBase::TTopicEventBase;
+    };
 };
 
 constexpr ui64 SendStatisticPeriodSec = 2;
 constexpr ui64 MaxHandledEventsCount = 1000;
 constexpr ui64 MaxHandledEventsSize = 1000000;
 
-class TTopicSession : public TActorBootstrapped<TTopicSession> {
+class TTopicSession : public TActorBootstrapped<TTopicSession>, NYql::TTopicEventProcessor<TEvPrivate::TEvExecuteTopicEvent> {
 private:
     using TBase = TActorBootstrapped<TTopicSession>;
 
@@ -104,6 +107,7 @@ private:
             , EnabledLLVM(ev->Get()->Record.GetSource().GetEnabledLLVM())
             , StartingMessageTimestampMs(ev->Get()->Record.GetStartingMessageTimestampMs())
             , Predicate(ev->Get()->Record.GetSource().GetPredicate())
+            , WatermarkExpr(ev->Get()->Record.GetSource().GetWatermarkExpr())
             , Columns(GetColumns(ev->Get()->Record.GetSource()))
             , ConsumerName(ev->Get()->Record.GetSource().GetConsumerName())
             , UseSsl(ev->Get()->Record.GetSource().GetUseSsl())
@@ -115,6 +119,9 @@ private:
                 InitialOffset = *offset;
             }
             Y_UNUSED(TDuration::TryParse(ev->Get()->Record.GetSource().GetReconnectPeriod(), ReconnectPeriod));
+            for (const auto& sensor : ev->Get()->Record.GetSource().GetTaskSensorLabel()) {
+                Counters = Counters->GetSubgroup(sensor.GetLabel(), sensor.GetValue());
+            }
             auto queryGroup = Counters->GetSubgroup("query_id", QueryId);
             auto readSubGroup = queryGroup->GetSubgroup("read_group", SanitizeLabel(readGroup));
             FilteredDataRate = readSubGroup->GetCounter("FilteredDataRate", true);
@@ -137,6 +144,10 @@ private:
             return result;
         }
 
+        bool IsStarted() const override {
+            return ClientStarted;
+        }
+
         TActorId GetClientId() const override {
             return ReadActorId;
         }
@@ -149,7 +160,11 @@ private:
             return Columns;
         }
 
-        const TString& GetWhereFilter() const override {
+        [[nodiscard]] const TString& GetWatermarkExpr() const override {
+            return WatermarkExpr;
+        }
+
+        [[nodiscard]] const TString& GetWhereFilter() const override {
             return Predicate;
         }
 
@@ -162,18 +177,20 @@ private:
         }
 
         void StartClientSession() override {
+            ClientStarted = true;
             Self.StartClientSession(*this);
         }
 
-        void AddDataToClient(ui64 offset, ui64 rowSize) override {
+        void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) override {
             Y_ENSURE(!NextMessageOffset || offset >= *NextMessageOffset, "Unexpected historical offset");
 
-            LOG_ROW_DISPATCHER_TRACE("AddDataToClient to " << ReadActorId << ", offset: " << offset << ", serialized size: " << rowSize);
+            LOG_ROW_DISPATCHER_TRACE("AddDataToClient to " << ReadActorId << ", offset: " << offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << watermark);
 
             NextMessageOffset = offset + 1;
-            QueuedRows++;
+            QueuedRows += numberRows;
             QueuedBytes += rowSize;
             Self.QueuedBytes += rowSize;
+            Watermark = watermark;
             Self.SendDataArrived(*this);
             Self.Metrics.QueuedBytes->Add(rowSize);
         }
@@ -198,6 +215,7 @@ private:
         const bool EnabledLLVM;
         const ui64 StartingMessageTimestampMs;
         const TString Predicate;
+        const TString WatermarkExpr;
         const TVector<TSchemaColumn> Columns;
         const TString ConsumerName;
         const bool UseSsl;
@@ -205,8 +223,10 @@ private:
         TDuration ReconnectPeriod;
 
         // State
+        bool ClientStarted = false;
         ui64 QueuedRows = 0;
         ui64 QueuedBytes = 0;
+        TMaybe<TInstant> Watermark;
         bool DataArrivedSent = false;
         std::optional<ui64> NextMessageOffset;          // offset to restart topic session
         TMaybe<ui64> ProcessedNextMessageOffset;        // offset of fully processed data (to save to checkpoint)
@@ -214,7 +234,7 @@ private:
         // Metrics
         ui64 InitialOffset = 0;
         TStats FilteredStat;
-        const ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
         NMonitoring::TDynamicCounters::TCounterPtr FilteredDataRate;    // filtered
         NMonitoring::TDynamicCounters::TCounterPtr RestartSessionByOffsetsByQuery;
     };
@@ -245,7 +265,7 @@ private:
     const NYdb::TDriver Driver;
     const NYql::IPqGateway::TPtr PqGateway;
     const std::shared_ptr<NYdb::ICredentialsProviderFactory> CredentialsProviderFactory;
-    const NConfig::TRowDispatcherConfig Config;
+    const NKikimrConfig::TSharedReadingConfig Config;
     const TFormatHandlerConfig FormatHandlerConfig;
     const i64 BufferSize;
     TString LogPrefix;
@@ -274,12 +294,13 @@ private:
     const ::NMonitoring::TDynamicCounterPtr CountersRoot;
 
 public:
-    explicit TTopicSession(
+    TTopicSession(
         const TString& readGroup,
         const TString& topicPath,
         const TString& endpoint,
         const TString& database,
-        const NConfig::TRowDispatcherConfig& config,
+        const NKikimrConfig::TSharedReadingConfig& config,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
         ui32 partitionId,
@@ -293,10 +314,10 @@ public:
     void Bootstrap();
     void PassAway() override;
 
-    static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_SESSION";
+    [[maybe_unused]] static constexpr char ActorName[] = "FQ_ROW_DISPATCHER_SESSION";
 
 private:
-    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl) const;
+    NYdb::NTopic::TTopicClientSettings GetTopicClientSettings(bool useSsl);
     NYql::ITopicClient& GetTopicClient(bool useSsl);
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(const TString& consumerName) const;
     void CreateTopicSession();
@@ -332,6 +353,7 @@ private:
 private:
 
     STRICT_STFUNC_EXC(StateFunc,
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
         hFunc(NFq::TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(NFq::TEvPrivate::TEvCreateSession, Handle);
         hFunc(NFq::TEvPrivate::TEvSendStatistic, Handle);
@@ -345,6 +367,7 @@ private:
 
     STRICT_STFUNC_EXC(ErrorState,
         cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
+        hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
@@ -361,7 +384,8 @@ TTopicSession::TTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -382,7 +406,7 @@ TTopicSession::TTopicSession(
     , PqGateway(pqGateway)
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Config(config)
-    , FormatHandlerConfig(CreateFormatHandlerConfig(config, compileServiceActorId))
+    , FormatHandlerConfig(CreateFormatHandlerConfig(config, functionRegistry, compileServiceActorId))
     , BufferSize(maxBufferSize)
     , LogPrefix("TopicSession")
     , Counters(counters)
@@ -394,8 +418,7 @@ void TTopicSession::Bootstrap() {
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " ";
     LOG_ROW_DISPATCHER_DEBUG("Bootstrap " << TopicPathPartition
-        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec,  StatusPeriod " << Config.GetSendStatusPeriodSec() << " sec");
-    Y_ENSURE(Config.GetSendStatusPeriodSec() > 0);
+        << ", Timeout " << Config.GetTimeoutBeforeStartSessionSec() << " sec");
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
 }
 
@@ -408,6 +431,7 @@ void TTopicSession::PassAway() {
 
 void TTopicSession::SubscribeOnNextEvent() {
     if (!ReadSession || IsWaitingEvents) {
+        LOG_ROW_DISPATCHER_TRACE("Skip SubscribeOnNextEvent, has ReadSession: " << (ReadSession ? "true" : "false") << ", IsWaitingEvents: " << IsWaitingEvents);
         return;
     }
 
@@ -418,7 +442,7 @@ void TTopicSession::SubscribeOnNextEvent() {
 
     LOG_ROW_DISPATCHER_TRACE("SubscribeOnNextEvent");
     IsWaitingEvents = true;
-    Metrics.InFlySubscribe->Inc();
+    Metrics.InFlySubscribe->Set(1);
     TActorSystem* actorSystem = TActivationContext::ActorSystem();
     WaitEventStartedAt = TInstant::Now();
     ReadSession->WaitEvent().Subscribe([actorSystem, selfId = SelfId()](const auto&){
@@ -426,12 +450,16 @@ void TTopicSession::SubscribeOnNextEvent() {
     });
 }
 
-NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) const {
-    return PqGateway->GetTopicClientSettings()
-        .Database(Database)
+NYdb::NTopic::TTopicClientSettings TTopicSession::GetTopicClientSettings(bool useSsl) {
+    auto opts = PqGateway->GetTopicClientSettings();
+    SetupTopicClientSettings(ActorContext().ActorSystem(), SelfId(), opts);
+
+    opts.Database(Database)
         .DiscoveryEndpoint(Endpoint)
         .SslCredentials(NYdb::TSslCredentials(useSsl))
         .CredentialsProviderFactory(CredentialsProviderFactory);
+
+    return opts;
 }
 
 NYql::ITopicClient& TTopicSession::GetTopicClient(bool useSsl) {
@@ -500,7 +528,7 @@ void TTopicSession::CreateTopicSession() {
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPqEventsReady");
-    Metrics.InFlySubscribe->Dec();
+    Metrics.InFlySubscribe->Set(0);
     IsWaitingEvents = false;
     auto waitEventDurationMs = (TInstant::Now() - WaitEventStartedAt).MilliSeconds();
     Metrics.WaitEventTimeMs->Collect(waitEventDurationMs);
@@ -518,7 +546,7 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
     if (Clients.empty()) {
         return;
     }
-    StartingMessageTimestamp = GetMinStartingMessageTimestamp();   
+    StartingMessageTimestamp = GetMinStartingMessageTimestamp();
     LOG_ROW_DISPATCHER_DEBUG("Reconnect topic session, " << TopicPathPartition
         << ", StartingMessageTimestamp " << StartingMessageTimestamp
         << ", BufferSize " << BufferSize << ", WithoutConsumer " << Config.GetWithoutConsumer());
@@ -653,7 +681,7 @@ void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEv
 }
 
 void TTopicSession::SendData(TClientsInfo& info) {
-    TQueue<std::pair<TRope, TVector<ui64>>> buffer;
+    TQueue<TDataBatch> buffer;
     if (const auto formatIt = FormatHandlers.find(info.HandlerSettings); formatIt != FormatHandlers.end()) {
         buffer = formatIt->second->ExtractClientData(info.GetClientId());
     }
@@ -666,7 +694,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     ui64 eventsSize = info.QueuedRows;
 
     if (!info.NextMessageOffset) {
-        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId 
+        LOG_ROW_DISPATCHER_ERROR("Try SendData() without NextMessageOffset, " << info.ReadActorId
             << " unread " << info.QueuedBytes << " DataArrivedSent " << info.DataArrivedSent);
         return;
     }
@@ -678,7 +706,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
         ui64 batchSize = 0;
         while (!buffer.empty()) {
-            auto [serializedData, offsets] = std::move(buffer.front());
+            auto [serializedData, offsets, watermark] = std::move(buffer.front());
             Y_ENSURE(!offsets.empty(), "Expected non empty message batch");
             buffer.pop();
 
@@ -687,8 +715,11 @@ void TTopicSession::SendData(TClientsInfo& info) {
             NFq::NRowDispatcherProto::TEvMessage message;
             message.SetPayloadId(event->AddPayload(std::move(serializedData)));
             message.MutableOffsets()->Assign(offsets.begin(), offsets.end());
+            if (watermark) {
+                message.AddWatermarksUs(watermark->MicroSeconds());
+            }
             event->Record.AddMessages()->CopyFrom(std::move(message));
-            event->Record.SetNextMessageOffset(offsets.back() + 1);
+            event->Record.SetNextMessageOffset(*offsets.rbegin() + 1);
 
             if (batchSize > MAX_BATCH_SIZE) {
                 break;
@@ -706,6 +737,7 @@ void TTopicSession::SendData(TClientsInfo& info) {
     Metrics.QueuedBytes->Sub(info.QueuedBytes);
     info.QueuedRows = 0;
     info.QueuedBytes = 0;
+    info.Watermark.Clear();
 
     info.FilteredStat.Add(dataSize, eventsSize);
     info.FilteredDataRate->Add(dataSize);
@@ -732,7 +764,7 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
-    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " << source.GetPredicate() << ", offset: " << offset);
+    LOG_ROW_DISPATCHER_INFO("New client: read actor id " << ev->Sender.ToString() << ", predicate: " << source.GetPredicate() << ", watermark expr: " << source.GetWatermarkExpr() << ", offset: " << offset);
 
     if (!CheckNewClient(ev)) {
         return;
@@ -744,12 +776,12 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto clientInfo = Clients.insert({ev->Sender, MakeIntrusive<TClientsInfo>(*this, LogPrefix, handlerSettings, ev, Counters, ReadGroup, offset)}).first->second;
     auto formatIt = FormatHandlers.find(handlerSettings);
     if (formatIt == FormatHandlers.end()) {
-        formatIt = FormatHandlers.insert({handlerSettings, CreateTopicFormatHandler(
+        formatIt = FormatHandlers.emplace(handlerSettings, CreateTopicFormatHandler(
             ActorContext(),
             FormatHandlerConfig,
             handlerSettings,
             {.CountersRoot = CountersRoot, .CountersSubgroup = Metrics.PartitionGroup}
-        )}).first;
+        )).first;
     }
 
     if (auto status = formatIt->second->AddClient(clientInfo); status.IsFail()) {
@@ -843,7 +875,11 @@ void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool 
     LOG_ROW_DISPATCHER_WARN("SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
+    event->Record.SetPartitionId(PartitionId);
     NYql::IssuesToMessage(status.GetErrorDescription(), event->Record.MutableIssues());
+    auto& issue = *event->Record.AddIssues();
+    issue.set_message(TStringBuilder() << "Topic " << TopicPathPartition);
+    issue.set_severity(NYql::TSeverityIds::S_INFO);
     event->ReadActorId = readActorId;
     event->IsFatalError = isFatalError;
     Send(RowDispatcherActorId, event.release());
@@ -859,7 +895,7 @@ void TTopicSession::StopReadSession() {
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {
-    if (!info.QueuedBytes || info.DataArrivedSent) {
+    if ((!info.QueuedBytes && !info.Watermark) || info.DataArrivedSent) {
         return;
     }
     info.DataArrivedSent = true;
@@ -897,7 +933,7 @@ void TTopicSession::SendStatistics() {
         clientStatistic.ReadActorId = readActorId;
         clientStatistic.QueuedRows = info.QueuedRows;
         clientStatistic.QueuedBytes = info.QueuedBytes;
-        clientStatistic.Offset = info.ProcessedNextMessageOffset.GetOrElse(0);
+        clientStatistic.Offset = info.ProcessedNextMessageOffset;
         clientStatistic.FilteredBytes = info.FilteredStat.Bytes;
         clientStatistic.FilteredRows = info.FilteredStat.Events;
         clientStatistic.ReadBytes = Statistics.Bytes;
@@ -957,7 +993,7 @@ void TTopicSession::RefreshParsers() {
     }
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -966,7 +1002,8 @@ std::unique_ptr<IActor> NewTopicSession(
     const TString& topicPath,
     const TString& endpoint,
     const TString& database,
-    const NConfig::TRowDispatcherConfig& config,
+    const NKikimrConfig::TSharedReadingConfig& config,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
     ui32 partitionId,
@@ -976,7 +1013,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, functionRegistry, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
 }
 
-}  // namespace NFq
+} // namespace NFq

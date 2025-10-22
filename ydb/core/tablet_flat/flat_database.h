@@ -149,6 +149,7 @@ public:
     void Update(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, TRowVersion rowVersion = TRowVersion::Min());
 
     void UpdateTx(ui32 table, ERowOp, TRawVals key, TArrayRef<const TUpdateOp>, ui64 txId);
+    void LockRowTx(ui32 table, ELockMode, TRawVals key, ui64 txId);
     void RemoveTx(ui32 table, ui64 txId);
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
@@ -173,6 +174,12 @@ public:
      * removed.
      */
     size_t GetOpenTxCount(ui32 table) const;
+
+    // Exposed for tests
+    size_t GetTxsWithDataCount(ui32 table) const;
+    size_t GetTxsWithStatusCount(ui32 table) const;
+    size_t GetCommittedTxCount(ui32 table) const;
+    size_t GetRemovedTxCount(ui32 table) const;
 
     /**
      * Remove row versions [lower, upper) from the given table
@@ -202,6 +209,7 @@ public:
     TAlter& Alter(); /* Begin DDL ALTER script */
 
     TEpoch TxSnapTable(ui32 table);
+    void Truncate(ui32 table);
 
     const TScheme& GetScheme() const noexcept;
 

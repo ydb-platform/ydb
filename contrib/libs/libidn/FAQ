@@ -1,5 +1,5 @@
 Libidn FAQ -- Anticipated Frequently Asked Questions.
-Copyright (C) 2002-2024 Simon Josefsson
+Copyright (C) 2002-2025 Simon Josefsson
 See the end for copying conditions.
 
 Q#1: Why doesn't Libidn use a separate library for the Unicode

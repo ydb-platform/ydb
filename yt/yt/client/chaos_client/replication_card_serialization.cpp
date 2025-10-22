@@ -8,6 +8,7 @@
 #include <yt/yt/core/misc/collection_helpers.h>
 
 #include <yt/yt/core/yson/string.h>
+#include <yt/yt/core/yson/protobuf_helpers.h>
 
 #include <yt/yt/core/ytree/convert.h>
 #include <yt/yt/core/ytree/yson_struct.h>
@@ -401,10 +402,10 @@ void ToProto(
     const TReplicationCardFetchOptions& options)
 {
     protoReplicationCard->mutable_replicas()->Reserve(replicationCard.Replicas.size());
-    for (const auto& [replicaId, replicaInfo] : SortHashMapByKeys(replicationCard.Replicas)) {
+    for (auto it : GetSortedIterators(replicationCard.Replicas)) {
         auto* protoReplicaEntry = protoReplicationCard->add_replicas();
-        ToProto(protoReplicaEntry->mutable_id(), replicaId);
-        ToProto(protoReplicaEntry->mutable_info(), replicaInfo, options);
+        ToProto(protoReplicaEntry->mutable_id(), it->first);
+        ToProto(protoReplicaEntry->mutable_info(), it->second, options);
     }
 
     if (options.IncludeCoordinators) {
@@ -412,7 +413,7 @@ void ToProto(
     }
 
     if (options.IncludeReplicatedTableOptions && replicationCard.ReplicatedTableOptions) {
-        protoReplicationCard->set_replicated_table_options(ConvertToYsonString(replicationCard.ReplicatedTableOptions).ToString());
+        protoReplicationCard->set_replicated_table_options(ToProto(ConvertToYsonString(replicationCard.ReplicatedTableOptions)));
     }
 
     protoReplicationCard->set_era(replicationCard.Era);

@@ -1,10 +1,11 @@
 #include "schemeshard_build_index.h"
-#include "schemeshard_xxport__helpers.h"
 #include "schemeshard_build_index_helpers.h"
 #include "schemeshard_build_index_tx_base.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for NTableIndex::CommonCheck
+#include "schemeshard_xxport__helpers.h"
 
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/ydb_convert/table_settings.h>
 
 namespace NKikimr::NSchemeShard {
@@ -116,7 +117,11 @@ public:
                 }
 
                 checks
-                    .IsValidLeafName()
+                    //NOTE: empty userToken here means that index is forbidden from getting a name
+                    // thats system reserved or starts with a system reserved prefix.
+                    // Even an cluster admin or the system inself will not be able to force a reserved name for this index.
+                    // If that will become an issue at some point, then a real userToken should be passed here.
+                    .IsValidLeafName(/*userToken*/ nullptr)
                     .PathsLimit(2) // index and impl-table
                     .DirChildrenLimit();
 
@@ -151,6 +156,11 @@ public:
             TString explain;
             if (!Prepare(*buildInfo, settings, explain)) {
                 return makeReply(explain);
+            }
+
+            if (tableInfo->IsTTLEnabled() && !DoesIndexSupportTTL(buildInfo->IndexType)) {
+                return Reply(Ydb::StatusIds::PRECONDITION_FAILED,
+                    TStringBuilder() << buildInfo->IndexType << " index doesn't support TTL");
             }
 
             NKikimrSchemeOp::TIndexBuildConfig tmpConfig;
@@ -219,6 +229,9 @@ private:
         const auto& index = settings.index();
 
         switch (index.type_case()) {
+        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
+            explain = "Invalid or unset index type";
+            return false;
         case Ydb::Table::TableIndex::TypeCase::kGlobalIndex:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
@@ -227,30 +240,54 @@ private:
             buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync;
             break;
-        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex:
-            if (AppData()->FeatureFlags.GetEnableAddUniqueIndex()) {
-                buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryIndex;
-                buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
-                break;
-            } else {
-                explain = "unsupported index type to build";
+        case Ydb::Table::TableIndex::TypeCase::kGlobalUniqueIndex: {
+            if (!Self->EnableAddUniqueIndex) {
+                explain = "Adding a unique index to an existing table is disabled";
                 return false;
             }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique;
+            break;
+        }
         case Ydb::Table::TableIndex::TypeCase::kGlobalVectorKmeansTreeIndex: {
+            if (!Self->EnableVectorIndex) {
+                explain = "Vector index support is disabled";
+                return false;
+            }
             buildInfo.BuildKind = index.index_columns().size() == 1
                 ? TIndexBuildInfo::EBuildKind::BuildVectorIndex
                 : TIndexBuildInfo::EBuildKind::BuildPrefixedVectorIndex;
             buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree;
             NKikimrSchemeOp::TVectorIndexKmeansTreeDescription vectorIndexKmeansTreeDescription;
             *vectorIndexKmeansTreeDescription.MutableSettings() = index.global_vector_kmeans_tree_index().vector_settings();
+            if (!NKikimr::NKMeans::ValidateSettings(vectorIndexKmeansTreeDescription.GetSettings(), explain)) {
+                return false;
+            }
             buildInfo.SpecializedIndexDescription = vectorIndexKmeansTreeDescription;
-            buildInfo.KMeans.K = std::max<ui32>(2, vectorIndexKmeansTreeDescription.GetSettings().clusters());
-            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + std::max<ui32>(1, vectorIndexKmeansTreeDescription.GetSettings().levels());
+            buildInfo.KMeans.K = vectorIndexKmeansTreeDescription.GetSettings().clusters();
+            buildInfo.KMeans.Levels = buildInfo.IsBuildPrefixedVectorIndex() + vectorIndexKmeansTreeDescription.GetSettings().levels();
+            buildInfo.KMeans.Rounds = NTableIndex::NKMeans::DefaultKMeansRounds;
+            buildInfo.Clusters = NKikimr::NKMeans::CreateClusters(vectorIndexKmeansTreeDescription.GetSettings().settings(), buildInfo.KMeans.Rounds, explain);
+            if (!buildInfo.Clusters) {
+                return false;
+            }
             break;
         }
-        case Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET:
-            explain = "invalid or unset index type";
-            return false;
+        case Ydb::Table::TableIndex::TypeCase::kGlobalFulltextIndex: {
+            if (!Self->EnableFulltextIndex) {
+                explain = "Fulltext index support is disabled";
+                return false;
+            }
+            buildInfo.BuildKind = TIndexBuildInfo::EBuildKind::BuildFulltext;
+            buildInfo.IndexType = NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltext;
+            NKikimrSchemeOp::TFulltextIndexDescription fulltextIndexDescription;
+            *fulltextIndexDescription.MutableSettings() = index.global_fulltext_index().fulltext_settings();
+            if (!NKikimr::NFulltext::ValidateSettings(fulltextIndexDescription.GetSettings(), explain)) {
+                return false;
+            }
+            buildInfo.SpecializedIndexDescription = fulltextIndexDescription;
+            break;
+        }
         };
 
         buildInfo.IndexName = index.name();

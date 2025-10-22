@@ -40,6 +40,10 @@ private:
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
         Ctx_->GetAuthState().State = state;
     }
@@ -366,9 +370,9 @@ void TEtcdWatchService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Watch::AsyncService::RequestWatch,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(this->Watchtower, new TEvWatchRequest(context.Release()));
+            ActorSystem->Send(this->ServiceActor, new TEvWatchRequest(context.Release()));
         },
-        *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
+        *ActorSystem, "Watch", getCounterBlock("etcd", "Watch", true), nullptr
     );
 }
 
@@ -413,9 +417,9 @@ void TEtcdLeaseService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     TStreamGRpcRequest::Start(this, this->GetService(), CQ, &etcdserverpb::Lease::AsyncService::RequestLeaseKeepAlive,
         [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-            ActorSystem->Send(this->Watchtower, new TEvLeaseKeepAliveRequest(context.Release()));
+            ActorSystem->Send(this->ServiceActor, new TEvLeaseKeepAliveRequest(context.Release()));
         },
-        *ActorSystem, "Lease", getCounterBlock("etcd", "Watch", true), nullptr
+        *ActorSystem, "Lease/LeaseKeepAlive", getCounterBlock("etcd", "LeaseKeepAlive", true), nullptr
     );
 }
 

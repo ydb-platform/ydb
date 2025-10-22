@@ -126,13 +126,13 @@ namespace orc {
                                            bool shouldThrow) {
     constexpr bool isFileTypeFloatingPoint(std::is_floating_point<FileType>::value);
     constexpr bool isReadTypeFloatingPoint(std::is_floating_point<ReadType>::value);
-    int64_t longValue = static_cast<int64_t>(srcValue);
+
     if (isFileTypeFloatingPoint) {
       if (isReadTypeFloatingPoint) {
         destValue = static_cast<ReadType>(srcValue);
       } else {
         if (!canFitInLong(static_cast<double>(srcValue)) ||
-            !downCastToInteger(destValue, longValue)) {
+            !downCastToInteger(destValue, static_cast<int64_t>(srcValue))) {
           handleOverflow<FileType, ReadType>(destBatch, idx, shouldThrow);
         }
       }

@@ -57,13 +57,10 @@
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_write_multi_usage_script_script/Temp",
                                                                 "ReadColumns": [
-                                                                    "Name",
+                                                                    "Name (-\u221e, +\u221e)",
                                                                     "Value"
                                                                 ],
                                                                 "ReadLimit": "1001",
-                                                                "ReadRanges": [
-                                                                    "Name (-\u221e, +\u221e)"
-                                                                ],
                                                                 "ReadRangesPointPrefixLen": "0",
                                                                 "Reverse": false,
                                                                 "Scan": "Sequential",
@@ -134,16 +131,12 @@
                                                                 "Name": "TableFullScan",
                                                                 "Path": "/local/base_write_multi_usage_script_script/Input1",
                                                                 "ReadColumns": [
+                                                                    "Group (-\u221e, +\u221e)",
+                                                                    "Name (-\u221e, +\u221e)",
                                                                     "Amount",
-                                                                    "Comment",
-                                                                    "Group",
-                                                                    "Name"
+                                                                    "Comment"
                                                                 ],
                                                                 "ReadLimit": "1001",
-                                                                "ReadRanges": [
-                                                                    "Group (-\u221e, +\u221e)",
-                                                                    "Name (-\u221e, +\u221e)"
-                                                                ],
                                                                 "ReadRangesPointPrefixLen": "0",
                                                                 "Reverse": false,
                                                                 "Scan": "Sequential",

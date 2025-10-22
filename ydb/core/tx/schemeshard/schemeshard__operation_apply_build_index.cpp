@@ -1,15 +1,13 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
+#include "schemeshard__operation_part.h"
+#include "schemeshard_impl.h"
 #include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"
-
-#include "schemeshard_impl.h"
-
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/table_index.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
@@ -17,9 +15,10 @@ namespace NKikimr {
 namespace NSchemeShard {
 namespace {
 
-ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId) {
-    Y_ABORT_UNLESS(index.Child(name)->PathId == pathId);
-    Y_ABORT_UNLESS(index.Child(name).LeafName() == name);
+ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPath& index, const TOperationId& partId, const TString& name, const TPathId& pathId, const NKikimrSchemeOp::TLockGuard& lockGuard) {
+    TPath implTable = index.Child(name);
+    Y_ABORT_UNLESS(implTable->PathId == pathId);
+    Y_ABORT_UNLESS(implTable.LeafName() == name);
     TTableInfo::TPtr table = context.SS->Tables.at(pathId);
     auto transaction = TransactionTemplate(index.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexImplTable);
     auto operation = transaction.MutableAlterTable();
@@ -27,6 +26,9 @@ ISubOperation::TPtr FinalizeIndexImplTable(TOperationContext& context, const TPa
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(table->PartitionConfig().GetCompactionPolicy());
     operation->MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(false);
     operation->MutablePartitionConfig()->SetShadowData(false);
+    if (implTable.IsLocked()) { // implTables for some type of indexes may be locked during build
+        *transaction.MutableLockGuard() = lockGuard;
+    }
     return CreateFinalizeBuildIndexImplTable(partId, transaction);
 }
 
@@ -109,7 +111,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
                 }
                 result.push_back(std::move(op));
             } else {
-                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second));
+                result.push_back(FinalizeIndexImplTable(context, index, partId, indexImplTableName, indexChildItems.second, tx.GetLockGuard()));
             }
         }
     }
@@ -127,9 +129,11 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     TPath table = TPath::Resolve(tablePath, context.SS);
 
     TVector<ISubOperation::TPtr> result;
+
     {
         auto finalize = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpFinalizeBuildIndexMainTable);
         *finalize.MutableLockGuard() = tx.GetLockGuard();
+
         auto op = finalize.MutableFinalizeBuildIndexMainTable();
         op->SetTableName(table.LeafName());
         op->SetSnapshotTxId(config.GetSnapshotTxId());
@@ -150,10 +154,7 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
         operation->SetName(index.Base()->Name);
 
         result.push_back(CreateDropTableIndex(NextPartId(nextId, result), tableIndexDropping));
-    }
 
-    if (!indexName.empty()) {
-        TPath index = table.Child(indexName);
         Y_ABORT_UNLESS(index.Base()->GetChildren().size() >= 1);
         for (auto& indexChildItems : index.Base()->GetChildren()) {
             const auto partId = NextPartId(nextId, result);
@@ -167,6 +168,27 @@ TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId nextId, const TTxTran
     }
 
     return result;
+}
+
+ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
+    Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnBuild);
+
+    auto config = tx.GetDropColumnBuild();
+    TString tablePath = config.GetSettings().GetTable();
+
+    TPath table = TPath::Resolve(tablePath, context.SS);
+
+    auto mainTableAlter = TransactionTemplate(table.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+    *mainTableAlter.MutableLockGuard() = tx.GetLockGuard();
+    auto op = mainTableAlter.MutableAlterTable();
+    op->SetName(table.LeafName());
+
+    for (const auto& col : config.GetSettings().Getcolumn()) {
+        auto colInfo = op->AddDropColumns();
+        colInfo->SetName(col.GetColumnName());
+    }
+
+    return CreateAlterTable(id, mainTableAlter);
 }
 
 }

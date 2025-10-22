@@ -6,6 +6,7 @@
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_column_group_helpers.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 
 namespace NYql::NFmr {
@@ -18,10 +19,13 @@ struct TFmrWriterSettings {
 
 class TFmrTableDataServiceWriter: public NYT::TRawTableWriter {
 public:
+    using TPtr = TIntrusivePtr<TFmrTableDataServiceWriter>;
+
     TFmrTableDataServiceWriter(
         const TString& tableId,
         const TString& partId,
         ITableDataService::TPtr tableDataService,
+        const TString& columnGroupSpec = TString(),
         const TFmrWriterSettings& settings = TFmrWriterSettings()
     );
 
@@ -59,6 +63,8 @@ private:
         std::exception_ptr Exception;
     };
     std::shared_ptr<TFmrWriterState> State_ = std::make_shared<TFmrWriterState>();
+
+    TParsedColumnGroupSpec ColumnGroupSpec_;
 };
 
 } // namespace NYql::NFmr

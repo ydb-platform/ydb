@@ -46,7 +46,7 @@ Below are examples of the code for authentication based on a username and token 
 
   ```java
   public void work(String connectionString, String username, String password) {
-      AuthProvider authProvider = new StaticCredentials(username, password);
+      StaticCredentials authProvider = new StaticCredentials(username, password);
 
       GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
               .withAuthProvider(authProvider)

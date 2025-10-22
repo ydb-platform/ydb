@@ -14,6 +14,8 @@ void TCpuConsumptionInfo::Clear() {
 
 void THarmonizerCpuConsumption::Init(i16 poolCount) {
     PoolConsumption.resize(poolCount);
+    PoolFullThreadConsumption.resize(poolCount);
+    PoolForeignConsumption.resize(poolCount);
     IsNeedyByPool.reserve(poolCount);
     NeedyPools.reserve(poolCount);
     HoggishPools.reserve(poolCount);
@@ -25,8 +27,9 @@ namespace {
         return Max(0.0, Min(1.0, value * (1.0/0.9)));
     }
 
-    void UpdatePoolConsumption(const TPoolInfo& pool, TCpuConsumptionInfo *poolConsumption) {
+    void UpdatePoolConsumption(const TPoolInfo& pool, TCpuConsumptionInfo *poolConsumption, TCpuConsumptionInfo *poolFullThreadConsumption) {
         poolConsumption->Clear();
+        poolFullThreadConsumption->Clear();
         for (i16 threadIdx = 0; threadIdx < pool.MaxThreadCount; ++threadIdx) {
             float threadElapsed = Rescale(pool.GetElapsed(threadIdx));
             float threadLastSecondElapsed = Rescale(pool.GetLastSecondElapsed(threadIdx));
@@ -36,13 +39,17 @@ namespace {
             poolConsumption->LastSecondElapsed += threadLastSecondElapsed;
             poolConsumption->Cpu += threadCpu;
             poolConsumption->LastSecondCpu += threadLastSecondCpu;
+            poolFullThreadConsumption->Elapsed += threadElapsed;
+            poolFullThreadConsumption->LastSecondElapsed += threadLastSecondElapsed;
+            poolFullThreadConsumption->Cpu += threadCpu;
+            poolFullThreadConsumption->LastSecondCpu += threadLastSecondCpu;
             LWPROBE_WITH_DEBUG(HarmonizeCheckPoolByThread, pool.Pool->PoolId, pool.Pool->GetName(), threadIdx, threadElapsed, threadCpu, threadLastSecondElapsed, threadLastSecondCpu);
         }
         for (i16 sharedIdx = 0; sharedIdx < static_cast<i16>(pool.SharedInfo.size()); ++sharedIdx) {
-            float sharedElapsed = Rescale(pool.GetSharedElapsed(sharedIdx));
-            float sharedLastSecondElapsed = Rescale(pool.GetLastSecondSharedElapsed(sharedIdx));
-            float sharedCpu = Rescale(pool.GetSharedCpu(sharedIdx));
-            float sharedLastSecondCpu = Rescale(pool.GetLastSecondSharedCpu(sharedIdx));
+            float sharedElapsed = pool.GetSharedElapsed(sharedIdx);
+            float sharedLastSecondElapsed = pool.GetLastSecondSharedElapsed(sharedIdx);
+            float sharedCpu = pool.GetSharedCpu(sharedIdx);
+            float sharedLastSecondCpu = pool.GetLastSecondSharedCpu(sharedIdx);
             poolConsumption->Elapsed += sharedElapsed;
             poolConsumption->LastSecondElapsed += sharedLastSecondElapsed;
             poolConsumption->Cpu += sharedCpu;
@@ -51,12 +58,19 @@ namespace {
         }
     }
 
+    void UpdatePoolForeignConsumption(const TPoolInfo& pool, TPoolForeignConsumptionInfo *poolForeignConsumption, const TSharedInfo& sharedInfo) {
+        float prevElapsed = std::exchange(poolForeignConsumption->PrevElapsedValue, sharedInfo.CpuConsumption[pool.Pool->PoolId].ForeignElapsed);
+        float prevCpu = std::exchange(poolForeignConsumption->PrevCpuValue, sharedInfo.CpuConsumption[pool.Pool->PoolId].ForeignCpu);
+        poolForeignConsumption->Elapsed = sharedInfo.CpuConsumption[pool.Pool->PoolId].ForeignElapsed - prevElapsed;
+        poolForeignConsumption->Cpu = sharedInfo.CpuConsumption[pool.Pool->PoolId].ForeignCpu - prevCpu;
+    }
+
     bool IsStarved(double elapsed, double cpu) {
         return Max(elapsed, cpu) > 0.1 && (cpu < elapsed * 0.7 || elapsed - cpu > 0.5);
     }
 
     bool IsHoggish(double elapsed, double currentThreadCount) {
-        return elapsed < currentThreadCount - 0.5;
+        return elapsed <= currentThreadCount - 1.0;
     }
 
 } // namespace
@@ -82,12 +96,27 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
 
         AdditionalThreads += Max(0, pool.GetFullThreadCount() - pool.DefaultFullThreadCount);
         float currentThreadCount = pool.GetThreadCount();
+        float currentFullThreadCount = pool.GetFullThreadCount();
         StoppingThreads += pool.Pool->GetBlockingThreadCount();
         HARMONIZER_DEBUG_PRINT("pool", poolIdx, "pool name", pool.Pool->GetName(), "current thread count", currentThreadCount, "stopping threads", StoppingThreads, "default thread count", pool.DefaultThreadCount);
 
-        UpdatePoolConsumption(pool, &PoolConsumption[poolIdx]);
+        UpdatePoolConsumption(pool, &PoolConsumption[poolIdx], &PoolFullThreadConsumption[poolIdx]);
+        UpdatePoolForeignConsumption(pool, &PoolForeignConsumption[poolIdx], sharedInfo);
 
-        HARMONIZER_DEBUG_PRINT("pool", poolIdx, "pool name", pool.Pool->GetName(), "elapsed", PoolConsumption[poolIdx].Elapsed, "cpu", PoolConsumption[poolIdx].Cpu, "last second elapsed", PoolConsumption[poolIdx].LastSecondElapsed, "last second cpu", PoolConsumption[poolIdx].LastSecondCpu);
+        HARMONIZER_DEBUG_PRINT("CpuConsumption::Pull",
+            "pool:", poolIdx,
+            "pool name:", pool.Pool->GetName(),
+            "elapsed:", PoolConsumption[poolIdx].Elapsed,
+            "cpu:", PoolConsumption[poolIdx].Cpu,
+            "last second elapsed:", PoolConsumption[poolIdx].LastSecondElapsed,
+            "last second cpu:", PoolConsumption[poolIdx].LastSecondCpu,
+            "full thread elapsed:", PoolFullThreadConsumption[poolIdx].Elapsed,
+            "full thread cpu:", PoolFullThreadConsumption[poolIdx].Cpu,
+            "last second full thread elapsed:", PoolFullThreadConsumption[poolIdx].LastSecondElapsed,
+            "last second full thread cpu:", PoolFullThreadConsumption[poolIdx].LastSecondCpu,
+            "foreign elapsed:", PoolForeignConsumption[poolIdx].Elapsed,
+            "foreign cpu:", PoolForeignConsumption[poolIdx].Cpu
+        );
 
         bool isStarved = IsStarved(PoolConsumption[poolIdx].Elapsed, PoolConsumption[poolIdx].Cpu)
                 || IsStarved(PoolConsumption[poolIdx].LastSecondElapsed, PoolConsumption[poolIdx].LastSecondCpu);
@@ -95,21 +124,23 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
             IsStarvedPresent = true;
         }
 
-        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount);
+        float expectedThreadCount = pool.GetFullThreadCount() + (sharedInfo.OwnedThreads[poolIdx] != -1 ? 1 : 0) + 0.5;
+        bool isMoreThanExpected = (PoolConsumption[poolIdx].LastSecondCpu >= expectedThreadCount) && (PoolFullThreadConsumption[poolIdx].LastSecondCpu >= currentFullThreadCount - 1);
+        bool isNeedy = (pool.IsAvgPingGood() || pool.NewNotEnoughCpuExecutions) && (PoolConsumption[poolIdx].LastSecondCpu >= currentThreadCount || isMoreThanExpected);
         IsNeedyByPool.push_back(isNeedy);
         if (isNeedy) {
             NeedyPools.push_back(poolIdx);
         }
 
-        bool isHoggish = IsHoggish(PoolConsumption[poolIdx].Elapsed, currentThreadCount);
+        bool isHoggish = !isNeedy && IsHoggish(PoolFullThreadConsumption[poolIdx].Elapsed, currentFullThreadCount) && IsHoggish(PoolFullThreadConsumption[poolIdx].LastSecondElapsed, currentFullThreadCount);
         if (isHoggish) {
-            float freeCpu = currentThreadCount - PoolConsumption[poolIdx].Elapsed;
+            float freeCpu = std::min(currentFullThreadCount - PoolFullThreadConsumption[poolIdx].Elapsed, currentFullThreadCount - PoolFullThreadConsumption[poolIdx].LastSecondElapsed);
             HoggishPools.push_back({poolIdx, freeCpu});
         }
 
         Elapsed += PoolConsumption[poolIdx].Elapsed;
         Cpu += PoolConsumption[poolIdx].Cpu;
-        LastSecondElapsed += PoolConsumption[poolIdx].LastSecondElapsed;
+    LastSecondElapsed += PoolConsumption[poolIdx].LastSecondElapsed;
         LastSecondCpu += PoolConsumption[poolIdx].LastSecondCpu;
         pool.LastFlags.store((i64)isNeedy | ((i64)isStarved << 1) | ((i64)isHoggish << 2), std::memory_order_relaxed);
         LWPROBE_WITH_DEBUG(
@@ -140,10 +171,12 @@ void THarmonizerCpuConsumption::Pull(const std::vector<std::unique_ptr<TPoolInfo
     HARMONIZER_DEBUG_PRINT("NeedyPools", NeedyPools.size(), "HoggishPools", HoggishPools.size());
 
     Budget = TotalCores - Elapsed;
+    BudgetLS = TotalCores - LastSecondElapsed;
     BudgetWithoutSharedCpu = Budget - sharedInfo.FreeCpu;
+    BudgetLSWithoutSharedCpu = BudgetLS - sharedInfo.FreeCpu;
     Overbooked = -Budget;
     LostCpu = Max<float>(0.0f, Elapsed - Cpu);
-    if (Budget < -0.1) {
+    if (BudgetLS < -0.1) {
         IsStarvedPresent = true;
     }
     HARMONIZER_DEBUG_PRINT("IsStarvedPresent", IsStarvedPresent, "Budget", Budget, "Overbooked", Overbooked, "TotalCores", TotalCores, "Elapsed", Elapsed, "Cpu", Cpu, "LastSecondElapsed", LastSecondElapsed, "LastSecondCpu", LastSecondCpu);

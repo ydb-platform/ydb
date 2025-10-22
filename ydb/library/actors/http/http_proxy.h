@@ -1,12 +1,13 @@
 #pragma once
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/actors/interconnect/poller_actor.h>
+#include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <library/cpp/dns/cache.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
 #include <util/generic/variant.h>
@@ -15,6 +16,8 @@
 #include "http_proxy_ssl.h"
 
 namespace NHttp {
+
+using namespace NActors;
 
 const ui32 DEFAULT_MAX_RECYCLED_REQUESTS_COUNT = 1000;
 
@@ -326,6 +329,13 @@ struct TPrivateEndpointInfo : THttpEndpointInfo {
     TPrivateEndpointInfo(const std::vector<TString>& compressContentTypes)
         : THttpEndpointInfo(compressContentTypes)
     {}
+};
+
+struct TUrlHandler {
+    THashMap<TString, TActorId> Handlers;
+
+    void RegisterHandler(const TString& url, const TActorId& handler);
+    TActorId GetHandler(const TString& url) const;
 };
 
 NActors::IActor* CreateHttpProxy(std::weak_ptr<NMonitoring::IMetricFactory> registry = NMonitoring::TMetricRegistry::SharedInstance());

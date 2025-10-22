@@ -7,10 +7,13 @@
 
 #include <yt/yt/core/rpc/grpc/proto/grpc.pb.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/error.h>
 
+#include <yt/yt/core/yson/protobuf_helpers.h>
+
 #include <yt/yt/core/tracing/trace_context.h>
+
+#include <library/cpp/yt/memory/blob.h>
 
 #include <random>
 
@@ -19,6 +22,7 @@ namespace NYT::NRpc {
 using namespace NConcurrency;
 
 using NYT::FromProto;
+using NYT::ToProto;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -70,6 +74,7 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NoReply));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(FlakyCall));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DelayedCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequireCoolFeature));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingEcho)
             .SetStreamingEnabled(true)
@@ -343,6 +348,12 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DelayedCall)
+    {
+        context->SetRequestInfo();
+        context->Reply();
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)
     {
         context->SetRequestInfo();
@@ -354,7 +365,7 @@ public:
     {
         context->SetRequestInfo();
         auto* traceContext = NTracing::TryGetCurrentTraceContext();
-        response->set_baggage(NYson::ConvertToYsonString(traceContext->UnpackBaggage()).ToString());
+        response->set_baggage(ToProto(NYson::ConvertToYsonString(traceContext->UnpackBaggage())));
         context->Reply();
     }
 

@@ -21,6 +21,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default(0)
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("main_job_id", &TListJobsOptions::MainJobId)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("job_competition_id", &TListJobsOptions::JobCompetitionId)
         .Default()
         .DontSerializeDefault();
@@ -57,7 +61,31 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default()
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("with_interruption_info", &TThat::WithInterruptionInfo)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("task_name", &TThat::TaskName)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("monitoring_descriptor", &TThat::MonitoringDescriptor)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("from_time", &TThat::FromTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("to_time", &TThat::ToTime)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("attributes", &TThat::Attributes)
         .Default()
         .DontSerializeDefault();
 
@@ -186,7 +214,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
         attributes = attributes->Clone();
     }
 
-    auto setField = [&] (auto& field, const TString& name) {
+    auto setField = [&] (auto& field, const std::string& name) {
         using T = std::remove_reference_t<decltype(field)>;
         if constexpr (std::is_same_v<T, NYson::TYsonString>) {
             if (auto value = attributes->FindYson(name)) {
@@ -311,9 +339,12 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("monitoring_descriptor", job.MonitoringDescriptor)
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
+            .OptionalItem("job_cookie_group_index", job.JobCookieGroupIndex)
+            .OptionalItem("main_job_id", job.MainJobId)
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
+            .OptionalItem("gang_rank", job.GangRank)
         .EndMap();
 }
 
@@ -327,6 +358,17 @@ void Serialize(const TJobTraceEvent& traceEvent, NYson::IYsonConsumer* consumer)
             .Item("event_index").Value(traceEvent.EventIndex)
             .Item("event").Value(traceEvent.Event)
             .Item("event_time").Value(traceEvent.EventTime.MicroSeconds())
+        .EndMap();
+}
+
+void Serialize(const TOperationEvent& operationEvent, NYson::IYsonConsumer* consumer) {
+    NYTree::BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("timestamp").Value(operationEvent.Timestamp)
+            .Item("event_type").Value(operationEvent.EventType)
+            .OptionalItem("incarnation", operationEvent.Incarnation)
+            .OptionalItem("incarnation_switch_reason", operationEvent.IncarnationSwitchReason)
+            .OptionalItem("incarnation_switch_info", operationEvent.IncarnationSwitchInfo)
         .EndMap();
 }
 
@@ -388,4 +430,3 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

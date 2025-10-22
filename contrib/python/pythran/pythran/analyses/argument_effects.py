@@ -48,17 +48,17 @@ for module in MODULES.values():
     save_function_effect(module)
 
 
-class ArgumentEffects(ModuleAnalysis):
+class ArgumentEffectsHelper(ModuleAnalysis[Aliases, GlobalDeclarations, Intrinsics]):
 
     """Gathers inter-procedural effects on function arguments."""
+
+    ResultType = DiGraph
 
     def __init__(self):
         # There's an edge between src and dest if a parameter of dest is
         # modified by src
-        self.result = DiGraph()
+        super().__init__()
         self.node_to_functioneffect = {}
-        super(ArgumentEffects, self).__init__(Aliases, GlobalDeclarations,
-                                              Intrinsics)
 
     def prepare(self, node):
         """
@@ -67,7 +67,7 @@ class ArgumentEffects(ModuleAnalysis):
         Initialisation done for Pythonic functions and default value set for
         user defined functions.
         """
-        super(ArgumentEffects, self).prepare(node)
+        super().prepare(node)
         for i in self.intrinsics:
             fe = IntrinsicArgumentEffects[i]
             self.node_to_functioneffect[i] = fe
@@ -77,29 +77,6 @@ class ArgumentEffects(ModuleAnalysis):
             fe = FunctionEffects(n)
             self.node_to_functioneffect[n] = fe
             self.result.add_node(fe)
-
-    def run(self, node):
-        result = super(ArgumentEffects, self).run(node)
-        candidates = set(result)
-        while candidates:
-            function = candidates.pop()
-            for ue in enumerate(function.update_effects):
-                update_effect_idx, update_effect = ue
-                if not update_effect:
-                    continue
-                for pred in result.successors(function):
-                    edge = result.edges[function, pred]
-                    for fp in enumerate(edge["formal_parameters"]):
-                        i, formal_parameter_idx = fp
-                        # propagate the impurity backward if needed.
-                        # Afterward we may need another graph iteration
-                        ith_effectiv = edge["effective_parameters"][i]
-                        if(formal_parameter_idx == update_effect_idx and
-                           not pred.update_effects[ith_effectiv]):
-                            pred.update_effects[ith_effectiv] = True
-                            candidates.add(pred)
-        self.result = {f.func: f.update_effects for f in result}
-        return self.result
 
     def argument_index(self, node):
         while isinstance(node, ast.Subscript):
@@ -199,3 +176,31 @@ class ArgumentEffects(ModuleAnalysis):
                     edge["effective_parameters"].append(n)
                     edge["formal_parameters"].append(i)
         self.generic_visit(node)
+
+class ArgumentEffects(ModuleAnalysis[ArgumentEffectsHelper]):
+
+    """Gathers inter-procedural effects on function arguments."""
+
+    ResultType = dict
+
+    def visit_Module(self, node):
+        result = self.argument_effects_helper
+        candidates = set(result)
+        while candidates:
+            function = candidates.pop()
+            for ue in enumerate(function.update_effects):
+                update_effect_idx, update_effect = ue
+                if not update_effect:
+                    continue
+                for pred in result.successors(function):
+                    edge = result.edges[function, pred]
+                    for fp in enumerate(edge["formal_parameters"]):
+                        i, formal_parameter_idx = fp
+                        # propagate the impurity backward if needed.
+                        # Afterward we may need another graph iteration
+                        ith_effectiv = edge["effective_parameters"][i]
+                        if(formal_parameter_idx == update_effect_idx and
+                           not pred.update_effects[ith_effectiv]):
+                            pred.update_effects[ith_effectiv] = True
+                            candidates.add(pred)
+        self.result = {f.func: f.update_effects for f in result}

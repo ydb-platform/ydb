@@ -43,7 +43,8 @@ namespace NKikimr {
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
                 if (HullCtx->VCtx->ActorSystem) {
-                    LOG_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                    LOG_LOG(*HullCtx->VCtx->ActorSystem, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO,
+                            NKikimrServices::BS_HULLCOMP,
                             VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "%s: PromoteSsts: action# %s timeSpent# %s",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
@@ -67,7 +68,7 @@ namespace NKikimr {
                 it.SeekToFirst();
                 while (it.Valid()) {
                     TLevelSstPtr p = it.Get();
-                    ui32 level = p.Level;
+                    const ui32 level = p.Level;
 
                     if (level >= 2 * Boundaries->SortedParts + 1) {
                         TLevelSegmentPtr sst = p.SstPtr;
@@ -78,6 +79,10 @@ namespace NKikimr {
                         if (!DoIntersect(sst, nextLevel.Segs)) {
                             action = ActMoveSsts;
                             Task->MoveSsts.MoveSst(level, level + 1, sst);
+                            if (HullCtx->VCtx->ActorSystem) {
+                                LOG_INFO_S(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP,
+                                    HullCtx->VCtx->VDiskLogPrefix << " TStrategyPromoteSsts: move sst# " << p.ToString() << " to level " << level + 1);
+                            }
                             break;
                         }
                     }

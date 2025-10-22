@@ -1,9 +1,23 @@
 # Contributing to Libidn
 
-This file contains instructions for developers and advanced users that
-wants to build from version controlled sources.
+This file contains instructions for developers and advanced users.
 
-We rely on several tools to build the software, including:
+## Obtaining sources
+
+Download the version controlled sources:
+```
+$ git clone https://git.savannah.gnu.org/git/libidn.git
+$ cd libidn
+```
+
+## Dependencies
+
+If you wish to build the project from version controlled sources,
+rebuild all generated files (e.g., run autoreconf), or modify some
+source code files, you will need to have additional tools installed
+beyond those mentioned in [DEPENDENCIES.md](DEPENDENCIES.md).  None of
+the following tools are necessary if you build Libidn in the usual way
+(i.e., ./configure && make).
 
 - Make <https://www.gnu.org/software/make/>
 - C compiler <https://www.gnu.org/software/gcc/>
@@ -24,7 +38,8 @@ We rely on several tools to build the software, including:
 - Valgrind <https://valgrind.org/> (optional)
 - OpenJDK (for java port)
 - Mono mcs <https://www.mono-project.com/> (for C# port)
-- fig2dev <https://sourceforge.net/projects/mcj/>
+- dot <https://www.graphviz.org/> (to generate doc/libidn-components.*)
+- Ghostscript <https://www.ghostscript.com/> (to edit PDF timestamps)
 
 The software is typically distributed with your operating system, and
 the instructions for installing them differ.  Here are some hints:
@@ -34,7 +49,7 @@ APT/DPKG-based distributions:
 apt-get install make git autoconf automake libtool gettext autopoint cvs
 apt-get install texinfo texlive texlive-plain-generic texlive-extra-utils
 apt-get install help2man gtk-doc-tools dblatex valgrind gengetopt
-apt-get install transfig mono-mcs gperf default-jdk-headless
+apt-get install graphviz ghostscript mono-mcs gperf default-jdk-headless
 ```
 
 DNF/RPM-based distributions:
@@ -47,7 +62,7 @@ dnf install -y gperf java-latest-openjdk-devel
 
 On macOS with Xcode and Homebrew:
 ```
-brew install autoconf automake libtool gengetopt help2man texinfo fig2dev
+brew install autoconf automake libtool gengetopt help2man texinfo graphviz
 ```
 
 To download the version controlled sources:
@@ -105,7 +120,7 @@ See README-release on how to make a release.
 Happy hacking!
 
 ----------------------------------------------------------------------
-Copyright (C) 2009-2024 Simon Josefsson
+Copyright (C) 2009-2025 Simon Josefsson
 Copying and distribution of this file, with or without modification,
 are permitted in any medium without royalty provided the copyright
 notice and this notice are preserved.

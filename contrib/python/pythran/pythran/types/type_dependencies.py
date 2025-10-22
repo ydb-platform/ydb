@@ -51,7 +51,7 @@ def pytype_to_deps(t):
     return res
 
 
-class TypeDependencies(ModuleAnalysis):
+class TypeDependencies(ModuleAnalysis[GlobalDeclarations]):
 
     """
     Gathers the callees of each function required for type inference.
@@ -224,14 +224,15 @@ class TypeDependencies(ModuleAnalysis):
 
     NoDeps = "None"
 
+    ResultType = DiGraph
+
     def __init__(self):
         """ Create empty result graph and gather global declarations. """
-        self.result = DiGraph()
+        super().__init__()
         self.current_function = None
         self.naming = dict()  # variable to dependencies for current function.
         # variable to dependencies for current conditional statement
         self.in_cond = dict()
-        ModuleAnalysis.__init__(self, GlobalDeclarations)
 
     def prepare(self, node):
         """
@@ -334,15 +335,20 @@ class TypeDependencies(ModuleAnalysis):
         It is valid for subscript, `a[i] = foo()` means `a` type depend on
         `foo` return type.
         """
-        if not node.value:
-            return
         value_deps = self.visit(node.value)
-        targets = node.targets if isinstance(node, ast.Assign) else (node.target,)
-        for target in targets:
+        for target in node.targets:
             name = get_variable(target)
             if isinstance(name, ast.Name):
                 self.naming[name.id] = value_deps
-    visit_AnnAssign = visit_Assign
+
+    def visit_AnnAssign(self, node):
+        deps = []
+        if node.value:
+            deps.extend(self.visit(node.value))
+        deps.extend(self.visit(node.annotation))
+        name = get_variable(node.target)
+        if isinstance(name, ast.Name):
+            self.naming[name.id] = deps
 
     def visit_AugAssign(self, node):
         """

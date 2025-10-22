@@ -32,6 +32,10 @@ SET(ORIG_SOURCES
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
+    mkql_block_test_helper.cpp
+    mkql_block_fuzzer.cpp
+    mkql_block_getelem_ut.cpp
+    mkql_block_just_ut.cpp
     mkql_block_top_sort_ut.cpp
     mkql_blocks_ut.cpp
     mkql_combine_ut.cpp
@@ -43,6 +47,7 @@ SET(ORIG_SOURCES
     mkql_filters_ut.cpp
     mkql_flatmap_ut.cpp
     mkql_fromstring_ut.cpp
+    mkql_linear_ut.cpp
     mkql_multihopping_saveload_ut.cpp
     mkql_multihopping_ut.cpp
     mkql_multimap_ut.cpp
@@ -62,6 +67,7 @@ SET(ORIG_SOURCES
     mkql_match_recognize_list_ut.cpp
     mkql_match_recognize_nfa_ut.cpp
     mkql_match_recognize_ut.cpp
+    mkql_mutdict_ut.cpp
     mkql_safe_circular_buffer_ut.cpp
     mkql_sort_ut.cpp
     mkql_switch_ut.cpp
@@ -84,12 +90,12 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
-    yql/essentials/core/arrow_kernels/request
-    yql/essentials/core/arrow_kernels/registry
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy
-    yql/essentials/sql/pg_dummy
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/parser/pg_wrapper/interface
+    yql/essentials/sql/pg
 )
 
 IF (ARCH_X86_64)

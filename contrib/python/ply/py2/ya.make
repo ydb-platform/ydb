@@ -2,7 +2,7 @@
 
 PY2_LIBRARY()
 
-SUBSCRIBER(pg g:python-contrib)
+SUBSCRIBER(g:python-contrib)
 
 VERSION(3.11)
 

@@ -1,7 +1,10 @@
 #pragma once
 
+#include "configuration.h"
+
 #include <yql/essentials/sql/v1/complete/core/input.h>
 #include <yql/essentials/sql/v1/complete/core/environment.h>
+#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
 #include <yql/essentials/sql/v1/complete/name/service/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
@@ -9,65 +12,66 @@
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 namespace NSQLComplete {
 
-    struct TCompletedToken {
-        TStringBuf Content;
-        size_t SourcePosition;
-    };
+struct TCompletedToken {
+    TStringBuf Content;
+    size_t SourcePosition = 0;
+};
 
-    enum class ECandidateKind {
-        Keyword,
-        PragmaName,
-        TypeName,
-        FunctionName,
-        HintName,
-        FolderName,
-        TableName,
-        ClusterName,
-        BindingName,
-        UnknownName,
-    };
+enum class ECandidateKind {
+    Keyword,
+    PragmaName,
+    TypeName,
+    FunctionName,
+    HintName,
+    FolderName,
+    TableName,
+    ClusterName,
+    ColumnName,
+    BindingName,
+    UnknownName,
+};
 
-    struct TCandidate {
-        ECandidateKind Kind;
-        TString Content;
-        size_t CursorShift = 0;
+struct TCandidate {
+    ECandidateKind Kind;
+    TString Content;
+    size_t CursorShift = 0;
+    TMaybe<TString> Documentation = Nothing();
 
-        friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
-    };
+    friend bool operator==(const TCandidate& lhs, const TCandidate& rhs) = default;
 
-    struct TCompletion {
-        TCompletedToken CompletedToken;
-        TVector<TCandidate> Candidates;
-    };
+    TString FilterText() const;
+};
 
-    class ISqlCompletionEngine {
-    public:
-        using TPtr = THolder<ISqlCompletionEngine>;
+struct TCompletion {
+    TCompletedToken CompletedToken;
+    TVector<TCandidate> Candidates;
+};
 
-        struct TConfiguration {
-            size_t Limit = 256;
-            THashSet<TString> IgnoredRules;
-        };
+// TODO(YQL-19747): Make it thread-safe.
+class ISqlCompletionEngine {
+public:
+    using TPtr = THolder<ISqlCompletionEngine>;
 
-        virtual ~ISqlCompletionEngine() = default;
-        virtual TCompletion Complete(TCompletionInput input) = 0; // TODO(YQL-19747): migrate YDB CLI to CompleteAsync
-        virtual NThreading::TFuture<TCompletion>
-        CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
-    };
+    virtual ~ISqlCompletionEngine() = default;
 
-    using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
+    virtual NThreading::TFuture<TCompletion>
+    Complete(TCompletionInput input, TEnvironment env = {}) = 0;
 
-    ISqlCompletionEngine::TConfiguration MakeYDBConfiguration();
+    virtual NThreading::TFuture<TCompletion> // TODO(YQL-19747): Migrate YDB CLI to `Complete` method
+    CompleteAsync(TCompletionInput input, TEnvironment env = {}) = 0;
+};
 
-    ISqlCompletionEngine::TConfiguration MakeYQLConfiguration();
+using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
 
-    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
-        TLexerSupplier lexer,
-        INameService::TPtr names,
-        ISqlCompletionEngine::TConfiguration configuration = {});
+ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
+    TLexerSupplier lexer,
+    INameService::TPtr names,
+    TConfiguration configuration = {},
+    IRanking::TPtr ranking = nullptr);
 
 } // namespace NSQLComplete

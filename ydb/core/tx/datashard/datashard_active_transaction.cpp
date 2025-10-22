@@ -18,7 +18,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    const TStepOrder &stepTxId,
                                    TInstant receivedAt,
                                    const TString &txBody,
-                                   bool usesMvccSnapshot)
+                                   bool usesMvccSnapshot,
+                                   bool isPropose)
     : StepTxId_(stepTxId)
     , TxBody(txBody)
     , EngineBay(self, txc, ctx, stepTxId)
@@ -161,7 +162,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
             auto& tasksRunner = GetKqpTasksRunner(); // create tasks runner, can throw TMemoryLimitExceededException
 
-            auto allocGuard = tasksRunner.BindAllocator(100_MB); // set big enough limit, decrease/correct later
+            auto allocGuard = tasksRunner.BindAllocator(isPropose ? 100_MB : 1_GB); // set big enough limit, decrease/correct later
 
             auto execCtx = DefaultKqpExecutionContext();
             tasksRunner.Prepare(DefaultKqpDataReqMemoryLimits(), *execCtx);
@@ -404,13 +405,14 @@ void TActiveTransaction::FillVolatileTxData(TDataShard *self,
 
 TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
                                                        TTransactionContext &txc,
-                                                       const TActorContext &ctx)
+                                                       const TActorContext &ctx,
+                                                       bool isPropose)
 {
     Y_ENSURE(IsDataTx() || IsReadTable());
     if (!DataTx) {
         Y_ENSURE(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead());
+                                                    GetReceivedAt(), TxBody, IsMvccSnapshotRead(), isPropose);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -440,6 +442,7 @@ bool TActiveTransaction::BuildSchemeTx()
         + (ui32)SchemeTx->HasCreateCdcStreamNotice()
         + (ui32)SchemeTx->HasAlterCdcStreamNotice()
         + (ui32)SchemeTx->HasDropCdcStreamNotice()
+        + (ui32)SchemeTx->HasRotateCdcStreamNotice()
         + (ui32)SchemeTx->HasMoveIndex()
         + (ui32)SchemeTx->HasCreateIncrementalRestoreSrc()
         + (ui32)SchemeTx->HasCreateIncrementalBackupSrc()
@@ -477,6 +480,8 @@ bool TActiveTransaction::BuildSchemeTx()
         SchemeTxType = TSchemaOperation::ETypeAlterCdcStream;
     else if (SchemeTx->HasDropCdcStreamNotice())
         SchemeTxType = TSchemaOperation::ETypeDropCdcStream;
+    else if (SchemeTx->HasRotateCdcStreamNotice())
+        SchemeTxType = TSchemaOperation::ETypeRotateCdcStream;
     else if (SchemeTx->HasMoveIndex())
         SchemeTxType = TSchemaOperation::ETypeMoveIndex;
     else if (SchemeTx->HasCreateIncrementalRestoreSrc())
@@ -677,12 +682,14 @@ void TActiveTransaction::FinalizeDataTxPlan()
         plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
         plan.push_back(EExecutionUnitKind::PrepareKqpDataTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
     } else {
         plan.push_back(EExecutionUnitKind::BuildDataTxOutRS);
         plan.push_back(EExecutionUnitKind::StoreAndSendOutRS);
         plan.push_back(EExecutionUnitKind::PrepareDataTxInRS);
         plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteDataTx);
     }
     plan.push_back(EExecutionUnitKind::CompleteOperation);
@@ -703,6 +710,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             Y_ENSURE(!loaded);
             plan.push_back(EExecutionUnitKind::CheckDataTx);
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+            plan.push_back(EExecutionUnitKind::BlockFailPoint);
             if (IsKqpDataTransaction()) {
                 plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             } else {
@@ -722,6 +730,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
             plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
             Y_ENSURE(IsKqpDataTransaction());
             // Note: execute will also prepare and send readsets
+            plan.push_back(EExecutionUnitKind::BlockFailPoint);
             plan.push_back(EExecutionUnitKind::ExecuteKqpDataTx);
             // Note: it is important that plan here is the same as regular
             // distributed tx, since normal tx may decide to commit in a
@@ -865,6 +874,7 @@ void TActiveTransaction::BuildExecutionPlan(bool loaded)
         plan.push_back(EExecutionUnitKind::CreateCdcStream);
         plan.push_back(EExecutionUnitKind::AlterCdcStream);
         plan.push_back(EExecutionUnitKind::DropCdcStream);
+        plan.push_back(EExecutionUnitKind::RotateCdcStream);
         plan.push_back(EExecutionUnitKind::CreateIncrementalRestoreSrc);
         plan.push_back(EExecutionUnitKind::CompleteOperation);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
@@ -965,9 +975,7 @@ bool TActiveTransaction::OnStopping(TDataShard& self, const TActorContext& ctx) 
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(
-                self.TabletID(), GetTxId());
-            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+            self.SendRestartNotification(this);
         }
 
         // Distributed ops avoid doing new work when stopping

@@ -22,6 +22,10 @@
 #define OPENSSL_SUPPRESS_DEPRECATED
 #include <openssl/crypto.h>
 
+#if defined(OPENSSL_IS_AWSLC)
+#    error #include <openssl/service_indicator.h>
+#endif
+
 static struct openssl_hmac_ctx_table hmac_ctx_table;
 static struct openssl_evp_md_ctx_table evp_md_ctx_table;
 
@@ -489,38 +493,82 @@ static enum aws_libcrypto_version s_resolve_libcrypto_symbols(enum aws_libcrypto
     return found_version;
 }
 
-static enum aws_libcrypto_version s_resolve_libcrypto_lib(void) {
-    const char *libcrypto_102 = "libcrypto.so.1.0.0";
-    const char *libcrypto_111 = "libcrypto.so.1.1";
+static enum aws_libcrypto_version s_libcrypto_version_at_compile_time(void) {
+#ifdef OPENSSL_IS_OPENSSL
+    /*
+     * Currently, this only checks for 1.0.2 vs 1.1. As a future optimization, we can also add a branch for OpenSSL 3.0.
+     * OpenSSL 3.0 is compatible with OpenSSL 1.1, so it works currently.
+     */
+    if (OPENSSL_VERSION_NUMBER < 0x10100000L) {
+        return AWS_LIBCRYPTO_1_0_2;
+    } else {
+        return AWS_LIBCRYPTO_1_1_1;
+    }
+#endif
+    /*
+     * Follow the default path instead of prioritizing the compiled version. This works, since we enforce that
+     * the compiled version and runtime version must be the same for BoringSSL and AWS-LC in
+     * `s_validate_libcrypto_linkage()`.
+     */
+    return AWS_LIBCRYPTO_NONE;
+}
 
-    AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "loading libcrypto 1.0.2");
-    void *module = dlopen(libcrypto_102, RTLD_NOW);
+/* Given libcrypto version, return the filename of the .so */
+static char *s_libcrypto_sharedlib_filename(enum aws_libcrypto_version version) {
+    switch (version) {
+        case AWS_LIBCRYPTO_1_0_2:
+            return "libcrypto.so.1.0.0";
+        case AWS_LIBCRYPTO_1_1_1:
+            return "libcrypto.so.1.1";
+        default:
+            return "libcrypto.so";
+    }
+}
+
+static bool s_load_libcrypto_sharedlib(enum aws_libcrypto_version version) {
+    const char *libcrypto_version = s_libcrypto_sharedlib_filename(version);
+
+    AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "loading %s", libcrypto_version);
+    void *module = dlopen(libcrypto_version, RTLD_NOW);
     if (module) {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "resolving against libcrypto 1.0.2");
-        enum aws_libcrypto_version result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_0_2, module);
-        if (result == AWS_LIBCRYPTO_1_0_2) {
-            return result;
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "resolving against %s", libcrypto_version);
+        enum aws_libcrypto_version result = s_resolve_libcrypto_symbols(version, module);
+        if (result == version) {
+            return true;
         }
         dlclose(module);
     } else {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "libcrypto 1.0.2 not found");
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "%s not found", libcrypto_version);
     }
 
-    AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "loading libcrypto 1.1.1");
-    module = dlopen(libcrypto_111, RTLD_NOW);
-    if (module) {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "resolving against libcrypto 1.1.1");
-        enum aws_libcrypto_version result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, module);
-        if (result == AWS_LIBCRYPTO_1_1_1) {
-            return result;
+    return false;
+}
+
+static enum aws_libcrypto_version s_resolve_libcrypto_sharedlib(void) {
+    /* First try to load the same version as the compiled libcrypto version */
+    const enum aws_libcrypto_version compiled_version = s_libcrypto_version_at_compile_time();
+    if (compiled_version != AWS_LIBCRYPTO_NONE) {
+        if (s_load_libcrypto_sharedlib(compiled_version)) {
+            return compiled_version;
         }
-        dlclose(module);
-    } else {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "libcrypto 1.1.1 not found");
+    }
+
+    /* If compiled_version is AWS_LIBCRYPTO_1_1_1, we have already tried to load it and failed. So, skip it here. */
+    if (compiled_version != AWS_LIBCRYPTO_1_1_1) {
+        if (s_load_libcrypto_sharedlib(AWS_LIBCRYPTO_1_1_1)) {
+            return AWS_LIBCRYPTO_1_1_1;
+        }
+    }
+
+    /* If compiled_version is AWS_LIBCRYPTO_1_0_2, we have already tried to load it and failed. So, skip it here. */
+    if (compiled_version != AWS_LIBCRYPTO_1_0_2) {
+        if (s_load_libcrypto_sharedlib(AWS_LIBCRYPTO_1_0_2)) {
+            return AWS_LIBCRYPTO_1_0_2;
+        }
     }
 
     AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "loading libcrypto.so");
-    module = dlopen("libcrypto.so", RTLD_NOW);
+    void *module = dlopen("libcrypto.so", RTLD_NOW);
     if (module) {
         unsigned long (*openssl_version_num)(void) = NULL;
         *(void **)(&openssl_version_num) = dlsym(module, "OpenSSL_version_num");
@@ -555,6 +603,47 @@ static enum aws_libcrypto_version s_resolve_libcrypto_lib(void) {
     return AWS_LIBCRYPTO_NONE;
 }
 
+/* Validate at runtime that we're linked against the same libcrypto we compiled against. */
+static void s_validate_libcrypto_linkage(void) {
+    /* NOTE: the choice of stack buffer size is somewhat arbitrary. it's
+     * possible, but unlikely, that libcrypto version strings may exceed this in
+     * the future. we guard against buffer overflow by limiting write size in
+     * snprintf with the size of the buffer itself. if libcrypto version strings
+     * do eventually exceed the chosen size, this runtime check will fail and
+     * will need to be addressed by increasing buffer size.*/
+    char expected_version[64] = {0};
+#if defined(OPENSSL_IS_AWSLC)
+    /* get FIPS mode at runtime becuase headers don't give any indication of
+     * AWS-LC's FIPSness at aws-c-cal compile time. version number can still be
+     * captured at preprocess/compile time from AWSLC_VERSION_NUMBER_STRING.*/
+    const char *mode = FIPS_mode() ? "AWS-LC FIPS" : "AWS-LC";
+    snprintf(expected_version, sizeof(expected_version), "%s %s", mode, AWSLC_VERSION_NUMBER_STRING);
+#elif defined(OPENSSL_IS_BORINGSSL)
+    snprintf(expected_version, sizeof(expected_version), "BoringSSL");
+#elif defined(OPENSSL_IS_OPENSSL)
+    snprintf(expected_version, sizeof(expected_version), OPENSSL_VERSION_TEXT);
+#elif !defined(BYO_CRYPTO)
+#    error Unsupported libcrypto!
+#endif
+    const char *runtime_version = SSLeay_version(SSLEAY_VERSION);
+    AWS_LOGF_DEBUG(
+        AWS_LS_CAL_LIBCRYPTO_RESOLVE,
+        "Compiled with libcrypto %s, linked to libcrypto %s",
+        expected_version,
+        runtime_version);
+#if defined(OPENSSL_IS_OPENSSL)
+    /* Validate that the string "AWS-LC" doesn't appear in OpenSSL version str. */
+    AWS_FATAL_ASSERT(strstr("AWS-LC", expected_version) == NULL);
+    AWS_FATAL_ASSERT(strstr("AWS-LC", runtime_version) == NULL);
+    /* Validate both expected and runtime versions begin with OpenSSL's version str prefix. */
+    const char *openssl_prefix = "OpenSSL ";
+    AWS_FATAL_ASSERT(strncmp(openssl_prefix, expected_version, strlen(openssl_prefix)) == 0);
+    AWS_FATAL_ASSERT(strncmp(openssl_prefix, runtime_version, strlen(openssl_prefix)) == 0);
+#else
+    AWS_FATAL_ASSERT(strcmp(expected_version, runtime_version) == 0 && "libcrypto mislink");
+#endif
+}
+
 static enum aws_libcrypto_version s_resolve_libcrypto(void) {
     /* Try to auto-resolve against what's linked in/process space */
     AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "searching process and loaded modules");
@@ -566,23 +655,25 @@ static enum aws_libcrypto_version s_resolve_libcrypto(void) {
     }
     if (result == AWS_LIBCRYPTO_NONE) {
         AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find boringssl symbols linked");
-        result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_0_2, process);
+        result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, process);
     }
     if (result == AWS_LIBCRYPTO_NONE) {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.0.2 symbols linked");
-        result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_1_1, process);
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.1.1 symbols linked");
+        result = s_resolve_libcrypto_symbols(AWS_LIBCRYPTO_1_0_2, process);
     }
     if (process) {
         dlclose(process);
     }
 
     if (result == AWS_LIBCRYPTO_NONE) {
-        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.1.1 symbols linked");
+        AWS_LOGF_DEBUG(AWS_LS_CAL_LIBCRYPTO_RESOLVE, "did not find libcrypto 1.0.2 symbols linked");
         AWS_LOGF_DEBUG(
             AWS_LS_CAL_LIBCRYPTO_RESOLVE,
             "libcrypto symbols were not statically linked, searching for shared libraries");
-        result = s_resolve_libcrypto_lib();
+        result = s_resolve_libcrypto_sharedlib();
     }
+
+    s_validate_libcrypto_linkage();
 
     return result;
 }

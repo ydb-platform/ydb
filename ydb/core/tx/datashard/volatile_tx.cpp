@@ -295,9 +295,11 @@ namespace NKikimr::NDataShard {
         for (auto& pr : VolatileTxs) {
             switch (pr.second->State) {
                 case EVolatileTxState::Waiting:
-                    for (ui64 target : pr.second->Participants) {
-                        if (Self->AddExpectation(target, pr.second->Version.Step, pr.second->TxId)) {
-                            Self->SendReadSetExpectation(ctx, pr.second->Version.Step, pr.second->TxId, Self->TabletID(), target);
+                    if (!pr.second->DisableExpectations) {
+                        for (ui64 target : pr.second->Participants) {
+                            if (Self->AddExpectation(target, pr.second->Version.Step, pr.second->TxId)) {
+                                Self->SendReadSetExpectation(ctx, pr.second->Version.Step, pr.second->TxId, Self->TabletID(), target);
+                            }
                         }
                     }
                     break;
@@ -356,6 +358,7 @@ namespace NKikimr::NDataShard {
             info->CommitOrder = details.GetCommitOrder();
             info->CommitOrdered = details.GetCommitOrdered();
             info->IsArbiter = details.GetIsArbiter();
+            info->DisableExpectations = details.GetDisableExpectations();
 
             maxCommitOrder = Max(maxCommitOrder, info->CommitOrder);
 
@@ -515,6 +518,7 @@ namespace NKikimr::NDataShard {
             std::optional<ui64> changeGroup,
             bool commitOrdered,
             bool isArbiter,
+            bool disableExpectations,
             TTransactionContext& txc)
     {
         using Schema = TDataShard::Schema;
@@ -537,6 +541,7 @@ namespace NKikimr::NDataShard {
         info->CommitOrder = NextCommitOrder++;
         info->CommitOrdered = commitOrdered;
         info->IsArbiter = isArbiter;
+        info->DisableExpectations = disableExpectations;
 
         if (info->Participants.empty()) {
             // Transaction is committed when we don't have to wait for other participants
@@ -593,6 +598,9 @@ namespace NKikimr::NDataShard {
         }
         if (info->IsArbiter) {
             details.SetIsArbiter(true);
+        }
+        if (info->DisableExpectations) {
+            details.SetDisableExpectations(true);
         }
 
         db.Table<Schema::TxVolatileDetails>().Key(info->TxId).Update(
@@ -663,7 +671,9 @@ namespace NKikimr::NDataShard {
         }
         for (ui64 shardId : info->Participants) {
             db.Table<Schema::TxVolatileParticipants>().Key(info->TxId, shardId).Delete();
-            Self->RemoveExpectation(shardId, info->TxId);
+            if (!info->DisableExpectations) {
+                Self->RemoveExpectation(shardId, info->TxId);
+            }
         }
         db.Table<Schema::TxVolatileDetails>().Key(info->TxId).Delete();
     }
@@ -899,7 +909,9 @@ namespace NKikimr::NDataShard {
         info->DelayedAcks.push_back(std::move(ack));
         info->DelayedConfirmations.insert(srcTabletId);
 
-        Self->RemoveExpectation(srcTabletId, txId);
+        if (!info->DisableExpectations) {
+            Self->RemoveExpectation(srcTabletId, txId);
+        }
 
         if (info->Participants.empty()) {
             // Move tx to committed.

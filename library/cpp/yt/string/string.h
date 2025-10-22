@@ -148,8 +148,8 @@ TString UnderscoreCaseToCamelCase(TStringBuf str);
 void CamelCaseToUnderscoreCase(TStringBuilderBase* builder, TStringBuf str);
 TString CamelCaseToUnderscoreCase(TStringBuf str);
 
-TString TrimLeadingWhitespaces(TStringBuf str);
-TString Trim(TStringBuf str, TStringBuf whitespaces);
+[[nodiscard]] TStringBuf TrimLeadingWhitespaces(TStringBuf str Y_LIFETIME_BOUND);
+[[nodiscard]] TStringBuf Trim(TStringBuf str Y_LIFETIME_BOUND, TStringBuf whitespaces = " ");
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -168,8 +168,15 @@ struct TCaseInsensitiveStringHasher
     size_t operator()(TStringBuf arg) const;
 };
 
-struct TCaseInsensitiveStringEqualityComparer
+struct TCaseInsensitiveStringEqualComparer
 {
+    using is_transparent = void;
+    bool operator()(TStringBuf lhs, TStringBuf rhs) const;
+};
+
+struct TCaseInsensitiveStringLessComparer
+{
+    using is_transparent = void;
     bool operator()(TStringBuf lhs, TStringBuf rhs) const;
 };
 

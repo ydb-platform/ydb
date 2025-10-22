@@ -93,9 +93,9 @@
                                                                             "Group",
                                                                             "Value"
                                                                         ],
-                                                                        "E-Cost": "No estimate",
-                                                                        "E-Rows": "No estimate",
-                                                                        "E-Size": "No estimate",
+                                                                        "E-Cost": "0",
+                                                                        "E-Rows": "0",
+                                                                        "E-Size": "0",
                                                                         "LookupKeyColumns": [
                                                                             "Group"
                                                                         ],
@@ -176,6 +176,7 @@
                                                 "PlanNodeId": 4,
                                                 "Plans": [
                                                     {
+                                                        "HashFunc": "HashV2",
                                                         "KeyColumns": [
                                                             "Group"
                                                         ],
@@ -208,9 +209,6 @@
                                                                                 "Name": "TableFullScan",
                                                                                 "Path": "/local/base_join_group_by_lookup_script_script/Input1",
                                                                                 "ReadColumns": [
-                                                                                    "Group"
-                                                                                ],
-                                                                                "ReadRanges": [
                                                                                     "Group (-\u221e, +\u221e)",
                                                                                     "Name (-\u221e, +\u221e)"
                                                                                 ],

@@ -58,7 +58,10 @@ public:
 
         auto taskRunner = TaskRunnerFactory(GetAllocatorPtr(), Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);
-        auto wakeupCallback = [this]{ ContinueExecute(EResumeSource::CABootstrapWakeup); };
+        auto selfId = this->SelfId();
+        auto wakeupCallback = [actorSystem, selfId]() {
+            actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        };
         auto errorCallback = [this](const TString& error){ SendError(error); };
         TDqTaskRunnerExecutionContext execCtx(TxId, std::move(wakeupCallback), std::move(errorCallback));
         PrepareTaskRunner(execCtx);

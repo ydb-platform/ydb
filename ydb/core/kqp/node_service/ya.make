@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/library/yql/dq/actors/compute
+    ydb/library/actors/async
 )
 
 YQL_LAST_ABI_VERSION()

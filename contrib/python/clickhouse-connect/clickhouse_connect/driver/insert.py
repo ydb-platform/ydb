@@ -42,8 +42,9 @@ class InsertContext(BaseQueryContext):
                  compression: Optional[Union[str, bool]] = None,
                  query_formats: Optional[Dict[str, str]] = None,
                  column_formats: Optional[Dict[str, Union[str, Dict[str, str]]]] = None,
-                 block_size: Optional[int] = None):
-        super().__init__(settings, query_formats, column_formats)
+                 block_size: Optional[int] = None,
+                 transport_settings: Optional[Dict[str, str]] = None):
+        super().__init__(settings, query_formats, column_formats, transport_settings=transport_settings)
         self.table = table
         self.column_names = column_names
         self.column_types = column_types
@@ -148,19 +149,20 @@ class InsertContext(BaseQueryContext):
         data = []
         for df_col_name, col_name, ch_type in zip(df.columns, self.column_names, self.column_types):
             df_col = df[df_col_name]
-            d_type = str(df_col.dtype)
+            d_type_kind = df_col.dtype.kind
             if ch_type.python_type == int:
-                if 'float' in d_type:
+                if d_type_kind == 'f':
                     df_col = df_col.round().astype(ch_type.base_type, copy=False)
-                else:
-                    df_col = df_col.astype(ch_type.base_type, copy=False)
-            elif 'datetime' in ch_type.np_type and (pd_time_test(df_col) or 'datetime64[ns' in d_type):
+                elif d_type_kind in ('i', 'u') and not df_col.hasnans:
+                    data.append(df_col.to_list())
+                    continue
+            elif 'datetime' in ch_type.np_type and (pd_time_test(df_col) or 'datetime64[ns' in str(df_col.dtype)):
                 div = ch_type.nano_divisor
                 data.append([None if pd.isnull(x) else x.value // div for x in df_col])
                 self.column_formats[col_name] = 'int'
                 continue
             if ch_type.nullable:
-                if d_type == 'object':
+                if d_type_kind == 'O':
                     #  This is ugly, but the multiple replaces seem required as a result of this bug:
                     #  https://github.com/pandas-dev/pandas/issues/29024
                     df_col = df_col.replace({pd.NaT: None}).replace({np.nan: None})

@@ -11,11 +11,11 @@ public:
 
     bool ExecuteSchemeQuery(const TRequestOptions& query) const;
 
-    bool ExecuteScript(const TRequestOptions& script) const;
+    bool ExecuteScript(const TRequestOptions& script, TDuration& duration) const;
 
-    bool ExecuteQuery(const TRequestOptions& query) const;
+    bool ExecuteQuery(const TRequestOptions& query, TDuration& duration) const;
 
-    bool ExecuteYqlScript(const TRequestOptions& query) const;
+    bool ExecuteYqlScript(const TRequestOptions& query, TDuration& duration) const;
 
     void ExecuteQueryAsync(const TRequestOptions& query) const;
 

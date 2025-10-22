@@ -60,7 +60,6 @@ DEFINE_ENUM(EUnknownYsonFieldsMode,
 // Thus we try to avoid the problem when we cannot read
 // a value that was written successfully, i.e. get("//a/@") after set("//a/@x", <deep yson>).
 // See YT-15698.
-constexpr int OriginalNestingLevelLimit = 64;
 constexpr int CypressWriteNestingLevelLimit = 128;
 constexpr int NewNestingLevelLimit = 256;
 

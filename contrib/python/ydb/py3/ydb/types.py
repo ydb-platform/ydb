@@ -32,8 +32,10 @@ def _from_date(x: ydb_value_pb2.Value, table_client_settings: table.TableClientS
     return x.uint32_value
 
 
-def _to_date(pb: ydb_value_pb2.Value, value: typing.Union[date, int]) -> None:
-    if isinstance(value, date):
+def _to_date(pb: ydb_value_pb2.Value, value: typing.Union[date, datetime, int]) -> None:
+    if isinstance(value, datetime):
+        pb.uint32_value = (value.date() - _EPOCH.date()).days
+    elif isinstance(value, date):
         pb.uint32_value = (value - _EPOCH.date()).days
     else:
         pb.uint32_value = value

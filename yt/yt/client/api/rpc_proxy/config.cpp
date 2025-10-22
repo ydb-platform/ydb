@@ -50,6 +50,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Optional();
     registrar.Parameter("enable_proxy_discovery", &TThis::EnableProxyDiscovery)
         .Default(true);
+    registrar.Parameter("proxy_url_aliasing_rules", &TThis::ProxyUrlAliasingRules)
+        .Default();
 
     registrar.Parameter("dynamic_channel_pool", &TThis::DynamicChannelPool)
         .DefaultNew();
@@ -82,6 +84,8 @@ void TConnectionConfig::Register(TRegistrar registrar)
         .Default(TDuration::Minutes(15));
     registrar.Parameter("default_streaming_stall_timeout", &TThis::DefaultStreamingStallTimeout)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("default_chaos_lease_timeout", &TThis::DefaultChaosLeaseTimeout)
+        .Default(TDuration::Seconds(30));
 
     registrar.Parameter("default_ping_period", &TThis::DefaultPingPeriod)
         .Default(TDuration::Seconds(5));
@@ -125,6 +129,9 @@ void TConnectionConfig::Register(TRegistrar registrar)
 
     registrar.Parameter("enable_select_query_tracing_tag", &TThis::EnableSelectQueryTracingTag)
         .Default(false);
+
+    registrar.Parameter("do_not_drop_pure_exclusive_locks", &TThis::DoNotDropPureExclusiveLocks)
+        .Default(true);
 
     registrar.Postprocessor([] (TThis* config) {
         if (!config->ClusterName && config->ClusterUrl) {

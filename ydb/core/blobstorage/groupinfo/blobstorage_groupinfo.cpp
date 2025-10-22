@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/protos/bridge.pb.h>
 
 #include <ydb/library/actors/core/interconnect.h>
 
@@ -633,10 +634,11 @@ TBlobStorageGroupInfo::TDynamicInfo::TDynamicInfo(TGroupId groupId, ui32 groupGe
 ////////////////////////////////////////////////////////////////////////////
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 numVDisksPerFailDomain,
         ui32 numFailDomains, ui32 numFailRealms, const TVector<TActorId> *vdiskIds, EEncryptionMode encryptionMode,
-        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId)
+        ELifeCyclePhase lifeCyclePhase, TCypherKey key, TGroupId groupId, ui32 groupSizeInUnits)
     : GroupID(groupId)
     , GroupGeneration(1)
     , Type(gtype)
+    , GroupSizeInUnits(groupSizeInUnits)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(encryptionMode)
     , LifeCyclePhase(lifeCyclePhase)
@@ -663,10 +665,11 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
     : GroupID(dyn.GroupId)
     , GroupGeneration(dyn.GroupGeneration)
     , Type(topology->GType)
+    , GroupSizeInUnits(groupSizeInUnits)
     , Topology(std::move(topology))
     , Dynamic(std::move(dyn))
     , AcceptedScope(acceptedScope)
@@ -675,9 +678,9 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
 {}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType, ui32 groupSizeInUnits)
     : TBlobStorageGroupInfo(std::make_shared<TTopology>(std::move(topology)), std::move(dyn), std::move(storagePoolName),
-            std::move(acceptedScope), deviceType)
+            std::move(acceptedScope), deviceType, groupSizeInUnits)
 {
     Topology->FinalizeConstruction();
 }
@@ -687,6 +690,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(const TIntrusivePtr<TBlobStorageGro
     : GroupID(vdiskId.GroupID)
     , GroupGeneration(vdiskId.GroupGeneration)
     , Type(info->Type)
+    , GroupSizeInUnits(info->GroupSizeInUnits)
     , Topology(info->Topology)
     , Dynamic(GroupID, GroupGeneration)
     , EncryptionMode(info->EncryptionMode)
@@ -708,7 +712,8 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     auto erasure = (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies();
     TBlobStorageGroupType type(erasure);
     TBlobStorageGroupInfo::TTopology topology(type);
-    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID), group.GetGroupGeneration());
+    TBlobStorageGroupInfo::TDynamicInfo dyn(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetGroupID),
+        group.GetGroupGeneration());
     topology.FailRealms.resize(group.RingsSize());
     for (ui32 ringIdx = 0; ringIdx < group.RingsSize(); ++ringIdx) {
         const auto& realm = group.GetRings(ringIdx);
@@ -742,6 +747,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     if (group.HasDecommitStatus()) {
         res->DecommitStatus = group.GetDecommitStatus();
     }
+    res->GroupSizeInUnits = group.GetGroupSizeInUnits();
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());
@@ -790,9 +796,15 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     }
 
     // parse bridge mode fields
-    for (const auto& groupId : group.GetBridgeGroupIds()) {
-        res->BridgeGroupIds.push_back(TGroupId::FromValue(groupId));
+    if (group.HasBridgeGroupState()) {
+        for (const auto& pile : group.GetBridgeGroupState().GetPile()) {
+           res->BridgeGroupIds.push_back(TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId));
+        }
     }
+    if (group.HasBridgeProxyGroupId()) {
+        res->BridgeProxyGroupId.emplace(TGroupId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgeProxyGroupId));
+    }
+    res->BridgePileId = TBridgePileId::FromProto(&group, &NKikimrBlobStorage::TGroupInfo::GetBridgePileId);
 
     // store original group protobuf it was parsed from
     res->Group.emplace(group);
@@ -964,6 +976,7 @@ TString TBlobStorageGroupInfo::ToString() const {
     str << "{GroupID# " << GroupID;
     str << " GroupGeneration# " << GroupGeneration;
     str << " Type# " << Type.ToString();
+    str << " SizeInUnits# " << GroupSizeInUnits;
     str << " FailRealms# {";
     for (ui32 realmIdx = 0; realmIdx < Topology->FailRealms.size(); ++realmIdx) {
         const TFailRealm& realm = Topology->FailRealms[realmIdx];

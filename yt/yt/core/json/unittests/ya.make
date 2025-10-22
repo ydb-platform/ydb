@@ -6,6 +6,7 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     parser_ut.cpp
+    web_json_consumer_ut.cpp
     writer_ut.cpp
 )
 

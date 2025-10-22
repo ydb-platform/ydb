@@ -30,13 +30,14 @@ namespace NWriter {
             Y_ENSURE(Groups.size() >= 1, "There must be at least one page collection group");
 
             const auto none = NTable::NPage::ECache::None;
+            const auto regular = NTable::NPage::ECacheMode::Regular;
 
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
                 Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
+                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].CacheMode, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
             }
-            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
+            Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex));
 
             Growth = new NTable::TScreen::TCook;
         }

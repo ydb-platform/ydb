@@ -7,6 +7,7 @@
 #include "opaque_path_description.h"
 #include "replica.h"
 
+#include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
@@ -66,6 +67,10 @@ class TReplica: public TMonitorableActor<TReplica> {
     };
 
 public:
+    explicit TReplica(const TIntrusivePtr<TStateStorageInfo>& info)
+        : Info(info)
+    {}
+
     enum ESubscriptionType {
         SUBSCRIPTION_UNSPECIFIED, // for filtration
         SUBSCRIPTION_BY_PATH,
@@ -433,6 +438,10 @@ public:
             }
 
             notify->Record.SetVersion(GetVersion());
+            Y_ABORT_UNLESS(Owner);
+            if (Owner->Info) {
+                TClusterState(Owner->Info.Get()).ToProto(*notify->Record.MutableClusterState());
+            }
 
             if (!IsEmpty() || IsExplicitlyDeleted() || forceStrong) {
                 notify->Record.SetStrong(true);
@@ -1116,7 +1125,7 @@ private:
         }
 
         if (auto cookie = info.ProcessSyncRequest()) {
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
         }
     }
 
@@ -1138,7 +1147,7 @@ private:
                 version = GetVersion(TPathId(record.GetPathOwnerId(), record.GetLocalPathId()));
             }
 
-            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version), 0, ev->Cookie);
+            Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(version, TClusterState(Info.Get())), 0, ev->Cookie);
             return;
         }
 
@@ -1160,7 +1169,7 @@ private:
         auto cookie = info.ProcessSyncRequest();
         Y_ABORT_UNLESS(cookie && *cookie == ev->Cookie);
 
-        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion()), 0, *cookie);
+        Send(ev->Sender, new NInternalEvents::TEvSyncVersionResponse(desc->GetVersion(), TClusterState(Info.Get())), 0, *cookie);
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoRequest::TPtr& ev) {
@@ -1227,6 +1236,14 @@ private:
         Send(ev->Sender, new TSchemeBoardMonEvents::TEvDescribeResponse(json), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr ev) {
+        SBR_LOG_I("Handle " << ev->Get()->ToString());
+
+        Info = ev->Get()->SchemeBoardConfig;
+        Y_ABORT_UNLESS(!ev->Get()->GroupConfig);
+        Y_ABORT_UNLESS(!ev->Get()->BoardConfig);
+    }
+
     void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         const ui32 nodeId = ev->Get()->NodeId;
 
@@ -1250,6 +1267,7 @@ private:
     }
 
     void PassAway() override {
+        SBR_LOG_T("PassAway");
         for (const auto& [_, info] : Populators) {
             if (const auto& actorId = info.PopulatorActor) {
                 Send(actorId, new TEvStateStorage::TEvReplicaShutdown());
@@ -1269,6 +1287,7 @@ public:
     }
 
     void Bootstrap() {
+        SBR_LOG_T("Bootstrap");
         TMonitorableActor::Bootstrap();
         auto localNodeId = SelfId().NodeId();
         auto whiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(localNodeId);
@@ -1290,6 +1309,8 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
             hFunc(TSchemeBoardMonEvents::TEvDescribeRequest, Handle);
 
+            hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
+
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         }
@@ -1300,13 +1321,14 @@ private:
     TDoubleIndexedMap<TString, TPathId, TDescription, TMerger, THashMap, TMap> Descriptions;
     TMap<TActorId, std::variant<TString, TPathId>, TActorId::TOrderedCmp> Subscribers;
     THashMap<ui64, TSet<TActorId>> WaitStrongNotifications;
+    TIntrusivePtr<TStateStorageInfo> Info;
 
 }; // TReplica
 
 } // NSchemeBoard
 
-IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>&, ui32) {
-    return new NSchemeBoard::TReplica();
+IActor* CreateSchemeBoardReplica(const TIntrusivePtr<TStateStorageInfo>& info, ui32) {
+    return new NSchemeBoard::TReplica(info);
 }
 
 } // NKikimr

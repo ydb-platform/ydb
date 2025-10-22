@@ -113,6 +113,12 @@
     "test_ydb_impex.TestImpex.test_import_file_with_bom[tsv-additional_args3-row]": {
         "uri": "file://test_ydb_impex.TestImpex.test_import_file_with_bom_tsv-additional_args3-row_/result.output"
     },
+    "test_ydb_impex.TestImpex.test_import_minimal_parallelism[csv-column]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_minimal_parallelism_csv-column_/result.output"
+    },
+    "test_ydb_impex.TestImpex.test_import_minimal_parallelism[csv-row]": {
+        "uri": "file://test_ydb_impex.TestImpex.test_import_minimal_parallelism_csv-row_/result.output"
+    },
     "test_ydb_impex.TestImpex.test_import_stdin_with_bom[csv-additional_args0-column]": {
         "uri": "file://test_ydb_impex.TestImpex.test_import_stdin_with_bom_csv-additional_args0-column_/result.output"
     },
@@ -289,6 +295,18 @@
     },
     "test_ydb_scheme.TestSchemeDescribe.test_describe_view": {
         "uri": "file://test_ydb_scheme.TestSchemeDescribe.test_describe_view/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_disabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_disabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_enabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_enabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_disabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_disabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_enabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_enabled_/result.output"
     },
     "test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table/result.output"

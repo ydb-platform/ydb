@@ -9,33 +9,44 @@
 
 namespace NSQLHighlight {
 
-    enum class EUnitKind {
-        Keyword,
-        Punctuation,
-        QuotedIdentifier,
-        BindParamterIdentifier,
-        TypeIdentifier,
-        FunctionIdentifier,
-        Identifier,
-        Literal,
-        StringLiteral,
-        Comment,
-        Whitespace,
-        Error,
-    };
+enum class EUnitKind {
+    Keyword,
+    Punctuation,
+    QuotedIdentifier,
+    BindParameterIdentifier,
+    OptionIdentifier,
+    TypeIdentifier,
+    FunctionIdentifier,
+    Identifier,
+    Literal,
+    StringLiteral,
+    Comment,
+    Whitespace,
+    Error,
+};
 
-    struct TUnit {
-        EUnitKind Kind;
-        TVector<NSQLTranslationV1::TRegexPattern> Patterns;
-        TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
-    };
+struct TRangePattern {
+    TString Begin;
+    TString End;
+};
 
-    struct THighlighting {
-        TVector<TUnit> Units;
-    };
+struct TUnit {
+    EUnitKind Kind;
+    TVector<NSQLTranslationV1::TRegexPattern> Patterns;
+    TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+    TMaybe<TRangePattern> RangePattern;
+    bool IsPlain = true;
+    bool IsCodeGenExcluded = false;
+};
 
-    THighlighting MakeHighlighting();
+struct THighlighting {
+    TString Name = "YQL";
+    TString Extension = "yql";
+    TVector<TUnit> Units;
+};
 
-    THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
+THighlighting MakeHighlighting();
+
+THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
 
 } // namespace NSQLHighlight

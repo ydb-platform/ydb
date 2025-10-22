@@ -9,7 +9,7 @@ void IDataTasksProcessor::ITask::DoExecute(const std::shared_ptr<NConveyor::ITas
     if (result.IsFail()) {
         NActors::TActivationContext::AsActorContext().Send(
             OwnerId, new NColumnShard::TEvPrivate::TEvTaskProcessedResult(result, std::move(Guard)));
-    } else {
+    } else if (*result) {
         NActors::TActivationContext::AsActorContext().Send(OwnerId,
             new NColumnShard::TEvPrivate::TEvTaskProcessedResult(static_pointer_cast<IDataTasksProcessor::ITask>(taskPtr), std::move(Guard)));
     }

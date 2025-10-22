@@ -14,6 +14,7 @@ PEERDIR(
     yt/yt/library/profiling/solomon
 
     yt/yt/core
+    yt/yt/core/test_framework
 
     yt/yt/client/federated
     yt/yt/client/unittests/mock

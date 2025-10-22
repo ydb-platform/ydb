@@ -1,5 +1,5 @@
 #include "actor_tracker.h"
-#include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/executor_thread.h>
 #include <ydb/library/actors/core/hfunc.h>
 

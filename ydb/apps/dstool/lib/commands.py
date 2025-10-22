@@ -7,6 +7,7 @@ import ydb.apps.dstool.lib.dstool_cmd_pdisk_list as pdisk_list
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_stop as pdisk_stop
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_restart as pdisk_restart
 import ydb.apps.dstool.lib.dstool_cmd_pdisk_readonly as pdisk_readonly
+import ydb.apps.dstool.lib.dstool_cmd_pdisk_move as pdisk_move
 
 import ydb.apps.dstool.lib.dstool_cmd_vdisk_evict as vdisk_evict
 import ydb.apps.dstool.lib.dstool_cmd_vdisk_list as vdisk_list
@@ -52,13 +53,13 @@ modules = [
     pool_list, pool_create_virtual,
     group_check, group_decommit, group_show_blob_info, group_show_storage_efficiency, group_show_usage_by_tablets,
     group_state, group_take_snapshot, group_add, group_list, group_virtual_create, group_virtual_cancel,
-    pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly,
+    pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly, pdisk_move,
     vdisk_evict, vdisk_list, vdisk_set_read_only, vdisk_remove_donor, vdisk_wipe, vdisk_compact, device_list,
 ]
 
 default_structure = [
     ('device', ['list']),
-    ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list', 'stop', 'restart', 'readonly']),
+    ('pdisk', ['add-by-serial', 'remove-by-serial', 'set', 'list', 'stop', 'restart', 'readonly', 'move']),
     ('vdisk', ['evict', 'list', 'set-read-only', 'remove-donor', 'wipe', 'compact']),
     ('group', ['add', 'check', 'decommit', ('show', ['blob-info', 'storage-efficiency', 'usage-by-tablets']), 'state', 'take-snapshot', 'list', ('virtual', ['create', 'cancel'])]),
     ('pool', ['list', ('create', ['virtual'])]),

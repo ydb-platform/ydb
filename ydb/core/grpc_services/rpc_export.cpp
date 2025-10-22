@@ -50,13 +50,15 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
     }
 
     static bool IsItemSupportedInExport(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindTable) {
-            return true;
+        switch (kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindTable:
+            case NSchemeCache::TSchemeCacheNavigate::KindTopic:
+                return true;
+            case NSchemeCache::TSchemeCacheNavigate::KindView:
+                return AppData()->FeatureFlags.GetEnableViewExport();
+            default:
+                return false;
         }
-        if (kind == NSchemeCache::TSchemeCacheNavigate::KindView) {
-            return AppData()->FeatureFlags.GetEnableViewExport();
-        }
-        return false;
     }
 
     static bool IsLikeDirectory(NSchemeCache::TSchemeCacheNavigate::EKind kind) {
@@ -96,7 +98,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
             exportSettings->clear_items();
             for (const auto& [sourcePath, info] : ExportItems) {
                 auto* item = exportSettings->add_items();
-                item->set_source_path(sourcePath.substr(CommonSourcePath.size() + 1));
+                item->set_source_path(sourcePath);
                 item->set_destination_prefix(info.Destination);
             }
         }
@@ -292,6 +294,7 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
                         // Skip children that we don't want to export
                         if (child.Name.StartsWith("~")
                             || child.Name.StartsWith(".sys")
+                            || child.Name.StartsWith(".tmp")
                             || child.Name.StartsWith(".metadata")
                             || child.Name.StartsWith("export-"))
                         {

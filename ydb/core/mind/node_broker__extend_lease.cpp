@@ -90,6 +90,8 @@ public:
             Self->AddNodeToUpdateNodesLog(node);
             Self->ScheduleProcessSubscribersQueue(ctx);
         }
+
+        Self->UpdateCommittedStateCounters();
     }
 
 private:

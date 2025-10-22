@@ -5,96 +5,111 @@
 
 namespace NSQLComplete {
 
-    namespace {
+namespace {
 
-        class TVisitor: public TSQLv1NarrowingVisitor {
-        public:
-            TVisitor(
-                antlr4::TokenStream* tokens,
-                size_t cursorPosition,
-                const TEnvironment* env)
-                : TSQLv1NarrowingVisitor(tokens, cursorPosition)
-                , Env_(env)
-            {
+class TVisitor: public TSQLv1NarrowingVisitor {
+public:
+    TVisitor(const TParsedInput& input, const TNamedNodes* nodes)
+        : TSQLv1NarrowingVisitor(input)
+        , Nodes_(nodes)
+    {
+    }
+
+    std::any visitSql_stmt_core(SQLv1::Sql_stmt_coreContext* ctx) override {
+        if (ctx->use_stmt() || IsEnclosing(ctx)) {
+            return visitChildren(ctx);
+        }
+        return {};
+    }
+
+    std::any visitUse_stmt(SQLv1::Use_stmtContext* ctx) override {
+        SQLv1::Cluster_exprContext* expr = ctx->cluster_expr();
+        if (!expr) {
+            return {};
+        }
+
+        TMaybe<TClusterContext> cluster = ParseClusterContext(expr, *Nodes_);
+        if (!cluster) {
+            return {};
+        }
+
+        return *cluster;
+    }
+
+private:
+    const TNamedNodes* Nodes_;
+};
+
+class TClusterVisitor: public TSQLv1BaseVisitor {
+public:
+    explicit TClusterVisitor(const TNamedNodes* nodes)
+        : Nodes_(nodes)
+    {
+    }
+
+    std::any visitCluster_expr(SQLv1::Cluster_exprContext* ctx) {
+        std::string provider;
+        std::string cluster;
+
+        if (SQLv1::An_idContext* id = ctx->an_id()) {
+            provider = id->getText();
+        }
+
+        if (SQLv1::Pure_column_or_namedContext* named = ctx->pure_column_or_named()) {
+            if (auto id = GetId(named)) {
+                cluster = std::move(*id);
             }
+        }
 
-            std::any visitSql_stmt_core(SQLv1::Sql_stmt_coreContext* ctx) override {
-                if (ctx->use_stmt() || IsEnclosing(ctx)) {
-                    return visitChildren(ctx);
-                }
-                return {};
-            }
+        if (cluster.empty()) {
+            return {};
+        }
 
-            std::any visitUse_stmt(SQLv1::Use_stmtContext* ctx) override {
-                SQLv1::Cluster_exprContext* expr = ctx->cluster_expr();
-                if (!expr) {
-                    return {};
-                }
-
-                std::string provider;
-                std::string cluster;
-
-                if (SQLv1::An_idContext* ctx = expr->an_id()) {
-                    provider = ctx->getText();
-                }
-
-                if (SQLv1::Pure_column_or_namedContext* ctx = expr->pure_column_or_named()) {
-                    if (auto id = GetId(ctx)) {
-                        cluster = std::move(*id);
-                    }
-                }
-
-                if (cluster.empty()) {
-                    return {};
-                }
-
-                return TUseContext{
-                    .Provider = std::move(provider),
-                    .Cluster = std::move(cluster),
-                };
-            }
-
-            std::any aggregateResult(std::any aggregate, std::any nextResult) override {
-                if (nextResult.has_value()) {
-                    return nextResult;
-                }
-                return aggregate;
-            }
-
-        private:
-            TMaybe<TString> GetId(SQLv1::Pure_column_or_namedContext* ctx) const {
-                if (auto* x = ctx->bind_parameter()) {
-                    return GetId(x);
-                } else if (auto* x = ctx->an_id()) {
-                    return x->getText();
-                } else {
-                    Y_ABORT("You should change implementation according grammar changes");
-                }
-            }
-
-            TMaybe<TString> GetId(SQLv1::Bind_parameterContext* ctx) const {
-                NYT::TNode node = Evaluate(ctx, *Env_);
-                if (!node.HasValue() || !node.IsString()) {
-                    return Nothing();
-                }
-                return node.AsString();
-            }
-
-            const TEnvironment* Env_;
+        return TClusterContext{
+            .Provider = std::move(provider),
+            .Name = std::move(cluster),
         };
+    }
 
-    } // namespace
+private:
+    TMaybe<TString> GetId(SQLv1::Pure_column_or_namedContext* ctx) const {
+        if (auto* x = ctx->bind_parameter()) {
+            return GetId(x);
+        } else if (auto* x = ctx->an_id()) {
+            return x->getText();
+        } else {
+            Y_ABORT("You should change implementation according grammar changes");
+        }
+    }
 
-    TMaybe<TUseContext> FindUseStatement(
-        SQLv1::Sql_queryContext* ctx,
-        antlr4::TokenStream* tokens,
-        size_t cursorPosition,
-        const TEnvironment& env) {
-        std::any result = TVisitor(tokens, cursorPosition, &env).visit(ctx);
-        if (!result.has_value()) {
+    TMaybe<TString> GetId(SQLv1::Bind_parameterContext* ctx) const {
+        NYT::TNode node = Evaluate(ctx, *Nodes_);
+        if (!node.HasValue() || !node.IsString()) {
             return Nothing();
         }
-        return std::any_cast<TUseContext>(result);
+        return node.AsString();
     }
+
+    const TNamedNodes* Nodes_;
+};
+
+} // namespace
+
+TMaybe<TClusterContext> ParseClusterContext(SQLv1::Cluster_exprContext* ctx, const TNamedNodes& nodes) {
+    std::any result = TClusterVisitor(&nodes).visit(ctx);
+    if (!result.has_value()) {
+        return Nothing();
+    }
+    return std::any_cast<TClusterContext>(result);
+}
+
+// TODO(YQL-19747): Use any to maybe conversion function
+TMaybe<TClusterContext> FindUseStatement(TParsedInput input, const TNamedNodes& nodes) {
+    std::any result = TVisitor(input, &nodes).visit(input.SqlQuery);
+    if (!result.has_value()) {
+        return Nothing();
+    }
+    return std::any_cast<TClusterContext>(result);
+}
 
 } // namespace NSQLComplete

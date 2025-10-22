@@ -13,9 +13,10 @@ from clickhouse_connect.driver.asyncclient import AsyncClient
 
 # pylint: disable=too-many-arguments,too-many-locals,too-many-branches
 def create_client(*,
-                  host: str = None,
-                  username: str = None,
+                  host: Optional[str] = None,
+                  username: Optional[str] = None,
                   password: str = '',
+                  access_token: Optional[str] = None,
                   database: str = '__default__',
                   interface: Optional[str] = None,
                   port: int = 0,
@@ -29,7 +30,11 @@ def create_client(*,
 
     :param host: The hostname or IP address of the ClickHouse server. If not set, localhost will be used.
     :param username: The ClickHouse username. If not set, the default ClickHouse user will be used.
+      Should not be set if `access_token` is used.
     :param password: The password for username.
+      Should not be set if `access_token` is used.
+    :param access_token: JWT access token (ClickHouse Cloud feature).
+      Should not be set if `username`/`password` are used.
     :param database:  The default database for the connection. If not set, ClickHouse Connect will use the
      default database for username.
     :param interface: Must be http or https.  Defaults to http, or to https if port is set to 8443 or 443
@@ -71,6 +76,9 @@ def create_client(*,
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
     if dsn:
@@ -90,6 +98,8 @@ def create_client(*,
     if not interface:
         interface = 'https' if use_tls else 'http'
     port = port or default_port(interface, use_tls)
+    if access_token and (username or password != ''):
+        raise ProgrammingError('Cannot use both access_token and username/password')
     if username is None and 'user' in kwargs:
         username = kwargs.pop('user')
     if username is None and 'user_name' in kwargs:
@@ -112,7 +122,8 @@ def create_client(*,
                     if name.startswith('ch_'):
                         name = name[3:]
                     settings[name] = value
-        return HttpClient(interface, host, port, username, password, database, settings=settings, **kwargs)
+        return HttpClient(interface, host, port, username, password, database, access_token,
+                          settings=settings, **kwargs)
     raise ProgrammingError(f'Unrecognized client type {interface}')
 
 
@@ -123,8 +134,8 @@ def default_port(interface: str, secure: bool):
 
 
 async def create_async_client(*,
-                              host: str = None,
-                              username: str = None,
+                              host: Optional[str] = None,
+                              username: Optional[str] = None,
                               password: str = '',
                               database: str = '__default__',
                               interface: Optional[str] = None,
@@ -186,6 +197,9 @@ async def create_async_client(*,
       validity.  This option can be used if using an ssh_tunnel or other indirect means to an ClickHouse server
       where the `host` argument refers to the tunnel or proxy and not the actual ClickHouse server
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
+    :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
+      instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
+      limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
 

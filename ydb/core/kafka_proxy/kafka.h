@@ -70,7 +70,7 @@ public:
 static constexpr TKafkaVersions VersionsNever(0, -1);
 static constexpr TKafkaVersions VersionsAlways(0, Max<TKafkaVersion>());
 
-using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter;
+using TWritableBuf = NKikimr::NRawSocket::TBufferedWriter<>;
 
 namespace NPrivate {
 
@@ -314,6 +314,10 @@ U AsUnsigned(S value) {
     return (value << 1) ^ (value >> Shift);
 }
 
+inline TKafkaRawBytes ToRawBytes(const TString& str) {
+    return TKafkaRawBytes(str.data(), str.size());
+}
+
 
 class TKafkaWritable {
 public:
@@ -407,6 +411,10 @@ public:
     char take(size_t shift);
 
     void skip(size_t length);
+
+    size_t left() const;
+
+    size_t position() const;
 
 private:
     void checkEof(size_t length);

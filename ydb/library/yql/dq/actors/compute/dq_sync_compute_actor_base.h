@@ -54,6 +54,17 @@ protected:
     }
 
     void DoTerminateImpl() override {
+        // we want to log debug output info only for long running (OLAP) tasks
+        if (TaskRunner && TBase::State == NDqProto::COMPUTE_STATE_FAILURE && TBase::RuntimeSettings.CollectFull()) {
+            auto& stats = *TaskRunner->GetStats();
+            if (stats.StartTs && TInstant::Now() - stats.StartTs > TDuration::Seconds(60)) {
+                auto taskRunnerDebugString = TaskRunner->GetOutputDebugString();
+                if (taskRunnerDebugString) {
+                    CA_LOG_E("TaskRunner->Output Debug String: " << taskRunnerDebugString);
+                }
+            }
+        }
+
         TaskRunner.Reset();
     }
 
@@ -102,6 +113,7 @@ protected: //TDqComputeActorChannels::ICalbacks
             Y_ABORT_UNLESS(inputChannel->CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED);
             Y_ABORT_UNLESS(this->Checkpoints);
             const auto& checkpoint = channelData.Proto.GetCheckpoint();
+            auto guard = TBase::BindAllocator();
             inputChannel->Pause(checkpoint);
             this->Checkpoints->RegisterCheckpoint(checkpoint, channelData.Proto.GetChannelId());
         }
@@ -216,6 +228,7 @@ protected:
         limits.OutputChunkMaxSize = this->MemoryLimits.OutputChunkMaxSize;
         limits.ChunkSizeLimit = this->MemoryLimits.ChunkSizeLimit;
         limits.ArrayBufferMinFillPercentage = this->MemoryLimits.ArrayBufferMinFillPercentage;
+        limits.BufferPageAllocSize = this->MemoryLimits.BufferPageAllocSize;
 
         if (!limits.OutputChunkMaxSize) {
             limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;

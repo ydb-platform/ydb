@@ -19,32 +19,40 @@
 namespace NLogin {
 
 struct TLoginProvider::TImpl {
-    THolder<NArgonish::IArgon2Base> ArgonHasher;
+public:
     TLruCache SuccessPasswordsCache;
     TLruCache WrongPasswordsCache;
     std::function<bool()> IsCacheUsed = [] () {return false;};
+    static const THolder<const NArgonish::IArgon2Base> ArgonHasher;
 
+public:
     TImpl() : TImpl([] () {return false;}, {}) {}
 
     TImpl(const std::function<bool()>& isCacheUsed, const TLoginProvider::TCacheSettings& cacheSettings)
         : SuccessPasswordsCache(cacheSettings.SuccessPasswordsCacheCapacity)
         , WrongPasswordsCache(cacheSettings.WrongPasswordsCacheCapacity)
         , IsCacheUsed(isCacheUsed)
-    {
-        ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
-            NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
-            2, // 2-pass computation
-            (1<<11), // 2 mebibytes memory usage (in KiB)
-            1 // number of threads and lanes
-            );
-    }
-    void GenerateKeyPair(TString& publicKey, TString& privateKey);
-    TString GenerateHash(const TString& password);
-    bool VerifyHash(const TString& password, const TString& hash);
+    {}
+
+    void GenerateKeyPair(TString& publicKey, TString& privateKey) const ;
+    TString GenerateHash(const TString& password) const;
+    static bool VerifyHash(const TString& password, const TString& hash);
     bool VerifyHashWithCache(const TLruCache::TKey& key);
+    bool NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult);
+    void UpdateCache(const TLruCache::TKey& key, const bool isSuccessVerifying);
 
     void UpdateCacheSettings(const TLoginProvider::TCacheSettings& cacheSettings);
+
+private:
+    void ClearCache();
 };
+
+const THolder<const NArgonish::IArgon2Base> TLoginProvider::TImpl::ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
+    NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
+    2, // 2-pass computation
+    (1<<11), // 2 mebibytes memory usage (in KiB)
+    1 // number of threads and lanes
+);
 
 TLoginProvider::TLoginProvider()
     : Impl(new TImpl())
@@ -462,34 +470,89 @@ TLoginProvider::TCheckLockOutResponse TLoginProvider::CheckLockOutUser(const TCh
     return response;
 }
 
-TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
-    auto now = std::chrono::system_clock::now();
-    TLoginUserResponse response;
+bool TLoginProvider::NeedVerifyHash(const TLoginUserRequest& request, TPasswordCheckResult* checkResult, TString* passwordHash) {
+    Y_ENSURE(checkResult);
+    Y_ENSURE(passwordHash);
 
+    if (FillUnavailableKey(checkResult)) {
+        return false;
+    }
+
+    if (!request.ExternalAuth) {
+        const auto* sid = GetUserSid(request.User);
+        if (FillInvalidUser(sid, checkResult)) {
+            return false;
+        }
+
+        *passwordHash = sid->PasswordHash;
+        return Impl->NeedVerifyHash({.User = request.User, .Password = request.Password, .Hash = sid->PasswordHash}, checkResult);
+    }
+
+    return false;
+}
+
+bool TLoginProvider::VerifyHash(const TLoginUserRequest& request, const TString& passwordHash) {
+    return TImpl::VerifyHash(request.Password, passwordHash);
+}
+
+void TLoginProvider::UpdateCache(const TLoginUserRequest& request, const TString& passwordHash, const bool isSuccessVerifying) {
+    Impl->UpdateCache({.User = request.User, .Password = request.Password, .Hash = passwordHash}, isSuccessVerifying);
+}
+
+bool TLoginProvider::FillUnavailableKey(TPasswordCheckResult* checkResult) const {
     if (Keys.empty() || Keys.back().PrivateKey.empty()) {
-        response.Status = TLoginUserResponse::EStatus::UNAVAILABLE_KEY;
-        response.Error = "No key to generate token";
+        checkResult->FillUnavailableKey();
+        return true;
+    }
+    return false;
+}
+
+TLoginProvider::TSidRecord* TLoginProvider::GetUserSid(const TString& user) {
+    auto itUser = Sids.find(user);
+    if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
+        return nullptr;
+    }
+    return &(itUser->second);
+}
+
+bool TLoginProvider::FillInvalidUser(const TSidRecord* sid, TPasswordCheckResult* checkResult) const {
+    if (!sid) {
+        checkResult->FillInvalidUser("Invalid user");
+        return true;
+    }
+    return false;
+}
+
+TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request, const TPasswordCheckResult& checkResult) {
+    TLoginUserResponse response;
+    if (checkResult.Status == TLoginUserResponse::EStatus::UNAVAILABLE_KEY) {
+        response.FillUnavailableKey();
+        return response;
+    }
+    if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_USER) {
+        response.FillInvalidUser(checkResult.Error);
+        return response;
+    }
+
+    if (FillUnavailableKey(&response)) {
         return response;
     }
 
     TSidRecord* sid = nullptr;
     if (!request.ExternalAuth) {
-        auto itUser = Sids.find(request.User);
-        if (itUser == Sids.end() || itUser->second.Type != ESidType::USER) {
-            response.Status = TLoginUserResponse::EStatus::INVALID_USER;
-            response.Error = "Invalid user";
+        sid = GetUserSid(request.User);
+        if (FillInvalidUser(sid, &response)) {
             return response;
         }
 
-        sid = &(itUser->second);
-        if (!Impl->VerifyHashWithCache({.User = request.User, .Password = request.Password, .Hash = itUser->second.PasswordHash})) {
-            response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
-            response.Error = "Invalid password";
-            sid->LastFailedLogin = now;
+        if (checkResult.Status == TLoginUserResponse::EStatus::INVALID_PASSWORD) {
+            response.FillInvalidPassword();
+            sid->LastFailedLogin = std::chrono::system_clock::now();
             sid->FailedLoginAttemptCount++;
             return response;
         }
     }
+    Y_ENSURE(!checkResult.Error);
 
     const TKeyRecord& key = Keys.back();
     auto keyId = ToString(key.KeyId);
@@ -497,6 +560,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
     const auto& privateKey = key.PrivateKey;
 
     // encode jwt
+    const auto now = std::chrono::system_clock::now();
     auto expires_at = now + MAX_TOKEN_EXPIRE_TIME;
     if (request.Options.ExpiresAfter != std::chrono::system_clock::duration::zero()) {
         expires_at = std::min(expires_at, now + request.Options.ExpiresAfter);
@@ -532,8 +596,20 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         sid->LastSuccessfulLogin = now;
         sid->FailedLoginAttemptCount = 0;
     }
-
     return response;
+}
+
+TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserRequest& request) {
+    TPasswordCheckResult checkResult;
+    TString passwordHash;
+    if (NeedVerifyHash(request, &checkResult, &passwordHash)) {
+        const auto isSuccessVerifying = VerifyHash(request, passwordHash);
+        UpdateCache(request, passwordHash, isSuccessVerifying);
+        if (!isSuccessVerifying) {
+            checkResult.FillInvalidPassword();
+        }
+    }
+    return LoginUser(request, checkResult);
 }
 
 std::deque<TLoginProvider::TKeyRecord>::iterator TLoginProvider::FindKeyIterator(ui64 keyId) {
@@ -695,7 +771,7 @@ void TLoginProvider::RotateKeys(std::vector<ui64>& keysExpired, std::vector<ui64
     KeysRotationTime = now;
 }
 
-void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& privateKey) {
+void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& privateKey) const {
     static constexpr int bits = 2048;
     publicKey.clear();
     privateKey.clear();
@@ -725,7 +801,7 @@ void TLoginProvider::TImpl::GenerateKeyPair(TString& publicKey, TString& private
     BN_free(bne);
 }
 
-TString TLoginProvider::TImpl::GenerateHash(const TString& password) {
+TString TLoginProvider::TImpl::GenerateHash(const TString& password) const {
     char salt[SALT_SIZE];
     char hash[HASH_SIZE];
     RAND_bytes(reinterpret_cast<unsigned char*>(salt), SALT_SIZE);
@@ -763,39 +839,67 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         hash.size());
 }
 
-bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
-    if (!IsCacheUsed()) {
-        if (SuccessPasswordsCache.Size() > 0) {
-            SuccessPasswordsCache.Clear();
-        }
-        if (WrongPasswordsCache.Size() > 0) {
-            WrongPasswordsCache.Clear();
-        }
-        return VerifyHash(key.Password, key.Hash);
-    }
+bool TLoginProvider::TImpl::NeedVerifyHash(const TLruCache::TKey& key, TPasswordCheckResult* checkResult) {
+    Y_ENSURE(checkResult);
 
-    const auto successCacheIt = SuccessPasswordsCache.Find(key);
-    if (successCacheIt != SuccessPasswordsCache.End()) {
+    if (!IsCacheUsed()) {
+        ClearCache();
         return true;
     }
 
-    const auto wrongCacheIt = WrongPasswordsCache.Find(key);
-    if (wrongCacheIt != WrongPasswordsCache.End()) {
+    if (SuccessPasswordsCache.Find(key) != SuccessPasswordsCache.End()) {
+        checkResult->Status = TLoginUserResponse::EStatus::SUCCESS;
         return false;
     }
 
-    bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
+    if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
+        checkResult->FillInvalidPassword();
+        return false;
+    }
+
+    return true;
+}
+
+void TLoginProvider::TImpl::UpdateCache(const TLruCache::TKey& key, const bool isSuccessVerifying) {
     if (isSuccessVerifying) {
         SuccessPasswordsCache.Insert(key, true);
     } else {
         WrongPasswordsCache.Insert(key, false);
     }
+
+}
+
+bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
+    if (!IsCacheUsed()) {
+        ClearCache();
+        return VerifyHash(key.Password, key.Hash);
+    }
+
+    if (SuccessPasswordsCache.Find(key) != SuccessPasswordsCache.End()) {
+        return true;
+    }
+
+    if (WrongPasswordsCache.Find(key) != WrongPasswordsCache.End()) {
+        return false;
+    }
+
+    const bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
+    UpdateCache(key, isSuccessVerifying);
     return isSuccessVerifying;
 }
 
 void TLoginProvider::TImpl::UpdateCacheSettings(const TCacheSettings& cacheSettings) {
     SuccessPasswordsCache.Resize(cacheSettings.SuccessPasswordsCacheCapacity);
     WrongPasswordsCache.Resize(cacheSettings.WrongPasswordsCacheCapacity);
+}
+
+void TLoginProvider::TImpl::ClearCache() {
+    if (SuccessPasswordsCache.Size() > 0) {
+        SuccessPasswordsCache.Clear();
+    }
+    if (WrongPasswordsCache.Size() > 0) {
+        WrongPasswordsCache.Clear();
+    }
 }
 
 NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {

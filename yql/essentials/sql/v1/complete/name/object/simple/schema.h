@@ -4,26 +4,33 @@
 
 namespace NSQLComplete {
 
-    struct TSplittedPath {
-        TStringBuf Path;
-        TStringBuf NameHint;
-    };
+struct TSplittedPath {
+    TStringBuf Path;
+    TStringBuf NameHint;
+};
 
-    class ISimpleSchema: public TThrRefBase {
-    public:
-        using TPtr = TIntrusivePtr<ISimpleSchema>;
+struct TTableDetails {
+    TVector<TString> Columns;
+};
 
-        virtual ~ISimpleSchema() = default;
+class ISimpleSchema: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<ISimpleSchema>;
 
-        virtual TSplittedPath Split(TStringBuf path) const = 0;
+    ~ISimpleSchema() override = default;
 
-        // TODO(YQL-19747): Deprecated, use List(cluster, folder) instead.
-        virtual NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const;
+    virtual TSplittedPath Split(TStringBuf path) const = 0;
 
-        virtual NThreading::TFuture<TVector<TFolderEntry>>
-        List(TString cluster, TString folder) const;
-    };
+    // TODO(YQL-19747): Deprecated, use List(cluster, folder) instead.
+    virtual NThreading::TFuture<TVector<TFolderEntry>> List(TString folder) const;
 
-    ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple);
+    virtual NThreading::TFuture<TVector<TFolderEntry>>
+    List(TString cluster, TString folder) const;
+
+    virtual NThreading::TFuture<TMaybe<TTableDetails>>
+    DescribeTable(const TString& cluster, const TString& path) const;
+};
+
+ISchema::TPtr MakeSimpleSchema(ISimpleSchema::TPtr simple);
 
 } // namespace NSQLComplete

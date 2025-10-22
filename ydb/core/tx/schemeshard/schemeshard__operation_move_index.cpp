@@ -1,15 +1,13 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
+#include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/mind/hive/hive.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace {
 
@@ -567,30 +565,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
                     << "exists, but overwrite flag has not been set";
                 return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
             }
-            {
-                auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
-                auto operation = indexDropping.MutableDrop();
-                operation->SetName(dstIndex);
-
-                result.push_back(CreateDropTableIndex(NextPartId(nextId, result), indexDropping));
-            }
-
-            for (const auto& [name, pathId]: dstIndexPath.Base()->GetChildren()) {
-                Y_ABORT_UNLESS(context.SS->PathsById.contains(pathId));
-                auto implPath = context.SS->PathsById.at(pathId);
-                if (implPath->Dropped()) {
-                    continue;
-                }
-
-                auto implTable = context.SS->PathsById.at(pathId);
-                Y_ABORT_UNLESS(implTable->IsTable());
-
-                auto implTableDropping = TransactionTemplate(dstIndexPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTable);
-                auto operation = implTableDropping.MutableDrop();
-                operation->SetName(name);
-
-                result.push_back(CreateDropTable(NextPartId(nextId, result), implTableDropping));
-            }
+            AddDropIndex(result, nextId, dstIndexPath);
         }
     }
 
@@ -599,12 +574,16 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId nextId, cons
     for(const auto& implTable : srcIndexPath.Base()->GetChildren()) {
         TString srcImplTableName = implTable.first;
         TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+        if (srcImplTable.IsDeleted()) {
+            continue;
+        }
 
         Y_ABORT_UNLESS(srcImplTable.Base()->PathId == implTable.second);
 
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 
         result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+        AddMoveSequences(nextId, result, srcImplTable, dstImplTable.PathString(), GetLocalSequences(context, srcImplTable));
     }
 
     return result;

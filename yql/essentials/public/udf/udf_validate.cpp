@@ -6,14 +6,14 @@ namespace NYql {
 namespace NUdf {
 
 #define SWITCH_ENUM_TYPE_TO_STR(name, val) \
-    case val: return TStringBuf(#name);
+    case val:                              \
+        return TStringBuf(#name);
 
 TString ValidateModeAvailables() {
     return Join(", ",
-        ValidateModeAsStr(EValidateMode::None),
-        ValidateModeAsStr(EValidateMode::Lazy),
-        ValidateModeAsStr(EValidateMode::Greedy)
-    );
+                ValidateModeAsStr(EValidateMode::None),
+                ValidateModeAsStr(EValidateMode::Lazy),
+                ValidateModeAsStr(EValidateMode::Greedy));
 }
 
 TStringBuf ValidateModeAsStr(EValidateMode validateMode) {
@@ -52,5 +52,16 @@ EValidatePolicy ValidatePolicyByStr(const TString& validatePolicyStr) {
     ythrow yexception() << "Unknown udf validate policy: " << validatePolicyStr;
 }
 
-} // namspace NUdf
-} // namspace NYql
+EValidateDatumMode ToDatumValidateMode(EValidateMode validateMode) {
+    switch (validateMode) {
+        case EValidateMode::None:
+            return EValidateDatumMode::None;
+        case EValidateMode::Lazy:
+            return EValidateDatumMode::Cheap;
+        case EValidateMode::Greedy:
+        case EValidateMode::Max:
+            return EValidateDatumMode::Expensive;
+    }
+}
+} // namespace NUdf
+} // namespace NYql

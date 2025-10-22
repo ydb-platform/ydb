@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+#include <ydb/core/protos/bridge.pb.h>
 #include <ydb/core/protos/metrics.pb.h>
 #include "hive.h"
 
@@ -199,9 +200,10 @@ struct Schema : NIceDb::Schema {
         struct Name : Column<10, NScheme::NTypeIds::String> {};
         struct BecomeUpOnRestart : Column<11, NScheme::NTypeIds::Bool> {};
         struct DrainSeqNo : Column<12, NScheme::NTypeIds::Uint64> { static constexpr bool Default = 0; };
+        struct BridgePileId : Column<13, NScheme::NTypeIds::Uint32> {};
 
         using TKey = TableKey<ID>;
-        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart, DrainSeqNo>;
+        using TColumns = TableColumns<ID, Local, Down, Freeze, ServicedDomains, Statistics, Drain, DrainInitiators, Location, Name, BecomeUpOnRestart, DrainSeqNo, BridgePileId>;
     };
 
     struct TabletCategory : Table<6> {
@@ -319,6 +321,17 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Index, User, Operation, OperationTimestamp>;
     };
 
+    struct BridgePile : Table<22> {
+        struct Id : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct State : Column<2, NScheme::NTypeIds::Uint32> { using Type = NKikimrBridge::TClusterState::EPileState; };
+        struct IsPrimary : Column<3, NScheme::NTypeIds::Bool> {};
+        struct IsPromoted : Column<4, NScheme::NTypeIds::Bool> {};
+        struct Drain : Column<5, NScheme::NTypeIds::Bool> { static constexpr bool Default = false; };
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, State, IsPrimary, IsPromoted, Drain>;
+    };
+
     using TTables = SchemaTables<
                                 State,
                                 Tablet,
@@ -335,7 +348,8 @@ struct Schema : NIceDb::Schema {
                                 BlockedOwner,
                                 TabletOwners,
                                 TabletAvailabilityRestrictions,
-                                OperationsLog
+                                OperationsLog,
+                                BridgePile
                                 >;
     using TSettings = SchemaSettings<
                                     ExecutorLogBatching<true>,

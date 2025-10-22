@@ -21,7 +21,7 @@ void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNo
 
     auto callableInput = input->ChildRef(0);
 
-   
+
     for (size_t i = 1; i < input->ChildrenSize(); ++i) {
         auto maybeLambda = TExprBase(input->ChildRef(i));
         if (!maybeLambda.Maybe<TCoLambda>()) {
@@ -35,7 +35,7 @@ void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNo
 
         if (callableInput->IsList()){
             for (size_t j = 0; j < callableInput->ChildrenSize(); ++j){
-                KqpTableByExprNode[lambda.Args().Arg(j).Ptr()] = KqpTableByExprNode[callableInput->Child(j)];  
+                KqpTableByExprNode[lambda.Args().Arg(j).Ptr()] = KqpTableByExprNode[callableInput->Child(j)];
             }
         } else {
             KqpTableByExprNode[lambda.Args().Arg(0).Ptr()] = KqpTableByExprNode[callableInput.Get()];
@@ -45,16 +45,16 @@ void TKqpColumnStatisticsRequester::PropagateTableToLambdaArgument(const TExprNo
 
 IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     Y_UNUSED(ctx);
-    
+
     output = input;
     auto optLvl = Config->CostBasedOptimizationLevel.Get().GetOrElse(TDqSettings::TDefault::CostBasedOptimizationLevel);
     auto enableColumnStats = Config->FeatureFlags.GetEnableColumnStatistics();
     if (!(optLvl > 0 && enableColumnStats)) {
         return IGraphTransformer::TStatus::Ok;
     }
-    
+
     VisitExprLambdasLast(
-        input, 
+        input,
         [&](const TExprNode::TPtr& input) {
             BeforeLambdas(input) || BeforeLambdasUnmatched(input);
 
@@ -81,7 +81,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
 
     // TODO: Add other statistics, not only COUNT_MIN_SKETCH.
     auto getStatisticsRequest = MakeHolder<NStat::TEvStatistics::TEvGetStatistics>();
-    getStatisticsRequest->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;  
+    getStatisticsRequest->StatType = NKikimr::NStat::EStatType::COUNT_MIN_SKETCH;
 
     for (const auto& [table, columns]: ColumnsByTableName) {
         auto tableMeta = Tables.GetTable(Cluster, table).Metadata;
@@ -123,7 +123,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
             promise.SetValue(NYql::NCommon::ResultFromError<TColumnStatisticsResponse>("can't get column statistics!"));
             return;
         }
-        
+
         THashMap<TString, TOptimizerStatistics::TColumnStatMap> columnStatisticsByTableName;
 
         for (auto&& stat: response.StatResponses) {
@@ -136,7 +136,7 @@ IGraphTransformer::TStatus TKqpColumnStatisticsRequester::DoTransform(TExprNode:
         promise.SetValue(TColumnStatisticsResponse{.ColumnStatisticsByTableName = std::move(columnStatisticsByTableName)});
     };
     auto statServiceId = NStat::MakeStatServiceID(ActorSystem->NodeId);
-    IActor* requestHandler = 
+    IActor* requestHandler =
         new TActorRequestHandler<TRequest, TResponse, TColumnStatisticsResponse>(statServiceId, getStatisticsRequest.Release(), promise, callback);
     ActorSystem
         ->Register(requestHandler, TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
@@ -170,7 +170,7 @@ TFuture<void> TKqpColumnStatisticsRequester::DoGetAsyncFuture(const TExprNode&) 
 
 bool TKqpColumnStatisticsRequester::BeforeLambdas(const TExprNode::TPtr& input) {
     bool matched = true;
-    
+
     if (TKqpTable::Match(input.Get())) {
         KqpTableByExprNode[input.Get()] = input.Get();
     } else if (auto maybeStreamLookup = TExprBase(input).Maybe<TKqpCnStreamLookup>()) {
@@ -194,7 +194,7 @@ bool TKqpColumnStatisticsRequester::BeforeLambdasUnmatched(const TExprNode::TPtr
 }
 
 TMaybe<std::pair<TString, TString>> TKqpColumnStatisticsRequester::GetTableAndColumnNames(const TCoMember& member) {
-    auto exprNode = TExprBase(member).Ptr(); 
+    auto exprNode = TExprBase(member).Ptr();
     if (!KqpTableByExprNode.contains(exprNode) || KqpTableByExprNode[exprNode] == nullptr) {
         return {};
     }
@@ -218,7 +218,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
     ) {
         std::shared_ptr<TOptimizerStatistics> dummyStats = nullptr;
         auto computer = NDq::TPredicateSelectivityComputer(dummyStats, true);
-    
+
         if (TCoFilterBase::Match(input.Get())) {
             computer.Compute(TExprBase(input).Cast<TCoFilterBase>().Lambda().Body());
         } else if (TCoFlatMapBase::Match(input.Get())) {
@@ -236,7 +236,7 @@ bool TKqpColumnStatisticsRequester::AfterLambdas(const TExprNode::TPtr& input) {
         }
 
         auto memberEqualities = computer.GetMemberEqualities();
-        for (const auto& [lhs, rhs]: memberEqualities.Data) {
+        for (const auto& [lhs, rhs]: memberEqualities) {
             auto maybeLhsTableAndColumn = GetTableAndColumnNames(lhs);
             if (!maybeLhsTableAndColumn) {
                 continue;

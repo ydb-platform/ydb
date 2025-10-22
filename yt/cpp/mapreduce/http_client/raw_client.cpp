@@ -425,7 +425,7 @@ void THttpRawClient::UpdateOperationParameters(
     TMutationId mutationId;
     THttpHeader header("POST", "update_op_parameters");
     header.MergeParameters(NRawClient::SerializeParamsForUpdateOperationParameters(operationId, options));
-    RequestWithoutRetry(Context_, mutationId, header);
+    RequestWithoutRetry(Context_, mutationId, header)->GetResponse();
 }
 
 NYson::TYsonString THttpRawClient::GetJob(
@@ -748,6 +748,15 @@ TNode::TListType THttpRawClient::SelectRows(
     return NodeFromYsonString(responseInfo->GetResponse(), ::NYson::EYsonType::ListFragment).AsList();
 }
 
+std::unique_ptr<IOutputStream> THttpRawClient::WriteTable(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options)
+{
+    return NRawClient::WriteTable(Context_, transactionId, path, format, options);
+}
+
 std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     const TTransactionId& transactionId,
     const TRichYPath& path,
@@ -765,6 +774,14 @@ std::unique_ptr<IInputStream> THttpRawClient::ReadTable(
     config.IsHeavy = true;
     auto responseInfo = RequestWithoutRetry(Context_, mutationId, header, /*body*/ {}, config);
     return std::make_unique<NHttpClient::THttpResponseStream>(std::move(responseInfo));
+}
+
+std::unique_ptr<IOutputStream> THttpRawClient::WriteFile(
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TFileWriterOptions& options)
+{
+    return NRawClient::WriteFile(Context_, transactionId, path, options);
 }
 
 std::unique_ptr<IInputStream> THttpRawClient::ReadTablePartition(

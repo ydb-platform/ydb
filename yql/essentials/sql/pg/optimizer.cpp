@@ -10,26 +10,26 @@
 #include <util/generic/scope.h>
 
 #ifdef _WIN32
-#define __restrict
+    #define __restrict
 #endif
 
-#define TypeName PG_TypeName
-#define SortBy PG_SortBy
+#define TypeName PG_TypeName // NOLINT(readability-identifier-naming)
+#define SortBy PG_SortBy     // NOLINT(readability-identifier-naming)
 #undef SIZEOF_SIZE_T
 
 extern "C" {
-Y_PRAGMA_DIAGNOSTIC_PUSH
+    Y_PRAGMA_DIAGNOSTIC_PUSH
 #ifdef _win_
-Y_PRAGMA("GCC diagnostic ignored \"-Wshift-count-overflow\"")
+    Y_PRAGMA("GCC diagnostic ignored \"-Wshift-count-overflow\"")
 #endif
-Y_PRAGMA("GCC diagnostic ignored \"-Wunused-parameter\"")
+    Y_PRAGMA("GCC diagnostic ignored \"-Wunused-parameter\"")
 #include "postgres.h"
 #include "miscadmin.h"
 #include "optimizer/paths.h"
 #include "nodes/print.h"
 #include "utils/selfuncs.h"
 #include "utils/palloc.h"
-Y_PRAGMA_DIAGNOSTIC_POP
+    Y_PRAGMA_DIAGNOSTIC_POP
 }
 
 #undef Min
@@ -42,10 +42,10 @@ namespace NYql {
 namespace {
 
 bool RelationStatsHook(
-    PlannerInfo *root,
-    RangeTblEntry *rte,
+    PlannerInfo* root,
+    RangeTblEntry* rte,
     AttrNumber attnum,
-    VariableStatData *vardata)
+    VariableStatData* vardata)
 {
     Y_UNUSED(root);
     Y_UNUSED(rte);
@@ -58,11 +58,11 @@ bool RelationStatsHook(
 
 Var* MakeVar(int relno, int varno) {
     Var* v = makeNode(Var);
-    v->varno = relno; // table number
+    v->varno = relno;    // table number
     v->varattno = varno; // column number in table
 
     // ?
-    v->vartype = 25; // ?
+    v->vartype = 25;   // ?
     v->vartypmod = -1; // ?
     v->varcollid = 0;
     v->varnosyn = v->varno;
@@ -84,8 +84,8 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
     PathTarget* t = makeNode(PathTarget);
     int maxattno = 0;
     for (int i = 0; i < (int)r.TargetVars.size(); i++) {
-        t->exprs = lappend(t->exprs, MakeVar(relno, i+1));
-        maxattno = i+1;
+        t->exprs = lappend(t->exprs, MakeVar(relno, i + 1));
+        maxattno = i + 1;
     }
     t->width = 8;
 
@@ -103,7 +103,7 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
     rel->pathlist = list_make1(p);
     rel->cheapest_total_path = p;
     rel->relids = bms_add_member(nullptr, rel->relid);
-    rel->attr_needed = (Relids*)palloc0((1+maxattno)*sizeof(Relids));
+    rel->attr_needed = (Relids*)palloc0((1 + maxattno) * sizeof(Relids));
 
     return rel;
 }
@@ -120,14 +120,15 @@ List* MakeRelOptInfoList(const IOptimizer::TInput& input) {
 TPgOptimizer::TPgOptimizer(
     const TInput& input,
     const std::function<void(const TString&)>& log)
-    : Input(input)
-    , Log(log)
+    : Input_(input)
+    , Log_(log)
 {
     get_relation_stats_hook = RelationStatsHook;
 }
 
 TPgOptimizer::~TPgOptimizer()
-{ }
+{
+}
 
 TPgOptimizer::TOutput TPgOptimizer::JoinSearch()
 {
@@ -143,16 +144,16 @@ TPgOptimizer::TOutput TPgOptimizer::JoinSearch()
 }
 
 Var* TPgOptimizer::MakeVar(TVarId varId) {
-    auto*& var = Vars[varId];
+    auto*& var = Vars_[varId];
     return var
-        ? var
-        : (var = ::NYql::MakeVar(std::get<0>(varId), std::get<1>(varId)));
+               ? var
+               : (var = ::NYql::MakeVar(std::get<0>(varId), std::get<1>(varId)));
 }
 
 EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
     EquivalenceClass* eq = makeNode(EquivalenceClass);
 
-    for (auto [relno, varno] : Input.EqClasses[i].Vars) {
+    for (auto [relno, varno] : Input_.EqClasses[i].Vars) {
         EquivalenceMember* m = makeNode(EquivalenceMember);
         m->em_expr = (Expr*)MakeVar(TVarId{relno, varno});
         m->em_relids = bms_add_member(nullptr, relno);
@@ -166,7 +167,7 @@ EquivalenceClass* TPgOptimizer::MakeEqClass(int i) {
 
 List* TPgOptimizer::MakeEqClasses() {
     List* l = nullptr;
-    for (int i = 0; i < (int)Input.EqClasses.size(); i++) {
+    for (int i = 0; i < (int)Input_.EqClasses.size(); i++) {
         l = lappend(l, MakeEqClass(i));
     }
     return l;
@@ -174,17 +175,17 @@ List* TPgOptimizer::MakeEqClasses() {
 
 void TPgOptimizer::LogNode(const TString& prefix, void* node)
 {
-    if (Log) {
+    if (Log_) {
         auto* str = nodeToString(node);
         auto* fmt = pretty_format_node_dump(str);
         pfree(str);
-        Log(TStringBuilder() << prefix << ": " << fmt);
+        Log_(TStringBuilder() << prefix << ": " << fmt);
         pfree(fmt);
     }
 }
 
 IOptimizer::TOutput TPgOptimizer::MakeOutput(Path* path) {
-    TOutput output = {{}, &Input};
+    TOutput output = {{}, &Input_};
     output.Rows = path->rows;
     output.TotalCost = path->total_cost;
     MakeOutputJoin(output, path);
@@ -200,7 +201,7 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
     int relid = -1;
     while ((relid = bms_next_member(path->parent->relids, relid)) >= 0)
-	{
+    {
         node.Rels.emplace_back(relid);
     }
 
@@ -216,21 +217,21 @@ int TPgOptimizer::MakeOutputJoin(TOutput& output, Path* path) {
 
         JoinPath* jpath = (JoinPath*)path;
         switch (jpath->jointype) {
-        case JOIN_INNER:
-            node.Mode = EJoinType::Inner;
-            break;
-        case JOIN_LEFT:
-            node.Mode = EJoinType::Left;
-            break;
-        case JOIN_RIGHT:
-            node.Mode = EJoinType::Right;
-            break;
-        default:
-            YQL_ENSURE(false, "Unsupported join type");
-            break;
+            case JOIN_INNER:
+                node.Mode = EJoinType::Inner;
+                break;
+            case JOIN_LEFT:
+                node.Mode = EJoinType::Left;
+                break;
+            case JOIN_RIGHT:
+                node.Mode = EJoinType::Right;
+                break;
+            default:
+                YQL_ENSURE(false, "Unsupported join type");
+                break;
         }
 
-       YQL_ENSURE(list_length(jpath->joinrestrictinfo) >= 1, "Unsupported joinrestrictinfo len");
+        YQL_ENSURE(list_length(jpath->joinrestrictinfo) >= 1, "Unsupported joinrestrictinfo len");
 
         for (int i = 0; i < list_length(jpath->joinrestrictinfo); i++) {
             RestrictInfo* rinfo = (RestrictInfo*)jpath->joinrestrictinfo->elements[i].ptr_value;
@@ -301,32 +302,32 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
             }
             oe->args = lappend(oe->args, MakeVar(TVarId{relId, varId}));
 
-            RestrictInfos[relId].emplace_back(ri);
+            RestrictInfos_[relId].emplace_back(ri);
         }
         dst.emplace_back(ri);
     }
 }
 
 RelOptInfo* TPgOptimizer::JoinSearchInternal() {
-    RestrictInfos.clear();
-    RestrictInfos.resize(Input.Rels.size()+1);
-    LeftRestriction.clear();
-    LeftRestriction.reserve(Input.Left.size());
-    MakeLeftOrRightRestrictions(LeftRestriction, Input.Left);
-    MakeLeftOrRightRestrictions(RightRestriction, Input.Right);
+    RestrictInfos_.clear();
+    RestrictInfos_.resize(Input_.Rels.size() + 1);
+    LeftRestriction_.clear();
+    LeftRestriction_.reserve(Input_.Left.size());
+    MakeLeftOrRightRestrictions(LeftRestriction_, Input_.Left);
+    MakeLeftOrRightRestrictions(RightRestriction_, Input_.Right);
 
-    List* rels = MakeRelOptInfoList(Input);
+    List* rels = MakeRelOptInfoList(Input_);
     ListCell* l;
 
     int relId = 1;
     foreach (l, rels) {
         RelOptInfo* rel = (RelOptInfo*)lfirst(l);
-        for (auto* ri : RestrictInfos[relId++]) {
+        for (auto* ri : RestrictInfos_[relId++]) {
             rel->joininfo = lappend(rel->joininfo, ri);
         }
     }
 
-    if (Log) {
+    if (Log_) {
         int i = 1;
         foreach (l, rels) {
             LogNode(TStringBuilder() << "Input: " << i++, lfirst(l));
@@ -337,13 +338,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     memset(&root, 0, sizeof(root));
     root.type = T_PlannerInfo;
     root.query_level = 1;
-    root.simple_rel_array_size = rels->length+1;
+    root.simple_rel_array_size = rels->length + 1;
     root.simple_rel_array = (RelOptInfo**)palloc0(
-        root.simple_rel_array_size
-        * sizeof(RelOptInfo*));
+        root.simple_rel_array_size * sizeof(RelOptInfo*));
     root.simple_rte_array = (RangeTblEntry**)palloc0(
-        root.simple_rel_array_size * sizeof(RangeTblEntry*)
-    );
+        root.simple_rel_array_size * sizeof(RangeTblEntry*));
     for (int i = 0; i <= rels->length; i++) {
         root.simple_rte_array[i] = makeNode(RangeTblEntry);
         root.simple_rte_array[i]->rtekind = RTE_RELATION;
@@ -351,7 +350,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     root.all_baserels = bms_add_range(nullptr, 1, rels->length);
     root.eq_classes = MakeEqClasses();
 
-    for (auto* ri : LeftRestriction) {
+    for (auto* ri : LeftRestriction_) {
         root.left_join_clauses = lappend(root.left_join_clauses, ri);
         root.hasJoinRTEs = 1;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->right_relids);
@@ -368,7 +367,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.join_info_list = lappend(root.join_info_list, ji);
     }
 
-    for (auto* ri : RightRestriction) {
+    for (auto* ri : RightRestriction_) {
         root.right_join_clauses = lappend(root.right_join_clauses, ri);
         root.hasJoinRTEs = 1;
         root.outer_join_rels = bms_add_members(root.outer_join_rels, ri->left_relids);
@@ -389,11 +388,11 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
 
     for (int i = 0; i < rels->length; i++) {
         auto* r = (RelOptInfo*)rels->elements[i].ptr_value;
-        root.simple_rel_array[i+1] = r;
+        root.simple_rel_array[i + 1] = r;
     }
 
-    for (int eqId = 0; eqId < (int)Input.EqClasses.size(); eqId++) {
-        for (auto& [relno, _] : Input.EqClasses[eqId].Vars) {
+    for (int eqId = 0; eqId < (int)Input_.EqClasses.size(); eqId++) {
+        for (auto& [relno, _] : Input_.EqClasses[eqId].Vars) {
             root.simple_rel_array[relno]->eclass_indexes = bms_add_member(
                 root.simple_rel_array[relno]->eclass_indexes,
                 eqId);
@@ -401,7 +400,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     }
 
     for (int i = 0; i < rels->length; i++) {
-        root.simple_rel_array[i+1]->has_eclass_joins = bms_num_members(root.simple_rel_array[i+1]->eclass_indexes) > 1;
+        root.simple_rel_array[i + 1]->has_eclass_joins = bms_num_members(root.simple_rel_array[i + 1]->eclass_indexes) > 1;
     }
     root.ec_merging_done = 1;
 
@@ -412,8 +411,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
     return result;
 }
 
-struct TPgOptimizerImpl
-{
+struct TPgOptimizerImpl {
     TPgOptimizerImpl(
         const std::shared_ptr<TJoinOptimizerNode>& root,
         TExprContext& ctx,
@@ -421,7 +419,8 @@ struct TPgOptimizerImpl
         : Root(root)
         , Ctx(ctx)
         , Log(log)
-    { }
+    {
+    }
 
     std::shared_ptr<TJoinOptimizerNode> Do() {
         CollectRels(Root);
@@ -474,8 +473,8 @@ struct TPgOptimizerImpl
 
     int GetVarId(int relId, TStringBuf column) {
         int varId = 0;
-        auto maybeVarId = VarIds[relId-1].find(column);
-        if (maybeVarId != VarIds[relId-1].end()) {
+        auto maybeVarId = VarIds[relId - 1].find(column);
+        if (maybeVarId != VarIds[relId - 1].end()) {
             varId = maybeVarId->second;
         } else {
             varId = Rels[relId - 1].TargetVars.size() + 1;
@@ -487,11 +486,11 @@ struct TPgOptimizerImpl
     }
 
     void ExtractVars(
-        std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& leftVars,
-        std::vector<std::tuple<int,int,TStringBuf,TStringBuf>>& rightVars,
+        std::vector<std::tuple<int, int, TStringBuf, TStringBuf>>& leftVars,
+        std::vector<std::tuple<int, int, TStringBuf, TStringBuf>>& rightVars,
         const std::shared_ptr<TJoinOptimizerNode>& op)
     {
-        for (size_t i=0; i<op->LeftJoinKeys.size(); i++ ) {
+        for (size_t i = 0; i < op->LeftJoinKeys.size(); i++) {
             auto& ltable = op->LeftJoinKeys[i].RelName;
             auto& lcol = op->LeftJoinKeys[i].AttributeName;
             auto& rtable = op->RightJoinKeys[i].RelName;
@@ -531,7 +530,8 @@ struct TPgOptimizerImpl
             auto& [lrelId, lvarId, ltable, lcolumn] = leftVars[i];
             auto& [rrelId, rvarId, rtable, rcolumn] = rightVars[i];
 
-            IOptimizer::TEq eqClass; eqClass.Vars.reserve(2);
+            IOptimizer::TEq eqClass;
+            eqClass.Vars.reserve(2);
             eqClass.Vars.emplace_back(std::make_tuple(lrelId, lvarId));
             eqClass.Vars.emplace_back(std::make_tuple(rrelId, rvarId));
 
@@ -543,18 +543,18 @@ struct TPgOptimizerImpl
     }
 
     bool OnOp(const std::shared_ptr<TJoinOptimizerNode>& op) {
-#define CHECK(A, B)                                                     \
-        if (Y_UNLIKELY(!(A))) {                                         \
-            TIssues issues;                                             \
-            issues.AddIssue(TIssue(B).SetCode(0, NYql::TSeverityIds::S_INFO)); \
-            Ctx.IssueManager.AddIssues(issues);                         \
-            return false;                                               \
-        }
+#define CHECK(A, B)                                                        \
+    if (Y_UNLIKELY(!(A))) {                                                \
+        TIssues issues;                                                    \
+        issues.AddIssue(TIssue(B).SetCode(0, NYql::TSeverityIds::S_INFO)); \
+        Ctx.IssueManager.AddIssues(issues);                                \
+        return false;                                                      \
+    }
 
         if (op->JoinType == InnerJoin) {
             // relId, varId, table, column
-            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars;
-            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> rightVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> rightVars;
 
             ExtractVars(leftVars, rightVars, op);
 
@@ -564,7 +564,7 @@ struct TPgOptimizerImpl
         } else if (op->JoinType == LeftJoin || op->JoinType == RightJoin) {
             CHECK(op->LeftJoinKeys.size() == 1 && op->RightJoinKeys.size() == 1, "Only 1 var per join supported");
 
-            std::vector<std::tuple<int,int,TStringBuf,TStringBuf>> leftVars, rightVars;
+            std::vector<std::tuple<int, int, TStringBuf, TStringBuf>> leftVars, rightVars;
             ExtractVars(leftVars, rightVars, op);
 
             IOptimizer::TEq leftEqClass = MakeEqClass(leftVars);
@@ -593,9 +593,7 @@ struct TPgOptimizerImpl
     {
         if (node->Kind == JoinNodeType) {
             auto op = std::static_pointer_cast<TJoinOptimizerNode>(node);
-            return OnOp(op)
-                && CollectOps(op->LeftArg)
-                && CollectOps(op->RightArg);
+            return OnOp(op) && CollectOps(op->LeftArg) && CollectOps(op->RightArg);
         }
         return true;
     }
@@ -616,20 +614,23 @@ struct TPgOptimizerImpl
         const auto* node = &Result.Nodes[nodeId];
         if (node->Outer == -1 && node->Inner == -1) {
             YQL_ENSURE(node->Rels.size() == 1);
-            auto leaf = Leafs[node->Rels[0]-1];
+            auto leaf = Leafs[node->Rels[0] - 1];
             return leaf;
         } else if (node->Outer != -1 && node->Inner != -1) {
             EJoinKind joinKind;
             switch (node->Mode) {
-            case IOptimizer::EJoinType::Inner:
-                joinKind = InnerJoin; break;
-            case IOptimizer::EJoinType::Left:
-                joinKind = LeftJoin; break;
-            case IOptimizer::EJoinType::Right:
-                joinKind = RightJoin; break;
-            default:
-                YQL_ENSURE(false, "Unsupported join type");
-                break;
+                case IOptimizer::EJoinType::Inner:
+                    joinKind = InnerJoin;
+                    break;
+                case IOptimizer::EJoinType::Left:
+                    joinKind = LeftJoin;
+                    break;
+                case IOptimizer::EJoinType::Right:
+                    joinKind = RightJoin;
+                    break;
+                default:
+                    YQL_ENSURE(false, "Unsupported join type");
+                    break;
             };
 
             auto left = Convert(node->Outer);
@@ -657,8 +658,7 @@ struct TPgOptimizerImpl
                 joinKind,
                 EJoinAlgoType::MapJoin,
                 false,
-                false
-                );
+                false);
         } else {
             YQL_ENSURE(false, "Wrong CBO node");
         }
@@ -684,26 +684,25 @@ struct TPgOptimizerImpl
     IOptimizer::TOutput Result;
 };
 
-class TPgOptimizerNew: public IOptimizerNew
-{
+class TPgOptimizerNew: public IOptimizerNew {
 public:
     TPgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, const std::function<void(const TString&)>& log)
         : IOptimizerNew(pctx)
-        , Ctx(ctx)
-        , Log(log)
-    { }
+        , Ctx_(ctx)
+        , Log_(log)
+    {
+    }
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
-        const std::shared_ptr<TJoinOptimizerNode>& joinTree, 
-        const TOptimizerHints& hints = {}) override
-    {
+        const std::shared_ptr<TJoinOptimizerNode>& joinTree,
+        const TOptimizerHints& hints = {}) override {
         Y_UNUSED(hints);
-        return TPgOptimizerImpl(joinTree, Ctx, Log).Do();
+        return TPgOptimizerImpl(joinTree, Ctx_, Log_).Do();
     }
 
 private:
-    TExprContext& Ctx;
-    std::function<void(const TString&)> Log;
+    TExprContext& Ctx_;
+    std::function<void(const TString&)> Log_;
 };
 
 IOptimizer* MakePgOptimizerInternal(const IOptimizer::TInput& input, const std::function<void(const TString&)>& log)
@@ -716,4 +715,4 @@ IOptimizerNew* MakePgOptimizerNew(IProviderContext& pctx, TExprContext& ctx, con
     return new TPgOptimizerNew(pctx, ctx, log);
 }
 
-} // namespace NYql {
+} // namespace NYql

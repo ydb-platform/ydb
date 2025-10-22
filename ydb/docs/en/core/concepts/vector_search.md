@@ -4,11 +4,14 @@
 
 **Vector search**, also known as [nearest neighbor search](https://en.wikipedia.org/wiki/Nearest_neighbor_search) (NN), is an optimization problem where the goal is to find the nearest vector (or a set of vectors) in a given dataset relative to a specified query vector. The proximity between vectors is determined using distance or similarity metrics.
 
+One common approach, especially for large datasets, is **approximate nearest neighbor (ANN) search**, which allows faster vector retrieval at the cost of potential accuracy trade-offs.
+
+
 Vector search is actively used in the following areas:
 
 * recommendation systems
 * semantic search
-* search for similar images
+* image similarity search
 * anomaly detection
 * classification systems
 

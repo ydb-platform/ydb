@@ -63,7 +63,7 @@ public:
     THoldingFileStorage& GetHoldingFileStorage();
 
     // as above + udf will be scanned and meta info put into UdfIndex
-    TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix, NUdf::ELogLevel logLevel);
+    TUserDataBlock* FreezeUdfNoThrow(const TUserDataKey& key, TString& errorMessage, const TString& customUdfPrefix, NUdf::ELogLevel logLevel, const TStringBuf& alias);
 
     // returns function which will register value in cache after invocation
     NThreading::TFuture<std::function<TUserDataBlock()>> FreezeAsync(const TUserDataKey& key);

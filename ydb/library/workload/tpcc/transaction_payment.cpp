@@ -289,7 +289,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         if (ShouldExit(warehouseResult)) {
             LOG_E("Terminal " << context.TerminalID << " warehouse update failed: "
                 << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " warehouse update failed: "
             << warehouseResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -302,7 +303,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     TResultSetParser warehouseParser(warehouseResult.GetResultSet(0));
     if (!warehouseParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID << " warehouse not found: " << warehouseID << ", session: " << session.GetId());
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
     std::string warehouseName = *warehouseParser.ColumnParser("W_NAME").GetOptionalUtf8();
 
@@ -314,7 +316,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         if (ShouldExit(districtResult)) {
             LOG_E("Terminal " << context.TerminalID << " district update failed: "
                 << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " district update failed: "
             << districtResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -325,7 +328,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     if (!districtParser.TryNextRow()) {
         LOG_E("Terminal " << context.TerminalID << " district not found: W_ID=" << warehouseID
             << ", D_ID=" << districtID << ", session: " << session.GetId());
-        std::quick_exit(1);
+        RequestStop();
+        co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
     }
     std::string districtName = *districtParser.ColumnParser("D_NAME").GetOptionalUtf8();
 
@@ -352,13 +356,14 @@ NThreading::TFuture<TStatus> GetPaymentTask(
     if (RandomNumber(1, 100) <= 60) {
         TString lastName = GetNonUniformRandomLastNameForRun();
 
-        auto customersFuture = GetCustomersByLastName(session, tx, context, warehouseID, districtID, lastName);
+        auto customersFuture = GetCustomersByLastName(session, tx, context, customerWarehouseID, customerDistrictID, lastName);
         auto customersResult = co_await TSuspendWithFuture(customersFuture, context.TaskQueue, context.TerminalID);
         if (!customersResult.IsSuccess()) {
             if (ShouldExit(customersResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customers query failed: "
                     << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customers query failed: "
                 << customersResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -370,20 +375,22 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         auto selectedCustomer = SelectCustomerFromResultSet(customersResult.GetResultSet(0));
         if (!selectedCustomer) {
             LOG_E("Terminal " << context.TerminalID << " no customer found by name: "
-                << warehouseID << ", " << districtID << ", " << lastName << ", session: " << session.GetId());
-            std::quick_exit(1);
+                << customerWarehouseID << ", " << customerDistrictID << ", " << lastName << ", session: " << session.GetId());
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         customer = std::move(*selectedCustomer);
     } else {
         int customerID = GetRandomCustomerID();
 
-        auto customerFuture = GetCustomerById(session, tx, context, warehouseID, districtID, customerID);
+        auto customerFuture = GetCustomerById(session, tx, context, customerWarehouseID, customerDistrictID, customerID);
         auto customerResult = co_await TSuspendWithFuture(customerFuture, context.TaskQueue, context.TerminalID);
         if (!customerResult.IsSuccess()) {
             if (ShouldExit(customerResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer query failed: "
                     << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customer query failed: "
                 << customerResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -393,7 +400,7 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         TResultSetParser customerParser(customerResult.GetResultSet(0));
         if (!customerParser.TryNextRow()) {
             LOG_E("Terminal " << context.TerminalID << " no customer found by id: "
-                << warehouseID << ", " << districtID << ", " << customerID << ", session: " << session.GetId());
+                << customerWarehouseID << ", " << customerDistrictID << ", " << customerID << ", session: " << session.GetId());
         }
         customer = ParseCustomerFromResult(customerParser);
         customer.c_id = customerID;
@@ -414,7 +421,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
             if (ShouldExit(cDataResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer data query failed: "
                     << cDataResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customer data query failed: "
                 << cDataResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -424,8 +432,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         TResultSetParser cDataParser(cDataResult.GetResultSet(0));
         if (!cDataParser.TryNextRow()) {
             LOG_E("Terminal " << context.TerminalID << " customer data not found: " << customer.c_id << ", session: " << session.GetId());
-            std::quick_exit(1);
-            co_return cDataResult;
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         customer.c_data = cDataParser.ColumnParser("C_DATA").GetOptionalUtf8().value_or("");
 
@@ -450,7 +458,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
             if (ShouldExit(updateCustResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer update with data failed: "
                     << updateCustResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customer update with data failed: "
                 << updateCustResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -467,7 +476,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
             if (ShouldExit(updateCustResult)) {
                 LOG_E("Terminal " << context.TerminalID << " customer update failed: "
                     << updateCustResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-                std::quick_exit(1);
+                RequestStop();
+                co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
             }
             LOG_T("Terminal " << context.TerminalID << " customer update failed: "
                 << updateCustResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
@@ -490,7 +500,8 @@ NThreading::TFuture<TStatus> GetPaymentTask(
         if (ShouldExit(historyResult)) {
             LOG_E("Terminal " << context.TerminalID << " history insert failed: "
                 << historyResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());
-            std::quick_exit(1);
+            RequestStop();
+            co_return TStatus(EStatus::CLIENT_INTERNAL_ERROR, NIssue::TIssues());
         }
         LOG_T("Terminal " << context.TerminalID << " history insert failed: "
             << historyResult.GetIssues().ToOneLineString() << ", session: " << session.GetId());

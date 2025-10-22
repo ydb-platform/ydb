@@ -89,6 +89,7 @@
                                                                 "PlanNodeId": 3,
                                                                 "Plans": [
                                                                     {
+                                                                        "HashFunc": "HashV2",
                                                                         "KeyColumns": [
                                                                             "EventDate",
                                                                             "URLHash"
@@ -98,12 +99,24 @@
                                                                         "PlanNodeType": "Connection",
                                                                         "Plans": [
                                                                             {
-                                                                                "Node Type": "Filter-TableRangeScan",
+                                                                                "Node Type": "Aggregate-Filter-TableRangeScan",
                                                                                 "Operators": [
                                                                                     {
+                                                                                        "Aggregation": "{SUM(1)}",
+                                                                                        "GroupBy": "[item.EventDate,item.URLHash]",
                                                                                         "Inputs": [
                                                                                             {
                                                                                                 "InternalOperatorId": 1
+                                                                                            }
+                                                                                        ],
+                                                                                        "Name": "Aggregate",
+                                                                                        "Phase": "Intermediate"
+                                                                                    },
+                                                                                    {
+                                                                                        "Blocks": "True",
+                                                                                        "Inputs": [
+                                                                                            {
+                                                                                                "InternalOperatorId": 2
                                                                                             }
                                                                                         ],
                                                                                         "Name": "Filter",
@@ -115,17 +128,14 @@
                                                                                         "Name": "TableRangeScan",
                                                                                         "Path": "/local/clickbench/plans/column/hits",
                                                                                         "ReadColumns": [
-                                                                                            "EventDate",
+                                                                                            "CounterID [62, 62]",
+                                                                                            "EventDate [15887, 15917]",
                                                                                             "IsRefresh",
                                                                                             "RefererHash",
                                                                                             "TraficSourceID",
                                                                                             "URLHash"
                                                                                         ],
-                                                                                        "ReadRanges": [
-                                                                                            "CounterID [62, 62]",
-                                                                                            "EventDate [15887, 15917]"
-                                                                                        ],
-                                                                                        "ReadRangesExpectedSize": 1,
+                                                                                        "ReadRangesExpectedSize": "1",
                                                                                         "ReadRangesKeys": [
                                                                                             "CounterID",
                                                                                             "EventDate"
@@ -321,28 +331,6 @@
                                                                                                     }
                                                                                                 },
                                                                                                 {
-                                                                                                    "GroupBy": {
-                                                                                                        "Aggregates": [
-                                                                                                            {
-                                                                                                                "Column": {
-                                                                                                                    "Id": 117
-                                                                                                                },
-                                                                                                                "Function": {
-                                                                                                                    "Id": 2
-                                                                                                                }
-                                                                                                            }
-                                                                                                        ],
-                                                                                                        "KeyColumns": [
-                                                                                                            {
-                                                                                                                "Id": 6
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 104
-                                                                                                            }
-                                                                                                        ]
-                                                                                                    }
-                                                                                                },
-                                                                                                {
                                                                                                     "Projection": {
                                                                                                         "Columns": [
                                                                                                             {
@@ -350,9 +338,6 @@
                                                                                                             },
                                                                                                             {
                                                                                                                 "Id": 104
-                                                                                                            },
-                                                                                                            {
-                                                                                                                "Id": 117
                                                                                                             }
                                                                                                         ]
                                                                                                     }

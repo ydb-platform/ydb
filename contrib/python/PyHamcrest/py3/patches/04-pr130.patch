@@ -1,0 +1,11 @@
+--- contrib/python/PyHamcrest/py3/hamcrest/core/core/allof.py   (index)
++++ contrib/python/PyHamcrest/py3/hamcrest/core/core/allof.py   (working tree)
+@@ -25,7 +25,7 @@ class AllOf(BaseMatcher):
+                 found_mismatch = True
+                 if not self.describe_all_mismatches:
+                     break
+-                elif i < len(self.matchers) - 1:
++                elif i < len(self.matchers) - 1 and mismatch_description:
+                     mismatch_description.append_text(' and ')
+         return not found_mismatch
+ 

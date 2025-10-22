@@ -14,7 +14,7 @@
 #include <util/string/join.h>
 
 #if defined(_tsan_enabled_)
-#include <util/system/mutex.h>
+    #include <util/system/mutex.h>
 #endif
 
 namespace NSQLTranslationV1 {
@@ -28,10 +28,10 @@ TMutex SanitizerSQLTranslationMutex;
 using NSQLTranslation::ILexer;
 using NSQLTranslation::MakeDummyLexerFactory;
 
-class TV1Lexer : public ILexer {
+class TV1Lexer: public ILexer {
 public:
     explicit TV1Lexer(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor)
-        : Factory(GetFactory(lexers, ansi, antlr4, flavor))
+        : Factory_(GetFactory(lexers, ansi, antlr4, flavor))
     {
     }
 
@@ -39,7 +39,7 @@ public:
 #if defined(_tsan_enabled_)
         TGuard<TMutex> grd(SanitizerSQLTranslationMutex);
 #endif
-        return Factory->MakeLexer()->Tokenize(query, queryName, onNextToken, issues, maxErrors);
+        return Factory_->MakeLexer()->Tokenize(query, queryName, onNextToken, issues, maxErrors);
     }
 
 private:
@@ -82,14 +82,14 @@ private:
         }
 
         switch (flavor) {
-        case ELexerFlavor::Default: {
-        } break;
-        case ELexerFlavor::Pure: {
-            parts.emplace_back("pure");
-        } break;
-        case ELexerFlavor::Regex: {
-            parts.emplace_back("regex");
-        } break;
+            case ELexerFlavor::Default: {
+            } break;
+            case ELexerFlavor::Pure: {
+                parts.emplace_back("pure");
+            } break;
+            case ELexerFlavor::Regex: {
+                parts.emplace_back("regex");
+            } break;
         }
 
         if (ansi) {
@@ -100,7 +100,7 @@ private:
     }
 
 private:
-    NSQLTranslation::TLexerFactoryPtr Factory;
+    NSQLTranslation::TLexerFactoryPtr Factory_;
 };
 
 } // namespace
@@ -270,10 +270,10 @@ void SplitByStatements(TTokenIterator begin, TTokenIterator end, TVector<TTokenI
     }
 }
 
-}
+} // namespace
 
 bool SplitQueryToStatements(
-    const TString& query, NSQLTranslation::ILexer::TPtr& lexer, 
+    const TString& query, NSQLTranslation::ILexer::TPtr& lexer,
     TVector<TString>& statements, NYql::TIssues& issues, const TString& file,
     bool areBlankSkipped) {
     TParsedTokenList allTokens;
@@ -318,4 +318,4 @@ bool SplitQueryToStatements(
     return true;
 }
 
-} //  namespace NSQLTranslationV1
+} // namespace NSQLTranslationV1

@@ -37,6 +37,10 @@ namespace NKikimr {
             return TKeyBlock();
         }
 
+        static TKeyBlock Inf() {
+            return TKeyBlock(Max<ui64>());
+        }
+
         bool IsSameAs(const TKeyBlock& other) const {
             return TabletId == other.TabletId;
         }

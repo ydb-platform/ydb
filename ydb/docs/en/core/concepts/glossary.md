@@ -102,6 +102,10 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
+### Implicit Transactions {#implicit-transactions}
+
+An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
+
 ### Interactive transactions {#interactive-transaction}
 
 The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
@@ -158,11 +162,12 @@ A **primary index** or **primary key index** is the main data structure used to 
 
 A **secondary index** is an additional data structure used to locate rows in a table, typically when it can't be done efficiently using the [primary index](#primary-index). Unlike the primary index, secondary indexes are managed independently from the main table data. Thus, a table might have multiple secondary indexes for different use cases. {{ ydb-short-name }}'s capabilities in terms of secondary indexes are covered in a separate article [{#T}](secondary_indexes.md). Secondary indexes can be either unique or non-unique.
 
-A special type of **secondary index** is singled out separately - [vector index] (#vector-index).
+A special type of **secondary index** is singled out separately - [vector index](#vector-index).
 
 #### Vector Index {#vector-index}
 
-**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
+**Vector index** is an additional data structure used to speed up the [vector search](vector_search.md) when there is a large amount of data, and the [exact vector search without an index](../yql/reference/udf/list/knn.md) does not perform satisfactorily.
+The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate nearest neighbor search) with vector indexes are described in a separate article [{#T}](../dev/vector-indexes.md).
 
 **Vector index** is distinct from a [secondary index](#secondary-index) as it solves other tasks.
 
@@ -193,7 +198,7 @@ A **system view** is for monitoring the DB status. System views are located in t
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
 
-Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](topic.md).
+Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](datamodel/topic.md).
 
 #### Partition {#partition}
 
@@ -314,7 +319,7 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 ### Access right inheritance {#access-right-inheritance}
 
-**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+**Access rights inheritance** is a mechanism by which [access rights](#access-right) granted on parent [access objects](#access-object) are inherited by child objects in the hierarchical structure of the database. This ensures that permissions granted at a higher level in the hierarchy are applied to all sublevels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
 
 ### Access control list {#access-control-list}
 
@@ -492,7 +497,13 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/index.md#memory-controller).
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/memory_controller_config.md).
+
+### Spilling {#spilling}
+
+**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
+
+For more details on spilling, see [{#T}](spilling.md).
 
 ### Tablet types {#tablet-types}
 

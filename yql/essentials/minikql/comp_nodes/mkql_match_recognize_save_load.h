@@ -8,7 +8,6 @@
 namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 struct TSerializerContext {
-
     TSerializerContext(
         TComputationContext& ctx,
         TType* rowType,
@@ -16,17 +15,18 @@ struct TSerializerContext {
         : Ctx(ctx)
         , RowType(rowType)
         , RowPacker(rowPacker)
-        {}
+    {
+    }
 
-    TComputationContext&    Ctx;
-    TType*                  RowType;
+    TComputationContext& Ctx;
+    TType* RowType;
     const TMutableObjectOverBoxedValue<TValuePackerBoxed>& RowPacker;
 };
 
-template<class>
+template <class>
 inline constexpr bool always_false_v = false;
 
-struct TMrOutputSerializer : TOutputSerializer {
+struct TMrOutputSerializer: TOutputSerializer {
 private:
     enum class TPtrStateMode {
         Saved = 0,
@@ -37,7 +37,8 @@ public:
     TMrOutputSerializer(const TSerializerContext& context, EMkqlStateType stateType, ui32 stateVersion, TComputationContext& ctx)
         : TOutputSerializer(stateType, stateVersion, ctx)
         , Context(context)
-    {} 
+    {
+    }
 
     using TOutputSerializer::Write;
 
@@ -50,7 +51,7 @@ public:
         WriteUnboxedValue(Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), value);
     }
 
-    template<class Type>
+    template <class Type>
     void Write(const TIntrusivePtr<Type>& ptr) {
         bool isValid = static_cast<bool>(ptr);
         WriteBool(Buf, isValid);
@@ -75,7 +76,7 @@ private:
     mutable std::map<std::uintptr_t, std::uintptr_t> Cache;
 };
 
-struct TMrInputSerializer : TInputSerializer {
+struct TMrInputSerializer: TInputSerializer {
 private:
     enum class TPtrStateMode {
         Saved = 0,
@@ -85,7 +86,8 @@ private:
 public:
     TMrInputSerializer(TSerializerContext& context, const NUdf::TUnboxedValue& state)
         : TInputSerializer(state, EMkqlStateType::SIMPLE_BLOB)
-        , Context(context) {    
+        , Context(context)
+    {
     }
 
     using TInputSerializer::Read;
@@ -99,7 +101,7 @@ public:
         value = ReadUnboxedValue(Context.RowPacker.RefMutableObject(Context.Ctx, false, Context.RowType), Context.Ctx);
     }
 
-    template<class Type>
+    template <class Type>
     void Read(TIntrusivePtr<Type>& ptr) {
         bool isValid = Read<bool>();
         if (!isValid) {
@@ -119,10 +121,10 @@ public:
         auto* cachePtr = static_cast<Type*>(it->second);
         ptr = TIntrusivePtr<Type>(cachePtr);
     }
- 
+
 private:
     TSerializerContext& Context;
-    mutable std::map<std::uintptr_t, void *> Cache;
+    mutable std::map<std::uintptr_t, void*> Cache;
 };
 
-} //namespace NKikimr::NMiniKQL::NMatchRecognize 
+} // namespace NKikimr::NMiniKQL::NMatchRecognize

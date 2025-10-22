@@ -43,10 +43,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_QUAD(Upsert, LogEnabled, UseSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig appConfig;
-            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
-            serverSettings.SetAppConfig(appConfig);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
 
@@ -96,11 +94,9 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_QUAD(UpsertEvWriteQueryService, isOlap, useOltpSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig AppConfig;
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
-            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
-
-            TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
+            TKikimrSettings serverSettings;
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
@@ -121,8 +117,6 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
 
-            ss.Clear();
-
             auto result = session.ExecuteQuery(R"(
                 --!syntax_v1
 
@@ -137,8 +131,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         TVector<std::pair<TString, ui64>> regexToMatchCount;
         if (!isOlap) {
             regexToMatchCount = {
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
+                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
+                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
                 {ConstructRegexToCheckLogs("INFO", "DataShard"), 2},
             };
 
@@ -156,8 +150,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         } else {
             regexToMatchCount = {
                 {ConstructRegexToCheckLogs("INFO", "WriteActor"), 3},
-                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2},
-                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2},
+                {ConstructRegexToCheckLogs("DEBUG", "SessionActor"), 2 + 2},
+                {ConstructRegexToCheckLogs("TRACE", "Grpc"), 2 + 2},
                 {ConstructRegexToCheckLogs("INFO", "Executer"),
                  useOltpSink ? 1 : 11}};
 
@@ -236,10 +230,8 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
     Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
         TStringStream ss;
         {
-            NKikimrConfig::TAppConfig AppConfig;
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
-            serverSettings.SetAppConfig(AppConfig);
+            serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);

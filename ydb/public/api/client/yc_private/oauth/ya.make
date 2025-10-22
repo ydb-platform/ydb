@@ -1,4 +1,5 @@
 PROTO_LIBRARY()
+PROTOC_FATAL_WARNINGS()
 
 PY_NAMESPACE(yandex.cloud.priv.oauth.v1)
 

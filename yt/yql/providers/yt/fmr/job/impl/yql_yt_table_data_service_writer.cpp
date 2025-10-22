@@ -11,6 +11,7 @@ TFmrTableDataServiceWriter::TFmrTableDataServiceWriter(
     const TString& tableId,
     const TString& partId,
     ITableDataService::TPtr tableDataService,
+    const TString& columnGroupSpec,
     const TFmrWriterSettings& settings
 )
     : TableId_(tableId),
@@ -18,7 +19,8 @@ TFmrTableDataServiceWriter::TFmrTableDataServiceWriter(
     TableDataService_(tableDataService),
     ChunkSize_(settings.ChunkSize),
     MaxInflightChunks_(settings.MaxInflightChunks),
-    MaxRowWeight_(settings.MaxRowWeight)
+    MaxRowWeight_(settings.MaxRowWeight),
+    ColumnGroupSpec_(GetColumnGroupsFromSpec(columnGroupSpec))
 {
     YQL_ENSURE(MaxRowWeight_ >= ChunkSize_);
 }
@@ -28,8 +30,7 @@ void TFmrTableDataServiceWriter::DoWrite(const void* buf, size_t len) {
 }
 
 void TFmrTableDataServiceWriter::NotifyRowEnd()  {
-    ++CurrentChunkRows_;
-    if (TableContent_.size() >= MaxRowWeight_) {
+    if (TableContent_.size() > MaxRowWeight_) {
         ythrow yexception() << "Current row size: " << TableContent_.size() << " is larger than max row weight: " << MaxRowWeight_;
     }
     if (TableContent_.size() >= ChunkSize_) {
@@ -50,31 +51,44 @@ void TFmrTableDataServiceWriter::DoFlush() {
 }
 
 void TFmrTableDataServiceWriter::PutRows() {
+    auto currentYsonContent = TString(TableContent_.Data(), TableContent_.Size());
+    std::unordered_map<TString, TString> splittedYsonByColumnGroups;
+
+    // Split current yson buffer by column groups
+    auto columnGroupSplitYsonResult = SplitYsonByColumnGroups(currentYsonContent, ColumnGroupSpec_);
+    ui64 recordsCount = columnGroupSplitYsonResult.RecordsCount;
+    CurrentChunkRows_ += recordsCount;
+    splittedYsonByColumnGroups = columnGroupSplitYsonResult.SplittedYsonByColumnGroups;
+
     with_lock(State_->Mutex) {
         State_->CondVar.Wait(State_->Mutex, [&] {
             return State_->CurInflightChunks < MaxInflightChunks_;
         });
-        ++State_->CurInflightChunks;
+        State_->CurInflightChunks += splittedYsonByColumnGroups.size(); // Adding number of keys which we want to put to TableDataService to inflight
     }
-    TString chunkKey = GetTableDataServiceKey(TableId_, PartId_, ChunkCount_);
-    TableDataService_->Put(chunkKey, TString(TableContent_.Data(), TableContent_.Size())).Subscribe(
-        [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
-            std::shared_ptr<TFmrWriterState> state = weakState.lock();
-            if (state) {
-                with_lock(state->Mutex) {
-                    --state->CurInflightChunks;
-                    try {
-                        putFuture.GetValue();
-                    } catch (...) {
-                        if (!state->Exception) {
-                            state->Exception = std::current_exception();
+
+    for (auto& [groupName, columnGroupYsonContent]: splittedYsonByColumnGroups) {
+        auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, PartId_);
+        auto tableDataServiceChunkId = GetTableDataServiceChunkId(ChunkCount_, groupName);
+        TableDataService_->Put(tableDataServiceGroup, tableDataServiceChunkId,columnGroupYsonContent).Subscribe(
+            [weakState = std::weak_ptr(State_)] (const auto& putFuture) mutable {
+                std::shared_ptr<TFmrWriterState> state = weakState.lock();
+                if (state) {
+                    with_lock(state->Mutex) {
+                        --state->CurInflightChunks;
+                        try {
+                            putFuture.GetValue();
+                        } catch (...) {
+                            if (!state->Exception) {
+                                state->Exception = std::current_exception();
+                            }
                         }
+                        state->CondVar.Signal();
                     }
-                    state->CondVar.Signal();
                 }
             }
-        }
-    );
+        );
+    }
     DataWeight_ += TableContent_.Size();
     PartIdChunkStats_.emplace_back(TChunkStats{.Rows = CurrentChunkRows_, .DataWeight = TableContent_.Size()});
     CurrentChunkRows_ = 0;
@@ -83,7 +97,7 @@ void TFmrTableDataServiceWriter::PutRows() {
 }
 
 TTableChunkStats TFmrTableDataServiceWriter::GetStats() {
-    YQL_CLOG(DEBUG, FastMapReduce) << " Finished writing to table data service for table Id: " << TableId_ << " and part Id " << PartId_ ;
+    YQL_CLOG(DEBUG, FastMapReduce) << " Finished writing to table data service for table Id: " << TableId_ << " and part Id " << PartId_;
     return TTableChunkStats{.PartId = PartId_, .PartIdChunkStats = PartIdChunkStats_};
 }
 

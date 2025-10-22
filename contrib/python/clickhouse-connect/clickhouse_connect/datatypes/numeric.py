@@ -1,5 +1,7 @@
 import decimal
-from typing import Union, Type, Sequence, MutableSequence
+from typing import Union, Type, Sequence, MutableSequence, Any
+import struct
+import array
 
 from math import nan, isnan, isinf
 
@@ -72,7 +74,7 @@ class UInt64(IntBase):
     np_type = '<u8'
     python_type = int
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         fmt = self.read_format(ctx)
         if ctx.use_numpy:
             np_type = '<q' if fmt == 'signed' else '<u8'
@@ -80,7 +82,7 @@ class UInt64(IntBase):
         arr_type = 'q' if fmt == 'signed' else 'Q'
         return source.read_array(arr_type, num_rows)
 
-    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext) -> Sequence:
+    def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
         return data_conv.read_nullable_array(source, 'q' if self.read_format(ctx) == 'signed' else 'Q',
                                              num_rows, self._active_null(ctx))
 
@@ -98,8 +100,9 @@ class UInt64(IntBase):
 class BigInt(ClickHouseType, registered=False):
     _signed = True
     valid_formats = 'string', 'native'
+    python_type = int
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         signed = self._signed
         sz = self.byte_size
         column = []
@@ -207,12 +210,86 @@ class Float64(Float):
     np_type = '<f8'
 
 
+class BFloat16(ArrayType):
+    _array_type = "H"
+    python_type = float
+    np_type = "<f4"
+
+    def _write_column_binary(
+        self,
+        column: Sequence[Any],
+        dest: bytearray,
+        ctx: InsertContext,
+    ):
+        if not column:
+            return
+
+        if self.nullable:
+            first = next((x for x in column if x is not None), None)
+            if isinstance(first, float):
+                column = [0 if (x is None or isnan(x) or isinf(x)) else x for x in column]
+            else:
+                column = [0 if x is None else float(x) for x in column]
+        elif not isinstance(column[0], float):
+            column = [float(x) for x in column]
+
+        vals = array.array("H")
+        extend = vals.extend
+        for x in column:
+            bits32 = struct.unpack("<I", struct.pack("<f", x))[0]
+            extend([bits32 >> 16])
+
+        write_array(self._array_type, vals, dest, ctx.column_name)
+
+    def _read_column_binary(
+        self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any
+    ):
+        if ctx.use_numpy:
+            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            return (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+
+        raw = source.read_array(self._array_type, num_rows)
+        return [struct.unpack("<f", struct.pack("<I", v << 16))[0] for v in raw]
+
+    def _read_nullable_column(
+        self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any
+    ):
+        null_map = source.read_bytes(num_rows)
+
+        if ctx.use_numpy:
+            arr16 = numpy_conv.read_numpy_array(source, "<u2", num_rows)
+            floats = (arr16.astype(np.uint32) << np.uint32(16)).view(np.float32)
+            return data_conv.build_nullable_column(
+                floats, null_map, self._active_null(ctx)
+            )
+
+        raw = source.read_array(self._array_type, num_rows)
+        floats = [struct.unpack("<f", struct.pack("<I", v << 16))[0] for v in raw]
+        return data_conv.build_nullable_column(floats, null_map, self._active_null(ctx))
+
+    def _finalize_column(self, column, ctx: QueryContext):
+        if ctx.use_extended_dtypes and self.nullable:
+            return pd.array(column, dtype="Float32")
+        if ctx.use_numpy and not isinstance(column, np.ndarray):
+            return np.array(column, dtype=self.np_type)
+        return column
+
+    def _active_null(self, ctx: QueryContext):
+        if ctx.use_extended_dtypes:
+            return nan
+        if ctx.use_none:
+            return None
+        if ctx.use_numpy:
+            return nan
+        return 0.0
+
+
 class Bool(ClickHouseType):
     np_type = '?'
     python_type = bool
     byte_size = 1
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         column = source.read_bytes(num_rows)
         return [b != 0 for b in column]
 
@@ -243,7 +320,7 @@ class Enum(ClickHouseType):
         val_str = ', '.join(f"'{key}' = {value}" for key, value in zip(escaped_keys, type_def.values))
         self._name_suffix = f'({val_str})'
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         column = source.read_array(self._array_type, num_rows)
         if self.read_format(ctx) == 'int':
             return column
@@ -299,7 +376,7 @@ class Decimal(ClickHouseType):
         self._name_suffix = f'({prec}, {scale})'
         self._array_type = array_type(self.byte_size, True)
 
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         column = source.read_array(self._array_type, num_rows)
         dec = decimal.Decimal
         scale = self.scale
@@ -336,7 +413,7 @@ class Decimal(ClickHouseType):
 
 
 class BigDecimal(Decimal, registered=False):
-    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx):
+    def _read_column_binary(self, source: ByteSource, num_rows: int, _ctx: QueryContext, _read_state: Any):
         dec = decimal.Decimal
         scale = self.scale
         prec = self.prec
@@ -387,3 +464,47 @@ class Decimal128(BigDecimal):
 
 class Decimal256(BigDecimal):
     dec_size = 256
+
+
+class IntervalNanosecond(Int32):
+    pass
+
+
+class IntervalMicrosecond(Int32):
+    pass
+
+
+class IntervalMillisecond(Int32):
+    pass
+
+
+class IntervalSecond(Int32):
+    pass
+
+
+class IntervalMinute(Int32):
+    pass
+
+
+class IntervalHour(Int32):
+    pass
+
+
+class IntervalDay(Int32):
+    pass
+
+
+class IntervalWeek(Int32):
+    pass
+
+
+class IntervalMonth(Int32):
+    pass
+
+
+class IntervalQuarter(Int32):
+    pass
+
+
+class IntervalYear(Int32):
+    pass

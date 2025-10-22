@@ -3,6 +3,7 @@
 #include "accounting_client.h"
 #include "admin_client.h"
 #include "connection.h"
+#include "chaos_client.h"
 #include "cypress_client.h"
 #include "distributed_table_client.h"
 #include "etc_client.h"
@@ -61,6 +62,7 @@ DEFINE_REFCOUNTED_TYPE(IClientBase)
  */
 struct IClient
     : public virtual IClientBase
+    , public IChaosClient
     , public IPrerequisiteClient
     , public ITransactionClient
     , public ITableClient
@@ -87,6 +89,8 @@ struct IClient
     virtual const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() = 0;
 
     virtual TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) = 0;
+
+    virtual const TClientOptions& GetOptions() = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)

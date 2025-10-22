@@ -27,6 +27,8 @@ public:
     // NB: Will be assigned to generic medium.
     explicit TChunkReplicaWithMedium(TChunkReplica replica);
 
+    std::strong_ordering operator<=>(const TChunkReplicaWithMedium& other) const = default;
+
     NNodeTrackerClient::TNodeId GetNodeId() const;
     int GetReplicaIndex() const;
     int GetMediumIndex() const;
@@ -274,7 +276,7 @@ struct TProtoTraits<NChunkClient::TChunkReplicaWithMedium>
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace
+} // namespace NYT
 
 //! A hasher for TChunkIdWithIndex.
 template <>

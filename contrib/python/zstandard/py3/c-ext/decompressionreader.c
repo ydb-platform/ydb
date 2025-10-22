@@ -756,7 +756,7 @@ PyType_Slot ZstdDecompressionReaderSlots[] = {
 };
 
 PyType_Spec ZstdDecompressionReaderSpec = {
-    "zstd.ZstdDecompressionReader",
+    "zstandard.backend_c.ZstdDecompressionReader",
     sizeof(ZstdDecompressionReader),
     0,
     Py_TPFLAGS_DEFAULT,

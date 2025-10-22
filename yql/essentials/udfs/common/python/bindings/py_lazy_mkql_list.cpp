@@ -11,7 +11,6 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
-
 using namespace NKikimr;
 
 namespace NPython {
@@ -28,7 +27,7 @@ static ui64 CalculateIteratorLength(PyObject* iter, const TPyCastContext::TPtr& 
     }
 
     if (PyErr_Occurred()) {
-        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
     }
 
     return length;
@@ -41,7 +40,7 @@ static bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castC
     }
 
     if (PyErr_Occurred()) {
-        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).data());
+        UdfTerminate((TStringBuilder() << castCtx->PyCtx->Pos << GetLastErrorAsString()).c_str());
     }
 
     return false;
@@ -50,9 +49,8 @@ static bool IsIteratorHasItems(PyObject* iter, const TPyCastContext::TPtr& castC
 //////////////////////////////////////////////////////////////////////////////
 // TBaseLazyList
 //////////////////////////////////////////////////////////////////////////////
-template<typename TDerived>
-class TBaseLazyList: public NUdf::TBoxedValue
-{
+template <typename TDerived>
+class TBaseLazyList: public NUdf::TBoxedValue {
     using TListSelf = TBaseLazyList<TDerived>;
 
     class TIterator: public NUdf::TBoxedValue {
@@ -61,7 +59,8 @@ class TBaseLazyList: public NUdf::TBoxedValue
             : CastCtx_(ctx)
             , PyIter_(std::move(pyIter))
             , ItemType_(type)
-        {}
+        {
+        }
 
         ~TIterator() {
             const TPyGilLocker lock;
@@ -77,12 +76,12 @@ class TBaseLazyList: public NUdf::TBoxedValue
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
         bool Next(NUdf::TUnboxedValue& value) override try {
@@ -94,12 +93,12 @@ class TBaseLazyList: public NUdf::TBoxedValue
             }
 
             if (PyErr_Occurred()) {
-                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).data());
+                UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << GetLastErrorAsString()).c_str());
             }
 
             return false;
         } catch (const yexception& e) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
         }
 
     private:
@@ -110,9 +109,9 @@ class TBaseLazyList: public NUdf::TBoxedValue
 
 public:
     TBaseLazyList(
-            const TPyCastContext::TPtr& castCtx,
-            TPyObjectPtr&& pyObject,
-            const NUdf::TType* type)
+        const TPyCastContext::TPtr& castCtx,
+        TPyObjectPtr&& pyObject,
+        const NUdf::TType* type)
         : CastCtx_(castCtx)
         , PyObject_(std::move(pyObject))
         , ItemType_(NUdf::TListTypeInspector(*CastCtx_->PyCtx->TypeInfoHelper, type).GetItemType())
@@ -127,9 +126,8 @@ public:
 private:
     TPyObjectPtr GetIterator() const try {
         return static_cast<const TDerived*>(this)->GetIteratorImpl();
-    }
-    catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+    } catch (const yexception& e) {
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasFastListLength() const override {
@@ -149,12 +147,13 @@ private:
 
         return *Length_;
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasListItems() const override try {
-        if (Length_.Defined())
+        if (Length_.Defined()) {
             return *Length_ > 0;
+        }
 
         const TPyGilLocker lock;
         TPyObjectPtr iter = GetIterator();
@@ -163,9 +162,8 @@ private:
             Length_ = 0;
         }
         return hasItems;
-    }
-    catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+    } catch (const yexception& e) {
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     NUdf::TUnboxedValue GetListIterator() const override try {
@@ -174,7 +172,7 @@ private:
         auto* self = const_cast<TListSelf*>(this);
         return NUdf::TUnboxedValuePod(new TIterator(self->CastCtx_, self->ItemType_, std::move(pyIter)));
     } catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     const NUdf::TOpaqueListRepresentation* GetListRepresentation() const override {
@@ -182,31 +180,27 @@ private:
     }
 
     NUdf::IBoxedValuePtr ReverseListImpl(
-            const NUdf::IValueBuilder& builder) const override
-    {
+        const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr SkipListImpl(
-            const NUdf::IValueBuilder& builder, ui64 count) const override
-    {
+        const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
         Y_UNUSED(count);
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr TakeListImpl(
-            const NUdf::IValueBuilder& builder, ui64 count) const override
-    {
+        const NUdf::IValueBuilder& builder, ui64 count) const override {
         Y_UNUSED(builder);
         Y_UNUSED(count);
         return nullptr;
     }
 
     NUdf::IBoxedValuePtr ToIndexDictImpl(
-            const NUdf::IValueBuilder& builder) const override
-    {
+        const NUdf::IValueBuilder& builder) const override {
         Y_UNUSED(builder);
         return nullptr;
     }
@@ -221,26 +215,28 @@ protected:
 //////////////////////////////////////////////////////////////////////////////
 // TLazyIterable
 //////////////////////////////////////////////////////////////////////////////
-class TLazyIterable: public TBaseLazyList<TLazyIterable>
-{
+class TLazyIterable: public TBaseLazyList<TLazyIterable> {
     using TBase = TBaseLazyList<TLazyIterable>;
+
 public:
     TLazyIterable(
-            const TPyCastContext::TPtr& castCtx,
-            TPyObjectPtr&& pyObject,
-            const NUdf::TType* type)
+        const TPyCastContext::TPtr& castCtx,
+        TPyObjectPtr&& pyObject,
+        const NUdf::TType* type)
         : TBase(castCtx, std::move(pyObject), type)
-    {}
+    {
+    }
 
     TPyObjectPtr GetIteratorImpl() const {
-        if (const  TPyObjectPtr ret = PyObject_GetIter(PyObject_.Get())) {
+        if (const TPyObjectPtr ret = PyObject_GetIter(PyObject_.Get())) {
             return ret;
         }
 
         UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos
-            << "Cannot get iterator from object: "
-            << PyObjectRepr(PyObject_.Get()) << ", error: "
-            << GetLastErrorAsString()).data());
+                                       << "Cannot get iterator from object: "
+                                       << PyObjectRepr(PyObject_.Get()) << ", error: "
+                                       << GetLastErrorAsString())
+                         .c_str());
     }
 
 private:
@@ -259,9 +255,8 @@ private:
             }
         }
         return *Length_;
-    }
-    catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+    } catch (const yexception& e) {
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 
     bool HasListItems() const override try {
@@ -278,32 +273,32 @@ private:
             Length_ = 0;
         }
         return hasItems;
-    }
-    catch (const yexception& e) {
-        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).data());
+    } catch (const yexception& e) {
+        UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << e.what()).c_str());
     }
 };
 
 //////////////////////////////////////////////////////////////////////////////
 // TLazyIterator
 //////////////////////////////////////////////////////////////////////////////
-class TLazyIterator: public TBaseLazyList<TLazyIterator>
-{
+class TLazyIterator: public TBaseLazyList<TLazyIterator> {
     using TBase = TBaseLazyList<TLazyIterator>;
+
 public:
     TLazyIterator(
-            const TPyCastContext::TPtr& castCtx,
-            TPyObjectPtr&& pyObject,
-            const NUdf::TType* type)
+        const TPyCastContext::TPtr& castCtx,
+        TPyObjectPtr&& pyObject,
+        const NUdf::TType* type)
         : TBase(castCtx, std::move(pyObject), type)
         , IteratorDrained_(false)
-    {}
+    {
+    }
 
     TPyObjectPtr GetIteratorImpl() const {
         if (IteratorDrained_) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos <<
-                "Lazy list was build under python iterator. "
-                "Iterator was already used.").data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Lazy list was build under python iterator. "
+                                                                      "Iterator was already used.")
+                             .c_str());
         }
         IteratorDrained_ = true;
         return PyObject_;
@@ -316,14 +311,14 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TLazyGenerator
 //////////////////////////////////////////////////////////////////////////////
-class TLazyGenerator: public TBaseLazyList<TLazyGenerator>
-{
+class TLazyGenerator: public TBaseLazyList<TLazyGenerator> {
     using TBase = TBaseLazyList<TLazyGenerator>;
+
 public:
     TLazyGenerator(
-            const TPyCastContext::TPtr& castCtx,
-            TPyObjectPtr&& pyObject,
-            const NUdf::TType* type)
+        const TPyCastContext::TPtr& castCtx,
+        TPyObjectPtr&& pyObject,
+        const NUdf::TType* type)
         : TBase(castCtx, std::move(pyObject), type)
     {
         // keep ownership of function closure if any
@@ -343,7 +338,7 @@ public:
     TPyObjectPtr GetIteratorImpl() const {
         TPyObjectPtr generator = PyObject_CallObject(PyObject_.Get(), nullptr);
         if (!generator || !PyGen_Check(generator.Get())) {
-            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").data());
+            UdfTerminate((TStringBuilder() << CastCtx_->PyCtx->Pos << "Expected generator as a result of function call").c_str());
         }
         return PyObject_GetIter(generator.Get());
     }
@@ -352,29 +347,28 @@ private:
     TPyObjectPtr Closure_;
 };
 
-} // namspace
-
+} // namespace
 
 NUdf::TUnboxedValue FromPyLazyGenerator(
-        const TPyCastContext::TPtr& castCtx,
-        const NUdf::TType* type,
-        TPyObjectPtr callableObj)
+    const TPyCastContext::TPtr& castCtx,
+    const NUdf::TType* type,
+    TPyObjectPtr callableObj)
 {
     return NUdf::TUnboxedValuePod(new TLazyGenerator(castCtx, std::move(callableObj), type));
 }
 
 NUdf::TUnboxedValue FromPyLazyIterable(
-        const TPyCastContext::TPtr& castCtx,
-        const NUdf::TType* type,
-        TPyObjectPtr iterableObj)
+    const TPyCastContext::TPtr& castCtx,
+    const NUdf::TType* type,
+    TPyObjectPtr iterableObj)
 {
     return NUdf::TUnboxedValuePod(new TLazyIterable(castCtx, std::move(iterableObj), type));
 }
 
 NUdf::TUnboxedValue FromPyLazyIterator(
-        const TPyCastContext::TPtr& castCtx,
-        const NUdf::TType* type,
-        TPyObjectPtr iteratorObj)
+    const TPyCastContext::TPtr& castCtx,
+    const NUdf::TType* type,
+    TPyObjectPtr iteratorObj)
 {
     return NUdf::TUnboxedValuePod(new TLazyIterator(castCtx, std::move(iteratorObj), type));
 }

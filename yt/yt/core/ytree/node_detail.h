@@ -139,8 +139,6 @@ protected:
         bool recursive) final;
 
 private:
-    void ThrowMaxKeyLengthViolated() const;
-
     std::pair<TString, INodePtr> PrepareSetChildOrChildValue(
         INodeFactory* factory,
         const TYPath& path,

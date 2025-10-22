@@ -85,6 +85,12 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
 bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
               const NExternalSource::IExternalSourceFactory::TPtr& factory,
               TString& errStr) {
+
+    if (!factory) {
+        errStr = "Internal error. External source factory is not set, please contact internal support";
+        return false;
+    }
+
     try {
         const auto source = factory->GetOrCreate(desc.GetSourceType());
         source->ValidateExternalDataSource(desc.SerializeAsString());

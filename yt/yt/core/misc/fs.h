@@ -242,6 +242,8 @@ TError AttachFindOutput(TError error, const TString& path);
 //! Returns id of device (major:minor) path belongs to.
 TDeviceId GetDeviceId(const TString& path);
 
+std::optional<TString> FindBinaryPath(const TString& binary);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NFS

@@ -85,6 +85,8 @@ struct TTestEnvOpts {
     ui32 NRings;
     ui32 RingSize;
     ui32 DataCenterCount;
+    ui32 PileCount;
+    ui32 NodesWithoutPDisksCount;
     TNodeTenantsMap Tenants;
     bool UseMirror3dcErasure;
     bool AdvanceCurrentTime;
@@ -92,6 +94,8 @@ struct TTestEnvOpts {
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
     bool EnableDynamicGroups;
+    bool IsBridgeMode;
+    bool EnableSimpleStateStorageConfig;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -107,6 +111,8 @@ struct TTestEnvOpts {
         , NRings(1)
         , RingSize(nodeCount)
         , DataCenterCount(1)
+        , PileCount(0)
+        , NodesWithoutPDisksCount(0)
         , Tenants(tenants)
         , UseMirror3dcErasure(false)
         , AdvanceCurrentTime(false)
@@ -114,6 +120,8 @@ struct TTestEnvOpts {
         , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
         , EnableDynamicGroups(false)
+        , IsBridgeMode(false)
+        , EnableSimpleStateStorageConfig(false)
     {
     }
 
@@ -139,6 +147,13 @@ struct TTestEnvOpts {
 
     TTestEnvOpts& WithDynamicGroups() {
         EnableDynamicGroups = true;
+        return *this;
+    }
+
+    TTestEnvOpts& WithBridgeMode(ui32 pileCount = 2, bool enableSimpleStateStorageConfig = false) {
+        IsBridgeMode = true;
+        PileCount = pileCount;
+        EnableSimpleStateStorageConfig = enableSimpleStateStorageConfig;
         return *this;
     }
 };
@@ -174,6 +189,9 @@ public:
 
     NKikimrCms::TClusterState RequestState(const NKikimrCms::TClusterStateRequest &request = {},
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
+    
+    using TListNodes = ::google::protobuf::RepeatedPtrField< ::Ydb::Maintenance::Node>;
+    TListNodes RequestListNodes();
 
     std::pair<TString, TVector<TString>> ExtractPermissions(const NKikimrCms::TPermissionResponse &response);
 
@@ -320,6 +338,12 @@ public:
         bool dry = false,
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
     NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
+    NKikimrCms::TManageRequestResponse CheckApproveRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK
+    );
 
     NKikimrCms::TPermissionResponse CheckRequest(
         const TString &user,

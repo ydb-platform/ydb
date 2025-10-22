@@ -140,7 +140,7 @@ class TStateStorageMonitoringActor : public TActorBootstrapped<TStateStorageMoni
         for (ui64 cookie = 0, e = replicasList.size(); cookie < e; ++cookie) {
             const TActorId &replica = replicasList[cookie];
             ReplicasInfo.push_back(replica);
-            ctx.Send(replica, new TEvStateStorage::TEvReplicaLookup(TabletID, cookie));
+            ctx.Send(replica, new TEvStateStorage::TEvReplicaLookup(TabletID, cookie, ev->Get()->ClusterStateGeneration, ev->Get()->ClusterStateGuid));
         }
         WaitingForReplicas = ReplicasInfo.size();
 

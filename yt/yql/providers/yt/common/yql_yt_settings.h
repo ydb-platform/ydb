@@ -82,16 +82,17 @@ enum class ERuntimeClusterSelectionMode {
     Force    /* "force" */,
 };
 
+enum class EConvertDynamicTablesToStatic {
+    Disable         /* "disable" */,
+    Join            /* "join" */,
+    All             /* "all" */,
+};
+
 struct TYtSettings {
 private:
-#ifdef YQL_BETTER_CONF_SETTING_API
     static constexpr NCommon::EConfSettingType Static = NCommon::EConfSettingType::Static;
     static constexpr NCommon::EConfSettingType Dynamic = NCommon::EConfSettingType::Dynamic;
     static constexpr NCommon::EConfSettingType StaticPerCluster = NCommon::EConfSettingType::StaticPerCluster;
-#else
-    static constexpr bool Static = false;
-    static constexpr bool Dynamic = true;
-#endif
 public:
 
     using TConstPtr = std::shared_ptr<const TYtSettings>;
@@ -99,21 +100,20 @@ public:
     // should be static, because are used on earlier stages
 
     // static per-cluster
-#ifdef YQL_BETTER_CONF_SETTING_API
     NCommon::TConfSetting<TGUID, StaticPerCluster> ExternalTx;
     NCommon::TConfSetting<TString, StaticPerCluster> TmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> TablesTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> BinaryTmpFolder;
     NCommon::TConfSetting<TString, StaticPerCluster> StaticPool;
+    NCommon::TConfSetting<TString, StaticPerCluster> StaticNetworkProject;
     NCommon::TConfSetting<TString, StaticPerCluster> CoreDumpPath;
-#else
-    NCommon::TConfSetting<TGUID, false, true> ExternalTx;
-    NCommon::TConfSetting<TString, false, true> TmpFolder;
-    NCommon::TConfSetting<TString, false, true> TablesTmpFolder;
-    NCommon::TConfSetting<TString, false, true> BinaryTmpFolder;
-    NCommon::TConfSetting<TString, false, true> StaticPool;
-    NCommon::TConfSetting<TString, false, true> CoreDumpPath;
-#endif
+    NCommon::TConfSetting<bool, StaticPerCluster> JobBlockInput;
+    NCommon::TConfSetting<bool, StaticPerCluster> JobBlockTableContent;
+    NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockInputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockInputSupportedDataTypes;
+    NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
+    NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
+    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -150,6 +150,8 @@ public:
     NCommon::TConfSetting<bool, Static> _ForbidSensitiveDataInOperationSpec;
     NCommon::TConfSetting<NSize::TSize, Static> _LocalTableContentLimit;
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
+    NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
+    NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -207,6 +209,7 @@ public:
     NCommon::TConfSetting<TString, Dynamic> PublishedAutoMerge;
     NCommon::TConfSetting<TString, Dynamic> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, Dynamic> LayerPaths;
+    NCommon::TConfSetting<THashMap<TString, TVector<TString>>, StaticPerCluster> LayerCaches;
     NCommon::TConfSetting<TString, Dynamic> DockerImage;
     NCommon::TConfSetting<NYT::TNode, Dynamic> JobEnv;
     NCommon::TConfSetting<NYT::TNode, Dynamic> OperationSpec;
@@ -269,6 +272,8 @@ public:
     NCommon::TConfSetting<bool, Static> BlockMapJoin;
     NCommon::TConfSetting<NSize::TSize, Static> LookupJoinLimit;
     NCommon::TConfSetting<ui64, Static> LookupJoinMaxRows;
+    NCommon::TConfSetting<EConvertDynamicTablesToStatic, Static> ConvertDynamicTablesToStatic;
+    NCommon::TConfSetting<bool, Static> KeepMergeWithDynamicInput;
     NCommon::TConfSetting<NSize::TSize, Static> EvaluationTableSizeLimit;
     NCommon::TConfSetting<TSet<TString>, Static> DisableOptimizers;
     NCommon::TConfSetting<ui32, Static> MaxInputTables;
@@ -332,13 +337,6 @@ public:
     NCommon::TConfSetting<ui16, Static> MinColumnGroupSize;
     NCommon::TConfSetting<ui16, Static> MaxColumnGroups;
     NCommon::TConfSetting<ui64, Static> ExtendedStatsMaxChunkCount;
-    NCommon::TConfSetting<bool, Static> JobBlockInput;
-    NCommon::TConfSetting<bool, Static> JobBlockTableContent;
-    NCommon::TConfSetting<TSet<TString>, Static> JobBlockInputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, Static> JobBlockInputSupportedDataTypes;
-    NCommon::TConfSetting<EBlockOutputMode, Static> JobBlockOutput;
-    NCommon::TConfSetting<TSet<TString>, Static> JobBlockOutputSupportedTypes;
-    NCommon::TConfSetting<TSet<NUdf::EDataSlot>, Static> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, Static> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, Static> CompactForDistinct;
     NCommon::TConfSetting<bool, Static> DropUnusedKeysFromKeyFilter;
@@ -406,6 +404,7 @@ public:
     ~TYtVersionedConfiguration() = default;
 
     size_t FindNodeVer(const TExprNode& node);
+    void CopyNodeVer(const TExprNode& from, const TExprNode& to);
     void FreezeZeroVersion();
     void PromoteVersion(const TExprNode& node);
     size_t GetLastVersion() const {

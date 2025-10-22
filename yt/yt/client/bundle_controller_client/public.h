@@ -6,6 +6,23 @@
 
 #include <yt/yt/client/object_client/public.h>
 
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYT::NBundleController::NProto {
+
+class TCpuLimits;
+class TMemoryLimits;
+class TInstanceResources;
+class TDefaultInstanceConfig;
+class TInstanceSize;
+class TBundleConfig;
+class TBundleConfigConstraints;
+class TResourceQuota;
+
+} // namespace NYT::NBundleController::NProto
+
+////////////////////////////////////////////////////////////////////////////////
+
 namespace NYT::NBundleControllerClient {
 
 ////////////////////////////////////////////////////////////////////////////////

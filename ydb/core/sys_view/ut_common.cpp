@@ -51,6 +51,10 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     featureFlags.SetEnableExternalDataSources(true);
     featureFlags.SetEnableSparsedColumns(settings.EnableSparsedColumns);
     featureFlags.SetEnableOlapCompression(settings.EnableOlapCompression);
+    featureFlags.SetEnableTableCacheModes(settings.EnableTableCacheModes);
+    if (settings.EnableRealSystemViewPaths) {
+        featureFlags.SetEnableRealSystemViewPaths(*settings.EnableRealSystemViewPaths);
+    }
 
     Settings->SetFeatureFlags(featureFlags);
 
@@ -64,6 +68,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
     *appConfig.MutableFeatureFlags() = Settings->FeatureFlags;
     appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
     appConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(settings.AlterObjectEnabled);
+    appConfig.MutableTableServiceConfig()->SetEnableTempTablesForUser(true);
     Settings->SetAppConfig(appConfig);
 
     for (ui32 i : xrange(settings.StoragePools)) {

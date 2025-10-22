@@ -26,6 +26,7 @@ public:
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() override;
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
+    const TClientOptions& GetOptions() override;
 
     // Transactions.
     NApi::ITransactionPtr AttachTransaction(
@@ -125,6 +126,7 @@ public:
         const std::vector<NYPath::TYPath>& movableTables,
         const NApi::TBalanceTabletCellsOptions& options) override;
 
+    // Chaos.
     TFuture<NChaosClient::TReplicationCardPtr> GetReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TGetReplicationCardOptions& options = {}) override;
@@ -136,6 +138,13 @@ public:
     TFuture<void> AlterReplicationCard(
         NChaosClient::TReplicationCardId replicationCardId,
         const TAlterReplicationCardOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> AttachChaosLease(
+        NChaosClient::TChaosLeaseId chaosLeaseId,
+        const TChaosLeaseAttachOptions& options = {}) override;
+
+    TFuture<NApi::IPrerequisitePtr> StartChaosLease(
+        const TChaosLeaseStartOptions& options = {}) override;
 
     // Distributed table client
     TFuture<ITableFragmentWriterPtr> CreateTableFragmentWriter(
@@ -197,7 +206,7 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+    TFuture<TGetCurrentUserResult> GetCurrentUser(
         const TGetCurrentUserOptions& options) override;
 
     TFuture<void> AddMember(
@@ -302,6 +311,10 @@ public:
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobFailContextOptions& options) override;
+
+    TFuture<std::vector<TOperationEvent>> ListOperationEvents(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const TListOperationEventsOptions& options) override;
 
     TFuture<NApi::TListOperationsResult> ListOperations(
         const NApi::TListOperationsOptions& options) override;
@@ -515,6 +528,9 @@ public:
 
     TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(
         const TGetQueryTrackerInfoOptions& options = {}) override;
+
+    TFuture<TGetQueryDeclaredParametersInfoResult> GetQueryDeclaredParametersInfo(
+        const TGetQueryDeclaredParametersInfoOptions& options = {}) override;
 
     // Authentication
 

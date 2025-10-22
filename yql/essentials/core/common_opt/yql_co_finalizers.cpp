@@ -297,14 +297,23 @@ bool AllConsumersAreUnordered(const TExprNode::TPtr& node, const TParentsMap& pa
     return true;
 }
 
-bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
-    static const char optName[] = "UnorderedOverSortImproved";
-    YQL_ENSURE(optCtx.Types);
-    const bool optEnabled = !IsOptimizerDisabled<optName>(*optCtx.Types);
-    if (!optEnabled) {
+bool AllConsumersAreMembers(const TExprNode::TPtr& node, const TParentsMap& parents, TNodeSet& memberConsumers) {
+    auto it = parents.find(node.Get());
+    if (it == parents.cend() || it->second.empty()) {
         return false;
     }
 
+    for (auto parent : it->second) {
+        if (!TCoMember::Match(parent)) {
+            return false;
+        }
+        memberConsumers.insert(parent);
+    }
+
+    return true;
+}
+
+bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
     if (!node->IsCallable({"Sort", "AssumeSorted", "TopSort"})) {
         return false;
     }
@@ -324,6 +333,81 @@ bool OptimizeForUnorderedConsumers(const TExprNode::TPtr& node, TNodeOnNodeOwned
 
     YQL_CLOG(DEBUG, Core) << "Droping sort due to unordered consumers for " << node->Content();
     return true;
+}
+
+void OptimizeForMemberConsumers(const TCoFlatMapBase& self, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    auto maybeAsStruct = self.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
+    if (!maybeAsStruct) {
+        return;
+    }
+
+    YQL_ENSURE(optCtx.ParentsMap);
+    const auto& parentsMap = *optCtx.ParentsMap;
+    TNodeSet memberConsumers;
+    if (!AllConsumersAreMembers(self.Ptr(), parentsMap, memberConsumers)) {
+        return;
+    }
+
+    TMap<TStringBuf, TExprNode::TPtr> structItems;
+    for (auto item : maybeAsStruct.Cast().Ref().ChildrenList()) {
+        TCoNameValueTuple tuple(item);
+        structItems[tuple.Name().Value()] = tuple.Value().Cast().Ptr();
+    }
+
+    TNodeSet restMembers;
+    size_t separableMembersCount = 0;
+    for (auto memberNode : memberConsumers) {
+        TCoMember member(memberNode);
+        auto name = member.Name().Value();
+        auto it = structItems.find(name);
+        YQL_ENSURE(it != structItems.end());
+
+        TExprNode::TPtr entry = it->second;
+        if (IsDepended(*entry, self.Lambda().Args().Arg(0).Ref())) {
+            restMembers.insert(memberNode);
+        } else {
+            ++separableMembersCount;
+            toOptimize[memberNode] = ctx.Builder(memberNode->Pos())
+                .Callable(self.CallableName())
+                    .Add(0, self.Input().Ptr())
+                    .Lambda(1)
+                        .Param("unused")
+                        .Add(0, ctx.WrapByCallableIf(!entry->GetTypeAnn()->IsOptionalOrNull(), "Just", std::move(entry)))
+                    .Seal()
+                .Seal()
+                .Build();
+            structItems.erase(it);
+        }
+    }
+
+    if (separableMembersCount && !restMembers.empty()) {
+        auto restBody = ctx.Builder(self.Lambda().Body().Pos())
+            .Callable("Just")
+                .Callable(0, "AsStruct")
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 i = 0U;
+                        for (const auto& [name, value] : structItems) {
+                            parent.List(i)
+                                .Atom(0, name)
+                                .Add(1, value)
+                            .Seal();
+                            ++i;
+                        }
+                        return parent;
+                    })
+                .Seal()
+            .Seal()
+            .Build();
+        auto restFlatMap = ctx.ChangeChild(self.Ref(), TCoFlatMapBase::idx_Lambda,
+            ctx.DeepCopyLambda(*ctx.ChangeChild(self.Lambda().Ref(), TCoLambda::idx_Body, std::move(restBody))));
+        for (auto restMember : restMembers) {
+            toOptimize[restMember] = ctx.ChangeChild(*restMember, TCoMember::idx_Struct, TExprNode::TPtr(restFlatMap));
+        }
+    }
+
+    if (separableMembersCount) {
+        YQL_CLOG(DEBUG, Core) << separableMembersCount << " separable Members and " << restMembers.size() << " non separable over " << self.CallableName();
+    }
 }
 
 }
@@ -359,20 +443,12 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
-    map[TCoSkipNullMembers::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map[TCoFilterNullMembers::CallableName()] =
+    map[TCoSkipNullMembers::CallableName()] =
+    [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
-            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
-                return ApplyExtractMembersToSkipNullMembers(input, members, ctx, " with multi-usage");
-            }
-        );
-
-        return true;
-    };
-
-    map[TCoFilterNullMembers::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
-        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
-            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
-                return ApplyExtractMembersToFilterNullMembers(input, members, ctx, " with multi-usage");
+            [&] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
+                return ApplyExtractMembersToFilterSkipNullMembers(input, members, ctx, " with multi-usage");
             }
         );
 
@@ -385,6 +461,10 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
                 return ApplyExtractMembersToFlatMap(input, members, ctx, " with multi-usage");
             }
         );
+
+        if (toOptimize.empty() && TCoFlatMapBase::Match(node.Get())) {
+            OptimizeForMemberConsumers(TCoFlatMapBase(node), toOptimize, ctx, optCtx);
+        }
 
         return true;
     };
@@ -457,7 +537,12 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         return true;
     };
 
-    map[TCoPartitionByKey::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map[TCoPartitionByKey::CallableName()] = map[TCoPartitionsByKeys::CallableName()] =
+        [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx)
+    {
+        if (node->IsCallable(TCoPartitionsByKeys::CallableName()) && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
+            return true;
+        }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap&, TExprContext& ctx) {
                 return ApplyExtractMembersToPartitionByKey(input, members, ctx, " with multi-usage");

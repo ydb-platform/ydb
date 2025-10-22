@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/events.h>
@@ -8,16 +9,18 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/util/should_continue.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/threading/future/future.h>
 
 #include <util/datetime/base.h>
 #include <util/folder/tempdir.h>
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
+#include <util/generic/function.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
@@ -32,6 +35,7 @@
 #include <utility>
 
 #include <functional>
+#include <type_traits>
 
 const TDuration DEFAULT_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(
         NValgrind::PlainOrUnderValgrind(TDuration::Seconds(60), TDuration::Seconds(120)),
@@ -74,6 +78,11 @@ namespace NActors {
             , Hint(hint)
         {
         }
+
+        TEventMailboxId(const TActorId& actorId)
+            : NodeId(actorId.NodeId())
+            , Hint(actorId.Hint())
+        {}
 
         bool operator<(const TEventMailboxId& other) const {
             return (NodeId < other.NodeId) || (NodeId == other.NodeId) && (Hint < other.Hint);
@@ -232,6 +241,25 @@ namespace NActors {
     struct TTestEventObserverTraits<TEventHandle<TEvType>>
         : public TTestEventObserverTraits<TEvType>
     {};
+
+    class TFunctorActor: public TActorBootstrapped<TFunctorActor> {
+    public:
+        TFunctorActor(std::function<void()> func, TActorId edgeActor)
+            : Func(std::move(func))
+            , EdgeActor(edgeActor)
+        {
+        }
+
+        void Bootstrap() {
+            Func();
+            Send(EdgeActor, new TEvents::TEvWakeup());
+            PassAway();
+        }
+
+    private:
+        std::function<void()> Func;
+        TActorId EdgeActor;
+    };
 
     class TTestActorRuntimeBase: public TNonCopyable {
     public:
@@ -558,7 +586,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(handle, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -567,7 +595,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(edgeFilter, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -576,7 +604,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvent<TEvent>(edgeActor, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeName<TEvent>() << ": " << FormatCurrentException();
             }
         }
 
@@ -603,7 +631,7 @@ namespace NActors {
             try {
                 return GrabEdgeEvents<TEvents...>(handle, simTimeout);
             } catch (...) {
-                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << CurrentExceptionMessage();
+                ythrow TWithBackTrace<yexception>() << "Exception occured while waiting for " << TypeNames<TEvents...>() << ": " << FormatCurrentException();
             }
         }
 
@@ -629,6 +657,57 @@ namespace NActors {
             ICCommonSetupper = std::move(icCommonSetupper);
         }
 
+    public:
+        void SimulateSleep(TDuration duration);
+
+        template<class TCondition>
+        inline void WaitFor(IOutputStream& log, const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
+            if (!condition()) {
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                // Quirk: non-empty FinalEvents enables full simulation
+                options.FinalEvents.emplace_back([](IEventHandle&) { return false; });
+
+                log << "... waiting for " << description << Endl;
+                this->DispatchEvents(options, simTimeout);
+
+                Y_ABORT_UNLESS(condition(), "Timeout while waiting for %s", description.c_str());
+                log << "... waiting for " << description << " (done)" << Endl;
+            }
+        }
+
+        template<class TCondition>
+        inline void WaitFor(const TString& description, const TCondition& condition, TDuration simTimeout = TDuration::Max()) {
+            // Using Cerr by default for compatibility with existing tests
+            WaitFor(Cerr, description, condition, simTimeout);
+        }
+
+        // Run function inside actor system context
+        // This allows func to safely use AppData().
+        template <typename Func>
+        TFunctionResult<Func> RunCall(Func&& func) {
+            using TResult = TFunctionResult<Func>;
+            auto edgeActor = AllocateEdgeActor();
+            auto promise = NThreading::NewPromise<TResult>();
+            auto future = promise.GetFuture();
+            Register(new TFunctorActor([f = std::move(func), p = std::move(promise)]() mutable {
+                try {
+                    if constexpr (std::is_same_v<TResult, void>) {
+                        f();
+                        p.SetValue();
+                    } else {
+                        p.SetValue(f());
+                    }
+                } catch (...) {
+                    p.SetException(std::current_exception());
+                }
+            }, edgeActor));
+            auto edgeEvent = GrabEdgeEvent<TEvents::TEvWakeup>(edgeActor);
+            return future.ExtractValue();
+        }
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
@@ -646,6 +725,7 @@ namespace NActors {
 
         THolder<TActorSystemSetup> MakeActorSystemSetup(ui32 nodeIndex, TNodeDataBase* node);
         THolder<TActorSystem> MakeActorSystem(ui32 nodeIndex, TNodeDataBase* node);
+        void StartActorSystem(ui32 nodeIndex, TNodeDataBase* node);
         virtual void InitActorSystemSetup(TActorSystemSetup& setup, TNodeDataBase* node) {
             Y_UNUSED(setup, node);
         }
@@ -794,6 +874,7 @@ namespace NActors {
         TDispatchContext* CurrentDispatchContext;
         TVector<ui64> TxAllocatorTabletIds;
         bool AllowBreakOnStopCondition = true;
+        TActorId SleepEdgeActor;
         static ui32 NextNodeId;
     };
 

@@ -11,6 +11,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/http
+    library/cpp/protobuf/interop
     library/cpp/protobuf/json
     ydb/core/actorlib_impl
     ydb/core/base
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/core/kqp/counters
     ydb/core/kqp/gateway/behaviour/resource_pool_classifier
     ydb/core/kqp/proxy_service/proto
+    ydb/core/kqp/proxy_service/script_executions_utils
     ydb/core/kqp/run_script_actor
     ydb/core/kqp/workload_service
     ydb/core/mind
@@ -44,6 +46,10 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE(
+    script_executions_utils
+)
 
 RECURSE_FOR_TESTS(
     ut

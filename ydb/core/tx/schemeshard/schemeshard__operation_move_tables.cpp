@@ -1,14 +1,12 @@
-#include "schemeshard__operation_part.h"
 #include "schemeshard__operation_common.h"
-#include "schemeshard_path_element.h"
-
+#include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
-
+#include "schemeshard_path_element.h"
 #include "schemeshard_utils.h"  // for TransactionTemplate
 
 #include <ydb/core/base/path.h>
-#include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/flat_tx_scheme.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -31,10 +29,15 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
 
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {
+        if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables")};
+        }
+        if (srcPath->IsColumnTable() && !AppData()->FeatureFlags.GetEnableMoveColumnTable()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "RENAME is prohibited for column tables")};
+        }
         TPath::TChecker checks = srcPath.Check();
         checks.IsResolved()
               .NotDeleted()
-              .IsTable()
               .NotAsyncReplicaTable()
               .IsCommonSensePath();
 
@@ -51,24 +54,7 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         }
     }
 
-    THashSet<TString> sequences;
-    for (const auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath dstPath = TPath::Resolve(dstStr, context.SS);
 
@@ -106,23 +92,28 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
             TPath dstImplTable = dstIndexPath.Child(implTableName);
 
             result.push_back(CreateMoveTable(NextPartId(nextId, result), MoveTableTask(srcImplTable, dstImplTable)));
+            AddMoveSequences(nextId, result, srcImplTable, dstImplTable.PathString(), GetLocalSequences(context, srcImplTable));
         }
     }
 
+    AddMoveSequences(nextId, result, srcPath, dstPath.PathString(), sequences);
+
+    return result;
+}
+
+void AddMoveSequences(TOperationId nextId, TVector<ISubOperation::TPtr>& result, const TPath& srcTable,
+    const TString& dstPath, const THashSet<TString>& sequences)
+{
     for (const auto& sequence : sequences) {
-        auto scheme = TransactionTemplate(
-            dstPath.PathString(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
+        auto scheme = TransactionTemplate(dstPath, NKikimrSchemeOp::EOperationType::ESchemeOpMoveSequence);
         scheme.SetFailOnExist(true);
 
         auto* moveSequence = scheme.MutableMoveSequence();
-        moveSequence->SetSrcPath(srcPath.PathString() + "/" + sequence);
-        moveSequence->SetDstPath(dstPath.PathString() + "/" + sequence);
+        moveSequence->SetSrcPath(srcTable.PathString() + "/" + sequence);
+        moveSequence->SetDstPath(dstPath + "/" + sequence);
 
         result.push_back(CreateMoveSequence(NextPartId(nextId, result), scheme));
     }
-
-    return result;
 }
 
 }

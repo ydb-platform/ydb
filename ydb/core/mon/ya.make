@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    events_internal.h
     mon.cpp
     mon.h
     crossref.cpp
@@ -14,6 +15,7 @@ PEERDIR(
     library/cpp/string_utils/url
     ydb/core/base
     ydb/core/grpc_services/base
+    ydb/core/mon/audit
     ydb/core/protos
     ydb/library/aclib
     ydb/library/actors/core
@@ -24,3 +26,12 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    audit
+    ut_utils
+)
+
+RECURSE_FOR_TESTS(
+    ut
+)

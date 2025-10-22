@@ -105,7 +105,7 @@ public:
         } else {
             Runtime->SetLogBackend(IsLowVerbose ? CreateStderrBackend() : CreateNullBackend());
         }
-        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}});
+        Runtime->Initialize(TTestActorRuntime::TEgg{appData.Release(), nullptr, {}, {}, {}});
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_SYSLOG, NLog::PRI_NOTICE);
         Runtime->SetLogPriority(NKikimrServices::BS_PDISK_TEST, NLog::PRI_DEBUG);
@@ -278,15 +278,17 @@ struct TVDiskMock {
         return {LastUsedLsn, LastUsedLsn};
     };
 
-    void InitFull() {
-        Init();
+    void InitFull(ui32 groupSizeInUnits = 0) {
+        Init(groupSizeInUnits);
         ReadLog();
         SendEvLogImpl(1, {}, true);
     }
 
-    void Init() {
+    void Init(ui32 groupSizeInUnits = 0) {
         const auto evInitRes = TestCtx->TestResponse<NPDisk::TEvYardInitResult>(
-                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID, TestCtx->TestCtx.PDiskGuid, TestCtx->Sender),
+                new NPDisk::TEvYardInit(OwnerRound.fetch_add(1), VDiskID,
+                    TestCtx->TestCtx.PDiskGuid, TestCtx->Sender,
+                    {}, Max<ui32>(), groupSizeInUnits),
                 NKikimrProto::OK);
 
         PDiskParams = evInitRes->PDiskParams;

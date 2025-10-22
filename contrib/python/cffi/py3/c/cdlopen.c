@@ -81,7 +81,7 @@ static PyObject *ffi_dlclose(PyObject *self, PyObject *args)
 
 static Py_ssize_t cdl_4bytes(char *src)
 {
-    /* read 4 bytes in little-endian order; return it as a signed integer */
+    /* read 4 bytes in big-endian order; return it as a signed integer */
     signed char *ssrc = (signed char *)src;
     unsigned char *usrc = (unsigned char *)src;
     return (ssrc[0] << 24) | (usrc[1] << 16) | (usrc[2] << 8) | usrc[3];

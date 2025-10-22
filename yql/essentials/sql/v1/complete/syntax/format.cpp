@@ -9,76 +9,63 @@
 
 namespace NSQLComplete {
 
-    namespace {
+namespace {
 
-        static const THashSet<std::string> Keywords = [] {
-            const auto& grammar = GetSqlGrammar();
-            const auto& vocabulary = grammar.GetVocabulary();
+const THashSet<std::string> Keywords = [] {
+    const auto& grammar = GetSqlGrammar();
+    const auto& vocabulary = grammar.GetVocabulary();
 
-            THashSet<std::string> keywords;
-            for (auto& token : grammar.GetKeywordTokens()) {
-                keywords.emplace(Display(vocabulary, token));
-            }
-            return keywords;
-        }();
+    THashSet<std::string> keywords;
+    for (auto& token : grammar.GetKeywordTokens()) {
+        keywords.emplace(Display(vocabulary, token));
+    }
+    return keywords;
+}();
 
-        static const THashSet<TString> TypeConstructors = {
-            "DECIMAL",
-            "OPTIONAL",
-            "TUPLE",
-            "STRUCT",
-            "VARIANT",
-            "LIST",
-            "STREAM",
-            "FLOW",
-            "DICT",
-            "SET",
-            "ENUM",
-            "RESOURCE",
-            "TAGGED",
-            "CALLABLE",
-        };
+} // namespace
 
-    } // namespace
-
-    TString FormatKeywords(const TVector<TString>& seq) {
-        if (seq.empty()) {
-            return "";
-        }
-
-        size_t i = 0;
-        TString text = seq[i++];
-
-        if (2 <= seq.size() &&
-            TypeConstructors.contains(text) &&
-            (seq[i] == "<" || seq[i] == "(")) {
-            text.to_title();
-            text.append(seq[i]);
-            i += 1;
-        }
-
-        for (; i < seq.size(); ++i) {
-            const auto& token = seq[i];
-            if (Keywords.contains(token)) {
-                text += " ";
-            }
-            text += token;
-        }
-
-        return text;
+TString FormatKeywords(const TVector<TString>& seq) {
+    if (seq.empty()) {
+        return "";
     }
 
-    TString Quoted(TString content) {
-        content.prepend('`');
-        content.append('`');
-        return content;
+    TString text = seq[0];
+    for (size_t i = 1; i < seq.size(); ++i) {
+        const auto& token = seq[i];
+        if (Keywords.contains(token)) {
+            text += " ";
+        }
+        text += token;
     }
+    return text;
+}
 
-    TString Unquoted(TString content) {
-        Y_ENSURE(2 <= content.size() && content.front() == '`' && content.back() == '`');
-        content.erase(0, 1);
-        content.pop_back();
-        return content;
-    }
+bool IsPlain(TStringBuf content) {
+    return GetSqlGrammar().IsPlainIdentifier(content);
+}
+
+bool IsQuoted(TStringBuf content) {
+    return 2 <= content.size() && content.front() == '`' && content.back() == '`';
+}
+
+TString Quoted(TString content) {
+    content.prepend('`');
+    content.append('`');
+    return content;
+}
+
+TStringBuf Unquoted(TStringBuf content) {
+    Y_ENSURE(IsQuoted(content));
+    return content.SubStr(1, content.size() - 2);
+}
+
+bool IsBinding(TStringBuf content) {
+    return 1 <= content.size() && content.front() == '$';
+}
+
+TStringBuf Unbinded(TStringBuf content) {
+    Y_ENSURE(IsBinding(content));
+    return content.SubStr(1);
+}
 
 } // namespace NSQLComplete

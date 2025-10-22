@@ -2,9 +2,9 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/blob.h>
 #include <yt/yt/core/misc/serialize.h>
 
+#include <library/cpp/yt/memory//blob.h>
 #include <library/cpp/yt/memory/ref.h>
 
 #include <contrib/libs/snappy/snappy-sinksource.h>

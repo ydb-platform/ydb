@@ -31,7 +31,8 @@ namespace NFake {
 
         enum class EFlg : ui32 {
             Comp    = 0x01,
-            Clean   = 0x02,
+            Vac     = 0x02,
+            Backup  = 0x04,
         };
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
@@ -128,10 +129,10 @@ namespace NFake {
                 Send(Owner, new NFake::TEvCompacted(table));
         }
 
-        void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext&) override
+        void VacuumComplete(ui64 vacuumGeneration, const TActorContext&) override
         {
-            if (Flags & ui32(EFlg::Clean))
-                Send(Owner, new NFake::TEvDataCleaned(dataCleanupGeneration));
+            if (Flags & ui32(EFlg::Vac))
+                Send(Owner, new NFake::TEvDataCleaned(vacuumGeneration));
         }
 
         void SnapshotComplete(
@@ -143,6 +144,17 @@ namespace NFake {
             } else {
                 Y_TABLET_ERROR("Unsupported snapshot context");
             }
+        }
+
+        bool NeedBackup() const override
+        {
+            return Flags & ui32(EFlg::Backup);
+        }
+
+        void BackupSnapshotComplete(const TActorContext&) override
+        {
+            if (NeedBackup())
+                Send(Owner, new NFake::TEvSnapshotBackedUp());
         }
 
     private:

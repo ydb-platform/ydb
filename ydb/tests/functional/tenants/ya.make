@@ -1,6 +1,6 @@
 PY3TEST()
 
-ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/ydbd_dep.inc)
 
 TEST_SRCS(
     conftest.py
@@ -22,7 +22,6 @@ SPLIT_FACTOR(20)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
 DEPENDS(
-    ydb/apps/ydbd
 )
 
 PEERDIR(
@@ -40,7 +39,7 @@ FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
     INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
-    REQUIREMENTS(ram:10 cpu:1)
+    REQUIREMENTS(ram:10 cpu:16)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()

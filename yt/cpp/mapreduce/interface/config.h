@@ -5,15 +5,32 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/yson_string/public.h>
+
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IYsonConsumer;
+
+enum class EYsonFormat : int;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYson
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -110,6 +127,12 @@ struct TConfig
 
     /// @brief Represents the role involved in RPC proxy configuration.
     TString RpcProxyRole;
+
+    /// @brief Proxy url aliasing rules to be used for connection.
+    ///
+    /// You can pass here "foo" => "fqdn:port" and afterwards use "foo" as handy alias,
+    /// while all connections will be made to "fqdn:port" address.
+    THashMap<TString, TString> ProxyUrlAliasingRules;
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.
@@ -246,6 +269,12 @@ struct TConfig
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;
 
+    /// Append job and operation IDs as shell command options.
+    bool EnableDebugCommandLineArguments = false;
+
+    /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
+    TString ConfigRemotePatchPath = "//sys/client_config";
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);
@@ -264,6 +293,7 @@ struct TConfig
     void LoadToken();
     void LoadSpec();
     void LoadTimings();
+    void LoadProxyUrlAliasingRules();
 
     void Reset();
 
@@ -271,6 +301,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

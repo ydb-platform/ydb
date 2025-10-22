@@ -15,11 +15,6 @@ namespace numpy
   namespace details
   {
 
-    inline long double float128()
-    {
-      return {};
-    }
-
     template <class V>
     long double float128(V v)
     {

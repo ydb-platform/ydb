@@ -281,6 +281,12 @@ namespace NKikimr {
                     TBase::Output(str);
                 }
 
+                TString ToString() const {
+                    TStringStream str;
+                    Output(str);
+                    return str.Str();
+                }
+
                 void Finalize() {
                     TBase::Finalize();
                     Y_ABORT_UNLESS(TargetLevel != (ui32)(-1));
@@ -293,6 +299,7 @@ namespace NKikimr {
             TDeleteSsts DeleteSsts;
             TMoveSsts MoveSsts;
             TCompactSsts CompactSsts;
+            bool IsFullCompaction = false;
             // this field contains
             // * original std::optional<TFullCompactionAttrs>
             // * if 'first' was set, than result of full compaction: second=true -- full compaction has been finished
@@ -307,6 +314,7 @@ namespace NKikimr {
                 DeleteSsts.Clear();
                 MoveSsts.Clear();
                 CompactSsts.Clear();
+                IsFullCompaction = false;
                 FullCompactionInfo.first.reset();
                 FullCompactionInfo.second = false;
             }

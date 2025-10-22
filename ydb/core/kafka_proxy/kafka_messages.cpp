@@ -19,6 +19,8 @@ const std::unordered_map<EApiKey, TString> EApiKeyNames = {
     {EApiKey::HEARTBEAT, "HEARTBEAT"},
     {EApiKey::LEAVE_GROUP, "LEAVE_GROUP"},
     {EApiKey::SYNC_GROUP, "SYNC_GROUP"},
+    {EApiKey::DESCRIBE_GROUPS, "DESCRIBE_GROUPS"},
+    {EApiKey::LIST_GROUPS, "LIST_GROUPS"},
     {EApiKey::SASL_HANDSHAKE, "SASL_HANDSHAKE"},
     {EApiKey::API_VERSIONS, "API_VERSIONS"},
     {EApiKey::CREATE_TOPICS, "CREATE_TOPICS"},
@@ -58,6 +60,10 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TLeaveGroupRequestData>();
         case SYNC_GROUP:
             return std::make_unique<TSyncGroupRequestData>();
+        case DESCRIBE_GROUPS:
+            return std::make_unique<TDescribeGroupsRequestData>();
+        case LIST_GROUPS:
+            return std::make_unique<TListGroupsRequestData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeRequestData>();
         case API_VERSIONS:
@@ -111,6 +117,10 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TLeaveGroupResponseData>();
         case SYNC_GROUP:
             return std::make_unique<TSyncGroupResponseData>();
+        case DESCRIBE_GROUPS:
+            return std::make_unique<TDescribeGroupsResponseData>();
+        case LIST_GROUPS:
+            return std::make_unique<TListGroupsResponseData>();
         case SASL_HANDSHAKE:
             return std::make_unique<TSaslHandshakeResponseData>();
         case API_VERSIONS:
@@ -204,6 +214,18 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case SYNC_GROUP:
             if (_version >= 4) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case DESCRIBE_GROUPS:
+            if (_version >= 5) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case LIST_GROUPS:
+            if (_version >= 3) {
                 return 2;
             } else {
                 return 1;
@@ -346,6 +368,18 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case SYNC_GROUP:
             if (_version >= 4) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case DESCRIBE_GROUPS:
+            if (_version >= 5) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case LIST_GROUPS:
+            if (_version >= 3) {
                 return 1;
             } else {
                 return 0;
@@ -4613,6 +4647,448 @@ i32 TSyncGroupResponseData::Size(TKafkaVersion _version) const {
     NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
     NPrivate::Size<ProtocolNameMeta>(_collector, _version, ProtocolName);
     NPrivate::Size<AssignmentMeta>(_collector, _version, Assignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsRequestData
+//
+const TDescribeGroupsRequestData::IncludeAuthorizedOperationsMeta::Type TDescribeGroupsRequestData::IncludeAuthorizedOperationsMeta::Default = false;
+
+TDescribeGroupsRequestData::TDescribeGroupsRequestData()
+        : IncludeAuthorizedOperations(IncludeAuthorizedOperationsMeta::Default)
+{}
+
+void TDescribeGroupsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsRequestData";
+    }
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+    NPrivate::Read<IncludeAuthorizedOperationsMeta>(_readable, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+    NPrivate::Write<IncludeAuthorizedOperationsMeta>(_collector, _writable, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+    NPrivate::Size<IncludeAuthorizedOperationsMeta>(_collector, _version, IncludeAuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData
+//
+const TDescribeGroupsResponseData::ThrottleTimeMsMeta::Type TDescribeGroupsResponseData::ThrottleTimeMsMeta::Default = 0;
+
+TDescribeGroupsResponseData::TDescribeGroupsResponseData()
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData::TDescribedGroup
+//
+const TDescribeGroupsResponseData::TDescribedGroup::ErrorCodeMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ErrorCodeMeta::Default = 0;
+const TDescribeGroupsResponseData::TDescribedGroup::GroupIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::GroupIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::GroupStateMeta::Type TDescribeGroupsResponseData::TDescribedGroup::GroupStateMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::ProtocolTypeMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ProtocolTypeMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::ProtocolDataMeta::Type TDescribeGroupsResponseData::TDescribedGroup::ProtocolDataMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::AuthorizedOperationsMeta::Type TDescribeGroupsResponseData::TDescribedGroup::AuthorizedOperationsMeta::Default = -2147483648;
+
+TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroup()
+        : ErrorCode(ErrorCodeMeta::Default)
+        , GroupId(GroupIdMeta::Default)
+        , GroupState(GroupStateMeta::Default)
+        , ProtocolType(ProtocolTypeMeta::Default)
+        , ProtocolData(ProtocolDataMeta::Default)
+        , AuthorizedOperations(AuthorizedOperationsMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::TDescribedGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup";
+    }
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<GroupStateMeta>(_readable, _version, GroupState);
+    NPrivate::Read<ProtocolTypeMeta>(_readable, _version, ProtocolType);
+    NPrivate::Read<ProtocolDataMeta>(_readable, _version, ProtocolData);
+    NPrivate::Read<MembersMeta>(_readable, _version, Members);
+    NPrivate::Read<AuthorizedOperationsMeta>(_readable, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::TDescribedGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<GroupStateMeta>(_collector, _writable, _version, GroupState);
+    NPrivate::Write<ProtocolTypeMeta>(_collector, _writable, _version, ProtocolType);
+    NPrivate::Write<ProtocolDataMeta>(_collector, _writable, _version, ProtocolData);
+    NPrivate::Write<MembersMeta>(_collector, _writable, _version, Members);
+    NPrivate::Write<AuthorizedOperationsMeta>(_collector, _writable, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::TDescribedGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<GroupStateMeta>(_collector, _version, GroupState);
+    NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
+    NPrivate::Size<ProtocolDataMeta>(_collector, _version, ProtocolData);
+    NPrivate::Size<MembersMeta>(_collector, _version, Members);
+    NPrivate::Size<AuthorizedOperationsMeta>(_collector, _version, AuthorizedOperations);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember
+//
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::MemberIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::MemberIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::GroupInstanceIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::GroupInstanceIdMeta::Default = std::nullopt;
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientIdMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientIdMeta::Default = {""};
+const TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientHostMeta::Type TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::ClientHostMeta::Default = {""};
+
+TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::TDescribedGroupMember()
+        : MemberId(MemberIdMeta::Default)
+        , GroupInstanceId(GroupInstanceIdMeta::Default)
+        , ClientId(ClientIdMeta::Default)
+        , ClientHost(ClientHostMeta::Default)
+{}
+
+void TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember";
+    }
+    NPrivate::Read<MemberIdMeta>(_readable, _version, MemberId);
+    NPrivate::Read<GroupInstanceIdMeta>(_readable, _version, GroupInstanceId);
+    NPrivate::Read<ClientIdMeta>(_readable, _version, ClientId);
+    NPrivate::Read<ClientHostMeta>(_readable, _version, ClientHost);
+    NPrivate::Read<MemberMetadataMeta>(_readable, _version, MemberMetadata);
+    NPrivate::Read<MemberAssignmentMeta>(_readable, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<MemberIdMeta>(_collector, _writable, _version, MemberId);
+    NPrivate::Write<GroupInstanceIdMeta>(_collector, _writable, _version, GroupInstanceId);
+    NPrivate::Write<ClientIdMeta>(_collector, _writable, _version, ClientId);
+    NPrivate::Write<ClientHostMeta>(_collector, _writable, _version, ClientHost);
+    NPrivate::Write<MemberMetadataMeta>(_collector, _writable, _version, MemberMetadata);
+    NPrivate::Write<MemberAssignmentMeta>(_collector, _writable, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TDescribeGroupsResponseData::TDescribedGroup::TDescribedGroupMember::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<MemberIdMeta>(_collector, _version, MemberId);
+    NPrivate::Size<GroupInstanceIdMeta>(_collector, _version, GroupInstanceId);
+    NPrivate::Size<ClientIdMeta>(_collector, _version, ClientId);
+    NPrivate::Size<ClientHostMeta>(_collector, _version, ClientHost);
+    NPrivate::Size<MemberMetadataMeta>(_collector, _version, MemberMetadata);
+    NPrivate::Size<MemberAssignmentMeta>(_collector, _version, MemberAssignment);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsRequestData
+//
+
+TListGroupsRequestData::TListGroupsRequestData()
+{}
+
+void TListGroupsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsRequestData";
+    }
+    NPrivate::Read<StatesFilterMeta>(_readable, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<StatesFilterMeta>(_collector, _writable, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<StatesFilterMeta>(_collector, _version, StatesFilter);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsResponseData
+//
+const TListGroupsResponseData::ThrottleTimeMsMeta::Type TListGroupsResponseData::ThrottleTimeMsMeta::Default = 0;
+const TListGroupsResponseData::ErrorCodeMeta::Type TListGroupsResponseData::ErrorCodeMeta::Default = 0;
+
+TListGroupsResponseData::TListGroupsResponseData()
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+        , ErrorCode(ErrorCodeMeta::Default)
+{}
+
+void TListGroupsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<GroupsMeta>(_readable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<GroupsMeta>(_collector, _writable, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<GroupsMeta>(_collector, _version, Groups);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TListGroupsResponseData::TListedGroup
+//
+const TListGroupsResponseData::TListedGroup::GroupIdMeta::Type TListGroupsResponseData::TListedGroup::GroupIdMeta::Default = {""};
+const TListGroupsResponseData::TListedGroup::ProtocolTypeMeta::Type TListGroupsResponseData::TListedGroup::ProtocolTypeMeta::Default = {""};
+const TListGroupsResponseData::TListedGroup::GroupStateMeta::Type TListGroupsResponseData::TListedGroup::GroupStateMeta::Default = {""};
+
+TListGroupsResponseData::TListedGroup::TListedGroup()
+        : GroupId(GroupIdMeta::Default)
+        , ProtocolType(ProtocolTypeMeta::Default)
+        , GroupState(GroupStateMeta::Default)
+{}
+
+void TListGroupsResponseData::TListedGroup::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TListGroupsResponseData::TListedGroup";
+    }
+    NPrivate::Read<GroupIdMeta>(_readable, _version, GroupId);
+    NPrivate::Read<ProtocolTypeMeta>(_readable, _version, ProtocolType);
+    NPrivate::Read<GroupStateMeta>(_readable, _version, GroupState);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TListGroupsResponseData::TListedGroup::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TListGroupsResponseData::TListedGroup";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<GroupIdMeta>(_collector, _writable, _version, GroupId);
+    NPrivate::Write<ProtocolTypeMeta>(_collector, _writable, _version, ProtocolType);
+    NPrivate::Write<GroupStateMeta>(_collector, _writable, _version, GroupState);
+
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+
+    }
+}
+
+i32 TListGroupsResponseData::TListedGroup::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<GroupIdMeta>(_collector, _version, GroupId);
+    NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
+    NPrivate::Size<GroupStateMeta>(_collector, _version, GroupState);
 
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);

@@ -1,22 +1,22 @@
-from moto.core.responses import BaseResponse
+from ._base_response import EC2BaseResponse
 
 
-class Fleets(BaseResponse):
-    def delete_fleets(self):
+class Fleets(EC2BaseResponse):
+    def delete_fleets(self) -> str:
         fleet_ids = self._get_multi_param("FleetId.")
-        terminate_instances = self._get_param("TerminateInstances")
+        terminate_instances = self._get_bool_param("TerminateInstances")
         fleets = self.ec2_backend.delete_fleets(fleet_ids, terminate_instances)
         template = self.response_template(DELETE_FLEETS_TEMPLATE)
         return template.render(fleets=fleets)
 
-    def describe_fleet_instances(self):
+    def describe_fleet_instances(self) -> str:
         fleet_id = self._get_param("FleetId")
 
         instances = self.ec2_backend.describe_fleet_instances(fleet_id)
         template = self.response_template(DESCRIBE_FLEET_INSTANCES_TEMPLATE)
         return template.render(fleet_id=fleet_id, instances=instances)
 
-    def describe_fleets(self):
+    def describe_fleets(self) -> str:
         fleet_ids = self._get_multi_param("FleetId.")
 
         requests = self.ec2_backend.describe_fleets(fleet_ids)
@@ -24,13 +24,15 @@ class Fleets(BaseResponse):
         rend = template.render(requests=requests)
         return rend
 
-    def create_fleet(self):
+    def create_fleet(self) -> str:
         on_demand_options = self._get_multi_param_dict("OnDemandOptions")
         spot_options = self._get_multi_param_dict("SpotOptions")
         target_capacity_specification = self._get_multi_param_dict(
             "TargetCapacitySpecification"
         )
-        launch_template_configs = self._get_multi_param("LaunchTemplateConfigs")
+        launch_template_configs = self._get_multi_param(
+            param_prefix="LaunchTemplateConfigs"
+        )
 
         excess_capacity_termination_policy = self._get_param(
             "ExcessCapacityTerminationPolicy"
@@ -209,8 +211,12 @@ DESCRIBE_FLEETS_TEMPLATE = """<DescribeFleetsResponse xmlns="http://ec2.amazonaw
                                 {% endif %}
                                 {% if override.InstanceRequirements.MemoryGiBPerVCpu %}
                                 <memoryGiBPerVCpu>
+                                    {% if override.InstanceRequirements.MemoryGiBPerVCpu.Min %}
                                     <min>{{ override.InstanceRequirements.MemoryGiBPerVCpu.Min }}</min>
+                                    {% endif %}
+                                    {% if override.InstanceRequirements.MemoryGiBPerVCpu.Max %}
                                     <max>{{ override.InstanceRequirements.MemoryGiBPerVCpu.Max }}</max>
+                                    {% endif %}
                                 </memoryGiBPerVCpu>
                                 {% endif %}
                                 {% if override.InstanceRequirements.MemoryMiB %}
@@ -368,8 +374,12 @@ DESCRIBE_FLEETS_TEMPLATE = """<DescribeFleetsResponse xmlns="http://ec2.amazonaw
             {% endif %}
             <terminateInstancesWithExpiration>{{ request.terminate_instances_with_expiration }}</terminateInstancesWithExpiration>
             <type>{{ request.fleet_type }}</type>
+            {% if request.valid_from %}
             <validFrom>{{ request.valid_from }}</validFrom>
+            {% endif %}
+            {% if request.valid_until %}
             <validUntil>{{ request.valid_until }}</validUntil>
+            {% endif %}
             <replaceUnhealthyInstances>{{ request.replace_unhealthy_instances }}</replaceUnhealthyInstances>
             <tagSet>
                 {% for tag in request.tags %}

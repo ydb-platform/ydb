@@ -9,6 +9,7 @@ if __name__ == '__main__':
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=10 ** 9, type=lambda x: int(x), help='A duration of workload in seconds.')
     parser.add_argument('--mode', default="row", choices=["row", "column"], help='STORE mode for CREATE TABLE')
+    parser.add_argument('--topic', default="local", choices=["local", "remote"], help='Topic local or remote')
     args = parser.parse_args()
-    with Workload(args.endpoint, args.database, args.duration, args.mode) as workload:
+    with Workload(args.endpoint, args.database, args.duration, args.mode, args.topic) as workload:
         workload.loop()

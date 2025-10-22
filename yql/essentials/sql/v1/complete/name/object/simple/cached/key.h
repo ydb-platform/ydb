@@ -8,41 +8,48 @@
 
 namespace NSQLComplete {
 
-    struct TSchemaListCacheKey {
-        TString Zone;
-        TString Cluster;
-        TString Folder;
+struct TSchemaDescribeCacheKey {
+    TString Zone;
+    TString Cluster;
+    TString Path;
 
-        friend bool operator==(
-            const TSchemaListCacheKey& lhs,
-            const TSchemaListCacheKey& rhs) = default;
-    };
+    friend bool operator==(
+        const TSchemaDescribeCacheKey& lhs,
+        const TSchemaDescribeCacheKey& rhs) = default;
+};
 
-    template <>
-    struct TByteSize<TSchemaListCacheKey> {
-        size_t operator()(const TSchemaListCacheKey& x) const noexcept {
-            return sizeof(x) +
-                   TByteSize<TString>()(x.Zone) +
-                   TByteSize<TString>()(x.Cluster) +
-                   TByteSize<TString>()(x.Folder);
-        }
-    };
+template <>
+struct TByteSize<TSchemaDescribeCacheKey> {
+    size_t operator()(const TSchemaDescribeCacheKey& x) const noexcept {
+        return sizeof(x) +
+               TByteSize<TString>()(x.Zone) +
+               TByteSize<TString>()(x.Cluster) +
+               TByteSize<TString>()(x.Path);
+    }
+};
 
-    template <>
-    struct TByteSize<TFolderEntry> {
-        size_t operator()(const TFolderEntry& x) const noexcept {
-            return sizeof(x) +
-                   TByteSize<TString>()(x.Type) +
-                   TByteSize<TString>()(x.Name);
-        }
-    };
+template <>
+struct TByteSize<TFolderEntry> {
+    size_t operator()(const TFolderEntry& x) const noexcept {
+        return sizeof(x) +
+               TByteSize<TString>()(x.Type) +
+               TByteSize<TString>()(x.Name);
+    }
+};
+
+template <>
+struct TByteSize<TTableDetails> {
+    size_t operator()(const TTableDetails& x) const noexcept {
+        return TByteSize<TVector<TString>>()(x.Columns);
+    }
+};
 
 } // namespace NSQLComplete
 
 template <>
-struct THash<NSQLComplete::TSchemaListCacheKey> {
-    inline size_t operator()(const NSQLComplete::TSchemaListCacheKey& key) const {
+struct THash<NSQLComplete::TSchemaDescribeCacheKey> {
+    inline size_t operator()(const NSQLComplete::TSchemaDescribeCacheKey& key) const {
         return THash<std::tuple<TString, TString, TString>>()(
-            std::tie(key.Zone, key.Cluster, key.Folder));
+            std::tie(key.Zone, key.Cluster, key.Path));
     }
 };

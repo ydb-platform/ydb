@@ -30,7 +30,7 @@
 # =======================
 
 SKIP     CC-BY-4.0            0ec92fc648504d1069b11b64e44bfdc4
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         Markus Kuhn [ˈmaʳkʊs kuːn] <http://www.cl.cam.ac.uk/~mgk25/> — 2002-07-25 CC BY
     Scancode info:
@@ -42,7 +42,7 @@ BELONGS ya.make
         third_party/utf8_range/UTF-8-demo.txt [5:5]
 
 KEEP     MIT                  399584035c417b91040964779555dfac
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         MIT License
     Scancode info:
@@ -54,7 +54,7 @@ BELONGS ya.make
         third_party/utf8_range/LICENSE [1:1]
 
 KEEP     MIT                  4b22d8fd72d8f6c6211edffd2b6983d7
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
 FILE_INCLUDE LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
 FILE_INCLUDE third_party/utf8_range/LICENSE found in files: third_party/utf8_range/utf8_validity.cc at line 4, third_party/utf8_range/utf8_validity.h at line 4
     License text:
@@ -71,7 +71,7 @@ FILE_INCLUDE third_party/utf8_range/LICENSE found in files: third_party/utf8_ran
         third_party/utf8_range/utf8_validity.h [3:5]
 
 KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -82,7 +82,7 @@ BELONGS ya.make
         third_party/utf8_range/LICENSE [6:22]
 
 SKIP     LicenseRef-scancode-generic-cla 5d780ffa423067f23c6a123ae33e7c18
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         \## Contributor License Agreement
     Scancode info:
@@ -309,7 +309,7 @@ BELONGS ya.make
         CONTRIBUTING.md [35:35]
 
 SKIP     LicenseRef-scancode-generic-cla d629c1791f1024cda2ec24fa16773bcd
-BELONGS ya.make
+BELONGS third_party/utf8_range/ya.make
     License text:
         Contributions to this project must be accompanied by a Contributor License
         Agreement (CLA). You (or your employer) retain the copyright to your

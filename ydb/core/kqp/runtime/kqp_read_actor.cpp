@@ -1,5 +1,4 @@
 #include "kqp_read_actor.h"
-#include "kqp_compute_scheduler.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
@@ -334,25 +333,34 @@ public:
 public:
     TKqpReadActor(
         const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
-        const NYql::NDq::TDqAsyncIoFactory::TSourceArguments& args,
+        TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+        const NActors::TActorId& computeActorId,
+        ui64 inputIndex,
+        NYql::NDq::TCollectStatsLevel statsLevel,
+        NYql::NDq::TTxId txId,
+        ui64 taskId,
+        const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+        const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+        const NWilson::TTraceId& traceId,
         TIntrusivePtr<TKqpCounters> counters)
         : Settings(settings)
-        , Arena(args.Arena)
-        , LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ", CA Id " << args.ComputeActorId << ". ")
-        , ComputeActorId(args.ComputeActorId)
-        , InputIndex(args.InputIndex)
-        , TypeEnv(args.TypeEnv)
-        , HolderFactory(args.HolderFactory)
-        , Alloc(args.Alloc)
+        , Arena(arena)
+        , LogPrefix(TStringBuilder() << "TxId: " << txId << ", task: " << taskId << ", CA Id " << computeActorId << ". ")
+        , ComputeActorId(computeActorId)
+        , InputIndex(inputIndex)
+        , TypeEnv(typeEnv)
+        , HolderFactory(holderFactory)
+        , Alloc(alloc)
         , Counters(counters)
         , UseFollowers(false)
         , PipeCacheId(MainPipeCacheId)
-        , ReadActorSpan(TWilsonKqp::ReadActor,  NWilson::TTraceId(args.TraceId), "ReadActor")
+        , ReadActorSpan(TWilsonKqp::ReadActor, NWilson::TTraceId(traceId), "ReadActor")
     {
         Y_ABORT_UNLESS(Arena);
         Y_ABORT_UNLESS(settings->GetArena() == Arena->Get());
 
-        IngressStats.Level = args.StatsLevel;
+        IngressStats.Level = statsLevel;
 
         TableId = TTableId(
             Settings->GetTable().GetTableId().GetOwnerId(),
@@ -598,6 +606,9 @@ public:
         } else if (!Snapshot.IsValid() && !Settings->HasLockTxId() && !Settings->GetAllowInconsistentReads()) {
             return RuntimeError("Inconsistent reads without locks", NDqProto::StatusIds::UNAVAILABLE);
         }
+        if (Settings->GetIsolationLevel() == NKikimrKqp::EIsolationLevel::ISOLATION_LEVEL_SNAPSHOT_RO) {
+            YQL_ENSURE(!Settings->HasLockTxId(), "SnapshotReadOnly should not take locks");
+        }
 
         const auto& tr = *AppData()->TypeRegistry;
 
@@ -679,6 +690,11 @@ public:
                     newShards.push_back(std::move(newShard));
                 }
             }
+        }
+
+        if (newShards.empty()) {
+            NotifyCA();
+            return;
         }
 
         YQL_ENSURE(!newShards.empty());
@@ -809,19 +825,20 @@ public:
         BatchOperationReadColumns.clear();
 
         auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        size_t notSystemColumnsIndex = 0;
         for (size_t i = 0; i < columnsSize; ++i) {
             const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
 
-                if (Settings->GetIsBatch()) {
-                    NScheme::TTypeInfo typeInfo = NScheme::TypeInfoFromProto(column.GetType(), column.GetTypeInfo());
-                    BatchOperationReadColumns.emplace_back(column.GetId(), typeInfo, column.GetIsPrimary());
+                if (Settings->GetIsBatch() && column.GetIsPrimary()) {
+                    BatchOperationReadColumns.emplace_back(notSystemColumnsIndex, column.GetId());
                 }
+                notSystemColumnsIndex++;
             }
         }
 
-        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() >= KeyColumnTypes.size());
+        YQL_ENSURE(!Settings->GetIsBatch() || BatchOperationReadColumns.size() == KeyColumnTypes.size());
 
         if (CollectDuplicateStats) {
             for (const auto& column : DuplicateCheckExtraColumns) {
@@ -931,7 +948,8 @@ public:
     }
 
     void HandleRead(TEvDataShard::TEvReadResult::TPtr ev) {
-        const auto& record = ev->Get()->Record;
+        auto& msg = *ev->Get();
+        const auto& record = msg.Record;
         auto id = record.GetReadId();
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
@@ -1051,19 +1069,20 @@ public:
         CA_LOG_D("Taken " << Locks.size() << " locks");
         Reads[id].SerializedContinuationToken = record.GetContinuationToken();
 
-        ui64 seqNo = ev->Get()->Record.GetSeqNo();
-        Reads[id].RegisterMessage(*ev->Get());
+        ui64 seqNo = record.GetSeqNo();
+        Reads[id].RegisterMessage(msg);
 
-        if (Settings->GetIsBatch()) {
-            SetBatchOperationMaxRow(ev->Get());
+        if (Settings->GetIsBatch() && msg.GetRowsCount() > 0) {
+            auto cells = msg.GetCells(msg.GetRowsCount() - 1);
+            BatchOperationMaxRow = TSerializedCellVec{cells};
         }
 
+        ReceivedRowCount += msg.GetRowsCount();
 
-        ReceivedRowCount += ev->Get()->GetRowsCount();
         CA_LOG_D(TStringBuilder() << "new data for read #" << id
-            << " seqno = " << ev->Get()->Record.GetSeqNo()
-            << " finished = " << ev->Get()->Record.GetFinished());
-        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(ev->Get()) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
+            << " seqno = " << seqNo
+            << " finished = " << record.GetFinished());
+        CA_LOG_T(TStringBuilder() << "read #" << id << " pushed " << DebugPrintCells(&msg) << " continuation token " << DebugPrintContionuationToken(record.GetContinuationToken()));
 
         Results.push({Reads[id].Shard->TabletId, THolder<TEventHandle<TEvDataShard::TEvReadResult>>(ev.Release()), id, seqNo});
         NotifyCA();
@@ -1507,22 +1526,21 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
-        if (Settings->GetIsBatch() && !BatchOperationMaxRow.empty()) {
+        if (Settings->GetIsBatch() && !BatchOperationMaxRow.GetCells().empty()) {
             std::vector<TCell> keyRow;
-            for (size_t i = 0; i < BatchOperationReadColumns.size(); ++i) {
-                if (const auto& column = BatchOperationReadColumns[i]; column.IsPrimary) {
-                    keyRow.push_back(BatchOperationMaxRow[i]);
-                    resultInfo.AddBatchOperationKeyIds(column.Id);
-                }
+            auto cells = BatchOperationMaxRow.GetCells();
+
+            for (const auto& meta : BatchOperationReadColumns) {
+                keyRow.push_back(cells[meta.ReadIndex]);
+                resultInfo.AddBatchOperationKeyIds(meta.ColumnId);
             }
 
             if (!keyRow.empty()) {
                 YQL_ENSURE(keyRow.size() == KeyColumnTypes.size());
-
-                TConstArrayRef<TCell> keyRef(keyRow);
-                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRef));
+                resultInfo.SetBatchOperationMaxKey(TSerializedCellVec::Serialize(keyRow));
             }
         }
+
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1569,13 +1587,6 @@ private:
                 }
                 DuplicateCheckColumnRemap.push_back(positions[column.Tag]);
             }
-        }
-    }
-
-    void SetBatchOperationMaxRow(TEvDataShard::TEvReadResult* ev) {
-        if (ev->GetRowsCount() > 0) {
-            auto cells = ev->GetCells(ev->GetRowsCount() - 1);
-            BatchOperationMaxRow = TOwnedCellVec::Make(cells);
         }
     }
 
@@ -1650,23 +1661,38 @@ private:
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
 
-    struct TReadColumnInfo {
-        ui32 Id;
-        NScheme::TTypeInfo TypeInfo;
-        bool IsPrimary = false;
+    struct TBatchOperationColumnMeta {
+        size_t ReadIndex;
+        ui32 ColumnId;
     };
 
-    TVector<TReadColumnInfo> BatchOperationReadColumns;
-    TOwnedCellVec BatchOperationMaxRow;
+    // For BATCH operations only
+    TVector<TBatchOperationColumnMeta> BatchOperationReadColumns;
+    TSerializedCellVec BatchOperationMaxRow;
 };
 
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpReadActor(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings,
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, // Arena for settings
+    const NActors::TActorId& computeActorId,
+    ui64 inputIndex,
+    NYql::NDq::TCollectStatsLevel statsLevel,
+    NYql::NDq::TTxId txId,
+    ui64 taskId,
+    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
+    const NKikimr::NMiniKQL::THolderFactory& holderFactory,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
+    const NWilson::TTraceId& traceId,
+    TIntrusivePtr<TKqpCounters> counters) {
+    auto* actor = new TKqpReadActor(settings, arena, computeActorId, inputIndex, statsLevel, txId, taskId, typeEnv, holderFactory, alloc, traceId, counters);
+    return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+}
 
 void RegisterKqpReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters) {
     factory.RegisterSource<NKikimrTxDataShard::TKqpReadRangesSourceSettings>(
         TString(NYql::KqpReadRangesSourceName),
         [counters] (const NKikimrTxDataShard::TKqpReadRangesSourceSettings* settings, NYql::NDq::TDqAsyncIoFactory::TSourceArguments&& args) {
-            auto* actor = new TKqpReadActor(settings, args, counters);
-            return std::make_pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*>(actor, actor);
+            return CreateKqpReadActor(settings, args.Arena, args.ComputeActorId, args.InputIndex, args.StatsLevel,
+        args.TxId, args.TaskId, args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters);
         });
 }
 

@@ -30,12 +30,14 @@ namespace NKikimr {
                     cfg.MilestoneHugeBlobInBytes,
                     cfg.MaxLogoBlobDataSize,
                     cfg.HugeBlobOverhead,
+                    cfg.HugeBlobStepsBetweenPowersOf2,
+                    false,
                     cfg.HugeBlobsFreeChunkReservation,
                     logFunc);
 
             return std::make_shared<THugeBlobCtx>("",
                     repairedHuge->Heap->BuildHugeSlotsMap(),
-                    true);
+                    EBlobHeaderMode::OLD_HEADER);
         }
 
 

@@ -1,6 +1,12 @@
 #include "record_codegen_cpp.h"
 
+#include <yt/yt/library/formats/format.h>
+
+#include <yt/yt/core/ytree/convert.h>
+
 namespace NYT::NTableClient::NDetail {
+
+using namespace NFormats;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,6 +35,14 @@ void ValidateRowValueCount(TUnversionedRow row, int id)
             id,
             row.GetCount());
     }
+}
+
+TLogicalTypePtr FromRecordCodegenTypeV3(TStringBuf data)
+{
+    TMemoryInput input(data);
+    auto producer = CreateProducerForFormat(TFormat(EFormatType::Json), EDataType::Structured, &input);
+
+    return ConvertTo<TLogicalTypePtr>(producer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

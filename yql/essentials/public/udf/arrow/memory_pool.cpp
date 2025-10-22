@@ -8,7 +8,7 @@
 namespace NYql {
 namespace NUdf {
 
-class TYqlMemoryPool : public arrow::MemoryPool {
+class TYqlMemoryPool: public arrow::MemoryPool {
     arrow::Status Allocate(int64_t size, uint8_t** out) final {
         Y_ENSURE(size >= 0 && out);
         *out = (uint8_t*)UdfArrowAllocate(size);
@@ -30,18 +30,18 @@ class TYqlMemoryPool : public arrow::MemoryPool {
     }
 
     int64_t max_memory() const final {
-        return max_memory_.load();
+        return MaxMemory_.load();
     }
 
     int64_t bytes_allocated() const final {
-        return bytes_allocated_.load();
+        return BytesAllocated_.load();
     }
 
     inline void UpdateAllocatedBytes(int64_t diff) {
         // inspired by arrow/memory_pool.h impl.
-        int64_t allocated = bytes_allocated_.fetch_add(diff) + diff;
-        if (diff > 0 && allocated > max_memory_) {
-            max_memory_ = allocated;
+        int64_t allocated = BytesAllocated_.fetch_add(diff) + diff;
+        if (diff > 0 && allocated > MaxMemory_) {
+            MaxMemory_ = allocated;
         }
     }
 
@@ -50,13 +50,13 @@ class TYqlMemoryPool : public arrow::MemoryPool {
     }
 
 private:
-    std::atomic<int64_t> bytes_allocated_{0};
-    std::atomic<int64_t> max_memory_{0};
+    std::atomic<int64_t> BytesAllocated_{0};
+    std::atomic<int64_t> MaxMemory_{0};
 };
 
 arrow::MemoryPool* GetYqlMemoryPool() {
     return Singleton<TYqlMemoryPool>();
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

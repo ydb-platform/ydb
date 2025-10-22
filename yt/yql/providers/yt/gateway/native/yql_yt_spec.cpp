@@ -85,7 +85,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps,
-    const TSet<TString>& addSecTags)
+    const TSet<TString>& addSecTags,
+    const TVector<TString>& layerPaths)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -482,6 +483,10 @@ void FillSpec(NYT::TNode& spec,
         spec["user_file_columnar_statistics"]["enabled"] = settings->TableContentColumnarStatistics.Get(cluster).GetOrElse(true);
     }
 
+    if (layerPaths.size() && settings->LayerPaths.Get(cluster)) {
+        throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+    }
+
     if (auto val = settings->LayerPaths.Get(cluster)) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
@@ -493,6 +498,21 @@ void FillSpec(NYT::TNode& spec,
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: *val) {
                 layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+    }
+
+    if (layerPaths.size()) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
+            }
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
             }
         }
     }
@@ -510,7 +530,7 @@ void FillSpec(NYT::TNode& spec,
         spec["max_speculative_job_count_per_task"] = i64(*val);
     }
 
-    if (auto val = settings->NetworkProject.Get(cluster)) {
+    if (auto val = settings->NetworkProject.Get(cluster).OrElse(settings->StaticNetworkProject.Get(cluster))) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             spec["mapper"]["network_project"] = *val;
         }
@@ -552,7 +572,11 @@ void CheckSpecForSecretsImpl(
 
     YQL_ENSURE(secretMasker);
 
-    auto maskedSpecStr = NYT::NodeToYsonString(spec);
+    // Secure vault is guaranteed not to be exposed by YT
+    auto cleanSpec = spec.AsMap();
+    cleanSpec.erase("secure_vault");
+    auto maskedSpecStr = NYT::NodeToYsonString(cleanSpec);
+
     auto secrets = secretMasker->Mask(maskedSpecStr);
     if (!secrets.empty()) {
         auto maskedSpecStrBuf = TStringBuf(maskedSpecStr);
@@ -618,6 +642,9 @@ void FillUserJobSpecImpl(NYT::TUserJobSpec& spec,
         spec.AddEnvironment("LD_LIBRARY_PATH", ".");
     }
 
+    if (settings->UseDefaultArrowAllocatorInJobs.Get().GetOrElse(false)) {
+        spec.AddEnvironment("YQL_USE_DEFAULT_ARROW_ALLOCATOR", "1");
+    }
 
     if (!localRun) {
         for (size_t i = 0; i < mrJobSystemLibs.size(); i++) {

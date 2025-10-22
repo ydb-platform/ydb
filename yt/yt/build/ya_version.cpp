@@ -56,6 +56,27 @@ void OutputCreateBranchCommitVersion(TStringBuf branch, TStringStream& out)
     out << "-asan";
 #endif
 
+// Future-proofing. The check for YT_ROPSAN_ENABLE_PTR_TAGGING is technically
+// redundant as it follows from access or serialization checks.
+#if defined(YT_ROPSAN_ENABLE_ACCESS_CHECK) || \
+    defined(YT_ROPSAN_ENABLE_SERIALIZATION_CHECK) || \
+    defined(YT_ROPSAN_ENABLE_LEAK_DETECTION) || \
+    defined(YT_ROPSAN_ENABLE_PTR_TAGGING)
+    out << "-ropsan";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_ACCESS_CHECK)
+    out << "A";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_SERIALIZATION_CHECK)
+    out << "S";
+#endif
+
+#if defined(YT_ROPSAN_ENABLE_LEAK_DETECTION)
+    out << "L";
+#endif
+
     TString commit;
     int svnRevision = GetProgramSvnRevision();
     if (svnRevision <= 0) {

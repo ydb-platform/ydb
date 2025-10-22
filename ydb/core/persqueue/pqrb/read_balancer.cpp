@@ -1,5 +1,6 @@
 #include "read_balancer.h"
 #include "read_balancer__balancing.h"
+#include "read_balancer__mlp_balancing.h"
 #include "read_balancer__txpreinit.h"
 #include "read_balancer__txwrite.h"
 #include "read_balancer_log.h"
@@ -49,6 +50,7 @@ TPersQueueReadBalancer::TPersQueueReadBalancer(const TActorId &tablet, TTabletSt
         , StatsReportRound(0)
     {
         Balancer = std::make_unique<TBalancer>(*this);
+        MLPBalancer = std::make_unique<TMLPBalancer>(*this);
     }
 
 struct TPersQueueReadBalancer::TTxWritePartitionStats : public ITransaction {
@@ -1080,6 +1082,75 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
     }
 }
 
+void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
+    MLPBalancer->Handle(ev);
+}
+
+STFUNC(TPersQueueReadBalancer::StateInit) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        default:
+            StateInitImpl(ev, SelfId());
+            break;
+    }
+}
+
+STFUNC(TPersQueueReadBalancer::StateWork) {
+    auto ctx(ActorContext());
+    TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
+
+    switch (ev->GetTypeRewrite()) {
+        HFunc(TEvents::TEvWakeup, HandleWakeup);
+        HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
+        HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
+        HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
+        HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
+        HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
+        HFunc(TEvTabletPipe::TEvServerConnected, Handle);
+        HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+        HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        HFunc(TEvPersQueue::TEvStatusResponse, Handle);
+        HFunc(TEvPQ::TEvStatsWakeup, Handle);
+        HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
+        HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
+        HFunc(TEvPersQueue::TEvStatus, Handle);
+        HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
+        HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
+        HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
+        HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
+        HFunc(TEvPQ::TEvBalanceConsumer, Handle);
+        // From kafka
+        HFunc(TEvPersQueue::TEvBalancingSubscribe, Handle);
+        HFunc(TEvPersQueue::TEvBalancingUnsubscribe, Handle);
+        // from PQ
+        HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
+        // from TPartitionScaleRequest
+        HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
+        // from MirrorDescriber
+        HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
+        // MLP
+        hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);
+        default:
+            HandleDefaultEvents(ev, SelfId());
+            break;
+    }
+}
 
 } // NPQ
 } // NKikimr

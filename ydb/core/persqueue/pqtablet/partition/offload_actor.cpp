@@ -24,7 +24,7 @@ using namespace NKikimr::NReplication;
 namespace NKikimr::NPQ {
 
 class TOffloadActor
-    : public TBaseActor<TOffloadActor>
+    : public TBaseTabletActor<TOffloadActor>
     , private TConstantLogPrefix
     , private NSchemeCache::TSchemeCacheHelpers
 {
@@ -49,7 +49,7 @@ public:
     }
 
     TOffloadActor(TActorId parentTablet, ui64 tabletId, ui32 partition, const NKikimrPQ::TOffloadConfig& config)
-        : TBaseActor(tabletId, parentTablet, NKikimrServices::CONTINUOUS_BACKUP)
+        : TBaseTabletActor(tabletId, parentTablet, NKikimrServices::CONTINUOUS_BACKUP)
         , Partition(partition)
         , Config(config)
     {}

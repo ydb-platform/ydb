@@ -185,7 +185,7 @@ i64 CmdGetOffset(const ui32 partition, const TString& user, const TMaybe<i64>& e
                     if (ctime == Max<i64>()) {
                         UNIT_ASSERT(resp.GetCreateTimestampMS() + 86'000'000 < TAppData::TimeProvider->Now().MilliSeconds());
                     } else {
-                        UNIT_ASSERT_EQUAL((i64)resp.GetCreateTimestampMS(), ctime);
+                        UNIT_ASSERT_VALUES_EQUAL_C((i64)resp.GetCreateTimestampMS(), ctime, resp.DebugString());
                     }
                 }
             }
@@ -995,7 +995,8 @@ bool CheckCmdReadResult(const TPQCmdReadSettings& settings, TEvPersQueue::TEvRes
         return false;
     }
     if (settings.Timeout) {
-        UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+        UNIT_ASSERT_VALUES_EQUAL_C(NPersQueue::NErrorCode::EErrorCode_Name(result->Record.GetErrorCode()),
+            NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::OK), result->Record.DebugString());
         UNIT_ASSERT(result->Record.GetPartitionResponse().HasCmdReadResult());
         auto res = result->Record.GetPartitionResponse().GetCmdReadResult();
         UNIT_ASSERT_EQUAL(res.ResultSize(), 0);

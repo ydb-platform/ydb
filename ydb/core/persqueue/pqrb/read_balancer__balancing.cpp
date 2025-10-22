@@ -1,6 +1,8 @@
 #include "read_balancer__balancing.h"
 #include "read_balancer_log.h"
 
+#include <ydb/core/persqueue/public/utils.h>
+
 #define DEBUG(message)
 
 
@@ -1724,6 +1726,16 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
                         << " is not connected and got register session request for session " << r.GetSession());
         return;
     }
+
+    // TODO MLP
+    // auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
+    // if (!consumerConfig || consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING) {
+    //     THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
+    //     response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+    //     response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" not found in topic " << Topic());
+    //     ctx.Send(ev->Sender, response.Release());
+    //     return;
+    // }
 
     std::vector<ui32> partitions;
     partitions.reserve(r.GroupsSize());

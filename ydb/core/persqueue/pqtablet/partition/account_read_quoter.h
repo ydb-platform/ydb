@@ -59,7 +59,7 @@ namespace NAccountQuoterEvents {
     };
 }
 
-class TBasicAccountQuoter : public TBaseActor<TBasicAccountQuoter> {
+class TBasicAccountQuoter : public TBaseTabletActor<TBasicAccountQuoter> {
 private:
     struct TQueueEvent {
         TQueueEvent(NAccountQuoterEvents::TEvRequest::TPtr request, TInstant startWait)

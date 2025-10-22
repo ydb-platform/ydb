@@ -123,14 +123,21 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         }
     }
 
-    bool doAddCompactionConsumer = config.GetEnableCompactification() && AllOf(config.GetConsumers(), [](const auto& consumer) {
-        return NPQ::CLIENTID_COMPACTION_CONSUMER != consumer.GetName();
-    });
-    if (doAddCompactionConsumer) {
+    if (config.GetEnableCompactification() && !HasConsumer(config, NPQ::CLIENTID_COMPACTION_CONSUMER)) {
         auto* consumer = config.AddConsumers();
         consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
         consumer->SetReadFromTimestampsMs(0);
         consumer->SetImportant(true);
+    }
+
+    ui32 nextConsumerId = 0;
+    for (auto& consumer : config.GetConsumers()) {
+        nextConsumerId = std::max<ui32>(nextConsumerId, consumer.GetId());
+    }
+    for (auto& consumer : *config.MutableConsumers()) {
+        if (!consumer.HasId() || consumer.GetId() == 0) {
+            consumer.SetId(++nextConsumerId);
+        }
     }
 }
 

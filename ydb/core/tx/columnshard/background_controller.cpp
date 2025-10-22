@@ -10,7 +10,7 @@ bool TBackgroundController::StartCompaction(const TInternalPathId pathId, const 
 }
 
 void TBackgroundController::FinishCompaction(const TInternalPathId pathId, const TString& taskId) {
-    auto it = ActiveCompactionInfo.find(std::make_pair(pathId, taskId ));
+    auto it = ActiveCompactionInfo.find(std::make_pair(pathId, taskId));
     AFL_VERIFY(it != ActiveCompactionInfo.end());
     if (it->second.Finish()) {
         ActiveCompactionInfo.erase(it);

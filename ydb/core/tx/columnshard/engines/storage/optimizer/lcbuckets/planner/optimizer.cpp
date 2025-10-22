@@ -40,7 +40,8 @@ std::vector<std::shared_ptr<TColumnEngineChanges>> TOptimizerPlanner::DoGetOptim
             if (data.IsEmpty()) {
                 continue;
             }
-            hasOneLayer |= dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]) || dynamic_pointer_cast<TOneLayerPortions>(level);
+            hasOneLayer |= (dynamic_pointer_cast<TOneLayerPortions>(Levels[data.GetTargetCompactionLevel()]) != nullptr) 
+                            || (dynamic_pointer_cast<TOneLayerPortions>(level) != nullptr);
             if (!results.empty() && hasOneLayer) {
                 return results;
             }

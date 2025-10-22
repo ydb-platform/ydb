@@ -18,15 +18,12 @@ public:
         return {Buffer.data(), Buffer.size()};
     }
 
-    TMutableContiguousSpan GetDataMut() override {
-        if(Buffer.IsShared()) {
+    TMutableContiguousSpan UnsafeGetDataMut() override {
+        // Actualy should newer be true, but acciording to the API this class can share TSharedData with some external buffer
+        if (Buffer.IsShared()) {
             Buffer = TSharedData::Copy(Buffer.data(), Buffer.size());
         }
         return {Buffer.mutable_data(), Buffer.size()};
-    }
-
-    TMutableContiguousSpan UnsafeGetDataMut() override {
-        return {const_cast<char *>(Buffer.data()), Buffer.size()};
     }
 
     bool IsPrivate() const override {
@@ -35,6 +32,14 @@ public:
 
     size_t GetOccupiedMemorySize() const override {
         return Buffer.size();
+    }
+
+    IContiguousChunk::TPtr Clone() override {
+        auto backend = MakeIntrusive<TRopeSharedDataBackend>(Buffer);
+        if (backend->Buffer.IsShared()) {
+            backend->Buffer = TSharedData::Copy(Buffer.data(), Buffer.size());
+        }
+        return backend;
     }
 };
 

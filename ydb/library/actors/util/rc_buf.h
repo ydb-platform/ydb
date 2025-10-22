@@ -283,25 +283,15 @@ struct IContiguousChunk : TThrRefBase {
     virtual TContiguousSpan GetData() const = 0;
 
     /**
-     * Should give mutable access to underlying data
-     * If data is shared - data should be copied
-     * E.g. for TString str.Detach() should be used
-     * Possibly invalidates previous *GetData*() calls
-     */
-    virtual TMutableContiguousSpan GetDataMut() = 0;
-
-    /**
      * Should give mutable access to undelying data as fast as possible
      * Even if data is shared this property should be ignored
      * E.g. in TString const_cast<char *>(str.data()) should be used
      * Possibly invalidates previous *GetData*() calls
      */
-    virtual TMutableContiguousSpan UnsafeGetDataMut() {
-        return GetDataMut();
-    }
+    virtual TMutableContiguousSpan UnsafeGetDataMut() = 0;
 
     /**
-     * Should return true if GetDataMut() would not copy contents when called.
+     * Must return false if implementation shares data even if ref count for IContiguousChunk::TPtr equal to 1
      */
     virtual bool IsPrivate() const {
         return true;
@@ -316,6 +306,12 @@ struct IContiguousChunk : TThrRefBase {
     virtual EInnerType GetInnerType() const noexcept {
         return OTHER;
     }
+
+    /**
+     * Allocate new chunk and copy data into it
+     * NOTE: The actual implementation of clonned chunk may be different
+     */
+    virtual IContiguousChunk::TPtr Clone() = 0;
 };
 
 class TRope;
@@ -500,7 +496,10 @@ class TRcBuf {
                     }
                     return {value.mutable_data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value->GetDataMut();
+                    if ((value->RefCount() != 1) || (value->IsPrivate() == false)) {
+                        value = value->Clone();
+                    }
+                    return value->UnsafeGetDataMut();
                 } else {
                     static_assert(TDependentFalse<T>, "unexpected type");
                 }

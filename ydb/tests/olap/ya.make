@@ -21,7 +21,8 @@ PY3TEST()
         test_upsert.py
     )
     FORK_SUBTESTS()
-
+    
+    REQUIREMENTS(cpu:4)
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
         TAG(ya:fat)

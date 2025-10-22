@@ -53,6 +53,7 @@ DATA(
     arcadia/ydb/tests/fq/s3
 )
 
+REQUIREMENTS(ram:8 cpu:2)
 IF (SANITIZER_TYPE)
     REQUIREMENTS(ram:16)
 ENDIF()

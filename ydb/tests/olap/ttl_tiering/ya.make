@@ -15,6 +15,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
+REQUIREMENTS(ram:16 cpu:2)
 SIZE(MEDIUM)
 
 PEERDIR(

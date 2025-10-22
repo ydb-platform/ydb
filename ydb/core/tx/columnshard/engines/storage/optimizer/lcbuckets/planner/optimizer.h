@@ -53,7 +53,7 @@ private:
     void RefreshWeights() {
         LevelsByWeight.clear();
         for (ui32 i = 0; i < Levels.size(); ++i) {
-            LevelsByWeight.emplace(Levels[i]->GetWeight(IsHighPriority()), Levels[i]);
+            LevelsByWeight.emplace(Levels[i]->GetWeight(IsHighPriority() || Levels[i]->IsHighPriority()), Levels[i]);
         }
     }
 

@@ -120,12 +120,12 @@ namespace {
 
         if (handlersExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(handlersExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
-            settings.DefaultHandlersExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         if (compressionExecutorThreadsNum) {
             auto threadPool = CreateThreadPool(compressionExecutorThreadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compression").SetBlocking(true).SetCatching(false));
-            settings.DefaultCompressionExecutor(NYdb::CreateExternalThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
+            settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool>(threadPool.Release())));
         }
 
         return settings;

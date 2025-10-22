@@ -652,6 +652,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         app.AddSystemBackupSID(sid);
     }
 
+    if (opts.DataShardStatsReportIntervalSeconds_) {
+        app.DataShardConfig.SetStatsReportIntervalSeconds(
+            *opts.DataShardStatsReportIntervalSeconds_);
+    }
+
     AddDomain(runtime, app, TTestTxConfig::DomainUid, hive, schemeRoot);
 
     SetupLogging(runtime);

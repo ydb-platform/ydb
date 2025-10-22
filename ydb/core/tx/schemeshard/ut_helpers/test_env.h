@@ -79,6 +79,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
         OPTION(std::optional<bool>, EnableLocalDBBtreeIndex, std::nullopt);
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
+        OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
 
         #undef OPTION
     };

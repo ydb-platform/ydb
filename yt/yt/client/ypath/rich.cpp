@@ -687,6 +687,11 @@ std::optional<TString> TRichYPath::GetAccessMethod() const
     return FindAttribute<TString>(*this, "access_method");
 }
 
+std::optional<TString> TRichYPath::GetInputQuery() const
+{
+    return FindAttribute<TString>(*this, "input_query");
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TString ConvertToString(const TRichYPath& path, EYsonFormat ysonFormat)

@@ -183,7 +183,7 @@ public:
    */
   template <typename T>
   simdjson_inline simdjson_result<T> get() &
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document> : true)
 #else
     noexcept
@@ -206,7 +206,7 @@ public:
    */
   template<typename T>
   simdjson_inline simdjson_result<T> get() &&
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document> : true)
 #else
     noexcept
@@ -224,18 +224,18 @@ public:
    * Be mindful that the document instance must remain in scope while you are accessing object, array and value instances.
    *
    * @param out This is set to a value of the given type, parsed from the JSON. If there is an error, this may not be initialized.
-   * @returns INCORRECT_TYPE If the JSON value is not an object.
+   * @returns INCORRECT_TYPE If the JSON value is of the given type.
    * @returns SUCCESS If the parse succeeded and the out parameter was set to the value.
    */
   template<typename T>
   simdjson_inline error_code get(T &out) &
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document> : true)
 #else
     noexcept
 #endif
   {
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     if constexpr (custom_deserializable<T, document>) {
         return deserialize(*this, out);
     } else {
@@ -247,7 +247,7 @@ public:
       static_cast<void>(out); // to get rid of unused errors
       return UNINITIALIZED;
     }
-#else // SIMDJSON_SUPPORTS_DESERIALIZATION
+#else // SIMDJSON_SUPPORTS_CONCEPTS
     // Unless the simdjson library or the user provides an inline implementation, calling this method should
     // immediately fail.
     static_assert(!sizeof(T), "The get method with given type is not implemented by the simdjson library. "
@@ -257,7 +257,7 @@ public:
       " You may also add support for custom types, see our documentation.");
     static_cast<void>(out); // to get rid of unused errors
     return UNINITIALIZED;
-#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
+#endif // SIMDJSON_SUPPORTS_CONCEPTS
   }
 
   /** @overload template<typename T> error_code get(T &out) & noexcept */
@@ -322,7 +322,7 @@ public:
    *          time it parses a document or when it is destroyed.
    * @exception simdjson_error(INCORRECT_TYPE) if the JSON value is not a string.
    */
-  simdjson_inline operator std::string_view() noexcept(false);
+  simdjson_inline operator std::string_view() noexcept(false) simdjson_lifetime_bound;
   /**
    * Cast this JSON value to a raw_json_string.
    *
@@ -331,7 +331,7 @@ public:
    * @returns A pointer to the raw JSON for the given string.
    * @exception simdjson_error(INCORRECT_TYPE) if the JSON value is not a string.
    */
-  simdjson_inline operator raw_json_string() noexcept(false);
+  simdjson_inline operator raw_json_string() noexcept(false) simdjson_lifetime_bound;
   /**
    * Cast this JSON value to a bool.
    *
@@ -481,11 +481,27 @@ public:
    * E.g., you must still call "is_null()" to check that a value is null even if
    * "type()" returns json_type::null.
    *
+   * The answer can be one of
+   * simdjson::ondemand::json_type::object,
+   * simdjson::ondemand::json_type::array,
+   * simdjson::ondemand::json_type::string,
+   * simdjson::ondemand::json_type::number,
+   * simdjson::ondemand::json_type::boolean,
+   * simdjson::ondemand::json_type::null.
+   *
+   * Starting with simdjson 4.0, this function will return simdjson::ondemand::json_type::unknown
+   * given a bad token.
+   * This allows you to identify a case such as {"key": NaN} and identify the NaN value.
+   * The simdjson::ondemand::json_type::unknown value should only happen with non-valid JSON.
+   *
    * NOTE: If you're only expecting a value to be one type (a typical case), it's generally
    * better to just call .get_double, .get_string, etc. and check for INCORRECT_TYPE (or just
    * let it throw an exception).
    *
-   * @error TAPE_ERROR when the JSON value is a bad token like "}" "," or "alse".
+   * Prior to simdjson 4.0, this function would return an error given a bad token.
+   * Starting with simdjson 4.0, it will return simdjson::ondemand::json_type::unknown.
+   * This allows you to identify a case such as {"key": NaN} and identify the NaN value.
+   * The simdjson::ondemand::json_type::unknown value should only happen with non-valid JSON.
    */
   simdjson_inline simdjson_result<json_type> type() noexcept;
 
@@ -775,7 +791,7 @@ public:
   simdjson_inline simdjson_result<bool> is_null() noexcept;
   template <typename T>
   simdjson_inline simdjson_result<T> get() &
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document> : true)
 #else
     noexcept
@@ -788,7 +804,7 @@ public:
   }
   template<typename T>
   simdjson_inline simdjson_result<T> get() &&
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document> : true)
 #else
     noexcept
@@ -811,13 +827,13 @@ public:
    */
   template<typename T>
   simdjson_inline error_code get(T &out) &
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     noexcept(custom_deserializable<T, document> ? nothrow_custom_deserializable<T, document_reference> : true)
 #else
     noexcept
 #endif
   {
-#if SIMDJSON_SUPPORTS_DESERIALIZATION
+#if SIMDJSON_SUPPORTS_CONCEPTS
     if constexpr (custom_deserializable<T, document_reference>) {
         return deserialize(*this, out);
     } else {
@@ -829,7 +845,7 @@ public:
       static_cast<void>(out); // to get rid of unused errors
       return UNINITIALIZED;
     }
-#else // SIMDJSON_SUPPORTS_DESERIALIZATION
+#else // SIMDJSON_SUPPORTS_CONCEPTS
     // Unless the simdjson library or the user provides an inline implementation, calling this method should
     // immediately fail.
     static_assert(!sizeof(T), "The get method with given type is not implemented by the simdjson library. "
@@ -839,7 +855,7 @@ public:
       " You may also add support for custom types, see our documentation.");
     static_cast<void>(out); // to get rid of unused errors
     return UNINITIALIZED;
-#endif // SIMDJSON_SUPPORTS_DESERIALIZATION
+#endif // SIMDJSON_SUPPORTS_CONCEPTS
   }
 
   /** @overload template<typename T> error_code get(T &out) & noexcept */
@@ -926,6 +942,9 @@ public:
   template<typename T> simdjson_inline error_code get(T &out) & noexcept;
   template<typename T> simdjson_inline error_code get(T &out) && noexcept;
 #if SIMDJSON_EXCEPTIONS
+
+  using SIMDJSON_IMPLEMENTATION::implementation_simdjson_result_base<SIMDJSON_IMPLEMENTATION::ondemand::document>::operator*;
+  using SIMDJSON_IMPLEMENTATION::implementation_simdjson_result_base<SIMDJSON_IMPLEMENTATION::ondemand::document>::operator->;
   template <class T, typename std::enable_if<std::is_same<T, SIMDJSON_IMPLEMENTATION::ondemand::document>::value == false>::type>
   explicit simdjson_inline operator T() noexcept(false);
   simdjson_inline operator SIMDJSON_IMPLEMENTATION::ondemand::array() & noexcept(false);

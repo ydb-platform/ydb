@@ -1,6 +1,7 @@
 # Изменение настроек базы данных
 
 Изменяет настройки базы данных. На данный момент поддержано изменение следующих [ограничений объектов схемы](../../../../concepts/limits-ydb.md#schema-object):
+
 - `MAX_PATHS`
 - `MAX_SHARDS`
 - `MAX_CHILDREN_IN_DIR`
@@ -21,11 +22,13 @@ ALTER DATABASE path SET (key = value, ...)
 ## Примеры
 
 Установка ограничения на максимальное количество таблеток в базе:
+
 ```yql
 ALTER DATABASE `/Root/test` SET (MAX_SHARDS = 1000);
 ```
 
 Установка ограничения на максимально количество таблеток в базе и на максимальное количество шардов у таблиц:
+
 ```yql
 ALTER DATABASE `/Root/test` SET (MAX_SHARDS = 1000, MAX_SHARDS_IN_PATH = 100);
 ```

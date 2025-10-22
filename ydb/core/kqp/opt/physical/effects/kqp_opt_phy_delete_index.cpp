@@ -98,7 +98,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             // and then delete the corresponding token rows from the index table
             
             // Wrap deleteIndexKeys so it can be used as stage input
-            TExprBase deleteKeysConnection;
+            std::optional<TExprBase> deleteKeysConnection;
             if (deleteIndexKeys.Maybe<TDqCnUnionAll>()) {
                 // Already a proper connection
                 deleteKeysConnection = deleteIndexKeys;
@@ -121,13 +121,11 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             
             auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                .Connection(deleteKeysConnection.Cast<TDqCnUnionAll>())
+                .Connection(deleteKeysConnection->Cast<TDqCnUnionAll>())
                 .Done();
             
-            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns,
+            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
                 del.Pos(), ctx);
-            // Update columns to reflect transformation: text column -> __ydb_token
-            indexTableColumns = BuildFulltextIndexColumns(table, indexDesc);
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
                 .Table(tableNode)
@@ -170,13 +168,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     // Skip lookup means that the input already has all required columns and we only need to project them
     auto settings = TKqpDeleteRowsIndexSettings::Parse(del);
-
-    if (settings.SkipLookup) {
-        auto lookupKeys = ProjectColumns(del.Input(), pk, ctx);
-        return BuildDeleteIndexStagesImpl(table, indexes, del, lookupKeys, [&](const TVector<TStringBuf>& indexTableColumns) {
-            return ProjectColumns(del.Input(), indexTableColumns, ctx);
-        }, ctx, kqpCtx);
-    }
+    Cout << "SkipLookup " << settings.SkipLookup << Endl;
 
     auto payloadSelector = Build<TCoLambda>(ctx, del.Pos())
         .Args({"stub"})
@@ -194,15 +186,6 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     for (const auto& pair : indexes) {
         for (const auto& col : pair.second->KeyColumns) {
             keyColumns.emplace(col);
-        }
-        
-        // For fulltext indexes, we also need the text column to tokenize
-        if (pair.second->Type == TIndexDescription::EType::GlobalFulltext) {
-            const auto* fulltextDesc = std::get_if<NKikimrKqp::TFulltextIndexDescription>(&pair.second->SpecializedIndexDescription);
-            YQL_ENSURE(fulltextDesc, "Expected fulltext index description");
-            const auto& settings = fulltextDesc->GetSettings();
-            YQL_ENSURE(settings.columns().size() == 1, "Expected single text column in fulltext index");
-            keyColumns.emplace(settings.columns().at(0).column());
         }
     }
 

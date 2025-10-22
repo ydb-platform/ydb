@@ -8,7 +8,7 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
-    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
+    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
     TPositionHandle pos, NYql::TExprContext& ctx)
 {
     // Extract fulltext index settings
@@ -70,8 +70,10 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     }
 
     // Add data columns (covered columns)
-    for (const auto& column : indexDesc->DataColumns) {
-        addIndexColumn(column);
+    if (includeDataColumns) {
+        for (const auto& column : indexDesc->DataColumns) {
+            addIndexColumn(column);
+        }
     }
     
     // Create lambda that builds output row for each token

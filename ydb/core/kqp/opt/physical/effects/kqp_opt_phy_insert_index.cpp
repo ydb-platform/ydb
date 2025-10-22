@@ -228,7 +228,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create index rows and refill index columns
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns,
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
                         insert.Pos(), ctx);
                     break;
                 }

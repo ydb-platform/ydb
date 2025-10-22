@@ -118,7 +118,7 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
-    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

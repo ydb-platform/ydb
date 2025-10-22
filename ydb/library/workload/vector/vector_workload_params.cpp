@@ -13,13 +13,6 @@
 namespace NYdbWorkload {
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    auto addCommonParam = [&]() {
-        opts.AddLongOption( "table", "Table name.")
-            .DefaultValue("vector_index_workload").StoreResult(&TableName);
-        opts.AddLongOption( "index", "Index name.")
-            .DefaultValue("index").StoreResult(&IndexName);
-    };
-
     auto addInitParam = [&]() {
         opts.AddLongOption( "rows", "Number of vectors to init the table.")
             .Required().StoreResult(&VectorInitCount);
@@ -33,7 +26,6 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
             .Required().StoreResult(&KmeansTreeLevels);
         opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
             .Required().StoreResult(&KmeansTreeClusters);
-
     };
 
     auto addUpsertParam = [&]() {
@@ -60,11 +52,11 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
 
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
-        addCommonParam();
+        ConfigureCommonOpts(opts);
         addInitParam();
         break;
     case TWorkloadParams::ECommandType::Run:
-        addCommonParam();
+        ConfigureCommonOpts(opts);
         switch (static_cast<EWorkloadRunType>(workloadType)) {
         case EWorkloadRunType::Upsert:
             addUpsertParam();
@@ -77,6 +69,26 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     default:
         break;
     }
+}
+
+void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption( "table", "Table name.")
+        .DefaultValue("vector_index_workload").StoreResult(&TableName);
+    opts.AddLongOption( "index", "Index name.")
+        .DefaultValue("index").StoreResult(&IndexName);
+}
+
+void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption( "distance", "Distance/similarity function")
+        .Required().StoreResult(&Distance);
+    opts.AddLongOption( "vector-type", "Type of vectors")
+        .Required().StoreResult(&VectorType);
+    opts.AddLongOption( "vector-dimension", "Vector dimension.")
+        .Required().StoreResult(&VectorDimension);
+    opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
+        .Required().StoreResult(&KmeansTreeLevels);
+    opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
+        .Required().StoreResult(&KmeansTreeClusters);
 }
 
 void TVectorWorkloadParams::Init() {

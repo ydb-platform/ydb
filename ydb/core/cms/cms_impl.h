@@ -389,6 +389,8 @@ private:
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
 
     void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
+    template<typename TEvRequestPtr>
+    bool CheckEnabled(TEvRequestPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvCheckRequest::TPtr &ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvConditionalPermissionRequest::TPtr &ev, const TActorContext &ctx);

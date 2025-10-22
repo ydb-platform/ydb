@@ -5,6 +5,9 @@
 #include "simdjson/generic/ondemand/base.h"
 #include "simdjson/generic/implementation_simdjson_result_base.h"
 #include "simdjson/generic/ondemand/value_iterator.h"
+#if SIMDJSON_STATIC_REFLECTION && SIMDJSON_SUPPORTS_CONCEPTS
+#include "simdjson/generic/ondemand/json_string_builder.h"  // for constevalutil::fixed_string
+#endif
 #endif // SIMDJSON_CONDITIONAL_INCLUDE
 
 namespace simdjson {
@@ -211,7 +214,7 @@ public:
    * @returns SUCCESS If the parse succeeded and the out parameter was set to the value.
    */
   template <typename T>
-  simdjson_inline error_code get(T &out)
+  simdjson_warn_unused simdjson_inline error_code get(T &out)
      noexcept(custom_deserializable<T, object> ? nothrow_custom_deserializable<T, object> : true) {
     static_assert(custom_deserializable<T, object>);
     return deserialize(*this, out);
@@ -231,12 +234,42 @@ public:
     SIMDJSON_TRY(get<T>(out));
     return out;
   }
+
+#if SIMDJSON_STATIC_REFLECTION
+  /**
+   * Extract only specific fields from the JSON object into a struct.
+   *
+   * This allows selective deserialization of only the fields you need,
+   * potentially improving performance by skipping unwanted fields.
+   *
+   * Example:
+   * ```c++
+   * struct Car {
+   *   std::string make;
+   *   std::string model;
+   *   int year;
+   *   double price;
+   * };
+   *
+   * Car car;
+   * object.extract_into<"make", "model">(car);
+   * // Only 'make' and 'model' fields are extracted from JSON
+   * ```
+   *
+   * @tparam FieldNames Compile-time string literals specifying which fields to extract
+   * @param out The output struct to populate with selected fields
+   * @returns SUCCESS on success, or an error code if a required field is missing or has wrong type
+   */
+  template<constevalutil::fixed_string... FieldNames, typename T>
+    requires(std::is_class_v<T> && (sizeof...(FieldNames) > 0))
+  simdjson_warn_unused simdjson_inline error_code extract_into(T& out) & noexcept;
+#endif // SIMDJSON_STATIC_REFLECTION
 #endif // SIMDJSON_SUPPORTS_CONCEPTS
 protected:
   /**
    * Go to the end of the object, no matter where you are right now.
    */
-  simdjson_inline error_code consume() noexcept;
+  simdjson_warn_unused simdjson_inline error_code consume() noexcept;
   static simdjson_inline simdjson_result<object> start(value_iterator &iter) noexcept;
   static simdjson_inline simdjson_result<object> start_root(value_iterator &iter) noexcept;
   static simdjson_inline simdjson_result<object> started(value_iterator &iter) noexcept;
@@ -291,7 +324,7 @@ public:
     return first.get<T>();
   }
   template<typename T>
-  simdjson_inline error_code get(T& out) noexcept {
+  simdjson_warn_unused simdjson_inline error_code get(T& out) noexcept {
     if (error()) { return error(); }
     if constexpr (std::is_same_v<T, SIMDJSON_IMPLEMENTATION::ondemand::object>) {
       out = first;
@@ -300,6 +333,16 @@ public:
     }
     return SUCCESS;
   }
+
+#if SIMDJSON_STATIC_REFLECTION
+  // TODO: move this code into object-inl.h
+  template<constevalutil::fixed_string... FieldNames, typename T>
+    requires(std::is_class_v<T> && (sizeof...(FieldNames) > 0))
+  simdjson_warn_unused simdjson_inline error_code extract_into(T& out) noexcept {
+    if (error()) { return error(); }
+    return first.extract_into<FieldNames...>(out);
+  }
+#endif // SIMDJSON_STATIC_REFLECTION
 #endif // SIMDJSON_SUPPORTS_CONCEPTS
 };
 

@@ -538,7 +538,8 @@ metadata:
   cluster: ""
   version: 1
 
-config: {yaml_config_enabled: false}
+config:
+  yaml_config_enabled: false
 allowed_labels: {}
 selector_config: []
 )";

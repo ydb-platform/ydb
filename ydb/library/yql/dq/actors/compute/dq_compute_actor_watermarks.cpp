@@ -67,7 +67,9 @@ bool TDqComputeActorWatermarks::NotifyAsyncInputWatermarkReceived(ui64 inputId, 
 
 bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime) {
     LOG_T((isChannel ? "Channel " : "Async input ") << inputId << " notified about watermark " << watermark);
-    MaxWatermark = Max(MaxWatermark, watermark);
+    if (MaxWatermark < watermark) {
+        MaxWatermark = watermark;
+    }
     auto [nextWatermark, updated] = Tracker.NotifyNewWatermark(std::make_pair(inputId, isChannel), watermark, systemTime);
     if (nextWatermark) {
         PendingWatermark = nextWatermark;

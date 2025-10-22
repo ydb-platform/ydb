@@ -8247,15 +8247,18 @@ Y_UNIT_TEST_SUITE(ExternalTable) {
 }
 
 Y_UNIT_TEST_SUITE(TopicsDDL) {
-    void TestQuery(const TString& query, bool expectOk = true) {
+    void TestQuery(const TString& query, bool expectOk = true, const TVector<TString> issueSubstrings = {}) {
         TStringBuilder finalQuery;
 
         finalQuery << "use plato;" << Endl << query;
         auto res = SqlToYql(finalQuery, 10, "kikimr");
         if (expectOk) {
-            UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+            UNIT_ASSERT_C(res.IsOk(), "Query: " << query << "\n" << "Issues: " << res.Issues.ToString());
         } else {
-            UNIT_ASSERT(!res.IsOk());
+            UNIT_ASSERT_C(!res.IsOk(), "Query: " << query << "\n" << "Issues: " << res.Issues.ToString());
+            for (const auto& issue : issueSubstrings) {
+                UNIT_ASSERT_STRING_CONTAINS_C(res.Issues.ToOneLineString(), issue, "Query: " << query << "\n" << "Issues: " << res.Issues.ToString());
+            }
         }
     }
 
@@ -8281,6 +8284,9 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
         TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false)) WITH (supported_codecs = "1,2,3");
         )");
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false, availability_period = Interval('PT9H'))) WITH (supported_codecs = "1,2,3");
+        )");
     }
 
     Y_UNIT_TEST(AlterTopicSimple) {
@@ -8305,6 +8311,8 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
                 ALTER CONSUMER consumer3 SET (important = false, read_from = 1),
                 ALTER CONSUMER consumer3 RESET (supported_codecs),
                 DROP CONSUMER consumer4,
+                ALTER CONSUMER consumer5 SET (availability_period = Interval('PT9H')),
+                ALTER CONSUMER consumer6 RESET (availability_period),
                 SET (partition_count_limit = 11, retention_period = Interval('PT1H')),
                 RESET(metering_mode)
         )");
@@ -8335,26 +8343,36 @@ Y_UNIT_TEST_SUITE(TopicsDDL) {
 
         TestQuery(R"(
             CREATE TOPIC topic1 WITH (retention_period = 123);
-        )", false);
+        )", false, {"3:58: Error: Literal of Interval type is expected for retention"});
         TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
-        )", false);
+        )", false, {"3:59: Error: Consumer cons1 defined more than once"});
         TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
-        )", false);
+        )", false, {"3:68: Error: BAD_OPTION: unknown option for consumer"});
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
+        )", false, {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
         TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
-        )", false);
+        )", false, {"3:80: Error: IMPORTANT reset is not supported"});
         TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 RESET (supported_codecs);
-        )", false);
+        )", false, {"5:49: Error: SUPPORTED_CODECS specified multiple times in ALTER CONSUMER statement for single consumer"});
         TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
-        )", false);
+        )", false, {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
+        TestQuery(R"(
+            CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
+        )", false, {"3:77: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
+        TestQuery(R"(
+            ALTER TOPIC topic1
+                ALTER CONSUMER consumer3 SET (availability_period = false);
+        )", false, {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
     }
 
     Y_UNIT_TEST(TopicWithPrefix) {

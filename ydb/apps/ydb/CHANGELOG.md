@@ -1,3 +1,4 @@
+* Added a new `ydb admin cluster state fetch` command to collect information about cluster nodes state and metrics.
 * Fixed a bug with no consumer creation for transfers with absolute topic paths when no CONNECTION_STRING is provided.
 * Added transfer objects support to the `ydb tools dump` and `ydb tools restore` commands.
 * Fixed a bug where the `ydb debug ping` command crashed in case of any error.

@@ -1549,7 +1549,11 @@ void TPartition::WriteInfoResponseHandler(
     ProcessTxsAndUserActs(ctx);
 }
 
-TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx) {
+TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
+                                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     PQ_ENSURE(tx.WriteInfo);
     PQ_ENSURE(!tx.WriteInfoApplied);
@@ -2338,9 +2342,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
         BatchingState = ETxBatchingState::Finishing;
         return;
     }
-    auto visitor = [this](auto& event) {
-        return this->PreProcessUserActionOrTransaction(event);
-    };
     while (CanProcessUserActionAndTransactionEvents() && !UserActionAndTransactionEvents.empty()) {
         if (ChangingConfig) {
             BatchingState = ETxBatchingState::Finishing;
@@ -2350,6 +2351,9 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
         if (TMessage* msg = std::get_if<TMessage>(&front.Event); msg && msg->WaitPreviousWriteSpan) {
             msg->WaitPreviousWriteSpan.End();
         }
+        auto visitor = [this, &front](auto& event) {
+            return this->PreProcessUserActionOrTransaction(event, front.AffectedSourceIdsAndConsumers);
+        };
         switch (std::visit(visitor, front.Event)) {
             case EProcessResult::Continue:
                 MoveUserActOrTxToCommitState();
@@ -2639,8 +2643,11 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
     Replies.clear();
 }
 
-TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t)
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
+                                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     auto span = t->CalcPredicateSpan.CreateChild(TWilsonTopic::TopicTopLevel,
                                                  "Topic.Partition.PreProcess",
                                                  NWilson::EFlags::AUTO_END);
@@ -2651,7 +2658,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Recieved write info but not applied
-        result = ApplyWriteInfoResponse(*t);
+        result = ApplyWriteInfoResponse(*t, affectedSourceIdsAndConsumers);
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
             PQ_LOG_TX_D("The TxId " << t->GetTxId() << " must be blocked");
             PQ_ENSURE(result != EProcessResult::Continue);
@@ -2671,7 +2678,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             ReplyToProposeOrPredicate(t, true);
             return EProcessResult::Continue;
         }
-        result = BeginTransactionData(*t);
+        result = BeginTransactionData(*t, affectedSourceIdsAndConsumers);
         if (t->Predicate.Defined()) {
             ReplyToProposeOrPredicate(t, true);
         }
@@ -2738,8 +2745,11 @@ bool TPartition::ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t, 
     return true;
 }
 
-TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t)
+TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
+                                                            TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     const TEvPQ::TEvTxCalcPredicate& tx = *t.Tx;
     TMaybe<bool>& predicateOut = t.Predicate;
     TString& issueMsg = t.Message;
@@ -3394,11 +3404,15 @@ void TPartition::ExecImmediateTx(TTransaction& t)
     return;
 }
 
-TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& act)
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& act,
+                                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     if (AffectedUsers.size() >= MAX_USERS) {
         return EProcessResult::Blocked;
     }
+
     return PreProcessUserAct(*act);
 }
 
@@ -3409,7 +3423,8 @@ bool TPartition::ExecUserActionOrTransaction(
     return true;
 }
 
-TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessage& msg)
+TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessage& msg,
+                                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
     if (WriteCycleSize >= MAX_WRITE_CYCLE_SIZE) {
         return EProcessResult::Blocked;
@@ -3417,16 +3432,17 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TMessag
 
     auto result = EProcessResult::Continue;
     if (msg.IsWrite()) {
-        result = PreProcessRequest(msg.GetWrite());
+        result = PreProcessRequest(msg.GetWrite(), affectedSourceIdsAndConsumers);
     } else if (msg.IsRegisterMessageGroup()) {
-        result = PreProcessRequest(msg.GetRegisterMessageGroup());
+        result = PreProcessRequest(msg.GetRegisterMessageGroup(), affectedSourceIdsAndConsumers);
     } else if (msg.IsDeregisterMessageGroup()) {
-        result = PreProcessRequest(msg.GetDeregisterMessageGroup());
+        result = PreProcessRequest(msg.GetDeregisterMessageGroup(), affectedSourceIdsAndConsumers);
     } else if (msg.IsSplitMessageGroup()) {
-        result = PreProcessRequest(msg.GetSplitMessageGroup());
+        result = PreProcessRequest(msg.GetSplitMessageGroup(), affectedSourceIdsAndConsumers);
     } else {
         PQ_ENSURE(msg.IsOwnership());
     }
+
     return result;
 }
 

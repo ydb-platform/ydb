@@ -805,9 +805,19 @@ private:
     // template <class T> T& GetCurrentEvent();
     //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
 
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event);
-    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx);
-    EProcessResult PreProcessUserActionOrTransaction(TMessage& msg);
+    struct TAffectedSourceIdsAndConsumers {
+        TVector<TString> TxWriteSourcesIds;
+        TVector<TString> WriteSourcesIds;
+        TVector<TString> TxReadConsumers;
+        TVector<TString> ReadConsumers;
+    };
+
+    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessUserActionOrTransaction(TMessage& msg,
+                                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event, TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
@@ -820,19 +830,25 @@ private:
     [[nodiscard]] EProcessResult PreProcessImmediateTx(TTransaction& t);
     void ExecImmediateTx(TTransaction& tx);
 
-    EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TSplitMessageGroupMsg& msg);
-    EProcessResult PreProcessRequest(TWriteMsg& msg);
+    EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TDeregisterMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TSplitMessageGroupMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult PreProcessRequest(TWriteMsg& msg,
+                                     TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     void ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters& parameters);
     void ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& parameters);
     bool ExecRequest(TWriteMsg& msg, ProcessParameters& parameters, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t);
+    [[nodiscard]] EProcessResult BeginTransactionData(TTransaction& t,
+                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
-    EProcessResult ApplyWriteInfoResponse(TTransaction& tx);
+    EProcessResult ApplyWriteInfoResponse(TTransaction& tx,
+                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     bool FirstEvent = true;
     bool HaveWriteMsg = false;
@@ -858,9 +874,6 @@ private:
     // user actions and transactions
     //
     struct TUserActionAndTransactionEvent {
-        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
-                     TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
-                     TMessage> Event;
         TUserActionAndTransactionEvent(TSimpleSharedPtr<TTransaction>&& transaction)
             : Event(std::move(transaction))
         {}
@@ -870,6 +883,11 @@ private:
         TUserActionAndTransactionEvent(TMessage&& message)
             : Event(std::move(message))
         {}
+
+        std::variant<TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>,             // user actions
+                     TSimpleSharedPtr<TTransaction>,                        // distributed transaction or update config
+                     TMessage> Event;
+        TAffectedSourceIdsAndConsumers AffectedSourceIdsAndConsumers;
     };
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;

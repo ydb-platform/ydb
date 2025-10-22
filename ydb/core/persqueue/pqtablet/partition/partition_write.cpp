@@ -896,7 +896,11 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
     StartProcessChangeOwnerRequests(ctx);
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -928,7 +932,11 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
     parameters.SourceIdBatch.RegisterSourceId(body.SourceId, body.SeqNo, parameters.CurOffset, CurrentTimestamp, std::move(keyRange));
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -951,7 +959,11 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 }
 
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -975,8 +987,8 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
         }
         WriteAffectedSourcesIds.insert(body.SourceId);
     }
-    return EProcessResult::Continue;
 
+    return EProcessResult::Continue;
 }
 
 
@@ -996,7 +1008,11 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
     }
 }
 
-TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
+TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
+                                                         TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,
@@ -1023,6 +1039,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
         }
     }
     WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+
     return EProcessResult::Continue;
 }
 

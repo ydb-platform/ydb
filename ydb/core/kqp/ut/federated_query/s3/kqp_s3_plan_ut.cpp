@@ -315,6 +315,104 @@ Y_UNIT_TEST_SUITE(KqpS3PlanTest) {
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Node Type"].GetStringSafe(), "TableFullScan");
         UNIT_ASSERT_VALUES_EQUAL(readStagePlan["Stats"]["Tasks"], 42);
     }
+
+    Y_UNIT_TEST(S3ExportBoolViaExternalDataSource) {
+        {
+            Aws::S3::S3Client s3Client = MakeS3Client();
+            CreateBucket("test_bool_export", s3Client);
+        }
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+
+        {
+            const TString query = fmt::format(R"sql(
+                CREATE EXTERNAL DATA SOURCE bool_sink WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{sink_location}",
+                    AUTH_METHOD="NONE"
+                );
+
+                CREATE TABLE row_bool_source (
+                    id Int64 NOT NULL,
+                    flag Bool,
+                    PRIMARY KEY (id)
+                );
+
+                )sql",
+                "sink_location"_a = GetBucketLocation("test_bool_export")
+            );
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString upsert = R"sql(
+                UPSERT INTO row_bool_source (id, flag) VALUES
+                    (1, true), (2, false), (3, true), (4, false);
+            )sql";
+
+            auto res = session.ExecuteDataQuery(upsert, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), NYdb::EStatus::SUCCESS, res.GetIssues().ToString());
+        }
+
+        const TString sql = R"sql(
+            INSERT INTO bool_sink.`/export/`
+            WITH (FORMAT = "parquet")
+            SELECT id, flag FROM row_bool_source
+        )sql";
+
+        auto queryClient = kikimr->GetQueryClient();
+        TExecuteQueryResult queryResult = queryClient.ExecuteQuery(
+            sql,
+            TTxControl::NoTx(),
+            TExecuteQuerySettings().StatsMode(EStatsMode::Full)).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(queryResult.GetStatus(), NYdb::EStatus::SUCCESS, queryResult.GetIssues().ToString());
+        UNIT_ASSERT(queryResult.GetStats());
+        UNIT_ASSERT(queryResult.GetStats()->GetPlan());
+
+        NJson::TJsonValue plan;
+
+        UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
+
+        const auto& writeStagePlan = plan["Plan"]["Plans"][0]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(writeStagePlan["Node Type"].GetStringSafe(), "Stage");
+
+        const auto& sinkPlan = plan["Plan"]["Plans"][0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkPlan["Node Type"].GetStringSafe(), "Sink");
+        UNIT_ASSERT(sinkPlan["Operators"].GetArraySafe().size() >= 1);
+
+        const auto& sinkOp = sinkPlan["Operators"].GetArraySafe()[0];
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["ExternalDataSource"].GetStringSafe(), "bool_sink");
+        UNIT_ASSERT_VALUES_EQUAL(sinkOp["Extension"].GetStringSafe(), ".parquet");
+
+        const auto& root = plan["Plan"]["Plans"][0]["Plans"][0];
+        std::function<bool(const NJson::TJsonValue&)> hasScanNode = [&](const NJson::TJsonValue& n) -> decltype(auto) {
+            const TString t = n["Node Type"].GetStringSafe();
+            if (t == "TableFullScan" || t == "TableRangesScan" || t == "TablePointLookup" || t == "Read" || t == "Source") {
+                return true;
+            }
+
+            if (n.GetMap().contains("Plans")) {
+                const auto& arr = n["Plans"].GetArraySafe();
+                for (auto&& child : arr) {
+                    if (hasScanNode(child)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        };
+
+        UNIT_ASSERT_C(hasScanNode(root), "Scan/source node not found under write stage subtree");
+    }
 }
 
 } // namespace NKikimr::NKqp

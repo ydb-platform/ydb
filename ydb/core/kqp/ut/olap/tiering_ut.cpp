@@ -63,6 +63,7 @@ public:
         runnerSettings.SetColumnShardAlterObjectEnabled(true);
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableColumnshardBool(true);
+        featureFlags.SetEnableColumnStore(true);
         runnerSettings.SetFeatureFlags(featureFlags);
         TestHelper.emplace(runnerSettings);
         OlapHelper.emplace(TestHelper->GetKikimr());

@@ -30,7 +30,11 @@ namespace NKikimr {
             }
 
             TLogoBlobID LogoBlobID() const {
-                return TLogoBlobID(Raw);
+                return TLogoBlobID(
+                    ReadUnaligned<ui64>(&Raw[0]),
+                    ReadUnaligned<ui64>(&Raw[1]),
+                    ReadUnaligned<ui64>(&Raw[2])
+                );
             }
 
             TString ToString() const {

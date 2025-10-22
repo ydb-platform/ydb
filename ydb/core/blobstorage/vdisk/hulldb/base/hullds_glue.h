@@ -80,7 +80,7 @@ namespace NKikimr {
         ui64 SstId;
         TInfo Info;
 
-        TIdxDiskPlaceHolder(ui64 sstId)
+        TIdxDiskPlaceHolder(ui64 sstId = 0)
             : MagicNumber(Signature)
             , PrevPart()
             , SstId(sstId)

@@ -105,7 +105,7 @@ public:
         if (IsAbsolutePath(path)) {
             return RewriteAbsolutePath(path);
         } else if (!BackupPathPrefix.empty() && !RestorePathPrefix.empty()) {
-            return TStringBuilder() << '`' << BuildRelativePath(NDump::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot)) << '`';
+            return TStringBuilder() << '`' << BuildRelativePath(::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot)) << '`';
         }
 
         return path;

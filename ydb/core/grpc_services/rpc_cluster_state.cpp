@@ -21,6 +21,7 @@
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 #include <ydb/core/protos/cluster_state_info.pb.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
+#include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <google/protobuf/util/json_util.h>
 
 namespace NKikimr {
@@ -67,6 +68,7 @@ public:
 
     void HandleBrowse(TEvInterconnect::TEvNodesInfo::TPtr& ev) {
         RequestHealthCheck();
+        RequestBaseConfig();
         Nodes = ev->Get()->Nodes;
         NodeReceived.resize(Nodes.size());
         NodeRequested.resize(Nodes.size());
@@ -89,6 +91,17 @@ public:
         } else {
             ReplyAndPassAway();
         }
+    }
+
+    void RequestBaseConfig() {
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new NKikimr::NStorage::TEvNodeWardenQueryBaseConfig);
+        Requested++;
+    }
+
+    void Handle(NKikimr::NStorage::TEvNodeWardenBaseConfig::TPtr ev) {
+        State.MutableBaseConfig()->CopyFrom(ev->Get()->BaseConfig);
+        ++Received;
+        CheckReply();
     }
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr &ev) {
@@ -203,6 +216,7 @@ public:
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvBridgeInfoResponse, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvNodeStateResponse, Handle);
+            hFunc(NKikimr::NStorage::TEvNodeWardenBaseConfig, Handle);
             hFunc(NKikimr::NCountersInfo::TEvCountersInfoResponse, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
             cFunc(TEvents::TSystem::Wakeup, Wakeup);

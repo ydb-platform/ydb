@@ -27,7 +27,7 @@ public:
     }
 
     bool IsPrivate() const override {
-        return Buffer.IsPrivate();
+        return RefCount() == 1 && Buffer.IsPrivate();
     }
 
     size_t GetOccupiedMemorySize() const override {
@@ -36,9 +36,7 @@ public:
 
     IContiguousChunk::TPtr Clone() override {
         auto backend = MakeIntrusive<TRopeSharedDataBackend>(Buffer);
-        if (backend->Buffer.IsShared()) {
-            backend->Buffer = TSharedData::Copy(Buffer.data(), Buffer.size());
-        }
+        backend->Buffer.Detach();
         return backend;
     }
 };

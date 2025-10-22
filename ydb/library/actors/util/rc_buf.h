@@ -291,10 +291,10 @@ struct IContiguousChunk : TThrRefBase {
     virtual TMutableContiguousSpan UnsafeGetDataMut() = 0;
 
     /**
-     * Must return false if implementation shares data even if ref count for IContiguousChunk::TPtr equal to 1
+     * Must return false if the implementation shares data
      */
     virtual bool IsPrivate() const {
-        return true;
+        return RefCount() == 1;
     }
 
     virtual size_t GetOccupiedMemorySize() const = 0;
@@ -454,7 +454,7 @@ class TRcBuf {
                 } else if constexpr (std::is_same_v<T, TString>) {
                     return value.IsDetached();
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    return value.RefCount() == 1 && value->IsPrivate();
+                    return value->IsPrivate();
                 } else {
                     static_assert(TDependentFalse<T>);
                 }
@@ -496,7 +496,7 @@ class TRcBuf {
                     }
                     return {value.mutable_data(), value.size()};
                 } else if constexpr (std::is_same_v<T, IContiguousChunk::TPtr>) {
-                    if ((value->RefCount() != 1) || (value->IsPrivate() == false)) {
+                    if (!value->IsPrivate()) {
                         value = value->Clone();
                     }
                     return value->UnsafeGetDataMut();

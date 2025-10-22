@@ -228,6 +228,7 @@ struct TViewQuerySplit {
     TString ContextRecreation;
     TString Select;
 
+    TViewQuerySplit() = default;
     TViewQuerySplit(const TVector<TString>& statements) {
         TStringBuilder context;
         for (int i = 0; i < std::ssize(statements) - 1; ++i) {
@@ -244,16 +245,9 @@ bool BuildTranslationSettings(const TString& query, google::protobuf::Arena& are
     return ParseTranslationSettings(query, settings, issues);
 }
 
-TLexers BuildLexers() {
-    TLexers lexers;
-    lexers.Antlr4 = MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = MakeAntlr4AnsiLexerFactory();
-    return lexers;
-}
-
-bool SplitViewQuery(const TString& query, const TLexers& lexers, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
+bool SplitViewQuery(const TString& query, const TTranslationSettings& translationSettings, TViewQuerySplit& split, NYql::TIssues& issues) {
     TVector<TString> statements;
-    auto lexer = NSQLTranslationV1::MakeLexer(lexers, translationSettings.AnsiLexer, translationSettings.Antlr4Parser);
+    auto lexer = NSQLTranslationV1::MakeLexer(translationSettings.AnsiLexer);
     if (!SplitQueryToStatements(query, lexer, statements, issues)) {
         return false;
     }
@@ -271,8 +265,7 @@ bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues&
     if (!BuildTranslationSettings(query, arena, translationSettings, issues)) {
         return false;
     }
-    auto lexers = BuildLexers();
-    return SplitViewQuery(query, lexers, translationSettings, split, issues);
+    return SplitViewQuery(query, translationSettings, split, issues);
 }
 
 bool SqlToProtoAst(const TString& query, TRule_sql_query& queryProto, NYql::TIssues& issues) {

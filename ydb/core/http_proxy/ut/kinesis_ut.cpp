@@ -198,7 +198,7 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             auto res = SendHttpRequest("/Root", "kinesisApi.CreateStream", request,
                                        FormAuthorizationStr("ru-central1"));
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
-            const TString expectedBody("{\"__type\":\"ValidationException\",\"message\":\"<main>: Error: retention hours and storage megabytes must fit one of: { hours : [0, 24],  storage : [0, 0]}, { hours : [0, 168],  storage : [51200, 1048576]}, { hours : [0, 24],  storage : [0, 0]}, { hours : [0, 168],  storage : [51200, 1048576]}, provided values: hours 56, storage 0, code: 500080\\n\"}")
+            const TString expectedBody("{\"__type\":\"ValidationException\",\"message\":\"<main>: Error: retention hours and storage megabytes must fit one of: { hours : [0, 24],  storage : [0, 0]}, { hours : [0, 168],  storage : [51200, 1048576]}, { hours : [0, 24],  storage : [0, 0]}, { hours : [0, 168],  storage : [51200, 1048576]}, provided values: hours 56, storage 0, code: 500080\\n\"}");
             UNIT_ASSERT_VALUES_EQUAL(res.Body, expectedBody);
             UNIT_ASSERT_VALUES_EQUAL(res.Description, "ValidationException");
         }

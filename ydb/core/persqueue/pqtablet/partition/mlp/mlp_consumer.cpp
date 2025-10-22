@@ -38,11 +38,11 @@ void ReplyOk(const TActorIdentity selfActorId, std::deque<T>& queue) {
 
 }
 
+TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
+    TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPSnapshot);
+    ikey.Append(consumerName.c_str(), consumerName.size());
 
-
-TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
-    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId)).ToString()
-        << "_" << Sprintf("%.10" PRIu32, consumerId);
+    return ikey.ToString();
 }
 
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
@@ -60,7 +60,7 @@ void TConsumerActor::Bootstrap() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
-    auto key = MakeSnapshotKey(PartitionId, Config.GetId());
+    auto key = MakeSnapshotKey(PartitionId, Config.GetName());
     LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.AddCmdRead()->SetKey(key);
@@ -151,8 +151,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                 return Restart(TStringBuilder() << "Parse snapshot error");
             }
 
-            if (Config.GetId() != snapshot.GetConfiguration().GetConsumerId()) {
-                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetId() << " vs " << snapshot.GetConfiguration().GetConsumerId());
+            if (Config.GetName() != snapshot.GetConfiguration().GetConsumerName()) {
+                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetName() << " vs " << snapshot.GetConfiguration().GetConsumerName());
             }
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
@@ -272,7 +272,7 @@ STFUNC(TConsumerActor::StateWrite) {
 void TConsumerActor::Restart(TString&& error) {
     LOG_E(error);
 
-    Send(PartitionActorId, new TEvPQ::TEvMLPRestartActor());
+    Send(TabletActorId, new TEvents::TEvPoison());
 
     ReplyErrorAll(SelfId(), ReadRequestsQueue);
     ReplyErrorAll(SelfId(), CommitRequestsQueue);
@@ -377,13 +377,13 @@ void TConsumerActor::PersistSnapshot() {
     NKikimrPQ::TMLPStorageSnapshot snapshot;
 
     auto* config = snapshot.MutableConfiguration();
-    config->SetConsumerId(Config.GetId());
+    config->SetConsumerName(Config.GetName());
     config->SetGeneration(Config.GetGeneration());
     Storage->CreateSnapshot(snapshot);
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     auto* write = request->Record.AddCmdWrite();
-    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
+    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
     write->SetValue(snapshot.SerializeAsString());
 
     Send(TabletActorId, std::move(request));

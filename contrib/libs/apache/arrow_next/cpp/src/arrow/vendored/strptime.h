@@ -20,7 +20,7 @@
 
 #include <time.h>
 
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 #ifdef __cplusplus
 extern "C" {

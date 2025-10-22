@@ -20,9 +20,9 @@
 
 #include <cstdint>
 
-#include "arrow/util/endian.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/endian.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
 
 namespace parquet20::internal {
 

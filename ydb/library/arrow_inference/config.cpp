@@ -4,7 +4,7 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/value_parsing.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/value_parsing.h>
 
 namespace NYdb::NArrowInference {
 

@@ -25,8 +25,8 @@
 #include <string>
 #include <utility>
 
-#include "parquet/platform.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace arrow20 {
 

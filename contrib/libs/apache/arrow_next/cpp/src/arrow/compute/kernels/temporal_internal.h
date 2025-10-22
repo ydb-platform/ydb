@@ -21,8 +21,8 @@
 #include <chrono>
 #include <cstdint>
 
-#include "arrow/compute/api_scalar.h"
-#include "arrow/vendored/datetime.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/vendored/datetime.h"
 
 namespace arrow20 {
 

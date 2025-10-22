@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/metadata_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/metadata_internal.h"
 
 #include <cstdint>
 #include <memory>
@@ -25,22 +25,22 @@
 
 #include <flatbuffers/flatbuffers.h>
 
-#include "arrow/extension_type.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/ipc/dictionary.h"
-#include "arrow/ipc/message.h"
-#include "arrow/ipc/options.h"
-#include "arrow/ipc/util.h"
-#include "arrow/sparse_tensor.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/key_value_metadata.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/string.h"
-#include "arrow/util/ubsan.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/dictionary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/message.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/sparse_tensor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/key_value_metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/string.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 #include "generated/File.fbs.h"
 #include "generated/Message.fbs.h"

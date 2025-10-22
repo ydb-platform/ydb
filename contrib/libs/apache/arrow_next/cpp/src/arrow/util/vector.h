@@ -22,10 +22,10 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/result.h"
-#include "arrow/util/algorithm.h"
-#include "arrow/util/functional.h"
-#include "arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/algorithm.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/functional.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
 
 namespace arrow20 {
 namespace internal {

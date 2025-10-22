@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/tensor/converter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/tensor/converter.h"
 
 #define DISPATCH(ACTION, index_elsize, value_elsize, ...) \
   switch (index_elsize) {                                 \

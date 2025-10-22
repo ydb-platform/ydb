@@ -23,8 +23,8 @@
 #include <string>
 #include <variant>
 
-#include "arrow/type.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

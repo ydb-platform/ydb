@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "parquet/file_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_reader.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -26,30 +26,30 @@
 #include <unordered_map>
 #include <utility>
 
-#include "arrow/io/caching.h"
-#include "arrow/io/file.h"
-#include "arrow/io/memory.h"
-#include "arrow/io/util_internal.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/future.h"
-#include "arrow/util/int_util_overflow.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/ubsan.h"
-#include "parquet/bloom_filter.h"
-#include "parquet/bloom_filter_reader.h"
-#include "parquet/column_reader.h"
-#include "parquet/column_scanner.h"
-#include "parquet/encryption/encryption_internal.h"
-#include "parquet/encryption/internal_file_decryptor.h"
-#include "parquet/exception.h"
-#include "parquet/file_writer.h"
-#include "parquet/metadata.h"
-#include "parquet/page_index.h"
-#include "parquet/platform.h"
-#include "parquet/properties.h"
-#include "parquet/schema.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/caching.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/file.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/util_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/future.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int_util_overflow.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/ubsan.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/bloom_filter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/bloom_filter_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/column_scanner.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/internal_file_decryptor.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/file_writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/metadata.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/page_index.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/properties.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 using arrow20::internal::AddWithOverflow;
 

@@ -25,11 +25,11 @@
 #include <unordered_map>
 #include <vector>
 
-#include "arrow/compute/expression.h"
-#include "arrow/compute/type_fwd.h"
-#include "arrow/result.h"
-#include "arrow/util/cpu_info.h"
-#include "arrow/util/simd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/expression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/cpu_info.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/simd.h"
 
 #if defined(__clang__) || defined(__GNUC__)
 #  define BYTESWAP(x) __builtin_bswap64(x)

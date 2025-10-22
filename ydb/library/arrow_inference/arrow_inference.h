@@ -14,10 +14,10 @@
 
 namespace NYdb::NArrowInference {
 
-using ArrowField = std::shared_ptr<arrow::Field>;
+using ArrowField = std::shared_ptr<arrow20::Field>;
 using ArrowFields = std::vector<ArrowField>;
 
-std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow::io::InputStream>>& inputs, std::shared_ptr<TFormatConfig> config);
-bool ArrowToYdbType(Ydb::Type& result, const arrow::DataType& type, std::shared_ptr<TFormatConfig> config);
+std::variant<ArrowFields, TString> InferTypes(const std::vector<std::shared_ptr<arrow20::io::InputStream>>& inputs, std::shared_ptr<TFormatConfig> config);
+bool ArrowToYdbType(Ydb::Type& result, const arrow20::DataType& type, std::shared_ptr<TFormatConfig> config);
 
 } // namespace NYdb 

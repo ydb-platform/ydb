@@ -15,10 +15,10 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/util/tracing.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing.h"
 
-#include "arrow/util/config.h"
-#include "arrow/util/tracing_internal.h"
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/tracing_internal.h"
 
 #include <memory>
 

@@ -25,10 +25,10 @@
 #include <string_view>
 #include <utility>
 
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type_fwd.h"
-#include "arrow/util/basic_decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/basic_decimal.h"
 
 namespace arrow20 {
 

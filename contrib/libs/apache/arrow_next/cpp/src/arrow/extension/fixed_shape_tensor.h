@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "arrow/extension_type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/extension_type.h"
 
 namespace arrow20 {
 namespace extension {

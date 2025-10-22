@@ -24,17 +24,17 @@
 #include <unordered_set>
 #include <utility>
 
-#include "arrow/io/caching.h"
-#include "arrow/type.h"
-#include "arrow/util/compression.h"
-#include "arrow/util/type_fwd.h"
-#include "parquet/encryption/encryption.h"
-#include "parquet/exception.h"
-#include "parquet/parquet_version.h"
-#include "parquet/platform.h"
-#include "parquet/schema.h"
-#include "parquet/type_fwd.h"
-#include "parquet/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/caching.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/compression.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/encryption.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/exception.h"
+#include "contrib/libs/apache/arrow_next/src/parquet/parquet_version.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/schema.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/type_fwd.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/types.h"
 
 namespace parquet20 {
 

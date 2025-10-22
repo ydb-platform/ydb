@@ -21,9 +21,9 @@
 #include <cstdint>
 #include <memory>
 
-#include "arrow/array/data.h"
-#include "arrow/compute/api_vector.h"
-#include "arrow/compute/kernels/vector_selection_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_vector.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/vector_selection_internal.h"
 
 namespace arrow20 {
 namespace compute {

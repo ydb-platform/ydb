@@ -29,16 +29,16 @@
 #include <utility>
 #include <vector>
 
-#include "arrow/buffer.h"
-#include "arrow/compute/exec.h"
-#include "arrow/datum.h"
-#include "arrow/device_allocation_type_set.h"
-#include "arrow/memory_pool.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/exec.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/datum.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/device_allocation_type_set.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/memory_pool.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 // macOS defines PREALLOCATE as a preprocessor macro in the header sys/vnode.h.
 // No other BSD seems to do so. The name is used as an identifier in MemAllocation enum.

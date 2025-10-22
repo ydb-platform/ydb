@@ -23,22 +23,22 @@
 #include <memory>
 #include <type_traits>
 
-#include "arrow/array/array_base.h"
-#include "arrow/array/array_binary.h"
-#include "arrow/array/builder_adaptive.h"   // IWYU pragma: export
-#include "arrow/array/builder_base.h"       // IWYU pragma: export
-#include "arrow/array/builder_primitive.h"  // IWYU pragma: export
-#include "arrow/array/data.h"
-#include "arrow/array/util.h"
-#include "arrow/scalar.h"
-#include "arrow/status.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_block_counter.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/decimal.h"
-#include "arrow/util/macros.h"
-#include "arrow/util/visibility.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_base.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/array_binary.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_adaptive.h"   // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_base.h"       // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/builder_primitive.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/data.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_block_counter.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/macros.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/visibility.h"
 
 namespace arrow20 {
 

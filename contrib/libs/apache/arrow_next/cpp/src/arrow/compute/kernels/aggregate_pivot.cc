@@ -15,14 +15,14 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/compute/api_aggregate.h"
-#include "arrow/compute/kernels/aggregate_internal.h"
-#include "arrow/compute/kernels/common_internal.h"
-#include "arrow/compute/kernels/pivot_internal.h"
-#include "arrow/scalar.h"
-#include "arrow/util/bit_run_reader.h"
-#include "arrow/util/logging.h"
-#include "arrow/visit_data_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/api_aggregate.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/aggregate_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/common_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/pivot_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/scalar.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_run_reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_data_inline.h"
 
 namespace arrow20::compute::internal {
 namespace {

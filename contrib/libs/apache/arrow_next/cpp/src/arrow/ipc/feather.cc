@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "arrow/ipc/feather.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/feather.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -29,24 +29,24 @@
 
 #include <flatbuffers/flatbuffers.h>
 
-#include "arrow/array.h"
-#include "arrow/buffer.h"
-#include "arrow/chunked_array.h"
-#include "arrow/io/interfaces.h"
-#include "arrow/ipc/metadata_internal.h"
-#include "arrow/ipc/options.h"
-#include "arrow/ipc/reader.h"
-#include "arrow/ipc/util.h"
-#include "arrow/ipc/writer.h"
-#include "arrow/result.h"
-#include "arrow/status.h"
-#include "arrow/table.h"
-#include "arrow/type.h"
-#include "arrow/type_traits.h"
-#include "arrow/util/bit_util.h"
-#include "arrow/util/checked_cast.h"
-#include "arrow/util/logging.h"
-#include "arrow/visit_type_inline.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/buffer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/chunked_array.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/io/interfaces.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/metadata_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/options.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/reader.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/writer.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/result.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/status.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/table.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/type_traits.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/bit_util.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/checked_cast.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/visit_type_inline.h"
 
 #include "generated/feather.fbs.h"
 

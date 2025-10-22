@@ -18,9 +18,9 @@
 
 #pragma once
 
-#include "arrow/util/int128_internal.h"
-#include "arrow/util/logging.h"
-#include "arrow/util/math_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/int128_internal.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/logging.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/util/math_internal.h"
 
 #include <cmath>
 #include <type_traits>

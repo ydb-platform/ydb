@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#include "arrow/filesystem/filesystem.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"
 
 namespace arrow20 {
 namespace internal {

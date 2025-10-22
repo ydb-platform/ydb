@@ -21,9 +21,9 @@
 #include <memory>
 #include <vector>
 
-#include "arrow/compute/cast.h"                      // IWYU pragma: keep
-#include "arrow/compute/kernel.h"                    // IWYU pragma: keep
-#include "arrow/compute/kernels/codegen_internal.h"  // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h"                      // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernel.h"                    // IWYU pragma: keep
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/compute/kernels/codegen_internal.h"  // IWYU pragma: keep
 
 namespace arrow20 {
 namespace compute {

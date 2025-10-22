@@ -99,7 +99,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             
             // Wrap deleteIndexKeys in a precompute node so it can be used as stage input
             auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                .Connection(deleteIndexKeys)
+                .Connection(deleteIndexKeys.Cast<TDqCnUnionAll>())
                 .Done();
             
             auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns,

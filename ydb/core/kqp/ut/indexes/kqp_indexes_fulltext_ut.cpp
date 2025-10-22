@@ -435,14 +435,10 @@ Y_UNIT_TEST(DeleteRowCovered) {
 }
 
 Y_UNIT_TEST(UpdateRow) {
-    // TODO: deletes are not implemented
-
     // TODO: test update of key, text, data
 }
 
 Y_UNIT_TEST(UpdateRowCovered) {
-    // TODO: deletes are not implemented
-
     // TODO: test update of key, text, data
 }
 

@@ -13,6 +13,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/functools.h>
 
 namespace NKikimr {
 namespace NKqp {

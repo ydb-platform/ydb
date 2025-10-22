@@ -2356,9 +2356,9 @@ TNodePtr TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
         if (subSelect) {
             auto writeSettings = subSelect->GetWriteSettings();
             if (writeSettings.Discard) {
-                // Mark DISCARD as being in invalid place (subquery in expression), but don't fail here
-                // The error will be raised in KQP for non-DML queries
-                subSelect->SetDiscardInInvalidPlace();
+                Ctx_.Warning(subSelect->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                    out << "DISCARD can only be used at the top level, not inside subqueries";
+                });
             }
         }
         result = LangVersionedSubSelect(std::move(subSelect));
@@ -2384,9 +2384,9 @@ TNodePtr TSqlExpression::SelectOrExpr(const TRule_select_or_expr& node) {
             if (source) {
                 auto writeSettings = source->GetWriteSettings();
                 if (writeSettings.Discard) {
-                    // Mark DISCARD as being in invalid place (subquery in select or expr), but don't fail here
-                    // The error will be raised in KQP for non-DML queries
-                    source->SetDiscardInInvalidPlace();
+                    Ctx_.Warning(source->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                        out << "DISCARD can only be used at the top level, not inside subqueries";
+                    });
                 }
             }
             return LangVersionedSubSelect(std::move(source));

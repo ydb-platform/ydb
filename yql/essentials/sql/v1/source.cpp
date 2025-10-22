@@ -399,11 +399,6 @@ TWriteSettings ISource::GetWriteSettings() const {
     return {};
 }
 
-void ISource::SetDiscardInInvalidPlace() {
-    // Default implementation - do nothing
-    // Overridden in classes that have TWriteSettings
-}
-
 TNodePtr ISource::PrepareSamplingRate(TPosition pos, ESampleClause clause, TNodePtr samplingRate) {
     if (ESampleClause::Sample == clause) {
         samplingRate = Y("*", samplingRate, Y("Double", Q("100")));

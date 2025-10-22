@@ -1170,6 +1170,7 @@ message TSharedReadingConfig {
         optional uint64 BatchSizeBytes = 1;  // default 1 MiB
         optional uint64 BatchCreationTimeoutMs = 2;
         optional uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+        optional bool SkipErrors = 4;
     }
 
     message TCompileServiceConfig {

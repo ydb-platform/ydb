@@ -23,6 +23,7 @@ message TJsonParserConfig {
     uint64 BatchSizeBytes = 1;  // default 1 MiB
     uint64 BatchCreationTimeoutMs = 2;
     uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
+    bool SkipErrors = 4;
 }
 
 message TCompileServiceConfig {

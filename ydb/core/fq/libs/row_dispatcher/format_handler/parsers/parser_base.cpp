@@ -93,7 +93,7 @@ void TTopicParserBase::ParseBuffer() {
         Stats.AddParserLatency(TInstant::Now() - startParse);
 
         if (status.IsSuccess()) {
-            Consumer->OnParsedData(GetOffsets().size());
+            Consumer->OnParsedData(GetParsedRowCount());
         } else {
             Consumer->OnParsingError(status);
         }

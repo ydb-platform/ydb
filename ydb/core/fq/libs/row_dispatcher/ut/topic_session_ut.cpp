@@ -49,12 +49,13 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool skipErrors = false) {
         TopicPath = topicPath;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
+        Config.MutableJsonParser()->SetSkipErrors(skipErrors);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -620,38 +621,36 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
     }
 
     Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
-        const TString topicName = "topic3";
+        const TString topicName = "wrong_json";
         PQCreateStream(topicName);
-        Init(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
         auto source = BuildSource();
         StartSession(ReadActorId1, source);
         
-        
-        //TString wrongJson = "{\"dt\":100,\"value\"}";
-//        TString wrongJson = "wrong";
-        
-        
         auto writeRead = [&](const std::vector<TString>& input, const TBatch& output) {
             PQWrite(input);
+            if (output.Rows.empty()) {
+                return;
+            }
             ExpectNewDataArrived({ReadActorId1});
             ExpectMessageBatch(ReadActorId1, output);
         };
-
+        
         auto test = [&](const TString& wrongJson) {
+            writeRead({ wrongJson}, { });
+            Sleep(TDuration::MilliSeconds(100));
             writeRead({ Json1, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
             writeRead({ wrongJson, Json2, Json3 }, { JsonMessage(2), JsonMessage(3) });
             writeRead({ Json1, Json2 , wrongJson }, { JsonMessage(1), JsonMessage(2) });
+            writeRead({ Json1, wrongJson, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
         };
 
-        test("{\"dt\":100,\"value\"}");     // empty value
         test("wrong");                      // not json
-        
-        // 2 wrong json
-
-        //  
+        test("{\"dt\":100,\"value\"}");     // empty value
+        test("{\"dt\":100}");               // no field
+        test("{\"dt\":400,\"value\":777}"); // wrong value type
         PassAway();
     }
-
 }
 
 }  // namespace NFq::NRowDispatcher::NTests

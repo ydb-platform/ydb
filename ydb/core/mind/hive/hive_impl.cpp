@@ -3794,17 +3794,17 @@ void THive::MakeScaleRecommendation() {
     BLOG_TRACE("[MSR] Avg CPU usage history: " << '[' << JoinSeq(", ", avgCpuUsageHistory) << ']');
 
     if (!domain.ScaleRecommenderPolicies.empty()) {
-        ui32 recommendedNodes = 1;
+        std::optional<ui32> recommendedNodes;
         for (auto& policy : domain.ScaleRecommenderPolicies) {
             recommendedNodes = std::max(recommendedNodes, policy->MakeScaleRecommendation(readyNodesCount, CurrentConfig));
         }
 
-        if (recommendedNodes != readyNodesCount) {
+        if (recommendedNodes) {
             domain.LastScaleRecommendation = TScaleRecommendation{
-                .Nodes = recommendedNodes,
+                .Nodes = *recommendedNodes,
                 .Timestamp = TActivationContext::Now()
             };
-            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(recommendedNodes);
+            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED].Set(*recommendedNodes);
             BLOG_TRACE("[MSR] Recommended nodes: " << recommendedNodes << ", current nodes: " << readyNodesCount);
         } else {
             BLOG_TRACE("[MSR] No scaling action recommended");
@@ -3812,13 +3812,12 @@ void THive::MakeScaleRecommendation() {
     }
 
     if (CurrentConfig.GetDryRunTargetTrackingCPU() != 0) {
-        ui32 dryRunRecommendedNodes = 1;
         TTargetTrackingPolicy dryRunPolicy(CurrentConfig.GetDryRunTargetTrackingCPU(), avgCpuUsageHistory, TabletID(), true);
-        dryRunRecommendedNodes = std::max(dryRunRecommendedNodes, dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig));
+        std::optional<ui32> dryRunRecommendedNodes = dryRunPolicy.MakeScaleRecommendation(readyNodesCount, CurrentConfig);
 
-        if (dryRunRecommendedNodes != readyNodesCount) {
-            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(dryRunRecommendedNodes);
-            BLOG_TRACE("[MSR] Dry run recommended nodes: " << dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
+        if (dryRunRecommendedNodes) {
+            TabletCounters->Simple()[NHive::COUNTER_NODES_RECOMMENDED_DRY_RUN].Set(*dryRunRecommendedNodes);
+            BLOG_TRACE("[MSR] Dry run recommended nodes: " << *dryRunRecommendedNodes << ", current nodes: " << readyNodesCount);
         } else {
             BLOG_TRACE("[MSR] No dry run scaling action recommended");
         }

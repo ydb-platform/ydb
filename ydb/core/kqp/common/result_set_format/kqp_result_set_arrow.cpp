@@ -835,26 +835,30 @@ namespace NTestUtils {
 namespace {
 
 template <typename TArrowType>
-NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     using TArrayType = typename arrow::TypeTraits<TArrowType>::ArrayType;
     auto array = std::static_pointer_cast<TArrayType>(column);
     return NUdf::TUnboxedValuePod(static_cast<typename TArrowType::c_type>(array->Value(row)));
 }
 
 template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::UInt64Array>(column);
     return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
 }
 
 template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::Int64Array>(column);
     return NUdf::TUnboxedValuePod(static_cast<i64>(array->Value(row)));
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::StructArray>(column);
     YQL_ENSURE(array->num_fields() == 2, "StructArray of some TzDate type should have 2 fields");
 
@@ -905,23 +909,40 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::BinaryArray>(column);
     auto data = array->GetView(row);
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::StringArray>(column);
     auto data = array->GetView(row);
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<arrow::Array> column, ui32 row) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
     auto array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
     auto data = array->GetView(row);
+
+    switch (slot) {
+        case NUdf::EDataSlot::Uuid: {
+            return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+        }
+        case NUdf::EDataSlot::Decimal: {
+            NYql::NDecimal::TInt128 value;
+            std::memcpy(&value, data.data(), data.size());
+            return NUdf::TUnboxedValuePod(value);
+        }
+        default: {
+            YQL_ENSURE(false, "Unexpected data slot");
+        }
+    }
+
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
@@ -965,10 +986,11 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         case NMiniKQL::TType::EKind::Data: {
             auto dataType = static_cast<const NMiniKQL::TDataType*>(itemType);
             NUdf::TUnboxedValue result;
-            bool success = SwitchMiniKQLDataTypeToArrowType(*dataType->GetDataSlot().Get(),
+            auto dataSlot = *dataType->GetDataSlot().Get();
+            bool success = SwitchMiniKQLDataTypeToArrowType(dataSlot,
                 [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                     Y_UNUSED(typeHolder);
-                    result = GetUnboxedValue<TType>(array, row);
+                    result = GetUnboxedValue<TType>(array, row, dataSlot);
                     return true;
                 });
             Y_ENSURE(success, "Failed to extract unboxed value from arrow array");

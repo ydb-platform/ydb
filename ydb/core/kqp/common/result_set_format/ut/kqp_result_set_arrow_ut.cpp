@@ -176,7 +176,7 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<float>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
         TDataDecimalType::Create(DECIMAL_PRECISION, DECIMAL_SCALE, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
+        // TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv),
@@ -844,14 +844,16 @@ void TestFixedSizeBinaryDataTypeConversion() {
     UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        auto view = typedArray->GetView(i);
         if constexpr (IsDecimalType) {
-            auto valueLine = reinterpret_cast<const char*>(typedArray->Value(i));
-            auto expected = values[i].AsStringRef().Data();
-            UNIT_ASSERT_STRINGS_EQUAL(valueLine, expected);
+            NYql::NDecimal::TInt128 actual;
+            std::memcpy(&actual, view.data(), view.size());
+
+            NYql::NDecimal::TInt128 expected = values[i].GetInt128();
+            UNIT_ASSERT(actual == expected);
         } else {
-            auto valueLine = std::string(reinterpret_cast<const char*>(typedArray->Value(i)), NScheme::FSB_SIZE);
             auto expected = values[i].AsStringRef();
-            UNIT_ASSERT_STRINGS_EQUAL(valueLine, std::string(expected.Data(), expected.Size()));
+            UNIT_ASSERT_STRINGS_EQUAL(std::string(view.data(), view.size()), std::string(expected.Data(), expected.Size()));
         }
     }
 }

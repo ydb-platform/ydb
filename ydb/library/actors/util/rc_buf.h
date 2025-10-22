@@ -269,7 +269,6 @@ public:
 
 struct IContiguousChunk : TThrRefBase {
     using TPtr = TIntrusivePtr<IContiguousChunk>;
-
     enum EInnerType {
         OTHER=0,
         RDMA_MEM_REG=1,
@@ -1150,3 +1149,12 @@ public:
         return TMutableContiguousSpan(GetDataMut(), GetSize());
     }
 };
+
+class IRcBufAllocator {
+public:
+    virtual ~IRcBufAllocator() = default;
+    virtual TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept = 0;
+    virtual TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept = 0;
+};
+
+IRcBufAllocator* GetDefaultRcBufAllocator() noexcept;

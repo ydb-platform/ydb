@@ -117,7 +117,7 @@ struct TCookiesBuilder : TCookies {
 };
 
 struct THeaders {
-    TMap<TStringBuf, TStringBuf, TLessNoCase> Headers;
+    TMultiMap<TStringBuf, TStringBuf, TLessNoCase> Headers;
 
     THeaders() = default;
     THeaders(TStringBuf headers);
@@ -139,6 +139,7 @@ struct THeadersBuilder : THeaders {
     THeadersBuilder(const THeadersBuilder& builder);
     THeadersBuilder(std::initializer_list<std::pair<TString, TString>> headers);
     void Set(TStringBuf name, TStringBuf data);
+    void Add(TStringBuf name, TStringBuf data);
     void Erase(TStringBuf name);
 };
 

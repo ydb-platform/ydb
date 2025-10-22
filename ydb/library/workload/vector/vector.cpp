@@ -77,6 +77,65 @@ namespace NYdb::NConsoleClient {
         }
     };
 
+    class TWorkloadCommandDropIndex final : public TYdbCommand {
+    private:
+        NYdbWorkload::TVectorWorkloadParams& Params;
+        bool DryRun = false;
+
+        THolder<TDriver> Driver;
+        THolder<NTable::TTableClient> TableClient;
+    
+    public:
+        TWorkloadCommandDropIndex(NYdbWorkload::TVectorWorkloadParams& params)
+            : TYdbCommand("drop-index", {}, "Drop the index table created for the workload")
+            , Params(params)
+        {}
+
+        virtual void Config(TConfig& config) override {
+            TYdbCommand::Config(config);
+
+            config.Opts->SetFreeArgsNum(0);
+            config.Opts->AddLongOption("dry-run", "Dry run")
+                .Optional().StoreTrue(&DryRun);
+
+            Params.ConfigureCommonOpts(config.Opts->GetOpts());
+        }
+
+        virtual int Run(TConfig& config) override {
+            Params.DbPath = config.Database;
+
+            Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
+            TableClient = MakeHolder<NTable::TTableClient>(*Driver);
+            Params.SetClients(nullptr, nullptr, TableClient.Get(), nullptr);
+
+            const TString ddlQuery = std::format(R"_(
+                    ALTER TABLE `{0}/{1}`
+                    DROP INDEX `{2}`;
+                )_",
+                Params.DbPath.c_str(),
+                Params.TableName.c_str(),
+                Params.IndexName.c_str()
+            );
+
+
+            if (!ddlQuery.empty()) {
+                Cout << "Drop vector index ..."  << Endl;
+                if (DryRun) {
+                    Cout << ddlQuery << Endl;
+                } else {
+                    auto result = TableClient->RetryOperationSync([ddlQuery](NTable::TSession session) {
+                        return session.ExecuteSchemeQuery(ddlQuery.c_str()).GetValueSync();
+                    });
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+                }
+                Cout << "Drop vector index ...Ok"  << Endl;
+
+            }
+
+            return EXIT_SUCCESS;
+        }
+    };
+
     TCommandVector::TCommandVector()
         : TClientCommandTree("vector", {}, "YDB vector workload")
         , Params(std::make_unique<NYdbWorkload::TVectorWorkloadParams>())
@@ -90,6 +149,7 @@ namespace NYdb::NConsoleClient {
         }
 
         AddCommand(std::make_unique<TWorkloadCommandBuildIndex>(*Params));
+        AddCommand(std::make_unique<TWorkloadCommandDropIndex>(*Params));
 
         auto supportedWorkloads = Params->CreateGenerator()->GetSupportedWorkloadTypes();
         switch (supportedWorkloads.size()) {

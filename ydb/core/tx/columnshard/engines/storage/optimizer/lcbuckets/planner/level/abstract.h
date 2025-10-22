@@ -284,6 +284,8 @@ public:
 class IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const = 0;
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const = 0;
 
 public:
     virtual ~IOverloadChecker() = default;
@@ -291,11 +293,19 @@ public:
     bool IsOverloaded(const TSimplePortionsGroupInfo& portionsData) const {
         return DoIsOverloaded(portionsData);
     }
+    
+    bool IsHighPriority(const TSimplePortionsGroupInfo& portionsData) const {
+        return DoIsHighPriority(portionsData);
+    }
 };
 
 class TNoOverloadChecker: public IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& /*portionsData*/) const override {
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& /* portionsData */) const override {
         return false;
     }
 };
@@ -313,6 +323,16 @@ private:
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
                    ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
+            return true;
+        }
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const override {
+        if (PortionsCountLimit && 0.7 * *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+            return true;
+        }
+        if (PortionBlobsSizeLimit && 0.7 * *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
             return true;
         }
         return false;
@@ -380,6 +400,10 @@ public:
 
     bool IsOverloaded() const {
         return NextLevel && OverloadChecker->IsOverloaded(GetPortionsInfo());
+    }
+    
+    bool IsHighPriority() const {
+        return NextLevel && OverloadChecker->IsHighPriority(GetPortionsInfo());
     }
 
     bool HasData() const {

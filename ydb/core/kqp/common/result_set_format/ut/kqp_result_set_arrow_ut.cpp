@@ -873,7 +873,14 @@ void TestSingularTypeConversion() {
     auto array = NTestUtils::MakeArray(values, type);
     UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
     UNIT_ASSERT(array->length() == static_cast<i64>(TEST_ARRAY_SIZE));
-    UNIT_ASSERT(array->type_id() == arrow::Type::NA);
+
+    if (SingularKind == TType::EKind::Null) {
+        UNIT_ASSERT(array->type_id() == arrow::Type::NA);
+    } else {
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 0);
+    }
 }
 
 } // namespace
@@ -1248,7 +1255,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateOptionalVariantOverStruct(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1311,7 +1318,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateDoubleOptionalVariantOverStruct(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1441,7 +1448,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1511,7 +1518,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1590,7 +1597,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1635,7 +1642,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1690,7 +1697,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
@@ -1744,8 +1751,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
 
         ui32 numberOfTypes = 500;
         auto variantType = context.GetLargeVariantType(numberOfTypes);
-        bool isCompatible = NFormats::IsArrowCompatible(variantType);
-        UNIT_ASSERT(!isCompatible);
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateLargeVariant(1000);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1797,7 +1803,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1857,7 +1863,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto optionalVariantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(optionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(optionalVariantType));
 
         auto values = context.CreateOptionalVariantOverStruct(100);
         auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
@@ -1872,7 +1878,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalVariantType));
 
         auto values = context.CreateDoubleOptionalVariantOverStruct(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
@@ -1902,7 +1908,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto optionalVariantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(optionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(optionalVariantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
@@ -1917,7 +1923,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalVariantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
@@ -1932,7 +1938,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1947,7 +1953,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
@@ -1962,8 +1968,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto variantType = context.GetLargeVariantType(500);
-        bool isCompatible = NFormats::IsArrowCompatible(variantType);
-        UNIT_ASSERT(!isCompatible);
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateLargeVariant(1000);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);

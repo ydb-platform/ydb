@@ -93,8 +93,8 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
-    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
-    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
+    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {

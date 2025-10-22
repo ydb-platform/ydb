@@ -49,6 +49,15 @@ bool SpillingTime() {
     Cerr << Endl;
 }
 
+size_t CalcMaxBlockLenForOutput(std::vector<TType*> wideComponents) {
+    size_t maxBlockItemSize = 0;
+    for (ui32 i = 0; i < wideComponents.size() - 1; ++i) {
+        maxBlockItemSize = std::max(maxBlockItemSize, CalcMaxBlockItemSize(wideComponents[i]));
+    }
+
+    return CalcBlockLen(maxBlockItemSize);
+}
+
 using TEqualsPtr = bool(*)(const NUdf::TUnboxedValuePod*, const NUdf::TUnboxedValuePod*);
 using THashPtr = NUdf::THashType(*)(const NUdf::TUnboxedValuePod*);
 
@@ -1395,6 +1404,7 @@ public:
         const std::vector<TType*>& inputItemTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
+        const size_t maxOutputBlockLen,
         const bool isAggregator,
         const bool enableSpilling
     )
@@ -1407,6 +1417,7 @@ public:
         , OutputTypes(outputTypes)
         , InputColumns(inputTypes.size() - 1)
         , OutputColumns(outputTypes.size() - 1)
+        , MaxOutputBlockLen(maxOutputBlockLen)
         , DrainMapIterator(nullptr)
     {
         InputBuffer.resize(InputColumns + 1, TUnboxedValuePod());
@@ -1540,11 +1551,11 @@ public:
 
         std::vector<std::unique_ptr<NYql::NUdf::IArrayBuilder>> blockBuilders;
         for (size_t i = 0; i < OutputTypes.size(); ++i) {
-            blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes[i], Ctx.ArrowMemoryPool, OutputBlockSize, &Ctx.Builder->GetPgBuilder()));
+            blockBuilders.push_back(MakeArrayBuilder(helper, OutputTypes[i], Ctx.ArrowMemoryPool, MaxOutputBlockLen, &Ctx.Builder->GetPgBuilder()));
         }
 
         size_t currentBlockSize = 0;
-        for (; DrainMapIterator != Map->End() && currentBlockSize < OutputBlockSize; Map->Advance(DrainMapIterator)) {
+        for (; DrainMapIterator != Map->End() && currentBlockSize < MaxOutputBlockLen; Map->Advance(DrainMapIterator)) {
             if (!Map->IsValid(DrainMapIterator)) {
                 continue;
             }
@@ -1619,8 +1630,6 @@ public:
     }
 
 private:
-    static constexpr const size_t OutputBlockSize = 8192;
-
     NYql::NUdf::TCounter OutputRowCounter;
 
     TUnboxedValueVector EmptyUVs;
@@ -1630,6 +1639,9 @@ private:
 
     size_t InputColumns; // without the block height column
     size_t OutputColumns;
+
+    const size_t MaxOutputBlockLen;
+
     std::vector<std::unique_ptr<IBlockReader>> InputReaders;
     std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters;
 
@@ -1723,7 +1735,7 @@ public:
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
-        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit,
+        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
         const bool isAggregator, const bool enableSpilling
     )
         : TBaseComputation(mutables, source, EValueRepresentation::Boxed)
@@ -1737,6 +1749,7 @@ public:
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
         , MemoryLimit(memoryLimit)
+        , MaxOutputBlockLen(maxOutputBlockLen)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(InputWidth)) // Need to reserve this here, can't do it later after the Context is built
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
@@ -2041,7 +2054,9 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex,
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, IsAggregator, EnableSpilling);
         }
     }
 
@@ -2055,6 +2070,7 @@ private:
     const NDqHashOperatorCommon::TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
     const ui64 MemoryLimit;
+    const size_t MaxOutputBlockLen;
     const ui32 WideFieldsIndex;
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
@@ -2072,7 +2088,7 @@ public:
         const bool blockMode,
         const std::vector<TType*>& inputTypes, const std::vector<TType*>& outputTypes,
         size_t inputWidth, const std::vector<TType*>& keyItemTypes, const std::vector<TType*>& stateItemTypes,
-        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit,
+        NDqHashOperatorCommon::TCombinerNodes&& nodes, TKeyTypes&& keyTypes, ui64 memoryLimit, size_t maxOutputBlockLen,
         const bool isAggregator, const bool enableSpilling
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -2086,6 +2102,7 @@ public:
         , KeyTypes(std::move(keyTypes))
         , KeyItemTypes(keyItemTypes)
         , MemoryLimit(memoryLimit)
+        , MaxOutputBlockLen(maxOutputBlockLen)
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(InputWidth)) // Need to reserve this here, can't do it later after the Context is built
         , MemoryHelper(keyItemTypes, stateItemTypes)
         , IsAggregator(isAggregator)
@@ -2119,7 +2136,9 @@ private:
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
         } else {
-            state = ctx.HolderFactory.Create<TBlockAggregationState>(ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex, KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, IsAggregator, EnableSpilling);
+            state = ctx.HolderFactory.Create<TBlockAggregationState>(
+                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, InputWidth, Nodes, WideFieldsIndex,
+                KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, IsAggregator, EnableSpilling);
         }
     }
 
@@ -2141,6 +2160,7 @@ private:
     const TKeyTypes KeyTypes;
     const std::vector<TType*> KeyItemTypes;
     const ui64 MemoryLimit;
+    const size_t MaxOutputBlockLen;
     const ui32 WideFieldsIndex;
     const TMemoryEstimationHelper MemoryHelper;
     const bool IsAggregator;
@@ -2178,6 +2198,11 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
         enableSpilling = AS_VALUE(TDataLiteral, operatorParams->GetValue(NDqHashOperatorParams::CombineParamMemLimit))->AsValue().Get<bool>();
     }
 
+    size_t maxOutputBlockLen = 0;
+    if (inputIsBlocks) {
+        maxOutputBlockLen = CalcMaxBlockLenForOutput(outputTypes);
+    }
+
     if (params.IsStream) {
         return new TDqHashCombineStreamWrapper(
             ctx.Mutables,
@@ -2190,7 +2215,8 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             params.StateItemTypes,
             std::move(params.Nodes),
             std::move(params.KeyTypes),
-            memLimit,
+            memLimit > 0 ? memLimit : DefaultMemoryLimit,
+            maxOutputBlockLen,
             isAggregator,
             enableSpilling);
     } else {
@@ -2207,10 +2233,10 @@ IComputationNode* WrapDqHashOperator(TCallable& callable, const TComputationNode
             params.StateItemTypes,
             std::move(params.Nodes),
             std::move(params.KeyTypes),
-            memLimit,
+            memLimit > 0 ? memLimit : DefaultMemoryLimit,
+            maxOutputBlockLen,
             isAggregator,
             enableSpilling);
-
     }
 }
 

@@ -102,6 +102,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
 
     REGISTER_SETTING(*this, UseDqHashCombine);
     REGISTER_SETTING(*this, UseDqHashAggregate);
+    REGISTER_SETTING(*this, DqHashCombineUsesBlocks);
 
     REGISTER_SETTING(*this, OptUseFinalizeByKey);
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
@@ -290,6 +291,10 @@ NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode()
 
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
+}
+
+bool TKikimrConfiguration::GetDqHashCombineUsesBlocks() const {
+    return DqHashCombineUsesBlocks.Get().GetOrElse(true);
 }
 
 }

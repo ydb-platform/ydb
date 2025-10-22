@@ -3457,7 +3457,8 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
 
         for (auto& query : queries) {
-            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
             auto result = StreamResultToYson(it);
             CompareYson(R"([])", result); // should be result
         }

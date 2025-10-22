@@ -927,13 +927,6 @@ public:
         return IsStreamingService(Service_);
     }
 
-    // TWriteSettings GetWriteSettings() const override {
-    //     if (Source_) {
-    //         return Source_->GetWriteSettings();
-    //     }
-    //     return {};
-    // }
-
     TPtr DoClone() const final {
         return new TInnerSource(Pos_, SafeClone(Node_), Service_, Cluster_, GetLabel());
     }

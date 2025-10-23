@@ -21,4 +21,6 @@ message TDataShardConfig {
     optional string CdcInitialScanTaskName = 17 [default = "cdc_initial_scan"];
     optional uint32 CdcInitialScanTaskPriority = 18 [default = 10];
     optional bool DisabledOnSchemeShard = 19 [default = false];
+    optional uint32 StatsReportIntervalSeconds = 25 [default = 10];
+    optional uint32 BackupTableStatsReportIntervalSeconds = 26 [default = 30];
 }

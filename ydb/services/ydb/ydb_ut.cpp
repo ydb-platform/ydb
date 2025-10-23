@@ -5697,6 +5697,7 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     NKikimrConfig::TAppConfig appConfig;
     // default table profile with a storage policy is needed to be able to create a table with families
     *appConfig.MutableTableProfilesConfig() = CreateDefaultTableProfilesConfig(storagePools[0].GetKind());
+    appConfig.MutableDataShardConfig()->SetStatsReportIntervalSeconds(0);
     serverSettings.SetAppConfig(appConfig);
 
     TServer::TPtr server = new TServer(serverSettings);
@@ -5705,7 +5706,6 @@ Y_UNIT_TEST(DisableWritesToDatabase) {
     InitRoot(server, sender);
 
     runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
-    NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
     NDataShard::gDbStatsDataSizeResolution = 1;
     NDataShard::gDbStatsRowCountResolution = 1;
 

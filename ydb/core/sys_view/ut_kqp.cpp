@@ -717,11 +717,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(PartitionStatsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env;
+        TTestEnv env(1, 4, 0, 0, false, false, 0);
         CreateRootTable(env);
 
         TTableClient client(env.GetDriver());
@@ -1210,11 +1208,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsFields) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         auto nowUs = TInstant::Now().MicroSeconds();
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, 0, 0, true, false, 0);
         CreateTenantsAndTables(env);
 
         TTableClient client(env.GetDriver());
@@ -1262,11 +1258,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsTables) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, 0, 0, true, false, 0);
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());
@@ -1292,11 +1286,9 @@ Y_UNIT_TEST_SUITE(SystemView) {
     }
 
     Y_UNIT_TEST(TopPartitionsRanges) {
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
-
         constexpr ui64 partitionCount = 5;
 
-        TTestEnv env(1, 4, 0, 0, true);
+        TTestEnv env(1, 4, 0, 0, true, false, 0);
         CreateTenantsAndTables(env, true, partitionCount);
 
         TTableClient client(env.GetDriver());

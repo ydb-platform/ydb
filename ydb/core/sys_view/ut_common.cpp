@@ -26,7 +26,10 @@ NKikimrSubDomains::TSubDomainSettings GetSubDomainDefaultSettings(const TString 
     return subdomain;
 }
 
-TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 pqTabletsN, bool enableSVP, bool disableSources) {
+TTestEnv::TTestEnv(
+    ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools,
+    ui32 pqTabletsN, bool enableSVP, bool disableSources,
+    std::optional<ui32> dataShardStatsReportIntervalSeconds) {
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
 
@@ -55,6 +58,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, ui32 
 
     Settings->AppConfig->MutableTableServiceConfig()->SetEnableKqpDataQuerySourceRead(!disableSources);
     Settings->AppConfig->MutableHiveConfig()->AddBalancerIgnoreTabletTypes(NKikimrTabletBase::TTabletTypes::SysViewProcessor);
+
+    if (dataShardStatsReportIntervalSeconds) {
+        Settings->AppConfig->MutableDataShardConfig()
+            ->SetStatsReportIntervalSeconds(*dataShardStatsReportIntervalSeconds);
+    }
 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);

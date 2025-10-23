@@ -46,10 +46,7 @@
  }
  
  void LogMessage::LogBacktraceIfNeeded() {
-@@ -633,7 +661,14 @@ template void LogMessage::CopyToEncodedBuffer<
- #endif
- 
- LogMessageFatal::LogMessageFatal(const char* file, int line)
+@@ -633,1 +661,8 @@ template void LogMessage::CopyToEncodedBuffer<
 -    : LogMessage(file, line, y_absl::LogSeverity::kFatal) {}
 +    : LogMessage(file, line, y_absl::LogSeverity::kFatal), file_{file}, line_{line} {}
 +
@@ -59,9 +56,6 @@
 +    }
 +    return *this;
 +}
- 
- LogMessageFatal::LogMessageFatal(const char* file, int line,
-                                  y_absl::string_view failure_msg)
 @@ -643,6 +678,7 @@ LogMessageFatal::LogMessageFatal(const char* file, int line,
  
  LogMessageFatal::~LogMessageFatal() {
@@ -72,19 +66,13 @@
  
 --- contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.h	(index)
 +++ contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/log_message.h	(working tree)
-@@ -354,7 +354,11 @@ class LogMessageFatal final : public LogMessage {
-   LogMessageFatal(const char* file, int line) Y_ABSL_ATTRIBUTE_COLD;
-   LogMessageFatal(const char* file, int line,
-                   y_absl::string_view failure_msg) Y_ABSL_ATTRIBUTE_COLD;
+@@ -354,1 +354,5 @@ class LogMessageFatal final : public LogMessage {
 -  [[noreturn]] ~LogMessageFatal();
 +  LogMessageFatal& TryThrow() Y_ABSL_ATTRIBUTE_COLD;
 +  ~LogMessageFatal();
 + private:
 +  const char* file_ {nullptr};
 +  int line_ = 0;
- };
- 
- // `LogMessageDebugFatal` ensures the process will exit in failure after logging
 --- contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/strip.h	(index)
 +++ contrib/restricted/abseil-cpp-tstring/y_absl/log/internal/strip.h	(working tree)
 @@ -74,7 +74,7 @@

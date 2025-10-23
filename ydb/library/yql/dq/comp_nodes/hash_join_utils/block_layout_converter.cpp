@@ -76,6 +76,7 @@ public:
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
+        ARROW_OK(dataBuffer->Resize(bytesCount));
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
     }
@@ -223,10 +224,12 @@ public:
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
         auto offsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * (len + 1), Pool_);
+        ARROW_OK(offsetBuffer->Resize(sizeof(TOffset) * (len + 1)));
         // zeroize offsets buffer, or your code will die
         // low-level unpack expects that first offset is set to null
         std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * (len + 1));
         auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
+        ARROW_OK(dataBuffer->Resize(bytesCount));
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
     }

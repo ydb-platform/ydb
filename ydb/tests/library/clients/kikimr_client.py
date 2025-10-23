@@ -326,6 +326,22 @@ class KiKiMRMessageBusClient(object):
             if not status.Success:
                 raise RuntimeError(f'define_host_config has failed status[{i}]: {status}')
 
+    def read_storage_pools(self, domain=1):
+        request = msgbus.TBlobStorageConfigRequest()
+        request.Domain = domain
+        cmd = request.Request.Command.add().ReadStoragePool
+        cmd.BoxId = 0xFFFFFFFFFFFFFFFF
+
+        response = self.send(request, 'BlobStorageConfig').BlobStorageConfigResponse
+        if not response.Success:
+            raise RuntimeError(f'read_storage_pools request failed: {response.ErrorDescription}')
+
+        status = response.Status[0]
+        if not status.Success:
+            raise RuntimeError(f'read_storage_pools has failed status: {status.ErrorDescription}')
+
+        return status.StoragePool
+
     def pdisk_set_all_active(self, pdisk_path=None, domain=1):
         """Equivalent to `dstool pdisk set --status=ACTIVE --pdisk-ids <pdisks>`"""
         base_config = self.query_base_config(domain=domain)
@@ -366,7 +382,6 @@ class KiKiMRMessageBusClient(object):
             raise RuntimeError(f'query_base_config failed: {status.ErrorDescription}')
 
         return status
-
 
     def __del__(self):
         self.close()

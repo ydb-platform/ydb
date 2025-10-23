@@ -2670,8 +2670,6 @@ void TPartition::AnswerCurrentReplies(const TActorContext& ctx)
 TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& t,
                                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     auto span = t->CalcPredicateSpan.CreateChild(TWilsonTopic::TopicTopLevel,
                                                  "Topic.Partition.PreProcess",
                                                  NWilson::EFlags::AUTO_END);

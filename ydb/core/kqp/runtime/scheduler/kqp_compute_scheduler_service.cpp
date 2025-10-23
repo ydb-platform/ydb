@@ -50,7 +50,10 @@ public:
         NHdrf::TStaticAttributes const attrs {
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
+
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Adding database: " << ev->Get()->Id);
         Scheduler->AddOrUpdateDatabase(ev->Get()->Id, attrs);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Added database: " << ev->Get()->Id);
     }
 
     void Handle(TEvRemoveDatabase::TPtr&) {
@@ -73,7 +76,11 @@ public:
 
         if (PoolSubscribtions.insert({std::make_pair(databaseId, poolId), {false, resourceWeight}}).second) {
             PoolExternalWeightSum += resourceWeight;
+
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Adding pool: " << databaseId << "/" << poolId);
             Scheduler->AddOrUpdatePool(databaseId, poolId, attrs);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Added pool: " << databaseId << "/" << poolId);
+
             Send(MakeKqpWorkloadServiceId(SelfId().NodeId()), new NWorkload::TEvSubscribeOnPoolChanges(databaseId, poolId));
             if (resourceWeight > Epsilon) {
                 UpdatePoolsGuarantee();
@@ -102,9 +109,11 @@ public:
 
             // Update limit
             if (ev->Get()->Config->TotalCpuLimitPercentPerNode >= 0) {
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Updating pool: " << databaseId << "/" << poolId);
                 Scheduler->AddOrUpdatePool(databaseId, poolId, {
                     .Limit = ev->Get()->Config->TotalCpuLimitPercentPerNode * Scheduler->GetTotalCpuLimit() / 100,
                 });
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Updated pool: " << databaseId << "/" << poolId);
             }
         } else if (poolIt != PoolSubscribtions.end()) {
             if (!poolIt->second.IsFirstRemoval) {
@@ -118,6 +127,7 @@ public:
                 // TODO: Scheduler->UpdatePool(…);
             }
         } else {
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Trying to remove unknown pool: " << databaseId << "/" << poolId);
             // TODO: the removing message for unknown pool - should we check?
         }
     }
@@ -130,18 +140,26 @@ public:
             .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
         };
 
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Adding query: " << databaseId << "/" << poolId << "/" << queryId);
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Added query: " << databaseId << "/" << poolId << "/" << queryId);
+
         auto response = MakeHolder<TEvQueryResponse>();
         response->Query = query;
         Send(ev->Sender, response.Release(), 0, queryId);
     }
 
     void Handle(TEvRemoveQuery::TPtr& ev) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Removing query: " << ev->Get()->Query->GetId());
         Scheduler->RemoveQuery(ev->Get()->Query);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Removed query: " << ev->Get()->Query->GetId());
     }
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Updating fair-share");
         Scheduler->UpdateFairShare();
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE_SCHEDULER, "Updated fair-share");
+
         Schedule(UpdateFairSharePeriod, new NActors::TEvents::TEvWakeup());
     }
 

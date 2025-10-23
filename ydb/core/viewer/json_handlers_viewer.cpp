@@ -222,7 +222,7 @@ void InitViewerPQConsumerInfoJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerPutRecordsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/put_records", new TJsonHandler<TPutRecord>(TPutRecord::GetSwagger()));
+    jsonHandlers.AddHandler("/viewer/put_record", new TJsonHandler<TPutRecord>(TPutRecord::GetSwagger()));
 }
 
 void InitViewerTabletCountersJsonHandler(TJsonHandlers& handlers) {

@@ -46,7 +46,6 @@ private:
     TString Key;
     ui32 Cookie = 1;
     TVector<TMetadataItem> Metadata;
-    NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
     bool IsAutoScaledTopic = false;
     TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     ui64 TabletId;
@@ -58,6 +57,7 @@ public:
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateKeySetResult);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
+            HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
         }
     }
     void Bootstrap() override {
@@ -86,6 +86,7 @@ public:
                 auto& metadataMap = metadataJson.GetMap();
                 if (!metadataMap.contains("key") || !metadataMap.contains("value")) {
                     ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "field 'metadata' must be key-value pairs"));
+                    return;
                 }
                 Metadata.emplace_back(metadataMap.at("key").GetStringRobust(), metadataMap.at("value").GetStringRobust());
             }
@@ -161,25 +162,23 @@ public:
 
         PQGroupInfo = info.PQGroupInfo;
         const auto& pqDescription = PQGroupInfo->Description;
-        MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
         if (pqDescription.GetPQTabletConfig().GetPartitionStrategy().HasPartitionStrategyType() &&
             pqDescription.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType() != 0) {
                 IsAutoScaledTopic = true;
         }
         if (!Params.Has("partition")) {
             if (IsAutoScaledTopic) {
-                ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "You must provide partition id you want to put records to for autoscaled topic."));
-                return;
+                
             }
             auto chooser = NPQ::CreatePartitionChooser(pqDescription, false);
-            NYql::NDecimal::TUint128 hash;
-            if (Key.empty()) {
-                hash = NDataStreams::V1::HexBytesToDecimal(MD5::Calc(Key));
+            if (!Key.empty()) {
+                NYql::NDecimal::TUint128 hash = NDataStreams::V1::BytesToDecimal(Key);
+                auto* partition = chooser->GetPartition(hash % pqDescription.GetPartitions().size());
+                Partition = partition->PartitionId;
             } else {
-                hash = NDataStreams::V1::BytesToDecimal(Key);
+                Partition = rand() % pqDescription.GetPartitions().size();
             }
-            auto* partition = chooser->GetPartition(hash % pqDescription.GetPartitions().size());
-            Partition = partition->PartitionId;
+
         }
 
         if (Event->Get()->UserToken.empty()) {
@@ -198,12 +197,18 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "LocalDC is not set fot federation."));
             return;
         }
-        const auto& partitions = pqDescription.GetPartitions();\
+        const auto& partitions = pqDescription.GetPartitions();
+        bool partitionFound = false;
         for (auto& partition : partitions) {
             auto partitionId = partition.GetPartitionId();
             if (partitionId == Partition) {
                 TabletId = partition.GetTabletId();
+                partitionFound = true;
             }
+        }
+        if (!partitionFound) {
+            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Partition not found."));
+            return;
         }
         NPQ::TPartitionWriterOpts opts;
         opts.WithDeduplication(false)
@@ -225,6 +230,7 @@ public:
         auto cookie = resp.GetCookie();
         if (cookie != Cookie) {
             ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
+            return;
         }
         if (r->IsSuccess()) {
             ReplyAndPassAway(Viewer->GetHTTPOK(Event->Get(), "text/plain", "Recieved response"));
@@ -235,6 +241,16 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", reason));
         }
     }
+
+    void HandleAccepting(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext&) {
+        auto r = request->Get();
+        auto cookie = r->Cookie;
+        if (cookie != Cookie) {
+            ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Cookies mismatch in TEvWriteAccepted Handler."));
+            return;
+        }
+    }
+
     void ReplyAndPassAway() override {
         TStringStream jsonBody;
         Send(WriteActorId, new TEvents::TEvPoison());

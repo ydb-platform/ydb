@@ -2141,7 +2141,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TKeepAliveHttpClient::THeaders headers;
         headers["Content-Type"] = "application/json";
         headers["Authorization"] = token;
-        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/put_records", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
+        const TKeepAliveHttpClient::THttpCode statusCode = httpClient.DoPost("/viewer/put_record", NJson::WriteJson(jsonRequest, false), &responseStream, headers);
         return statusCode;
     }
     std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> GetMessagesCount(std::shared_ptr<NYdb::NTopic::IReadSession> readSession) {
@@ -2327,12 +2327,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
 
-        // checking that request for autosplit topic without specifying partition is forbidden
-        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message);
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_BAD_REQUEST);
-
-        auto postReturnCode3 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
-        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
 
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({autoscalingTopic});

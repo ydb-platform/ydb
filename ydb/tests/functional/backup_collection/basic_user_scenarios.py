@@ -2208,9 +2208,16 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
         # ensure target tables absent
         self._remove_tables([full_orders, full_products])
+        start_total, start_success, _ = self._count_restore_operations()
         rest_inc1 = self._execute_yql(f"RESTORE `{col_inc1}`;")
         assert rest_inc1.exit_code == 0, f"RESTORE inc1 failed: {rest_inc1.std_err}"
-        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc1], timeout_s=90)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
+        if not ok:
+            raise AssertionError(
+                "Timeout waiting restore via operation list. Diagnostics: "
+                f"{info}"
+            )
+        restored_rows = self._capture_snapshot(t_orders)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc1]), "Verify data in backup (2) failed"
         assert schema_stage2_t_orders == self._capture_schema(f"/Root/{t_orders}"), "Verify schema in backup (2) failed"
         restored_acl2 = self._capture_acl_pretty(f"/Root/{t_orders}")
@@ -2222,9 +2229,16 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
         self._remove_tables([full_orders, full_products])
+        start_total, start_success, _ = self._count_restore_operations()
         rest_inc2 = self._execute_yql(f"RESTORE `{col_inc2}`;")
         assert rest_inc2.exit_code == 0, f"RESTORE inc2 failed: {rest_inc2.std_err}"
-        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[snap_inc2], timeout_s=90)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
+        if not ok:
+            raise AssertionError(
+                "Timeout waiting restore via operation list. Diagnostics: "
+                f"{info}"
+            )
+        restored_rows = self._capture_snapshot(t_orders)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[snap_inc2]), "Verify data in backup (3) failed"
         assert schema_stage3_t_orders == self._capture_schema(f"/Root/{t_orders}"), "Verify schema in backup (3) failed"
         restored_acl3 = self._capture_acl_pretty(f"/Root/{t_orders}")
@@ -2291,9 +2305,16 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
             assert r.exit_code == 0, f"tools restore import failed for {s}: {r.std_err}"
         # drop and restore
         self._remove_tables([full_orders, full_products])
+        start_total, start_success, _ = self._count_restore_operations()
         rest_post = self._execute_yql(f"RESTORE `{col_post_full2}`;")
         assert rest_post.exit_code == 0, f"RESTORE post-full2 failed: {rest_post.std_err}"
-        restored_rows = self.wait_for_table_rows(t_orders, snapshot_rows[chosen_inc_after_full2], timeout_s=90)
+        ok, info = self.poll_restore_by_count(start_total=start_total, start_success=start_success, timeout_s=180, poll_interval=2.0, verbose=True)
+        if not ok:
+            raise AssertionError(
+                "Timeout waiting restore via operation list. Diagnostics: "
+                f"{info}"
+            )
+        restored_rows = self._capture_snapshot(t_orders)
         assert self.normalize_rows(restored_rows) == self.normalize_rows(snapshot_rows[chosen_inc_after_full2]), "Verify data in backup (5) failed"
         assert schema_stage5_t_orders == self._capture_schema(f"/Root/{t_orders}"), "Verify schema in backup (3) failed"
         restored_acl5 = self._capture_acl_pretty(f"/Root/{t_orders}")

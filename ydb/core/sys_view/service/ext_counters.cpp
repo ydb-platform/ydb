@@ -27,6 +27,7 @@ class TExtCountersUpdaterActor
     TCounterPtr StorageUsedBytesOnHdd;
     TVector<TCounterPtr> CpuUsedCorePercents;
     TVector<TCounterPtr> CpuLimitCorePercents;
+    TCounterPtr TotalCores;
     THistogramPtr ExecuteLatencyMs;
 
     TCounterPtr AnonRssSize;
@@ -76,6 +77,17 @@ public:
                 "resources.cpu.used_core_percents", true);
             CpuLimitCorePercents[i] = ydbGroup->GetSubgroup("pool", name)->GetNamedCounter("name",
                 "resources.cpu.limit_core_percents", false);
+        }
+
+        double totalCores = 0;
+        for (const auto& pool : Config.Pools) {
+            if (pool.Name != "IO") {
+                totalCores += pool.ThreadCount;
+            }
+        }
+        TotalCores = ydbGroup->GetNamedCounter("name", "resources.cpu.total_core_percents", false);
+        if (TotalCores) {
+            TotalCores->Set(totalCores * 100);
         }
 
         ExecuteLatencyMs = ydbGroup->FindNamedHistogram("name", "table.query.execution.latency_milliseconds");

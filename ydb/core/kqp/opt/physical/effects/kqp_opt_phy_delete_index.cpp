@@ -107,7 +107,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                     .Build()
                 .Done();
             
-            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns,
+            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
                 del.Pos(), ctx);
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

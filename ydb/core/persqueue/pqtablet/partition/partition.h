@@ -831,7 +831,8 @@ private:
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
 
 
-    [[nodiscard]] EProcessResult PreProcessImmediateTx(TTransaction& t);
+    [[nodiscard]] EProcessResult PreProcessImmediateTx(TTransaction& t,
+                                                       TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     void ExecImmediateTx(TTransaction& tx);
 
     EProcessResult PreProcessRequest(TRegisterMessageGroupMsg& msg,

@@ -2693,7 +2693,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
             return EProcessResult::Continue;
         }
         t->Predicate.ConstructInPlace(true);
-        return PreProcessImmediateTx(*t);
+        return PreProcessImmediateTx(*t, affectedSourceIdsAndConsumers);
 
     } else if (t->Tx) { // Distributed TX
         if (t->Predicate.Defined()) { // Predicate defined - either failed previously or Tx created with predicate defined.
@@ -3293,8 +3293,11 @@ void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)
     TxIdHasChanged = true;
 }
 
-TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t)
+TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
+                                                             TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    Y_UNUSED(affectedSourceIdsAndConsumers);
+
     const NKikimrPQ::TEvProposeTransaction& tx = t.ProposeTransaction->GetRecord();
 
     if (AffectedUsers.size() >= MAX_USERS) {

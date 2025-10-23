@@ -86,6 +86,7 @@ public:
         pDiskConfig->EnableSectorEncryption = !pDiskConfig->SectorMap;
         pDiskConfig->FeatureFlags.SetEnableSmallDiskOptimization(Settings.SmallDisk);
         pDiskConfig->FeatureFlags.SetSuppressCompatibilityCheck(Settings.SuppressCompatibilityCheck);
+        pDiskConfig->FeatureFlags.SetEnablePDiskLogForSmallDisks(false);
         pDiskConfig->ReadOnly = Settings.ReadOnly;
         pDiskConfig->PlainDataChunks = Settings.PlainDataChunks;
         return pDiskConfig;

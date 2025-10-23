@@ -47,8 +47,6 @@ struct TJsonParserBuffer {
     }
 
     void AddMessage(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
-        LOG_ROW_DISPATCHER_WARN("TJsonParserBuffer AddMessage");
-
         Y_ENSURE(!Finished, "Cannot add messages into finished buffer");
 
         const auto offset = message.GetOffset();
@@ -77,10 +75,6 @@ struct TJsonParserBuffer {
         Values.clear();
         Offsets.clear();
         MessageOffsets.clear();
-    }
-
-    const TVector<ui64>& GetOffsets() const {
-        return Offsets;
     }
 
 private:
@@ -126,6 +120,7 @@ public:
             return false;
         }
         ParsedRows[ParsedRowsCount++] = rowId;
+
         if (DataSlot != NYql::NUdf::EDataSlot::Json) {
             ParseDataType(std::move(jsonValue), resultValue, Status);
         } else {
@@ -360,7 +355,7 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name() << " (" << simdjson::get_active_implementation()->description() << "), skip error: " << Config.SkipErrors);
+        LOG_ROW_DISPATCHER_INFO("Simdjson active implementation " << simdjson::get_active_implementation()->name() << " (" << simdjson::get_active_implementation()->description() << "), error skip mode: " << Config.SkipErrors);
         Parser.threaded = false;
     }
 
@@ -395,17 +390,13 @@ public:
         for (const auto& message : messages) {
             Buffer.AddMessage(message);
             if (Buffer.IsReady() && (Buffer.NumberValues >= MaxNumberRows || Buffer.GetSize() >= Config.BatchSize)) {
-                do {
-                    ParseBuffer();
-                } while(Buffer.IsReady());
+                ParseBuffer();
             }
         }
 
         if (Buffer.IsReady()) {
             if (!Config.LatencyLimit) {
-                do {
-                    ParseBuffer();
-                } while(Buffer.IsReady());
+                ParseBuffer();
             } else {
                 LOG_ROW_DISPATCHER_TRACE("Collecting data to parse, skip parsing, current buffer size: " << Buffer.GetSize());
             }
@@ -421,9 +412,7 @@ public:
 
         const auto creationDuration = TInstant::Now() - Buffer.CreationStartTime;
         if (force || creationDuration > Config.LatencyLimit) {
-            do {
-                ParseBuffer();
-            } while(Buffer.IsReady());
+            ParseBuffer();
         } else {
             LOG_ROW_DISPATCHER_TRACE("Refresh, skip parsing, buffer creation duration: " << creationDuration);
         }
@@ -444,11 +433,11 @@ public:
     }
 
     const TVector<ui64>& GetOffsets() const override {
-        return Buffer.GetOffsets();
+        return Buffer.Offsets;
     }
 
     ui64 GetParsedRowCount() const override {
-        return Buffer.GetOffsets().size() - ParsingFailed;
+        return Buffer.Offsets.size() - ParsingFailed;
     }
 
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
@@ -482,7 +471,7 @@ protected:
 
         const char* begin = values;
         
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.GetOffsets().front() << ", values:\n" << values);
+        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
         ui16 outputRowId = 0;
         ui16 skipped = 0;
         ui16 nonOptionalColumnsCount = 0;

@@ -1,7 +1,6 @@
 LIBRARY()
 
 SRCS(
-    cq_actor.cpp
     ctx.cpp
     ctx_open.cpp
     link_manager.cpp
@@ -18,6 +17,10 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    cq_actor
+)
 
 RECURSE_FOR_TESTS(
     ut

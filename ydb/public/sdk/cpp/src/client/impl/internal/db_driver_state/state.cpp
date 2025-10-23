@@ -20,9 +20,11 @@ namespace {
 
 namespace NYdb::inline Dev {
 
+using namespace std::chrono_literals;
+
 constexpr int PESSIMIZATION_DISCOVERY_THRESHOLD = 50; // percent of endpoints pessimized by transport error to start recheck
-constexpr TDuration ENDPOINT_UPDATE_PERIOD = TDuration::Minutes(1); // period to perform endpoints update in "normal" case
-constexpr TDuration DISCOVERY_RECHECK_PERIOD = TDuration::Seconds(5); // period to run periodic discovery task
+constexpr std::chrono::microseconds ENDPOINT_UPDATE_PERIOD = 1min; // period to perform endpoints update in "normal" case
+constexpr std::chrono::microseconds DISCOVERY_RECHECK_PERIOD = 5s; // period to run periodic discovery task
 
 TDbDriverState::TDbDriverState(
     const std::string& database,
@@ -237,7 +239,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
     return strongState;
 }
 
-void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDuration period) {
+void TDbDriverState::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) {
     Client->AddPeriodicTask(std::move(cb), period);
 }
 

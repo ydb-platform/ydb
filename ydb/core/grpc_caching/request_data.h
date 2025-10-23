@@ -4,7 +4,7 @@
 
 namespace NKikimr {
 
-    constexpr TDuration DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT = TDuration::Seconds(10);
+    constexpr NYdb::TDeadline::Duration DEFAULT_CACHED_GRPC_REQUEST_TIMEOUT = std::chrono::seconds(10);
     const TString REQUEST_ID_METADATA_NAME = "x-request-id";
 
     struct TRequestIdData {

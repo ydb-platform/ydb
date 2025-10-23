@@ -18,9 +18,9 @@
 
 namespace NYdb::inline Dev {
 
-constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(10);
-constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call
-constexpr TDuration GET_ENDPOINTS_TIMEOUT = TDuration::Seconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
+constexpr TDeadline::Duration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = std::chrono::seconds(10);
+constexpr TDeadline::Duration INITIAL_DEFERRED_CALL_DELAY = std::chrono::milliseconds(10); // The delay before first deferred service call
+constexpr TDeadline::Duration GET_ENDPOINTS_TIMEOUT = std::chrono::milliseconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
 
 using NYdbGrpc::TCallMeta;
 using NYdbGrpc::IQueueClientContextPtr;
@@ -45,8 +45,8 @@ public:
     TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> params);
     ~TGRpcConnectionsImpl();
 
-    void AddPeriodicTask(TPeriodicCb&& cb, TDuration period) override;
-    void ScheduleOneTimeTask(TSimpleCb&& fn, TDuration timeout);
+    void AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration period) override;
+    void ScheduleOneTimeTask(TSimpleCb&& fn, TDeadline::Duration timeout);
     NThreading::TFuture<bool> ScheduleFuture(
         TDuration timeout,
         IQueueClientContextPtr token = nullptr
@@ -74,7 +74,7 @@ public:
     template<typename TService>
     using TServiceConnection = NYdbGrpc::TServiceConnection<TService>;
 
-    static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDuration& timeout, bool permitWithoutCalls);
+    static void SetGrpcKeepAlive(NYdbGrpc::TGRpcClientConfig& config, const TDeadline::Duration& timeout, bool permitWithoutCalls);
 
     template<typename TService>
     std::pair<std::unique_ptr<TServiceConnection<TService>>, TEndpointKey> GetServiceConnection(
@@ -113,7 +113,7 @@ public:
                 }
                 clientConfig.Locator = endpoint.Endpoint;
                 clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
-                if (GRpcKeepAliveTimeout_) {
+                if (GRpcKeepAliveTimeout_ > TDeadline::Duration::zero()) {
                     SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
                 }
             }
@@ -233,7 +233,7 @@ public:
                 }
 
                 TCallMeta meta;
-                meta.Timeout = requestSettings.ClientTimeout;
+                meta.Timeout = requestSettings.Deadline;
         #ifndef YDB_GRPC_UNSECURE_AUTH
                 meta.CallCredentials = dbState->CallCredentials;
         #else
@@ -330,7 +330,7 @@ public:
         TDeferredOperationCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
-        TDuration deferredTimeout,
+        TDeadline::Duration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         bool poll = false,
         std::shared_ptr<IQueueClientContext> context = nullptr)
@@ -341,7 +341,7 @@ public:
             return;
         }
 
-        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, poll, context]
+        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, deadline = requestSettings.Deadline, poll, context]
             (TResponse* response, TPlainStatus status) mutable
         {
             if (response) {
@@ -353,6 +353,7 @@ public:
                         this,
                         std::move(context),
                         deferredTimeout,
+                        deadline,
                         dbState,
                         status.Endpoint);
 
@@ -409,7 +410,7 @@ public:
         TDeferredResultCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
-        TDuration deferredTimeout,
+        TDeadline::Duration deferredTimeout,
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
@@ -466,7 +467,7 @@ public:
                 }
 
                 TCallMeta meta;
-                meta.Timeout = requestSettings.ClientTimeout;
+                meta.Timeout = requestSettings.Deadline;
 #ifndef YDB_GRPC_UNSECURE_AUTH
                 meta.CallCredentials = dbState->CallCredentials;
 #else
@@ -763,7 +764,7 @@ private:
     const std::int64_t MaxQueuedResponses_;
     const bool DrainOnDtors_;
     const TBalancingPolicy::TImpl BalancingSettings_;
-    const TDuration GRpcKeepAliveTimeout_;
+    const TDeadline::Duration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const std::uint64_t MemoryQuota_;
     const std::uint64_t MaxInboundMessageSize_;
@@ -772,7 +773,7 @@ private:
 
     std::atomic_int64_t QueuedRequests_;
     const NYdbGrpc::TTcpKeepAliveSettings TcpKeepAliveSettings_;
-    const TDuration SocketIdleTimeout_;
+    const TDeadline::Duration SocketIdleTimeout_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     NYdbGrpc::TChannelPool ChannelPool_;
 #endif

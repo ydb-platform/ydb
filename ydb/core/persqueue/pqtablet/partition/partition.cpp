@@ -2393,32 +2393,31 @@ void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAnd
     AppendReadAffectedConsumers(affectedSourceIdsAndConsumers);
 }
 
+static void AppendToSet(const TVector<TString>& p, THashSet<TString>& q)
+{
+    for (const auto& s : p) {
+        q.insert(s);
+    }
+}
+
 void TPartition::AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    for (const auto& sourceId : affectedSourceIdsAndConsumers.TxWriteSourcesIds) {
-        TxAffectedSourcesIds.insert(sourceId);
-    }
+    AppendToSet(affectedSourceIdsAndConsumers.TxWriteSourcesIds, TxAffectedSourcesIds);
 }
 
 void TPartition::AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    for (const auto& sourceId : affectedSourceIdsAndConsumers.WriteSourcesIds) {
-        WriteAffectedSourcesIds.insert(sourceId);
-    }
+    AppendToSet(affectedSourceIdsAndConsumers.WriteSourcesIds, WriteAffectedSourcesIds);
 }
 
 void TPartition::AppendTxReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    for (const auto& consumer : affectedSourceIdsAndConsumers.TxReadConsumers) {
-        TxAffectedConsumers.insert(consumer);
-    }
+    AppendToSet(affectedSourceIdsAndConsumers.TxReadConsumers, TxAffectedConsumers);
 }
 
 void TPartition::AppendReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    for (const auto& consumer : affectedSourceIdsAndConsumers.ReadConsumers) {
-        SetOffsetAffectedConsumers.insert(consumer);
-    }
+    AppendToSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
 }
 
 void TPartition::MoveUserActOrTxToCommitState() {

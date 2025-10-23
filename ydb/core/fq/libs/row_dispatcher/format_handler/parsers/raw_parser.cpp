@@ -83,10 +83,6 @@ public:
         return Offsets;
     }
 
-    ui64 GetParsedRowCount() const override {
-        return Offsets.size();
-    }
-
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         Y_ENSURE(columnId == 0, "Invalid column id for raw parser");
         return std::span<NYql::NUdf::TUnboxedValue>(ParsedColumn);

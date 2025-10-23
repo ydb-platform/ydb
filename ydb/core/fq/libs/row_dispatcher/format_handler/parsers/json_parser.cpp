@@ -437,10 +437,6 @@ public:
         return !ParsingFailedRowCount ? Buffer.Offsets : OutputOffsets;
     }
 
-    ui64 GetParsedRowCount() const override {   // TODO: rm
-        return Buffer.Offsets.size() - ParsingFailedRowCount;
-    }
-
     TValueStatus<std::span<NYql::NUdf::TUnboxedValue>> GetParsedColumn(ui64 columnId) override {
         if (auto status = Columns[columnId].GetStatus(); !Config.SkipErrors && status.IsFail()) {
             return status;
@@ -451,12 +447,12 @@ public:
 protected:
 
 #define HANDLE_ERROR(status) \
-    if (!skipErrors) { \
+    if (Y_UNLIKELY(!skipErrors)) { \
         return status; \
     } \
     ++skipped; \
     ClearRowBuffer(outputRowId); \
-    if (outputRowId + skipped < Buffer.MessageOffsets.size()) { \
+    if (Y_LIKELY(outputRowId + skipped < Buffer.MessageOffsets.size())) { \
         values = begin + Buffer.MessageOffsets[outputRowId + skipped]; \
         size -= (values - begin); \
         goto retry; \
@@ -560,7 +556,7 @@ end_parsing:
 
         if (ParsingFailedRowCount) {
             ParsingErrors->Inc();
-            //OutputOffsets.resize(Buffer.Offsets - ParsingFailedRowCount);
+            OutputOffsets.resize(Buffer.Offsets.size() - ParsingFailedRowCount);
         }
         for (auto& column : Columns) {
             column.ValidateNumberValues(outputRowId, GetOffsets());

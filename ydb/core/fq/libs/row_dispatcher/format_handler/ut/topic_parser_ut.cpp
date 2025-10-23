@@ -18,10 +18,11 @@ public:
         using TPtr = TIntrusivePtr<TParsedDataConsumer>;
 
     public:
-        TParsedDataConsumer(const TBaseParserFixture& self, const TVector<TSchemaColumn>& columns, TCallback callback)
+        TParsedDataConsumer(const TBaseParserFixture& self, const TVector<TSchemaColumn>& columns, TCallback callback, bool checkOffsets = true)
             : Self(self)
             , Columns(columns)
             , Callback(callback)
+            , CheckOffsets(checkOffsets)
         {}
 
         void ExpectColumnError(ui64 columnId, TStatusCode statusCode, const TString& message) {
@@ -54,10 +55,12 @@ public:
             UNIT_ASSERT_C(!ExpectedCommonError, "Expected common error: " << ExpectedCommonError->second);
 
             const auto& offsets = Self.Parser->GetOffsets();
-            UNIT_ASSERT_VALUES_EQUAL_C(Self.Parser->GetParsedRowCount(), numberRows, "Unexpected offsets size");
-            for (const ui64 offset : offsets) {
-                UNIT_ASSERT_VALUES_EQUAL_C(offset, CurrentOffset, "Unexpected offset");
-                CurrentOffset++;
+            UNIT_ASSERT_VALUES_EQUAL_C(offsets.size(), numberRows, "Unexpected offsets size");
+            if (CheckOffsets) {
+                for (const ui64 offset : offsets) {
+                    UNIT_ASSERT_VALUES_EQUAL_C(offset, CurrentOffset, "Unexpected offset");
+                    CurrentOffset++;
+                }
             }
 
             TVector<std::span<NYql::NUdf::TUnboxedValue>> result(Columns.size());
@@ -80,6 +83,7 @@ public:
         const TBaseParserFixture& Self;
         const TVector<TSchemaColumn> Columns;
         const TCallback Callback;
+        const bool CheckOffsets;
 
         std::optional<std::pair<TStatusCode, TString>> ExpectedCommonError;
         std::unordered_map<ui64, std::pair<TStatusCode, TString>> ExpectedErrors;
@@ -97,8 +101,8 @@ public:
     }
 
 public:
-    TStatus MakeParser(TVector<TSchemaColumn> columns, TCallback callback) {
-        ParserHandler = MakeIntrusive<TParsedDataConsumer>(*this, columns, callback);
+    TStatus MakeParser(TVector<TSchemaColumn> columns, TCallback callback, bool checkOffsets = true) {
+        ParserHandler = MakeIntrusive<TParsedDataConsumer>(*this, columns, callback, checkOffsets);
 
         auto parserStatus = CreateParser();
         if (parserStatus.IsFail()) {
@@ -109,12 +113,12 @@ public:
         return TStatus::Success();
     }
 
-    TStatus MakeParser(TVector<TString> columnNames, TString columnType, TCallback callback) {
+    TStatus MakeParser(TVector<TString> columnNames, TString columnType, TCallback callback, bool checkOffsets = true) {
         TVector<TSchemaColumn> columns;
         for (const auto& columnName : columnNames) {
             columns.push_back({.Name = columnName, .TypeYson = columnType});
         }
-        return MakeParser(columns, callback);
+        return MakeParser(columns, callback, checkOffsets);
     }
 
     TStatus MakeParser(TVector<TString> columnNames, TString columnType) {
@@ -501,7 +505,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
                 UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(result[0][i].AsStringRef()), i);
                 UNIT_ASSERT_VALUES_EQUAL_C("101", TString(result[1][i].AsStringRef()), i);
             }
-        }));
+        }, false));
 
         Parser->ParseMessages({
             GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})"),
@@ -519,7 +523,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
                 UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(result[0][i].AsStringRef()), i);
                 UNIT_ASSERT_VALUES_EQUAL_C("101", TString(result[1][i].AsStringRef()), i);
             }
-        }));
+        }, false));
 
         Parser->ParseMessages({
             GetMessage(FIRST_OFFSET, R"({"a1": "hello1", "event": "event1"})"),
@@ -531,7 +535,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         ExpectedBatches = 1;
         CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> /*result*/) {
             UNIT_ASSERT_VALUES_EQUAL(0, numberRows);
-        }));
+        }, false));
 
         Parser->ParseMessages({
             GetMessage(FIRST_OFFSET, R"(lalala)")
@@ -547,7 +551,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
             UNIT_ASSERT_VALUES_EQUAL("100", TString(result[1][0].AsStringRef()));
             UNIT_ASSERT(!result[0][1]);
             UNIT_ASSERT_VALUES_EQUAL("102", TString(result[1][1].AsStringRef()));
-        }));
+        }, false));
 
         Parser->ParseMessages({
             GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),

@@ -77,11 +77,11 @@ IClientPtr CreateRpcClient(
         retryConfigProvider = CreateDefaultRetryConfigProvider();
     }
 
+    NDetail::EnsureInitialized();
+
     auto rawClient = MakeIntrusive<NDetail::TRpcRawClient>(
         NDetail::CreateApiClient(context),
         context.Config);
-
-    NDetail::EnsureInitialized();
 
     return new NDetail::TClient(
         std::move(rawClient),

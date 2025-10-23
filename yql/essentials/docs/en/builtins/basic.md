@@ -37,7 +37,25 @@ SELECT NVL(
 
 All three examples above are equivalent.
 
+## NullIf {#nullif}
 
+Returns NULL if both arguments are equal; otherwise, returns the first argument.
+
+#### Signature
+
+```yql
+NullIf(T, U)->T?
+NullIf(T?, U)->T?
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+
+#### Examples
+
+```yql
+SELECT NullIf(1,2); -- 1
+SELECT NullIf(1,1); -- NULL
+```
 
 ## LENGTH {#length}
 

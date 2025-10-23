@@ -126,8 +126,13 @@ namespace NKikimr {
             {}
 
             bool Check(const TRecordHdr *rec) const {
+                const ui64* raw = rec->GetLogoBlob()->Raw;
                 return (rec->RecType != TRecordHdr::RecLogoBlob)
-                    || TLogoBlobFilter::Check(TLogoBlobID(rec->GetLogoBlob()->Raw));
+                    || TLogoBlobFilter::Check(TLogoBlobID(
+                            ReadUnaligned<ui64>(&raw[0]),
+                            ReadUnaligned<ui64>(&raw[1]),
+                            ReadUnaligned<ui64>(&raw[2])
+                        ));
             }
         };
 

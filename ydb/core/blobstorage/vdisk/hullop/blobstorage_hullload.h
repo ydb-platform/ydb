@@ -233,9 +233,9 @@ namespace NKikimr {
                 FirstRead = false;
 
                 // copy placeholder data, because otherwise we get unaligned access
-                TIdxDiskPlaceHolder placeHolder(0);
                 size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
-                memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
+                TIdxDiskPlaceHolder placeHolder = ReadUnaligned<TIdxDiskPlaceHolder>(
+                        data.DataPtr<const TIdxDiskPlaceHolder>(partSize));
 
                 Y_VERIFY_S(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature, VCtx->VDiskLogPrefix);
                 RestToReadIndex = placeHolder.Info.IdxTotalSize;

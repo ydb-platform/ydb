@@ -296,7 +296,18 @@ public:
             .RemoteChannelInflightBytes = TableServiceConfig.GetRemoteChannelInflightBytes(),
             .NodeSessionIcInflightBytes = TableServiceConfig.GetNodeSessionIcInflightBytes()
         };
-        auto channelServiceActorId = TActivationContext::Register(NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(), limits, ChannelService));
+
+        ui32 icPoolId = AppData()->UserPoolId;
+        // {
+        //     auto it = AppData()->ServicePools.find("Interconnect");
+        //     if (it != AppData()->ServicePools.end()) {
+        //         icPoolId = it->second;
+        //     }
+        // }
+
+        auto channelServiceActorId = TActivationContext::Register(
+            NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(), limits, ChannelService),
+            SelfId(), TMailboxType::HTSwap, icPoolId);
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeChannelServiceActorID(SelfId().NodeId()), channelServiceActorId);
 

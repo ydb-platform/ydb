@@ -486,7 +486,7 @@ public:
     TEvDqCompute::TEvChannelDataV2::TPtr OutOfOrderMessage;
     // ...
     const ui64 MaxInflightBytes;
-    const ui64 MaxInflightMessages = 64;
+    const ui64 MaxInflightMessages = 8192;
     std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
     const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconcilation;

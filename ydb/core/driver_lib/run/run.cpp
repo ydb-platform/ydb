@@ -687,7 +687,7 @@ void TKikimrRunner::InitializeKqpController(const TKikimrRunConfig& runConfig) {
     if (runConfig.ServicesMask.EnableKqp) {
         auto& tableServiceConfig = runConfig.AppConfig.GetTableServiceConfig();
         auto& featureFlags = runConfig.AppConfig.GetFeatureFlags();
-        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(runConfig.NodeId, tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
+        KqpShutdownController.Reset(new NKqp::TKqpShutdownController(NKqp::MakeKqpProxyID(runConfig.NodeId), tableServiceConfig, featureFlags.GetEnableGracefulShutdown()));
         KqpShutdownController->Initialize(ActorSystem.Get());
     }
 }

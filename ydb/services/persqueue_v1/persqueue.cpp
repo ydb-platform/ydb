@@ -87,7 +87,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         #NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
 
     ADD_REQUEST(GetReadSessionsInfo, PersQueueService, ReadInfoRequest, ReadInfoResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQReadInfoRequest(ctx));
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQReadInfoRequest(ctx, &DoPQReadInfoRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying()}));
     })
 
     ADD_REQUEST(DropTopic, PersQueueService, DropTopicRequest, DropTopicResponse, {
@@ -117,8 +117,6 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
 #undef ADD_REQUEST
-
-
 }
 
 void TGRpcPersQueueService::StopService() noexcept {

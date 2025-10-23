@@ -332,7 +332,7 @@ TAsyncCreateSessionResult TTableClient::TImpl::GetSession(const TCreateSessionSe
             //TODO: Do we realy need it?
             Client->ScheduleTaskUnsafe([promise{std::move(Promise)}, val{std::move(val)}]() mutable {
                 promise.SetValue(std::move(val));
-            }, std::chrono::microseconds::zero());
+            }, TDeadline::Duration::zero());
         }
         NThreading::TPromise<TCreateSessionResult> Promise;
         std::shared_ptr<TTableClient::TImpl> Client;

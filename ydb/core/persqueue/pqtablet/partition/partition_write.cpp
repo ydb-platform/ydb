@@ -933,8 +933,6 @@ void TPartition::ExecRequest(TRegisterMessageGroupMsg& msg, ProcessParameters& p
 TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroupMsg& msg,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -960,8 +958,6 @@ void TPartition::ExecRequest(TDeregisterMessageGroupMsg& msg, ProcessParameters&
 TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& msg,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -1009,8 +1005,6 @@ void TPartition::ExecRequest(TSplitMessageGroupMsg& msg, ProcessParameters& para
 TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     if (!CanWrite()) {
         WriteInflightSize -= p.Msg.Data.size();
         ScheduleReplyError(p.Cookie, false, InactivePartitionErrorCode,

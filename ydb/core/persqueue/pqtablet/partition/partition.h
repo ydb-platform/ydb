@@ -801,8 +801,8 @@ private:
     mutable TMaybe<TString> InitLogPrefix;
     mutable TMaybe<TString> UnknownLogPrefix;
 
-    // template <class T> T& GetUserActionAndTransactionEventsFront();
-    // template <class T> T& GetCurrentEvent();
+    //template <class T> T& GetUserActionAndTransactionEventsFront();
+    //template <class T> T& GetCurrentEvent();
     //TSimpleSharedPtr<TTransaction>& GetCurrentTransaction();
 
     struct TAffectedSourceIdsAndConsumers {
@@ -816,6 +816,7 @@ private:
     void AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     void AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     void AppendTxReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    void AppendReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
@@ -828,7 +829,8 @@ private:
     bool ExecUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx, TEvKeyValue::TEvRequest* request);
     bool ExecUserActionOrTransaction(TMessage& msg, TEvKeyValue::TEvRequest* request);
 
-    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act);
+    [[nodiscard]] EProcessResult PreProcessUserAct(TEvPQ::TEvSetClientInfo& act,
+                                                   TAffectedSourceIdsAndConsumers* affectedSourceIdsAndConsumers);
     void CommitUserAct(TEvPQ::TEvSetClientInfo& act);
 
 

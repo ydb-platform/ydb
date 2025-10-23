@@ -545,7 +545,7 @@ retry:
                 if (nonOptionalColumnsCount && !column.GetIsOptional()) {
                     ++parsedNonOptional;
                 }
-                if (!success) {
+                if (Config.SkipErrors && !success) {
                     auto status = column.GetStatus();
                     HANDLE_ERROR(status);
                 }

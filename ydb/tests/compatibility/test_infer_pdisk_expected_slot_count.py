@@ -8,7 +8,7 @@ from ydb.tests.library.compatibility.fixtures import init_stable_binary_path, in
 from ydb.tests.library.compatibility.fixtures import inter_stable_binary_path, inter_stable_name
 from ydb.tests.library.compatibility.fixtures import current_binary_path, current_name
 from ydb.tests.library.common.types import Erasure
-import ydb.core.protos.blobstorage_config_pb2 as blobstorage_config_pb2
+from ydb.core.protos import blobstorage_config_pb2
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class TestUpgradeThenRollback(RestartToAnotherVersionFixture):
             except AssertionError as e:
                 if time.time() > deadline:
                     logger.warning(f"pdisk_list incorrect: {pdisks}")
-                    raise e from e
+                    raise e
                 else:
                     time.sleep(delay)
 

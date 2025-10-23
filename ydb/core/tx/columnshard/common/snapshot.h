@@ -50,7 +50,7 @@ public:
     }
 
     constexpr bool Valid() const noexcept {
-        return PlanStep && TxId;
+        return PlanStep;
     }
 
     static constexpr TSnapshot Zero() noexcept {

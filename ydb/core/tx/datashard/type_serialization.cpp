@@ -15,10 +15,7 @@ TString DecimalToString(const std::pair<ui64, i64>& loHi, const NScheme::TTypeIn
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    const char* result = ToString(val, MaxPrecision /*typeInfo.GetDecimalType().GetPrecision()*/, typeInfo.GetDecimalType().GetScale());
-    Y_ENSURE(result);
-
-    return result;
+    return ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
 }
 
 TString DyNumberToString(TStringBuf data) {
@@ -39,15 +36,11 @@ TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
 }
 
 bool DecimalToStream(const std::pair<ui64, i64>& loHi, IOutputStream& out, TString& err, const NScheme::TTypeInfo& typeInfo) {
+    Y_UNUSED(err);
     using namespace NYql::NDecimal;
 
     TInt128 val = FromHalfs(loHi.first, loHi.second);
-    const char* result = ToString(val, MaxPrecision /*typeInfo.GetDecimalType().GetPrecision()*/, typeInfo.GetDecimalType().GetScale());
-    if (!result) [[unlikely]] {
-        err = "Invalid Decimal binary representation";
-        return false;
-    }
-    out << result;
+    out << ToString(val, typeInfo.GetDecimalType().GetPrecision(), typeInfo.GetDecimalType().GetScale());
     return true;
 }
 

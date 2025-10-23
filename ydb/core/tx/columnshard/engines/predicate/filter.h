@@ -9,13 +9,18 @@
 namespace NKikimr::NOlap {
 
 class TPKRangesFilter {
+    friend class TRangesBuilder;
+
 private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
+    std::shared_ptr<arrow::RecordBatch> Data;
+
+    [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
+    TPKRangesFilter() = default;
+    TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
 
 public:
-    TPKRangesFilter();
-
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
         ui32 result = 0;
         for (auto&& i : SortedRanges) {
@@ -28,18 +33,11 @@ public:
         return result;
     }
 
-    [[nodiscard]] TConclusionStatus Add(
-        std::shared_ptr<NOlap::TPredicate> f, std::shared_ptr<NOlap::TPredicate> t, const std::shared_ptr<arrow::Schema>& pkSchema);
     std::shared_ptr<arrow::RecordBatch> SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const;
     TString SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const;
 
     bool IsEmpty() const {
         return SortedRanges.empty() || FakeRanges;
-    }
-
-    const TPKRangeFilter& Front() const {
-        Y_ABORT_UNLESS(Size());
-        return SortedRanges.front();
     }
 
     size_t Size() const {
@@ -55,14 +53,15 @@ public:
     }
 
     bool IsUsed(const TPortionInfo& info) const {
-        return IsUsed(info.IndexKeyStart(), info.IndexKeyEnd());
+        return IsUsed(info.IndexKeyStart().BuildSortablePosition(), info.IndexKeyEnd().BuildSortablePosition());
     }
 
-    bool IsUsed(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const {
+    bool IsUsed(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
         return GetUsageClass(start, end) != TPKRangeFilter::EUsageClass::NoUsage;
     }
-    TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
-    bool CheckPoint(const NArrow::TSimpleRow& point) const;
+    TPKRangeFilter::EUsageClass GetUsageClass(
+        const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const;
+    bool CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const;
 
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
@@ -85,6 +84,9 @@ public:
     static std::shared_ptr<TPKRangesFilter> BuildFromRecordBatchFull(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema);
     static std::shared_ptr<TPKRangesFilter> BuildFromString(const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema);
+    static TPKRangesFilter BuildEmpty() {
+        return TPKRangesFilter();
+    }
 
     static TConclusion<TPKRangesFilter> BuildFromProto(
         const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
@@ -321,6 +323,63 @@ public:
         : PrimaryKey(pk) {
         AFL_VERIFY(PrimaryKey);
     }
+};
+
+class TRangesBuilder {
+    class TPredicateInfo {
+    private:
+        YDB_READONLY_DEF(NKernels::EOperation, Operation);
+        YDB_READONLY_DEF(ui32, NumColumns);
+        YDB_READONLY_DEF(ui32, RowIndex);
+
+    public:
+        TPredicateInfo(const NKernels::EOperation operation, const ui32 numColumns, const ui32 rowIndex)
+            : Operation(operation)
+            , NumColumns(numColumns)
+            , RowIndex(rowIndex)
+        {
+        }
+
+        std::optional<TPredicate> BuildPredicate(
+            const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+            if (!NumColumns) {
+                return std::nullopt;
+            }
+            auto columns = schema->field_names();
+            columns.resize(NumColumns);
+            return TPredicate(Operation, NArrow::NMerger::TSortableBatchPosition(batch, RowIndex, columns, {}, false));
+        }
+    };
+
+private:
+    const std::vector<NScheme::TTypeInfo> YdbPK;
+    const std::shared_ptr<arrow::Schema> ArrPK;
+    NArrow::TArrowBatchBuilder BatchBuilder;
+    std::vector<std::pair<TPredicateInfo, TPredicateInfo>> RangesInfo;
+
+private:
+    static std::vector<NScheme::TTypeInfo> ExtractTypes(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns) {
+        std::vector<NScheme::TTypeInfo> types;
+        types.reserve(columns.size());
+        for (auto& [name, type] : columns) {
+            types.push_back(type);
+        }
+        return types;
+    }
+
+    static TConclusion<TCell> MakeDefaultCell(const NScheme::TTypeInfo typeInfo);
+
+public:
+    TRangesBuilder(const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk)
+        : YdbPK(ExtractTypes(ydbPk))
+        , ArrPK(arrPk)
+    {
+        AFL_VERIFY((i64)ydbPk.size() == arrPk->num_fields());
+        NArrow::TStatusValidator::Validate(BatchBuilder.Start(ydbPk, arrPk));
+    }
+
+    void AddRange(TSerializedTableRange&&);
+    TConclusion<TPKRangesFilter> Finish();
 };
 
 }   // namespace NKikimr::NOlap

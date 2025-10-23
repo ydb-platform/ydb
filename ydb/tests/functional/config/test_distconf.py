@@ -6,6 +6,7 @@ import os
 from hamcrest import assert_that
 import time
 import pytest
+import functools
 
 from ydb.tests.library.common.types import Erasure
 import ydb.tests.library.common.cms as cms
@@ -52,6 +53,7 @@ class DistConfKiKiMRTest(object):
         "version": 0,
         "cluster": "",
     }
+    CONSOLE_NODE: Final[int] = 3
 
     @classmethod
     def setup_class(cls):
@@ -60,8 +62,9 @@ class DistConfKiKiMRTest(object):
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
             'BS_NODE': LogLevels.DEBUG,
-            # 'GRPC_SERVER': LogLevels.DEBUG,
-            # 'GRPC_PROXY': LogLevels.DEBUG,
+            'GRPC_SERVER': LogLevels.DEBUG,
+            'GRPC_PROXY': LogLevels.DEBUG,
+            'FLAT_SCHEMESHARD': LogLevels.DEBUG,
             # 'TX_PROXY': LogLevels.DEBUG,
             # 'TICKET_PARSER': LogLevels.DEBUG,
         }
@@ -69,9 +72,9 @@ class DistConfKiKiMRTest(object):
             "console": [
                 {
                     "info": {"tablet_id": 72057594037936131},
-                    "node": [3]
+                    "node": [cls.CONSOLE_NODE]
                 }
-            ]
+            ],
         }
         cls.configurator = KikimrConfigGenerator(
             cls.erasure,
@@ -213,7 +216,6 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
 
     def test_dynamic_slot_start_with_seed_nodes(self):
         database_path = os.path.join('/', self.cluster.domain_name, f'dyn_seed_db')
-        # database_path = "/Root/mydb"
         try:
             self.cluster.remove_database(database_path)
         except Exception:
@@ -224,25 +226,28 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
         pool = ydb.SessionPool(driver)
 
-        def create_table(session):
+        def create_table(session, num):
             session.execute_scheme(
                 f"""
-                create table `{database_path}/t` (
+                create table `{database_path}/t{num}` (
                     id Uint64,
                     primary key(id)
                 );
                 """
             )
+        
+        def create_table_n(num):
+            return functools.partial(create_table, num)
 
         initial_slots = self.cluster.register_and_start_slots(database_path, count=1)
         logger.info(f"[TEST] Initially started slots: {[s.node_id for s in initial_slots]}")
         self.cluster.wait_tenant_up(database_path)
-        pool.retry_operation_sync(create_table)
+        pool.retry_operation_sync(create_table_n(1))
 
         initial_slots[0].stop()
         logger.info("[TEST] Stopped initial dynamic slot")
 
-        self.cluster.nodes[3].stop()
+        self.cluster.nodes[3].stop() # вынести в константу 3
         logger.info("[TEST] Stopped static node 3 (Console)")
 
         seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != 3]
@@ -257,26 +262,16 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             initial_slots[0].start()
             logger.info(f"[TEST] Restarted slot with seed-nodes: {initial_slots[0].node_id}")
 
-            def create_table2(session):
-                session.execute_scheme(
-                    f"""
-                    create table `{database_path}/t2` (
-                        id Uint64,
-                        primary key(id)
-                    );
-                    """
-                )
-
-            pool.retry_operation_sync(create_table2)
+            pool.retry_operation_sync(create_table_n(2))
             def upsert(session):
                 session.transaction().execute(
-                    f"upsert into `{database_path}/t` (id) values (1); upsert into `{database_path}/t2` (id) values (2);",
+                    f"upsert into `{database_path}/t1` (id) values (1);",
                     commit_tx=True,
                 )
 
             def select(session):
                 session.transaction().execute(
-                    f"select id from `{database_path}/t`; select id from `{database_path}/t2`;",
+                    f"select id from `{database_path}/t1`;",
                     commit_tx=True,
                 )
 

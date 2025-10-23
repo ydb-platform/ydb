@@ -1350,7 +1350,6 @@ public:
             // FIXME(innokentii)
             // RunConfig.ConfigInitInfo[NKikimrConsole::TConfigItem::NameserviceConfigItem].Updates.pop_back();
         }
-        Logger.Out() << "[DynInit Console] NodeId=" << NodeId << ": AppConfig:\n" << AppConfig.DebugString() << Endl;
     }
 
     class TAppConfigFieldsPreserver {
@@ -1438,7 +1437,6 @@ public:
 
         Logger.Err() << "[DynInit] NodeId=" << NodeId << ": fetching config via DynConfigClient, addrs.size=" << addrs.size() << Endl;
         auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
-
         if (!result) {
             Logger.Err() << "[DynInit] NodeId=" << NodeId << ": DynConfigClient.GetConfig returned empty result" << Endl;
             return;
@@ -1454,6 +1452,7 @@ public:
         NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
         Logger.Err() << "[DynInit] NodeId=" << NodeId << ": applying dyn config" << Endl;
         ApplyConfigForNode(appConfig);
+        Logger.Out() << "[DynInit Console] NodeId=" << NodeId << ": AppConfig:\n" << AppConfig.DebugString() << Endl;
     }
 
     void RegisterCliOptions(NLastGetopt::TOpts& opts) override {
@@ -1616,28 +1615,6 @@ public:
 
         NKikimrConfig::TAppConfig yamlConfig;
         NYamlConfig::ResolveAndParseYamlConfig(mainYaml, {}, Labels, yamlConfig);
-
-        bool hasTenantPool = yamlConfig.HasTenantPoolConfig() && yamlConfig.GetTenantPoolConfig().GetSlots().size() > 0;
-        if (!hasTenantPool) {
-            if (CommonAppOptions.TenantName) {
-                auto& slot = *yamlConfig.MutableTenantPoolConfig()->AddSlots();
-                slot.SetId("dynamic-slot");
-                slot.SetIsDynamic(true);
-                slot.SetTenantName(CommonAppOptions.TenantName.GetRef());
-                if (CommonAppOptions.NodeType) {
-                    yamlConfig.MutableTenantPoolConfig()->SetNodeType(CommonAppOptions.NodeType.GetRef());
-                }
-                yamlConfig.MutableTenantPoolConfig()->SetIsEnabled(true);
-                if (CommonAppOptions.Workload == EWorkload::Operational) {
-                    auto* denyCs = yamlConfig.MutableDynamicNodeConfig()->AddTabletAvailability();
-                    denyCs->SetType(NKikimrTabletBase::TTabletTypes::ColumnShard);
-                    denyCs->SetMaxCount(0);
-                    Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": set TabletAvailability deny for ColumnShard (operational workload)" << Endl;
-                }
-                Logger.Err() << "[SeedDynamic] NodeId=" << NodeId << ": synthesized TenantPoolConfig for tenant '"
-                             << CommonAppOptions.TenantName.GetRef() << "'" << Endl;
-            }
-        }
 
         Logger.Out() << "[SeedDynamic] NodeId=" << NodeId << ": AppConfig:\n" << AppConfig.DebugString() << Endl;
         InitDebug.YamlConfig.CopyFrom(yamlConfig);

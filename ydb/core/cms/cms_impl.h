@@ -223,6 +223,17 @@ private:
         }
     }
 
+    #define HFuncChecked(TEvType, HandleFunc) \
+        case TEvType::EventType: { \
+            typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+            if (State->Config.Enable) { \
+                HandleFunc(*x, this->ActorContext()); \
+            } else { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+            } \
+            break; \
+        } \
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
@@ -234,9 +245,9 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
-            HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
-            HFunc(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvNotification, CheckAndEnqueueRequest);
@@ -387,14 +398,6 @@ private:
     void ManuallyApproveRequest(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void GetNotifications(TEvCms::TEvManageNotificationRequest::TPtr &ev, bool all, const TActorContext &ctx);
     bool RemoveNotification(const TString &id, const TString &user, bool remove, TErrorInfo &error);
-
-    template<typename TEvRequestPtr>
-    bool CheckEnabled(TEvRequestPtr &ev, const TActorContext &ctx) const {
-        if (!State->Config.Enable) {
-            ReplyWithError<TEvCms::TEvPermissionResponse>(ev, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", ctx);
-        }
-        return State->Config.Enable;
-    }
 
     void EnqueueRequest(TAutoPtr<IEventHandle> ev, const TActorContext &ctx);
     void CheckAndEnqueueRequest(TEvCms::TEvPermissionRequest::TPtr &ev, const TActorContext &ctx);

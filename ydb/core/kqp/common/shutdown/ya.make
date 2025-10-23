@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/base
     ydb/core/protos
     ydb/library/actors/core
 )

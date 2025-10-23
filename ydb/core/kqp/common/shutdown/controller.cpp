@@ -1,6 +1,8 @@
 #include "controller.h"
 #include "events.h"
 
+#include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
@@ -21,9 +23,11 @@ void TKqpShutdownController::Stop() {
     if (!EnableGraceful)
         return;
 
-    for (auto& actorId : {NKqp::MakeKqpProxyID(NodeId_), NKqp::MakeKqpNodeServiceID(NodeId_)}) {
-        ActorSystem_->Send(new NActors::IEventHandle(actorId, {}, new NPrivateEvents::TEvInitiateShutdownRequest(ShutdownState_)));
+    if (AppData()->FeatureFlags.GetEnableLocalExecutionIfNodeShutdowned()) {
+        ActorSystem_->Send(new NActors::IEventHandle(NKqp::MakeKqpNodeServiceID(NodeId_), {}, new NPrivateEvents::TEvInitiateShutdownRequest(ShutdownState_)));
     }
+    ActorSystem_->Send(new NActors::IEventHandle(NKqp::MakeKqpProxyID(NodeId_), {}, new NPrivateEvents::TEvInitiateShutdownRequest(ShutdownState_)));
+
 
     auto timeout = TDuration::MilliSeconds(TableServiceConfig.GetShutdownSettings().GetShutdownTimeoutMs());
     auto startedAt = TInstant::Now();

@@ -98,51 +98,15 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             // and then delete the corresponding token rows from the index table
             
             // Wrap deleteIndexKeys so it can be used as stage input
-            std::optional<TExprBase> deleteKeysConnection;
-            if (deleteIndexKeys.Maybe<TDqCnUnionAll>()) {
-                // Already a proper connection
-                deleteKeysConnection = deleteIndexKeys;
-            } else {
-                // Not a connection (e.g., TCoMap from ProjectColumns)
-                // Need to find embedded connections and create a proper stage
-                TVector<TExprNode::TPtr> inputs;
-                TVector<TExprNode::TPtr> args;
-                TNodeOnNodeOwnedMap replaces;
-                int i = 1;
-                VisitExpr(deleteIndexKeys.Ptr(), [&](const TExprNode::TPtr& node) {
-                    TExprBase expr(node);
-                    if (auto cast = expr.Maybe<TDqCnUnionAll>()) {
-                        auto newArg = ctx.NewArgument(del.Pos(), TStringBuilder() << "rows" << i);
-                        inputs.emplace_back(node);
-                        args.emplace_back(newArg);
-                        replaces.emplace(expr.Raw(), newArg);
-                        i++;
-                        return false;
-                    }
-                    return true;
-                });
-                
-                auto wrapStage = Build<TDqStage>(ctx, del.Pos())
-                    .Inputs()
-                        .Add(inputs)
-                        .Build()
-                    .Program()
-                        .Args(args)
-                        .Body(ctx.ReplaceNodes(deleteIndexKeys.Ptr(), replaces))
-                        .Build()
-                    .Settings().Build()
-                    .Done();
-                
-                deleteKeysConnection = Build<TDqCnUnionAll>(ctx, del.Pos())
-                    .Output()
-                        .Stage(wrapStage)
-                        .Index().Build("0")
-                        .Build()
-                    .Done();
-            }
+            auto deleteKeysConnection = Build<TDqCnUnionAll>(ctx, del.Pos())
+                .Output()
+                    .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                    .Index().Build("0")
+                    .Build()
+                .Done();
             
             auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                .Connection(deleteKeysConnection->Cast<TDqCnUnionAll>())
+                .Connection(deleteKeysConnection.Cast<TDqCnUnionAll>())
                 .Done();
             
             auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,

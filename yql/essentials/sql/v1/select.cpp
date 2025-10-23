@@ -2920,7 +2920,7 @@ private:
     TVector<TSourcePtr> Sources_;
     const TString Operator_;
     bool QuantifierAll_;
-    const TWriteSettings Settings_;
+    TWriteSettings Settings_;
 };
 
 TSourcePtr BuildSelectOp(

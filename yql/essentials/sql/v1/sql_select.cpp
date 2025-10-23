@@ -547,6 +547,12 @@ TSourcePtr TSqlSelect::SingleSource(const TRule_single_source& node, const TVect
             if (!source) {
                 return nullptr;
             }
+            auto writeSettings = source->GetWriteSettings();
+            if (writeSettings.Discard) {
+                Ctx_.Warning(source->GetPos(), TIssuesIds::YQL_DISCARD_IN_INVALID_PLACE, [](auto& out) {
+                    out << "DISCARD can only be used at the top level, not inside subqueries";
+                });
+            }
             return BuildInnerSource(pos, BuildSourceNode(pos, std::move(source)), Ctx_.Scoped->CurrService, Ctx_.Scoped->CurrCluster);
         }
         case TRule_single_source::kAltSingleSource3: {
@@ -1353,7 +1359,7 @@ TSqlSelect::TSelectKindResult TSqlSelect::SelectKind(const TRule_select_kind_par
     if (node.Alt_case() == TRule_select_kind_parenthesis::kAltSelectKindParenthesis1) {
         return SelectKind(node.GetAlt_select_kind_parenthesis1().GetRule_select_kind_partial1(), selectPos, placement);
     } else {
-        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, {});
+        return SelectKind(node.GetAlt_select_kind_parenthesis2().GetRule_select_kind_partial2(), selectPos, placement);
     }
 }
 

@@ -13,6 +13,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/iterator/functools.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -3275,6 +3276,102 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
             TString output = StreamResultToYson(it);
             CompareYson(output, R"([[1u;1u]])");
         }
+    }
+
+    Y_UNIT_TEST(DiscardSelectSupport) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+        
+        TVector<TString> queries = {
+            "DISCARD SELECT 1",
+            "DISCARD SELECT COUNT(*) FROM `/Root/EightShard`",
+            "DISCARD SELECT 5 FROM (SELECT Key FROM `/Root/EightShard`)",
+            R"(DISCARD SELECT e1.Key, e2.Value1
+            FROM `/Root/EightShard` AS e1
+            JOIN `/Root/TwoShard` AS e2 ON e1.Key = e2.Key)"
+        };
+
+        TVector<TString> invalidQueries = {
+            "SELECT 5 FROM (DISCARD SELECT Key FROM `/Root/EightShard`)",
+            "SELECT * FROM `/Root/EightShard` WHERE Key IN (DISCARD SELECT 1)",
+            "SELECT 1 UNION ALL (DISCARD SELECT 2)"
+        };
+
+        for (const auto& query : queries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 0,
+                "DISCARD SELECT should return no result sets for query: " << query);
+        }
+        {
+            auto multiLineQuery = R"(SELECT 1; DISCARD SELECT 2; DISCARD SELECT COUNT(*) FROM `/Root/EightShard`;
+                        SELECT MIN(Key) FROM `/Root/TwoShard`)";
+
+                auto result = db.ExecuteQuery(multiLineQuery,
+                        NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetResultSets().size(), 2,
+                "expect 2 result sets, got " << result.GetResultSets().size() << " instead");
+        }
+
+        for (const auto& query : invalidQueries) {
+            auto result = db.ExecuteQuery(query,
+                    NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(),
+                "Query should fail: " << query);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "DISCARD");
+        }
+        // backward compability tests
+        {
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            for (auto& query : Concatenate(queries, invalidQueries)) {
+                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                UNIT_ASSERT_C(result.GetResultSets().size() > 0,
+                    "DISCARD SELECT should return result sets for dml (backward compability) but got: " << result.GetResultSets().size() << " for query " << query);
+            }
+        }
+
+        for (auto& query : queries) {
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            auto collected = CollectStreamResult(it);
+            UNIT_ASSERT_C(!collected.ResultSetYson.empty(),
+                "DISCARD SELECT should return result sets for Scan query (backward compatibility), got empty for query: " << query);
+        }
+
+    }
+
+    Y_UNIT_TEST(DiscardSelectEnsureExecuted) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetQueryClient();
+
+        auto failingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data > 1000000, "Data value too large") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result = db.ExecuteQuery(failingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(!result.IsSuccess(),
+            "Query with DISCARD and failing Ensure should fail, proving Ensure is executed. Got status: " << result.GetStatus());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Data value too large");
+
+        auto passingEnsureQuery = R"(
+            DISCARD SELECT Ensure(Data, Data < 1000000, "Data value out of range") AS value
+            FROM `/Root/EightShard`
+        )";
+
+        auto result2 = db.ExecuteQuery(passingEnsureQuery,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(result2.GetResultSets().size(), 0,
+            "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
     }
 }
 

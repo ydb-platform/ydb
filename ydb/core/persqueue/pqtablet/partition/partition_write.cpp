@@ -899,8 +899,6 @@ void TPartition::CancelOneWriteOnWrite(const TActorContext& ctx,
 TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMsg& msg,
                                                          TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     if (!CanWrite()) {
         ScheduleReplyError(msg.Cookie, false, InactivePartitionErrorCode,
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
@@ -915,7 +913,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TRegisterMessageGroupMs
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -950,7 +948,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TDeregisterMessageGroup
     if (TxAffectedSourcesIds.contains(msg.Body.SourceId)) {
         return EProcessResult::Blocked;
     }
-    WriteAffectedSourcesIds.insert(msg.Body.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(msg.Body.SourceId);
     return EProcessResult::Continue;
 }
 
@@ -979,13 +977,13 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TSplitMessageGroupMsg& 
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
     for (auto& body : msg.Deregistrations) {
         if (TxAffectedSourcesIds.contains(body.SourceId)) {
             return EProcessResult::Blocked;
         }
-        WriteAffectedSourcesIds.insert(body.SourceId);
+        affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(body.SourceId);
     }
 
     return EProcessResult::Continue;
@@ -1038,7 +1036,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p,
             return EProcessResult::Blocked;
         }
     }
-    WriteAffectedSourcesIds.insert(p.Msg.SourceId);
+    affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(p.Msg.SourceId);
 
     return EProcessResult::Continue;
 }

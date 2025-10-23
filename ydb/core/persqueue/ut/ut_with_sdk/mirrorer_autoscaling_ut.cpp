@@ -380,7 +380,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,

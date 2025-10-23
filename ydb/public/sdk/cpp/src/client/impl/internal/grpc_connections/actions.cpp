@@ -4,9 +4,11 @@
 
 #include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
 
+using namespace std::chrono_literals;
+
 namespace NYdb::inline Dev {
 
-constexpr TDuration MAX_DEFERRED_CALL_DELAY = TDuration::Seconds(10); // The max delay between GetOperation calls for one operation
+constexpr TDeadline::Duration MAX_DEFERRED_CALL_DELAY = 10s; // The max delay between GetOperation calls for one operation
 
 TSimpleCbResult::TSimpleCbResult(
         TSimpleCb&& cb,
@@ -24,18 +26,17 @@ TDeferredAction::TDeferredAction(const std::string& operationId,
         TDeferredOperationCb&& userCb,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
-        TDuration delay,
+        TDeadline::Duration delay,
+        TDeadline deadline,
         TDbDriverStatePtr dbState,
         const std::string& endpoint)
     : TAlarmActionBase(std::move(userCb), connection, std::move(context))
-    , NextDelay_(Min(delay * 2, MAX_DEFERRED_CALL_DELAY))
+    , NextDelay_(std::min(delay * 2, MAX_DEFERRED_CALL_DELAY))
     , DbDriverState_(dbState)
     , OperationId_(operationId)
     , Endpoint_(endpoint)
 {
-    Deadline_ = gpr_time_add(
-        gpr_now(GPR_CLOCK_MONOTONIC),
-        gpr_time_from_micros(delay.MicroSeconds(), GPR_TIMESPAN));
+    Deadline_ = std::min(deadline, TDeadline::AfterDuration(delay));
 }
 
 void TDeferredAction::OnAlarm() {
@@ -46,7 +47,8 @@ void TDeferredAction::OnAlarm() {
 
     TRpcRequestSettings settings;
     settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
-    
+    settings.Deadline = Deadline_;
+
     Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
         std::move(getOperationRequest),
         std::move(UserResponseCb_),
@@ -76,13 +78,11 @@ TPeriodicAction::TPeriodicAction(
     TPeriodicCb&& userCb,
     TGRpcConnectionsImpl* connection,
     std::shared_ptr<NYdbGrpc::IQueueClientContext> context,
-    TDuration period)
+    TDeadline::Duration period)
     : TAlarmActionBase(std::move(userCb), connection, std::move(context))
     , Period_(period)
 {
-    Deadline_ = gpr_time_add(
-        gpr_now(GPR_CLOCK_MONOTONIC),
-        gpr_time_from_micros(Period_.MicroSeconds(), GPR_TIMESPAN));
+    Deadline_ = TDeadline::AfterDuration(period);
 }
 
 void TPeriodicAction::OnAlarm() {

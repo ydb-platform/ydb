@@ -3,6 +3,8 @@
 #include <ydb/public/sdk/cpp/src/client/impl/endpoints/endpoints.h>
 #include <ydb/public/sdk/cpp/src/client/impl/internal/internal_header.h>
 
+#include <ydb/public/sdk/cpp/src/library/time/time.h>
+
 namespace NYdb::inline Dev {
 
 struct TRpcRequestSettings {
@@ -16,7 +18,7 @@ struct TRpcRequestSettings {
         UseDiscoveryEndpoint            // Use single discovery endpoint
     } EndpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally;
     bool UseAuth = true;
-    TDuration ClientTimeout;
+    NYdb::TDeadline Deadline = NYdb::TDeadline::Max();
 
     template <typename TRequestSettings>
     static TRpcRequestSettings Make(const TRequestSettings& settings, const TEndpointKey& preferredEndpoint = {}, TEndpointPolicy endpointPolicy = TEndpointPolicy::UsePreferredEndpointOptionally) {
@@ -28,11 +30,11 @@ struct TRpcRequestSettings {
         if (!settings.TraceParent_.empty()) {
             rpcSettings.Header.emplace_back("traceparent", settings.TraceParent_);
         }
-        
+
         rpcSettings.PreferredEndpoint = preferredEndpoint;
         rpcSettings.EndpointPolicy = endpointPolicy;
         rpcSettings.UseAuth = true;
-        rpcSettings.ClientTimeout = settings.ClientTimeout_;
+        rpcSettings.Deadline = NYdb::TDeadline::AfterDuration(settings.ClientTimeout_);
         return rpcSettings;
     }
 };

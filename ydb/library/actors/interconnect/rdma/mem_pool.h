@@ -38,9 +38,10 @@ namespace NInterconnect::NRdma {
 
     public: // IContiguousChunk
         TContiguousSpan GetData() const override;
-        TMutableContiguousSpan GetDataMut() override;
+        TMutableContiguousSpan UnsafeGetDataMut() override;
         size_t GetOccupiedMemorySize() const override;
         EInnerType GetInnerType() const noexcept override;
+        IContiguousChunk::TPtr Clone() noexcept override;
     protected:
         TChunkPtr Chunk;
         const uint32_t Offset;
@@ -73,6 +74,7 @@ namespace NInterconnect::NRdma {
 
     class IMemPool {
     public:
+        // WARN: In case of addition new flags consider "Clone()" method implementation
         enum Flags : ui32 {
             EMPTY = 0,
             PAGE_ALIGNED = 1,    // Page alignment allocation

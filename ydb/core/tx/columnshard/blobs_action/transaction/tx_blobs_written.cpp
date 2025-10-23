@@ -16,7 +16,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
     TInstant startTransactionTime = TInstant::Now();
     TMemoryProfileGuard mpg("TTxBlobsWritingFinished::Execute");
     txc.DB.NoMoreReadsForTx();
-    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification();
+    CommitSnapshot = Self->GetCurrentSnapshotForInternalModification().GetNextSnapshot();
     NActors::TLogContextGuard logGuard =
         NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD_BLOBS)("tablet_id", Self->TabletID())("tx_state", "execute");
     ACFL_DEBUG("event", "start_execute");
@@ -44,7 +44,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
         InsertWriteIds.emplace_back(constructor->GetInsertWriteIdVerified());
         portion.Finalize(Self, txc);
         if (PackBehaviour == EOperationBehaviour::NoTxWrite) {
-            granule.CommitImmediateOnExecute(txc, *CommitSnapshot, portion.GetPortionInfo(), firstPKColumnId);
+            granule.CommitImmediateOnExecute(txc, CommitSnapshot->GetNextSnapshot(), portion.GetPortionInfo(), firstPKColumnId);
         } else {
             granule.InsertPortionOnExecute(txc, portion.GetPortionInfoPtr(), firstPKColumnId);
         }

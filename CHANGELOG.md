@@ -147,9 +147,9 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
 
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
+* TestRetryLimiter
+* RestoreScriptPhysicalGraphOnRetry
+* CreateStreamingQueryMatchRecognize
 
 Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
@@ -178,4 +178,4 @@ Also increased default test logs level [#25408](https://github.com/ydb-platform/
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
 * 25668:Used AS threads in topic sdk IO operations [#25668](https://github.com/ydb-platform/ydb/pull/25668) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
-
+* 27023: Implemented the possibility to enable multiple encryption threads in PDisk; This may help to increase blockdevice throughput for a single PDisk. Setting is set by `TPDiskConfig.EncryptionThreadCount` and `ICB` controls `EncryptionThreadCountSSD`, `EncryptionThreadCountHDD`. ([Aleksei Pleshakov](https://github.com/qrort))

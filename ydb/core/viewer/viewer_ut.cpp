@@ -2290,7 +2290,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         client->InitRoot();
         client->InitSourceIds();
         NYdb::TDriverConfig driverCfg;\
-        TString message = "message_Ira";
+        TString message = "message_test";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         TTestActorRuntime& runtime = *server.GetRuntime();

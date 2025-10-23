@@ -167,18 +167,13 @@ public:
                 IsAutoScaledTopic = true;
         }
         if (!Params.Has("partition")) {
-            if (IsAutoScaledTopic) {
-                
-            }
             auto chooser = NPQ::CreatePartitionChooser(pqDescription, false);
             if (!Key.empty()) {
-                NYql::NDecimal::TUint128 hash = NDataStreams::V1::BytesToDecimal(Key);
-                auto* partition = chooser->GetPartition(hash % pqDescription.GetPartitions().size());
+                auto* partition = chooser->GetPartition(Key);
                 Partition = partition->PartitionId;
             } else {
                 Partition = rand() % pqDescription.GetPartitions().size();
             }
-
         }
 
         if (Event->Get()->UserToken.empty()) {
@@ -193,10 +188,6 @@ public:
             };
         }
 
-        if (!AppData(this->ActorContext())->PQConfig.GetTopicsAreFirstClassCitizen() && !pqDescription.GetPQTabletConfig().GetLocalDC()) {
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "LocalDC is not set fot federation."));
-            return;
-        }
         const auto& partitions = pqDescription.GetPartitions();
         bool partitionFound = false;
         for (auto& partition : partitions) {

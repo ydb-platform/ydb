@@ -6,6 +6,8 @@
 #include <ydb/core/testlib/common_helper.h>
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/ast/yql_ast.h>
@@ -3482,6 +3484,65 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_C(result2.IsSuccess(), result2.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL_C(result2.GetResultSets().size(), 0,
             "DISCARD SELECT should return no result sets, got: " << result2.GetResultSets().size());
+    }
+
+    Y_UNIT_TEST(ChannelData) {
+        TKikimrRunner kikimr(TKikimrSettings().SetUseRealThreads(false));
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+
+        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
+                SELECT COUNT(*) FROM `/Root/TwoShard`;
+            )")).GetValueSync();
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
+        auto dataQuery = prepareResult.GetQuery();
+
+        ui32 channelDataCount = 0;
+        TActorId executerId;
+        bool executerIdCaptured = false;
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            // Capture executer ID from first TEvTxRequest
+            if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
+                executerId = ev->Recipient;
+                executerIdCaptured = true;
+                Cerr << "Captured ExecuterId: " << executerId << Endl;
+            }
+
+            // Track ChannelData events sent to executer
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvChannelData::EventType) {
+                auto& record = ev->Get<NYql::NDq::TEvDqCompute::TEvChannelData>()->Record;
+                Cerr << "ChannelData event detected, channelId: " << record.GetChannelData().GetChannelId() 
+                     << ", sender: " << ev->Sender << ", recipient: " << ev->Recipient << Endl;
+                
+                if (executerIdCaptured && ev->Recipient == executerId) {
+                    ++channelDataCount;
+                    Cerr << "ChannelData sent to Executer! Count: " << channelDataCount << Endl;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto settings = TExecDataQuerySettings().OperationTimeout(TDuration::Seconds(20));
+        kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), settings).GetValueSync(); });
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
+            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
+                && ev.Sender == executerId;
+        });
+
+        UNIT_ASSERT(runtime.DispatchEvents(opts));
+        
+        Cerr << "Test finished. ChannelData to Executer count: " << channelDataCount << Endl;
+        
+        // В данном тесте проверяем, что ChannelData НЕ прилетает напрямую в Executer
+        // (он должен прилетать в Compute Actor, а затем результаты передаются через другие механизмы)
+        UNIT_ASSERT_VALUES_EQUAL_C(channelDataCount, 0, 
+            "ChannelData should not be sent directly to Executer, count: " << channelDataCount);
     }
 }
 

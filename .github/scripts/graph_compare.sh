@@ -14,7 +14,7 @@ if [[ -z "$YA_MAKE_COMMAND" ]]; then
     YA_MAKE_COMMAND="./ya make -ttt ydb --build release -k --cache-tests --build-all"
 fi
 
-$YA_MAKE_COMMAND -Gj0 | jq '.graph[]' > $workdir/graph_base
+$YA_MAKE_COMMAND -k --cache-tests --build-all -Gj0 | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...
 git checkout $2

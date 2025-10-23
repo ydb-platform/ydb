@@ -14,6 +14,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 
 #include <library/cpp/type_info/tz/tz.h>
 
@@ -74,8 +75,9 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(decimal);
         }
         case NUdf::EDataSlot::DyNumber: {
-            // TODO: Implement DyNumber
-            break;
+            auto number = NKikimr::NDyNumber::ParseDyNumberString(TStringBuilder() << value);
+            UNIT_ASSERT_C(number.Defined(), "Failed to convert string to DyNumber");
+            return MakeString(*number);
         }
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
@@ -176,7 +178,7 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<float>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
         TDataDecimalType::Create(DECIMAL_PRECISION, DECIMAL_SCALE, TypeEnv),
-        // TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv),
@@ -797,11 +799,8 @@ void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
 
     for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
         if constexpr (IsStringType) {
-            static_assert(std::is_same_v<TPhysicalType, std::string>, "TPhysicalType must be std::string for string types");
-
-            auto valueLine = typedArray->Value(i);
-            auto expected = values[i].AsStringRef();
-            UNIT_ASSERT_STRINGS_EQUAL(TPhysicalType(valueLine.data(), valueLine.size()), TPhysicalType(expected.Data(), expected.Size()));
+            auto value = NTestUtils::ExtractUnboxedValue(array, i, type, context.HolderFactory);
+            AssertUnboxedValuesAreEqual(value, values[i], type);
         } else {
             UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == values[i].Get<TPhysicalType>());
         }
@@ -932,8 +931,7 @@ Y_UNIT_TEST_SUITE(KqpFormat_MiniKQL_Arrow) {
     }
 
     Y_UNIT_TEST(DataType_DyNumber) {
-        // TODO: Serialize DyNumber from binary to string
-        // TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+        TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
     }
 
     // Floating point types

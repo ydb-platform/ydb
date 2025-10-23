@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 namespace NKikimr::NKqp::NFormats {
@@ -57,9 +58,9 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc &&callback) {
             return callback(TTypeWrapper<arrow::DoubleType>());
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::DyNumber:
             return callback(TTypeWrapper<arrow::StringType>());
         case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::DyNumber:
         case NUdf::EDataSlot::Yson:
         case NUdf::EDataSlot::JsonDocument:
             return callback(TTypeWrapper<arrow::BinaryType>());
@@ -307,7 +308,8 @@ std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TOptionalType* opt
 }
 
 template <typename TArrowType>
-void AppendDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     auto typedBuilder = reinterpret_cast<typename arrow::TypeTraits<TArrowType>::BuilderType*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
@@ -319,7 +321,8 @@ void AppendDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
 }
 
 template <>
-void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     YQL_ENSURE(builder->type()->id() == arrow::Type::UINT64, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::UInt64Builder*>(builder);
     arrow::Status status;
@@ -332,7 +335,8 @@ void AppendDataValue<arrow::UInt64Type>(arrow::ArrayBuilder* builder, NUdf::TUnb
 }
 
 template <>
-void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     YQL_ENSURE(builder->type()->id() == arrow::Type::INT64, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::Int64Builder*>(builder);
     arrow::Status status;
@@ -345,21 +349,41 @@ void AppendDataValue<arrow::Int64Type>(arrow::ArrayBuilder* builder, NUdf::TUnbo
 }
 
 template <>
-void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
     YQL_ENSURE(builder->type()->id() == arrow::Type::STRING, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::StringBuilder*>(builder);
     arrow::Status status;
     if (!value.HasValue()) {
         status = typedBuilder->AppendNull();
     } else {
-        auto data = value.AsStringRef();
-        status = typedBuilder->Append(data.Data(), data.Size());
+        switch (dataSlot) {
+            case NUdf::EDataSlot::DyNumber: {
+                auto number = NDyNumber::DyNumberToString(value.AsStringRef());
+                YQL_ENSURE(number.Defined(), "Failed to convert DyNumber to string");
+                status = typedBuilder->Append(number->data(), number->size());
+                break;
+            }
+            case NUdf::EDataSlot::JsonDocument: {
+                // TODO: implement
+                break;
+            }
+            case NUdf::EDataSlot::Utf8:
+            case NUdf::EDataSlot::Json: {
+                auto data = value.AsStringRef();
+                status = typedBuilder->Append(data.Data(), data.Size());
+                break;
+            }
+            default:
+                YQL_ENSURE(false, "Unexpected data slot");
+                break;
+        }
     }
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 
 template <>
-void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     YQL_ENSURE(builder->type()->id() == arrow::Type::BINARY, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);
     arrow::Status status;
@@ -374,7 +398,8 @@ void AppendDataValue<arrow::BinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnb
 
 // Only for timezone datetime types
 template <>
-void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value) {
+void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     YQL_ENSURE(builder->type()->id() == arrow::Type::STRUCT, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::StructBuilder*>(builder);
     YQL_ENSURE(typedBuilder->num_fields() == 2, "StructBuilder of timezone datetime types should have 2 fields");
@@ -428,10 +453,8 @@ void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 }
 
-template <typename TArrowType>
-void AppendFixedSizeDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
-    static_assert(std::is_same_v<TArrowType, arrow::FixedSizeBinaryType>, "This function is only for FixedSizeBinaryType");
-
+template <>
+void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue value, NUdf::EDataSlot dataSlot) {
     YQL_ENSURE(builder->type()->id() == arrow::Type::FIXED_SIZE_BINARY, "Unexpected builder type");
     auto typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder);
     arrow::Status status;
@@ -604,11 +627,7 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             auto slot = *dataType->GetDataSlot().Get();
             bool success = SwitchMiniKQLDataTypeToArrowType( slot, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                     Y_UNUSED(typeHolder);
-                    if constexpr (std::is_same_v<TType, arrow::FixedSizeBinaryType>) {
-                        AppendFixedSizeDataValue<TType>(builder, value, slot);
-                    } else {
-                        AppendDataValue<TType>(builder, value);
-                    }
+                    AppendDataValue<TType>(builder, value, slot);
                     return true;
                 });
             YQL_ENSURE(success, "Failed to append data value to arrow builder");
@@ -918,9 +937,28 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Ar
 
 template <>
 NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
     auto array = std::static_pointer_cast<arrow::StringArray>(column);
     auto data = array->GetView(row);
+
+    switch (slot) {
+        case NUdf::EDataSlot::DyNumber: {
+            auto number = NDyNumber::ParseDyNumberString(TStringBuf(data.data(), data.size()));
+            YQL_ENSURE(number.Defined(), "Failed to convert string to DyNumber");
+            return NMiniKQL::MakeString(*number);
+        }
+        case NUdf::EDataSlot::JsonDocument: {
+            // TODO: implement
+            break;
+        }
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json: {
+            return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+        }
+        default: {
+            YQL_ENSURE(false, "Unexpected data slot");
+        }
+    }
+
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 

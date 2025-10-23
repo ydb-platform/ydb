@@ -48,12 +48,8 @@ SRCS(
     mock/pdisk_mock.cpp
 )
 
-IF (BUILD_TYPE != "DEBUG")
-    SRCS(
-        blobstorage_pdisk_ut_yard.cpp
-    )
-ELSE ()
-    MESSAGE(WARNING "It takes too much time to run test in DEBUG mode, some tests are skipped")
-ENDIF ()
+SRCS(
+    blobstorage_pdisk_ut_yard.cpp
+)
 
 END()

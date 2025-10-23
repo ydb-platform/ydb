@@ -277,7 +277,6 @@ struct TChunkState {
     };
 
     ui64 Nonce;
-    ui64 CurrentNonce;
     ui64 PreviousNonce;
     std::atomic<i64> OperationsInProgress;
     TOwner OwnerId;
@@ -287,7 +286,6 @@ struct TChunkState {
     ui64 ShredGeneration;
     TChunkState()
         : Nonce(0)
-        , CurrentNonce(0)
         , PreviousNonce(0)
         , OperationsInProgress(0)
         , OwnerId(OwnerUnallocated)
@@ -309,7 +307,6 @@ struct TChunkState {
         TStringStream str;
         str << "{ ";
         OUT_VAR(Nonce);
-        OUT_VAR(CurrentNonce);
         OUT_VAR(PreviousNonce);
         OUT_VAR(OperationsInProgress.load());
         OUT_VAR(OwnerId);

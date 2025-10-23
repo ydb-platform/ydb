@@ -17,6 +17,7 @@ PEERDIR(
     ydb/library/yql/dq/proto
     yql/essentials/providers/result/expr_nodes
     ydb/core/kqp/expr_nodes
+    ydb/core/kqp/common/result_set_format
 )
 
 YQL_LAST_ABI_VERSION()

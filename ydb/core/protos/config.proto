@@ -1621,6 +1621,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 50,
             DefaultValue: 10 }];
+        optional uint64 GarbageThresholdToRunFullCompactionPerMille = 36 [(ControlOptions) = {
+            Description: "Maximal allowed fraction from vdisk fare share of garbage before compaction would be triggered. If value = 0 - compaction would run after every defragmentation quantum",
+            MinValue: 0,
+            MaxValue: 300,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1725,6 +1730,12 @@ message TImmediateControlsConfig {
 
         optional uint64 HullCompThrottlerBytesRate = 35 [(ControlOptions) = {
             Description: "Rate bytes in 1 second for requests (sum of write and read) in compaction throttler",
+            MinValue: 0,
+            MaxValue: 10000000000, // 10 GB/s
+            DefaultValue: 0 }];
+
+        optional uint64 DefragThrottlerBytesRate = 37 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in defragmentation throttler",
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];

@@ -162,7 +162,6 @@ namespace {
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
                 break;
             case NKikimr::NKqp::IKqpTransactionManager::PREPARING:
-                return false;
             case NKikimr::NKqp::IKqpTransactionManager::FINISHED:
             case NKikimr::NKqp::IKqpTransactionManager::ERROR:
             case NKikimr::NKqp::IKqpTransactionManager::PROCESSING:

@@ -57,7 +57,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpRead> read, TRBOContext & ctx) {
 
     TVector<const TItemExprType*> structItemTypes = rowType->Cast<TStructExprType>()->GetItems();
     TVector<const TItemExprType*> newItemTypes;
-    for (auto t : structItemTypes ) {
+    for (auto t : structItemTypes) {
         newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>("_alias_" + read->Alias + "." + t->GetName(), t->GetItemType()));
     }
 
@@ -192,7 +192,34 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
     return TStatus::Ok;
 }
 
-TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext & ctx) {
+TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
+    auto inputType = aggregate->GetInput()->Type;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    THashMap<TStringBuf, std::pair<TStringBuf, TStringBuf>> aggTraitsMap;
+    for (const auto& aggTraits : aggregate->AggregationTraitsList) {
+        const auto originalColName = aggTraits.OriginalColName.GetFullName();
+        const auto resultColName = aggTraits.ResultColName.GetFullName();
+        const auto funcName = aggTraits.AggFunction;
+        aggTraitsMap[originalColName] = {resultColName, funcName};
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto* itemType : structType->GetItems()) {
+        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
+            Y_ENSURE(it->second.second == "sum", "Only sum aggregation function is supported");
+            // For count need to update type
+            newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->second.first, itemType->GetItemType()));
+        } else {
+            newItemTypes.push_back(itemType);
+        }
+    }
+
+    auto resultType = ctx.ExprCtx.MakeType<TListExprType>(ctx.ExprCtx.MakeType<TStructExprType>(newItemTypes));
+    aggregate->Type = resultType;
+    return TStatus::Ok;
+}
+
+TStatus ComputeTypes(std::shared_ptr<TOpJoin> join, TRBOContext& ctx) {
     // FIXME: This works correctly only for inner joins, other join types 
     auto leftInputType = join->GetLeftInput()->Type;
     auto rightInputType = join->GetRightInput()->Type;
@@ -242,6 +269,9 @@ TStatus ComputeTypes(std::shared_ptr<IOperator> op, TRBOContext & ctx) {
     }
     else if(MatchOperator<TOpLimit>(op)) {
         return ComputeTypes(CastOperator<TOpLimit>(op), ctx);
+    }
+    else if(MatchOperator<TOpAggregate>(op)) {
+        return ComputeTypes(CastOperator<TOpAggregate>(op), ctx);
     }
     else {
         Y_ENSURE(false, "Invalid operator type in RBO type inference");

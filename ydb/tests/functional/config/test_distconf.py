@@ -62,9 +62,8 @@ class DistConfKiKiMRTest(object):
         log_configs = {
             'BOARD_LOOKUP': LogLevels.DEBUG,
             'BS_NODE': LogLevels.DEBUG,
-            'GRPC_SERVER': LogLevels.DEBUG,
-            'GRPC_PROXY': LogLevels.DEBUG,
-            'FLAT_SCHEMESHARD': LogLevels.DEBUG,
+            # 'GRPC_SERVER': LogLevels.DEBUG,
+            # 'GRPC_PROXY': LogLevels.DEBUG,
             # 'TX_PROXY': LogLevels.DEBUG,
             # 'TICKET_PARSER': LogLevels.DEBUG,
         }

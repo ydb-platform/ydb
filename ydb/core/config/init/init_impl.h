@@ -1121,6 +1121,7 @@ public:
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
         Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
+
         CommonAppOptions.ValidateTenant();
 
         CommonAppOptions.ApplyServicesMask(ServicesMask);

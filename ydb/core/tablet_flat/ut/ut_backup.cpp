@@ -333,6 +333,60 @@ struct TxWriteNewColumn : public ITransaction {
     }
 }; // TxWriteNewColumn
 
+struct TTxCountRows : public ITransaction {
+    enum EEv {
+        EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
+    };
+
+    struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
+        TEvResult(ui64 count)
+            : Count(count)
+        {}
+
+        ui64 Count;
+    };
+
+    const TActorId Owner;
+    ui64 Count = 0;
+
+    TTxCountRows(TActorId owner)
+        : Owner(owner)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        Count = 0;
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowSet = db.Table<TSchema::Data>().All().Select();
+        if (!rowSet.IsReady()) {
+            return false;
+        }
+        while (!rowSet.EndOfSet()) {
+            ++Count;
+            if (!rowSet.Next()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new TEvResult(Count));
+    }
+}; // TTxCountRows
+
+struct TRestoreStarter : public NFake::TStarter {
+    using TBase = NFake::TStarter;
+
+    NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
+        auto* info = TBase::MakeTabletInfo(tablet, channelsCount);
+        info->BootMode = NFake::TStorageInfo::EBootMode::Restore;
+        return info;
+    }
+}; // TRestoreStarter
+
 struct TEnv : public TMyEnvBase {
     TEnv()
         : TMyEnvBase()
@@ -401,6 +455,28 @@ struct TEnv : public TMyEnvBase {
         WaitFor<NFake::TEvResult>();
     }
 
+    ui64 CountRows() {
+        SendAsync(new NFake::TEvExecute{ new TTxCountRows(Edge) });
+
+        TAutoPtr<IEventHandle> handle;
+        Env.GrabEdgeEventRethrow<TTxCountRows::TEvResult>(handle);
+
+        return handle->Get<TTxCountRows::TEvResult>()->Count;
+    }
+
+    void RestartTabletInRestoreMode(ui32 flags = 0)
+    {
+        SendSync(new TEvents::TEvPoison, false, true);
+
+        TRestoreStarter starter;
+        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new NFake::TDummy(tablet, info, Edge, flags);
+        }, 0, &starter);
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvTablet::EvTabletActive);
+        Env.DispatchEvents(options);
+    }
 }; // TEnv
 
 Y_UNIT_TEST_SUITE(Backup) {
@@ -942,6 +1018,34 @@ Y_UNIT_TEST_SUITE(Backup) {
             lines[1],
             R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"NewColumn":20}]})"
         );
+    }
+
+    Y_UNIT_TEST(RestoreModeDeleteData) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing three rows" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 10);
+        env.WriteValue(3, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 3);
+
+        Cerr << "...restarting dummy tablet in restore mode" << Endl;
+        env.RestartTabletInRestoreMode(TestTabletFlags);
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        env.RestartTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 0);
     }
 }
 

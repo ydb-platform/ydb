@@ -10,6 +10,7 @@
 #include <ydb/core/base/services/blobstorage_service_id.h>
 #include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/base.pb.h>
+#include <ydb/core/protos/bootstrap.pb.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/core/protos/blobstorage_base.pb.h>
 #include <ydb/core/protos/blobstorage_base3.pb.h>
@@ -330,16 +331,23 @@ struct TTabletChannelInfo {
 
 class TTabletStorageInfo : public TThrRefBase {
 public:
+    enum class EBootMode {
+        Normal = 0,
+        Restore = 1,
+    };
+
     //
     TTabletStorageInfo()
         : TabletID(Max<ui64>())
         , TabletType(TTabletTypes::TypeInvalid)
         , Version(0)
+        , BootMode(EBootMode::Normal)
     {}
     TTabletStorageInfo(ui64 tabletId, TTabletTypes::EType tabletType)
         : TabletID(tabletId)
         , TabletType(tabletType)
         , Version(0)
+        , BootMode(EBootMode::Normal)
     {}
     virtual ~TTabletStorageInfo() {}
 
@@ -381,6 +389,7 @@ public:
         str << "}";
         if (TenantPathId)
             str << " Tenant: " << TenantPathId;
+        str << " BootMode: " << BootMode;
         return str.Str();
     }
 
@@ -412,6 +421,7 @@ public:
     ui32 Version;
     TPathId TenantPathId;
     ui64 HiveId = 0;
+    EBootMode BootMode;
 };
 
 inline TActorId TTabletStorageInfo::BSProxyIDForChannel(ui32 channel, ui32 generation) const {

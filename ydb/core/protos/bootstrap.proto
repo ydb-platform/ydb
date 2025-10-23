@@ -45,7 +45,7 @@ message TBootstrap {
 
     enum EBootMode {
         NORMAL = 0;
-        RECOVERY = 1;
+        RESTORE = 1; // wipe tablet data and restore it from backup
     }
 
     message TTablet {

@@ -472,6 +472,10 @@ protected:
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
 
+        if (TasksGraph.GetMeta().UseFastChannels) {
+            return;
+        }
+
         ui64 channelId;
         if (ResponseEv->TxResults.size() == 1) {
             YQL_ENSURE(!ResultChannelToComputeActor.empty());

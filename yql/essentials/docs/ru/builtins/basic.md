@@ -109,6 +109,26 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
 
+## Concat {#concat}
+
+Конкатенация одной и более строк.
+
+#### Сигнатура
+
+```yql
+Concat((String|Utf8)[?], ...)->(String|Utf8)[?]
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Если хотя бы у одной входной строки тип `Optional`, то таким же является и результат.
+Если все входные строки имеют тип `Utf8`, то таким же является и результат, в противном случае - `String`.
+Если хотя бы одна входная строка является `NULL`, то таким же является и результат.
+
+#### Примеры
+
+```yql
+SELECT Concat("abc", "de", "f"); -- "abcdef"
+```
 
 ## FIND {#find}
 
@@ -385,7 +405,6 @@ $config = @@{
 }@@;
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 ```
-
 
 ## CurrentUtc... {#current-utc}
 
@@ -1149,6 +1168,51 @@ WithSideEffectsMode(T, mode:string)->T
 ```yql
 SELECT WithSideEffects(MyModule::Func(...)) FROM table
 ```
+
+## ToDynamicLinear
+
+#### Сигнатура
+
+```yql
+ToDynamicLinear(Linear<T>)->DynamicLinear<T>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `ToDynamicLinear` преобразует значение из статического [линейного](../types/linear.md) типа в динамический.
+
+## FromDynamicLinear
+
+#### Сигнатура
+
+```yql
+FromDynamicLinear(DynamicLinear<T>)->Linear<T>
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `FromDynamicLinear` преобразует значение из динамического [линейного](../types/linear.md) типа в статический.
+
+## Block
+
+#### Сигнатура
+
+```yql
+Block(lambda((dependsOnArgument)->T))->T
+```
+
+Функция доступна начиная с версии [2025.04](../changelog/2025.04.md).
+Функция `Block` выполняет лямбду с одним аргументом (тип которого не определен, так как должен использоваться только как зависимый узел) и возвращает ее выходное значение.
+Зависимые узлы это те, которые используются для управления вычислением недетерминированных функций таких как [Random](#random) или функций, создающих значения [линейных](../types/linear.md) типов.
+
+#### Пример
+
+```yql
+SELECT Block(($arg)->{
+    $dict = ToMutDict({'key1':123}, $arg); -- используем зависимый узел при создании значения линейного типа
+    $dict = MutDictInsert($dict, 'key2', 456);
+    return FromMutDict($dict);
+}); -- {'key1':123, 'key2': 456}
+```
+
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}
 

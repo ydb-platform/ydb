@@ -227,13 +227,11 @@ void ngtcp2_qlog_start(ngtcp2_qlog *qlog, const ngtcp2_cid *odcid, int server) {
 }
 
 void ngtcp2_qlog_end(ngtcp2_qlog *qlog) {
-  uint8_t buf[1] = {0};
-
   if (!qlog->write) {
     return;
   }
 
-  qlog->write(qlog->user_data, NGTCP2_QLOG_WRITE_FLAG_FIN, &buf, 0);
+  qlog->write(qlog->user_data, NGTCP2_QLOG_WRITE_FLAG_FIN, "", 0);
 }
 
 static ngtcp2_vec vec_pkt_type_initial = ngtcp2_make_vec_lit("initial");
@@ -1095,7 +1093,6 @@ void ngtcp2_qlog_metrics_updated(ngtcp2_qlog *qlog,
 void ngtcp2_qlog_pkt_lost(ngtcp2_qlog *qlog, ngtcp2_rtb_entry *ent) {
   uint8_t buf[256];
   uint8_t *p = buf;
-  ngtcp2_pkt_hd hd = {0};
 
   if (!qlog->write) {
     return;
@@ -1107,11 +1104,11 @@ void ngtcp2_qlog_pkt_lost(ngtcp2_qlog *qlog, ngtcp2_rtb_entry *ent) {
   p = write_verbatim(
     p, ",\"name\":\"recovery:packet_lost\",\"data\":{\"header\":");
 
-  hd.type = ent->hd.type;
-  hd.flags = ent->hd.flags;
-  hd.pkt_num = ent->hd.pkt_num;
-
-  p = write_pkt_hd(p, &hd);
+  p = write_pkt_hd(p, &(ngtcp2_pkt_hd){
+                        .pkt_num = ent->hd.pkt_num,
+                        .type = ent->hd.type,
+                        .flags = ent->hd.flags,
+                      });
   p = write_verbatim(p, "}}\n");
 
   qlog->write(qlog->user_data, NGTCP2_QLOG_WRITE_FLAG_NONE, buf,
@@ -1154,20 +1151,19 @@ void ngtcp2_qlog_stateless_reset_pkt_received(
   ngtcp2_qlog *qlog, const ngtcp2_pkt_stateless_reset *sr) {
   uint8_t buf[256];
   uint8_t *p = buf;
-  ngtcp2_pkt_hd hd = {0};
 
   if (!qlog->write) {
     return;
   }
-
-  hd.type = NGTCP2_PKT_STATELESS_RESET;
 
   *p++ = '\x1e';
   *p++ = '{';
   p = qlog_write_time(qlog, p);
   p = write_verbatim(
     p, ",\"name\":\"transport:packet_received\",\"data\":{\"header\":");
-  p = write_pkt_hd(p, &hd);
+  p = write_pkt_hd(p, &(ngtcp2_pkt_hd){
+                        .type = NGTCP2_PKT_STATELESS_RESET,
+                      });
   *p++ = ',';
   p = write_pair_hex(p, "stateless_reset_token", sr->stateless_reset_token,
                      NGTCP2_STATELESS_RESET_TOKENLEN);

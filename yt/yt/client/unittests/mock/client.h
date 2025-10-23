@@ -662,8 +662,9 @@ public:
         const TGetJobStderrOptions& options),
         (override));
 
-    MOCK_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+    MOCK_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options),
         (override));
 

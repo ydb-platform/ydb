@@ -2668,27 +2668,6 @@ message TRspGetJobStderr
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetJobTrace
-{
-    oneof operation_id_or_alias {
-        NYT.NProto.TGuid operation_id = 1;
-        string operation_alias = 2;
-    }
-    optional NYT.NProto.TGuid job_id = 3;
-    optional NYT.NProto.TGuid trace_id = 4;
-    optional int64 from_event_index = 5;
-    optional int64 to_event_index = 6;
-    optional int64 from_time = 7;
-    optional int64 to_time = 8;
-}
-
-message TRspGetJobTrace
-{
-    repeated TJobTraceEvent events = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 message TReqGetJobFailContext
 {
     oneof operation_id_or_alias {
@@ -2914,6 +2893,24 @@ message TWriteTableMeta
 }
 
 message TRspWriteTable
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    required NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_time = 5;
+    optional int64 to_time = 6;
+}
+
+message TRspGetJobTrace
 {
 }
 

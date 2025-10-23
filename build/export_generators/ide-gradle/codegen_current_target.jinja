@@ -1,5 +1,64 @@
 {%- set current_target_object_indexes = [] -%}
 
+{%- set some_runs = [] -%}
+{%- if current_target.custom_runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.custom_runs|map(attribute='_object_index') -%}
+{%-     set some_runs = some_runs + current_target.custom_runs -%}
+{%- endif -%}
+
+{%- if current_target.runs|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
+{%-     set some_runs = some_runs + current_target.runs -%}
+{%- endif -%}
+
+{#- Here in current_target_object_indexes all codegens with special output dirs -#}
+{#- Select only some runs with parents (depend runs) -#}
+{%- set some_runs_with_parents = some_runs|selectattr('_parent_object_index', 'in', current_target_object_indexes) -%}
+
+{%- macro PatchArg(arg, object_index, ins, outs, is_path = false) -%}
+{%-     set in_bindir = arg|replace(codegenBindir, '') != arg -%}
+{%-     if (outs|select("eq", arg)|length) or (outs|select("eq", codegenBindir + "/" + arg)|length) or (in_bindir and outs|join('|') != outs|join('|')|replace(arg + "/", '')) -%}
+{%-         if proto_template -%}
+{{ PatchGeneratedProto(arg, false, object_index) }}
+{%-         else -%}
+{{ PatchRoots(arg, false, object_index) }}
+{%-         endif -%}
+{%-     elif in_bindir or (is_path and arg[0] != '/') -%}
+{#-         relatives searching in bindir too -#}
+{%-         set dep_runs = some_runs_with_parents|selectattr('_parent_object_index', 'eq', object_index) -%}
+{%-         if dep_runs|length -%}
+{%-             set bindir_arg = codegenBindir + "/" + arg -%}
+{%-             set dep_outputs = dep_runs|selectattr('outputs')|map(attribute='outputs')|sum -%}
+{%-             set dep_out = dep_runs|selectattr('out')|map(attribute='out')|sum -%}
+{%-             set dep_out_dir = dep_runs|selectattr('out_dir')|map(attribute='out_dir')|sum -%}
+{%-             if (dep_outputs|select('eq', arg)|length) or (dep_outputs|select('eq', bindir_arg)|length) or (in_bindir and dep_outputs|join('|') != dep_outputs|join('|')|replace(arg + "/", '')) -%}
+{%-                 set list_name = 'outputs' -%}
+{%-             elif (dep_out|select('eq', arg)|length) or (dep_out|select('eq', bindir_arg)|length) or (in_bindir and dep_out|join('|') != dep_out|join('|')|replace(arg + "/", '')) -%}
+{%-                 set list_name = 'out' -%}
+{%-             elif (dep_out_dir|select('eq', arg)|length) or (dep_out_dir|select('eq', bindir_arg)|length) or (in_bindir and dep_out_dir|join('|') != dep_out_dir|join('|')|replace(arg + "/", '')) -%}
+{%-                 set list_name = 'out_dir' -%}
+{%-             else -%}
+{%-                 set list_name = false -%}
+{%-             endif -%}
+{%-             if list_name -%}
+{%-                 for dep_run in dep_runs -%}
+{%-                     if (dep_run[list_name]|select('eq', arg)|length) or (dep_run[list_name]|select('eq', bindir_arg)|length) or (in_bindir and dep_run[list_name]|join('|') != dep_run[list_name]|join('|')|replace(arg + "/", '')) -%}
+{{ PatchRoots(arg, false, dep_run['_object_index']) }}
+{%-                     endif -%}
+{%-                 endfor -%}
+{%-             else -%}
+{{ PatchRoots(arg) }}
+{%-             endif -%}
+{%-         else -%}
+{{ PatchRoots(arg) }}
+{%-         endif -%}
+{%-     elif ins|select("in", arg)|length -%}
+{{ PatchRoots(arg, true) }}
+{%-     else -%}
+{{ PatchRoots(arg) }}
+{%-     endif -%}
+{%- endmacro -%}
+
 {%- include "[generator]/codegen_run_program.jinja" -%}
 {%- include "[generator]/codegen_run_java_program.jinja" -%}
 {%- include "[generator]/codegen_copy_file.jinja" -%}

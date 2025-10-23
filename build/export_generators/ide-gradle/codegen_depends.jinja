@@ -27,3 +27,42 @@
 {{ ObjDepends(from_sandbox) }}
 {%-     endfor -%}
 {%- endif -%}
+
+{%- if current_target.custom_runs|length or current_target.runs|length -%}
+{%-     set collectTask = varprefix + "Collect" %}
+
+val {{ collectTask }} = tasks.register<Sync>("{{ collectTask }}") {
+{%-     if current_target.custom_runs|length -%}
+{%-         for custom_run in current_target.custom_runs -%}
+{%-             if not (custom_run['_parent_object_index'] is defined) or not (custom_run['_parent_object_index'] in current_target_object_indexes) %}
+    from({{ varprefix }}{{ custom_run['_object_index'] }})
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif -%}
+{%-     if current_target.runs|length -%}
+{%-         for run in current_target.runs -%}
+{%-             if not(run['_parent_object_index'] is defined) or not(run['_parent_object_index'] in current_target_object_indexes) %}
+    from({{ varprefix }}{{ run['_object_index'] }})
+{%-             endif -%}
+{%-         endfor -%}
+{%-     endif %}
+    into("$projectCodegenDir/{{ varprefix }}.collect")
+}
+
+{%-     if varprefix == MAIN_VARPREFIX %}
+
+sourceSets {
+    main {
+        java.srcDir({{ collectTask }}).include("**/*")
+    }
+}
+{%-     else %}
+
+sourceSets {
+    test {
+        java.srcDir({{ collectTask }}).include("**/*")
+    }
+}
+{%-     endif %}
+
+{%- endif -%}

@@ -1120,7 +1120,7 @@ public:
         Option("naming-file", TCfg::TNameserviceConfigFieldTag{});
 
         CommonAppOptions.NodeId = CommonAppOptions.DeduceNodeId(AppConfig, Env);
-
+        Logger.Out() << "Determined node ID: " << CommonAppOptions.NodeId << Endl;
         CommonAppOptions.ValidateTenant();
 
         CommonAppOptions.ApplyServicesMask(ServicesMask);
@@ -1424,6 +1424,7 @@ public:
         };
 
         auto result = DynConfigClient.GetConfig(CommonAppOptions.GrpcSslSettings, addrs, settings, Env, Logger);
+
         if (!result) {
             return;
         }
@@ -1435,6 +1436,7 @@ public:
         InitDebug.YamlConfig.CopyFrom(yamlConfig);
 
         NKikimrConfig::TAppConfig appConfig = GetActualDynConfig(yamlConfig, result->GetConfig(), ConfigUpdateTracer);
+
         ApplyConfigForNode(appConfig);
     }
 
@@ -1515,6 +1517,7 @@ public:
 
         auto result = ConfigClient.FetchConfig(CommonAppOptions.GrpcSslSettings, CommonAppOptions.SeedNodes, Env, Logger);
         if (!result) {
+            Logger.Out() << "Failed to fetch config from seed nodes" << Endl;
             return;
         }
 
@@ -1542,7 +1545,6 @@ public:
             }
         };
 
-        Logger.Out() << "[SeedStatic] Received main_yaml.size=" << clusterConfig.size() << ", storage_yaml.size=" << storageConfig.size() << Endl;
         bool clusterSaved = !clusterConfig.empty() && saveConfig(clusterConfig, CONFIG_NAME);
         bool storageSaved = !storageConfig.empty() && saveConfig(storageConfig, STORAGE_CONFIG_NAME);
 
@@ -1554,10 +1556,10 @@ public:
         }
 
         if (clusterSaved && storageSaved) {
-            Logger.Out() << "[SeedStatic] Initialized main and storage configs in " << configDirPath << "/"
+            Logger.Out() << "Initialized main and storage configs in " << configDirPath << "/"
                          << CONFIG_NAME << " and " << STORAGE_CONFIG_NAME << Endl;
         } else if (clusterSaved) {
-            Logger.Out() << "[SeedStatic] Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
+            Logger.Out() << "Initialized config in " << configDirPath << "/" << CONFIG_NAME << Endl;
         } else if (!clusterConfig.empty() || !storageConfig.empty()) {
             TStringBuilder errorMsg;
             errorMsg << "Failed to save configs: ";
@@ -1572,7 +1574,7 @@ public:
             }
             ythrow yexception() << errorMsg;
         } else {
-            Logger.Out() << "[SeedStatic] No configs received from seed nodes" << Endl;
+            Logger.Out() << "No configs received from seed nodes" << Endl;
         }
     }
     void InitConfigFromSeedNodesDynamic() {

@@ -924,7 +924,7 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
         }
 
         case NUdf::EDataSlot::TzDatetime: {
-            YQL_ENSURE(typeId = arrow::Type::UINT32);
+            YQL_ENSURE(typeId == arrow::Type::UINT32);
             value = NUdf::TUnboxedValuePod(static_cast<ui32>(
                 std::static_pointer_cast<arrow::UInt32Array>(datetimeArray)->Value(row)));
             break;

@@ -1,6 +1,5 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
-#include <ydb/core/base/fulltext.h>
 
 namespace NKikimr::NKqp::NOpt {
 

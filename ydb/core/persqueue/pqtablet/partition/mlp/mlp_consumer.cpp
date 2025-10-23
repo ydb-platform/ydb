@@ -9,7 +9,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
+    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
 }
 
 template<typename T>
@@ -170,6 +170,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
         default:
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
+
+    CommitIfNeeded();
 
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");

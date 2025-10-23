@@ -1552,8 +1552,6 @@ void TPartition::WriteInfoResponseHandler(
 TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
                                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
-    Y_UNUSED(affectedSourceIdsAndConsumers);
-
     bool isImmediate = (tx.ProposeTransaction != nullptr);
     PQ_ENSURE(tx.WriteInfo);
     PQ_ENSURE(!tx.WriteInfoApplied);
@@ -1580,7 +1578,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             break;
         }
         if (isImmediate) {
-            WriteAffectedSourcesIds.insert(s.first);
+            affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(s.first);
         } else {
             if (WriteAffectedSourcesIds.contains(s.first)) {
                 PQ_LOG_TX_D("WriteAffectedSourcesIds contains SourceId " << s.first << ". TxId " << tx.GetTxId());
@@ -2382,8 +2380,21 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 
 }
 
+void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    AppendWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
+}
+
+void TPartition::AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    for (const auto& sourceId : affectedSourceIdsAndConsumers.WriteSourcesIds) {
+        WriteAffectedSourcesIds.insert(sourceId);
+    }
+}
+
 void TPartition::MoveUserActOrTxToCommitState() {
     auto& front = UserActionAndTransactionEvents.front();
+    AppendAffectedSourceIdsAndConsumers(front.AffectedSourceIdsAndConsumers);
     UserActionAndTxPendingCommit.push_back(std::move(front));
     UserActionAndTransactionEvents.pop_front();
 }
@@ -3486,8 +3497,10 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo
             return EProcessResult::Blocked;
         }
     }
+
     WriteKeysSizeEstimate += 1;
     SetOffsetAffectedConsumers.insert(user);
+
     return EProcessResult::Continue;
 }
 
@@ -4435,4 +4448,5 @@ void TPartition::ResetDetailedMetrics() {
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
 }
+
 } // namespace NKikimr::NPQ

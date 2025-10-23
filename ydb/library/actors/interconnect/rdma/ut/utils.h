@@ -2,7 +2,7 @@
 
 #include <library/cpp/testing/gtest/gtest.h>
 
-#include <ydb/library/actors/interconnect/rdma/cq_actor.h>
+#include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>
 

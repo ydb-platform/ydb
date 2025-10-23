@@ -98,7 +98,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             // and then delete the corresponding token rows from the index table
             
             // Wrap deleteIndexKeys so it can be used as stage input
-            TExprBase deleteKeysConnection;
+            std::optional<TExprBase> deleteKeysConnection;
             if (deleteIndexKeys.Maybe<TDqCnUnionAll>()) {
                 // Already a proper connection
                 deleteKeysConnection = deleteIndexKeys;
@@ -142,10 +142,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             }
             
             auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                .Connection(deleteKeysConnection.Cast<TDqCnUnionAll>())
+                .Connection(deleteKeysConnection->Cast<TDqCnUnionAll>())
                 .Done();
             
-            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns,
+            auto fulltextIndexRows = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
                 del.Pos(), ctx);
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())

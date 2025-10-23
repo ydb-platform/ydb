@@ -138,34 +138,6 @@ runs:
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
 
-        if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
-
-          set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=${PIPESTATUS[0]}
-          set -e
-
-          if [ $RC -ne 0 ]; then
-            echo "graph_compare.sh returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
-            exit $RC
-          fi
-
-          git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
-        else
-          YA_MAKE_TARGET=""
-          for TARGET in ${{ inputs.build_target }}; do
-             if [ -e $TARGET ]; then
-                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
-             fi
-          done
-        fi
-
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
 
@@ -280,6 +252,35 @@ runs:
         echo "::debug::get version"
         ./ya --version
 
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        if [ "${{ inputs.increment }}" = "true" ]; then
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
+
+          set +e
+          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          if [ $RC -ne 0 ]; then
+            echo "graph_compare.sh returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            exit $RC
+          fi
+
+          git checkout $ORIGINAL_HEAD
+          YA_MAKE_TARGET=.
+        else
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
+        fi
+
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
         YA_MAKE_OUTPUT="$PUBLIC_DIR/ya_make_output.txt"
@@ -336,7 +337,7 @@ runs:
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
           set +e
-          (./ya make $YA_MAKE_TARGET "${params[@]}" \
+          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT

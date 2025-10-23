@@ -274,11 +274,6 @@ void TConsumerActor::Restart(TString&& error) {
 
     Send(TabletActorId, new TEvents::TEvPoison());
 
-    ReplyErrorAll(SelfId(), ReadRequestsQueue);
-    ReplyErrorAll(SelfId(), CommitRequestsQueue);
-    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
-    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
-
     PassAway();
 }
 
@@ -408,11 +403,12 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
-        TStorage::MaxMessages - metrics.InflyMessageCount);
-    if (metrics.InflyMessageCount < TStorage::MinMessages) {
-        maxMessages = std::max(maxMessages, TStorage::MinMessages - metrics.InflyMessageCount);
+    auto maxMessages = TStorage::MinMessages;
+    if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    maxMessages = std::min(maxMessages, TStorage::MaxMessages - metrics.InflyMessageCount);
+
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
@@ -440,6 +436,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         return;
     }
 
+    size_t messageCount = 0;
     auto& response = ev->Get()->Response;
     if (response->GetPartitionResponse().HasCmdReadResult()) {
         auto lastOffset = Storage->GetLastOffset();
@@ -453,7 +450,10 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
             }
 
             Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
+            ++messageCount;
         }
+
+        LOG_D("Fetched " << messageCount << " messages");
 
         ProcessEventQueue();
     }

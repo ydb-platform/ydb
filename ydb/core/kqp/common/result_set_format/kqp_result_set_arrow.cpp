@@ -2,6 +2,8 @@
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <yql/essentials/utils/yql_panic.h>
 
@@ -59,10 +61,10 @@ bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot type, TFunc &&callback) {
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json:
         case NUdf::EDataSlot::DyNumber:
+        case NUdf::EDataSlot::JsonDocument:
             return callback(TTypeWrapper<arrow::StringType>());
         case NUdf::EDataSlot::String:
         case NUdf::EDataSlot::Yson:
-        case NUdf::EDataSlot::JsonDocument:
             return callback(TTypeWrapper<arrow::BinaryType>());
         case NUdf::EDataSlot::Decimal:
         case NUdf::EDataSlot::Uuid:
@@ -357,25 +359,30 @@ void AppendDataValue<arrow::StringType>(arrow::ArrayBuilder* builder, NUdf::TUnb
         status = typedBuilder->AppendNull();
     } else {
         switch (dataSlot) {
-            case NUdf::EDataSlot::DyNumber: {
-                auto number = NDyNumber::DyNumberToString(value.AsStringRef());
-                YQL_ENSURE(number.Defined(), "Failed to convert DyNumber to string");
-                status = typedBuilder->Append(number->data(), number->size());
-                break;
-            }
-            case NUdf::EDataSlot::JsonDocument: {
-                // TODO: implement
-                break;
-            }
             case NUdf::EDataSlot::Utf8:
             case NUdf::EDataSlot::Json: {
                 auto data = value.AsStringRef();
                 status = typedBuilder->Append(data.Data(), data.Size());
                 break;
             }
-            default:
-                YQL_ENSURE(false, "Unexpected data slot");
+
+            case NUdf::EDataSlot::JsonDocument: {
+                YQL_ENSURE(NBinaryJson::IsValidBinaryJson(value.AsStringRef()));
+                auto textJson = NBinaryJson::SerializeToJson(value.AsStringRef());
+                status = typedBuilder->Append(textJson.data(), textJson.size());
                 break;
+            }
+
+            case NUdf::EDataSlot::DyNumber: {
+                auto number = NDyNumber::DyNumberToString(value.AsStringRef());
+                YQL_ENSURE(number.Defined(), "Failed to convert DyNumber to string");
+                status = typedBuilder->Append(number->data(), number->size());
+                break;
+            }
+
+            default: {
+                YQL_ENSURE(false, "Unexpected data slot");
+            }
         }
     }
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
@@ -416,35 +423,42 @@ void AppendDataValue<arrow::StructType>(arrow::ArrayBuilder* builder, NUdf::TUnb
     auto datetimeArray = typedBuilder->field_builder(0);
     auto timezoneArray = reinterpret_cast<arrow::StringBuilder*>(typedBuilder->field_builder(1));
 
-    switch (datetimeArray->type()->id()) {
-        // NUdf::EDataSlot::TzDate
-        case arrow::Type::UINT16: {
+    switch (dataSlot) {
+        case NUdf::EDataSlot::TzDate: {
+            YQL_ENSURE(datetimeArray->type()->id() == arrow::Type::UINT16);
             status = reinterpret_cast<arrow::UInt16Builder*>(datetimeArray)->Append(value.Get<ui16>());
             break;
         }
-        // NUdf::EDataSlot::TzDatetime
-        case arrow::Type::UINT32: {
+
+        case NUdf::EDataSlot::TzDatetime: {
+            YQL_ENSURE(datetimeArray->type()->id() == arrow::Type::UINT32);
             status = reinterpret_cast<arrow::UInt32Builder*>(datetimeArray)->Append(value.Get<ui32>());
             break;
         }
-        // NUdf::EDataSlot::TzTimestamp
-        case arrow::Type::UINT64: {
+
+        case NUdf::EDataSlot::TzTimestamp: {
+            YQL_ENSURE(datetimeArray->type()->id() == arrow::Type::UINT64);
             status = reinterpret_cast<arrow::UInt64Builder*>(datetimeArray)->Append(value.Get<ui64>());
             break;
         }
-        // NUdf::EDataSlot::TzDate32
-        case arrow::Type::INT32: {
+
+        case NUdf::EDataSlot::TzDate32: {
+            YQL_ENSURE(datetimeArray->type()->id() == arrow::Type::INT32);
             status = reinterpret_cast<arrow::Int32Builder*>(datetimeArray)->Append(value.Get<i32>());
             break;
         }
-        // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
-        case arrow::Type::INT64: {
+
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64: {
+            YQL_ENSURE(datetimeArray->type()->id() == arrow::Type::INT64);
             status = reinterpret_cast<arrow::Int64Builder*>(datetimeArray)->Append(value.Get<i64>());
             break;
         }
-        default:
+
+        default: {
             YQL_ENSURE(false, "Unexpected timezone datetime slot");
             return;
+        }
     }
     YQL_ENSURE(status.ok(), "Failed to append data value: " << status.ToString());
 
@@ -479,42 +493,54 @@ void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, N
 
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type) {
     switch (type->GetKind()) {
-        case NMiniKQL::TType::EKind::Null:
+        case NMiniKQL::TType::EKind::Null: {
             return arrow::null();
+        }
+
         case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
+        case NMiniKQL::TType::EKind::EmptyDict: {
             return arrow::struct_({});
+        }
+
         case NMiniKQL::TType::EKind::Data: {
             auto dataType = static_cast<const NMiniKQL::TDataType*>(type);
             return GetArrowType(dataType);
         }
+
         case NMiniKQL::TType::EKind::Struct: {
             auto structType = static_cast<const NMiniKQL::TStructType*>(type);
             return GetArrowType(structType);
         }
+
         case NMiniKQL::TType::EKind::Tuple: {
             auto tupleType = static_cast<const NMiniKQL::TTupleType*>(type);
             return GetArrowType(tupleType);
         }
+
         case NMiniKQL::TType::EKind::Optional: {
             auto optionalType = static_cast<const NMiniKQL::TOptionalType*>(type);
             return GetArrowType(optionalType);
         }
+
         case NMiniKQL::TType::EKind::List: {
             auto listType = static_cast<const NMiniKQL::TListType*>(type);
             return GetArrowType(listType);
         }
+
         case NMiniKQL::TType::EKind::Dict: {
             auto dictType = static_cast<const NMiniKQL::TDictType*>(type);
             return GetArrowType(dictType);
         }
+
         case NMiniKQL::TType::EKind::Variant: {
             auto variantType = static_cast<const NMiniKQL::TVariantType*>(type);
             return GetArrowType(variantType);
         }
-        default:
+
+        default: {
             YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+        }
     }
     return arrow::null();
 }
@@ -525,8 +551,9 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Null:
         case NMiniKQL::TType::EKind::EmptyList:
         case NMiniKQL::TType::EKind::EmptyDict:
-        case NMiniKQL::TType::EKind::Data:
+        case NMiniKQL::TType::EKind::Data: {
             return true;
+        }
 
         case NMiniKQL::TType::EKind::Struct: {
             auto structType = static_cast<const NMiniKQL::TStructType*>(type);
@@ -597,8 +624,9 @@ bool IsArrowCompatible(const NKikimr::NMiniKQL::TType* type) {
         case NMiniKQL::TType::EKind::Block:
         case NMiniKQL::TType::EKind::Pg:
         case NMiniKQL::TType::EKind::Multi:
-        case NMiniKQL::TType::EKind::Linear:
+        case NMiniKQL::TType::EKind::Linear: {
             return false;
+        }
     }
     return true;
 }
@@ -844,8 +872,9 @@ void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, cons
             break;
         }
 
-        default:
+        default: {
             YQL_ENSURE(false, "Unsupported type: " << type->GetKindAsStr());
+        }
     }
 }
 
@@ -854,30 +883,29 @@ namespace NTestUtils {
 namespace {
 
 template <typename TArrowType>
-NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
+NUdf::TUnboxedValue GetUnboxedValue(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     using TArrayType = typename arrow::TypeTraits<TArrowType>::ArrayType;
     auto array = std::static_pointer_cast<TArrayType>(column);
     return NUdf::TUnboxedValuePod(static_cast<typename TArrowType::c_type>(array->Value(row)));
 }
 
 template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
+NUdf::TUnboxedValue GetUnboxedValue<arrow::UInt64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     auto array = std::static_pointer_cast<arrow::UInt64Array>(column);
     return NUdf::TUnboxedValuePod(static_cast<ui64>(array->Value(row)));
 }
 
 template <> // For darwin build
-NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
+NUdf::TUnboxedValue GetUnboxedValue<arrow::Int64Type>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     auto array = std::static_pointer_cast<arrow::Int64Array>(column);
     return NUdf::TUnboxedValuePod(static_cast<i64>(array->Value(row)));
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
+NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
     auto array = std::static_pointer_cast<arrow::StructArray>(column);
     YQL_ENSURE(array->num_fields() == 2, "StructArray of some TzDate type should have 2 fields");
 
@@ -885,41 +913,49 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
     auto timezoneArray = std::static_pointer_cast<arrow::StringArray>(array->field(1));
 
     NUdf::TUnboxedValuePod value;
+    auto typeId = datetimeArray->type_id();
 
-    switch (datetimeArray->type()->id()) {
-        // NUdf::EDataSlot::TzDate
-        case arrow::Type::UINT16: {
+    switch (dataSlot) {
+        case NUdf::EDataSlot::TzDate: {
+            YQL_ENSURE(typeId == arrow::Type::UINT16);
             value = NUdf::TUnboxedValuePod(static_cast<ui16>(
                 std::static_pointer_cast<arrow::UInt16Array>(datetimeArray)->Value(row)));
             break;
         }
-        // NUdf::EDataSlot::TzDatetime
-        case arrow::Type::UINT32: {
+
+        case NUdf::EDataSlot::TzDatetime: {
+            YQL_ENSURE(typeId = arrow::Type::UINT32);
             value = NUdf::TUnboxedValuePod(static_cast<ui32>(
                 std::static_pointer_cast<arrow::UInt32Array>(datetimeArray)->Value(row)));
             break;
         }
-        // NUdf::EDataSlot::TzTimestamp
-        case arrow::Type::UINT64: {
+
+        case NUdf::EDataSlot::TzTimestamp: {
+            YQL_ENSURE(typeId == arrow::Type::UINT64);
             value = NUdf::TUnboxedValuePod(static_cast<ui64>(
                 std::static_pointer_cast<arrow::UInt64Array>(datetimeArray)->Value(row)));
             break;
         }
-        // NUdf::EDataSlot::TzDate32
-        case arrow::Type::INT32: {
+
+        case NUdf::EDataSlot::TzDate32: {
+            YQL_ENSURE(typeId == arrow::Type::INT32);
             value = NUdf::TUnboxedValuePod(static_cast<i32>(
                 std::static_pointer_cast<arrow::Int32Array>(datetimeArray)->Value(row)));
             break;
         }
-        // NUdf::EDataSlot::TzDatetime64, NUdf::EDataSlot::TzTimestamp64
-        case arrow::Type::INT64: {
+
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64: {
+            YQL_ENSURE(typeId == arrow::Type::INT64);
             value = NUdf::TUnboxedValuePod(static_cast<i64>(
                 std::static_pointer_cast<arrow::Int64Array>(datetimeArray)->Value(row)));
             break;
         }
-        default:
-            YQL_ENSURE(false, "Unexpected timezone datetime slot");
+
+        default: {
+            YQL_ENSURE(false, "Unexpected timezone datetime data type");
             return NUdf::TUnboxedValuePod();
+        }
     }
 
     auto view = timezoneArray->Value(row);
@@ -928,60 +964,73 @@ NUdf::TUnboxedValue GetUnboxedValue<arrow::StructType>(std::shared_ptr<arrow::Ar
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
-    Y_UNUSED(slot);
+NUdf::TUnboxedValue GetUnboxedValue<arrow::BinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
+    Y_UNUSED(dataSlot);
     auto array = std::static_pointer_cast<arrow::BinaryArray>(column);
     auto data = array->GetView(row);
     return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::StringType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
     auto array = std::static_pointer_cast<arrow::StringArray>(column);
     auto data = array->GetView(row);
 
-    switch (slot) {
-        case NUdf::EDataSlot::DyNumber: {
-            auto number = NDyNumber::ParseDyNumberString(TStringBuf(data.data(), data.size()));
-            YQL_ENSURE(number.Defined(), "Failed to convert string to DyNumber");
-            return NMiniKQL::MakeString(*number);
-        }
-        case NUdf::EDataSlot::JsonDocument: {
-            // TODO: implement
-            break;
-        }
+    switch (dataSlot) {
         case NUdf::EDataSlot::Utf8:
         case NUdf::EDataSlot::Json: {
             return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
         }
+
+        case NUdf::EDataSlot::JsonDocument: {
+            auto variant = NBinaryJson::SerializeToBinaryJson(TStringBuf(data.data(), data.size()));
+            if (std::holds_alternative<NBinaryJson::TBinaryJson>(variant)) {
+                const auto& json = std::get<NBinaryJson::TBinaryJson>(variant);
+                return NMiniKQL::MakeString(NUdf::TStringRef(json.Data(), json.Size()));
+            }
+
+            YQL_ENSURE(false, "Cannot serialize to binary json");
+            break;
+        }
+
+        case NUdf::EDataSlot::DyNumber: {
+            auto number = NDyNumber::ParseDyNumberString(TStringBuf(data.data(), data.size()));
+            if (number.Defined()) {
+                return NMiniKQL::MakeString(*number);
+            }
+
+            YQL_ENSURE(false, "Failed to convert string to DyNumber");
+            break;
+        }
+
         default: {
             YQL_ENSURE(false, "Unexpected data slot");
         }
     }
-
-    return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+    return NUdf::TUnboxedValuePod();
 }
 
 template <>
-NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot slot) {
+NUdf::TUnboxedValue GetUnboxedValue<arrow::FixedSizeBinaryType>(std::shared_ptr<arrow::Array> column, ui32 row, NUdf::EDataSlot dataSlot) {
     auto array = std::static_pointer_cast<arrow::FixedSizeBinaryArray>(column);
     auto data = array->GetView(row);
 
-    switch (slot) {
+    switch (dataSlot) {
         case NUdf::EDataSlot::Uuid: {
             return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
         }
+
         case NUdf::EDataSlot::Decimal: {
             NYql::NDecimal::TInt128 value;
             std::memcpy(&value, data.data(), data.size());
             return NUdf::TUnboxedValuePod(value);
         }
+
         default: {
             YQL_ENSURE(false, "Unexpected data slot");
         }
     }
-
-    return NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size()));
+    return NUdf::TUnboxedValuePod();
 }
 
 } // namespace
@@ -1018,8 +1067,9 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
         case NMiniKQL::TType::EKind::Void:
         case NMiniKQL::TType::EKind::Null:
         case NMiniKQL::TType::EKind::EmptyList:
-        case NMiniKQL::TType::EKind::EmptyDict:
+        case NMiniKQL::TType::EKind::EmptyDict: {
             break;
+        }
 
         case NMiniKQL::TType::EKind::Data: {
             auto dataType = static_cast<const NMiniKQL::TDataType*>(itemType);
@@ -1031,7 +1081,7 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
                     result = GetUnboxedValue<TType>(array, row, dataSlot);
                     return true;
                 });
-            Y_ENSURE(success, "Failed to extract unboxed value from arrow array");
+            YQL_ENSURE(success, "Failed to extract unboxed value from arrow array");
             return result;
         }
 
@@ -1213,8 +1263,9 @@ NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& arr
             NUdf::TUnboxedValue value = ExtractUnboxedValue(valuesArray, rowInChild, innerType, holderFactory);
             return holderFactory.CreateVariantHolder(value.Release(), variantIndex);
         }
-        default:
+        default: {
             YQL_ENSURE(false, "Unsupported type: " << itemType->GetKindAsStr());
+        }
     }
     return NUdf::TUnboxedValuePod();
 }

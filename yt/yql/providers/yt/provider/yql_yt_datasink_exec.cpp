@@ -310,13 +310,14 @@ private:
         if (queryCacheMode != EQueryCacheMode::Disable) {
             if (!hasNonDeterministicFunctions) {
                 operationHash = TYtNodeHashCalculator(State_, cluster, config).GetHash(*optimizedNode);
-                THashBuilder builder;
-                builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
-                for (size_t i = 0; i < finalCypressPaths.size(); ++i) {
-                    builder << finalCypressPaths[i] << snaphsotsResult[i].second;
+                if (!operationHash.empty()) {
+                    THashBuilder builder;
+                    builder << TYtNodeHashCalculator::MakeSalt(settings, cluster) << operationHash << snaphsotsResult.size();
+                    for (size_t i = 0; i < snaphsotsResult.size(); ++i) {
+                        builder << snaphsotsResult[i].first << snaphsotsResult[i].second;
+                    }
+                    operationHash = builder.Finish();
                 }
-                operationHash = builder.Finish();
-
             }
             YQL_CLOG(DEBUG, ProviderYt) << "Operation hash: " << HexEncode(operationHash).Quote()
                 << ", cache mode: " << queryCacheMode;

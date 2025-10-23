@@ -78,9 +78,9 @@ public:
     };
 
     TCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
     {
         const auto& cellsFrom = TableRange.From.GetCells();
         if (cellsFrom.size() > 1 && !cellsFrom[1].IsNull()) {
@@ -144,6 +144,12 @@ private:
             return;
         }
 
+        // if feature flag is not set -- return only for self node
+        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
+            PendingNodesInitialized = true;
+            PendingNodes.emplace_back(SelfId().NodeId());
+        }
+
         if (AckReceived) {
             StartScan();
         }
@@ -154,13 +160,9 @@ private:
             ReplyEmptyAndDie();
             return;
         }
-        // if feature flag is not set -- return only for self node
-        if (!AppData()->FeatureFlags.GetEnableCompileCacheView()) {
-            PendingNodesInitialized = true;
-            PendingNodes.emplace_back(SelfId().NodeId());
-        }
 
-        if (!PendingNodesInitialized) {
+        if (!PendingNodesInitialized && !PendingRequest) {
+            PendingRequest = true;
             Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKikimr::NKqp::TEvKqp::TEvListProxyNodesRequest());
             return;
         }
@@ -196,6 +198,7 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvListProxyNodesResponse::TPtr& ev) {
+        PendingRequest = false;
         if (AppData()->FeatureFlags.GetEnableCompileCacheView()) {
             auto& proxies = ev->Get()->ProxyNodes;
             std::sort(proxies.begin(), proxies.end());
@@ -289,10 +292,10 @@ private:
     NKikimrKqp::TEvListCompileCacheQueriesResponse LastResponse;
     };
 THolder<NActors::IActor> CreateCompileCacheQueriesScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TCompileCacheQueriesScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

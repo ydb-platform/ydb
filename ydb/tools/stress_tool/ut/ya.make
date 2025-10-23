@@ -16,6 +16,8 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/minikql/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm16
 )
 
 END()

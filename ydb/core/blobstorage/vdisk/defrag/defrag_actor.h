@@ -25,6 +25,7 @@ namespace NKikimr {
         const TActorId HugeKeeperId;
         NMonGroup::TDefragGroup DefragMonGroup;
         bool RunDefragBySchedule;
+        std::shared_ptr<TEventsQuoter> Throttler;
 
         TDefragCtx(
                 const TIntrusivePtr<TVDiskContext> &vctx,

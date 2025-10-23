@@ -4,8 +4,8 @@
 
 namespace NKikimr::NStat {
 
-struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
-    TTxScheduleTrasersal(TSelf* self)
+struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
+    TTxScheduleTraversal(TSelf* self)
         : TTxBase(self)
     {}
 
@@ -17,7 +17,7 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
             return true;
         }
 
-        TDuration time = TDuration ::Zero();
+        TDuration time = TDuration::Zero();
         if (!Self->ForceTraversals.empty()) {
             time = ctx.Now() - Self->ForceTraversals.front().CreatedAt;
         }
@@ -59,7 +59,7 @@ struct TStatisticsAggregator::TTxScheduleTrasersal : public TTxBase {
 };
 
 void TStatisticsAggregator::Handle(TEvPrivate::TEvScheduleTraversal::TPtr&) {
-    Execute(new TTxScheduleTrasersal(this), TActivationContext::AsActorContext());
+    Execute(new TTxScheduleTraversal(this), TActivationContext::AsActorContext());
 }
 
 } // NKikimr::NStat

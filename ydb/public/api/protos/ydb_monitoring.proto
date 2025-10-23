@@ -182,12 +182,19 @@ message LocationBridgePile {
     string name = 1;
 }
 
+message LocationStateStorage {
+    uint32 ring = 1;
+    LocationNode node = 2;
+    LocationBridgePile pile = 3;
+}
+
 message LocationCompute {
     LocationNode node = 1;
     LocationComputePool pool = 2;
     LocationComputeTablet tablet = 3;
     LocationComputeSchema schema = 4;
     LocationBridgePile pile = 5;
+    LocationStateStorage state_storage = 6;
 }
 
 message LocationDatabase {
@@ -226,4 +233,19 @@ message SelfCheckResult {
     repeated IssueLog issue_log = 2;
     repeated DatabaseStatus database_status = 3;
     LocationNode location = 4;
+}
+
+message ClusterStateRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+    uint32 duration_seconds = 2;
+    uint32 period_seconds = 3;
+}
+
+message ClusterStateResponse {
+    // After successfull completion must contain ClusterStateResult.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message ClusterStateResult {
+    string result = 1;
 }

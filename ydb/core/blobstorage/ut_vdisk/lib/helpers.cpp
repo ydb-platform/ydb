@@ -4,6 +4,7 @@
 #include <util/random/shuffle.h>
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclogreader.h>
 #include <ydb/core/blobstorage/backpressure/queue_backpressure_client.h>
@@ -885,7 +886,7 @@ NActors::IActor *CreatePutGC(const NActors::TActorId &notifyID, const TAllVDisks
 class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOneDisk> {
     TActorId NotifyID;
     const TAllVDisks::TVDiskInstance VDiskInfo;
-
+    const bool Sync;
     friend class TActorBootstrapped<TWaitForCompactionOneDisk>;
 
     void Bootstrap(const TActorContext&) {
@@ -903,12 +904,22 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
     }
 
     void SendVCompact() {
-        Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID,
-                NKikimrBlobStorage::TEvVCompact::ASYNC), IEventHandle::FlagTrackDelivery);
+        if (Sync) {
+            Send(VDiskInfo.ActorID, TEvCompactVDisk::Create(EHullDbType::LogoBlobs,
+                TEvCompactVDisk::EMode::FULL, false));
+        } else {
+            Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVCompact(VDiskInfo.VDiskID,
+                    NKikimrBlobStorage::TEvVCompact::ASYNC), IEventHandle::FlagTrackDelivery);
+        }
     }
 
     void SendVStatus() {
         Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVStatus(VDiskInfo.VDiskID), IEventHandle::FlagTrackDelivery);
+    }
+
+    void Handle(TEvCompactVDiskResult::TPtr&, const TActorContext& ctx) {
+        ctx.Send(NotifyID, new TEvents::TEvCompleted());
+        Die(ctx);
     }
 
     void Handle(TEvBlobStorage::TEvVStatusResult::TPtr &ev) {
@@ -932,6 +943,7 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
     STRICT_STFUNC(StateSchedule,
         hFunc(TEvBlobStorage::TEvVCompactResult, Handle);
         cFunc(TEvents::TEvUndelivered::EventType, SendVCompact)
+        HFunc(TEvCompactVDiskResult, Handle);
     )
 
     STRICT_STFUNC(StateWait,
@@ -940,15 +952,16 @@ class TWaitForCompactionOneDisk : public TActorBootstrapped<TWaitForCompactionOn
     )
 
 public:
-    TWaitForCompactionOneDisk(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo)
+    TWaitForCompactionOneDisk(const TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, bool sync)
         : TActorBootstrapped<TWaitForCompactionOneDisk>()
         , NotifyID(notifyID)
         , VDiskInfo(vdiskInfo)
+        , Sync(sync)
     {}
 };
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo) {
-    return new TWaitForCompactionOneDisk(notifyID, vdiskInfo);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, const TAllVDisks::TVDiskInstance &vdiskInfo, bool sync) {
+    return new TWaitForCompactionOneDisk(notifyID, vdiskInfo, sync);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -956,7 +969,7 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
     TActorId NotifyID;
     TConfiguration *Conf;
     ui32 Counter;
-
+    bool Sync;
     friend class TActorBootstrapped<TWaitForCompaction>;
 
     void Bootstrap(const TActorContext &ctx) {
@@ -965,7 +978,7 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
         ui32 total = Conf->GroupInfo->GetTotalVDisksNum();
         for (ui32 i = 0; i < total; i++) {
             TAllVDisks::TVDiskInstance &instance = Conf->VDisks->Get(i);
-            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance));
+            ctx.RegisterWithSameMailbox(CreateWaitForCompaction(ctx.SelfID, instance, Sync));
             Counter++;
         }
     }
@@ -984,16 +997,17 @@ class TWaitForCompaction : public TActorBootstrapped<TWaitForCompaction> {
     )
 
 public:
-    TWaitForCompaction(const TActorId &notifyID, TConfiguration *conf)
+    TWaitForCompaction(const TActorId &notifyID, TConfiguration *conf, bool sync)
         : TActorBootstrapped<TWaitForCompaction>()
         , NotifyID(notifyID)
         , Conf(conf)
         , Counter(0)
+        , Sync(sync)
     {}
 };
 
-NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf) {
-    return new TWaitForCompaction(notifyID, conf);
+NActors::IActor *CreateWaitForCompaction(const NActors::TActorId &notifyID, TConfiguration *conf, bool sync) {
+    return new TWaitForCompaction(notifyID, conf, sync);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

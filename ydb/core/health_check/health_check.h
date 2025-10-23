@@ -11,10 +11,12 @@ enum EEv {
     EvSelfCheckRequest = EventSpaceBegin(TKikimrEvents::ES_HEALTH_CHECK),
     EvNodeCheckRequest,
     EvSelfCheckRequestProto,
+    EvClusterStateRequest,
 
     // replies
     EvSelfCheckResult = EvSelfCheckRequest + 512,
     EvSelfCheckResultProto,
+    EvClusterStateResult,
 
     EvEnd
 };
@@ -32,6 +34,14 @@ struct TEvNodeCheckRequest : TEventLocal<TEvNodeCheckRequest, EvNodeCheckRequest
 
 struct TEvSelfCheckResult : TEventLocal<TEvSelfCheckResult, EvSelfCheckResult> {
     Ydb::Monitoring::SelfCheckResult Result;
+};
+
+struct TEvClusterStateRequest : TEventLocal<TEvClusterStateRequest, EvClusterStateRequest> {
+    Ydb::Monitoring::ClusterStateRequest Request;
+};
+
+struct TEvClusterStateResult : TEventLocal<TEvClusterStateResult, EvClusterStateResult> {
+    Ydb::Monitoring::ClusterStateResult Result;
 };
 
 struct TEvSelfCheckRequestProto : TEventPB<TEvSelfCheckRequestProto, Ydb::Monitoring::SelfCheckRequest, EvSelfCheckRequestProto> {};

@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/persqueue_v1/actors/schema_actors.h>
+#include <ydb/services/persqueue_v1/actors/commit_offset_actor.h>
 
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
@@ -21,6 +22,11 @@ using TEvRpcDropTopicRequest = TGrpcRequestOperationCall<Ydb::Topic::DropTopicRe
 template<>
 IActor* TEvRpcCreateTopicRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return new NGRpcProxy::V1::TCreateTopicActor(msg);
+}
+
+template<>
+IActor* TEvCommitOffsetRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new NGRpcProxy::V1::TCommitOffsetActor(msg);
 }
 
 template<>

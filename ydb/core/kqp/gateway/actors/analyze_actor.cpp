@@ -187,6 +187,7 @@ void TAnalyzeActor::SendStatisticsAggregatorAnalyze(const TNavigate::TEntry& ent
 
     auto& record = Request.Record;
     record.SetOperationId(OperationId);
+    record.SetDatabase(Database);
     auto table = record.AddTables();
 
     PathId.ToProto(table->MutablePathId());

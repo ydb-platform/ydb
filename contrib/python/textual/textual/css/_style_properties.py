@@ -745,10 +745,10 @@ class OffsetProperty:
         _rich_traceback_omit = True
         if offset is None:
             if obj.clear_rule(self.name):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
         elif isinstance(offset, ScalarOffset):
             if obj.set_rule(self.name, offset):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
         else:
             x, y = offset
 
@@ -771,7 +771,7 @@ class OffsetProperty:
             _offset = ScalarOffset(scalar_x, scalar_y)
 
             if obj.set_rule(self.name, _offset):
-                obj.refresh(layout=True)
+                obj.refresh(layout=True, repaint=False)
 
 
 class StringEnumProperty(Generic[EnumType]):
@@ -808,8 +808,8 @@ class StringEnumProperty(Generic[EnumType]):
         """Get the string property, or the default value if it's not set.
 
         Args:
-            obj: The ``Styles`` object.
-            objtype: The ``Styles`` class.
+            obj: The `Styles` object.
+            objtype: The `Styles` class.
 
         Returns:
             The string property value.
@@ -823,7 +823,7 @@ class StringEnumProperty(Generic[EnumType]):
         """Set the string property and ensure it is in the set of allowed values.
 
         Args:
-            obj: The ``Styles`` object.
+            obj: The `Styles` object.
             value: The string value to set the property to.
 
         Raises:
@@ -988,7 +988,7 @@ class ColorProperty:
                     raise StyleValueError(
                         f"Invalid color value '{token}'",
                         help_text=color_property_help_text(
-                            self.name, context="inline", error=error
+                            self.name, context="inline", error=error, value=token
                         ),
                     )
             parsed_color = parsed_color.with_alpha(alpha)

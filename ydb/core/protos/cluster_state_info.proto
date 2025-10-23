@@ -1,0 +1,26 @@
+import "ydb/core/protos/blobstorage_config.proto";
+import "ydb/core/protos/node_whiteboard.proto";
+import "ydb/public/api/protos/ydb_monitoring.proto";
+
+package NKikimrClusterStateInfoProto;
+
+message TNodeInfo {
+    optional uint32 NodeId = 1;
+    optional string Host = 2;
+    optional uint32 Port = 3;
+    optional string Location = 4;
+
+    optional NKikimrWhiteboard.TEvVDiskStateResponse VDiskInfo = 5;
+    optional NKikimrWhiteboard.TEvPDiskStateResponse PDiskInfo = 6;
+    optional NKikimrWhiteboard.TEvTabletStateResponse TabletInfo = 7;
+    optional NKikimrWhiteboard.TEvBSGroupStateResponse BSGroupInfo = 8;
+    optional NKikimrWhiteboard.TEvSystemStateResponse SystemInfo = 9;
+    optional NKikimrWhiteboard.TEvBridgeInfoResponse BridgeInfo = 10;
+    optional NKikimrWhiteboard.TEvNodeStateResponse NodeStateInfo = 11;
+    repeated string CountersInfo = 12;
+}
+message TClusterStateInfo {
+    optional Ydb.Monitoring.SelfCheckResult SelfCheck = 1;
+    repeated TNodeInfo NodeInfos = 2;
+    optional NKikimrBlobStorage.TBaseConfig BaseConfig = 3;
+}

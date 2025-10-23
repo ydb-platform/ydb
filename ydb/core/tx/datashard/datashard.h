@@ -153,7 +153,6 @@ namespace NDataShard {
 
     // NOTE: this switch should be modified only in tests !!!
     extern bool gAllowLogBatchingDefaultValue;
-    extern TDuration gDbStatsReportInterval;
     extern ui64 gDbStatsDataSizeResolution;
     extern ui64 gDbStatsRowCountResolution;
     extern ui32 gDbStatsHistogramBucketsCount;

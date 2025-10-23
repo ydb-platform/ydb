@@ -2,6 +2,6 @@
 
 namespace NKikimr::NKqp {
 
-std::shared_ptr<TControlWrapper> MergeDatashardReadsControl();
+bool IsEnabledReadsMerge();
 
 } // namespace NKikimr::NKqp

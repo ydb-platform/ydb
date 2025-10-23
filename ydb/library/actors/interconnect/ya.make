@@ -20,6 +20,7 @@ SRCS(
     interconnect_address.h
     interconnect_channel.cpp
     interconnect_channel.h
+    interconnect_common.cpp
     interconnect_common.h
     interconnect_counters.cpp
     interconnect.h
@@ -46,7 +47,6 @@ SRCS(
     interconnect_zc_processor.h
     load.cpp
     load.h
-    logging.h
     packet.cpp
     packet.h
     profiler.h

@@ -11,6 +11,7 @@ IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TAG(ya:fat)
     REQUIREMENTS(ram:32)
 ELSE()
+    REQUIREMENTS(ram:16 cpu:4)
     SIZE(MEDIUM)
 ENDIF()
 

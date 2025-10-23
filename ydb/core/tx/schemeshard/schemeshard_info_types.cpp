@@ -858,11 +858,11 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
-    const TAppData *appData, TString &errDescr)
+    const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, errDescr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1062,6 +1062,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const bool isServerlessDomain,
     TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
@@ -1135,6 +1136,11 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (changesFamily.HasColumnCacheMode()) {
+            if (isServerlessDomain && changesFamily.GetColumnCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory) {
+                errDescr = TStringBuilder()
+                    << "CacheMode InMemory is not supported in serverless databases. ColumnFamily id: " << familyId << " name: " << familyName;
+                return false;
+            }
             dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
         }
 

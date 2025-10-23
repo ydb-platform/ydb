@@ -123,10 +123,7 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
         }
     }
 
-    bool doAddCompactionConsumer = config.GetEnableCompactification() && AllOf(config.GetConsumers(), [](const auto& consumer) {
-        return NPQ::CLIENTID_COMPACTION_CONSUMER != consumer.GetName();
-    });
-    if (doAddCompactionConsumer) {
+    if (config.GetEnableCompactification() && !HasConsumer(config, NPQ::CLIENTID_COMPACTION_CONSUMER)) {
         auto* consumer = config.AddConsumers();
         consumer->SetName(NPQ::CLIENTID_COMPACTION_CONSUMER);
         consumer->SetReadFromTimestampsMs(0);

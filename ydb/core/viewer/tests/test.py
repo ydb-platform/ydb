@@ -619,6 +619,21 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def test_viewer_storage_nodes_no_database(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'type': 'storage',
+        })
+        return result
+
+    @classmethod
+    def test_viewer_storage_nodes_no_database_filter_node_id(cls):
+        result = cls.get_viewer_normalized("/viewer/nodes", {
+            'type': 'storage',
+            'node_id': '1',
+        })
+        return result
+
+    @classmethod
     def test_viewer_storage_nodes(cls):
         result = cls.get_viewer_db_normalized("/viewer/nodes", {
             'type': 'storage',

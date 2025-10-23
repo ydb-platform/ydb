@@ -460,12 +460,10 @@ TExprNode::TPtr BuildSort(TExprNode::TPtr input, TOrderEnforcer & enforcer, TExp
 namespace NKikimr {
 namespace NKqp {
 
-TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TExprContext &ctx, TTypeAnnotationContext &types,
-                                  TAutoPtr<IGraphTransformer> typeAnnTransformer, TAutoPtr<IGraphTransformer> peepholeTransformer,
-                                  TKikimrConfiguration::TPtr config) {
-    Y_UNUSED(types);
+TExprNode::TPtr ConvertToPhysical(TOpRoot &root, TRBOContext& rboCtx, TAutoPtr<IGraphTransformer> typeAnnTransformer, 
+                                TAutoPtr<IGraphTransformer> peepholeTransformer) {
     Y_UNUSED(peepholeTransformer);
-    Y_UNUSED(config);
+    TExprContext & ctx = rboCtx.ExprCtx;
 
     THashMap<int, TExprNode::TPtr> stages;
     THashMap<int, TVector<TExprNode::TPtr>> stageArgs;

@@ -21,9 +21,9 @@ public:
 
     void FinalizeRunner() const;
 
-    bool FetchScriptResults();
+    bool FetchScriptResults(const TString& userSID);
 
-    bool ForgetExecutionOperation();
+    bool ForgetExecutionOperation(const TString& userSID);
 
     void PrintScriptResults() const;
 

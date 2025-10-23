@@ -31,9 +31,6 @@ namespace {
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, const NScheme::TTypeInfo* tableColumnType = nullptr) {
     switch (type.id()) {
-        case arrow::Type::BOOL:
-            toType.set_type_id(Ydb::Type::BOOL);
-            return true;
         case arrow::Type::UINT8:
             toType.set_type_id(Ydb::Type::UINT8);
             return true;
@@ -86,6 +83,7 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType, 
 
             break;
         }
+        case arrow::Type::BOOL:
         case arrow::Type::NA:
         case arrow::Type::HALF_FLOAT:
         case arrow::Type::DATE32:

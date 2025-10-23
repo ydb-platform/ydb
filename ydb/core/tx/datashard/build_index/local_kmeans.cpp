@@ -434,7 +434,7 @@ protected:
     void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
-        if (!Clusters->IsExpectedSize(embedding)) {
+        if (!Clusters->IsExpectedFormat(embedding)) {
             return;
         }
 

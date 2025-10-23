@@ -21,8 +21,6 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
     .prefix##SSD = prefix##SSD
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
-    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
-
     std::unique_ptr<IActor> proxy;
     TActorSystem *as = TActivationContext::ActorSystem();
 
@@ -31,6 +29,11 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     auto getCounters = [&](const TIntrusivePtr<TBlobStorageGroupInfo>& info) {
         return DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
     };
+
+    STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy",
+        (GroupId, groupId),
+        (HasGroupInfo, static_cast<bool>(group.Info)),
+        (GroupInfoGeneration, group.Info ? std::make_optional(group.Info->GroupGeneration) : std::nullopt));
 
     if (EnableProxyMock) {
         // create mock proxy
@@ -98,6 +101,8 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                 ADD_CONTROLS_FOR_DEVICE_TYPES(MaxNumOfSlowDisks),
             }
         }));
+
+        Y_DEBUG_ABORT_UNLESS(!EjectedGroups.contains(groupId));
     }
 
     // subscribe for group information changes through distconf cache

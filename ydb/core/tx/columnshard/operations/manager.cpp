@@ -72,15 +72,15 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
 }
 
 void TOperationsManager::BreakConflictingTxs(const TLockFeatures& lock) {
-    for (auto&& i : lock.GetBrokeOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", i);
-            lockNotify->SetBroken();
+    for (auto&& lockIdToBreak : lock.GetBreakOnCommit()) {
+        if (auto lockToBreak = GetLockOptional(lockIdToBreak)) {
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("broken_lock_id", lockIdToBreak);
+            lockToBreak->SetBroken();
         }
     }
-    for (auto&& i : lock.GetNotifyOnCommit()) {
-        if (auto lockNotify = GetLockOptional(i)) {
-            lockNotify->AddNotifyCommit(lock.GetLockId());
+    for (auto&& lockIdToNotify : lock.GetNotifyOnCommit()) {
+        if (auto lockToNotify = GetLockOptional(lockIdToNotify)) {
+            lockToNotify->NotifyAboutCommit(lock.GetLockId());
         }
     }
 }
@@ -328,16 +328,17 @@ void TOperationsManager::AddEventForLock(
     auto& txLock = GetLockVerified(lockId);
     writer->CheckInteraction(lockId, InteractionsContext, txConflicts, txNotifications);
     for (auto& [commitLockId, breakLockIds] : txConflicts) {
+        // if commitLockId not found, it means the conflicting tx is already committed or aborted
         if (GetLockOptional(commitLockId)) {
-            GetLockVerified(commitLockId).AddBrokeOnCommit(breakLockIds);
-        // if txId not found, it means the conflicting tx is already committed or aborted
-        } else if (txLock.IsCommitted(commitLockId)) {
-            // if the conflicting tx is already committed, we cannot commit the given tx, so break its lock
+            GetLockVerified(commitLockId).AddBreakOnCommit(breakLockIds);
+        } 
+        // if the conflicting tx is already committed, we cannot commit the given tx, so break its lock
+        if (txLock.IsCommitted(commitLockId)) {
             txLock.SetBroken();
         }
     }
-    for (auto&& i : txNotifications) {
-        GetLockVerified(i.first).AddNotificationsOnCommit(i.second);
+    for (auto& [commitLockId, lockIdsToNotify] : txNotifications) {
+        GetLockVerified(commitLockId).AddNotifyOnCommit(lockIdsToNotify);
     }
     if (auto txEvent = writer->BuildEvent()) {
         NOlap::NTxInteractions::TTxEventContainer container(lockId, txEvent);

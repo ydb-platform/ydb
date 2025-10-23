@@ -11,6 +11,7 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
 #include <ydb/core/tx/columnshard/tracing/probes.h>
@@ -124,6 +125,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
     SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
+    ScanDiagnosticsActorId = Register(new NDiagnostics::TScanDiagnosticsActor());
+    ActorsToStop.push_back(ScanDiagnosticsActorId);
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));

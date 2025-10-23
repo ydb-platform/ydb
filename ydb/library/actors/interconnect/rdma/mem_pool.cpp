@@ -62,6 +62,10 @@ namespace NInterconnect::NRdma {
         return MRs.empty();
     }
 
+    TMemRegionPtr AllocMr(int size, ui32 flags) noexcept {
+        return MemPool->Alloc(size, flags);
+    }
+
     private:
         std::vector<ibv_mr*> MRs;
         IMemPool* MemPool;
@@ -115,14 +119,26 @@ namespace NInterconnect::NRdma {
     TContiguousSpan TMemRegion::GetData() const {
         return TContiguousSpan(static_cast<const char*>(GetAddr()), GetSize());
     }
-    TMutableContiguousSpan TMemRegion::GetDataMut() {
+
+    TMutableContiguousSpan TMemRegion::UnsafeGetDataMut() {
         return TMutableContiguousSpan(static_cast<char*>(GetAddr()), GetSize());
     }
+
     size_t TMemRegion::GetOccupiedMemorySize() const {
         return GetSize();
     }
+
     IContiguousChunk::EInnerType TMemRegion::GetInnerType() const noexcept {
         return EInnerType::RDMA_MEM_REG;
+    }
+
+    IContiguousChunk::TPtr TMemRegion::Clone() noexcept {
+        static const ui64 pageAlign = NSystemInfo::GetPageSize() - 1;
+        const IMemPool::Flags flag = (((ui64)GetAddr() & pageAlign) == 0) ? IMemPool::PAGE_ALIGNED : IMemPool::EMPTY;
+        TMemRegionPtr newRegion = Chunk->AllocMr(GetSize(), flag);
+        auto span = newRegion->UnsafeGetDataMut();
+        ::memcpy(span.GetData(), GetAddr(), GetSize());
+        return newRegion;
     }
 
     TMemRegionSlice::TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept

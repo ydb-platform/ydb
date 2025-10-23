@@ -12,15 +12,18 @@ ENDIF()
 PEERDIR(
     library/cpp/testing/unittest
     library/cpp/yson/node
+    ydb/core/base
     ydb/core/kqp/ut/common
     ydb/core/persqueue/ut/common
     ydb/core/testlib/pg
+    ydb/library/testlib/common
     ydb/public/sdk/cpp/src/client/draft
 )
 
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_auth.cpp
     ut_kqp.cpp
     ut_common.cpp
     ut_counters.cpp

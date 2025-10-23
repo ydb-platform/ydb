@@ -1068,7 +1068,16 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             return nullptr;
         }
 
-        ids.push_back(columnOrType ? BuildColumnOrType(Ctx_.Pos()) : BuildColumn(Ctx_.Pos()));
+        TNodePtr id;
+        if (IsYqlColumnRefProduced_) {
+            id = BuildYqlColumnRef(Ctx_.Pos());
+        } else if (columnOrType) {
+            id = BuildColumnOrType(Ctx_.Pos());
+        } else {
+            id = BuildColumn(Ctx_.Pos());
+        }
+        ids.emplace_back(std::move(id));
+
         ids.push_back(name);
     }
 

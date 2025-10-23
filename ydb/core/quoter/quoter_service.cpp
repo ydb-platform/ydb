@@ -568,6 +568,8 @@ TQuoterService::EInitLeafStatus TQuoterService::InitResourceLeaf(const TEvQuota:
             Counters.ActiveQuoterProxies->Inc();
 
             THolder<NSchemeCache::TSchemeCacheNavigate> req(new NSchemeCache::TSchemeCacheNavigate());
+            req->DatabaseName = leaf.Database;
+
             req->ResultSet.emplace_back();
             req->ResultSet.back().Path.swap(path);
             req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
@@ -1469,7 +1471,7 @@ TString TQuoterService::PrintEvent(const TEvQuota::TEvRequest::TPtr& ev) {
         }
         ret << " { " << leaf.Amount << ", ";
         if (leaf.Quoter) {
-            ret << "\"" << leaf.Quoter << "\":\"" << leaf.Resource << "\"";
+            ret << "\"" << leaf.Database << "\":\"" << leaf.Quoter << "\":\"" << leaf.Resource << "\"";
         } else {
             ret << leaf.QuoterId << ":" << leaf.ResourceId;
         }

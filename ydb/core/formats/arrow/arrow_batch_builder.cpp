@@ -29,6 +29,14 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.AsValue<ui8>());
 }
 
+[[maybe_unused]] arrow::Status AppendCell(arrow::UInt8Builder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+
+    return builder.Append(cell.AsValue<ui8>());
+}
+
 [[maybe_unused]] arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();

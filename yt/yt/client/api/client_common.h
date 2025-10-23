@@ -194,6 +194,8 @@ struct TSelectRowsOptions
     std::optional<i64> MaxJoinBatchSize;
     //! Determines the way statistics are aggregated across subqueries.
     std::optional<NQueryClient::EStatisticsAggregation> StatisticsAggregation;
+    //! Minimizes request rate to dictionary tables when executing joins.
+    std::optional<bool> UseOrderByInJoinSubqueries;
     //! Allow queries without any condition on key columns.
     bool AllowFullScan = true;
     //! Allow queries with join condition which implies foreign query with IN operator.
@@ -209,8 +211,6 @@ struct TSelectRowsOptions
     //! For internal use only.
     //! Use original table schema in result rowset.
     bool UseOriginalTableSchema = false;
-    //! Minimizes request rate to dictionary tables when executing joins.
-    bool UseOrderByInJoinSubqueries = false;
 };
 
 struct TFallbackReplicaOptions

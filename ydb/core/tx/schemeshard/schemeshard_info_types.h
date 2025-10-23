@@ -178,12 +178,12 @@ struct TPartitionConfigMerger {
     static bool ApplyChanges(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        const TAppData* appData, TString& errDescr);
+        const TAppData* appData, const bool isServerlessDomain, TString& errDescr);
 
     static bool ApplyChangesInColumnFamilies(
         NKikimrSchemeOp::TPartitionConfig& result,
         const NKikimrSchemeOp::TPartitionConfig& src, const NKikimrSchemeOp::TPartitionConfig& changes,
-        TString& errDescr);
+        const bool isServerlessDomain, TString& errDescr);
 
     static THashMap<ui32, size_t> DeduplicateColumnFamiliesById(NKikimrSchemeOp::TPartitionConfig& config);
     static THashMap<ui32, size_t> DeduplicateStorageRoomsById(NKikimrSchemeOp::TPartitionConfig& config);

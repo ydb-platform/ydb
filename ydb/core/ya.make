@@ -10,6 +10,7 @@ RECURSE(
     cms
     config
     control
+    counters_info
     debug
     debug_tools
     discovery

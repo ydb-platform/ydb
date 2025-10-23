@@ -363,6 +363,7 @@ void LogStructuredEvent(
 
 #define YT_LOG_EVENT(logger, level, ...) \
     do { \
+         /* NOLINTBEGIN(bugprone-reserved-identifier, readability-identifier-naming) */ \
         const auto& logger__ = (logger)(); \
         auto level__ = (level); \
         auto location__ = __LOCATION__; \
@@ -397,6 +398,7 @@ void LogStructuredEvent(
             location__, \
             anchor__, \
             std::move(message__.MessageRef)); \
+        /* NOLINTEND(bugprone-reserved-identifier, readability-identifier-naming) */ \
     } while (false)
 
 #define YT_LOG_EVENT_WITH_DYNAMIC_ANCHOR(logger, level, anchor, ...) \

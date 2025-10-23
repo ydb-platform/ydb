@@ -545,6 +545,7 @@ private:
     TSpaceWatcher* SpaceWatcher;
     TActorId SpaceWatcherId;
     THashMap<TActorId, TActorId> PipeServersInterconnectSessions;
+    TActorId ScanDiagnosticsActorId;
 
     void TryRegisterMediatorTimeCast();
     void UnregisterMediatorTimeCast();

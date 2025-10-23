@@ -8,6 +8,7 @@
 #include <yql/essentials/sql/v1/sql.h>
 #include <yql/essentials/sql/v1/complete/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/lexer/check/check_lexers.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
@@ -100,63 +101,23 @@ static void ExtractQuery(TPosOutput& out, const google::protobuf::Message& node)
 }
 
 bool TestFormat(
-    const NSQLTranslation::TTranslators& translators,
     const TString& query,
     const NSQLTranslation::TTranslationSettings& settings,
-    const TString& queryFile,
-    const NYql::TAstParseResult& parseRes,
     const TString& outFileName,
-    const bool checkDoubleFormatting) {
-    TStringStream yqlProgram;
-    parseRes.Root->PrettyPrintTo(yqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
-
-    TString frmQuery;
+    const bool checkDoubleFormatting)
+{
     NYql::TIssues issues;
-    NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
-    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
-    NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
-    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
-    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
-    if (!formatter->Format(query, frmQuery, issues)) {
-        Cerr << "Failed to format query: " << issues.ToString() << Endl;
-        return false;
-    }
-    NYql::TAstParseResult frmParseRes = NSQLTranslation::SqlToYql(translators, frmQuery, settings);
-    if (!frmParseRes.Issues.Empty()) {
-        frmParseRes.Issues.PrintWithProgramTo(Cerr, queryFile, frmQuery);
-        if (AnyOf(frmParseRes.Issues, [](const auto& issue) { return issue.GetSeverity() <= NYql::TSeverityIds::S_ERROR; })) {
-            return false;
-        }
-    }
-    if (!frmParseRes.IsOk()) {
-        Cerr << "No error reported, but no yql compiled result!" << Endl << Endl;
-        return false;
-    }
-    TStringStream frmYqlProgram;
-    frmParseRes.Root->PrettyPrintTo(frmYqlProgram, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);
-    if (yqlProgram.Str() != frmYqlProgram.Str()) {
-        Cerr << "source query's AST and formatted query's AST are not same\n";
-        return false;
-    }
-
-    TString frmQuery2;
-    if (!formatter->Format(frmQuery, frmQuery2, issues)) {
-        Cerr << "Failed to format already formatted query: " << issues.ToString() << Endl;
-        return false;
-    }
-
-    if (checkDoubleFormatting && frmQuery != frmQuery2) {
-        Cerr << "Formatting an already formatted query yielded a different resut" << Endl
-             << "Add /* skip double format */ to suppress" << Endl;
+    TMaybe<TString> formatted = NSQLFormat::CheckedFormat(query, settings, issues, checkDoubleFormatting);
+    if (!formatted) {
+        Cerr << issues.ToString() << Endl;
         return false;
     }
 
     if (!outFileName.empty()) {
         TFixedBufferFileOutput out{outFileName};
-        out << frmQuery;
+        out << *formatted;
     }
+
     return true;
 }
 
@@ -471,7 +432,7 @@ int BuildAST(int argc, char* argv[]) {
             }
 
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
-                hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
+                hasError = !TestFormat(query, settings, outFileNameFormat, res.Has("test-double-format"));
             }
 
             if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {

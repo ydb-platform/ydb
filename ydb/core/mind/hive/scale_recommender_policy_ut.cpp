@@ -17,13 +17,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.8 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.8, 0.8 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.8, 0.8, 0.8 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 4);
@@ -37,13 +37,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.3 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.3, 0.3 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 2);
@@ -57,13 +57,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.8 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.8, 0.8 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.8, 0.8, 0.8 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1334);
@@ -77,13 +77,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.3 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.3, 0.3 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 1000);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), std::nullopt);
 
         history = { 0.3, 0.3, 0.3 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(1000, config), 500);
@@ -97,16 +97,16 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.9 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.9, 0.3 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
     }
 
     Y_UNIT_TEST(NearTarget) {
@@ -118,16 +118,16 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.55, };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.55, 0.55 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.55, 0.55, 0.55 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
     }
 
     Y_UNIT_TEST(AtTarget) {
@@ -139,16 +139,16 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.6, };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.6, 0.6 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.6, 0.6, 0.6 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
     }
 
     void TestFluctuations(ui32 initialNodes) {
@@ -167,8 +167,11 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
                 std::deque<double> history;
                 for (size_t i = 0; i < 10; ++i) {
                     history.push_back(totalLoad / currentNodes);
-                    currentNodes = TTargetTrackingPolicy(avgTargetLoad, history).MakeScaleRecommendation(currentNodes, config);
-                    uniqueCurrentNodes.insert(currentNodes);
+                    std::optional<ui32> recommendedNodes = TTargetTrackingPolicy(avgTargetLoad, history).MakeScaleRecommendation(currentNodes, config);
+                    if (recommendedNodes) {
+                        currentNodes = *recommendedNodes;
+                        uniqueCurrentNodes.insert(currentNodes);
+                    }
                     currentNodesHistory.push_back(currentNodes);
                 }
 
@@ -229,13 +232,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.1 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.3, 0.1, 0.1 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 2);
@@ -249,13 +252,13 @@ Y_UNIT_TEST_SUITE(TargetTrackingScaleRecommenderPolicy) {
         std::deque<double> history;
 
         history = {};
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.01, };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.01, 0.01 };
-        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 3);
+        UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), std::nullopt);
 
         history = { 0.01, 0.01, 0.01 };
         UNIT_ASSERT_VALUES_EQUAL(TTargetTrackingPolicy(0.6, history).MakeScaleRecommendation(3, config), 1);

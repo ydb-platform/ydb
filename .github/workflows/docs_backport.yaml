@@ -32,3 +32,4 @@ jobs:
         uses: korthout/backport-action@v3
         with:
           label_pattern: '^backport\/([^ ]+)$'
+          conflict_resolution: 'draft_commit_conflicts'

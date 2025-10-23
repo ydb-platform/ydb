@@ -8867,7 +8867,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Build();
             // clang-format on
             return IGraphTransformer::TStatus::Repeat;
-        } else if (name == "date_trunc") {
+        } else if (name == "date_trunc" || name == "date_part") {
             if (args.size() != 2) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
                 return IGraphTransformer::TStatus::Error;
@@ -8877,7 +8877,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             output = ctx.Expr.Builder(pos)
                 .Callable("FromPg")
                     .Callable(0, "PgCall")
-                        .Atom(0, "date_trunc")
+                        .Atom(0, name)
                         .List(1)
                         .Seal()
                         .Callable(2, "SafeCast")
@@ -8892,7 +8892,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                 .Build();
             // clang-format on
             return IGraphTransformer::TStatus::Repeat;
-        } else if (name == "floor") {
+        } else if (name == "floor" || name == "ceil") {
             if (args.size() != 1) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 1 argument"));
                 return IGraphTransformer::TStatus::Error;
@@ -8902,10 +8902,35 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             output = ctx.Expr.Builder(pos)
                 .Callable("FromPg")
                     .Callable(0, "PgCall")
-                        .Atom(0,"floor")
+                        .Atom(0, name)
                         .List(1)
                         .Seal()
                         .Add(2, args[0])
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "to_char") {
+            if (args.size() != 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0, "to_char")
+                        .List(1)
+                        .Seal()
+                        .Add(2, args[0])
+                        .Callable(3, "SafeCast")
+                            .Add(0, args[1])
+                            .Callable(1, "DataType")
+                                .Atom(0, "Utf8")
+                            .Seal()
+                        .Seal()
                     .Seal()
                 .Seal()
                 .Build();

@@ -147,7 +147,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }
 
-    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected) {
+    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected, const std::vector<ui64>& expectedLastOffset = {}) {
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
 
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
@@ -157,6 +157,12 @@ public:
 
         NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
         UNIT_ASSERT_VALUES_EQUAL(message.OffsetsSize(), expected.Rows.size());
+        if (!expectedLastOffset.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset.size(), message.OffsetsSize());
+            for (size_t i =0; i < expectedLastOffset.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset[i], message.GetOffsets().Get(i));
+            }
+        }
         CheckMessageBatch(eventHolder->Get()->GetPayload(message.GetPayloadId()), expected);
     }
 
@@ -649,6 +655,20 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         test("{\"dt\":100,\"value\"}");     // empty value
         test("{\"dt\":100}");               // no field
         test("{\"dt\":400,\"value\":777}"); // wrong value type
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WrongJsonOffset, TRealTopicFixture) {
+        const TString topicName = "wrong_json_offset";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+
+        TString wrongJson{"wrong"};
+        PQWrite({ Json1, wrongJson, wrongJson, Json3 });
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(3) }, {0, 3});
         PassAway();
     }
 }

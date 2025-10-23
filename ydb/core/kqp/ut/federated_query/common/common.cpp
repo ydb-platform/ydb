@@ -84,7 +84,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
-        
+
         if (appConfig && appConfig->HasFeatureFlags()) {
             const auto& appFlags = appConfig->GetFeatureFlags();
             if (appFlags.GetEnableColumnshardBool()) {

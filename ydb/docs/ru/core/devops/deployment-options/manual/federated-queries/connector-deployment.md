@@ -206,35 +206,35 @@
 | `datasources` | Опциональная секция. Содержит настройки, специфичные для источников данных. ||
 | `datasources.postgresql` | Опциональная секция. Содержит настройки, специфичные для источника данных PostgreSQL. ||
 | `datasources.postgresql.open_connection_timeout` | Таймаут открытия соединения с PostgreSQL. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
-| `datasources.postgresql.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц на сплиты. Её включение необходимо для массивно-параллельного чтения из PostgreSQL в {{ ydb-short-name }}. ||
+| `datasources.postgresql.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц на [сплиты](../../../../concepts/glossary.md#split). Её включение необходимо для массивно-параллельного чтения из внешней базы данных PostgreSQL в федеративную {{ ydb-short-name }}. | Разбиение таблиц на сплиты отключено. |
 | `datasources.postgresql.splitting.enabled` | Включает разбиение таблиц на сплиты. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.postgresql.splitting.table_physical_size_threshold_bytes` | Минимальное значение физического размера внешней таблицы для включения разбиения на сплиты. Все таблицы меньшего размера будут всегда читаться одним сплитом. ||
-| `datasources.postgresql.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.postgresql.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.postgresql.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.clickhouse` | Опциональная секция. Содержит настройки, специфичные для источника данных ClickHouse. ||
 | `datasources.clickhouse.open_connection_timeout` | Таймаут открытия соединения с ClickHouse. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
 | `datasources.clickhouse.ping_connection_timeout` | Таймаут проверки соединения с ClickHouse. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
-| `datasources.clickhouse.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.clickhouse.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.clickhouse.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.mysql` | Опциональная секция. Содержит настройки, специфичные для источника данных MySQL. ||
 | `datasources.mysql.result_chan_capacity` | Ёмкость буфера для извлечённых строк из сетевого соединения с базой. | 512 строк |
 | `datasources.mysql.open_connection_timeout` | Таймаут открытия соединения с MySQL. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
-| `datasources.mysql.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.mysql.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.mysql.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.ms_sql_server` | Опциональная секция. Содержит настройки, специфичные для источника данных MS SQL Server. ||
 | `datasources.ms_sql_server.open_connection_timeout` | Таймаут открытия соединения с MS SQL Server. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
 | `datasources.ms_sql_server.ping_connection_timeout` | Таймаут проверки соединения с MS SQL Server. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
-| `datasources.ms_sql_server.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.ms_sql_server.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.ms_sql_server.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.greenplum` | Опциональная секция. Содержит настройки, специфичные для источника данных Greenplum. ||
 | `datasources.greenplum.open_connection_timeout` | Таймаут открытия соединения с Greenplum. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
-| `datasources.greenplum.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.greenplum.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.greenplum.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.ydb` | Опциональная секция. Содержит настройки, специфичные для источника данных {{ ydb-short-name }}. ||
 | `datasources.ydb.open_connection_timeout` | Таймаут открытия соединения с {{ ydb-short-name }}. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
 | `datasources.ydb.ping_connection_timeout` | Таймаут проверки соединения с {{ ydb-short-name }}. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `5s` |
 | `datasources.ydb.mode` | Режим параметризует способ взаимодействия коннектора с сервером {{ ydb-short-name }}. Допустимые значения: `MODE_TABLE_SERVICE_STDLIB_SCAN_QUERIES` (использует Table Service {{ ydb-short-name }}), `MODE_QUERY_SERVICE_NATIVE` (использует Query Service {{ ydb-short-name }}). | `MODE_QUERY_SERVICE_NATIVE` |
-| `datasources.ydb.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц на сплиты. Её включение необходимо для массивно-параллельного чтения из внешней {{ ydb-short-name }} в федеративную {{ ydb-short-name }}. ||
+| `datasources.ydb.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц на [сплиты](../../../../concepts/glossary.md#split). Её включение необходимо для массивно-параллельного чтения из внешней {{ ydb-short-name }} в федеративную {{ ydb-short-name }}. | Разбиение таблиц на сплиты отключено. |
 | `datasources.ydb.splitting.enabled_on_column_shards` | Включает разбиение на сплиты для колоночных таблиц. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.ydb.splitting.query_tablet_ids_timeout` | Таймаут для запроса, запрашивающего идентификаторы таблеток колоночной таблицы {{ ydb-short-name }}. Варианты допустимых значений: `100ms`, `5s`, `3h`. | `1m` |
 | `datasources.ydb.resource_pool` | Название пула ресурсов, которое будет использоваться при выполнении запроса. Применимо только для режима `MODE_QUERY_SERVICE_NATIVE`. | `default` |
@@ -243,5 +243,5 @@
 | `datasources.ydb.table_metadata_cache.ristretto` | Опциональная секция. Содержит конфигурацию кеша, построенного на основе библиотеки [ristretto](https://pkg.go.dev/github.com/dgraph-io/ristretto/v2#Config). ||
 | `datasources.ydb.table_metadata_cache.ristretto.max_keys` | Максимальное количество ключей для хранения в кеше. | 10000 |
 | `datasources.ydb.table_metadata_cache.ristretto.max_size_bytes` | Максимальный размер кеша в байтах (приблизительный лимит). | 64 МиБ |
-| `datasources.ydb.pushdown` | Опциональная секция. Содержит различные настройки для пушдауна предикатов. ||
+| `datasources.ydb.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.ydb.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |

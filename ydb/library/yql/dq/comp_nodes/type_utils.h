@@ -123,7 +123,7 @@ template <typename Payload> struct One {
 template <typename Payload> using FetchResult = std::variant<Finish, Yield, One<Payload>>;
 
 template <typename Payload> EFetchResult AsResult(const FetchResult<Payload> var) {
-    return static_cast<EFetchResult>(var.index());
+    return static_cast<EFetchResult>(int(var.index()) - 1);
 }
 
 template <typename Payload> NYql::NUdf::EFetchStatus AsStatus(const FetchResult<Payload> var) {

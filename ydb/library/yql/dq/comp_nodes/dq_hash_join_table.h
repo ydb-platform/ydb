@@ -97,14 +97,14 @@ class TNeumannJoinTable : NNonCopyable::TMoveOnly {
 
     void BuildWith(IBlockLayoutConverter::TPackResult data) {
         BuildData_ = std::move(data);
-        Cout << "TNeumannJoinTable::BuildWith called";
+        Cout << Sprintf("TNeumannJoinTable::BuildWith called with data size %i\n", data.NTuples);
         Table_.Build(BuildData_.PackedTuples.data(), BuildData_.Overflow.data(), BuildData_.NTuples);
         Built_ = true;
     }
 
     void Lookup(Tuple row, std::invocable<Tuple> auto consume) const {
         MKQL_ENSURE(Built_, "table must be built before lookup");
-        Cout << "TNeumannJoinTable::Lookup called";
+        Cout << "TNeumannJoinTable::Lookup called\n";
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
             consume(Tuple{tuplePackedData, BuildData_.Overflow.data()});
         });
@@ -113,7 +113,7 @@ class TNeumannJoinTable : NNonCopyable::TMoveOnly {
   private:
     bool Built_ = false;
     IBlockLayoutConverter::TPackResult BuildData_;
-    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<> Table_;
+    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
 };
 
 } // namespace NKikimr::NMiniKQL::NJoinTable

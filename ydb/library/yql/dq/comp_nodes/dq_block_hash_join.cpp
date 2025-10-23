@@ -120,6 +120,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             return Finish{};
         }
         auto res = StreamValues_.WideFetch(Buff_.data(), Buff_.size());
+        Cout << Sprintf("got res from stream: %i\n", res);
         if (res != NYql::NUdf::EFetchStatus::Ok) {
             if (res == NYql::NUdf::EFetchStatus::Finish) {
                 Finished_ = true;
@@ -131,6 +132,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
+        Cout << Sprintf("packed size: %i, arrow size: %i\n", result.NTuples, columns[0].length());
         return One{std::move(result)};
     }
 
@@ -163,7 +165,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         return Renames_->size();
     }
 
-    int SizeTuples() const {
+    i64 SizeTuples() const {
         return Output_.NItems;
     }
 
@@ -173,13 +175,13 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     };
 
     struct TuplePairs {
-        int NItems;
+        i64 NItems = 0;
         TSides<PackedTuplesData> Data;
     };
 
     auto MakeConsumeFn() {
         return [this](TSides<NJoinTable::TNeumannJoinTable::Tuple> tuples) {
-            Cout << "matched rows" << Endl;
+            Cout << "matched 2 rows\n";
             ForEachSide([&](ESide side) {
                 Converters_.SelectSide(side)->GetTupleLayout()->TupleDeepCopy(
                     tuples.SelectSide(side).PackedData, tuples.SelectSide(side).OverflowBegin,
@@ -202,15 +204,20 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TSides<TVector<arrow::Datum>> Flush() {
         TSides<TVector<arrow::Datum>> out;
         auto fillSide = [&](ESide side) {
-            TPackResult res;
+            IBlockLayoutConverter::TPackResult res;
 
+            res.NTuples = SizeTuples();
             res.PackedTuples = std::move(Output_.Data.SelectSide(side).PackedTuples);
             res.Overflow = std::move(Output_.Data.SelectSide(side).Overflow);
-            res.NTuples = Output_.NItems;
             Converters_.SelectSide(side)->Unpack(res, out.SelectSide(side));
+            Cout << (side == ESide::Build ? "Build": "Probe") << "block sizes";
+            for(auto& block: out.SelectSide(side)){
+                Cout << block.length() << " ";
+            }
         };
         fillSide(ESide::Build);
         fillSide(ESide::Probe);
+        
         Output_.NItems = 0;
         return out;
     }
@@ -272,10 +279,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(Output_.SizeTuples() != 0, "make sure we are flushing something, not empty set of tuples");
-            int rows = Output_.SizeTuples();
+            i64 rows = Output_.SizeTuples();
             Cout << Sprintf("flushed %i rows", rows) << Endl;
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
+                Cout << Sprintf("arrow->uv for index %i, arrow size: %i", colIndex, arrowOutput[colIndex].length()) << Endl;
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
             }
             output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));

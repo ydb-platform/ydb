@@ -287,11 +287,12 @@ template <typename Source> class TJoinPackedTuples {
 
         // int tupleOffset = 0;
         // int overflowOffset = 0;
+        int tupleSize = Layouts_.Build->TotalRowSize;
         for (const IBlockLayoutConverter::TPackResult& tupleBatch : tuples) {
             Layouts_.Build->Concat(flattened.PackedTuples, flattened.Overflow,
-                                   std::ssize(flattened.PackedTuples) / Layouts_.Build->TotalRowSize,
+                                   std::ssize(flattened.PackedTuples) / tupleSize,
                                    tupleBatch.PackedTuples.data(), tupleBatch.Overflow.data(),
-                                   tupleBatch.PackedTuples.size(), tupleBatch.Overflow.size());
+                                   tupleBatch.PackedTuples.size() / tupleSize, tupleBatch.Overflow.size());
             // std::ranges::copy(tupleBatch.PackedTuples, flattened.PackedTuples.data()+tupleOffset);
             // std::ranges::copy(tupleBatch.Overflow, flattened.Overflow.data()+overflowOffset);
             // tupleOffset += std::ssize(tupleBatch.PackedTuples);
@@ -331,6 +332,7 @@ template <typename Source> class TJoinPackedTuples {
             if (resEnum == EFetchResult::One) {
                 const IBlockLayoutConverter::TPackResult& thisPackResult =
                     std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
+                Cout << Sprintf("get %i tuples to probe\n", thisPackResult.NTuples);
                 for (int index = 0; index < thisPackResult.NTuples; ++index) {
                     const ui8* thisRow = &thisPackResult.PackedTuples[index * Layouts_.Probe->TotalRowSize];
                     TTable::Tuple probeRow{thisRow, thisPackResult.Overflow.data()};

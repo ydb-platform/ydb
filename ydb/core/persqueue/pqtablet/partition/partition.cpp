@@ -2387,6 +2387,7 @@ void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAnd
 {
     AppendTxWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
     AppendWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
+    AppendTxReadAffectedConsumers(affectedSourceIdsAndConsumers);
 }
 
 void TPartition::AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
@@ -2400,6 +2401,13 @@ void TPartition::AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsume
 {
     for (const auto& sourceId : affectedSourceIdsAndConsumers.WriteSourcesIds) {
         WriteAffectedSourcesIds.insert(sourceId);
+    }
+}
+
+void TPartition::AppendTxReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    for (const auto& consumer : affectedSourceIdsAndConsumers.TxReadConsumers) {
+        TxAffectedConsumers.insert(consumer);
     }
 }
 
@@ -2779,9 +2787,9 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
         return EProcessResult::Continue;
     }
 
-    THashSet<TString> consumers;
+    TVector<TString> consumers;
     bool result = true;
-    for (auto& operation : tx.Operations) {
+    for (const auto& operation : tx.Operations) {
         const TString& consumer = operation.GetConsumer();
         if (TxAffectedConsumers.contains(consumer)) {
             PQ_LOG_TX_D("TxAffectedConsumers contains consumer " << consumer << ". TxId " << tx.TxId);
@@ -2866,13 +2874,13 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                 }
                 break;
             }
-            consumers.insert(consumer);
+            consumers.push_back(consumer);
             PQ_LOG_TX_D("TxId " << tx.TxId << " affect consumer " << consumer);
         }
     }
 
     if (result) {
-        TxAffectedConsumers.insert(consumers.begin(), consumers.end());
+        affectedSourceIdsAndConsumers.TxReadConsumers = std::move(consumers);
     }
     predicateOut = result;
     return EProcessResult::Continue;

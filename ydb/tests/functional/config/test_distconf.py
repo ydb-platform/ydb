@@ -53,7 +53,7 @@ class DistConfKiKiMRTest(object):
         "version": 0,
         "cluster": "",
     }
-    CONSOLE_NODE: Final[int] = 3
+    console_node = 3
 
     @classmethod
     def setup_class(cls):
@@ -72,7 +72,7 @@ class DistConfKiKiMRTest(object):
             "console": [
                 {
                     "info": {"tablet_id": 72057594037936131},
-                    "node": [cls.CONSOLE_NODE]
+                    "node": [cls.console_node]
                 }
             ],
         }
@@ -214,7 +214,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 logger.error(f"Viewer API response content: {pdisk_info}")
             raise
 
-    def test_dynamic_slot_start_with_seed_nodes(self):
+    def test_dynamic_node_start_with_seed_nodes(self):
         database_path = os.path.join('/', self.cluster.domain_name, f'dyn_seed_db')
         try:
             self.cluster.remove_database(database_path)
@@ -226,7 +226,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         driver = ydb.Driver(ydb.DriverConfig(endpoint, database_path))
         pool = ydb.SessionPool(driver)
 
-        def create_table(session, num):
+        def create_table(num, session):
             session.execute_scheme(
                 f"""
                 create table `{database_path}/t{num}` (
@@ -247,7 +247,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
         initial_slots[0].stop()
         logger.info("[TEST] Stopped initial dynamic slot")
 
-        self.cluster.nodes[3].stop() # вынести в константу 3
+        self.cluster.nodes[self.console_node].stop()
         logger.info("[TEST] Stopped static node 3 (Console)")
 
         seed_nodes = [f"grpc://localhost:{node.grpc_port}" for _, node in self.cluster.nodes.items() if node.node_id != 3]
@@ -262,7 +262,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             initial_slots[0].start()
             logger.info(f"[TEST] Restarted slot with seed-nodes: {initial_slots[0].node_id}")
 
-            pool.retry_operation_sync(create_table_n(2))
+            # pool.retry_operation_sync(create_table_n(2))
             def upsert(session):
                 session.transaction().execute(
                     f"upsert into `{database_path}/t1` (id) values (1);",

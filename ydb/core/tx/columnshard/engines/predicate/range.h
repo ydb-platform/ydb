@@ -48,6 +48,9 @@ public:
     }
 
     bool IsPointRange(const std::shared_ptr<arrow::Schema>& pkSchema) const {
+        if (PredicateFrom.IsEmpty() || PredicateTo.IsEmpty()) {
+            return false;
+        }
         return PredicateFrom.GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL &&
                PredicateTo.GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL && PredicateFrom.IsEqualPointTo(PredicateTo) &&
                PredicateFrom.IsSchemaEqualTo(pkSchema);
@@ -66,7 +69,7 @@ public:
     NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     bool IsUsed(const TPortionInfo& info) const;
-    bool CheckPoint(const NArrow::TSimpleRow& point) const;
+    bool CheckPoint(const NArrow::NMerger::TSortableBatchPosition& point) const;
 
     enum class EUsageClass {
         NoUsage,
@@ -74,7 +77,7 @@ public:
         FullUsage
     };
 
-    EUsageClass GetUsageClass(const NArrow::TSimpleRow& start, const NArrow::TSimpleRow& end) const;
+    EUsageClass GetUsageClass(const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

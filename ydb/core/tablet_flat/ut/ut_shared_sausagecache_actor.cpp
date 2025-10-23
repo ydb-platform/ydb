@@ -103,7 +103,7 @@ private:
 };
 
 struct TSharedPageCacheMock {
-    TSharedPageCacheMock(ui64 memoryLimit = DefaultMemoryLimit, bool enableSchedule = false) {
+    TSharedPageCacheMock(ui64 memoryLimit = DefaultMemoryLimit, bool enableSchedule = false, ui64 inMemoryInFlyLimit = 10 * (sizeof(TPage) + 10)) {
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
@@ -112,6 +112,7 @@ struct TSharedPageCacheMock {
         TSharedCacheConfig config;
         config.SetMemoryLimit(memoryLimit);
         config.SetAsyncQueueInFlyLimit(19); // 2 in-fly pages
+        config.SetInMemoryInFlyLimit(inMemoryInFlyLimit);
         ActorId = Runtime.Register(CreateSharedPageCache(config, Runtime.GetDynamicCounters()));
         if (enableSchedule) {
             Runtime.EnableScheduleForActor(ActorId);
@@ -135,6 +136,16 @@ struct TSharedPageCacheMock {
         Send(Sender1, wakeup);
 
         TWaitForFirstEvent<TKikimrEvents::TEvWakeup> waiter(Runtime);
+        waiter.Wait();
+
+        return *this;
+    }
+
+    TSharedPageCacheMock& SetLimit(ui64 limitBytes) {
+        auto limit = new NMemory::TEvConsumerLimit(limitBytes);
+        Send(Sender1, limit);
+
+        TWaitForFirstEvent<NMemory::TEvConsumerLimit> waiter(Runtime);
         waiter.Wait();
 
         return *this;
@@ -1837,50 +1848,64 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
         // after loading collection#2 to InMemory, all collection#1 pages should be evicted
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection2, ECacheMode::TryKeepInMemory);
         sharedCache.CheckFetches({
-            TFetch{40, sharedCache.Collection2, {0, 1, 2, 3}}
+            TFetch{20, sharedCache.Collection2, {0, 1}}
         });
-        sharedCache.Provide(sharedCache.Collection2, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.Provide(sharedCache.Collection2, {0, 1}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
         sharedCache.CheckResults({
-            TFetch{0, sharedCache.Collection2, {2, 3}}
+            TFetch{0, sharedCache.Collection2, {0, 1}}
         });
 
         // collection#1 pages has reads and prioritized, read collection#2 again to evict their pages
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection2, {0, 1, 2, 3});
         sharedCache.CheckFetches({
-            TFetch{20, sharedCache.Collection2, {0, 1}}
+            TFetch{20, sharedCache.Collection2, {2, 3}}
         });
-        sharedCache.Provide(sharedCache.Collection2, {0, 1});
+        sharedCache.Provide(sharedCache.Collection2, {2, 3});
         sharedCache.CheckResults({
             TFetch{fetchNo++, sharedCache.Collection2, {0, 1, 2, 3}}
         });
         sharedCache.Wakeup();
+        sharedCache.CheckFetches({});
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits += 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), cacheMisses += 2);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 2);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize + collection2TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 2 * (sizeof(TPage) + 10));
 
         // all evicted collection#1 pages should be moved to Regular
         sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::Regular);
+        sharedCache.Wakeup();
         sharedCache.CheckFetches({});
 
-        collection1Pages.clear();
+        // should reload collection2 pages after collection1 pages will be unused
+        collection1Pages.clear(); // unuse
+        sharedCache.Wakeup();
+        sharedCache.CheckFetches({
+            TFetch{20, sharedCache.Collection2, {2, 3}}
+        });
+        sharedCache.Provide(sharedCache.Collection2, {2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection2, {2, 3}}
+        });
 
-        // collection#1 page#0 should be preserved in PassivePages, collection#1 page#1 should be GC'ed
+        // all collection#1 pages should be GC'ed and loaded again
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {0});
-        sharedCache.CheckFetches({});
+        sharedCache.CheckFetches({
+            TFetch{10, sharedCache.Collection1, {0}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {0});
         sharedCache.CheckResults({
             TFetch{fetchNo++, sharedCache.Collection1, {0}}
         });
 
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), ++cacheHits);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), cacheMisses);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), ++cacheMisses);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 1);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection2TotalSize);
-        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * (sizeof(TPage) + 10));
 
         // collection#1 page#1 should be loaded again
         sharedCache.Request(sharedCache.Sender1, sharedCache.Collection1, {1});
@@ -1894,6 +1919,115 @@ Y_UNIT_TEST_SUITE(TSharedPageCache_Actor) {
 
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheHitPages->Val(), cacheHits);
         UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->CacheMissPages->Val(), ++cacheMisses);
+    }
+
+    Y_UNIT_TEST(InMemory_ReloadPages) {
+        ui64 pageSize = sizeof(TPage) + 10;
+        TSharedPageCacheMock sharedCache(8 * pageSize);
+        sharedCache.SetLimit(4 * pageSize);
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 6u);
+        ui64 collection1TotalSize = 6 * pageSize;
+
+        // only 4 pages should be in memory cache
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({
+            TFetch{40, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 2, 3}}
+        });
+        sharedCache.CheckFetches({});
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 4 * pageSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 4 * pageSize);
+
+        sharedCache.SetLimit(5 * pageSize);
+        sharedCache.CheckFetches({
+            TFetch{10, sharedCache.Collection1, {4}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {4}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {4}}
+        });
+        sharedCache.CheckFetches({});
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 5 * pageSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 5 * pageSize);
+
+        sharedCache.SetLimit(3 * pageSize);
+        sharedCache.CheckFetches({});
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 3 * pageSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 3 * pageSize);
+
+        sharedCache.SetLimit(7 * pageSize);
+        sharedCache.CheckFetches({
+            TFetch{30, sharedCache.Collection1, {0, 1, 5}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {0, 1, 5}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1, 5}}
+        });
+        sharedCache.CheckFetches({});
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 6 * pageSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 7 * pageSize);
+    }
+
+    Y_UNIT_TEST(InMemory_ReloadPagesLimitedInFly) {
+        ui64 pageSize = sizeof(TPage) + 10;
+        TSharedPageCacheMock sharedCache(5 * pageSize, false, 2 * pageSize);
+
+        sharedCache.Collection1 = MakeIntrusiveConst<TPageCollectionMock>(1ul, 5u);
+        ui64 collection1TotalSize = 5 * pageSize;
+
+        sharedCache.Attach(sharedCache.Sender1, sharedCache.Collection1, ECacheMode::TryKeepInMemory);
+        sharedCache.CheckFetches({
+            TFetch{20, sharedCache.Collection1, {0, 1}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {0, 1}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {0, 1}}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 2);
+
+        sharedCache.CheckFetches({
+            TFetch{20, sharedCache.Collection1, {2, 3}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {2, 3}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {2, 3}}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 4);
+
+        sharedCache.CheckFetches({
+            TFetch{10, sharedCache.Collection1, {4}}
+        });
+        sharedCache.Provide(sharedCache.Collection1, {4}, TRY_KEEP_IN_MEMORY_PRELOAD_COOKIE);
+        sharedCache.CheckResults({
+            TFetch{0, sharedCache.Collection1, {4}}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActivePages->Val(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->PassivePages->Val(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->TargetInMemoryBytes->Val(), collection1TotalSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveInMemoryBytes->Val(), 5 * pageSize);
+        UNIT_ASSERT_VALUES_EQUAL(sharedCache.Counters->ActiveLimitBytes->Val(), 5 * pageSize);
     }
 
     Y_UNIT_TEST(GC_Manual) {

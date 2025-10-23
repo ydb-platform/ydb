@@ -102,7 +102,7 @@ public:
 
                 auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
                 auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
-                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
+                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to);
 
                 LabelNamesRequests_[soReadObject.Raw()] = {
                     .SolomonClient = solomonClient,

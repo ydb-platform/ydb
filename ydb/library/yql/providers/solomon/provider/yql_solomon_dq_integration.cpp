@@ -373,13 +373,7 @@ public:
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(2000);
-        sourceSettings.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
-
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(4000);
-        sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
-
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(10);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
         auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);

@@ -159,6 +159,63 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     return TListMetricsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
+TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::TResult&& response) {
+    TListMetricsLabelsResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Content.data() <<
+            ", internal code: " << response.Content.HttpResponseCode);
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response is not a valid json" );
+    }
+
+    if (!json.IsMap() || !json.Has("labels") || !json.Has("totalCount")) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response doesn't contain requested info");
+    }
+
+    if (!json["totalCount"].IsInteger() || !json["labels"].IsArray()) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid data");
+    }
+
+    result.TotalCount = json["totalCount"].GetInteger();
+
+    for (const auto& label : json["labels"].GetArray()) {
+        if (!label.IsMap() ||
+            !label.Has("name") || !label["name"].IsString() ||
+            !label.Has("absent") || !label["absent"].IsBoolean() ||
+            !label.Has("truncated") || !label["truncated"].IsBoolean() ||
+            !label.Has("values") || !label["values"].IsArray()) {
+            return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid labels");
+        }
+
+        TString name = label["name"].GetString();
+        bool absent = label["absent"].GetBoolean();
+        bool truncated = label["truncated"].GetBoolean();
+        std::vector<TString> values;
+
+        for (const auto& labelValue : label["values"].GetArray()) {
+            if (!labelValue.IsString()) {
+                return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");
+            }
+            values.push_back(labelValue.GetString());
+        }
+
+        result.Labels.emplace_back(name, absent, truncated, std::move(values));
+    }
+
+    return TListMetricsLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
+}
+
 TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
     static std::set<TString> whitelistIssues = {
         "Not able to apply function count on vector with size 0"
@@ -269,7 +326,7 @@ public:
 
 public:
     NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
-        auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
+        auto url = BuildGetLabelsUrl(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -279,14 +336,14 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url)
         );
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
-        auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
@@ -296,7 +353,26 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url),
+            std::move(body)
+        );
+
+        return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsLabelsHttpParams(selectors, from, to);
+
+        auto resultPromise = NThreading::NewPromise<TListMetricsLabelsResponse>();
+        
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
+            resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
+        };
+
+        DoHttpRequest(
+            std::move(cb),
+            std::move(url),
+            std::move(body)
         );
 
         return resultPromise.GetFuture();
@@ -317,8 +393,7 @@ public:
             auto fullSelectors = AddRequiredLabels(selectors);
             TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
             
-            auto requestUrl = BuildGetPointsCountUrl();
-            auto requestBody = BuildGetPointsCountBody(program, downsamplingTo, to);
+            auto [url, body] = BuildGetPointsCountHttpParams(program, downsamplingTo, to);
             
             auto cb = [resultPromise, downsampledPointsCount](NYql::IHTTPGateway::TResult&& response) mutable {
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
@@ -326,8 +401,8 @@ public:
     
             DoHttpRequest(
                 std::move(cb),
-                std::move(requestUrl),
-                std::move(requestBody)
+                std::move(url),
+                std::move(body)
             );
 
         } else {
@@ -482,14 +557,13 @@ private:
 
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
         builder.AddUrlParam("to", to.ToString());
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const {
+    std::tuple<TString, TString> BuildListMetricsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -498,18 +572,53 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
+        // NJsonWriter::TBuf w;
+        // w.BeginObject()
+        //     .UnsafeWriteKey("projectId").WriteString(GetProjectId())
+        //     .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+        //     .UnsafeWriteKey("from").WriteString(from.ToString())
+        //     .UnsafeWriteKey("to").WriteString(to.ToString())
+        //     .UnsafeWriteKey("pageSize").WriteInt(20000)
+        // .EndObject();
+
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
         builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("pageSize", std::to_string(pageSize));
-        builder.AddUrlParam("page", std::to_string(page));
+        builder.AddUrlParam("pageSize", "20000");
 
-        return builder.Build();
+        return { builder.Build(), "" };
     }
 
-    TString BuildGetPointsCountUrl() const {
+    std::tuple<TString, TString> BuildListMetricsLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
+
+        builder.AddPathComponent("api");
+        builder.AddPathComponent("v2");
+        builder.AddPathComponent("projects");
+        builder.AddPathComponent(Settings.GetProject());
+        builder.AddPathComponent("sensors");
+        builder.AddPathComponent("labels");
+
+        // NJsonWriter::TBuf w;
+        // w.BeginObject()
+        //     .UnsafeWriteKey("projectId").WriteString(GetProjectId())
+        //     .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+        //     .UnsafeWriteKey("from").WriteString(from.ToString())
+        //     .UnsafeWriteKey("to").WriteString(to.ToString())
+        //     .UnsafeWriteKey("limit").WriteInt(100000)
+        // .EndObject();
+
+        builder.AddUrlParam("projectId", GetProjectId());
+        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
+        builder.AddUrlParam("limit", "100000");
+
+        return { builder.Build(), "" };
+    }
+
+    std::tuple<TString, TString> BuildGetPointsCountHttpParams(const TString& program, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -521,17 +630,12 @@ private:
 
         builder.AddUrlParam("projectId", GetProjectId());
 
-        return builder.Build();
-    }
-
-    TString BuildGetPointsCountBody(const TString& program, TInstant from, TInstant to) const {
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(from.ToString())
             .UnsafeWriteKey("to").WriteString(to.ToString())
             .UnsafeWriteKey("program").WriteString(program)
-            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
@@ -544,7 +648,7 @@ private:
         }
         w.EndObject().EndObject();
 
-        return w.Str();
+        return { builder.Build(), w.Str() };
     }
 
     ReadRequest BuildGetDataRequest(const TString& program, TInstant from, TInstant to) const {
@@ -606,7 +710,7 @@ private:
 
 private:
     const TString DefaultReplica;
-    const ui64 ListSizeLimit = 1ull << 20;
+    const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 

@@ -52,7 +52,7 @@ TConclusionStatus TZeroLevelConstructor::DoDeserializeFromJson(const NJson::TJso
     if (json.Has("concurrency")) {
         const auto& jsonValue = json["concurrency"];
         if (!jsonValue.IsUInteger() || jsonValue.GetUInteger() == 0) {
-            return TConclusionStatus::Fail("incorrect concurrency value (have to be unsigned int)");
+            return TConclusionStatus::Fail("incorrect concurrency value (have to be positive unsigned int)");
         }
         Concurrency = jsonValue.GetUInteger();
     }

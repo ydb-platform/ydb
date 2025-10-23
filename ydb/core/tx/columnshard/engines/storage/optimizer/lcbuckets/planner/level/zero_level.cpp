@@ -33,7 +33,7 @@ std::vector<TCompactionTaskData> TZeroLevelPortions::DoGetOptimizationTasks() co
 }
 
 ui64 TZeroLevelPortions::GetMaxConcurrency() const {
-    return std::max(std::min(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) / std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), Concurrency), ui64(1));
+    return std::clamp(ui64(GetPortionsInfo().PredictPackedBlobBytes(GetPackKff()) / std::max(NextLevel->GetExpectedPortionSize(), GetExpectedPortionSize())), ui64(1), Concurrency);
 }
 
 ui64 TZeroLevelPortions::DoGetWeight(bool highPriority) const {

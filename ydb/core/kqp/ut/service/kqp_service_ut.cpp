@@ -637,6 +637,7 @@ struct TDictCase {
      Y_UNIT_TEST(TwoNodeOneShuttingDown) {
         TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2)
                                         .SetUseRealThreads(false));
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableLocalExecutionIfNodeShutdowned(true);
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         ui32 const nodeId = runtime.GetNodeId(0);
 

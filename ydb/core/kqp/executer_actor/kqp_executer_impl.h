@@ -807,10 +807,12 @@ protected:
                     break;
                 }
                 case NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN: {
-                    for (auto& task : record.GetNotStartedTasks()) {
-                        if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
-                              and ev->Sender.NodeId() != SelfId().NodeId()) {
-                            Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
+                    if (AppData()->FeatureFlags.GetEnableLocalExecutionIfNodeShutdowned()) {
+                        for (auto& task : record.GetNotStartedTasks()) {
+                            if (task.GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN
+                                and ev->Sender.NodeId() != SelfId().NodeId()) {
+                                Planner->SendStartKqpTasksRequest(task.GetRequestId(), MakeKqpNodeServiceID(SelfId().NodeId()));
+                            }
                         }
                     }
                     break;

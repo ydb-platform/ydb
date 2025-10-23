@@ -274,6 +274,7 @@ void Init(
         config.MutableJsonParser()->SetBatchSizeBytes(fqConfig.GetJsonParser().GetBatchSizeBytes());
         config.MutableJsonParser()->SetBatchCreationTimeoutMs(fqConfig.GetJsonParser().GetBatchCreationTimeoutMs());
         config.MutableJsonParser()->SetBufferCellCount(fqConfig.GetJsonParser().GetBufferCellCount());
+        config.MutableJsonParser()->SetSkipErrors(fqConfig.GetJsonParser().GetSkipErrors());
         config.MutableCompileService()->SetParallelCompilationLimit(fqConfig.GetCompileService().GetParallelCompilationLimit());
         auto* database = config.MutableCoordinator()->MutableDatabase();
         auto fqDatabase = fqConfig.GetCoordinator().GetDatabase();

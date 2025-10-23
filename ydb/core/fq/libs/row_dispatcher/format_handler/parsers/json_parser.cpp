@@ -355,6 +355,7 @@ public:
         , MaxNumberRows(CalculateMaxNumberRows())
         , LogPrefix("TJsonParser: ")
         , Counters(counters.CountersSubgroup)
+        , ParsingErrors(Counters->GetCounter("ParsingErrors", true))
     {
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
@@ -494,7 +495,7 @@ protected:
         }
 
 retry:
-        LOG_ROW_DISPATCHER_TRACE("Init parser,  skipped " << skipped << ", outputRowId " << outputRowId << ", offset " <<  values - begin  << " size " << size );
+        LOG_ROW_DISPATCHER_TRACE("Init parser, skipped " << skipped << ", outputRowId " << outputRowId << ", offset " <<  values - begin  << " size " << size );
 
         /*
            Batch size must be at least maximum of document size.
@@ -566,6 +567,9 @@ end_parsing:
             HANDLE_ERROR(status);
         }
 
+        if (ParsingFailed) {
+            ParsingErrors->Inc();
+        }
         for (auto& column : Columns) {
             column.ValidateNumberValues(outputRowId, GetOffsets());
         }
@@ -637,6 +641,7 @@ private:
     TVector<NYql::NUdf::TUnboxedValue> ParsedValuesBuffer;
     TVector<std::span<NYql::NUdf::TUnboxedValue>> ParsedValues;
     NMonitoring::TDynamicCounterPtr Counters;
+    NMonitoring::TDynamicCounters::TCounterPtr ParsingErrors;
     ui64 ParsingFailed = 0;
 };
 

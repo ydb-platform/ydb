@@ -1,5 +1,7 @@
 #include "purecalc_filter.h"
 
+#include <fmt/format.h>
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -438,17 +440,19 @@ private:
         return {};
     }
 
-    TStringBuilder sb;
-    sb << R"(PRAGMA config.flags("LLVM", ")" << (settings.EnabledLLVM ? "ON" : "OFF") << R"(");)" << '\n';
-    sb << "SELECT "
-        << "(" << (filterExpr ? filterExpr : "TRUE") << ") AS " << FILTER_FIELD_NAME
-        << ", " << OFFSET_FIELD_NAME;
-    if (watermarkExpr) {
-        sb << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME;
-    }
-    sb << " FROM Input;\n";
+    using namespace fmt::literals;
+    auto result = fmt::format(
+        R"sql(
+            PRAGMA config.flags("LLVM", "{enabled_llvm}");
+            SELECT COALESCE({filter_expr}, FALSE) AS {filter_field_name}, {offset_field_name}{watermark_expr} FROM Input;
+        )sql",
+        "enabled_llvm"_a = settings.EnabledLLVM ? "ON" : "OFF",
+        "filter_expr"_a = filterExpr ? filterExpr : "TRUE",
+        "filter_field_name"_a = FILTER_FIELD_NAME,
+        "offset_field_name"_a = OFFSET_FIELD_NAME,
+        "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
+    );
 
-    TString result = sb;
     LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
     return result;
 }

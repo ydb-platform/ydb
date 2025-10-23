@@ -87,14 +87,6 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
             requestBaseCtx->FinishSpan();
-            TGRpcRequestProxyHandleMethods::Handle(event, ctx);
-        }
-    }
-
-    void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
-        IRequestProxyCtx* requestBaseCtx = event->Get();
-        if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }

@@ -44,7 +44,12 @@ private:
     void DoDescribe() {
         LOG_D("Start describe");
         TBase::Become(&TThis::DescribeState);
-        ChildActorId = TBase::RegisterWithSameMailbox(NDescriber::CreateDescriberActor(TBase::SelfId(), Settings.DatabasePath, { Settings.TopicName }));
+
+        NDescriber::TDescribeSettings settings = {
+            .UserToken = Settings.UserToken,
+            .AccessRights = NACLib::EAccessRights::SelectRow
+        };
+        ChildActorId = TBase::RegisterWithSameMailbox(NDescriber::CreateDescriberActor(TBase::SelfId(), Settings.DatabasePath, { Settings.TopicName }, settings));
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {

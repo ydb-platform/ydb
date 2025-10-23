@@ -20,7 +20,12 @@ void TReaderActor::Bootstrap() {
 void TReaderActor::DoDescribe() {
     LOG_D("Start describe");
     Become(&TReaderActor::DescribeState);
-    ChildActorId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.DatabasePath, { Settings.TopicName }));
+
+    NDescriber::TDescribeSettings settings = {
+        .UserToken = Settings.UserToken,
+        .AccessRights = NACLib::EAccessRights::SelectRow
+    };
+    ChildActorId = RegisterWithSameMailbox(NDescriber::CreateDescriberActor(SelfId(), Settings.DatabasePath, { Settings.TopicName }, settings));
 }
 
 void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {

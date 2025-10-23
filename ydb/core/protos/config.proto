@@ -1851,7 +1851,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 2,
             DefaultValue: 0 }];
-
+        optional uint64 CommonStaticLogChunks = 6 [(ControlOptions) = {
+            Description: "Special reserve of log chunks on the PDisk with static groups",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 70 }];
     }
 
     message TBlobStorageControllerControls {

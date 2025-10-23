@@ -1570,22 +1570,23 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
 
     EProcessResult ret = EProcessResult::Continue;
     const auto& knownSourceIds = SourceIdStorage.GetInMemorySourceIds();
-    THashSet<TString> txSourceIds;
-    for (auto& s : srcIdInfo) {
+    TVector<TString> txSourceIds;
+    for (const auto& s : srcIdInfo) {
         if (TxAffectedSourcesIds.contains(s.first)) {
             PQ_LOG_TX_D("TxAffectedSourcesIds contains SourceId " << s.first << ". TxId " << tx.GetTxId());
             ret = EProcessResult::Blocked;
             break;
         }
         if (isImmediate) {
-            affectedSourceIdsAndConsumers.WriteSourcesIds.push_back(s.first);
+            txSourceIds.push_back(s.first);
+            LOG_D("TxId " << tx.GetTxId() << " affect SourceId " << s.first);
         } else {
             if (WriteAffectedSourcesIds.contains(s.first)) {
                 PQ_LOG_TX_D("WriteAffectedSourcesIds contains SourceId " << s.first << ". TxId " << tx.GetTxId());
                 ret = EProcessResult::Blocked;
                 break;
             }
-            txSourceIds.insert(s.first);
+            txSourceIds.push_back(s.first);
             LOG_D("TxId " << tx.GetTxId() << " affect SourceId " << s.first);
         }
 
@@ -1619,10 +1620,14 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             }
         }
     }
+
     if (ret == EProcessResult::Continue && tx.Predicate.GetOrElse(true)) {
-        TxAffectedSourcesIds.insert(txSourceIds.begin(), txSourceIds.end());
+        auto& sourceIds =
+            (isImmediate ? affectedSourceIdsAndConsumers.WriteSourcesIds : affectedSourceIdsAndConsumers.TxWriteSourcesIds);
+        sourceIds = std::move(txSourceIds);
 
         tx.WriteInfoApplied = true;
+
         WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
         WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
     }
@@ -2382,7 +2387,15 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 
 void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
+    AppendTxWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
     AppendWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
+}
+
+void TPartition::AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    for (const auto& sourceId : affectedSourceIdsAndConsumers.TxWriteSourcesIds) {
+        TxAffectedSourcesIds.insert(sourceId);
+    }
 }
 
 void TPartition::AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)

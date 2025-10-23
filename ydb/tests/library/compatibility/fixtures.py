@@ -175,9 +175,16 @@ class MixedClusterFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
+        all_versions_numbered = all(
+            # +inf == current will be float, all other versions are int
+            isinstance(item, int)
+            for tpl in self.versions
+            for item in tpl
+        )
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
+            suppress_version_check=not all_versions_numbered,
             **kwargs,
         )
 

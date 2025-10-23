@@ -66,6 +66,29 @@ void TDataShard::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound::T
     Execute(new TTxPersistSubDomainPathId(this, msg->SchemeShardId, msg->LocalPathId), ctx);
 }
 
+bool TDataShard::NeedToWatchSubDomainPathId() {
+    switch (State) {
+        case TShardState::WaitScheme:
+            if (!TransQueue.GetSchemaOperations().empty()) {
+                // We start watching when storing the first schema operation
+                return true;
+            }
+            break;
+
+        case TShardState::SplitDstReceivingSnapshot:
+            // We start watching when split dst is initialized
+            return true;
+
+        case TShardState::Ready:
+            return true;
+
+        default:
+            break;
+    }
+
+    return false;
+}
+
 void TDataShard::StopWatchingSubDomainPathId() {
     if (WatchingSubDomainPathId) {
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvWatchRemove());

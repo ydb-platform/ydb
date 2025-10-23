@@ -20,9 +20,6 @@ on:
         description: Comma or space separated branches to cherry-pick
         required: true
 
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 jobs:

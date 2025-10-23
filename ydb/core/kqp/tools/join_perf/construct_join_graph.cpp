@@ -67,38 +67,51 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
     TDqProgramBuilder& dqPb = descr.Setup->GetDqProgramBuilder();
     TProgramBuilder& pb = static_cast<TProgramBuilder&>(dqPb);
 
-    TVector<TType*> resultTypesArr;
-    TVector<const ui32> leftRenames, rightRenames;
-    if (joinKind != EJoinKind::RightOnly && joinKind != EJoinKind::RightSemi) {
-        for (int colIndex = 0; colIndex < std::ssize(descr.LeftSource.ColumnTypes); ++colIndex) {
-            leftRenames.push_back(colIndex);
-            leftRenames.push_back(colIndex);
+    ;
+    TGraceJoinRenames renames;
+    if (descr.CustomRenames) {
+        renames = TGraceJoinRenames::FromDq(*descr.CustomRenames);
+    } else {
+        if (joinKind != EJoinKind::RightOnly && joinKind != EJoinKind::RightSemi) {
+            for (int colIndex = 0; colIndex < std::ssize(descr.LeftSource.ColumnTypes); ++colIndex) {
+                renames.Left.push_back(colIndex);
+                renames.Left.push_back(colIndex);
+            }
         }
-        for (auto& resType : descr.LeftSource.ColumnTypes) {
-            resultTypesArr.push_back([&] {
-                if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
-                    return pb.NewOptionalType(resType);
-                } else {
-                    return resType;
-                }
-            }());
-        }
-    }
-    if (joinKind != EJoinKind::LeftOnly && joinKind != EJoinKind::LeftSemi) {
-        for (int colIndex = 0; colIndex < std::ssize(descr.RightSource.ColumnTypes); ++colIndex) {
-            rightRenames.push_back(colIndex);
-            rightRenames.push_back(colIndex + std::ssize(resultTypesArr));
-        }
-        for (auto* resType : descr.LeftSource.ColumnTypes) {
-            resultTypesArr.push_back([&] {
-                if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
-                    return pb.NewOptionalType(resType);
-                } else {
-                    return resType;
-                }
-            }());
+        if (joinKind != EJoinKind::LeftOnly && joinKind != EJoinKind::LeftSemi) {
+            for (int colIndex = 0; colIndex < std::ssize(descr.RightSource.ColumnTypes); ++colIndex) {
+                renames.Right.push_back(colIndex);
+                renames.Right.push_back(colIndex + std::ssize(descr.LeftSource.ColumnTypes));
+            }
         }
     }
+
+    const TVector<TType*> resultTypesArr = [&] {
+        TVector<TType*> arr;
+        TDqRenames dqRenames = FromGraceFormat(renames);
+        for (auto rename : dqRenames) {
+            if (rename.Side == JoinSide::kLeft) {
+                auto* resType = descr.LeftSource.ColumnTypes[rename.Index];
+                arr.push_back([&] {
+                    if (ForceLeftOptional(joinKind) && !resType->IsOptional()) {
+                        return pb.NewOptionalType(resType);
+                    } else {
+                        return resType;
+                    }
+                }());
+            } else {
+                auto* resType = descr.RightSource.ColumnTypes[rename.Index];
+                arr.push_back([&] {
+                    if (ForceRightOptional(joinKind) && !resType->IsOptional()) {
+                        return pb.NewOptionalType(resType);
+                    } else {
+                        return resType;
+                    }
+                }());
+            }
+        }
+        return arr;
+    }();
 
     struct TJoinArgs {
         TRuntimeNode Left;
@@ -159,7 +172,7 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
 
             return dqPb.FromFlow(dqPb.GraceJoin(ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind,
                                                 descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
-                                                leftRenames, rightRenames, dqPb.NewFlowType(multiResultType)));
+                                                renames.Left, renames.Right, dqPb.NewFlowType(multiResultType)));
         }
         case NKikimr::NMiniKQL::ETestedJoinAlgo::kScalarMap: {
             Y_ABORT_IF(descr.RightSource.KeyColumnIndexes.size() > 1,
@@ -213,12 +226,13 @@ THolder<IComputationGraph> ConstructJoinGraphStream(EJoinKind joinKind, ETestedJ
             blockResultTypes.push_back(dqPb.LastScalarIndexBlock());
             return dqPb.DqBlockHashJoin(ToWideStream(dqPb, args.Left), ToWideStream(dqPb, args.Right), joinKind,
                                         descr.LeftSource.KeyColumnIndexes, descr.RightSource.KeyColumnIndexes,
+                                        renames.Left, renames.Right,
                                         pb.NewStreamType(pb.NewMultiType(blockResultTypes)));
         }
         case ETestedJoinAlgo::kScalarHash: {
             return pb.FromFlow(dqPb.DqScalarHashJoin(
                 ToWideFlow(pb, args.Left), ToWideFlow(pb, args.Right), joinKind, descr.LeftSource.KeyColumnIndexes,
-                descr.RightSource.KeyColumnIndexes, pb.NewFlowType(multiResultType)));
+                descr.RightSource.KeyColumnIndexes, renames.Left, renames.Right, pb.NewFlowType(multiResultType)));
         }
         default:
             Y_ABORT("unreachable");

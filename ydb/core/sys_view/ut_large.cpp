@@ -22,7 +22,7 @@ struct TLogStopwatch {
         : Message(std::move(message))
         , Started(TAppData::TimeProvider->Now())
     {}
-    
+
     ~TLogStopwatch() {
         Cerr << "[STOPWATCH] " << Message << " in " << (TAppData::TimeProvider->Now() - Started).MilliSeconds() << "ms" << Endl;
     }
@@ -39,8 +39,6 @@ Y_UNIT_TEST_SUITE(SystemViewLarge) {
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
         env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
         env.GetServer().GetRuntime()->SetDispatchedEventsLimit(100'000'000'000);
-        
-        TTableClient client(env.GetDriver());
 
         const size_t pathsToCreate = 10'000 - 100;
 
@@ -66,21 +64,25 @@ Y_UNIT_TEST_SUITE(SystemViewLarge) {
             }
         }
 
-        Cerr << env.GetClient().Describe(env.GetServer().GetRuntime(), "/Root").DebugString() << Endl;
-
         {
-            const size_t expectedCount = pathsToCreate + 4;
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(env.GetEndpoint())
+                .SetDiscoveryMode(EDiscoveryMode::Off)
+                .SetDatabase("/Root");
+            auto driver = TDriver(driverConfig);
 
-            TLogStopwatch stopwatch(TStringBuilder() << "Selected " << expectedCount << " rows from .sys/auth_owners");
-
+            TLogStopwatch stopwatch(TStringBuilder() << "Selected " << pathsToCreate << " rows from .sys/auth_owners");
+            TTableClient client(driver);
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT COUNT (*)
-                FROM `Root/.sys/auth_owners`
+                FROM `/Root/.sys/auth_owners`
+                WHERE Path NOT LIKE "%/.sys%"    -- not list system dirs and files
+                AND Path NOT LIKE "%/.metadata%"
             )").GetValueSync();
 
             auto expected = Sprintf(R"([
                 [%du];
-            ])", expectedCount);
+            ])", pathsToCreate);
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }

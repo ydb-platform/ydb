@@ -179,8 +179,7 @@ EValidationResult ValidateStateStorageConfig(const NKikimrConfig::TAppConfig& pr
         }
     }
     if (!proposed.HasDomainsConfig()) {
-        msg.push_back(TStringBuilder() << "DomainsConfig is not defined");
-        return EValidationResult::Error;
+        return EValidationResult::Ok;
     }
     const auto& domains = proposed.GetDomainsConfig();
     bool isExplicit = domains.HasExplicitStateStorageConfig() && domains.HasExplicitStateStorageBoardConfig() && domains.HasExplicitSchemeBoardConfig();

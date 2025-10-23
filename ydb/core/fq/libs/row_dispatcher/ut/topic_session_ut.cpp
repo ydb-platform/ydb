@@ -264,7 +264,7 @@ public:
     NActors::TActorId ReadActorId2;
     NActors::TActorId ReadActorId3;
     ui32 PartitionId = 0;
-    NKikimrConfig::TSharedReadingConfig Config;
+    NConfig::TRowDispatcherConfig Config;
     TIntrusivePtr<IMockPqGateway> MockPqGateway;
     IMockPqReadSession::TPtr MockReadSession;
 
@@ -517,6 +517,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
 
         Sleep(TDuration::MilliSeconds(100));
 
+        ExpectNewDataArrived({ReadActorId1, ReadActorId2});
         readMessages = ReadMessages(ReadActorId1);
         UNIT_ASSERT_VALUES_EQUAL(readMessages, messagesSize);
 

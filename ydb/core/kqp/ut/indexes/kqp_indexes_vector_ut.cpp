@@ -1120,6 +1120,55 @@ Y_UNIT_TEST_SUITE(KqpVectorIndexes) {
         }
     }
 
+    Y_UNIT_TEST(VectorResolveDuplicateEvent) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableVectorIndex(true);
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            // SetUseRealThreads(false) is required to capture events (!) but then you have to do kikimr.RunCall() for everything
+            .SetUseRealThreads(false)
+            .SetKqpSettings({setting});
+
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); });
+        auto session = kikimr.RunCall([&] { return DoCreateTableAndVectorIndex(db, true, false); });
+
+        int capturedCount = 0;
+        auto runtime = kikimr.GetTestServer().GetRuntime();
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::EventType &&
+                runtime->FindActorName(ev->GetRecipientRewrite()) == "NKikimr::NKqp::TKqpVectorResolveActor") {
+                capturedCount++;
+                if (capturedCount == 3) {
+                    // Add a duplicate event (checking issue #27095)
+                    auto dup = new NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived(
+                        ev->Get<NYql::NDq::IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived>()->InputIndex);
+                    runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, dup));
+                }
+            }
+            return false;
+        };
+        runtime->SetEventFilter(captureEvents);
+
+        // Insert to the table with index should succeed
+        {
+            TString query1(Q_(R"(
+                INSERT INTO `/Root/TestTable` (pk, emb, data) VALUES
+                (10, "\x11\x62\x02", "10"),
+                (11, "\x77\x75\x02", "11")
+            )"));
+
+            auto result = kikimr.RunCall([&] {
+                return session.ExecuteDataQuery(query1, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                    .ExtractValueSync();
+            });
+            UNIT_ASSERT(result.IsSuccess());
+        }
+    }
+
 }
 
 }

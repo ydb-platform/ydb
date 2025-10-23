@@ -2256,7 +2256,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("first-consumer");
             req.set_offset(25);
 
@@ -2269,12 +2269,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
         }
 
-        // commit to past - expect bad request
+        // commit to past - expect commit to start offset
         {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("first-consumer");
             req.set_offset(3);
 
@@ -2284,7 +2284,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             Cerr << resp << "\n";
             UNIT_ASSERT(status.ok());
-            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         // commit to valid offset - expect successful commit
@@ -2292,7 +2292,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("first-consumer");
             req.set_offset(18);
 
@@ -2311,7 +2311,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("second-consumer");
             req.set_offset(18);
 
@@ -2324,12 +2324,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
-        // commit to past - expect error
+        // commit to past - expect commit to start offset
         {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("second-consumer");
             req.set_offset(3);
 
@@ -2339,7 +2339,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             Cerr << resp << "\n";
             UNIT_ASSERT(status.ok());
-            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+            UNIT_ASSERT_VALUES_EQUAL(resp.operation().status(), Ydb::StatusIds::SUCCESS);
         }
 
         // commit to future - expect bad request
@@ -2347,7 +2347,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic2");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic2");
             req.set_consumer("second-consumer");
             req.set_offset(25);
 
@@ -5876,6 +5876,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       ServiceType: "data-streams"
       Version: 0
+      Type: CONSUMER_TYPE_STREAMING
     }
     Consumers {
       Name: "consumer"
@@ -5890,6 +5891,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ServiceType: "data-streams"
       Version: 567
       Important: true
+      Type: CONSUMER_TYPE_STREAMING
     }
   }
   ErrorCode: OK

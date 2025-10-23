@@ -1,7 +1,7 @@
 UNITTEST_FOR(ydb/library/yql/dq/comp_nodes/hash_join_utils)
 
 IF (SANITIZER_TYPE OR NOT OPENSOURCE)
-    REQUIREMENTS(ram:32)
+    REQUIREMENTS(ram:32 cpu:4)
 ENDIF()
 
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
@@ -13,9 +13,10 @@ ENDIF()
 
 
 SRCS(
-    packed_tuple_ut.cpp
     accumulator_ut.cpp
     block_layout_converter_ut.cpp
+    hash_table_ut.cpp
+    packed_tuple_ut.cpp
 )
 
 PEERDIR(

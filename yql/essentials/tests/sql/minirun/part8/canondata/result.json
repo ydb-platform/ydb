@@ -1615,6 +1615,23 @@
             "uri": "https://{canondata_backend}/1937367/464904f3fe8948f1469d56c6971b4f31adbe3bda/resource.tar.gz#test.test_side_effects-logical_bools_override-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[simple_pg-to_char-default.txt-Debug]": [
+        {
+            "checksum": "d20633b8fb9cc03d59fb8db8ae6bd07b",
+            "size": 383,
+            "uri": "https://{canondata_backend}/1936997/710ddd5ba12627f0c148c65f1e294dc596bc232f/resource.tar.gz#test.test_simple_pg-to_char-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[simple_pg-to_char-default.txt-Results]": [
+        {
+            "checksum": "24dcf28b45e26c9697be8762b30ee2ec",
+            "size": 890,
+            "uri": "https://{canondata_backend}/1936997/710ddd5ba12627f0c148c65f1e294dc596bc232f/resource.tar.gz#test.test_simple_pg-to_char-default.txt-Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_simple_pg-to_char-default.txt-Results_/extracted"
+        }
+    ],
     "test.test[udf-logger_resolve--Debug]": [
         {
             "checksum": "df551ab2d87bb2dec98cc1e869a6b915",

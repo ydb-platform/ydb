@@ -58,4 +58,7 @@
 {%-     set extractLibrariesProtosTask = libraries|length -%}
 {%- endif -%}
 
+{%- set MAIN_VARPREFIX = "codegen" -%}
+{%- set CODEGENS_DIRNAME = "gradle.codegens" -%}
+
 {%- include "[generator]/jdk.jinja" -%}

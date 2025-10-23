@@ -66,12 +66,7 @@ sourceSets {
 {#- glue -#}
 {{ TargetSets(target, "main") }}
 
-{%-     if proto_template and symlinks_to_generated %}
-        java.srcDir("generated/source/proto/main/java").include("**/*")
-{%-         if target.proto_grpc %}
-        java.srcDir("generated/source/proto/main/grpc").include("**/*")
-{%-         endif -%}
-{%-     elif proto_template %}
+{%-     if proto_template %}
         java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/java")).include("**/*")
 {%-         if target.proto_grpc %}
         java.srcDir(layout.buildDirectory.dir("generated/source/proto/main/grpc")).include("**/*")
@@ -93,8 +88,9 @@ sourceSets {
     }
 {%      else %}
     test {
-        java.exclude("**/*")
-        resources.exclude("**/*")
+        // Preventing automatic search for tests
+        java.setSrcDirs(emptyList<Any>())
+        resources.setSrcDirs(emptyList<Any>())
     }
 {%      endif -%}
 {%- endif -%}
@@ -105,6 +101,10 @@ tasks.withType<Jar>() {
 }
 
 tasks.withType<Copy>() {
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType<Sync>() {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 

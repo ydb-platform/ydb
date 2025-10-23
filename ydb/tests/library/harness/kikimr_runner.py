@@ -323,6 +323,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         except Exception as e:
             raise RuntimeError("Unexpected error initializing config for node %s: %s" % (str(self.node_id), str(e)))
 
+
 class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def __init__(self, configurator=None, cluster_name='cluster'):
         super(KiKiMR, self).__init__()

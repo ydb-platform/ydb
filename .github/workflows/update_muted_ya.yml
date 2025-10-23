@@ -12,7 +12,7 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  BRANCH_FOR_PR: update-muted-ya
+  PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
   REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test"
@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] codeowners pandas PyGithub
+          pip install ydb[yc] codeowners pandas
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -64,7 +64,7 @@ jobs:
       - name: Set environment variables
         run: |
           echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
-          PR_BRANCH="${{ env.BRANCH_FOR_PR }}_${{ matrix.BASE_BRANCH }}"
+          PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
           echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
       # Всегда checkout main для получения актуальных скриптов
@@ -128,9 +128,6 @@ jobs:
       - name: Create PR branch and apply changes
         if: env.changes == 'true'
         run: |
-          # Отменяем изменения в debug скрипте перед переключением ветки
-          git checkout -- .github/scripts/tests/create_new_muted_ya.py
-          
           # Создаем PR ветку на основе целевой ветки
           git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
           

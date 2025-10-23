@@ -197,7 +197,7 @@
 | `logger` | Опциональная секция. Содержит настройки логирования. ||
 | `logger.log_level` | Уровень логгирования. Допустимые значения: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, `FATAL`. | `INFO` |
 | `logger.enable_sql_query_logging` | Для источников данных, поддерживающих SQL, включает логирование транслированных запросов. Допустимые значения: `true`, `false`. **ВАЖНО**: Включение этой опции может привести к печати конфиденциальных пользовательских данных в логи. | `false` |
-| `metrics_server` | Опциональная секция. Содержит настройки вспомогательного сервера, выполняющего доступ к метрикам. | Сервер отключён. |
+| `metrics_server` | Опциональная секция. Содержит настройки вспомогательного сервера, предоставляющего доступ к метрикам производительности и другой статистике сервиса. Метрики доступны по URL `http://host:port/metrics`. | Сервер отключён. |
 | `metrics_server.endpoint.host` | Имя хоста или IP-адрес, на котором сервер будет принимать TCP-соединения. ||
 | `metrics_server.endpoint.port` | Номер порта, на котором сервер будет принимать TCP-соединения. ||
 | `paging` | Опциональная секция. Содержит настройки алгоритма разбиения извлекаемого из источника потока данных на Arrow-блоки (страницы данных). На каждый запрос в коннекторе создаётся очередь из заранее подготовленных к отправке на сторону {{ ydb-short-name }} страниц. Аллокации Arrow-блоков формируют наиболее существенный вклад в потребление оперативной памяти процессом. Минимальный объём памяти, необходимый коннектору для работы, можно приблизительно оценить по формуле $memory = requests \cdot bytes\_per\_page \cdot prefetch\_queue\_capacity$, где $requests$ — количество одновременно выполняемых запросов `ReadSplits`. ||
@@ -217,7 +217,7 @@
 | `datasources.clickhouse.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.clickhouse.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.mysql` | Опциональная секция. Содержит настройки, специфичные для источника данных MySQL. ||
-| `datasources.mysql.result_chan_capacity` | Ёмкость буфера для извлечённых строк из сетевого соединения с базой. | 512 строк |
+| `datasources.mysql.result_chan_capacity` | Ёмкость буфера для извлечённых строк из сетевого соединения с внешней базой данных MySQL. Используется для буферизации данных перед их преобразованием в Arrow-блоки. | 512 строк |
 | `datasources.mysql.open_connection_timeout` | Таймаут открытия соединения с MySQL. {% include [!](_includes/connector_connection_timeout_duration.md) %} | `5s` |
 | `datasources.mysql.pushdown` | Опциональная секция. Содержит различные настройки для [пушдауна предикатов](../../../../concepts/glossary.md#predicate-pushdown). ||
 | `datasources.mysql.pushdown.enable_timestamp_pushdown` | Включает пушдаун фильтров для столбцов типа YQL `Timestamp`. Допустимые значения: `true`, `false`. | `false` |
@@ -233,7 +233,7 @@
 | `datasources.ydb` | Опциональная секция. Содержит настройки, специфичные для источника данных {{ ydb-short-name }}. ||
 | `datasources.ydb.open_connection_timeout` | Таймаут открытия соединения с {{ ydb-short-name }}. {% include [!](_includes/connector_connection_timeout_duration.md) %} | `5s` |
 | `datasources.ydb.ping_connection_timeout` | Таймаут проверки соединения с {{ ydb-short-name }}. {% include [!](_includes/connector_connection_timeout_duration.md) %} | `5s` |
-| `datasources.ydb.mode` | Режим параметризует способ взаимодействия коннектора с сервером {{ ydb-short-name }}. Допустимые значения: `MODE_TABLE_SERVICE_STDLIB_SCAN_QUERIES` (использует Table Service {{ ydb-short-name }}), `MODE_QUERY_SERVICE_NATIVE` (использует Query Service {{ ydb-short-name }}). | `MODE_QUERY_SERVICE_NATIVE` |
+| `datasources.ydb.mode` | Режим параметризует способ взаимодействия коннектора с сервером {{ ydb-short-name }}. Допустимые значения: `MODE_TABLE_SERVICE_STDLIB_SCAN_QUERIES` (использует [TableService](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/ydb_table_v1.proto#L8) {{ ydb-short-name }}), `MODE_QUERY_SERVICE_NATIVE` (использует [QueryService](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/ydb_query_v1.proto#L9) {{ ydb-short-name }}). | `MODE_QUERY_SERVICE_NATIVE` |
 | `datasources.ydb.splitting` | Опциональная секция. Содержит различные настройки для процесса разбиения таблиц на [сплиты](../../../../concepts/glossary.md#split). Её включение необходимо для массивно-параллельного чтения из внешней {{ ydb-short-name }} в федеративную {{ ydb-short-name }}. | Разбиение таблиц на сплиты отключено. |
 | `datasources.ydb.splitting.enabled_on_column_shards` | Включает разбиение на сплиты для колоночных таблиц. Допустимые значения: `true`, `false`. | `false` |
 | `datasources.ydb.splitting.query_tablet_ids_timeout` | Таймаут для запроса, запрашивающего идентификаторы таблеток колоночной таблицы {{ ydb-short-name }}. {% include [!](_includes/connector_connection_timeout_duration.md) %} | `1m` |

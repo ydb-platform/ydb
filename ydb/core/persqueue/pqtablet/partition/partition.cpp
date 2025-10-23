@@ -1628,8 +1628,8 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
 
         tx.WriteInfoApplied = true;
 
-        WriteKeysSizeEstimate += tx.WriteInfo->BodyKeys.size();
-        WriteKeysSizeEstimate += tx.WriteInfo->SrcIdInfo.size();
+        affectedSourceIdsAndConsumers.WriteKeysSize += tx.WriteInfo->BodyKeys.size();
+        affectedSourceIdsAndConsumers.WriteKeysSize += tx.WriteInfo->SrcIdInfo.size();
     }
 
     return ret;
@@ -2389,6 +2389,8 @@ void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAnd
     AppendWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
     AppendTxReadAffectedConsumers(affectedSourceIdsAndConsumers);
     AppendReadAffectedConsumers(affectedSourceIdsAndConsumers);
+
+    WriteKeysSizeEstimate += affectedSourceIdsAndConsumers.WriteKeysSize;
 }
 
 static void AppendToSet(const TVector<TString>& p, THashSet<TString>& q)
@@ -3346,7 +3348,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(TTransaction& t,
         consumers.push_back(user);
     }
     affectedSourceIdsAndConsumers.ReadConsumers = std::move(consumers);
-    WriteKeysSizeEstimate += consumers.size();
+    affectedSourceIdsAndConsumers.WriteKeysSize += consumers.size();
     return EProcessResult::Continue;
 }
 
@@ -3525,7 +3527,7 @@ TPartition::EProcessResult TPartition::PreProcessUserAct(TEvPQ::TEvSetClientInfo
     }
 
     if (affectedSourceIdsAndConsumers) {
-        WriteKeysSizeEstimate += 1;
+        ++affectedSourceIdsAndConsumers->WriteKeysSize;
         affectedSourceIdsAndConsumers->ReadConsumers.push_back(user);
     }
 

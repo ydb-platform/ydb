@@ -806,6 +806,7 @@ private:
         TVector<TString> WriteSourcesIds;
         TVector<TString> TxReadConsumers;
         TVector<TString> ReadConsumers;
+        ui32 WriteKeysSize = 0;
     };
 
     void AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);

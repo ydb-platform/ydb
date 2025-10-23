@@ -82,6 +82,7 @@ public:
     FEATURE_FLAG_SETTER(EnableRealSystemViewPaths)
     FEATURE_FLAG_SETTER(EnableDataShardWriteAlwaysVolatile)
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
+    FEATURE_FLAG_SETTER(EnableLocalExecutionIfNodeShutdowned)
 
     #undef FEATURE_FLAG_SETTER
 };

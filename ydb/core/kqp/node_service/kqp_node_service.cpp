@@ -383,9 +383,11 @@ private:
     }
 
     void HandleWork(TEvKqp::TEvInitiateShutdownRequest::TPtr& ev) {
-        LOG_I("Prepare to shutdown: do not acccept any messages from this time");
-        ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
-        Become(&TKqpNodeService::ShuttingDownState);
+        if (AppData()->FeatureFlags.GetEnableLocalExecutionIfNodeShutdowned()) {
+            LOG_I("Prepare to shutdown: do not acccept any messages from this time");
+            ShutdownState_.Reset(ev->Get()->ShutdownState.Get());
+            Become(&TKqpNodeService::ShuttingDownState);
+        }
     }
 
     void HandleShuttingDown(TEvKqpNode::TEvStartKqpTasksRequest::TPtr& ev) {

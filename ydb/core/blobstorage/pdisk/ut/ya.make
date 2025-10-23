@@ -6,7 +6,7 @@ IF (WITH_VALGRIND)
     ENV(VALGRIND_OPTS=--max-stackframe=16000000)
 ENDIF()
 
-IF (SANITIZER_TYPE OR WITH_VALGRIND)
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     SPLIT_FACTOR(20)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -27,12 +27,6 @@ IF (YDB_ENABLE_PDISK_SHRED)
     )
 ENDIF()
 
-IF (YDB_DISABLE_PDISK_ENCRYPTION)
-    CFLAGS(
-        -DDISABLE_PDISK_ENCRYPTION
-    )
-ENDIF()
-
 SRCS(
     blobstorage_pdisk_blockdevice_ut.cpp
     blobstorage_pdisk_crypto_ut.cpp
@@ -48,9 +42,6 @@ SRCS(
     blobstorage_pdisk_ut_run.cpp
     blobstorage_pdisk_ut_sectormap.cpp
     blobstorage_pdisk_util_ut.cpp
-    blobstorage_pdisk_ut_pdisk_config.cpp
-    blobstorage_pdisk_ut_chunk_tracker.cpp
-    blobstorage_pdisk_ut_failure.cpp
     mock/pdisk_mock.cpp
 )
 

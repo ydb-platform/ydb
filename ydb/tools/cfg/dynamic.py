@@ -189,12 +189,22 @@ class DynamicConfigGenerator(object):
                 Type=drive.type,
                 Kind=drive.kind,
             )
+            pc = None
             if drive.pdisk_config is not None:
                 pc = pdisk_config.TPDiskConfig()
                 utils.wrap_parse_dict(drive.pdisk_config, pc)
                 kwargs.update(PDiskConfig=pc)
-            elif drive.expected_slot_count is not None:
-                pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
+            if drive.encryption_thread_count is not None:
+                if pc is None:
+                    pc = pdisk_config.TPDiskConfig(EncryptionThreadCount=drive.encryption_thread_count)
+                else:
+                    pc.EncryptionThreadCount = drive.encryption_thread_count
+                kwargs.update(PDiskConfig=pc)
+            if drive.expected_slot_count is not None:
+                if pc is None:
+                    pc = pdisk_config.TPDiskConfig(ExpectedSlotCount=drive.expected_slot_count)
+                else:
+                    pc.ExpectedSlotCount = drive.expected_slot_count
                 kwargs.update(PDiskConfig=pc)
             array.add(**kwargs)
 

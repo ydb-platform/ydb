@@ -9,3 +9,5 @@ items:
   href: dapper.md
 - name: Entity Framework
   href: entity-framework.md
+- name: LinqToDB
+  href: linq2db.md

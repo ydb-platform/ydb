@@ -617,6 +617,9 @@ namespace {
                 );
                 YQL_ENSURE(result);
                 request->mutable_partitioning_settings()->mutable_auto_partitioning_settings()->set_strategy(strategy);
+            } else if (name == "setMetricsLevel") {
+                auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_metrics_level(metricsLevel);
             }
         }
     }

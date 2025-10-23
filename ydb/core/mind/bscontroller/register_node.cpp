@@ -401,6 +401,10 @@ public:
 
     void Complete(const TActorContext&) override {
         if (Response) {
+            auto *node = Self->FindNode(Request->Sender.NodeId());
+            Y_ABORT_UNLESS(node);
+            Y_ABORT_UNLESS(!node->Registered);
+            node->Registered = true;
             Self->SendInReply(*Request, std::move(Response));
             Self->Execute(new TTxUpdateNodeDrives(std::move(UpdateNodeDrivesRecord), Self));
         }
@@ -590,6 +594,7 @@ void TBlobStorageController::OnWardenConnected(TNodeId nodeId, TActorId serverId
         EraseKnownDrivesOnDisconnected(&node);
     }
     node.ConnectedServerId = serverId;
+    node.Registered = false;
     node.InterconnectSessionId = interconnectSessionId;
 
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
@@ -610,6 +615,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId, TActorId serve
     }
     node.ConnectedServerId = {};
     node.InterconnectSessionId = {};
+    node.Registered = false;
 
     for (const TGroupId groupId : std::exchange(node.WaitingForGroups, {})) {
         if (TGroupInfo *group = FindGroup(groupId)) {

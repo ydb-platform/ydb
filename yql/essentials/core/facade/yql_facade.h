@@ -216,6 +216,10 @@ public:
         Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
     }
 
+    inline TAstNode* AstRoot() {
+        return AstRoot_;
+    }
+
     inline const TAstNode* AstRoot() const {
         return AstRoot_;
     }

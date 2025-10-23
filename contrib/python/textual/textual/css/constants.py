@@ -22,6 +22,7 @@ VALID_BORDER: Final = {
     "round",
     "solid",
     "tall",
+    "tab",
     "thick",
     "vkey",
     "wide",
@@ -33,6 +34,7 @@ VALID_BOX_SIZING: Final = {"border-box", "content-box"}
 VALID_OVERFLOW: Final = {"scroll", "hidden", "auto"}
 VALID_ALIGN_HORIZONTAL: Final = {"left", "center", "right"}
 VALID_ALIGN_VERTICAL: Final = {"top", "middle", "bottom"}
+VALID_POSITION: Final = {"relative", "absolute"}
 VALID_TEXT_ALIGN: Final = {
     "start",
     "end",

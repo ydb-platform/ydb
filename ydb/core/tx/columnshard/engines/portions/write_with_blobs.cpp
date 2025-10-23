@@ -55,8 +55,8 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
         }
     }
     for (auto&& [_, i] : inplaceChunks) {
-        result.GetPortionConstructor().AddIndex(
-            TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
+        result.GetPortionConstructor().AddIndex(TIndexChunk(
+            i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
     }
 
     return result;

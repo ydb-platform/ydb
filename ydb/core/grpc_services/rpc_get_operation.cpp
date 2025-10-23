@@ -7,11 +7,10 @@
 #include "rpc_operation_request_base.h"
 #include "rpc_restore_base.h"
 
-#include <ydb/core/grpc_services/base/base.h>
-#include <google/protobuf/text_format.h>
-
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/cms/console/console.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/rpc_common/rpc_common.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -21,10 +20,12 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
-#include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/public/issue/yql_issue_message.h>
+
+#include <google/protobuf/text_format.h>
 
 #include <util/string/cast.h>
 
@@ -217,7 +218,7 @@ private:
     }
 
     void SendGetScriptExecutionOperation() {
-        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_));
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(GetDatabaseName(), OperationId_, GetUserSID(*Request)));
     }
 
     void Handle(NSchemeShard::TEvExport::TEvGetExportResponse::TPtr& ev, const TActorContext& ctx) {

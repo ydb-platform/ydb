@@ -19,14 +19,14 @@ public:
 
     static TImpl UseAllNodes();
 
-    static TImpl UsePreferableLocation(const std::string& location);
+    static TImpl UsePreferableLocation(const std::optional<std::string>& location);
 
     static TImpl UsePreferablePileState(EPileState pileState);
 
     EPolicyType PolicyType;
 
     // UsePreferableLocation
-    std::string Location;
+    std::optional<std::string> Location;
 
     // UsePreferablePileState
     EPileState PileState;

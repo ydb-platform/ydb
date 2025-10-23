@@ -516,6 +516,8 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(true);
     registrar.Parameter("enable_cookies", &TThis::EnableCookies)
         .Default(false);
+    registrar.Parameter("omit_inaccessible_rows", &TThis::OmitInaccessibleRows)
+        .Default(false);
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -530,6 +532,7 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
     Options.EnableCookies = EnableCookies;
+    Options.OmitInaccessibleRows = OmitInaccessibleRows;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
@@ -961,7 +964,7 @@ void TSelectRowsCommand::Register(TRegistrar registrar)
         .GreaterThan(0)
         .Optional(/*init*/ false);
 
-    registrar.ParameterWithUniversalAccessor<bool>(
+    registrar.ParameterWithUniversalAccessor<std::optional<bool>>(
         "use_order_by_in_join_subqueries",
         [] (TThis* command) -> auto& {
             return command->Options.UseOrderByInJoinSubqueries;

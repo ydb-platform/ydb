@@ -8154,6 +8154,55 @@
             "uri": "https://{canondata_backend}/1942671/82ed7d067ef141d1fcef204dc3b89bf4e1c70c57/resource.tar.gz#test_sql2yql.test_select_op-select_op_precedence_named_node_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-alias]": [
+        {
+            "checksum": "33dc55c0790d7112a27e081a48a228ce",
+            "size": 1849,
+            "uri": "https://{canondata_backend}/1881367/bd3634d7029be128790526e9f6936e9d4e62611f/resource.tar.gz#test_sql2yql.test_select_yql-alias_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-expr]": [
+        {
+            "checksum": "c3970c80cdc82b4a685c8639427d3f0a",
+            "size": 751,
+            "uri": "https://{canondata_backend}/1881367/bd3634d7029be128790526e9f6936e9d4e62611f/resource.tar.gz#test_sql2yql.test_select_yql-expr_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-from_anon_values]": [
+        {
+            "checksum": "e5e204d08da35e20051a79a5476d7dcb",
+            "size": 763,
+            "uri": "https://{canondata_backend}/1881367/bd3634d7029be128790526e9f6936e9d4e62611f/resource.tar.gz#test_sql2yql.test_select_yql-from_anon_values_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-from_values]": [
+        {
+            "checksum": "0c824a5c49577fd20991e97f58b8f20f",
+            "size": 893,
+            "uri": "https://{canondata_backend}/1946324/49df8639d304dfe2c977bad20e3580e113ec0014/resource.tar.gz#test_sql2yql.test_select_yql-from_values_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-from_values_ordered_columns]": [
+        {
+            "checksum": "5126b24f43de5eb7717bef58a6a7d4e0",
+            "size": 965,
+            "uri": "https://{canondata_backend}/1946324/49df8639d304dfe2c977bad20e3580e113ec0014/resource.tar.gz#test_sql2yql.test_select_yql-from_values_ordered_columns_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-minimal]": [
+        {
+            "checksum": "45a1f9a2ca783e3861f51241f57039b0",
+            "size": 588,
+            "uri": "https://{canondata_backend}/1881367/bd3634d7029be128790526e9f6936e9d4e62611f/resource.tar.gz#test_sql2yql.test_select_yql-minimal_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-minimal_ordered_columns]": [
+        {
+            "checksum": "3f8a6c6437c3acb562c0a0adabc9aa0d",
+            "size": 660,
+            "uri": "https://{canondata_backend}/1130705/d43abb2de178f94a1126902afd1e77e6bd8e8734/resource.tar.gz#test_sql2yql.test_select_yql-minimal_ordered_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[seq_mode-shared_named_expr]": [
         {
             "checksum": "1bc276a9cb08e31273e24da9ad90582d",
@@ -13152,6 +13201,41 @@
     "test_sql_format.test[select_op-select_op_precedence_named_node]": [
         {
             "uri": "file://test_sql_format.test_select_op-select_op_precedence_named_node_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-alias]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-alias_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-expr]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-expr_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-from_anon_values]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-from_anon_values_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-from_values]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-from_values_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-from_values_ordered_columns]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-from_values_ordered_columns_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-minimal]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-minimal_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-minimal_ordered_columns]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-minimal_ordered_columns_/formatted.sql"
         }
     ],
     "test_sql_format.test[seq_mode-shared_named_expr]": [

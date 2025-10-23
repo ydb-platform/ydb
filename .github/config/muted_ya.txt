@@ -1,10 +1,9 @@
+ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
-ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
-ydb/core/blobstorage/ut_blobstorage/ut_balancing unittest.[*/*] chunk
+ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_statestorage TStateStorageRingGroupState.TestProxyConfigMismatch
-ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadHuge
@@ -18,24 +17,20 @@ ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/service KqpService.TwoNodeOneShuttingDown
-ydb/core/mind/hive/ut unittest.[*/*] chunk
 ydb/core/persqueue/ut/slow SlowTopicAutopartitioning.CDC_Write
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
+ydb/core/sys_view/ut SystemView.AuthGroups_Access
 ydb/core/sys_view/ut SystemView.AuthUsers_Access
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
-ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc
-ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
-ydb/library/actors/interconnect/ut_huge_cluster unittest.sole chunk
 ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultichannel
-ydb/public/sdk/cpp/src/client/federated_topic/ut BasicUsage.PropagateSessionClosed
-ydb/public/sdk/cpp/src/client/federated_topic/ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/src/client/topic/ut/with_direct_read_ut unittest.[*/*] chunk
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.StressTestSync/1
@@ -65,6 +60,7 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackup.test_database_backup
 ydb/tests/functional/ydb_cli test_ydb_backup.py.TestDatabaseBackupRestore.test_database_backup_restore
 ydb/tests/olap py3test.[*/*] chunk
+ydb/tests/olap test_cs_many_updates.py.TestCSManyUpdates.test_many_updates[bulk_upsert]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

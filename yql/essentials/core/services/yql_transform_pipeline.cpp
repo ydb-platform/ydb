@@ -322,7 +322,9 @@ TTransformationPipeline& TTransformationPipeline::AddLineageOptimization(TMaybe<
                         try {
                             // normalize is needed to check correctness of lineage output, e.g. if column-wise lineage section is empty, normalization will fail
                             NormalizeLineage(*lineageOut);
+                            typeCtx->EnableStandaloneLineage = true;
                         } catch (const std::exception& e) {
+                            typeCtx->EnableStandaloneLineage = false;
                             YQL_LOG(INFO) << "Skip saving to QStorageLineage as lineage is incorrect: "
                                           << e.what()
                                           << ", calculated lineage: "

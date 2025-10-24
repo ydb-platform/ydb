@@ -476,6 +476,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EnableLineage = false;
     bool EnableStandaloneLineage = false;
     bool CorrectLineage = true;
+    TMaybe<bool> CorrectStandaloneLineage;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;
     NLayers::ILayersRegistryPtr LayersRegistry;

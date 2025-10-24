@@ -5,7 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 SRCS(
-    kqp_result_set_arrow_ut.cpp
+    kqp_formats_arrow_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

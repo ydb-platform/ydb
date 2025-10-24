@@ -2,7 +2,7 @@
 
 #include <util/string/hex.h>
 
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>

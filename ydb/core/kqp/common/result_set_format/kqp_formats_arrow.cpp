@@ -1,4 +1,4 @@
-#include "kqp_result_set_arrow.h"
+#include "kqp_formats_arrow.h"
 
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/mkql_string_util.h>

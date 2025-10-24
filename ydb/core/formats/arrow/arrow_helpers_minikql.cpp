@@ -1,6 +1,6 @@
 #include "arrow_helpers_minikql.h"
 
-#include <ydb/core/kqp/common/result_set_format/kqp_result_set_arrow.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_formats_arrow.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow {

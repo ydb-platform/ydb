@@ -61,7 +61,7 @@ public:
     void Bootstrap() override {
         if (!Params.Has("path") || !Params.Has("message")) {
             TBase::Become(&TThis::StateWork);
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "fields 'path' and 'message' are required and should not be empty"));
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "fields 'path' and 'message' are required and should not be empty"));
         }
 
         TopicPath = Params.Get("path");
@@ -83,8 +83,7 @@ public:
                 NJson::ReadJsonTree(Params.Get("metadata", i), &metadataJson, true);
                 auto& metadataMap = metadataJson.GetMap();
                 if (!metadataMap.contains("key") || !metadataMap.contains("value")) {
-                    ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "field 'metadata' must be key-value pairs"));
-                    return;
+                    return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "field 'metadata' must be key-value pairs"));
                 }
                 Metadata.emplace_back(metadataMap.at("key").GetStringRobust(), metadataMap.at("value").GetStringRobust());
             }
@@ -155,7 +154,7 @@ public:
         auto* navigate = ev.Get()->Get()->Request.Get();
         auto& info = navigate->ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
         }
 
         const auto& pqDescription = info.PQGroupInfo->Description;
@@ -173,13 +172,11 @@ public:
 
         if (Event->Get()->UserToken.empty()) {
             if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-                ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
-                return;
+                return ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
             }
         } else {
             if (!info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, NACLib::TUserToken(Event->Get()->UserToken))) {
-                ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
-                return;
+                return ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
             };
         }
 
@@ -193,8 +190,7 @@ public:
             }
         }
         if (!partitionFound) {
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Partition not found."));
-            return;
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Partition not found."));
         }
         NPQ::TPartitionWriterOpts opts;
         opts.WithDeduplication(false)
@@ -215,16 +211,15 @@ public:
         const auto& resp = r->Record.GetPartitionResponse();
         auto cookie = resp.GetCookie();
         if (cookie != Cookie) {
-            ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
-            return;
+            return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
         }
         if (r->IsSuccess()) {
-            ReplyAndPassAway(TBase::GetHTTPOK("text/plain", "Recieved response"));
+            return ReplyAndPassAway(TBase::GetHTTPOK("text/plain", "Recieved response"));
         } else {
             auto error = r->GetError();
             TString reason = r->GetError().Reason;
             Cerr << reason << Endl;
-            ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", reason));
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", reason));
         }
     }
 
@@ -232,14 +227,12 @@ public:
         auto r = request->Get();
         auto cookie = r->Cookie;
         if (cookie != Cookie) {
-            ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteAccepted Handler."));
-            return;
+            return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteAccepted Handler."));
         }
     }
 
     void HandleDisconnected(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr, const TActorContext&) {
-        ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Partition writer is disconnected."));
-        return;
+        return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Partition writer is disconnected."));
     }
 
     void ReplyAndPassAway() override {

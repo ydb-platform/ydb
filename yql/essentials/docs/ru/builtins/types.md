@@ -264,7 +264,7 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType и VoidType {#generictype}
+## GenericType, UnitType, VoidType, NullType, EmptyListType, EmptyDictType {#generictype}
 
 #### Сигнатура
 
@@ -272,6 +272,9 @@ SELECT FormatType(CallableType(
 GenericType()->тип
 UnitType()->тип
 VoidType()->тип
+NullType()->тип
+EmptyListType()->тип
+EmptyDictType()->тип
 ```
 
 Возвращают одноименные [специальные типы данных](../types/special.md). Аргументов нет, так как они не параметризуются.

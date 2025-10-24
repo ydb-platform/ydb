@@ -479,11 +479,6 @@ public:
     }
 
     TSortableBatchPosition TrimSortingKeys(const ui64 numSortingColumns) const {
-        // const auto& selfSortingColumns = Sorting->GetFieldNames();
-        // AFL_VERIFY(sortingColumns.size() <= selfSortingColumns.size())("incoming", sortingColumns.size())("self", selfSortingColumns.size());
-        // for (ui64 i = 0; i < sortingColumns.size(); ++i) {
-        //     AFL_VERIFY(selfSortingColumns[i] == sortingColumns[i])("incoming", sortingColumns[i])("self", selfSortingColumns[i]);
-        // }
         return TSortableBatchPosition(Position, RecordsCount, ReverseSort, Sorting->Trim(numSortingColumns), Data);
     }
 

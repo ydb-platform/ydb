@@ -14,9 +14,32 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
     }
 
     auto result = NArrow::TColumnFilter::BuildDenyFilter();
-    // TODO: create TSortableBatchPosition(data) once
+    NArrow::NMerger::TRWSortableBatchPosition iterator(data, 0, false);
+    bool reachedEnd = false;
     for (const auto& range : SortedRanges) {
-        result = result.Or(range.BuildFilter(data));
+        const ui64 initialIdx = iterator.GetPosition();
+        const auto findBegin = range.GetPredicateFrom().FindFirstIncluded(iterator);
+        const ui64 beginIdx = findBegin ? findBegin->GetPosition() : iterator.GetRecordsCount();
+
+        result.Add(false, beginIdx - initialIdx);
+        reachedEnd = !iterator.InitPosition(beginIdx);
+        if (reachedEnd) {
+            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+            break;
+        }
+
+        auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
+        const ui64 endIdx = findEnd ? findEnd->GetPosition() : iterator.GetRecordsCount();
+
+        result.Add(true, endIdx - beginIdx);
+        reachedEnd = !iterator.InitPosition(endIdx);
+        if (reachedEnd) {
+            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+            break;
+        }
+    }
+    if (!reachedEnd) {
+        result.Add(false, iterator.GetRecordsCount() - iterator.GetPosition());
     }
     return result;
 }
@@ -88,7 +111,6 @@ bool TPKRangesFilter::CheckPoint(const NArrow::NMerger::TSortableBatchPosition& 
 
 TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(
     const NArrow::NMerger::TSortableBatchPosition& start, const NArrow::NMerger::TSortableBatchPosition& end) const {
-    // TODO: accept batch position as a agruments to avoid conversion from simple row
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
@@ -108,6 +130,7 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(
 
 TPKRangesFilter::TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data)
     : Data(data)
+    , MemoryGuard(GetMemorySize())
 {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
     Y_ABORT_UNLESS(range.IsSuccess());

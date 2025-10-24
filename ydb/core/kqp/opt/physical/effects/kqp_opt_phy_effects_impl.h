@@ -98,6 +98,8 @@ NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKi
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
 
+NYql::NNodes::TDqStageBase ReadTableToStage(const NYql::NNodes::TExprBase& expr, NYql::TExprContext& ctx);
+
 NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
     const NYql::NNodes::TKqpTable& tableNode,
     const TString& indexName,
@@ -118,9 +120,7 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
-    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexTableColumns,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
-
-TVector<TStringBuf> BuildFulltextIndexColumns(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc);
 
 } // NKikimr::NKqp::NOpt

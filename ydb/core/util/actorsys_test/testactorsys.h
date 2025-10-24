@@ -200,7 +200,7 @@ public:
         }
         return info;
     };
-    
+
 public:
     TTestActorSystem(ui32 numNodes, NLog::EPriority defaultPrio = NLog::PRI_ERROR, TIntrusivePtr<TDomainsInfo> domainsInfo = nullptr, TFeatureFlags featureFlags = {})
         : MaxNodeId(numNodes)
@@ -420,6 +420,10 @@ public:
 
     void SetOwnLogPriority(NActors::NLog::EPrio priority) {
         OwnLogPriority = priority;
+    }
+
+    bool Send(std::unique_ptr<IEventHandle>&& ev, ui32 nodeId = 0) {
+        return Send(ev.release(), nodeId);
     }
 
     bool Send(TAutoPtr<IEventHandle> ev, ui32 nodeId = 0) {

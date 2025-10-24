@@ -90,7 +90,7 @@ public:
         Context->Schedule(delta, ev, cookie, NodeId);
     }
 
-    bool Send(TAutoPtr<IEventHandle>& ev) override {
+    bool Send(std::unique_ptr<IEventHandle>& ev) override {
         if (TlsActivationContext) {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             IActor* sender = Context->GetActor(ctx.SelfID);
@@ -99,10 +99,10 @@ public:
                 ev = nullptr;
             }
         }
-        return Context->Send(ev, NodeId);
+        return Context->Send(std::move(ev), NodeId);
     }
 
-    bool SpecificSend(TAutoPtr<IEventHandle>& ev) override {
+    bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override {
         return Send(ev);
     }
 

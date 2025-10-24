@@ -187,7 +187,7 @@ namespace NActors {
     }
 
     template <TActorSystem::TEPSendFunction EPSpecificSend>
-    bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
+    bool TActorSystem::GenericSend(std::unique_ptr<IEventHandle>&& ev) const {
         if (Y_UNLIKELY(!ev))
             return false;
 
@@ -243,30 +243,30 @@ namespace NActors {
             }
         }
         if (ev) {
-            Send(IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown));
+            Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::ReasonActorUnknown));
         }
         return false;
     }
 
     template
-    bool TActorSystem::GenericSend<&IExecutorPool::Send>(TAutoPtr<IEventHandle> ev) const;
+    bool TActorSystem::GenericSend<&IExecutorPool::Send>(std::unique_ptr<IEventHandle>&& ev) const;
     template
-    bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(TAutoPtr<IEventHandle> ev) const;
+    bool TActorSystem::GenericSend<&IExecutorPool::SpecificSend>(std::unique_ptr<IEventHandle>&& ev) const;
 
     bool TActorSystem::Send(const TActorId& recipient, IEventBase* ev, ui32 flags, ui64 cookie) const {
         return this->Send(new IEventHandle(recipient, DefSelfID, ev, flags, cookie));
     }
 
-    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev) const {
-        return this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+    bool TActorSystem::SpecificSend(std::unique_ptr<IEventHandle>&& ev) const {
+        return this->GenericSend<&IExecutorPool::SpecificSend>(std::move(ev));
     }
 
-    bool TActorSystem::SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const {
+    bool TActorSystem::SpecificSend(std::unique_ptr<IEventHandle>&& ev, ESendingType sendingType) const {
         if (!TlsThreadContext) {
-            return this->GenericSend<&IExecutorPool::Send>(ev);
+            return this->GenericSend<&IExecutorPool::Send>(std::move(ev));
         } else {
             ESendingType previousType = TlsThreadContext->ExchangeSendingType(sendingType);
-            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
+            bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(std::move(ev));
             TlsThreadContext->SetSendingType(previousType);
             return isSent;
         }

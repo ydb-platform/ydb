@@ -379,7 +379,7 @@ namespace NActors {
             if (!TlsThreadContext || TlsThreadContext->CheckSendingType(ESendingType::Common)) {
                 sys->Send(eh);
             } else {
-                sys->SpecificSend(eh);
+                sys->SpecificSend(std::unique_ptr<IEventHandle>(eh.Release()));
             }
         }
     }
@@ -621,9 +621,22 @@ namespace NActors {
     template <ESendingType SendingType>
     bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
         if constexpr (SendingType == ESendingType::Common) {
-            return this->GenericSend< &IExecutorPool::Send>(ev);
+            return this->GenericSend< &IExecutorPool::Send>(std::unique_ptr<IEventHandle>(ev.Release()));
         } else {
-            return this->SpecificSend(ev, SendingType);
+            return this->SpecificSend(std::unique_ptr<IEventHandle>(ev.Release()), SendingType);
+        }
+    }
+
+    template bool TActorSystem::Send<ESendingType::Common>(std::unique_ptr<IEventHandle>&& ev) const;
+    template bool TActorSystem::Send<ESendingType::Lazy>(std::unique_ptr<IEventHandle>&& ev) const;
+    template bool TActorSystem::Send<ESendingType::Tail>(std::unique_ptr<IEventHandle>&& ev) const;
+
+    template <ESendingType SendingType>
+    bool TActorSystem::Send(std::unique_ptr<IEventHandle>&& ev) const {
+        if constexpr (SendingType == ESendingType::Common) {
+            return this->GenericSend< &IExecutorPool::Send>(std::move(ev));
+        } else {
+            return this->SpecificSend(std::move(ev), SendingType);
         }
     }
 

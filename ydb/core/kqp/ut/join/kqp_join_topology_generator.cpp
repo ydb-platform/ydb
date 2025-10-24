@@ -123,6 +123,16 @@ std::string TSchema::MakeDropQuery() const {
     return query;
 }
 
+void TSchema::Rename(std::vector<int> oldToNew) {
+    std::vector<TTable> newTables(Tables_.size());
+
+    for (unsigned i = 0; i < oldToNew.size(); ++i) {
+        newTables[oldToNew[i]] = Tables_[i];
+    }
+
+    Tables_ = newTables;
+}
+
 
 TRelationGraph TRelationGraph::FromPrufer(std::mt19937 &mt, const std::vector<unsigned>& prufer, double newColumnProbability) {
     unsigned n = prufer.size() + 2;
@@ -234,6 +244,51 @@ void TRelationGraph::DumpGraph(std::ostream &OS) const {
     }
 
     OS << "}\n";
+}
+
+void TRelationGraph::ReorderDFS() {
+    std::vector<bool> visited(GetN(), false);
+    std::vector<int> newOrder;
+    newOrder.reserve(GetN());
+
+    auto searchDepthFirst = [&](auto &&self, unsigned node) {
+        if (visited[node]) {
+            return;
+        }
+
+        visited[node] = true;
+        newOrder.push_back(node);
+
+        for (TEdge edge : AdjacencyList_[node]) {
+            self(self, edge.Target);
+        }
+    };
+
+    for (unsigned i = 0; i < GetN(); i++) {
+        searchDepthFirst(searchDepthFirst, i);
+    }
+
+    std::vector<int> oldToNew(GetN());
+    for (unsigned i = 0; i < GetN(); i++) {
+        oldToNew[newOrder[i]] = i;
+    }
+
+    Rename(oldToNew);
+    Schema_.Rename(oldToNew);
+}
+
+void TRelationGraph::Rename(const std::vector<int> &oldToNew) {
+    TAdjacencyList newGraph(GetN());
+    for (unsigned u = 0; u < GetN(); ++ u) {
+        for (TEdge edge : AdjacencyList_[u]) {
+            unsigned v = edge.Target;
+
+            edge.Target = oldToNew[v];
+            newGraph[oldToNew[u]].push_back(edge);
+        }
+    }
+
+    AdjacencyList_ = newGraph;
 }
 
 

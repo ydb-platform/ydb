@@ -1,4 +1,4 @@
-#! /usr/bin/python3
+#! /usr/bin/python3 -u
 
 # Compares build graphs for two given refs in the current directory git repo
 # Creates ya.make in the current directory listing affected ydb targets
@@ -8,7 +8,6 @@ import os
 import tempfile
 import sys
 import json
-import datetime
 
 
 def exec(command: str):
@@ -19,7 +18,7 @@ def exec(command: str):
 
 
 def log(msg: str):
-    print(f'{datetime.datetime.now().time().isoformat("seconds")} {msg}\n')
+    print(f'{msg}\n')
 
 
 def do_compare():
@@ -94,5 +93,5 @@ def do_compare():
     exit(0)
 
 
-if __name__ == 'main':
+if __name__ == '__main__':
     do_compare()

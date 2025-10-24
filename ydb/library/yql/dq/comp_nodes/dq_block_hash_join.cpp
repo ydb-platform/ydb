@@ -28,66 +28,6 @@ struct TDqBlockJoinMetadata {
     TDqJoinImplRenames Renames;
 };
 
-class TBlockRowSource : public NNonCopyable::TMoveOnly {
-  public:
-    TBlockRowSource(TComputationContext& ctx, IComputationNode* stream, const std::vector<TType*>& types)
-        : Stream_(stream)
-        , Values_(Stream_->GetValue(ctx))
-        , Buff_(types.size())
-    {
-        TTypeInfoHelper typeInfoHelper;
-        for (int index = 0; index < std::ssize(InputReaders); ++index) {
-            InputReaders[index] = NYql::NUdf::MakeBlockReader(typeInfoHelper, types[index]);
-            InputItemConverters[index] =
-                MakeBlockItemConverter(typeInfoHelper, types[index], ctx.Builder->GetPgBuilder());
-        }
-    }
-
-    bool Finished() const {
-        return Finished_;
-    }
-
-    int UserDataSize() const {
-        return Buff_.size() - 1;
-    }
-
-    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, std::invocable<NJoinTable::TTuple> auto consume) {
-        auto res = Values_.WideFetch(Buff_.data(), Buff_.size());
-        if (res != NYql::NUdf::EFetchStatus::Ok) {
-            if (res == NYql::NUdf::EFetchStatus::Finish) {
-                Finished_ = true;
-            }
-            return res;
-        }
-        const int cols = UserDataSize();
-
-        for (int index = 0; index < cols; ++index) {
-            Blocks_[index] = &TArrowBlock::From(Buff_[index]).GetDatum();
-        }
-
-        const int rows = ArrowScalarAsInt(TArrowBlock::From(Buff_.back()));
-
-        for (int rowIndex = 0; rowIndex < rows; ++rowIndex) {
-            for (int colIndex = 0; colIndex < cols; ++colIndex) {
-                ConsumeBuff_[colIndex] = InputItemConverters[colIndex]->MakeValue(
-                    InputReaders[colIndex]->GetItem(*Blocks_[colIndex]->array(), rowIndex), ctx.HolderFactory);
-            }
-            consume(ConsumeBuff_.data());
-        }
-        return NYql::NUdf::EFetchStatus::Ok;
-    }
-
-  private:
-    bool Finished_ = false;
-    IComputationNode* Stream_;
-    NYql::NUdf::TUnboxedValue Values_;
-    TUnboxedValueVector Buff_;
-    TUnboxedValueVector ConsumeBuff_{Buff_.size() - 1};
-    std::vector<const arrow::Datum*> Blocks_{Buff_.size() - 1};
-    std::vector<std::unique_ptr<IBlockReader>> InputReaders{Buff_.size() - 1};
-    std::vector<std::unique_ptr<IBlockItemConverter>> InputItemConverters{Buff_.size() - 1};
-};
-
 class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
   public:
     TBlockPackedTupleSource(TComputationContext& ctx, TSides<IComputationNode*> stream,

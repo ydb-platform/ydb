@@ -1272,14 +1272,14 @@ namespace NKikimr::NHttpProxy {
                     HttpContext.RequestBodyToProto(&Request);
                     auto queueUrl = QueueUrlExtractor(Request);
                     if (!queueUrl.empty()) {
-                        // XXX
-                        auto cloudIdAndResourceId = NKikimr::NSqsTopic::CloudIdAndResourceIdFromQueueUrl(queueUrl);
-                        if (cloudIdAndResourceId.first.empty()) {
-                            return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Invalid queue url");
+                        const auto parsedQueueUrl = NKikimr::NSqsTopic::ParseQueueUrl(queueUrl);
+                        if (!parsedQueueUrl.has_value()) {
+                            return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, parsedQueueUrl.error());
                         }
-                        CloudId = cloudIdAndResourceId.first;
-                        HttpContext.ResourceId = ResourceId = cloudIdAndResourceId.second;
-                        HttpContext.ResponseData.YmqIsFifo = AsciiHasSuffixIgnoreCase(queueUrl, ".fifo");
+                        const auto& parsedQueueUrlValue = parsedQueueUrl.value();
+                        CloudId = parsedQueueUrlValue.Database;
+                        HttpContext.ResourceId = ResourceId = parsedQueueUrlValue.TopicPath;
+                        HttpContext.ResponseData.YmqIsFifo = parsedQueueUrlValue.Fifo;
                     }
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;

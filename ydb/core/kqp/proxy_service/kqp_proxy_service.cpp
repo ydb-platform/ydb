@@ -1781,7 +1781,7 @@ private:
 
     void InitCheckpointStorage() {
         const auto& streamingQueries = QueryServiceConfig.GetStreamingQueries();
-        if (!streamingQueries.HasExternalStorage() || !FederatedQuerySetup) {
+        if (!FederatedQuerySetup || !AppData()->FeatureFlags.GetEnableStreamingQueries()) {
             return;
         }
 

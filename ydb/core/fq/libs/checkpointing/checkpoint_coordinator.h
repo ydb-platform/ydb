@@ -24,7 +24,7 @@ class TCheckpointCoordinatorSettings {
 public:
     inline static TDuration DefaultCheckpointingPeriod = TDuration::Seconds(30);
 
-    TCheckpointCoordinatorSettings() = default;
+    TCheckpointCoordinatorSettings();
     TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config);
 
 private:

@@ -157,6 +157,8 @@ protected:
 
     TString LogPrefix() const;
 
+    STFUNC(StateFunc);
+
 private:
     // Methods for implementing in derived classes.
     virtual void OnRunQuery() = 0;
@@ -180,8 +182,6 @@ private:
             actorSystem->Send(selfId, new TEvent(std::move(result)));
         };
     }
-
-    STFUNC(StateFunc);
 
     void RunCreateSession() const;
     void Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev);

@@ -10,30 +10,29 @@ if [[ -z "$YA_MAKE_COMMAND" ]]; then
     exit 1
 fi
 
-workdir=$(mktemp -d)
+if [[ -z "$workdir" ]]; then
+    workdir=$(mktemp -d)
+fi
+
 echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0 | jq '.graph[]' > $workdir/graph_base
+$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0 > $workdir/graph_base.json
 
 echo Checkout head commit...
 git checkout $2
 echo Build graph for head commit...
-$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0  | jq '.graph[]' > $workdir/graph_head
+$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0 > $workdir/graph_head.json
 
-echo Generate lists of uids for base and head...
-cat $workdir/graph_base | jq '.uid' > $workdir/uid_base
-cat $workdir/graph_head | jq '.uid' > $workdir/uid_head
-
-echo Create a list of changed uids in the head graph...
-(cat $workdir/uid_head;(cat $workdir/uid_base;cat $workdir/uid_head) | sort | uniq -u) | sort | uniq -d > $workdir/uids_new
+echo Generate diff graph
+./ya tool ygdiff --old $workdir/graph_base.json --new $workdir/graph_head.json --cut $workdir/graph_diff.json
 
 echo Create ya.make
 echo "" > ya.make
 
-echo Generate list of test shard names from the head graph based on the list of uids...
-cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."node-type"=="test") | select( any( .uid; .==$uids[] )) | .kv.path' | sort | uniq > $workdir/testsuites
+echo Generate list of test shard names from the diff graph
+cat $workdir/graph_diff.json | jq -r '.graph[] | select( ."node-type"=="test" and ."kv"."path" != null ) | .kv.path' | sort | uniq > $workdir/testsuites
 
 echo Number of test suites:
 cat $workdir/testsuites | wc -l
@@ -44,20 +43,14 @@ sed -E 's/\/[^/]*$//g;/^null$/d' $workdir/testsuites > $workdir/ts2
 echo Append into ya.make RECURSE_FOR_TESTS to all required tests...
 cat $workdir/ts2 | (echo 'RECURSE_FOR_TESTS(';cat;echo ')') >> ya.make
 
-echo Generate list of module names from the head graph based on the list of uids...
-cat $workdir/graph_head | jq -r --slurpfile uids $workdir/uids_new 'select( ."target_properties"."module_type" != null) | select( ( ."target_properties"."module_tag" // "-" | strings | contains("proto") ) | not ) | select( any( .uid; .==$uids[] )) | .target_properties.module_dir' | sort | uniq > $workdir/modules
+echo Generate list of module names from the diff graph
+cat $workdir/graph_diff.json | jq -r '.graph[].target_properties | select( ."module_type" != null and  (."module_dir" | startswith("ydb")) and ( ."module_tag" // "-" | strings | contains("proto") | not )) | .module_dir' | sort | uniq > $workdir/modules
 
 echo Number of modules:
 cat $workdir/modules | wc -l
 
-echo Filter only modules in ydb
-cat $workdir/modules | { grep "^ydb" || true; } > $workdir/modules2
-
-echo Number of modules:
-cat $workdir/modules2 | wc -l
-
 echo Append into ya.make RECURSE to all required modules...
-cat $workdir/modules2 | (echo 'RECURSE(';cat;echo ')') >> ya.make
+cat $workdir/modules | (echo 'RECURSE(';cat;echo ')') >> ya.make
 
 echo "ya.make content:"
 cat ya.make

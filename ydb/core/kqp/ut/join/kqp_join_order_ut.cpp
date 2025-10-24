@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/kqp_benches.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
@@ -618,15 +619,17 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
-    TString ExplainQuery(NYdb::NQuery::TSession session, const std::string &query) {
+    std::optional<TString> ExplainQuery(NYdb::NQuery::TSession session, const std::string &query) {
         auto explainRes = session.ExecuteQuery(query,
           NYdb::NQuery::TTxControl::NoTx(),
           NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
         ).ExtractValueSync();
 
-        Cout << query << "\n";
+        if (explainRes.GetStatus() == EStatus::TIMEOUT) {
+            return std::nullopt;
+        }
+
         explainRes.GetIssues().PrintTo(Cout);
-        Cout << "Status: " << explainRes.IsSuccess() << "\n";
         UNIT_ASSERT_VALUES_EQUAL(explainRes.GetStatus(), EStatus::SUCCESS);
 
         return *explainRes.GetStats()->GetPlan();
@@ -635,9 +638,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     std::vector<NYdb::TResultSet> ExecuteQuery(NYdb::NQuery::TSession session, std::string query) {
         auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
-        Cout << query << "\n";
         execRes.GetIssues().PrintTo(Cout);
-        Cout << "Status: " << execRes.IsSuccess() << "\n";
         UNIT_ASSERT(execRes.IsSuccess());
 
         return execRes.GetResultSets();
@@ -664,96 +665,121 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         return queryWithShuffleElimination;
     }
 
-    struct TShuffleEliminationBenchResult {
-        unsigned TimeWithShuffleEliminationNanos = 0;
-        unsigned TimeWithoutShuffleEliminationNanos = 0;
-    };
+    std::optional<TStatistics<ui64>> BenchmarkExplain(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
+        std::optional<TString> savedPlan = std::nullopt;
+        auto stats = Benchmark(config, [&]() -> bool {
+            auto plan = ExplainQuery(session, query);
+            if (!savedPlan) {
+                savedPlan = plan;
+            }
 
-    TShuffleEliminationBenchResult BenchmarkShuffleElimination(NYdb::NQuery::TSession session, const TString& query) {
-        namespace Nsc = std::chrono;
-        using TClock = Nsc::high_resolution_clock;
+            return !!plan;
+        });
 
-        TString queryWithoutCBO = ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/1);
-        unsigned nanosWithoutCBO = 0;
-        {
-            std::chrono::time_point start = TClock::now();
-            ExplainQuery(session, queryWithoutCBO);
-            nanosWithoutCBO = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
-            Cout << "Nanoseconds for query without CBO: " << nanosWithoutCBO << "\n";
+        if (!stats) {
+            Cout << "-------------------------------- TIMED OUT -------------------------------\n";
+            return std::nullopt;
         }
 
-        TString queryWithShuffleElimination = ConfigureQuery(query, /*enableShuffleElimination=*/true);
-        TString planWithShuffleElimnation;
-        unsigned nanosWith = 0;
-        {
+        assert(savedPlan);
+        JustPrintPlan(*savedPlan);
+        Cout << "--------------------------------------------------------------------------\n";
 
-            std::chrono::time_point start = TClock::now();
-            planWithShuffleElimnation = ExplainQuery(session, queryWithShuffleElimination);
-            nanosWith = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
-            Cout << "Nanoseconds for CBO with shuffle elimination: " << nanosWith - nanosWithoutCBO << "\n";
-        }
+        stats->Dump(Cout);
 
-        TString queryWithoutShuffleElimination = ConfigureQuery(query, /*enableShuffleElimination=*/false);
-        TString planWithoutShuffleElimnation;
-        unsigned nanosWithout = 0;
-        {
-            std::chrono::time_point start = TClock::now();
-            planWithoutShuffleElimnation = ExplainQuery(session, queryWithoutShuffleElimination);
-            nanosWithout = Nsc::duration_cast<Nsc::nanoseconds>(TClock::now() - start).count();
-            Cout << "Nanoseconds for CBO without shuffle elimination: " << nanosWithout - nanosWithoutCBO << "\n";
-        }
-
-        JustPrintPlan(planWithShuffleElimnation);
-        JustPrintPlan(planWithoutShuffleElimnation);
-
-        return { nanosWith, nanosWithout };
+        return stats;
     }
 
-    struct TTopologyShuffleEliminationResult {
-        double NewColumnProbability = 0.0;
-        int NumTables = 0;
-        TShuffleEliminationBenchResult Bench = {};
 
-        void Dump(IOutputStream &OS) const {
-            OS << NewColumnProbability << " " << NumTables << " "
-               << Bench.TimeWithShuffleEliminationNanos << " "
-               << Bench.TimeWithoutShuffleEliminationNanos << "\n";
-        }
-    };
+    std::optional<TStatistics<ui64>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
+        Cout << "--------------------------------- W/O CBO --------------------------------\n";
+        BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/1));
+        Cout << "--------------------------------- CBO-SE ---------------------------------\n";
+        BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
+        Cout << "--------------------------------- CBO+SE ---------------------------------\n";
+        auto result = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+        Cout << "--------------------------------------------------------------------------\n";
+
+        return result;
+    }
+
+    TKikimrRunner GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
+        TVector<NKikimrKqp::TKqpSetting> settings;
+
+        assert(!stats.empty());
+
+        NKikimrKqp::TKqpSetting setting;
+        setting.SetName("OptOverrideStatistics");
+        setting.SetValue(stats);
+        settings.push_back(setting);
+
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);
+        appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
+        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(compilationTimeout.MilliSeconds());
+
+        TKikimrSettings serverSettings(appConfig);
+        serverSettings.SetKqpSettings(settings);
+
+        return TKikimrRunner(serverSettings);
+    }
 
     template <auto Lambda>
     void BenchmarkShuffleEliminationOnTopology(int maxNumTables, double probabilityStep, unsigned seed = 0) {
+        auto config = TBenchmarkConfig {
+            .Warmup = {
+                .MinRepeats = 1,
+                .MaxRepeats = 3,
+                .Timeout = 100'000'000,
+            },
+
+            .Bench = {
+                .MinRepeats = 5,
+                .MaxRepeats = 100,
+                .Timeout = 10'000'000'000,
+            },
+        };
+
         std::mt19937 mt(seed);
 
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(maxNumTables);
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
 
-        auto kikimr = GetKikimrWithJoinSettings(/*useStreamLookupJoin=*/false, /*stats=*/stats, /*useCBO=*/true, TExecuteParams{});
+        auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(3));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        std::vector<TTopologyShuffleEliminationResult> data;
-        int totalCount = 0;
-        for (double probability = 0; probability <= 1.0; probability += probabilityStep) {
-            for (int i = 2 /* one table is not possible with all topoloties, so 2 */; i < maxNumTables; i ++) {
-                TRelationGraph graph = Lambda(mt, i, 0.5);
+        for (int i = 2 /* one table is not possible with all topoloties, so 2 */; i < maxNumTables; i ++) {
+            for (double probability = 0; probability <= 1.0; probability += probabilityStep) {
+                TRelationGraph graph = Lambda(mt, i, probability);
 
-                ExecuteQuery(session, graph.GetSchema().MakeCreateQuery());
+                Cout << "\n\n";
+                Cout << "================================= CREATE =================================\n";
+                graph.DumpGraph(Cout);
 
-                auto resultTime = BenchmarkShuffleElimination(session, graph.MakeQuery());
-                data.push_back({probability, i, resultTime});
+                Cout << "================================= REORDER ================================\n";
+                graph.ReorderDFS();
+                graph.DumpGraph(Cout);
 
-                Cout << "totalCount: " << ++ totalCount << "\n";
-                Cout << "result: ";
-                data.back().Dump(Cout);
+                Cout << "================================= PREPARE ================================\n";
+                auto creationQuery = graph.GetSchema().MakeCreateQuery();
+                Cout << creationQuery;
+                ExecuteQuery(session, creationQuery);
 
-                ExecuteQuery(session, graph.GetSchema().MakeDropQuery());
+                Cout << "================================= BENCHMARK ==============================\n";
+                TString query = graph.MakeQuery();
+                Cout << query;
+                auto resultTime = BenchmarkShuffleElimination(config, session, query);
+
+                Cout << "================================= FINALIZE ===============================\n";
+                auto deletionQuery = graph.GetSchema().MakeDropQuery();
+                Cout << deletionQuery;
+                ExecuteQuery(session, deletionQuery);
+                Cout << "==========================================================================\n";
+                if (!resultTime) {
+                    continue;
+                }
             }
-        }
-
-        // Printing a report of all measurements
-        for (const auto &result: data) {
-            result.Dump(Cout);
         }
     }
 
@@ -1020,7 +1046,61 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
-        BenchmarkShuffleEliminationOnTopology<GenerateRandomTree>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+        BenchmarkShuffleEliminationOnTopology<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
+    }
+
+    Y_UNIT_TEST(TRunningStatistics) {
+        TRunningStatistics<ui64> stats;
+
+        stats.AddValue(1);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), 1);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 1 / 1.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 1);
+
+        stats.AddValue(1);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), (1 + 1) / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 2 / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 2);
+
+        stats.AddValue(1);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), 1);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 3 / 3.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 3);
+
+        stats.AddValue(1);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), (1 + 1) / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 4 / 4.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 4);
+
+        stats.AddValue(3);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), 1);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 7 / 5.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 5);
+
+        stats.AddValue(5);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), (1 + 1) / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 12 / 6.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 6);
+
+        stats.AddValue(7);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), 1);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 19 / 7.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 7);
+
+        stats.AddValue(7);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), (1 + 3) / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 26 / 8.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 8);
+
+        stats.AddValue(8);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), 3);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 34 / 9.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 9);
+
+        stats.AddValue(100);
+        UNIT_ASSERT_EQUAL(stats.GetMedian(), (3 + 5) / 2.0);
+        UNIT_ASSERT_EQUAL(stats.GetMean(), 134 / 10.0);
+        UNIT_ASSERT_EQUAL(stats.GetN(), 10);
     }
 
     Y_UNIT_TEST_TWIN(ShuffleEliminationOneJoin, EnableSeparationComputeActorsFromRead) {

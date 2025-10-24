@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import argparse
-import configparser
 import datetime
 import os
 import re
@@ -21,18 +20,16 @@ from update_mute_issues import (
     close_unmuted_issues,
 )
 
+# Add analytics directory to path for ydb_wrapper import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from ydb_wrapper import YDBWrapper
+
 # Configure logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
-config.read(config_file_path)
-
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 # Константы для временных окон mute-логики
 MUTE_DAYS = 4
@@ -139,36 +136,24 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     logging.info(f"SQL Query:\n{query_string}")
     
     try:
-        with ydb.Driver(
-            endpoint=DATABASE_ENDPOINT,
-            database=DATABASE_PATH,
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            driver.wait(timeout=10, fail_fast=True)
-            logging.info("Successfully connected to YDB")
-            
-            query = ydb.ScanQuery(query_string, {})
-            table_client = ydb.TableClient(driver, ydb.TableClientSettings())
-            it = table_client.scan_query(query)
-            results = []
-            
-            logging.info("Starting to fetch results...")
-            row_count = 0
-            while True:
-                try:
-                    result = next(it)
-                    batch_results = result.result_set.rows
-                    results.extend(batch_results)
-                    row_count += len(batch_results)
-                    logging.debug(f"Fetched batch of {len(batch_results)} rows, total: {row_count}")
-                except StopIteration:
-                    break
-            
-            query_end_time = datetime.datetime.now()
-            query_duration = query_end_time - query_start_time
-            logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
-            logging.info(f"Query execution time: {query_duration.total_seconds():.2f} seconds")
-            return results
+        # Initialize YDB wrapper
+        ydb_wrapper = YDBWrapper()
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return []
+        
+        logging.info("Successfully connected to YDB")
+        
+        logging.info("Starting to fetch results...")
+        results = ydb_wrapper.execute_scan_query(query_string, script_name)
+        
+        query_end_time = datetime.datetime.now()
+        query_duration = query_end_time - query_start_time
+        logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
+        logging.info(f"Query execution time: {query_duration.total_seconds():.2f} seconds")
+        return results
         
     except Exception as e:
         query_end_time = datetime.datetime.now()
@@ -852,17 +837,13 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
-
-    # Simplified Connection
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
+    # Initialize YDB wrapper
+    ydb_wrapper = YDBWrapper()
+    script_name = os.path.basename(__file__)
+    
+    # Check credentials
+    if not ydb_wrapper.check_credentials():
         return 1
-    else:
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
 
     logging.info(f"Starting mute worker with mode: {args.mode}")
     logging.info(f"Branch: {args.branch}")

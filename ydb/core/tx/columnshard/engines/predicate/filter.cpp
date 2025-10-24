@@ -230,7 +230,6 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
     const ui32 leftPrefix = addRow(range.From.GetCells());
     const ui32 rightPrefix = addRow(range.To.GetCells());
     AFL_VERIFY(BatchBuilder.Rows());
-    AFL_VERIFY(BatchBuilder.Bytes());
     AFL_VERIFY(leftPrefix <= YdbPK.size());
     AFL_VERIFY(rightPrefix <= YdbPK.size());
 

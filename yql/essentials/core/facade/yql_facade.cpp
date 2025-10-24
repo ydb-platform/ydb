@@ -1866,10 +1866,17 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CalculateLineage");
+        writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
-            writer.OnKeyedItem("Correct");
-            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnEndMap();
+    }
+    if (TypeCtx_->CorrectStandaloneLineage) {
+        writer.OnKeyedItem("CorrectStandaloneLineage");
+        writer.OnBeginMap();
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
         writer.OnEndMap();
     }
 

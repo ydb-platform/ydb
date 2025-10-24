@@ -741,7 +741,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -784,7 +785,8 @@
             vector_type="Float",
             vector_dimension={dimension},
             levels={levels},
-            clusters={clusters}
+            clusters={clusters},
+            overlap_clusters=3
         );
         """
 
@@ -827,7 +829,8 @@
                 vector_type="Float",
                 vector_dimension={3},
                 levels={4},
-                clusters={5}
+                clusters={5},
+                overlap_clusters=3
             );
         )", tableName, indexName, strategy, dim, levels, clusters);
 
@@ -991,12 +994,14 @@
         strategy: str = "CosineSimilarity",
         limit: int = 1,
         index_name: str | None = None,
+        top_clusters: int = 10,
     ) -> list[dict]:
         view_index = f"VIEW {index_name}" if index_name else ""
 
         sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
         query = f"""
+        PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
         DECLARE $embedding as String;
 
         SELECT
@@ -1042,12 +1047,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as String;
             SELECT
                 id,
@@ -1056,7 +1063,7 @@
             FROM {0} {1}
             ORDER BY score {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         auto params = NYdb::TParamsBuilder()
             .AddParam("$embedding")
@@ -1289,12 +1296,14 @@
         strategy: str = "CosineSimilarity",
         limit: int = 1,
         index_name: str | None = None,
+        top_clusters: int = 10,
     ) -> list[dict]:
         view_index = f"VIEW {index_name}" if index_name else ""
 
         sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
         query = f"""
+        PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
         DECLARE $embedding as List<Float>;
 
         $target_embedding = Knn::ToBinaryStringFloat($embedding);
@@ -1340,12 +1349,14 @@
         const std::vector<float>& embedding,
         const std::string& strategy,
         std::uint64_t limit,
-        const std::optional<std::string>& indexName)
+        std::uint64_t topClusters = 10,
+        const std::optional<std::string>& indexName = std::nullopt)
     {
         std::string viewIndex = indexName ? "VIEW " + *indexName : "";
         std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
 
         std::string query = std::format(R"(
+            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
             DECLARE $embedding as List<Float>;
 
             $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
@@ -1358,7 +1369,7 @@
             ORDER BY score
             {3}
             LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit);
+        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
 
         NYdb::TParamsBuilder paramsBuilder;
         auto& valueBuilder = paramsBuilder.AddParam("$embedding");
@@ -1558,6 +1569,7 @@
             embedding=[1, 0, 0],
             strategy="CosineSimilarity",
             limit=3,
+            top_clusters=10,
         )
         print_results(items)
 
@@ -1579,6 +1591,7 @@
             index_name=index_name,
             strategy="CosineSimilarity",
             limit=3,
+            top_clusters=10,
         )
         print_results(items)
 
@@ -1657,7 +1670,7 @@
             InsertItemsAsBytes(client, tableName, items);
             PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
-            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, indexName));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
         } catch (const std::exception& e) {
             std::cerr << "Execution failed: " << e.what() << std::endl;
         }

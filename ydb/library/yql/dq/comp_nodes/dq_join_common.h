@@ -232,11 +232,11 @@ template <typename Source> class TJoinPackedTuples {
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
 
-    TJoinPackedTuples(Source build, Source probe, NUdf::TLoggerPtr logger, TString componentName,
+    TJoinPackedTuples(TSides<Source> sources, NUdf::TLoggerPtr logger, TString componentName,
                       TSides<const NPackedTuple::TTupleLayout*> layouts)
         : Logger_(logger)
         , LogComponent_(logger->RegisterComponent(componentName))
-        , Sources_({.Build = std::move(build), .Probe = std::move(probe)})
+        , Sources_(std::move(sources))
         , Layouts_(layouts)
         , Table_(Layouts_.Build)
     {}
@@ -259,9 +259,9 @@ template <typename Source> class TJoinPackedTuples {
         int tupleSize = Layouts_.Build->TotalRowSize;
         for (const IBlockLayoutConverter::TPackResult& tupleBatch : tuples) {
             Layouts_.Build->Concat(flattened.PackedTuples, flattened.Overflow,
-                                   std::ssize(flattened.PackedTuples) / tupleSize,
-                                   tupleBatch.PackedTuples.data(), tupleBatch.Overflow.data(),
-                                   tupleBatch.PackedTuples.size() / tupleSize, tupleBatch.Overflow.size());
+                                   std::ssize(flattened.PackedTuples) / tupleSize, tupleBatch.PackedTuples.data(),
+                                   tupleBatch.Overflow.data(), tupleBatch.PackedTuples.size() / tupleSize,
+                                   tupleBatch.Overflow.size());
         }
         return flattened;
     }

@@ -43,11 +43,9 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return Finished_;
     }
 
-
     int UserDataCols() const {
         return Buff_.size() - 1;
     }
-
 
     FetchResult<IBlockLayoutConverter::TPackResult> FetchRow() {
         if (Finished()) {
@@ -141,7 +139,7 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
         };
         fillSide(ESide::Build);
         fillSide(ESide::Probe);
-        
+
         Output_.NItems = 0;
         return out;
     }
@@ -191,9 +189,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             : TBase(memInfo)
             , Meta_(meta)
             , Converters_(std::move(converters))
-            , Join_(TBlockPackedTupleSource{ctx, streams, meta, Converters_, ESide::Build},
-                    TBlockPackedTupleSource{ctx, streams, meta, Converters_, ESide::Probe}, ctx.MakeLogger(),
-                    "BlockHashJoin",
+            , Join_(TSides<TBlockPackedTupleSource>{.Build = {ctx, streams, meta, Converters_, ESide::Build},
+                                                    .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
+                    ctx.MakeLogger(), "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()})
             , Ctx_(&ctx)
@@ -210,7 +208,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
-            return NYql::NUdf::EFetchStatus::Ok;    
+            return NYql::NUdf::EFetchStatus::Ok;
         }
 
       private:

@@ -294,6 +294,7 @@ namespace NActors {
                     }
                     needToCheckSleep = true;
                     CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
+                    break;
                 }
 
                 if (!needToCheckSleep) {

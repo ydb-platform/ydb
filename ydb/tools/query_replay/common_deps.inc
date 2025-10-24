@@ -44,7 +44,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/library/actors/core
     ydb/library/actors/interconnect
     ydb/library/grpc/server
-    ydb/library/yql/dq/comp_nodes/llvm16
+    ydb/library/yql/dq/comp_nodes/llvm20
     ydb/library/yql/udfs/common/clickhouse/client
     ydb/public/api/protos
     ydb/public/lib/base
@@ -60,7 +60,7 @@ SET(YDB_REPLAY_PEERDIRS
     ydb/services/rate_limiter
     ydb/services/ydb
     yql/essentials/core/services/mounts
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
     yql/essentials/udfs/common/datetime2
@@ -81,6 +81,6 @@ SET(YDB_REPLAY_PEERDIRS
     yql/essentials/udfs/common/yson2
     yql/essentials/udfs/logs/dsv
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
-    yt/yql/providers/yt/comp_nodes/llvm16
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
+    yt/yql/providers/yt/comp_nodes/llvm20
 )

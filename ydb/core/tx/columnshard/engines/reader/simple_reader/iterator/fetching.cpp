@@ -32,33 +32,8 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     source->AddTxConflict();
     return true;
 
-    // If we have only conflicting portions
 
     
-    auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
-                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
-                               source->GetContext()->GetCommonContext()->GetResolver()),
-            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
-    if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
-        if (source->AddTxConflict()) {
-            return true;
-        }
-    }
-    
-    AFL_VERIFY(false)("fuck me", "we must not get here")("info", portionSource->GetPortionInfo().DebugString())("conflicting", status.Conflicting)("committed", status.Committed)("read snapshot", source->GetContext()->GetReadMetadata()->GetRequestSnapshot().DebugString());
-    // source->MutableStageData().Clear();
-    // source->MutableStageData().Abort();
-    // return true;
-    // total deny is 0
-    // cast to TPortionDataSource
-    // auto* portionSource = static_cast<TPortionDataSource*>(source.get());
-    // auto state = portionSource->GetContext()->GetPortionStateAtScanStart(portionSource->GetPortionInfo());
-    // auto count = filter.GetFilteredCount().value_or(0);
-    // // we must not have here a single row
-    // AFL_VERIFY(count == 0)("count", count)("source.record_count", source->GetRecordsCount())("filter", filter.DebugString())("portion", portionSource->GetPortionInfo().DebugString())("request_snapshot", source->GetContext()->GetReadMetadata()->GetRequestSnapshot().DebugString())("state.conflicting", ToString(state.Conflicting))("state.committed", ToString(state.Committed));
-    source->MutableStageData().AddFilter(filter);
-    return true;
 }
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(

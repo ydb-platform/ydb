@@ -45,7 +45,7 @@ class WorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "yaml-config",
             ""))  # Путь к yaml конфигурации
-    _ignore_stderr_content: bool = False 
+    _ignore_stderr_content: bool = False
 
     @classmethod
     def get_workload_name(cls) -> str:
@@ -2011,7 +2011,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         )
                     if self._ignore_stderr_content:
                         success = not is_timeout
-                    else: 
+                    else:
                         # success=True только если stderr пустой (исключая SSH
                         # warnings) И нет timeout
                         success = not bool(stderr.strip()) and not is_timeout

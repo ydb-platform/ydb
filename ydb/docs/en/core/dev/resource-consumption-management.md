@@ -1,6 +1,6 @@
 # Workload Manager — recource consumption management
 
-[Resource pools]( ../concepts/glossary.md#) allow you to isolate [database]( ../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (requesting more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
+[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (requesting more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
 
 For example, one typical resource isolation scenario is to separate two classes of consumers (customer/client/user):
 

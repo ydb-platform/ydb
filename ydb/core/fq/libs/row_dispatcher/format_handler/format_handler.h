@@ -20,7 +20,7 @@ public:
     virtual bool IsStarted() const = 0;
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
     virtual const TString& GetWatermarkExpr() const = 0;
-    virtual const TString& GetWhereFilter() const = 0;
+    virtual const TString& GetFilterExpr() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
     virtual std::optional<ui64> GetNextMessageOffset() const = 0;
@@ -34,7 +34,7 @@ public:
 
 struct TDataBatch {
     TRope SerializedData;
-    TSet<ui64> Offsets;
+    TVector<ui64> Offsets;
     TMaybe<TInstant> Watermark;
 };
 

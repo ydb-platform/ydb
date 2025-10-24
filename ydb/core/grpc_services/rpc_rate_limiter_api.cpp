@@ -621,11 +621,9 @@ public:
 
     void SendRequest() {
         UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
-        const TString database = ""; // to allow access to shared database
-
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(
-                TEvQuota::TResourceLeaf(database,
+                TEvQuota::TResourceLeaf(GetProtoRequest()->database_name(),
                                         GetProtoRequest()->coordination_node_path(),
                                         GetProtoRequest()->resource_path(),
                                         GetProtoRequest()->required()));
@@ -633,7 +631,7 @@ public:
         }
 
         SendLeaf(
-            TEvQuota::TResourceLeaf(database,
+            TEvQuota::TResourceLeaf(GetProtoRequest()->database_name(),
                                     GetProtoRequest()->coordination_node_path(),
                                     GetProtoRequest()->resource_path(),
                                     GetProtoRequest()->used(),

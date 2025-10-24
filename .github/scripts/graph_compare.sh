@@ -5,17 +5,22 @@
 
 set -exo pipefail
 
+if [[ -z "$YA_MAKE_COMMAND" ]]; then
+    echo "YA_MAKE_COMMAND not set"
+    exit 1
+fi
+
 workdir=$(mktemp -d)
 echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_base
+$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0 | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...
 git checkout $2
 echo Build graph for head commit...
-./ya make -Gj0 -ttt ydb --build release -k --cache-tests --build-all | jq '.graph[]' > $workdir/graph_head
+$YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0  | jq '.graph[]' > $workdir/graph_head
 
 echo Generate lists of uids for base and head...
 cat $workdir/graph_base | jq '.uid' > $workdir/uid_base

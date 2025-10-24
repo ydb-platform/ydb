@@ -34,11 +34,6 @@ std::set<std::string> TPKRangeFilter::GetColumnNames() const {
     return result;
 }
 
-NArrow::TColumnFilter TPKRangeFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    auto result = PredicateTo.BuildFilter(data);
-    return result.And(PredicateFrom.BuildFilter(data));
-}
-
 bool TPKRangeFilter::IsUsed(const TPortionInfo& info) const {
     return GetUsageClass(info.IndexKeyStart().BuildSortablePosition(), info.IndexKeyEnd().BuildSortablePosition()) !=
            TPKRangeFilter::EUsageClass::NoUsage;

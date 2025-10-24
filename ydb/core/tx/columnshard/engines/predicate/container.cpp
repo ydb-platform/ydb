@@ -132,36 +132,4 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(std::opti
     }
 }
 
-NArrow::TColumnFilter TPredicateContainer::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    if (!Object) {
-        auto result = NArrow::TColumnFilter::BuildAllowFilter();
-        result.Add(true, data->GetRecordsCount());
-        return result;
-    }
-    if (!data->GetRecordsCount()) {
-        return NArrow::TColumnFilter::BuildAllowFilter();
-    }
-    // TODO: data -> SortableBAtchPosition
-    auto sortingFields = GetColumnNames();
-    auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
-    const bool needUppedBound = GetCompareType() == NArrow::ECompareType::LESS_OR_EQUAL || GetCompareType() == NArrow::ECompareType::GREATER;
-    const auto findBound = position.FindBound(position, 0, data->GetRecordsCount() - 1, Object->Batch, needUppedBound);
-    const ui64 rowsBeforeBound = findBound ? findBound->GetPosition() : data->GetRecordsCount();
-
-    auto filter = NArrow::TColumnFilter::BuildAllowFilter();
-    switch (GetCompareType()) {
-        case NArrow::ECompareType::LESS:
-        case NArrow::ECompareType::LESS_OR_EQUAL:
-            filter.Add(true, rowsBeforeBound);
-            filter.Add(false, data->GetRecordsCount() - rowsBeforeBound);
-            break;
-        case NArrow::ECompareType::GREATER:
-        case NArrow::ECompareType::GREATER_OR_EQUAL:
-            filter.Add(false, rowsBeforeBound);
-            filter.Add(true, data->GetRecordsCount() - rowsBeforeBound);
-            break;
-    }
-    return filter;
-}
-
 }   // namespace NKikimr::NOlap

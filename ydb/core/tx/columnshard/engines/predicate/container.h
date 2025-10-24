@@ -22,14 +22,9 @@ struct TIndexInfo;
 class TPredicateContainer {
 private:
     std::optional<NOlap::TPredicate> Object;
-    // NArrow::ECompareType CompareType;
-    // mutable std::optional<std::vector<TString>> ColumnNames;
-    // NArrow::NMerger::TSortableBatchPosition ReplaceKey;
 
     TPredicateContainer(std::optional<NOlap::TPredicate> object)
         : Object(object)
-    // , CompareType(Object->GetCompareType())
-    // , ReplaceKey(replaceKey)
     {
     }
 
@@ -37,18 +32,6 @@ private:
     }
 
     static std::partial_ordering ComparePredicatesSamePrefix(const NOlap::TPredicate& l, const NOlap::TPredicate& r);
-
-    static NArrow::NMerger::TSortableBatchPosition ExtractKey(const NOlap::TPredicate& predicate, const std::shared_ptr<arrow::Schema>& key) {
-        // TODO: Not implemented (validation)
-        // AFL_VERIFY(predicate.Batch);
-        // const auto& batchFields = predicate.Batch->schema()->fields();
-        // const auto& keyFields = key->fields();
-        // AFL_VERIFY(batchFields.size() <= keyFields.size());
-        // for (size_t i = 0; i < batchFields.size(); ++i) {
-        //     Y_DEBUG_ABORT_UNLESS(batchFields[i]->type()->Equals(*keyFields[i]->type()));
-        // }
-        return predicate.Batch.TrimSortingKeys(key->num_fields());
-    }
 
 public:
     bool IsSchemaEqualTo(const std::shared_ptr<arrow::Schema>& schema) const {
@@ -87,16 +70,6 @@ public:
         return !Object;
     }
 
-    // template <class TArrayColumn>
-    // std::optional<typename TArrayColumn::value_type> Get(
-    //     const ui32 colIndex, const ui32 rowIndex, const std::optional<typename TArrayColumn::value_type> defaultValue = {}) const {
-    //     if (!Object) {
-    //         return defaultValue;
-    //     } else {
-    //         return Object->Get<TArrayColumn>(colIndex, rowIndex, defaultValue);
-    //     }
-    // }
-
     TString DebugString() const;
 
     int MatchScalar(const ui32 columnIdx, const std::shared_ptr<arrow::Scalar>& s) const;
@@ -123,14 +96,30 @@ public:
         return TPredicateContainer();
     }
 
-    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
+    std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> FindFirstIncluded(
+        NArrow::NMerger::TRWSortableBatchPosition& begin) const {
+        AFL_VERIFY(IsForwardInterval());
+        AFL_VERIFY(begin.GetRecordsCount());
 
-    size_t GetMemorySize() const {
-        size_t res = sizeof(TPredicateContainer);
-        res += Object ? sizeof(NOlap::TPredicate) : 0;
-        // res += ReplaceKey ? ReplaceKey->GetMemorySize() : 0;
-        // Column names are cached, may be changed
-        return res;
+        if (!Object) {
+            return NArrow::NMerger::TSortableBatchPosition::TFoundPosition(begin.GetPosition(), std::partial_ordering::equivalent);
+        }
+
+        return NArrow::NMerger::TSortableBatchPosition::FindBound(
+            begin, begin.GetPosition(), begin.GetRecordsCount() - 1, Object->Batch, !Object->IsInclusive());
+    }
+
+    std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> FindFirstExcluded(
+        NArrow::NMerger::TRWSortableBatchPosition& begin) const {
+        AFL_VERIFY(!IsForwardInterval());
+        AFL_VERIFY(begin.GetRecordsCount());
+
+        if (!Object) {
+            return std::nullopt;
+        }
+
+        return NArrow::NMerger::TSortableBatchPosition::FindBound(
+            begin, begin.GetPosition(), begin.GetRecordsCount() - 1, Object->Batch, Object->IsInclusive());
     }
 };
 

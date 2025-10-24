@@ -4,6 +4,8 @@
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 
+#include <ydb/library/formats/arrow/size_calcer.h>
+
 #include <deque>
 
 namespace NKikimr::NOlap {
@@ -11,16 +13,43 @@ namespace NKikimr::NOlap {
 class TPKRangesFilter {
     friend class TRangesBuilder;
 
+    class TMemoryTrackingGuard: TNonCopyable {
+    private:
+        YDB_READONLY_DEF(ui64, Bytes);
+
+    public:
+        TMemoryTrackingGuard(const ui64 mem)
+            : Bytes(mem)
+        {
+            TotalFiltersMemorySize += mem;
+        }
+        ~TMemoryTrackingGuard() {
+            TotalFiltersMemorySize.Sub(Bytes);
+        }
+    };
+
 private:
     bool FakeRanges = true;
     std::deque<TPKRangeFilter> SortedRanges;
     std::shared_ptr<arrow::RecordBatch> Data;
+    TMemoryTrackingGuard MemoryGuard;
 
     [[nodiscard]] TConclusionStatus Add(std::optional<NOlap::TPredicate> f, std::optional<NOlap::TPredicate> t);
-    TPKRangesFilter() = default;
+    TPKRangesFilter()
+        : MemoryGuard(0)
+    {
+    }
     TPKRangesFilter(const std::shared_ptr<arrow::RecordBatch>& data);
 
+    static inline TPositiveControlInteger TotalFiltersMemorySize;
+
 public:
+    TPKRangesFilter(TPKRangesFilter&& other)
+        : Data(other.Data)
+        , MemoryGuard(other.MemoryGuard.GetBytes())
+    {
+    }
+
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
         ui32 result = 0;
         for (auto&& i : SortedRanges) {
@@ -90,6 +119,13 @@ public:
 
     static TConclusion<TPKRangesFilter> BuildFromProto(
         const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk);
+
+    size_t GetMemorySize() const {
+        return NArrow::GetBatchMemorySize(Data);
+    }
+    static size_t GetFiltersTotalMemorySize() {
+        return TotalFiltersMemorySize.Val();
+    }
 };
 
 class ICursorEntity {
@@ -216,7 +252,8 @@ public:
     TSimpleScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk, const ui64 portionId, const ui32 recordIndex)
         : PrimaryKey(pk)
         , SourceId(portionId)
-        , RecordIndex(recordIndex) {
+        , RecordIndex(recordIndex)
+    {
     }
 };
 
@@ -282,7 +319,8 @@ public:
 
     TNotSortedSimpleScanCursor(const ui64 portionId, const ui32 recordIndex)
         : SourceId(portionId)
-        , RecordIndex(recordIndex) {
+        , RecordIndex(recordIndex)
+    {
     }
 };
 
@@ -320,7 +358,8 @@ public:
     TPlainScanCursor() = default;
 
     TPlainScanCursor(const std::shared_ptr<NArrow::TSimpleRow>& pk)
-        : PrimaryKey(pk) {
+        : PrimaryKey(pk)
+    {
         AFL_VERIFY(PrimaryKey);
     }
 };

@@ -895,8 +895,16 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
                 // For fulltext indexes, we need to tokenize the text from the rows being deleted
                 // and then delete the corresponding token rows from the index table
+                auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+                    .Connection<TDqCnUnionAll>()
+                        .Output()
+                            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                            .Index().Build("0")
+                            .Build()
+                        .Build()
+                    .Done();
                 THashSet<TStringBuf> deleteInputColumns(indexTableColumnsWithoutData.begin(), indexTableColumnsWithoutData.end());
-                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, deleteInputColumns,
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, deleteInputColumns,
                     indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
             }
 

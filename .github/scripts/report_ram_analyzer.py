@@ -225,8 +225,6 @@ if __name__ == "__main__":
         thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
         dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'
 
-        artifact_location = 
-
         message = f"""🚨 *Possible OOM*
 During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than max agent RAM *{round(max_agent_ram, 1)}GB*
 Threshold is {args.memory_threshold}%

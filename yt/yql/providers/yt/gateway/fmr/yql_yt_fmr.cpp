@@ -335,6 +335,10 @@ public:
                     SetTablePresenceStatus(fmrOutputTableId, sessionId, ETablePresenceStatus::OnlyInFmr);
                     SetAnonymousTableFmrIdAlias(fmrOutputTableId, inputFmrId, sessionId);
 
+                    TYtTableMetaInfo meta;
+                    meta.DoesExist = true;
+                    SetFmrTableMeta(fmrOutputTableId, meta, sessionId);
+
                     TPublishResult publishResult;
                     publishResult.SetSuccess();
                     return MakeFuture<TPublishResult>(publishResult);
@@ -387,6 +391,87 @@ public:
             return UploadSeveralFmrTablesToYt<TPublishResult, TPublishOptions>(outputTablesByCluster, std::move(options), nodePos);
         }
         return Slave_->Publish(node, ctx, std::move(options));
+    }
+
+    TFuture<TDropTrackablesResult> DropTrackables(TDropTrackablesOptions&& options) override {
+        TMaybe<TFuture<TDropTablesResponse>> fmrFuture;
+        TMaybe<TFuture<TDropTrackablesResult>> ytFuture;
+        TVector<TFuture<void>> allFutures;
+
+        with_lock(Mutex_) {
+            TString sessionId = options.SessionId();
+            std::vector<TString> fmrTableIds;
+            TVector<IYtGateway::TDropTrackablesOptions::TClusterAndPath> ytPaths;
+
+            for (const auto& path : options.Pathes()) {
+                TFmrTableId tableId(path.Cluster, path.Path);
+
+                auto tmpFolder = GetTablesTmpFolder(*options.Config(), path.Cluster);
+                auto transformedTableId = GetTransformedPath(sessionId, path.Path, tmpFolder);
+                auto status = GetTablePresenceStatus(transformedTableId, sessionId);
+
+                if (status == ETablePresenceStatus::OnlyInFmr || status == ETablePresenceStatus::Both) {
+                    fmrTableIds.push_back(tableId.Id);
+                }
+
+                if (status == ETablePresenceStatus::OnlyInYt || status == ETablePresenceStatus::Both) {
+                    ytPaths.push_back(path);
+                }
+            }
+
+            if (!fmrTableIds.empty()) {
+                TDropTablesRequest fmrRequest{
+                    .TableIds = fmrTableIds
+                };
+                fmrFuture = Coordinator_->DropTables(fmrRequest);
+            }
+
+            if (!ytPaths.empty()) {
+                options.Pathes() = std::move(ytPaths);
+                ytFuture = Slave_->DropTrackables(std::move(options));
+            }
+
+            RemoveFmrTablesWithDependents(fmrTableIds, sessionId);
+
+            if (fmrFuture) {
+                allFutures.push_back(fmrFuture->IgnoreResult());
+            }
+            if (ytFuture) {
+                allFutures.push_back(ytFuture->IgnoreResult());
+            }
+        }
+
+        return WaitExceptionOrAll(allFutures).Apply([fmrFuture, ytFuture](const TFuture<void>&) mutable {
+            TDropTrackablesResult finalResult;
+            bool fmrSuccess = true;
+
+            if (fmrFuture) {
+                try {
+                    fmrFuture->GetValue();
+                } catch (...) {
+                    fmrSuccess = false;
+                    FillResultFromCurrentException(finalResult);
+                }
+            }
+
+            bool ytSuccess = true;
+            if (ytFuture) {
+                auto ytResult = ytFuture->GetValue();
+                if (!ytResult.Success()) {
+                    ytSuccess = false;
+                    if (!ytResult.Issues().Empty()) {
+                        YQL_CLOG(ERROR, FastMapReduce) << "YT Slave DropTrackables failed: " << ytResult.Issues().ToString();
+                    }
+                    finalResult.AddIssues(ytResult.Issues());
+                }
+            }
+
+            if (fmrSuccess && ytSuccess) {
+                finalResult.SetSuccess();
+            }
+
+            return MakeFuture<TDropTrackablesResult>(finalResult);
+        });
     }
 
     TFuture<TTableInfoResult> GetTableInfo(TGetTableInfoOptions&& options) final {
@@ -525,6 +610,39 @@ public:
     }
 
 private:
+    void RemoveFmrTablesWithDependents(
+        const std::vector<TString>& tableIdsToRemove,
+        const TString& sessionId)
+    {
+        if (tableIdsToRemove.empty()) {
+            return;
+        }
+
+        auto& fmrTables = Sessions_[sessionId]->FmrTables;
+
+        std::unordered_set<TFmrTableId> anonymousTablesToDelete;
+
+        for (const auto& tableIdStr : tableIdsToRemove) {
+            TFmrTableId tableId(tableIdStr);
+
+            for (auto& [anonTableId, anonTableInfo] : fmrTables) {
+                if (anonTableInfo.AnonymousTableFmrIdAlias && *anonTableInfo.AnonymousTableFmrIdAlias == tableId) {
+                    YQL_CLOG(DEBUG, FastMapReduce)
+                    << "Clearing alias in anonymous table " << anonTableId
+                    << " (was pointing to " << tableId << ")";
+                    anonTableInfo.TableMeta = fmrTables[tableId].TableMeta;
+                    anonTableInfo.TableStats = fmrTables[tableId].TableStats;
+                    anonTableInfo.AnonymousTableFmrIdAlias = Nothing();
+                }
+            }
+        }
+
+        for (const auto& tableIdStr : tableIdsToRemove) {
+            TFmrTableId tableId(tableIdStr);
+            YQL_CLOG(DEBUG, FastMapReduce) << "Removing table " << tableId;
+            fmrTables.erase(tableId);
+        }
+    }
     TString GenerateId() {
         return GetGuidAsString(RandomProvider_->GenGuid());
     }

@@ -1341,6 +1341,7 @@ namespace NKikimr::NBsController {
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+            settings->AddBlobCheckerPeriodicity(static_cast<ui64>(BlobCheckerPeriodicity));
         }
 
         void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,

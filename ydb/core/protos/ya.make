@@ -15,6 +15,7 @@ SRCS(
     backup.proto
     base.proto
     bind_channel_storage_pool.proto
+    blob_checker.proto
     blob_depot.proto
     blob_depot_config.proto
     blobstorage.proto

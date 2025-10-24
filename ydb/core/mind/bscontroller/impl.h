@@ -10,6 +10,8 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
+#include "blob_checker.h"
+#include "blob_checker_planner.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 
@@ -82,6 +84,7 @@ public:
     class TTxCheckUnsynced;
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
+    class TTxBlobCheckerUpdateGroupStatus;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -1573,6 +1576,16 @@ private:
             EvUpdateShredState,
             EvCommitMetrics,
             EvCheckSyncerDisconnectedNodes,
+            
+            // BlobCheckerOrchestrator <-> BSC interface
+            EvBlobCheckerUpdateSettings,
+            EvBlobCheckerUpdateGroupStatus,
+            EvBlobCheckerPlanCheck,
+            EvBlobCheckerDecision,
+            EvBlobCheckerUpdateGroupSet,
+
+            // BlobCheckerWorker <-> BlobCheckerOrchestrator interface
+            EvBlobCheckerFinishQuantum,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1691,8 +1704,13 @@ private:
         return *it->second;
     }
 
+    // returns number of groups, including static groups
+    ui32 TotalGroupCount() const {
+        return GroupLookup.size() + StaticGroups.size();
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // NODE ACCESS
+    // NODE ACCESS AND STATS
 
     TNodeInfo* FindNode(TNodeId id) {
         auto it = Nodes.find(id);
@@ -1916,6 +1934,22 @@ private:
     void IssueInitialGroupContent();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BlobChecker background process
+
+    TDuration BlobCheckerPeriodicity = TDuration::Zero();
+    TActorId BlobCheckerOrchestratorId;
+    TBlobCheckerPlanner BlobCheckerPlanner;
+    TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
+    std::unordered_map<TGroupId, TString> BlobCheckerSerializedGroupStatuses;
+
+    void Handle(const TEvBlobCheckerPlanCheck::TPtr& ev);
+    void Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev);
+    void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev);
+
+    void UpdateBlobCheckerState();
+    void DequeueCheckForGroup(TGroupId groupId);
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
 
     struct TWaitingSelectGroupsItem {
@@ -2077,6 +2111,12 @@ private:
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // BlobChecker
+
+    using TSerializedBlobCheckerGroupState = std::unordered_map<ui32, TString>;
+    TSerializedBlobCheckerGroupStates SerializedBlobCheckerGroupStates;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
@@ -2208,6 +2248,8 @@ public:
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
+            hFunc(TEvPrivate::TEvBlobCheckerPlanCheck, Handle);
+            hFunc(TEvPrivate::TEvBlobCheckerUpdateGroupStatus, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

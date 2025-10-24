@@ -157,6 +157,12 @@ namespace NKikimr::NBsController {
                             Self->TryToRelocateBrokenDisksLocallyFirst = value;
                             db.Table<T>().Key(true).Update<T::TryToRelocateBrokenDisksLocallyFirst>(Self->TryToRelocateBrokenDisksLocallyFirst);
                         }
+                        for (ui64 raw : settings.GetBlobCheckerPeriodicity()) {
+                            TDuration value = static_cast<TDuration>(raw);
+                            db.Table<T>().Key(true).Update<T::BlobCheckerPeriodicity>(value);
+                            Self->Send(Self->SelfId(), new TEvBlobCheckerUpdateSettings(value));
+                            // Self->BlobCheckerPeriodicity is updated in the event handler
+                        }
                         return true;
                     }
 

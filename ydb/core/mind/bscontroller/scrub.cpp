@@ -539,6 +539,7 @@ public:
     std::unordered_map<TPDiskId, TScrubbedEntityInfo<TPredLockedByPDisk>, THash<TPDiskId>> CurrentlyScrubbedDisks;
     std::unordered_map<TGroupId, TScrubbedEntityInfo<TPredLockedByGroup>> CurrentlyScrubbedGroups;
     std::unordered_map<TGroupId, TProhibitInfo> ScrubProhibitedGroups;
+    std::unordered_map<TGroupId, TActorId> Scrubbed;
     std::map<TInstant, TIntrusiveList<TVDiskItem, TPredLockedByTime>> LockedByTime;
     ui64 LastQueueIndex = 0;
     TIntrusiveList<TVDiskItem, TCandidates> Candidates;
@@ -742,7 +743,16 @@ public:
                 working += {&*group->Topology, slot->GetShortVDiskId()};
             }
         }
-        return group->Topology->QuorumChecker->OneStepFromDegradedOrWorse(~working);
+        if (group->Topology->QuorumChecker->OneStepFromDegradedOrWorse(~working)) {
+            // prohibited by DEGRADED logic
+            return false;
+        }
+
+        if (group->IsScanPlanned()) {
+            return true;
+        }
+
+        return true;
     }
 
     void UpdateVDiskState(const TVSlotInfo *slot, TInstant now) {
@@ -782,6 +792,7 @@ TBlobStorageController::TScrubState::~TScrubState()
 void TBlobStorageController::TScrubState::HandleTimer() {
     Impl->OnTimer(TActivationContext::Now());
     TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
+    UpdateBlobCheckerState();
 }
 
 void TBlobStorageController::TScrubState::Clear() {

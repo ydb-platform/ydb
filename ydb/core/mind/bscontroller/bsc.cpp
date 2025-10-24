@@ -1003,6 +1003,9 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
+        fFunc(TEvBlobCheckerPlanCheck, EnqueueIncomingEvent);
+        fFunc(TEvBlobCheckerUpdateGroupStatus, EnqueueIncomingEvent);
+        hFunc(TEvBlobCheckerUpdateSettings, EnqueueIncomingEvent);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -1092,6 +1095,11 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         // timers and different observation (also includes RO transactions in TConfigRequest)
         case TEvPrivate::EvScrub:                                      return 5;
         case TEvPrivate::EvVSlotReadyUpdate:                           return 5;
+
+        // BlobChecker <-> BSC interface, low-priority background activity
+        case TEvPrivate::EvBlobCheckerUpdateGroupState:                return 7;
+        case TEvPrivate::EvBlobCheckerPlanCheck:                       return 7;
+        case TEvPrivate::EvBlobCheckerUpdateSettings:                  return 7;
 
         // external observation and non-latency-bound activities
         case TEvPrivate::EvUpdateSystemViews:                          return 10;

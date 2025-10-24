@@ -45,6 +45,7 @@ public:
             auto pdiskSerial = db.Table<Schema::DriveSerial>().Select();
             auto blobDepotDeleteQueue = db.Table<Schema::BlobDepotDeleteQueue>().Select();
             auto bridgeSyncState = db.Table<Schema::BridgeSyncState>().Select();
+            auto groupStatuses = db.Table<Schema::BlobCheckerGroupStatus>().Select();
             if (!state.IsReady()
                     || !nodes.IsReady()
                     || !disk.IsReady()
@@ -65,7 +66,8 @@ public:
                     || !scrubState.IsReady()
                     || !pdiskSerial.IsReady()
                     || !blobDepotDeleteQueue.IsReady()
-                    || !bridgeSyncState.IsReady()) {
+                    || !bridgeSyncState.IsReady()
+                    || !groupStatuses.IsReady()) {
                 return false;
             }
         }
@@ -546,6 +548,22 @@ public:
             }
         }
 
+        // blob scanner state
+        Self->SerializedBlobCheckerGroupStates.clear();
+        {
+            using Table = Schema::BlobCheckerGroupStatus;
+            auto groupStatuses = db.Table<Table>().Select();
+            if (!groupStatuses.IsReady()) {
+                return false;
+            }
+            while (groupStatuses.IsValid()) {
+                BlobCheckerSerializedGroupStatuses[groupStatuses.GetKey()] = groupStatuses.GetValue<Table::SerializedState>();
+                if (!groupStatuses.Next()) {
+                    return false;
+                }
+            }
+        }
+
         THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
 
         // fill in correct relations between bridged groups
@@ -696,6 +714,15 @@ public:
             }
             const auto& selfId = Self->SelfId();
             selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
+        }
+
+        // create initial empty BlobChecker status for all groups
+        {
+            for (const auto& [groupId, _] : GroupMap) {
+                if (!BlobCheckerSerializedGroupStatuses.contains(groupId)) {
+                    BlobCheckerSerializedGroupStatuses[groupId] = 
+                }
+            }
         }
 
         return true;

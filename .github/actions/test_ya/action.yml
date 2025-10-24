@@ -208,22 +208,6 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
-          params+=(--retest)
-        fi
-
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
@@ -280,6 +264,24 @@ runs:
              fi
           done
         fi
+
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
+        if [ true = ${{ inputs.run_tests }} ]; then
+          params+=(-A)
+          params+=(--retest)
+        fi
+
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 

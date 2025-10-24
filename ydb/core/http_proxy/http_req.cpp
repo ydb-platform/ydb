@@ -1065,6 +1065,17 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(TagQueue);
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
+
+        #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<Ydb::SqsTopic::V1::SqsTopicService, Ydb::SqsTopic::V1::name##Request, Ydb::SqsTopic::V1::name##Response, Ydb::SqsTopic::V1::name##Result,\
+                    decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), NKikimr::NGRpcService::TEvSqsTopic##name##Request>> \
+                    (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name, [](Ydb::SqsTopic::V1::name##Request&){return "";})
+        DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
+        #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
+
+        #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<Ydb::SqsTopic::V1::YmqService, Ydb::SqsTopic::V1::name##Request, Ydb::SqsTopic::V1::name##Response, Ydb::SqsTopic::V1::name##Result,\
+                    decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
+                    (#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::SqsTopic::V1::name##Request& request){return request.Getqueue_url();})
+        #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {
@@ -1074,14 +1085,18 @@ namespace NKikimr::NHttpProxy {
     bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
                                          THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
                                          const TActorContext& ctx) {
-        THashMap<TString, THolder<IHttpRequestProcessor>>* Name2Processor;
+        const THashMap<TString, THolder<IHttpRequestProcessor>>* Name2Processor;
         if (context.ApiVersion == "AmazonSQS") {
-            if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled()) {
+            if (!context.ServiceConfig.GetHttpConfig().GetYmqEnabled() && !context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
                 context.ResponseData.IsYmq = true;
                 context.ResponseData.YmqHttpCode = 400;
                 SetApiVersionDisabledErrorText(context);
             }
-            Name2Processor = &Name2YmqProcessor;
+            if (context.ServiceConfig.GetHttpConfig().GetSqsTopicEnabled()) {
+                Name2Processor = &Name2SqsTopicProcessor;
+            } else {
+                Name2Processor = &Name2YmqProcessor;
+            }
         } else {
             if (!context.ServiceConfig.GetHttpConfig().GetDataStreamsEnabled()) {
                 context.ResponseData.Status = NYdb::EStatus::BAD_REQUEST;

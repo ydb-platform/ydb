@@ -128,6 +128,7 @@ public:
 private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2DataStreamsProcessor;
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
+    THashMap<TString, THolder<IHttpRequestProcessor>> Name2SqsTopicProcessor;
 };
 
 NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);

@@ -21,8 +21,8 @@ int TWorkloadCommandIndexBase::Run(TConfig& config) {
     Params.DbPath = config.Database;
 
     Driver = MakeHolder<NYdb::TDriver>(CreateDriver(config));
-    TableClient = MakeHolder<NYdb::NTable::TTableClient>(*Driver);
-    Params.SetClients(nullptr, nullptr, TableClient.Get(), nullptr);
+    QueryClient = MakeHolder<NYdb::NQuery::TQueryClient>(*Driver);
+    Params.SetClients(QueryClient.get(), nullptr, nullptr, nullptr);
 
     return DoRun();
 }
@@ -31,8 +31,8 @@ void TWorkloadCommandIndexBase::HandleQuery(const TString& query) {
     if (DryRun) {
         Cout << query << Endl;
     } else {
-        auto result = TableClient->RetryOperationSync([query](NYdb::NTable::TSession session) {
-            return session.ExecuteSchemeQuery(query.c_str()).GetValueSync();
+        auto result = QueryClient->RetryQuerySync([query](NYdb::NQuery::TSession session) {
+            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
         });
         NYdb::NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     }

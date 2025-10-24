@@ -1,0 +1,31 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.SqsTopic.V1;
+
+import "ydb/public/api/protos/draft/ymq.proto";
+
+
+option java_package = "com.yandex.ydb.ymq.v1";
+
+
+service SqsTopicService {
+    rpc SqsTopicGetQueueUrl(GetQueueUrlRequest) returns (GetQueueUrlResponse);
+    rpc SqsTopicCreateQueue(CreateQueueRequest) returns (CreateQueueResponse);
+    rpc SqsTopicSendMessage(SendMessageRequest) returns (SendMessageResponse);
+    rpc SqsTopicReceiveMessage(ReceiveMessageRequest) returns (ReceiveMessageResponse);
+    rpc SqsTopicGetQueueAttributes(GetQueueAttributesRequest) returns (GetQueueAttributesResponse);
+    rpc SqsTopicListQueues(ListQueuesRequest) returns (ListQueuesResponse);
+    rpc SqsTopicDeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse);
+    rpc SqsTopicPurgeQueue(PurgeQueueRequest) returns (PurgeQueueResponse);
+    rpc SqsTopicDeleteQueue(DeleteQueueRequest) returns (DeleteQueueResponse);
+    rpc SqsTopicChangeMessageVisibility(ChangeMessageVisibilityRequest) returns (ChangeMessageVisibilityResponse);
+    rpc SqsTopicSetQueueAttributes(SetQueueAttributesRequest) returns (SetQueueAttributesResponse);
+    rpc SqsTopicSendMessageBatch(SendMessageBatchRequest) returns (SendMessageBatchResponse);
+    rpc SqsTopicDeleteMessageBatch(DeleteMessageBatchRequest) returns (DeleteMessageBatchResponse);
+    rpc SqsTopicChangeMessageVisibilityBatch(ChangeMessageVisibilityBatchRequest) returns (ChangeMessageVisibilityBatchResponse);
+    rpc SqsTopicListDeadLetterSourceQueues(ListDeadLetterSourceQueuesRequest) returns (ListDeadLetterSourceQueuesResponse);
+    rpc SqsTopicListQueueTags(ListQueueTagsRequest) returns (ListQueueTagsResponse);
+    rpc SqsTopicTagQueue(TagQueueRequest) returns (TagQueueResponse);
+    rpc SqsTopicUntagQueue(UntagQueueRequest) returns (UntagQueueResponse);
+}

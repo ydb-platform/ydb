@@ -61,7 +61,10 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
             .DatabasePath = "/Root",
             .TopicName = "/Root/topic1",
             .Consumer = "mlp-consumer",
-            .WaitTime = TDuration::Seconds(3)
+            .WaitTime = TDuration::Seconds(3),
+            .VisibilityTimeout = TDuration::Seconds(30),
+            .MaxNumberOfMessage = 1,
+            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -90,7 +93,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(1),
                 .VisibilityTimeout = TDuration::Seconds(2),
-                .MaxNumberOfMessage = 2
+                .MaxNumberOfMessage = 2,
+                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -106,7 +110,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(0),
                 .VisibilityTimeout = TDuration::Seconds(5),
-                .MaxNumberOfMessage = 10
+                .MaxNumberOfMessage = 10,
+                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -121,7 +126,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(0),
                 .VisibilityTimeout = TDuration::Seconds(2),
-                .MaxNumberOfMessage = 2
+                .MaxNumberOfMessage = 2,
+                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);
@@ -137,7 +143,8 @@ Y_UNIT_TEST_SUITE(TMLPReaderTests) {
                 .Consumer = "mlp-consumer",
                 .WaitTime = TDuration::Seconds(5),
                 .VisibilityTimeout = TDuration::Seconds(2),
-                .MaxNumberOfMessage = 2
+                .MaxNumberOfMessage = 2,
+                .UncompressMessages = true
             });
 
             auto response = GetReadResponse(runtime);

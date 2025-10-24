@@ -178,8 +178,111 @@ Y_UNIT_TEST(ReadAndReleaseTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].MessageId.PartitionId, 0);
         UNIT_ASSERT_VALUES_EQUAL(result->Messages[1].MessageId.Offset, 2);
     }
+}
+
+Y_UNIT_TEST(CapacityTest) {
+    return;
+
+    auto setup = CreateSetup();
+    CreateTopic(setup, "/Root/topic1", "mlp-consumer");
+
+    WriteMany(setup, "/Root/topic1", 0, 10000, 50000);
+
+    struct State {
+        size_t ReadSuccess = 0;
+        size_t ReadFailed = 0;
+        size_t CommitSuccess = 0;
+        size_t CommitFailed = 0;
+    };
+
+    State state;
+
+    struct TestActor : public TActorBootstrapped<TestActor> {
+
+        TestActor(State& state)
+            : State(state) {}
+
+        void Bootstrap() {
+            Become(&TestActor::StateWork);
+            Schedule(TDuration::Seconds(30), new TEvents::TEvWakeup());
+            Next();
+        }
+
+        void Next() {
+            while (Infly < 100) {
+                Register(CreateReader(SelfId(), TReaderSettings{
+                    .DatabasePath = "/Root",
+                    .TopicName = "/Root/topic1",
+                    .Consumer = "mlp-consumer",
+                    .WaitTime = TDuration::Seconds(1),
+                    .VisibilityTimeout = TDuration::Seconds(5),
+                    .MaxNumberOfMessage = 1
+                }));
+
+                ++Infly;
+            }
+        }
+
+        void Handle(NMLP::TEvReadResponse::TPtr& ev) {
+            --Infly;
+
+            if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+                ++State.ReadSuccess;
+
+                if (!ev->Get()->Messages.empty() && RandomNumber<size_t>(10) > 0) {
+                    Register(CreateCommitter(SelfId(), TCommitterSettings{
+                        .DatabasePath = "/Root",
+                        .TopicName = "/Root/topic1",
+                        .Consumer = "mlp-consumer",
+                        .Messages = { ev->Get()->Messages[0].MessageId }
+                    }));
+
+                    ++Infly;
+                }
+            } else {
+                ++State.ReadFailed;
+            }
+
+            Next();
+        }
+
+        void Handle(NMLP::TEvChangeResponse::TPtr& ev) {
+            --Infly;
+
+            if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+                ++State.CommitSuccess;
+            } else {
+                ++State.CommitFailed;
+            }
+
+            Next();
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NMLP::TEvReadResponse, Handle);
+                hFunc(NMLP::TEvChangeResponse, Handle);
+                sFunc(TEvents::TEvPoison, PassAway);
+                sFunc(TEvents::TEvWakeup, PassAway);
+            }            
+        }
+
+        size_t Infly = 0;
+
+        State& State;
+    };
+
+    auto& runtime = setup->GetRuntime();
+    runtime.Register(new TestActor(state));
 
 
+    Sleep(TDuration::Seconds(35));
+
+    Cerr << "Total:\n  Read success: " << state.ReadSuccess
+        << "\n  Read fail: " << state.ReadFailed
+        << "\n  Commit success: " << state.CommitSuccess
+        << "\n  Commit fail: " << state.CommitFailed
+        << Endl;
 }
 
 }

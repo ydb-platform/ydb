@@ -5,6 +5,10 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/library/actors/core/actorsystem_fwd.h>
 
+namespace NACLib {
+class TUserToken;
+}
+
 namespace NKikimr::NPQ::NMLP {
 
 enum EEv : ui32 {
@@ -67,8 +71,9 @@ struct TReaderSettings {
     TDuration WaitTime = TDuration::Zero();
     TDuration VisibilityTimeout = TDuration::Seconds(30);
     ui32 MaxNumberOfMessage = 1;
+    bool UncompressMessages = false;
 
-    // TODO check access
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 // Return TEvReadResponse
@@ -81,7 +86,7 @@ struct TCommitterSettings {
     TString Consumer;
     std::vector<TMessageId> Messages;
 
-    // TODO check access
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 // Return TEvChangeResponse
@@ -93,7 +98,7 @@ struct TUnlockerSettings {
     TString Consumer;
     std::vector<TMessageId> Messages;
 
-    // TODO check access
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 // Return TEvChangeResponse
@@ -106,7 +111,7 @@ struct TMessageDeadlineChangerSettings {
     std::vector<TMessageId> Messages;
     TInstant Deadline;
 
-    // TODO check access
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
 };
 
 // Return TEvChangeResponse

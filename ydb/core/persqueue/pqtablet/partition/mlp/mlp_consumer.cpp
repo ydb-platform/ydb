@@ -9,7 +9,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
+    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
 }
 
 template<typename T>
@@ -171,6 +171,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
 
+    CommitIfNeeded();
+
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");
         Become(&TConsumerActor::StateWork);
@@ -273,11 +275,6 @@ void TConsumerActor::Restart(TString&& error) {
     LOG_E(error);
 
     Send(TabletActorId, new TEvents::TEvPoison());
-
-    ReplyErrorAll(SelfId(), ReadRequestsQueue);
-    ReplyErrorAll(SelfId(), CommitRequestsQueue);
-    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
-    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
 
     PassAway();
 }
@@ -408,11 +405,12 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
-        TStorage::MaxMessages - metrics.InflyMessageCount);
-    if (metrics.InflyMessageCount < TStorage::MinMessages) {
-        maxMessages = std::max(maxMessages, TStorage::MinMessages - metrics.InflyMessageCount);
+    auto maxMessages = TStorage::MinMessages;
+    if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    maxMessages = std::min(maxMessages, TStorage::MaxMessages - metrics.InflyMessageCount);
+
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
@@ -440,6 +438,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         return;
     }
 
+    size_t messageCount = 0;
     auto& response = ev->Get()->Response;
     if (response->GetPartitionResponse().HasCmdReadResult()) {
         auto lastOffset = Storage->GetLastOffset();
@@ -453,7 +452,10 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
             }
 
             Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
+            ++messageCount;
         }
+
+        LOG_D("Fetched " << messageCount << " messages");
 
         ProcessEventQueue();
     }

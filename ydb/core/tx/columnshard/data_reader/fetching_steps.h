@@ -296,6 +296,7 @@ private:
                 new NOlap::NBlobOperations::NRead::TActor(std::make_shared<TSubscriber>(fetchingContext, std::move(readActions))));
             return IFetchingStep::EStepResult::Detached;
         } else {
+            fetchingContext->MutableCurrentContext().SetBlobs(NBlobOperations::NRead::TCompositeReadBlobs());
             return IFetchingStep::EStepResult::Continue;
         }
     }

@@ -21,6 +21,9 @@
 
 namespace NYql {
 
+const TString LineageComponent = "Lineage";
+const TString LineageResultLabel = "LineageResult";
+
 TTransformationPipeline::TTransformationPipeline(
     TIntrusivePtr<TTypeAnnotationContext> ctx,
     TTypeAnnCallableFactory typeAnnCallableFactory)
@@ -167,33 +170,66 @@ TTransformationPipeline& TTransformationPipeline::AddFinalCommonOptimization(EYq
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddOptimizationWithLineage(bool enableLineage, bool checkWorld, bool withFinalOptimization, EYqlIssueCode issueCode) {
     AddCommonOptimization(false, issueCode);
-    Transformers_.push_back(TTransformStage(
-        CreateChoiceGraphTransformer(
-            [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
-                return typesCtx.EnableLineage;
-            },
-            TTransformStage(
-                CreateFunctorTransformer(
-                    [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                        output = input;
-                        try {
-                            CalculateLineage(*input, *typeCtx, ctx, false);
-                        } catch (const std::exception& e) {
-                            YQL_LOG(ERROR) << "CalculateLineage error: " << e.what();
-                            typeCtx->CorrectLineage = false;
-                        }
-                        return IGraphTransformer::TStatus::Ok;
-                    }),
-                "Lineage",
-                issueCode),
-            TTransformStage(
-                new TNullTransformer(),
-                "SkipLineage",
-                issueCode)),
-        "LineageCalculation",
-        issueCode));
+    if (enableLineage) {
+        Transformers_.push_back(TTransformStage(
+            CreateChoiceGraphTransformer(
+                [&typesCtx = std::as_const(*TypeAnnotationContext_)](const TExprNode::TPtr&, TExprContext&) {
+                    return typesCtx.EnableLineage;
+                },
+                TTransformStage(
+                    CreateSinglePassFunctorTransformer(
+                        [typeCtx = TypeAnnotationContext_](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                            output = input;
+                            TString calculatedLineage, loadedLineage;
+                            if (typeCtx->QContext && typeCtx->QContext.CanRead()) {
+                                auto loaded = typeCtx->QContext.GetReader()->Get({LineageComponent, LineageResultLabel}).GetValueSync();
+                                if (loaded.Defined()) {
+                                    loadedLineage = loaded->Value;
+                                } else {
+                                    YQL_LOG(INFO) << "There is no lineage in QStorage, lineage calculation is skipped in replay mode";
+                                    return IGraphTransformer::TStatus::Ok;
+                                }
+                            }
+                            std::exception_ptr lineageError;
+                            try {
+                                calculatedLineage = CalculateLineage(*input, *typeCtx, ctx, false);
+                            } catch (const std::exception& e) {
+                                YQL_LOG(ERROR) << "Lineage calculation error: " << e.what();
+                                typeCtx->CorrectLineage = false;
+                                lineageError = std::current_exception();
+                            }
+                            if (!loadedLineage.empty()) {
+                                // if lineage calculation is failed, but loaded lineage exists, rethrow exception for replay mode
+                                if (lineageError) {
+                                    std::rethrow_exception(lineageError);
+                                }
+                                if (NormalizeLineage(calculatedLineage) != NormalizeLineage(loadedLineage)) {
+                                    YQL_LOG(INFO) << "Lineage in replay is different:"
+                                                  << "\nCalculated lineage:\n"
+                                                  << calculatedLineage
+                                                  << "\nLoaded lineage:\n"
+                                                  << loadedLineage;
+                                    throw yexception() << "Lineage in replay is different";
+                                }
+                                YQL_LOG(INFO) << "Lineage replay is the same";
+                            }
+                            if (typeCtx->QContext && typeCtx->QContext.CanWrite() && typeCtx->CorrectLineage) {
+                                typeCtx->QContext.GetWriter()->Put({LineageComponent, LineageResultLabel}, calculatedLineage).GetValueSync();
+                                YQL_LOG(INFO) << "Lineage is saved to QStorage";
+                            }
+                            return IGraphTransformer::TStatus::Ok;
+                        }),
+                    "Lineage",
+                    issueCode),
+                TTransformStage(
+                    new TNullTransformer(),
+                    "SkipLineage",
+                    issueCode)),
+            "LineageCalculation",
+            issueCode));
+    }
     AddProviderOptimization(issueCode);
     if (withFinalOptimization) {
         AddFinalCommonOptimization(issueCode);

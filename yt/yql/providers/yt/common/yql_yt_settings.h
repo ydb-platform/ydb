@@ -114,6 +114,7 @@ public:
     NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
     NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
+    NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -153,6 +154,7 @@ public:
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
     NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
+    NCommon::TConfSetting<bool, Static> ValidateClusters;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

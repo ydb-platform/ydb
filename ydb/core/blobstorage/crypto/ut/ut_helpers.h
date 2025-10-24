@@ -52,6 +52,10 @@ public:
         return BufSize;
     }
 
+    size_t GetAlign() const {
+        return Align;
+    }
+
     ~TAlignedBuf() {
         delete[] Buf;
     }
@@ -69,16 +73,18 @@ public:
         return {reinterpret_cast<const char *>(Buffer.Data()), Buffer.Size()};
     }
 
-    TMutableContiguousSpan GetDataMut() override {
-        return {reinterpret_cast<char *>(Buffer.Data()), Buffer.Size()};
-    }
-
     TMutableContiguousSpan UnsafeGetDataMut() override {
         return {reinterpret_cast<char *>(Buffer.Data()), Buffer.Size()};
     }
 
     size_t GetOccupiedMemorySize() const override {
         return Buffer.Size();
+    }
+
+    IContiguousChunk::TPtr Clone() override {
+        auto newBackend = MakeIntrusive<TRopeAlignedBufferBackend>(Buffer.Size(), Buffer.GetAlign());
+        ::memcpy(newBackend->UnsafeGetDataMut().data(), GetData().data(), GetData().size());
+        return newBackend;
     }
 };
 

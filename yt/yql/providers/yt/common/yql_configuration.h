@@ -145,4 +145,6 @@ constexpr bool DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER = false;
 
 constexpr bool DEFAULT_EARLY_PARTITION_PRUNING = false;
 
+constexpr bool DEFAULT_VALIDATE_CLUSTERS = false;
+
 } // NYql

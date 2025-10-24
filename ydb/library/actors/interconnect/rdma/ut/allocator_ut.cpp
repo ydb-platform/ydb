@@ -304,6 +304,73 @@ TEST_P(WithAllPools, PageAlligned) {
     }
 }
 
+TEST_P(WithAllPools, RcBufDetach) {
+    auto memPool = GetParam();
+    TRcBuf data = memPool->AllocRcBuf(4, 0).value();
+    {
+        ::memcpy(data.UnsafeGetDataMut(), "test", 4);
+    }
+    TRcBuf data2 = data;
+    UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+    char* res = data2.Detach();
+    UNIT_ASSERT_UNEQUAL(data.GetData(), data2.GetData());
+    UNIT_ASSERT_EQUAL(res, data2.GetData());
+    UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
+    UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+}
+
+TEST_P(WithAllPools, RcBufDetachAfterMut) {
+    auto memPool = GetParam();
+    TRcBuf data = memPool->AllocRcBuf(4, 0).value();
+    {
+        ::memcpy(data.UnsafeGetDataMut(), "test", 4);
+    }
+    // Check GetDataMut doesn't change backend in case of single ref
+    UNIT_ASSERT_EQUAL(data.GetData(), data.GetDataMut());
+    TRcBuf data2 = data;
+    UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+    char* res = data2.Detach();
+    UNIT_ASSERT_UNEQUAL(data.GetData(), data2.GetData());
+    UNIT_ASSERT_EQUAL(res, data2.GetData());
+    UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
+    UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+}
+
+TEST_P(WithAllPools, RcBufDetachPageAlign) {
+    using namespace NInterconnect::NRdma;
+    static const ui64 pageAlign = NSystemInfo::GetPageSize() - 1;
+    auto memPool = GetParam();
+    TRcBuf data = memPool->AllocRcBuf(4, IMemPool::PAGE_ALIGNED).value();
+    {
+        ::memcpy(data.UnsafeGetDataMut(), "test", 4);
+    }
+    TRcBuf data2 = data;
+    UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
+    UNIT_ASSERT_EQUAL((ui64)data.GetData() & pageAlign, 0ull);
+    char* res = data2.Detach();
+    UNIT_ASSERT_UNEQUAL(data.GetData(), data2.GetData());
+    UNIT_ASSERT_EQUAL((ui64)data.GetData() & pageAlign, 0ull);
+    UNIT_ASSERT_EQUAL((ui64)data2.GetData() & pageAlign, 0ull);
+    UNIT_ASSERT_EQUAL(res, data2.GetData());
+    UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
+    UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+}
+
+TEST_P(WithAllPools, DetachAndDestroySrc) {
+    auto memPool = GetParam();
+    TRcBuf data = memPool->AllocRcBuf(4, 0).value();
+    {
+        ::memcpy(data.UnsafeGetDataMut(), "test", 4);
+    }
+    TRcBuf data2 = data;
+    data = {};
+    UNIT_ASSERT_EQUAL(data2.GetSize(), 4u);
+    char* res = data2.Detach();
+    UNIT_ASSERT_EQUAL(data2.GetSize(), 4u);
+    UNIT_ASSERT_EQUAL(res, data2.GetData());
+    UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
+}
+
 INSTANTIATE_TEST_SUITE_P(
     TAllocatorSuite,
     WithAllPools,

@@ -341,7 +341,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableExtendedQueueUrl) {
+void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -354,7 +354,7 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
-    appConfig.MutableSqsConfig()->SetExtendedQueueUrlEnabled(enableExtendedQueueUrl);
+    appConfig.MutableSqsConfig()->SetSqsTopicEnabled(enableSqsTopic);
 
     if (enableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();
@@ -694,7 +694,7 @@ void THttpProxyTestMock::InitAccessServiceService() {
     AccessServiceServer = builder.BuildAndStart();
 }
 
-void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableExtendedQueueUrl) {
+void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopic) {
     using namespace NKikimr::NHttpProxy;
     NKikimrConfig::TServerlessProxyConfig config;
     config.MutableHttpConfig()->AddYandexCloudServiceRegion("ru-central1");
@@ -707,7 +707,7 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableExtende
     config.MutableHttpConfig()->SetPort(HttpServicePort);
     config.MutableHttpConfig()->SetYandexCloudMode(yandexCloudMode);
     config.MutableHttpConfig()->SetYmqEnabled(true);
-    config.MutableHttpConfig()->SetExtendedQueueUrlEnabled(enableExtendedQueueUrl);
+    config.MutableHttpConfig()->SetSqsTopicEnabled(enableSqsTopic);
 
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYdb::CreateOAuthCredentialsProviderFactory("proxy_sa@builtin");
 

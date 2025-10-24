@@ -3,10 +3,10 @@ option cc_enable_arenas = true;
 
 package Ydb.SqsTopic.V1;
 
-import "ydb/public/api/protos/draft/ymq.proto";
+import "ydb/public/api/protos/draft/sqs_topic.proto";
 
 
-option java_package = "com.yandex.ydb.ymq.v1";
+option java_package = "com.yandex.ydb.sqs_topic.v1";
 
 
 service SqsTopicService {

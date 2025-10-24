@@ -48,6 +48,8 @@
 #include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
+#include <ydb/services/sqs_topic/grpc_service.h>
+#include <ydb/services/sqs_topic/sqs_topic_proxy.h>
 
 #include <util/generic/guid.h>
 #include <util/stream/file.h>

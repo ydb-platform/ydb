@@ -474,6 +474,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     bool EarlyExpandSeq = true;
     bool DirectRowDependsOn = true;
     bool EnableLineage = false;
+    bool EnableStandaloneLineage = false;
     bool CorrectLineage = true;
 
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayerProviderByName;

@@ -28,6 +28,26 @@ template <typename T> struct TSides {
     }
 };
 
+
+/*
+  usage:
+  instead of copy pasting code and changing "build" to "probe", use TSides and ForEachSide to call same code twice.
+  example:
+
+void f(int buildSize, int probeSize, bool buildRequired, bool probeRequired){
+    use(buildSize + (buildRequired ? 0 : transform(buildSize)));
+    use(probeSize + (probeRequired ? 0 : transform(probeSize)));
+}
+
+vs
+
+void f(TSides<int> sizes, TSides<bool> required) {
+    ForEachSide([&](ESide side){
+        use(sizes.SelectSide(side) + (required.SelectSide(side) ? 0 : transform(sizes.SelectSide(side))));
+    });
+}
+  
+*/
 void ForEachSide(std::invocable<ESide> auto fn) {
     fn(ESide::Build);
     fn(ESide::Probe);

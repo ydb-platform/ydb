@@ -2835,4 +2835,38 @@ TString ReadTable(
     return result;
 }
 
+ui64 AsyncCreateSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateSubDomain, workingDir);
+    auto* m = request->Record.MutableTransaction()->MutableModifyScheme();
+    auto* op = m->MutableSubDomain();
+    op->SetName(name);
+    bool ok = google::protobuf::TextFormat::MergeFromString(schema, op);
+    UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncAlterSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterSubDomain, workingDir);
+    auto* m = request->Record.MutableTransaction()->MutableModifyScheme();
+    auto* op = m->MutableSubDomain();
+    op->SetName(name);
+    bool ok = google::protobuf::TextFormat::MergeFromString(schema, op);
+    UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
 }

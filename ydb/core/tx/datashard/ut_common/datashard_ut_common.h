@@ -732,6 +732,20 @@ ui64 AsyncAlterRestoreMultipleIncrementalBackups(
         const TVector<TString>& srcTablePaths,
         const TString& dstTablePAth);
 
+ui64 AsyncCreateSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema);
+
+ui64 AsyncAlterSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema);
+
 struct TReadShardedTableState {
     TActorId Sender;
     TActorId Worker;

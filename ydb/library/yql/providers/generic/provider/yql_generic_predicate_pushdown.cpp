@@ -1082,12 +1082,4 @@ namespace NYql {
         TSerializationContext serializationContext = {.Arg = predicate.Args().Arg(0), .Err = err};
         return SerializeExpression(predicate.Body(), proto, serializationContext, 0);
     }
-
-    TString FormatWhere(const TPredicate& predicate) {
-        auto stream = FormatPredicate(predicate);
-        if (stream.empty()) {
-            return "";
-        }
-        return "WHERE " + stream;
-    }
 } // namespace NYql

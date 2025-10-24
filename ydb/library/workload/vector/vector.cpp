@@ -9,7 +9,7 @@
 namespace NYdb::NConsoleClient {
 
 TCommandVector::TCommandVector()
-    : TClientCommandTree("vector", {}, "YDB vector workload")
+    : TClientCommandTree("vector", {}, "YDB vector workload. Reference: https://ydb.tech/docs/concepts/vector_search")
     , Params(std::make_unique<NYdbWorkload::TVectorWorkloadParams>())
 {
     if (const auto desc = Params->GetDescription(NYdbWorkload::TWorkloadParams::ECommandType::Root, 0)) {

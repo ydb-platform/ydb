@@ -85,9 +85,9 @@ void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
         .Required().StoreResult(&VectorType);
     opts.AddLongOption( "vector-dimension", "Vector dimension")
         .Required().StoreResult(&VectorDimension);
-    opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
+    opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .Required().StoreResult(&KmeansTreeLevels);
-    opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans")
+    opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .Required().StoreResult(&KmeansTreeClusters);
 }
 

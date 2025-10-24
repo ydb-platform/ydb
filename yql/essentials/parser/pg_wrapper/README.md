@@ -23,16 +23,18 @@ libreadline-dev
 libssl-dev
 libxml2-dev
 libossp-uuid-dev
+build-essential
+zlib1g-dev
 
 2. On clean repository perform following command:
 
-  ./copy_src.sh && git diff -R postgresql  > local_changes.patch
+  ./copy_src.sh && arc diff -R postgresql  > local_changes.patch
 
   In file local_changes.patch you will get all changes applied to postgresql/ directory which are not part of automated patching by copy_src.sh
 
 3. Cleanup repositry:
 
-   git checkout .
+   arc checkout .
 
 4. Bump PostgreSQL version in copy_src.sh (it is recommended not to do big jumps here)
 
@@ -40,13 +42,23 @@ libossp-uuid-dev
 
 6. Assuming compilation and automatic patching were successful, apply local changes collected on step 2:
 
-   patch -p6 < local_changes.patch
+   patch -p4 < local_changes.patch
 
    Resolve possible conflicts. Usually, conflicts arise due to some already backported changes
 
+   check for .rej/.orig files:
+
+   find . -name "*.rej"
+   find . -name "*.orig"
+
+   remove .rej/.orig files:
+
+   find . -name "*.rej" | xargs rm
+   find . -name "*.orig" | xargs rm
+
 7. Update pg_catalog data
 
-   (cd ../../tools/pg_catalog_dump/ && yag make --build=relwithdebinfo && ./pg_catalog_dump > dump.json)
+   (cd ../../tools/pg_catalog_dump/ && ya make --build=relwithdebinfo && YQL_ALLOW_ALL_PG_FUNCTIONS=1 ./pg_catalog_dump | jq > dump.json)
 
 8. Regenerate Arrow postgresql kernels
 
@@ -54,7 +66,7 @@ libossp-uuid-dev
 
 9. Make sure that resulting pg_wrapper library compiles and passes minimal tests
 
-   yag make --build=relwithdebinfo -tA -C ut -C test -C ../../sql/pg/ut
+   ya make --build=relwithdebinfo -tA -C ut -C test -C ../../sql/pg/ut
 
 10. Verify that all global variables in PostgreSQL-originated sources are accounted for
 
@@ -62,4 +74,9 @@ libossp-uuid-dev
 
    Should output OK
 
-11. Submit PR (do not forget to git add all new files created in postgresql/ direcotry - they sshould also present in pg_sources.inc)
+11. Remove local_changes.patch and build directory
+
+    rm -rf build
+    rm local_changes.patch
+
+12. Submit PR (do not forget to arc add all new files created in postgresql/ directory - they should also present in pg_sources.inc)

@@ -84,7 +84,6 @@ typedef struct
 	List	   *fkconstraints;	/* FOREIGN KEY constraints */
 	List	   *ixconstraints;	/* index-creating constraints */
 	List	   *likeclauses;	/* LIKE clauses that need post-processing */
-	List	   *extstats;		/* cloned extended statistics */
 	List	   *blist;			/* "before list" of things to do before
 								 * creating the table */
 	List	   *alist;			/* "after list" of things to do after creating
@@ -117,13 +116,14 @@ static void transformTableLikeClause(CreateStmtContext *cxt,
 static void transformOfType(CreateStmtContext *cxt,
 							TypeName *ofTypename);
 static CreateStatsStmt *generateClonedExtStatsStmt(RangeVar *heapRel,
-												   Oid heapRelid, Oid source_statsid);
+												   Oid heapRelid,
+												   Oid source_statsid,
+												   const AttrMap *attmap);
 static List *get_collation(Oid collation, Oid actual_datatype);
 static List *get_opclass(Oid opclass, Oid actual_datatype);
 static void transformIndexConstraints(CreateStmtContext *cxt);
 static IndexStmt *transformIndexConstraint(Constraint *constraint,
 										   CreateStmtContext *cxt);
-static void transformExtendedStatistics(CreateStmtContext *cxt);
 static void transformFKConstraints(CreateStmtContext *cxt,
 								   bool skipValidation,
 								   bool isAddConstraint);
@@ -243,7 +243,6 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
 	cxt.likeclauses = NIL;
-	cxt.extstats = NIL;
 	cxt.blist = NIL;
 	cxt.alist = NIL;
 	cxt.pkey = NULL;
@@ -337,11 +336,6 @@ transformCreateStmt(CreateStmt *stmt, const char *queryString)
 	transformCheckConstraints(&cxt, !cxt.isforeign);
 
 	/*
-	 * Postprocess extended statistics.
-	 */
-	transformExtendedStatistics(&cxt);
-
-	/*
 	 * Output results.
 	 */
 	stmt->tableElts = cxt.columns;
@@ -371,30 +365,22 @@ generateSerialExtraStmts(CreateStmtContext *cxt, ColumnDef *column,
 {
 	ListCell   *option;
 	DefElem    *nameEl = NULL;
+	DefElem    *loggedEl = NULL;
 	Oid			snamespaceid;
 	char	   *snamespace;
 	char	   *sname;
+	char		seqpersistence;
 	CreateSeqStmt *seqstmt;
 	AlterSeqStmt *altseqstmt;
 	List	   *attnamelist;
-	int			nameEl_idx = -1;
 
 	/* Make a copy of this as we may end up modifying it in the code below */
 	seqoptions = list_copy(seqoptions);
 
 	/*
-	 * Determine namespace and name to use for the sequence.
-	 *
-	 * First, check if a sequence name was passed in as an option.  This is
-	 * used by pg_dump.  Else, generate a name.
-	 *
-	 * Although we use ChooseRelationName, it's not guaranteed that the
-	 * selected sequence name won't conflict; given sufficiently long field
-	 * names, two different serial columns in the same table could be assigned
-	 * the same sequence name, and we'd not notice since we aren't creating
-	 * the sequence quite yet.  In practice this seems quite unlikely to be a
-	 * problem, especially since few people would need two serial columns in
-	 * one table.
+	 * Check for non-SQL-standard options (not supported within CREATE
+	 * SEQUENCE, because they'd be redundant), and remove them from the
+	 * seqoptions list if found.
 	 */
 	foreach(option, seqoptions)
 	{
@@ -405,12 +391,24 @@ generateSerialExtraStmts(CreateStmtContext *cxt, ColumnDef *column,
 			if (nameEl)
 				errorConflictingDefElem(defel, cxt->pstate);
 			nameEl = defel;
-			nameEl_idx = foreach_current_index(option);
+			seqoptions = foreach_delete_current(seqoptions, option);
+		}
+		else if (strcmp(defel->defname, "logged") == 0 ||
+				 strcmp(defel->defname, "unlogged") == 0)
+		{
+			if (loggedEl)
+				errorConflictingDefElem(defel, cxt->pstate);
+			loggedEl = defel;
+			seqoptions = foreach_delete_current(seqoptions, option);
 		}
 	}
 
+	/*
+	 * Determine namespace and name to use for the sequence.
+	 */
 	if (nameEl)
 	{
+		/* Use specified name */
 		RangeVar   *rv = makeRangeVarFromNameList(castNode(List, nameEl->arg));
 
 		snamespace = rv->schemaname;
@@ -424,11 +422,20 @@ generateSerialExtraStmts(CreateStmtContext *cxt, ColumnDef *column,
 			snamespace = get_namespace_name(snamespaceid);
 		}
 		sname = rv->relname;
-		/* Remove the SEQUENCE NAME item from seqoptions */
-		seqoptions = list_delete_nth_cell(seqoptions, nameEl_idx);
 	}
 	else
 	{
+		/*
+		 * Generate a name.
+		 *
+		 * Although we use ChooseRelationName, it's not guaranteed that the
+		 * selected sequence name won't conflict; given sufficiently long
+		 * field names, two different serial columns in the same table could
+		 * be assigned the same sequence name, and we'd not notice since we
+		 * aren't creating the sequence quite yet.  In practice this seems
+		 * quite unlikely to be a problem, especially since few people would
+		 * need two serial columns in one table.
+		 */
 		if (cxt->rel)
 			snamespaceid = RelationGetNamespace(cxt->rel);
 		else
@@ -450,22 +457,37 @@ generateSerialExtraStmts(CreateStmtContext *cxt, ColumnDef *column,
 							 cxt->relation->relname, column->colname)));
 
 	/*
+	 * Determine the persistence of the sequence.  By default we copy the
+	 * persistence of the table, but if LOGGED or UNLOGGED was specified, use
+	 * that (as long as the table isn't TEMP).
+	 *
+	 * For CREATE TABLE, we get the persistence from cxt->relation, which
+	 * comes from the CreateStmt in progress.  For ALTER TABLE, the parser
+	 * won't set cxt->relation->relpersistence, but we have cxt->rel as the
+	 * existing table, so we copy the persistence from there.
+	 */
+	seqpersistence = cxt->rel ? cxt->rel->rd_rel->relpersistence : cxt->relation->relpersistence;
+	if (loggedEl)
+	{
+		if (seqpersistence == RELPERSISTENCE_TEMP)
+			ereport(ERROR,
+					(errcode(ERRCODE_INVALID_TABLE_DEFINITION),
+					 errmsg("cannot set logged status of a temporary sequence"),
+					 parser_errposition(cxt->pstate, loggedEl->location)));
+		else if (strcmp(loggedEl->defname, "logged") == 0)
+			seqpersistence = RELPERSISTENCE_PERMANENT;
+		else
+			seqpersistence = RELPERSISTENCE_UNLOGGED;
+	}
+
+	/*
 	 * Build a CREATE SEQUENCE command to create the sequence object, and add
 	 * it to the list of things to be done before this CREATE/ALTER TABLE.
 	 */
 	seqstmt = makeNode(CreateSeqStmt);
 	seqstmt->for_identity = for_identity;
 	seqstmt->sequence = makeRangeVar(snamespace, sname, -1);
-
-	/*
-	 * Copy the persistence of the table.  For CREATE TABLE, we get the
-	 * persistence from cxt->relation, which comes from the CreateStmt in
-	 * progress.  For ALTER TABLE, the parser won't set
-	 * cxt->relation->relpersistence, but we have cxt->rel as the existing
-	 * table, so we copy the persistence from there.
-	 */
-	seqstmt->sequence->relpersistence = cxt->rel ? cxt->rel->rd_rel->relpersistence : cxt->relation->relpersistence;
-
+	seqstmt->sequence->relpersistence = seqpersistence;
 	seqstmt->options = seqoptions;
 
 	/*
@@ -1127,59 +1149,23 @@ transformTableLikeClause(CreateStmtContext *cxt, TableLikeClause *table_like_cla
 	}
 
 	/*
-	 * We cannot yet deal with defaults, CHECK constraints, or indexes, since
-	 * we don't yet know what column numbers the copied columns will have in
-	 * the finished table.  If any of those options are specified, add the
-	 * LIKE clause to cxt->likeclauses so that expandTableLikeClause will be
-	 * called after we do know that.  Also, remember the relation OID so that
-	 * expandTableLikeClause is certain to open the same table.
+	 * We cannot yet deal with defaults, CHECK constraints, indexes, or
+	 * statistics, since we don't yet know what column numbers the copied
+	 * columns will have in the finished table.  If any of those options are
+	 * specified, add the LIKE clause to cxt->likeclauses so that
+	 * expandTableLikeClause will be called after we do know that.  Also,
+	 * remember the relation OID so that expandTableLikeClause is certain to
+	 * open the same table.
 	 */
 	if (table_like_clause->options &
 		(CREATE_TABLE_LIKE_DEFAULTS |
 		 CREATE_TABLE_LIKE_GENERATED |
 		 CREATE_TABLE_LIKE_CONSTRAINTS |
-		 CREATE_TABLE_LIKE_INDEXES))
+		 CREATE_TABLE_LIKE_INDEXES |
+		 CREATE_TABLE_LIKE_STATISTICS))
 	{
 		table_like_clause->relationOid = RelationGetRelid(relation);
 		cxt->likeclauses = lappend(cxt->likeclauses, table_like_clause);
-	}
-
-	/*
-	 * We may copy extended statistics if requested, since the representation
-	 * of CreateStatsStmt doesn't depend on column numbers.
-	 */
-	if (table_like_clause->options & CREATE_TABLE_LIKE_STATISTICS)
-	{
-		List	   *parent_extstats;
-		ListCell   *l;
-
-		parent_extstats = RelationGetStatExtList(relation);
-
-		foreach(l, parent_extstats)
-		{
-			Oid			parent_stat_oid = lfirst_oid(l);
-			CreateStatsStmt *stats_stmt;
-
-			stats_stmt = generateClonedExtStatsStmt(cxt->relation,
-													RelationGetRelid(relation),
-													parent_stat_oid);
-
-			/* Copy comment on statistics object, if requested */
-			if (table_like_clause->options & CREATE_TABLE_LIKE_COMMENTS)
-			{
-				comment = GetComment(parent_stat_oid, StatisticExtRelationId, 0);
-
-				/*
-				 * We make use of CreateStatsStmt's stxcomment option, so as
-				 * not to need to know now what name the statistics will have.
-				 */
-				stats_stmt->stxcomment = comment;
-			}
-
-			cxt->extstats = lappend(cxt->extstats, stats_stmt);
-		}
-
-		list_free(parent_extstats);
 	}
 
 	/*
@@ -1446,6 +1432,44 @@ expandTableLikeClause(RangeVar *heapRel, TableLikeClause *table_like_clause)
 
 			index_close(parent_index, AccessShareLock);
 		}
+	}
+
+	/*
+	 * Process extended statistics if required.
+	 */
+	if (table_like_clause->options & CREATE_TABLE_LIKE_STATISTICS)
+	{
+		List	   *parent_extstats;
+		ListCell   *l;
+
+		parent_extstats = RelationGetStatExtList(relation);
+
+		foreach(l, parent_extstats)
+		{
+			Oid			parent_stat_oid = lfirst_oid(l);
+			CreateStatsStmt *stats_stmt;
+
+			stats_stmt = generateClonedExtStatsStmt(heapRel,
+													RelationGetRelid(childrel),
+													parent_stat_oid,
+													attmap);
+
+			/* Copy comment on statistics object, if requested */
+			if (table_like_clause->options & CREATE_TABLE_LIKE_COMMENTS)
+			{
+				comment = GetComment(parent_stat_oid, StatisticExtRelationId, 0);
+
+				/*
+				 * We make use of CreateStatsStmt's stxcomment option, so as
+				 * not to need to know now what name the statistics will have.
+				 */
+				stats_stmt->stxcomment = comment;
+			}
+
+			result = lappend(result, stats_stmt);
+		}
+
+		list_free(parent_extstats);
 	}
 
 	/* Done with child rel */
@@ -1872,10 +1896,12 @@ generateClonedIndexStmt(RangeVar *heapRel, Relation source_idx,
  * Generate a CreateStatsStmt node using information from an already existing
  * extended statistic "source_statsid", for the rel identified by heapRel and
  * heapRelid.
+ *
+ * Attribute numbers in expression Vars are adjusted according to attmap.
  */
 static CreateStatsStmt *
 generateClonedExtStatsStmt(RangeVar *heapRel, Oid heapRelid,
-						   Oid source_statsid)
+						   Oid source_statsid, const AttrMap *attmap)
 {
 	HeapTuple	ht_stats;
 	Form_pg_statistic_ext statsrec;
@@ -1958,10 +1984,19 @@ generateClonedExtStatsStmt(RangeVar *heapRel, Oid heapRelid,
 
 		foreach(lc, exprs)
 		{
+			Node	   *expr = (Node *) lfirst(lc);
 			StatsElem  *selem = makeNode(StatsElem);
+			bool		found_whole_row;
+
+			/* Adjust Vars to match new table's column numbering */
+			expr = map_variable_attnos(expr,
+									   1, 0,
+									   attmap,
+									   InvalidOid,
+									   &found_whole_row);
 
 			selem->name = NULL;
-			selem->expr = (Node *) lfirst(lc);
+			selem->expr = expr;
 
 			def_names = lappend(def_names, selem);
 		}
@@ -2688,19 +2723,6 @@ transformIndexConstraint(Constraint *constraint, CreateStmtContext *cxt)
 }
 
 /*
- * transformExtendedStatistics
- *     Handle extended statistic objects
- *
- * Right now, there's nothing to do here, so we just append the list to
- * the existing "after" list.
- */
-static void
-transformExtendedStatistics(CreateStmtContext *cxt)
-{
-	cxt->alist = list_concat(cxt->alist, cxt->extstats);
-}
-
-/*
  * transformCheckConstraints
  *		handle CHECK constraints
  *
@@ -3338,7 +3360,6 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 	cxt.fkconstraints = NIL;
 	cxt.ixconstraints = NIL;
 	cxt.likeclauses = NIL;
-	cxt.extstats = NIL;
 	cxt.blist = NIL;
 	cxt.alist = NIL;
 	cxt.pkey = NULL;
@@ -3617,9 +3638,6 @@ transformAlterTableStmt(Oid relid, AlterTableStmt *stmt,
 		newcmd->def = (Node *) lfirst(l);
 		newcmds = lappend(newcmds, newcmd);
 	}
-
-	/* Append extended statistics objects */
-	transformExtendedStatistics(&cxt);
 
 	/* Close rel */
 	relation_close(rel, NoLock);

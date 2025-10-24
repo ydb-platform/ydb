@@ -150,4 +150,6 @@ CFLAGS(
     -DresetStringInfo=yql_resetStringInfo
     -DinitStringInfo=yql_initStringInfo
     -DmakeStringInfo=yql_makeStringInfo
+    -Dpg_encoding_set_invalid=yql_pg_encoding_set_invalid
+    -Dpg_encoding_mblen_or_incomplete=yql_pg_encoding_mblen_or_incomplete
 )

@@ -1,7 +1,5 @@
 FORK_SUBTESTS()
 
-ENABLE(YQL_STYLE_CPP)
-
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(1800)
     SIZE(LARGE)
@@ -10,8 +8,6 @@ ELSE()
     TIMEOUT(600)
     SIZE(MEDIUM)
 ENDIF()
-
-SUBSCRIBER(g:yql)
 
 PEERDIR(
     yql/essentials/public/udf

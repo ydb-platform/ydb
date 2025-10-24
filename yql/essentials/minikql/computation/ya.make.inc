@@ -1,10 +1,3 @@
-ENABLE(YQL_STYLE_CPP)
-
-SUBSCRIBER(
-    g:yql
-    g:yql_ydb_core
-)
-
 
 INCLUDE(header.ya.make.inc)
 

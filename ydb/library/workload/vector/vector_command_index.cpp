@@ -72,9 +72,9 @@ int TWorkloadCommandBuildIndex::DoRun() {
     );
 
     if (!ddlQuery.empty()) {
-        Cout << "Init vector index ..."  << Endl;
+        Cout << "Build vector index ..."  << Endl;
         HandleQuery(ddlQuery);
-        Cout << "Init vector index ...Ok"  << Endl;
+        Cout << "Build vector index ...Ok"  << Endl;
     }
 
     return EXIT_SUCCESS;

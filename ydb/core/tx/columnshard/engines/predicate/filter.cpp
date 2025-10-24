@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    if (SortedRanges.empty()) {
+    if (IsEmpty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
 
@@ -28,13 +28,13 @@ NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_pt
             break;
         }
 
-        auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
+        const auto findEnd = range.GetPredicateTo().FindFirstExcluded(iterator);
         const ui64 endIdx = findEnd ? findEnd->GetPosition() : iterator.GetRecordsCount();
 
         result.Add(true, endIdx - beginIdx);
         reachedEnd = !iterator.InitPosition(endIdx);
         if (reachedEnd) {
-            AFL_VERIFY((i64)beginIdx == iterator.GetRecordsCount());
+            AFL_VERIFY((i64)endIdx == iterator.GetRecordsCount());
             break;
         }
     }

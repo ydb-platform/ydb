@@ -23,6 +23,18 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NComm
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
+
+    auto* portionSource = static_cast<TPortionDataSource*>(source.get());
+    auto status = portionSource->GetContext()->GetPortionStateAtScanStart(portionSource->GetPortionInfo());
+    // We may have here only conflicting portions.
+    AFL_VERIFY(status.Conflicting);
+    AFL_VERIFY(source->GetRecordsCount() > 0);
+    source->AddTxConflict();
+    return true;
+
+    // If we have only conflicting portions
+
+    
     auto filter =
         MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
                                std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
@@ -33,6 +45,18 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
             return true;
         }
     }
+    
+    AFL_VERIFY(false)("fuck me", "we must not get here")("info", portionSource->GetPortionInfo().DebugString())("conflicting", status.Conflicting)("committed", status.Committed)("read snapshot", source->GetContext()->GetReadMetadata()->GetRequestSnapshot().DebugString());
+    // source->MutableStageData().Clear();
+    // source->MutableStageData().Abort();
+    // return true;
+    // total deny is 0
+    // cast to TPortionDataSource
+    // auto* portionSource = static_cast<TPortionDataSource*>(source.get());
+    // auto state = portionSource->GetContext()->GetPortionStateAtScanStart(portionSource->GetPortionInfo());
+    // auto count = filter.GetFilteredCount().value_or(0);
+    // // we must not have here a single row
+    // AFL_VERIFY(count == 0)("count", count)("source.record_count", source->GetRecordsCount())("filter", filter.DebugString())("portion", portionSource->GetPortionInfo().DebugString())("request_snapshot", source->GetContext()->GetReadMetadata()->GetRequestSnapshot().DebugString())("state.conflicting", ToString(state.Conflicting))("state.committed", ToString(state.Committed));
     source->MutableStageData().AddFilter(filter);
     return true;
 }

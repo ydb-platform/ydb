@@ -87,7 +87,7 @@ void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
         .Required().StoreResult(&VectorDimension);
     opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
         .Required().StoreResult(&KmeansTreeLevels);
-    opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
+    opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans")
         .Required().StoreResult(&KmeansTreeClusters);
 }
 

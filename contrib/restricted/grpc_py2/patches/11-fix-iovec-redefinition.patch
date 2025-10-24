@@ -1,0 +1,15 @@
+diff -r -u grpc-old/src/core/tsi/alts/crypt/gsec.h grpc/src/core/tsi/alts/crypt/gsec.h
+--- a/src/core/tsi/alts/crypt/gsec.h
++++ b/src/core/tsi/alts/crypt/gsec.h
+@@ -28,8 +28,10 @@
+ #include <grpc/event_engine/port.h>
+ #include <grpc/grpc.h>
+
+-#ifndef _STRUCT_IOVEC
++#ifndef _STRUCT_IOVEC && !defined(__DEFINED_struct_iovec)
+ #if !defined(GRPC_EVENT_ENGINE_POSIX)
++#define _STRUCT_IOVEC
++#define __DEFINED_struct_iovec
+ struct iovec {
+   void* iov_base;
+   size_t iov_len;

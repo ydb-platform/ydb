@@ -136,7 +136,7 @@ public:
         settings.AddColumnTypes("[DataType; Uint64]");
         settings.AddColumnTypes("[DataType; String]");
         if (!emptyPredicate) {
-            settings.SetPredicate("WHERE true");
+            settings.SetPredicate("TRUE");
         }
         settings.SetSkipJsonErrors(skipErrors);
         return settings;

@@ -24,6 +24,14 @@
  *		values plus row-locating info for UPDATE and MERGE cases, or just the
  *		row-locating info for DELETE cases.
  *
+ *		The relation to modify can be an ordinary table, a view having an
+ *		INSTEAD OF trigger, or a foreign table.  Earlier processing already
+ *		pointed ModifyTable to the underlying relations of any automatically
+ *		updatable view not using an INSTEAD OF trigger, so code here can
+ *		assume it won't have one as a modification target.  This node does
+ *		process ri_WithCheckOptions, which may have expressions from those
+ *		automatically updatable views.
+ *
  *		MERGE runs a join between the source relation and the target
  *		table; if any WHEN NOT MATCHED clauses are present, then the
  *		join is an outer join.  In this case, any unmatched tuples will
@@ -56,6 +64,7 @@
 #include "nodes/nodeFuncs.h"
 #include "optimizer/optimizer.h"
 #include "rewrite/rewriteHandler.h"
+#include "rewrite/rewriteManip.h"
 #include "storage/bufmgr.h"
 #include "storage/lmgr.h"
 #include "utils/builtins.h"
@@ -199,19 +208,10 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 		attr = TupleDescAttr(resultDesc, attno);
 		attno++;
 
-		if (!attr->attisdropped)
-		{
-			/* Normal case: demand type match */
-			if (exprType((Node *) tle->expr) != attr->atttypid)
-				ereport(ERROR,
-						(errcode(ERRCODE_DATATYPE_MISMATCH),
-						 errmsg("table row type and query-specified row type do not match"),
-						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
-								   format_type_be(attr->atttypid),
-								   attno,
-								   format_type_be(exprType((Node *) tle->expr)))));
-		}
-		else
+		/*
+		 * Special cases here should match planner's expand_insert_targetlist.
+		 */
+		if (attr->attisdropped)
 		{
 			/*
 			 * For a dropped column, we can't check atttypid (it's likely 0).
@@ -225,6 +225,35 @@ ExecCheckPlanOutput(Relation resultRel, List *targetList)
 						 errmsg("table row type and query-specified row type do not match"),
 						 errdetail("Query provides a value for a dropped column at ordinal position %d.",
 								   attno)));
+		}
+		else if (attr->attgenerated)
+		{
+			/*
+			 * For a generated column, the planner will have inserted a null
+			 * of the column's base type (to avoid possibly failing on domain
+			 * not-null constraints).  It doesn't seem worth insisting on that
+			 * exact type though, since a null value is type-independent.  As
+			 * above, just insist on *some* NULL constant.
+			 */
+			if (!IsA(tle->expr, Const) ||
+				!((Const *) tle->expr)->constisnull)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Query provides a value for a generated column at ordinal position %d.",
+								   attno)));
+		}
+		else
+		{
+			/* Normal case: demand type match */
+			if (exprType((Node *) tle->expr) != attr->atttypid)
+				ereport(ERROR,
+						(errcode(ERRCODE_DATATYPE_MISMATCH),
+						 errmsg("table row type and query-specified row type do not match"),
+						 errdetail("Table has type %s at ordinal position %d, but query expects %s.",
+								   format_type_be(attr->atttypid),
+								   attno,
+								   format_type_be(exprType((Node *) tle->expr)))));
 		}
 	}
 	if (attno != resultDesc->natts)
@@ -1401,18 +1430,18 @@ ExecDeleteEpilogue(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
  *		DELETE is like UPDATE, except that we delete the tuple and no
  *		index modifications are needed.
  *
- *		When deleting from a table, tupleid identifies the tuple to
- *		delete and oldtuple is NULL.  When deleting from a view,
- *		oldtuple is passed to the INSTEAD OF triggers and identifies
- *		what to delete, and tupleid is invalid.  When deleting from a
- *		foreign table, tupleid is invalid; the FDW has to figure out
- *		which row to delete using data from the planSlot.  oldtuple is
- *		passed to foreign table triggers; it is NULL when the foreign
- *		table has no relevant triggers.  We use tupleDeleted to indicate
- *		whether the tuple is actually deleted, callers can use it to
- *		decide whether to continue the operation.  When this DELETE is a
- *		part of an UPDATE of partition-key, then the slot returned by
- *		EvalPlanQual() is passed back using output parameter epqreturnslot.
+ *		When deleting from a table, tupleid identifies the tuple to delete and
+ *		oldtuple is NULL.  When deleting through a view INSTEAD OF trigger,
+ *		oldtuple is passed to the triggers and identifies what to delete, and
+ *		tupleid is invalid.  When deleting from a foreign table, tupleid is
+ *		invalid; the FDW has to figure out which row to delete using data from
+ *		the planSlot.  oldtuple is passed to foreign table triggers; it is
+ *		NULL when the foreign table has no relevant triggers.  We use
+ *		tupleDeleted to indicate whether the tuple is actually deleted,
+ *		callers can use it to decide whether to continue the operation.  When
+ *		this DELETE is a part of an UPDATE of partition-key, then the slot
+ *		returned by EvalPlanQual() is passed back using output parameter
+ *		epqreturnslot.
  *
  *		Returns RETURNING result if any, otherwise NULL.
  * ----------------------------------------------------------------
@@ -2244,21 +2273,22 @@ ExecCrossPartitionUpdateForeignKey(ModifyTableContext *context,
  *		is, we don't want to get stuck in an infinite loop
  *		which corrupts your database..
  *
- *		When updating a table, tupleid identifies the tuple to
- *		update and oldtuple is NULL.  When updating a view, oldtuple
- *		is passed to the INSTEAD OF triggers and identifies what to
- *		update, and tupleid is invalid.  When updating a foreign table,
- *		tupleid is invalid; the FDW has to figure out which row to
- *		update using data from the planSlot.  oldtuple is passed to
- *		foreign table triggers; it is NULL when the foreign table has
- *		no relevant triggers.
+ *		When updating a table, tupleid identifies the tuple to update and
+ *		oldtuple is NULL.  When updating through a view INSTEAD OF trigger,
+ *		oldtuple is passed to the triggers and identifies what to update, and
+ *		tupleid is invalid.  When updating a foreign table, tupleid is
+ *		invalid; the FDW has to figure out which row to update using data from
+ *		the planSlot.  oldtuple is passed to foreign table triggers; it is
+ *		NULL when the foreign table has no relevant triggers.
  *
  *		slot contains the new tuple value to be stored.
  *		planSlot is the output of the ModifyTable's subplan; we use it
  *		to access values from other input tables (for RETURNING),
  *		row-ID junk columns, etc.
  *
- *		Returns RETURNING result if any, otherwise NULL.
+ *		Returns RETURNING result if any, otherwise NULL.  On exit, if tupleid
+ *		had identified the tuple to update, it will identify the tuple
+ *		actually updated after EvalPlanQual.
  * ----------------------------------------------------------------
  */
 static TupleTableSlot *
@@ -2317,6 +2347,8 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	}
 	else
 	{
+		ItemPointerData lockedtid;
+
 		/*
 		 * If we generate a new candidate tuple after EvalPlanQual testing, we
 		 * must loop back here to try again.  (We don't need to redo triggers,
@@ -2325,6 +2357,7 @@ ExecUpdate(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 		 * to do them again.)
 		 */
 redo_act:
+		lockedtid = *tupleid;
 		result = ExecUpdateAct(context, resultRelInfo, tupleid, oldtuple, slot,
 							   canSetTag, &updateCxt);
 
@@ -2417,6 +2450,14 @@ redo_act:
 							if (unlikely(!resultRelInfo->ri_projectNewInfoValid))
 								ExecInitUpdateProjection(context->mtstate,
 														 resultRelInfo);
+
+							if (resultRelInfo->ri_needLockTagTuple)
+							{
+								UnlockTuple(resultRelationDesc,
+											&lockedtid, InplaceUpdateTupleLock);
+								LockTuple(resultRelationDesc,
+										  tupleid, InplaceUpdateTupleLock);
+							}
 
 							/* Fetch the most recent version of old tuple. */
 							oldSlot = resultRelInfo->ri_oldTupleSlot;
@@ -2521,6 +2562,14 @@ ExecOnConflictUpdate(ModifyTableContext *context,
 	Datum		xminDatum;
 	TransactionId xmin;
 	bool		isnull;
+
+	/*
+	 * Parse analysis should have blocked ON CONFLICT for all system
+	 * relations, which includes these.  There's no fundamental obstacle to
+	 * supporting this; we'd just need to handle LOCKTAG_TUPLE like the other
+	 * ExecUpdate() caller.
+	 */
+	Assert(!resultRelInfo->ri_needLockTagTuple);
 
 	/* Determine lock mode to use */
 	lockmode = ExecUpdateLockMode(context->estate, resultRelInfo);
@@ -2805,18 +2854,20 @@ ExecMergeMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 				 ItemPointer tupleid, bool canSetTag)
 {
 	ModifyTableState *mtstate = context->mtstate;
+	ItemPointerData lockedtid;
 	TupleTableSlot *newslot;
 	EState	   *estate = context->estate;
 	ExprContext *econtext = mtstate->ps.ps_ExprContext;
 	bool		isNull;
 	EPQState   *epqstate = &mtstate->mt_epqstate;
 	ListCell   *l;
+	bool		no_further_action = true;
 
 	/*
 	 * If there are no WHEN MATCHED actions, we are done.
 	 */
 	if (resultRelInfo->ri_matchedMergeAction == NIL)
-		return true;
+		return no_further_action;
 
 	/*
 	 * Make tuple and any needed join variables available to ExecQual and
@@ -2829,6 +2880,20 @@ ExecMergeMatched(ModifyTableContext *context, ResultRelInfo *resultRelInfo,
 	econtext->ecxt_outertuple = NULL;
 
 lmerge_matched:
+
+	if (resultRelInfo->ri_needLockTagTuple)
+	{
+		/*
+		 * This locks even for CMD_DELETE, for CMD_NOTHING, and for tuples
+		 * that don't match mas_whenqual.  MERGE on system catalogs is a minor
+		 * use case, so don't bother optimizing those.
+		 */
+		LockTuple(resultRelInfo->ri_RelationDesc, tupleid,
+				  InplaceUpdateTupleLock);
+		lockedtid = *tupleid;
+	}
+	else
+		ItemPointerSetInvalid(&lockedtid);
 
 	/*
 	 * This routine is only invoked for matched rows, and we must have found
@@ -2900,7 +2965,7 @@ lmerge_matched:
 										tupleid, NULL, newslot, &result))
 				{
 					if (result == TM_Ok)
-						return true;	/* "do nothing" */
+						goto out;	/* "do nothing" */
 					break;		/* concurrent update/delete */
 				}
 				result = ExecUpdateAct(context, resultRelInfo, tupleid, NULL,
@@ -2916,7 +2981,7 @@ lmerge_matched:
 				if (updateCxt.crossPartUpdate)
 				{
 					mtstate->mt_merge_updated += 1;
-					return true;
+					goto out;
 				}
 
 				if (result == TM_Ok && updateCxt.updated)
@@ -2933,7 +2998,7 @@ lmerge_matched:
 										NULL, NULL, &result))
 				{
 					if (result == TM_Ok)
-						return true;	/* "do nothing" */
+						goto out;	/* "do nothing" */
 					break;		/* concurrent update/delete */
 				}
 				result = ExecDeleteAct(context, resultRelInfo, tupleid, false);
@@ -3011,7 +3076,8 @@ lmerge_matched:
 				 * If the tuple was already deleted, return to let caller
 				 * handle it under NOT MATCHED clauses.
 				 */
-				return false;
+				no_further_action = false;
+				goto out;
 
 			case TM_Updated:
 				{
@@ -3057,13 +3123,19 @@ lmerge_matched:
 							 * NOT MATCHED actions.
 							 */
 							if (TupIsNull(epqslot))
-								return false;
+							{
+								no_further_action = false;
+								goto out;
+							}
 
 							(void) ExecGetJunkAttribute(epqslot,
 														resultRelInfo->ri_RowIdAttNo,
 														&isNull);
 							if (isNull)
-								return false;
+							{
+								no_further_action = false;
+								goto out;
+							}
 
 							/*
 							 * When a tuple was updated and migrated to
@@ -3089,6 +3161,10 @@ lmerge_matched:
 							 * Update tupleid to that of the new tuple, for
 							 * the refetch we do at the top.
 							 */
+							if (resultRelInfo->ri_needLockTagTuple)
+								UnlockTuple(resultRelInfo->ri_RelationDesc,
+											&lockedtid,
+											InplaceUpdateTupleLock);
 							ItemPointerCopy(&context->tmfd.ctid, tupleid);
 							goto lmerge_matched;
 
@@ -3098,7 +3174,8 @@ lmerge_matched:
 							 * tuple already deleted; tell caller to run NOT
 							 * MATCHED actions
 							 */
-							return false;
+							no_further_action = false;
+							goto out;
 
 						case TM_SelfModified:
 
@@ -3126,13 +3203,15 @@ lmerge_matched:
 
 							/* This shouldn't happen */
 							elog(ERROR, "attempted to update or delete invisible tuple");
-							return false;
+							no_further_action = false;
+							goto out;
 
 						default:
 							/* see table_tuple_lock call in ExecDelete() */
 							elog(ERROR, "unexpected table_tuple_lock status: %u",
 								 result);
-							return false;
+							no_further_action = false;
+							goto out;
 					}
 				}
 
@@ -3154,7 +3233,11 @@ lmerge_matched:
 	/*
 	 * Successfully executed an action or no qualifying action was found.
 	 */
-	return true;
+out:
+	if (ItemPointerIsValid(&lockedtid))
+		UnlockTuple(resultRelInfo->ri_RelationDesc, &lockedtid,
+					InplaceUpdateTupleLock);
+	return no_further_action;
 }
 
 /*
@@ -3312,6 +3395,7 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 			switch (action->commandType)
 			{
 				case CMD_INSERT:
+					/* INSERT actions always use rootRelInfo */
 					ExecCheckPlanOutput(rootRelInfo->ri_RelationDesc,
 										action->targetList);
 
@@ -3351,9 +3435,23 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 					}
 					else
 					{
-						/* not partitioned? use the stock relation and slot */
-						tgtslot = resultRelInfo->ri_newTupleSlot;
-						tgtdesc = RelationGetDescr(resultRelInfo->ri_RelationDesc);
+						/*
+						 * If the MERGE targets an inherited table, we insert
+						 * into the root table, so we must initialize its
+						 * "new" tuple slot, if not already done, and use its
+						 * relation descriptor for the projection.
+						 *
+						 * For non-inherited tables, rootRelInfo and
+						 * resultRelInfo are the same, and the "new" tuple
+						 * slot will already have been initialized.
+						 */
+						if (rootRelInfo->ri_newTupleSlot == NULL)
+							rootRelInfo->ri_newTupleSlot =
+								table_slot_create(rootRelInfo->ri_RelationDesc,
+												  &estate->es_tupleTable);
+
+						tgtslot = rootRelInfo->ri_newTupleSlot;
+						tgtdesc = RelationGetDescr(rootRelInfo->ri_RelationDesc);
 					}
 
 					action_state->mas_proj =
@@ -3381,10 +3479,81 @@ ExecInitMerge(ModifyTableState *mtstate, EState *estate)
 				case CMD_NOTHING:
 					break;
 				default:
-					elog(ERROR, "unknown operation");
+					elog(ERROR, "unknown action in MERGE WHEN clause");
 					break;
 			}
 		}
+	}
+
+	/*
+	 * If the MERGE targets an inherited table, any INSERT actions will use
+	 * rootRelInfo, and rootRelInfo will not be in the resultRelInfo array.
+	 * Therefore we must initialize its WITH CHECK OPTION constraints, as
+	 * ExecInitModifyTable did for the resultRelInfo entries, but there should
+	 * be nothing to do for RETURNING, since MERGE does not support RETURNING.
+	 *
+	 * Note that the planner does not build a withCheckOptionList for the root
+	 * relation, but as in ExecInitPartitionInfo, we can use the first
+	 * resultRelInfo entry as a reference to calculate the attno's for the
+	 * root table.
+	 */
+	if (rootRelInfo != mtstate->resultRelInfo &&
+		rootRelInfo->ri_RelationDesc->rd_rel->relkind != RELKIND_PARTITIONED_TABLE &&
+		(mtstate->mt_merge_subcommands & MERGE_INSERT) != 0)
+	{
+		Relation	rootRelation = rootRelInfo->ri_RelationDesc;
+		Relation	firstResultRel = mtstate->resultRelInfo[0].ri_RelationDesc;
+
+		if (node->withCheckOptionLists != NIL)
+		{
+			List	   *wcoList;
+			List	   *wcoExprs = NIL;
+
+			/* There should be as many WCO lists as result rels */
+			Assert(list_length(node->withCheckOptionLists) ==
+				   list_length(node->resultRelations));
+
+			/*
+			 * Use the first WCO list as a reference. In the most common case,
+			 * this will be for the same relation as rootRelInfo, and so there
+			 * will be no need to adjust its attno's.
+			 */
+			wcoList = linitial(node->withCheckOptionLists);
+			if (rootRelation != firstResultRel)
+			{
+				int			firstVarno = mtstate->resultRelInfo[0].ri_RangeTableIndex;
+				AttrMap    *part_attmap;
+				bool		found_whole_row;
+
+				/* Convert any Vars in it to contain the root's attno's */
+				part_attmap =
+					build_attrmap_by_name(RelationGetDescr(rootRelation),
+										  RelationGetDescr(firstResultRel),
+										  false);
+
+				wcoList = (List *)
+					map_variable_attnos((Node *) wcoList,
+										firstVarno, 0,
+										part_attmap,
+										RelationGetForm(rootRelation)->reltype,
+										&found_whole_row);
+			}
+
+			foreach(lc, wcoList)
+			{
+				WithCheckOption *wco = lfirst_node(WithCheckOption, lc);
+				ExprState  *wcoExpr = ExecInitQual(castNode(List, wco->qual),
+												   &mtstate->ps);
+
+				wcoExprs = lappend(wcoExprs, wcoExpr);
+			}
+
+			rootRelInfo->ri_WithCheckOptions = wcoList;
+			rootRelInfo->ri_WithCheckOptionExprs = wcoExprs;
+		}
+
+		/* MERGE does not support RETURNING */
+		Assert(node->returningLists == NIL);
 	}
 }
 
@@ -3600,6 +3769,7 @@ ExecModifyTable(PlanState *pstate)
 	HeapTupleData oldtupdata;
 	HeapTuple	oldtuple;
 	ItemPointer tupleid;
+	bool		tuplock;
 
 	CHECK_FOR_INTERRUPTS();
 
@@ -3800,8 +3970,8 @@ ExecModifyTable(PlanState *pstate)
 			 * know enough here to set t_tableOid.  Quite separately from
 			 * this, the FDW may fetch its own junk attrs to identify the row.
 			 *
-			 * Other relevant relkinds, currently limited to views, always
-			 * have a wholerow attribute.
+			 * Other relevant relkinds, currently limited to views having
+			 * INSTEAD OF triggers, always have a wholerow attribute.
 			 */
 			else if (AttributeNumberIsValid(resultRelInfo->ri_RowIdAttNo))
 			{
@@ -3842,6 +4012,8 @@ ExecModifyTable(PlanState *pstate)
 				break;
 
 			case CMD_UPDATE:
+				tuplock = false;
+
 				/* Initialize projection info if first time for this table */
 				if (unlikely(!resultRelInfo->ri_projectNewInfoValid))
 					ExecInitUpdateProjection(node, resultRelInfo);
@@ -3853,6 +4025,7 @@ ExecModifyTable(PlanState *pstate)
 				oldSlot = resultRelInfo->ri_oldTupleSlot;
 				if (oldtuple != NULL)
 				{
+					Assert(!resultRelInfo->ri_needLockTagTuple);
 					/* Use the wholerow junk attr as the old tuple. */
 					ExecForceStoreHeapTuple(oldtuple, oldSlot, false);
 				}
@@ -3861,6 +4034,11 @@ ExecModifyTable(PlanState *pstate)
 					/* Fetch the most recent version of old tuple. */
 					Relation	relation = resultRelInfo->ri_RelationDesc;
 
+					if (resultRelInfo->ri_needLockTagTuple)
+					{
+						LockTuple(relation, tupleid, InplaceUpdateTupleLock);
+						tuplock = true;
+					}
 					if (!table_tuple_fetch_row_version(relation, tupleid,
 													   SnapshotAny,
 													   oldSlot))
@@ -3873,6 +4051,9 @@ ExecModifyTable(PlanState *pstate)
 				/* Now apply the update. */
 				slot = ExecUpdate(&context, resultRelInfo, tupleid, oldtuple,
 								  slot, node->canSetTag);
+				if (tuplock)
+					UnlockTuple(resultRelInfo->ri_RelationDesc, tupleid,
+								InplaceUpdateTupleLock);
 				break;
 
 			case CMD_DELETE:

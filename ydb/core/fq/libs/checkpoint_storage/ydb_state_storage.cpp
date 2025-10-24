@@ -368,26 +368,6 @@ TStateStorage::TStateStorage(
 TFuture<TIssues> TStateStorage::Init() {
     TIssues issues;
 
-    // // TODO: list at first?
-    // if (YdbConnection->DB != YdbConnection->TablePathPrefix) {
-    //     //LOG_STREAMS_STORAGE_SERVICE_INFO("Creating directory: " << YdbConnection->TablePathPrefix);
-    //     auto status = YdbConnection->SchemeClient.MakeDirectory(YdbConnection->TablePathPrefix).GetValueSync();
-    //     if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-    //         issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-
-    //         TStringStream ss;
-    //         ss << "Failed to create path '" << YdbConnection->TablePathPrefix << "': " << status.GetStatus();
-    //         if (issues) {
-    //             ss << ", issues: ";
-    //             issues.PrintTo(ss);
-    //         }
-
-    //         //LOG_STREAMS_STORAGE_SERVICE_DEBUG(ss.Str());
-    //         return MakeFuture(std::move(issues));
-    //     }
-    
-    // }
-
     auto stateDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("task_id", EPrimitiveType::Uint64)

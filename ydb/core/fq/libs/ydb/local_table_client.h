@@ -45,6 +45,14 @@ public:
         , Operation(operation) {
     }
 
+    ~TRetryOperationActor() override {
+        if (!Promise.HasValue()) {
+            auto status = NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
+                NYdb::NIssue::TIssues({NYdb::NIssue::TIssue("Destructor calling")}));
+            Promise.SetValue(status);
+        }
+    }
+
     void Bootstrap() {
         LOG_STREAMS_STORAGE_SERVICE_TRACE("TRetryOperationActor: successfully bootstrapped");
         Become(&TRetryOperationActor::StateFunc);

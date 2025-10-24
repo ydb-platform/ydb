@@ -128,6 +128,7 @@ public:
                 .PqGateway = PqGateway,
                 .CheckpointPeriod = CheckpointPeriod,
                 .LogSettings = LogSettings,
+                .UseLocalCheckpointsInStreamingQueries = true,
             });
 
             Kikimr->GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(UseSchemaSecrets());
@@ -587,8 +588,8 @@ public:
     void WaitCheckpointUpdate(const TString& checkpointId) {
         std::optional<uint64_t> minSeqNo;
         WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
-            const auto& result = ExecExternalQuery(fmt::format(R"(
-                SELECT MIN(seq_no) AS seq_no FROM checkpoints_metadata
+            const auto& result = ExecQuery(fmt::format(R"(
+                SELECT MIN(seq_no) AS seq_no FROM `.metadata/checkpoints/checkpoints_metadata`
                 WHERE graph_id = "{checkpoint_id}";
             )", "checkpoint_id"_a = checkpointId));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -917,7 +918,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSourceBasicAuth("sourceName");
     }
 
-    Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb111, TStreamingTestFixture) {
         SetupAppConfig().MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
 
         ExecSchemeQuery(TStringBuilder() << R"(
@@ -927,6 +928,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 DATABASE_NAME=")" << YDB_DATABASE << R"(",
                 AUTH_METHOD="NONE"
             );)", EStatus::SCHEME_ERROR);
+        Sleep(TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
@@ -1431,9 +1433,9 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         ReadTopicMessage(outputTopicName, "A");
         WaitCheckpointUpdate(checkpointId);
 
-        const auto& result = ExecExternalQuery(fmt::format(R"(
+        const auto& result = ExecQuery(fmt::format(R"(
             SELECT COUNT(*) AS states_count FROM (
-                SELECT DISTINCT task_id FROM states
+                SELECT DISTINCT task_id FROM `.metadata/checkpoints/states`
                 WHERE graph_id = "{checkpoint_id}"
             )
         )", "checkpoint_id"_a = checkpointId));

@@ -246,6 +246,16 @@ void TRelationGraph::DumpGraph(IOutputStream &OS) const {
     OS << "}\n";
 }
 
+std::vector<int> TRelationGraph::GetDegrees() const {
+    std::vector<int> degrees(AdjacencyList_.size());
+    for (unsigned i = 0; i < AdjacencyList_.size(); ++ i) {
+        degrees[i] = AdjacencyList_[i].size();
+    }
+
+    std::sort(degrees.begin(), degrees.end());
+    return degrees;
+}
+
 void TRelationGraph::ReorderDFS() {
     std::vector<bool> visited(GetN(), false);
     std::vector<int> newOrder;

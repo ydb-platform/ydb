@@ -257,11 +257,11 @@ private:
                 return;
             }
 
-            FilteredOffsets.push_back(offset);
-
             auto newNumberRows = NumberRows;
             auto newDataPackerSize = DataPackerSize;
             if (filter) {
+                FilteredOffsets.push_back(offset);
+
                 Y_DEFER {
                     // Values allocated on parser allocator and should be released
                     FilteredRow.assign(Columns.size(), NYql::NUdf::TUnboxedValue());
@@ -296,7 +296,7 @@ private:
             NumberRows = newNumberRows;
             DataPackerSize = newDataPackerSize;
             if (DataPackerSize > MAX_BATCH_SIZE) {
-                FinishPacking();
+                FinishPacking(offset);
             }
         }
 
@@ -319,9 +319,12 @@ private:
             return TStatus::Success();
         }
 
-        void FinishPacking() {
+        void FinishPacking(ui64 offset) {
             if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
                 LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
+                if (FilteredOffsets.empty()) {
+                    FilteredOffsets.push_back(offset);
+                }
                 ClientData.emplace(NYql::MakeReadOnlyRope(DataPacker->Finish()), std::move(FilteredOffsets), Watermark);
                 NumberRows = 0;
                 DataPackerSize = 0;

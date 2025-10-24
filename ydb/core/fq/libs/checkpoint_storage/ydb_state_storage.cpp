@@ -366,8 +366,6 @@ TStateStorage::TStateStorage(
 }
 
 TFuture<TIssues> TStateStorage::Init() {
-    TIssues issues;
-
     auto stateDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("task_id", EPrimitiveType::Uint64)
@@ -379,19 +377,25 @@ TFuture<TIssues> TStateStorage::Init() {
         .SetPrimaryKeyColumns({"graph_id", "task_id", "coordinator_generation", "seq_no", "blob_seq_num"})
         .Build();
 
-    auto status = CreateTable(YdbConnection, StatesTable, std::move(stateDesc)).GetValueSync();
-    if (!IsTableCreated(status)) {
-        issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+    auto promise = NThreading::NewPromise<TIssues>();
 
-        TStringStream ss;
-        ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
-        if (issues) {
-            ss << ", issues: ";
-            issues.PrintTo(ss);
-        }
-    }
-
-    return MakeFuture(std::move(issues));
+    CreateTable(YdbConnection, StatesTable, std::move(stateDesc))
+        .Subscribe([promise](const auto& f) mutable {
+            auto status = f.GetValue();
+            if (!IsTableCreated(status)) {
+                auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+                TStringStream ss;
+                ss << "Failed to create " << StatesTable << " table: " << status.GetStatus();
+                if (issues) {
+                    ss << ", issues: ";
+                    issues.PrintTo(ss);
+                }
+                promise.SetValue(std::move(issues));
+                return;
+            }
+            promise.SetValue(TIssues());
+        });
+    return promise.GetFuture();
 }
 
 EStateType TStateStorage::DeserializeState(const TContextPtr& context, TContext::TaskInfo& taskInfo) {

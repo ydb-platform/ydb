@@ -54,7 +54,6 @@ public:
     }
 
     void Bootstrap() {
-        LOG_STREAMS_STORAGE_SERVICE_TRACE("TRetryOperationActor: successfully bootstrapped");
         Become(&TRetryOperationActor::StateFunc);
         StartOperation();
     }
@@ -72,7 +71,6 @@ private:
     void Handle(TEvPrivate::TEvResult::TPtr& ev) {
         const auto& status = ev->Get()->Status;
         if (!status.IsSuccess()) {
-            Cerr << "TRetryOperationActor::Operation !IsSuccess" << Endl;
             ScheduleRetry(status);
         } else {
             Promise.SetValue(status);
@@ -80,9 +78,7 @@ private:
         }
     }
 
-    void StartOperation() {
-        LOG_STREAMS_STORAGE_SERVICE_TRACE("TRetryOperationActor: StartOperation()");
-        
+    void StartOperation() {        
         auto session = MakeIntrusive<TLocalSession>();
         auto future = Operation(session);
         future.Subscribe([this](const NYdb::TAsyncStatus& result){
@@ -91,7 +87,6 @@ private:
     }
 
     void ScheduleRetry(const NYdb::TStatus& status) {
-        LOG_STREAMS_STORAGE_SERVICE_TRACE("TRetryOperationActor: ScheduleRetry()");
         if (RetryState == nullptr) {
             RetryState = RetryPolicy->CreateRetryState();
         }

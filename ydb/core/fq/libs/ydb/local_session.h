@@ -53,7 +53,6 @@ public:
             }
             desc.SetType(type);
             desc.SetNotNull(!optional); 
-
             columns.push_back(desc);
         }
         Register(
@@ -93,11 +92,9 @@ struct TLocalSession : public ISession {
 
     TLocalSession() {
         QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQuerySession().release());
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession()");
     }
 
     ~TLocalSession() {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("~TLocalSession()");
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new NActors::TEvents::TEvPoison());
     }
 
@@ -106,8 +103,6 @@ struct TLocalSession : public ISession {
         NFq::ISession::TTxControl txControl,
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::ExecuteDataQuery()");
-
         auto promise = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvExecuteDataQuery(
             sql,
@@ -125,15 +120,12 @@ struct TLocalSession : public ISession {
     }
 
     NYdb::TAsyncStatus Rollback() override {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::Rollback()");
         NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvRollbackTransaction());
         HasTransaction = false;
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
 
     NYdb::TAsyncStatus CreateTable(const std::string& db, const std::string& path, NYdb::NTable::TTableDescription&& tableDesc) override {
-        LOG_STREAMS_STORAGE_SERVICE_INFO("TLocalSession::CreateTable()");
-
         auto promise = NThreading::NewPromise<NYdb::TStatus>();
         NActors::TActivationContext::Register(new TTableCreator(db, path, std::move(tableDesc), promise));
         return promise.GetFuture();

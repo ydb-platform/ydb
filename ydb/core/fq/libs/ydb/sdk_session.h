@@ -33,11 +33,6 @@ struct TSdkSession : public ISession {
         if (txControl.Commit_) {
             tx = tx.CommitTx();
         }
-        Cerr << "ExecuteDataQuery " << sql << Endl;
-        Cerr << "Begin_ " << txControl.Begin_ << Endl;
-        Cerr << "Continue_ " << txControl.Continue_ << Endl;
-        Cerr << "Commit_ " << txControl.Commit_ << Endl;
-    
         if (paramsBuilder) {
             return Session.ExecuteDataQuery(sql, tx, paramsBuilder->Build(), execDataQuerySettings);
         } else {

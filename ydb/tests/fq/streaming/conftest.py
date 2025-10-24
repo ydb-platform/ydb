@@ -34,12 +34,12 @@ class YdbClient:
 @pytest.fixture(scope="function")
 def kikimr(request):
     local_checkpoints = request.param["local_checkpoints"]
-    
+
     class Kikimr:
         def __init__(self, client, cluster):
             self.YdbClient = client
             self.Cluster = cluster
-        
+
     def get_ydb_config():
         config = KikimrConfigGenerator(
             extra_feature_flags={
@@ -58,8 +58,8 @@ def kikimr(request):
         query_service_config["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
         query_service_config["enable_match_recognize"] = True
 
-        #monitoring_config = config.yaml_config.setdefault("monitoring_config", {})
-        #monitoring_config["monitoring_port"] = 8765
+        # monitoring_config = config.yaml_config.setdefault("monitoring_config", {})
+        # monitoring_config["monitoring_port"] = 8765
 
         database_connection = query_service_config.setdefault("streaming_queries", {}).setdefault("external_storage", {}).setdefault("database_connection", {})
         if not local_checkpoints:

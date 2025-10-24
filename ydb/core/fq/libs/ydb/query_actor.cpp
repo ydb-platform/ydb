@@ -26,7 +26,7 @@ public:
     TQuerySession()
         : NKikimr::TQueryBase(NKikimrServices::STREAMS_STORAGE_SERVICE) {
     }
-    
+
 private:
 
     TString LogPrefix() const {
@@ -56,7 +56,6 @@ private:
     }
 
     void Handle(TEvQuerySession::TEvExecuteDataQuery::TPtr& ev) {
-        LOG_T("TEvExecuteDataQuery");
         Y_ABORT_UNLESS(!IsExecuting);
         Y_ABORT_UNLESS(!DataQuery);
 
@@ -65,21 +64,17 @@ private:
     }
 
     void Handle(TEvQuerySession::TEvRollbackTransaction::TPtr& /*ev*/) {
-        LOG_T("TEvRollbackTransaction");
         Y_ABORT_UNLESS(!DataQuery);
         Finish(Ydb::StatusIds::INTERNAL_ERROR, "Rollback transaction", true);
     }
 
     void OnRunQuery() final {
-        LOG_T("OnRunQuery()");
         ReadyToExecute = true;
         ProcessQueries();
     }
 
     void OnQueryResult() final {
         Y_ABORT_UNLESS(IsExecuting);
-        LOG_T("OnQueryResult()");
-
         auto promise = DataQuery->Promise;
         DataQuery = std::nullopt;
         auto status = NYdb::TStatus(NYdb::EStatus::SUCCESS, NYdb::NIssue::TIssues());
@@ -92,8 +87,6 @@ private:
     }
 
     void OnFinish(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) final {
-        LOG_T("OnFinish");
-
         if (DataQuery) {          
             NYdb::TStatus status(static_cast<NYdb::EStatus>(statusCode), NYdb::NAdapters::ToSdkIssues(issues));
             DataQuery->Promise.SetValue(NYdb::NTable::TDataQueryResult(std::move(status), std::move(ResultSets), std::nullopt, std::nullopt, false, std::nullopt));
@@ -125,7 +118,6 @@ private:
     }
 
     void DoPassAway() {
-        LOG_T("DoPassAway");
         if (DataQuery) {
             IsFinishing = true;
             return;

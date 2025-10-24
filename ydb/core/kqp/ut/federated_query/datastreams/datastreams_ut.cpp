@@ -918,7 +918,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreatePqSourceBasicAuth("sourceName");
     }
 
-    Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb111, TStreamingTestFixture) {
+    Y_UNIT_TEST_F(FailedWithoutAvailableExternalDataSourcesYdb, TStreamingTestFixture) {
         SetupAppConfig().MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
 
         ExecSchemeQuery(TStringBuilder() << R"(
@@ -928,7 +928,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 DATABASE_NAME=")" << YDB_DATABASE << R"(",
                 AUTH_METHOD="NONE"
             );)", EStatus::SCHEME_ERROR);
-        Sleep(TDuration::Seconds(1));
     }
 
     Y_UNIT_TEST_F(CheckAvailableExternalDataSourcesYdb, TStreamingTestFixture) {

@@ -674,53 +674,13 @@ TCheckpointStorage::TCheckpointStorage(
 
 TFuture<TIssues> TCheckpointStorage::Init()
 {
-    TIssues issues;
-
-//     // TODO: list at first?
-//     if (YdbGateway->GetDb() != YdbGateway->GetTablePathPrefix()) {
-//         auto status = YdbConnection->SchemeClient.MakeDirectory(YdbGateway->GetTablePathPrefix()).GetValueSync();
-//         if (!status.IsSuccess() && status.GetStatus() != EStatus::ALREADY_EXISTS) {
-//             TStringStream ss;
-//             ss << "Failed to create path '" << YdbGateway->GetTablePathPrefix() << "'";
-//             NYql::TIssue issue(ss.Str());
-//             auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
-//             if (issues) {
-//                 for (const NYql::TIssue& i : issues) {
-//                     issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
-//                 }
-//             }
-//             return MakeFuture(NYql::TIssues{issue});
-//         }
-//     }
-
-#define RUN_CREATE_TABLE(tableName, desc)                           \
-    {                                                               \
-        auto status = CreateTable(YdbConnection,                    \
-                                  tableName,                        \
-                                  std::move(desc)).GetValueSync();  \
-        if (!IsTableCreated(status)) {                              \
-            issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());                            \
-                                                                    \
-            TStringStream ss;                                       \
-            ss << "Failed to create " << tableName                  \
-               << " table: " << status.GetStatus();                 \
-            if (issues) {                                           \
-                ss << ", issues: ";                                 \
-                issues.PrintTo(ss);                                 \
-            }                                                       \
-                                                                    \
-            return MakeFuture(std::move(issues));                   \
-        }                                                           \
-    }
-
     auto graphDesc = TTableBuilder()
         .AddNullableColumn("graph_id", EPrimitiveType::String)
         .AddNullableColumn("generation", EPrimitiveType::Uint64)
         .SetPrimaryKeyColumn("graph_id")
         .Build();
-
-    RUN_CREATE_TABLE(CoordinatorsSyncTable, graphDesc);
-
+    auto f1 = CreateTable(YdbConnection, CoordinatorsSyncTable, std::move(graphDesc));
+    
     // TODO: graph_id could be just secondary index, but API forbids it,
     // so we set it primary key column to have index
     auto checkpointDesc = TTableBuilder()
@@ -734,8 +694,7 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("graph_description_id", EPrimitiveType::String)
         .SetPrimaryKeyColumns({"graph_id", "coordinator_generation", "seq_no"})
         .Build();
-
-    RUN_CREATE_TABLE(CheckpointsMetadataTable, checkpointDesc);
+    auto f2 = CreateTable(YdbConnection, CheckpointsMetadataTable, std::move(checkpointDesc));
 
     auto checkpointGraphsDescDesc = TTableBuilder()
         .AddNullableColumn("id", EPrimitiveType::String)
@@ -743,12 +702,32 @@ TFuture<TIssues> TCheckpointStorage::Init()
         .AddNullableColumn("graph_description", EPrimitiveType::String)
         .SetPrimaryKeyColumn("id")
         .Build();
+    auto f3 = CreateTable(YdbConnection, CheckpointsGraphsDescriptionTable, std::move(checkpointGraphsDescDesc));
 
-    RUN_CREATE_TABLE(CheckpointsGraphsDescriptionTable, checkpointGraphsDescDesc);
+    std::vector<NThreading::TFuture<NYdb::TStatus>> futures{f1, f2, f3};
 
-#undef RUN_CREATE_TABLE
-
-    return MakeFuture(std::move(issues));
+    auto promise = NThreading::NewPromise<TIssues>();
+    NThreading::WaitAll(futures)
+        .Subscribe([futures = std::move(futures), promise](const auto& ) mutable {
+            auto check = [] (const NYdb::TStatus& status, auto& promise) mutable {
+                if (!IsTableCreated(status)) {
+                    auto issues = NYdb::NAdapters::ToYqlIssues(status.GetIssues());
+                    TStringStream ss;
+                    ss << "Failed to create table: " << status.GetStatus();
+                    if (issues) {
+                        ss << ", issues: ";
+                        issues.PrintTo(ss);
+                    }
+                    promise.SetValue(std::move(issues));
+                    return false;
+                }
+                return true;
+            };
+            if (check(futures[0].GetValue(), promise) && check(futures[1].GetValue(), promise) && check(futures[2].GetValue(), promise)) {
+                promise.SetValue(TIssues());
+            }
+        });
+    return promise.GetFuture();
 }
 
 TFuture<TIssues> TCheckpointStorage::RegisterGraphCoordinator(const TCoordinatorId& coordinator)

@@ -58,6 +58,8 @@ public:
         } else {
             InitLocalConnection();
         }
+        WaitBootstrapped();
+        Cerr << "\n--------------------------- INIT FINISHED ---------------------------\n";
     }
 
     void InitSdkConnection(bool enableGc) {
@@ -111,19 +113,16 @@ public:
         GetRuntime()->SetDispatchTimeout(TestTimeout);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
-
-        WaitBootstrapped();
-        Cerr << "\n--------------------------- INIT FINISHED ---------------------------\n";
     }
 
     void WaitBootstrapped() {
         TActorId sender = GetRuntime()->AllocateEdgeActor();
         while (true) {
             try {
-                auto request = std::make_unique<TEvCheckpointStorage::TEvAbortCheckpointRequest>(TCoordinatorId{"graphId", 0}, TCheckpointId{0, 0}, "test reason");
+                auto request = std::make_unique<TEvCheckpointStorage::TEvGetCheckpointsMetadataRequest>("aaa");
                 GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
-                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvAbortCheckpointResponse>(sender, TDuration::Seconds(1));
-                if (event) {
+                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvGetCheckpointsMetadataResponse>(sender, TDuration::Seconds(1));
+                 if (event && event->Get()->Issues.Empty()) {
                     break;
                 }
             } catch (TEmptyEventQueueException&) {

@@ -67,6 +67,28 @@ struct TRequestContext : public TThrRefBase {
     }
 };
 
+struct TEvPrivate {
+    // Event ids
+    enum EEv : ui32 {
+        EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
+        EvInitResult = EvBegin + 10,
+        EvInitialize,
+        EvEnd
+    };
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+    // Events
+    struct TEvInitResult : public TEventLocal<TEvInitResult, EvInitResult> {
+        TEvInitResult(const NYql::TIssues& storageIssues, const NYql::TIssues& stateIssues)
+            : StorageIssues(storageIssues)
+            , StateIssues(stateIssues) {}
+        NYql::TIssues StorageIssues;
+        NYql::TIssues StateIssues;
+    };
+    struct TEvInitialize : public TEventLocal<TEvInitialize, EvInitialize> {
+    };
+};
+
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     TCheckpointStorageSettings Config;
     TString IdsPrefix;
@@ -77,7 +99,6 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYdb::TDriver Driver;
     const TStorageProxyMetricsPtr Metrics;
-    bool Initialized = false;
 
 public:
     explicit TStorageProxy(
@@ -103,6 +124,8 @@ private:
 
         hFunc(NYql::NDq::TEvDqCompute::TEvSaveTaskState, Handle);
         hFunc(NYql::NDq::TEvDqCompute::TEvGetTaskState, Handle);
+        hFunc(TEvPrivate::TEvInitResult, Handle);
+        hFunc(TEvPrivate::TEvInitialize, Handle);
     )
 
     void Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev);
@@ -116,6 +139,8 @@ private:
 
     void Handle(NYql::NDq::TEvDqCompute::TEvSaveTaskState::TPtr& ev);
     void Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev);
+    void Handle(TEvPrivate::TEvInitResult::TPtr& ev);
+    void Handle(TEvPrivate::TEvInitialize::TPtr& ev);
 };
 
 static void FillDefaultParameters(TCheckpointStorageSettings& checkpointCoordinatorConfig, TExternalStorageSettings& ydbStorageConfig) {
@@ -169,27 +194,19 @@ void TStorageProxy::Bootstrap() {
 }
 
 void TStorageProxy::Initialize() {
-    if (Initialized) {
-        return;
-    }
-    LOG_STREAMS_STORAGE_SERVICE_INFO("Initialize");
-    Initialized = true;
+    LOG_STREAMS_STORAGE_SERVICE_TRACE("Initialize");
 
-    auto issues = CheckpointStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << issues.ToOneLineString());
-        Initialized = false;
-    }
-    
-    issues = StateStorage->Init().GetValueSync();
-    if (!issues.Empty()) {
-        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint state storage: " << issues.ToOneLineString());
-        Initialized = false;
-    }
+    auto storageInitFuture = CheckpointStorage->Init();
+    auto stateInitFuture = StateStorage->Init();
+
+    std::vector<NThreading::TFuture<NYql::TIssues>> futures{storageInitFuture, stateInitFuture};
+    NThreading::WaitAll(futures)
+        .Subscribe([futures = std::move(futures), actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const auto& ) mutable {
+            actorSystem->Send(actorId, new TEvPrivate::TEvInitResult(futures[0].GetValue(), futures[1].GetValue()));
+        });
 }
 
 void TStorageProxy::Handle(TEvCheckpointStorage::TEvRegisterCoordinatorRequest::TPtr& ev) {
-    Initialize();
     auto context = MakeIntrusive<TRequestContext>(Metrics);
 
     const auto* event = ev->Get();
@@ -443,6 +460,25 @@ void TStorageProxy::Handle(NYql::NDq::TEvDqCompute::TEvGetTaskState::TPtr& ev) {
             LOG_STREAMS_STORAGE_SERVICE_AS_DEBUG(*actorSystem, "[" << graphId << "] [" << checkpointId << "] Send TEvGetTaskStateResult: tasks: {" << JoinSeq(", ", taskIds) << "}");
             actorSystem->Send(sender, response.release(), 0, cookie);
         });
+}
+
+void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
+    const auto* event = ev->Get();
+    if (!event->StorageIssues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init checkpoint storage: " << event->StorageIssues.ToOneLineString());
+    }
+    if (!event->StateIssues.Empty()) {
+        LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init state storage: " << event->StateIssues.ToOneLineString());
+    }
+    if (!event->StorageIssues.Empty() || !event->StateIssues.Empty()) {
+        Schedule(TDuration::Seconds(5), new TEvPrivate::TEvInitialize());
+        return;
+    }
+    LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully inited");
+}
+
+void TStorageProxy::Handle(TEvPrivate::TEvInitialize::TPtr& /*ev*/) {
+    Initialize();
 }
 
 } // namespace

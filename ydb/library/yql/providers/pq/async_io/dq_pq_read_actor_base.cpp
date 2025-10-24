@@ -161,16 +161,16 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
         SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
         lateArrivalDelay,
         idleDelay,
-        TInstant::Now()
+        LogPrefix
     );
 }
 
-void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
+void TDqPqReadActorBase::MaybeScheduleNextIdleCheck() {
     if (!WatermarkTracker) {
         return;
     }
 
-    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
+    const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt();
     if (!nextIdleCheckAt) {
         return;
     }

@@ -22,6 +22,7 @@ struct TComputeActorAsyncInputHelper {
     TIssuesBuffer IssuesBuffer;
     bool Finished = false;
     const NDqProto::EWatermarksMode WatermarksMode = NDqProto::EWatermarksMode::WATERMARKS_MODE_DISABLED;
+    const TDuration WatermarksIdleDelay = TDuration::Max();
     const NKikimr::NMiniKQL::TType* ValueType = nullptr;
     TMaybe<TInstant> PendingWatermark = Nothing();
     TMaybe<NKikimr::NMiniKQL::TProgramBuilder> ProgramBuilder;
@@ -78,7 +79,7 @@ public:
 
             metricsReporter.ReportAsyncInputData(Index, batch.RowCount(), space, watermark);
 
-            if (watermark) {
+            if (watermark && !finished) {
                 const auto inputWatermarkChanged = watermarksTracker.NotifyAsyncInputWatermarkReceived(
                     Index,
                     *watermark);

@@ -315,7 +315,9 @@ public:
             return;
         }
         SkipWatermarksBeforeBarrier();
-        Y_ENSURE(!PendingBarriers.empty());
+        if (PendingBarriers.empty() || PendingBarriers.front().Barrier > watermark ) {
+            PendingBarriers.emplace_front(TBarrier { .Barrier = watermark });
+        }
         Y_ENSURE(PendingBarriers.front().Barrier >= watermark);
     }
 
@@ -367,9 +369,18 @@ public:
     }
 
     void AddWatermark(TInstant watermark) override {
+        if (watermark > TBarrier::MaxValidWatermark) {
+            watermark = TBarrier::MaxValidWatermark;
+        }
+        Y_ABORT_UNLESS(PendingBarriers.empty() || PendingBarriers.back().IsCheckpoint() || PendingBarriers.back().Barrier <= watermark);
+        if (!PendingBarriers.empty() && PendingBarriers.back().Barrier >= watermark) {
+            // must be idle channel; TODO verify
+            return;
+        }
         if (!PendingBarriers.empty() && PendingBarriers.back().Batches == 0 && !PendingBarriers.back().IsCheckpoint()) {
             Y_ENSURE(PendingBarriers.back().Rows == 0);
             Y_ENSURE(PendingBarriers.back().Bytes == 0);
+            Y_ENSURE(PendingBarriers.back().Barrier <= watermark);
             PendingBarriers.back().Barrier = watermark;
         } else {
             PendingBarriers.emplace_back(TBarrier { .Barrier = watermark });
@@ -429,6 +440,7 @@ protected:
     struct TBarrier {
         static constexpr TInstant NoBarrier = TInstant::Zero();
         static constexpr TInstant CheckpointBarrier = TInstant::Max();
+        static constexpr TInstant MaxValidWatermark = TInstant::Max() - TDuration::MicroSeconds(1);
         TInstant Barrier = CheckpointBarrier;
         ui64 Batches = 0;
         ui64 Bytes = 0;

@@ -558,7 +558,7 @@ TDqPqRdReadActor::TDqPqRdReadActor(
     InputDataType = programBuilder->NewMultiType(inputTypeParts);
     DataUnpacker = std::make_unique<NKikimr::NMiniKQL::TValuePackerTransport<true>>(InputDataType, NKikimr::NMiniKQL::EValuePackerVersion::V0);
 
-    InitWatermarkTracker();
+    InitWatermarkTracker(); // non-virtual!
     IngressStats.Level = statsLevel;
 }
 
@@ -751,7 +751,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
 
     if (WatermarkTracker) {
         const auto now = TInstant::Now();
-        MaybeScheduleNextIdleCheck(now);
+        MaybeScheduleNextIdleCheck();
 
         const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
 
@@ -815,7 +815,10 @@ void TDqPqRdReadActor::ScheduleSourcesCheck(TInstant at) {
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
     auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
-    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    auto idleDelayUs = // TODO remove fallback
+        SourceParams.GetWatermarks().HasIdleDelayUs() ?
+        SourceParams.GetWatermarks().GetIdleDelayUs() :
+        lateArrivalDelayUs;
     TDqPqReadActorBase::InitWatermarkTracker(
             TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
             TDuration::MicroSeconds(idleDelayUs));

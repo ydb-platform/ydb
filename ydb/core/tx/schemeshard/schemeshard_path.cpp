@@ -3,6 +3,7 @@
 #include "schemeshard_system_names.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/base/auth.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/path.h>
 
@@ -1871,6 +1872,8 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
 
     if (AppData()->FeatureFlags.GetEnableSystemNamesProtection()) {
         TPathCreationContext context;
+        context.IsSystemUser = NSchemeShard::IsSystemUser(userToken);
+        context.IsAdministrator = NKikimr::IsAdministrator(AppData(), userToken);
 
         if (IsBackupServiceReservedName(leaf)) {
             TPath parentPath = Parent();
@@ -1883,7 +1886,7 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explai
             }
         }
 
-        if (!CheckReservedName(leaf, AppData(), userToken, context, explain)) {
+        if (!CheckReservedName(leaf, context, explain)) {
             return false;
         }
     } else if (leaf == NSysView::SysPathName) {

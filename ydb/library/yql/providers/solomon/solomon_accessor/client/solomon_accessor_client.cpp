@@ -304,10 +304,12 @@ class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
+        ui64 maxListingPageSize,
         ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
+        , MaxListingPageSize(maxListingPageSize)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
@@ -572,20 +574,11 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        // NJsonWriter::TBuf w;
-        // w.BeginObject()
-        //     .UnsafeWriteKey("projectId").WriteString(GetProjectId())
-        //     .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
-        //     .UnsafeWriteKey("from").WriteString(from.ToString())
-        //     .UnsafeWriteKey("to").WriteString(to.ToString())
-        //     .UnsafeWriteKey("pageSize").WriteInt(20000)
-        // .EndObject();
-
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
         builder.AddUrlParam("from", from.ToString());
         builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("pageSize", "20000");
+        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
 
         return { builder.Build(), "" };
     }
@@ -599,15 +592,6 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("labels");
-
-        // NJsonWriter::TBuf w;
-        // w.BeginObject()
-        //     .UnsafeWriteKey("projectId").WriteString(GetProjectId())
-        //     .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
-        //     .UnsafeWriteKey("from").WriteString(from.ToString())
-        //     .UnsafeWriteKey("to").WriteString(to.ToString())
-        //     .UnsafeWriteKey("limit").WriteInt(100000)
-        // .EndObject();
 
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
@@ -710,6 +694,7 @@ private:
 
 private:
     const TString DefaultReplica;
+    const ui64 MaxListingPageSize;
     const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
@@ -734,12 +719,17 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
+    ui64 maxListingPageSize = 301;
+    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
+        maxListingPageSize = FromString<ui64>(it->second);
+    }
+
     ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
         maxApiInflight = FromString<ui64>(it->second);
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxApiInflight, std::move(source), credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxListingPageSize, maxApiInflight, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

@@ -385,6 +385,9 @@ public:
         auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
         sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
 
+        auto maxListingPageSize = solomonConfig->_MaxListingPageSize.Get().OrElse(20000);
+        sourceSettings.insert({"maxListingPageSize", ToString(maxListingPageSize)});
+
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});
 

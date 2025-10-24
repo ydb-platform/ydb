@@ -79,6 +79,7 @@ public:
         TDqSolomonReadParams&& readParams,
         ui64 batchCountLimit,
         TDuration truePointsFindRange,
+        ui64 maxListingPageSize,
         ui64 maxApiInflight,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : ConsumersCount(consumersCount)
@@ -86,6 +87,7 @@ public:
         , BatchCountLimit(batchCountLimit)
         , TrueRangeFrom(TInstant::Seconds(ReadParams.Source.GetFrom()) - truePointsFindRange)
         , TrueRangeTo(TInstant::Seconds(ReadParams.Source.GetTo()) + truePointsFindRange)
+        , MaxListingPageSize(maxListingPageSize)
         , MaxApiInflight(maxApiInflight)
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
@@ -184,6 +186,7 @@ private:
         LOG_D("TDqSolomonMetricsQueueActor", "HandleNextLabelsListingChunkReceived");
         auto& batch = *ev->Get();
         CurrentInflight--;
+        DownloadedBytes += batch.Response.DownloadedBytes;
 
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             MaybeIssues = batch.Response.Error;
@@ -247,6 +250,7 @@ private:
         LOG_D("TDqSolomonMetricsQueueActor", "HandleNextMetricsListingChunkReceived");
         auto& batch = *ev->Get();
         CurrentInflight--;
+        DownloadedBytes += batch.Response.DownloadedBytes;
 
         if (batch.Response.Status != NSo::EStatus::STATUS_OK) {
             MaybeIssues = batch.Response.Error;
@@ -298,7 +302,6 @@ private:
 
     void SaveRetrievedResults(const NSo::TListMetricsResponse& response) {
         LOG_T("TDqSolomonMetricsQueueActor", "SaveRetrievedResults");
-        DownloadedBytes += response.DownloadedBytes;
 
         LOG_D("TDqSolomonMetricsQueueActor", "SaveRetrievedResults saving: " << response.Result.Metrics.size() << " metrics");
         for (const auto& metric : response.Result.Metrics) {
@@ -495,8 +498,8 @@ private:
     const ui64 BatchCountLimit;
     const TInstant TrueRangeFrom;
     const TInstant TrueRangeTo;
+    const ui64 MaxListingPageSize;
     const ui64 MaxApiInflight;
-    const ui64 MaxListingPageSize = 20000;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
     const NSo::ISolomonAccessorClient::TPtr SolomonClient;
 
@@ -524,12 +527,17 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         truePointsFindRange = FromString<ui64>(it->second);
     }
 
+    ui64 maxListingPageSize = 301;
+    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
+        maxListingPageSize = FromString<ui64>(it->second);
+    }
+
     ui64 maxInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
         maxInflight = FromString<ui64>(it->second);
     }
 
-    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), batchCountLimit, TDuration::Seconds(truePointsFindRange), maxInflight, credentialsProvider);
+    return new TDqSolomonMetricsQueueActor(consumersCount, std::move(readParams), batchCountLimit, TDuration::Seconds(truePointsFindRange), maxListingPageSize, maxInflight, credentialsProvider);
 }
 
 } // namespace NYql::NDq

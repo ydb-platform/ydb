@@ -592,8 +592,8 @@ private:
         }
 
         if (!defaultColumnsLeft.empty() && UpsertIfExists) {
-            // some default columns are not specified in the request but upsert is executed in update mode
-            // we will not change these default columns, only update the columns that are specified in the request.
+            // some default columns are not specified in the request, but upsert will only update existing rows
+            // and only the columns specified in the request will be updated; unspecified default columns will not be changed.
             defaultColumnsLeft.clear();
         }
 

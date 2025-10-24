@@ -1408,10 +1408,6 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
     auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
 
-    Cerr << "Calculated the output type as: ";
-    finishOutputType->Out(Cerr);
-    Cerr << Endl;
-
     input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
     return TStatus::Ok;
 }

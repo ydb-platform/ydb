@@ -232,7 +232,7 @@ private:
                 ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
             } \
             break; \
-        } \
+        } Y_SEMICOLON_GUARD
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {

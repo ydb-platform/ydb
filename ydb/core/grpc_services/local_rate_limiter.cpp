@@ -91,6 +91,7 @@ TActorId RateLimiterAcquireUseSameMailbox(
         Ydb::RateLimiter::AcquireResourceRequest request;
         SetDuration(duration * 10, *request.mutable_operation_params()->mutable_operation_timeout());
         SetDuration(duration, *request.mutable_operation_params()->mutable_cancel_after());
+        request.set_database_name(rlPath.DatabaseName);
         request.set_coordination_node_path(rlPath.CoordinationNode);
         request.set_resource_path(rlPath.ResourcePath);
         request.set_required(required);
@@ -106,11 +107,13 @@ TActorId RateLimiterAcquireUseSameMailbox(
 }
 
 static void Fill(const TRlConfig::TOnReqAction& action,
+    const TString& databaseName,
     const TString& coordinationNodePath,
     const TString& resourcePath,
     TVector <std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>>& res)
 {
     Ydb::RateLimiter::AcquireResourceRequest request;
+    request.set_database_name(databaseName);
     request.set_coordination_node_path(coordinationNodePath);
     request.set_resource_path(resourcePath);
     request.set_required(action.Required);
@@ -119,18 +122,20 @@ static void Fill(const TRlConfig::TOnReqAction& action,
 }
 
 static void Fill(const TRlConfig::TOnRespAction&,
+    const TString& databaseName,
     const TString& coordinationNodePath,
     const TString& resourcePath,
     TVector <std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>>& res)
 {
     Ydb::RateLimiter::AcquireResourceRequest request;
+    request.set_database_name(databaseName);
     request.set_coordination_node_path(coordinationNodePath);
     request.set_resource_path(resourcePath);
 
     res.push_back({Actions::OnResp, request});
 }
 
-TMaybe<TRlPath> Match(const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs) {
+TMaybe<TRlPath> MakeRlPath(const TString& database, const TRlConfig& rlConfig, const THashMap<TString, TString>& attrs) {
     const auto coordinationNodeIt = attrs.find(rlConfig.CoordinationNodeKey);
     if (coordinationNodeIt == attrs.end()) {
         return {};
@@ -141,7 +146,7 @@ TMaybe<TRlPath> Match(const TRlConfig& rlConfig, const THashMap<TString, TString
         return {};
     }
 
-    return TRlPath{coordinationNodeIt->second, rlResourcePathIt->second};
+    return TRlPath{database, coordinationNodeIt->second, rlResourcePathIt->second};
 }
 
 TVector<std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>> MakeRequests(
@@ -152,7 +157,7 @@ TVector<std::pair<Actions, Ydb::RateLimiter::AcquireResourceRequest>> MakeReques
 
     for (auto& action : rlConfig.Actions) {
         auto f = [&](const auto& item) {
-            Fill(item, rlPath.CoordinationNode, rlPath.ResourcePath, result);
+            Fill(item, rlPath.DatabaseName, rlPath.CoordinationNode, rlPath.ResourcePath, result);
         };
         std::visit(f, action);
     }

@@ -289,6 +289,9 @@ message AcquireResourceRequest {
         // Actually used resource's units by client.
         uint64 used = 5;
     }
+
+    // Name of a coordination node database.
+    string database_name = 6;
 }
 
 message AcquireResourceResponse {

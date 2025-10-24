@@ -2,7 +2,7 @@ name: SLO Report
 
 on:
   workflow_run:
-    workflows: ['C++ SDK SLO']
+    workflows: ['SLO CPP SDK']
     types:
       - completed
 

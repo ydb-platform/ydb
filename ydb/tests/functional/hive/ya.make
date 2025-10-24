@@ -18,6 +18,7 @@ IF (SANITIZER_TYPE == "thread")
     SPLIT_FACTOR(20)
 ELSE()
     SIZE(MEDIUM)
+    REQUIREMENTS(ram:16 cpu:2)
     SPLIT_FACTOR(20)
 ENDIF()
 

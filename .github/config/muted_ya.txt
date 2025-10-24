@@ -68,3 +68,5 @@ ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bu
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
+ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
+ydb/tests/functional/restarts test_restarts.py.TestRestartClusterMirror34.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok

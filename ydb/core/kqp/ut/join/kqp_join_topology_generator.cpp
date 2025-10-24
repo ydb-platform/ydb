@@ -1,11 +1,9 @@
 #include "kqp_join_topology_generator.h"
 
 #include <vector>
-#include <iostream>
 #include <cassert>
 #include <sstream>
 #include <random>
-#include <set>
 
 
 namespace NKikimr::NKqp {
@@ -185,7 +183,7 @@ std::string TRelationGraph::MakeQuery() const {
     std::string joinClause;
     for (unsigned i = 0; i < AdjacencyList_.size(); ++ i) {
         std::string currentJoin =
-            "JOIN " + TLexicographicalNameGenerator::getName(i, /*lowerCase=*/false) + " ON";
+            "JOIN " + getTableName(i) + " ON";
 
         bool hasJoin = false;
         auto addJoinCodition = [&](int j) {
@@ -323,7 +321,7 @@ std::string TSchemaStats::ToJSON() const {
         if (i != 0)
             ss << ",";
 
-        ss << "\"/Root/" << TLexicographicalNameGenerator::getName(i, /*lowerCase=*/false) << "\": ";
+        ss << "\"" << getTablePath(i) << "\": ";
         ss << "{";
         ss << "\"" << "n_rows" << "\": " << Stats_[i].RowSize << ", ";
         ss << "\"" << "byte_size" << "\": " << Stats_[i].ByteSize;

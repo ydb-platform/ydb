@@ -43,6 +43,8 @@ items:
   href: tx-control.md
 - name: Configuring time to live (TTL)
   href: ttl.md
+- name: Vector search
+  href: vector-search.md
 - name: Coordination
   items:
   - name: Distributed lock

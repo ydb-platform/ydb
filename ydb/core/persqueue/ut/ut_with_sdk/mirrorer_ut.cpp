@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             /*ui64 writeSpeed =*/ 20000000,
             /*TString user =*/ "",
             /*ui64 readSpeed =*/ 200000000,
-            /*TVector<TString> rr =*/ {"some_user"},
+            /*TVector<TString> rr =*/ {"some_user", "user"},
             /*TVector<TString> important =*/ {}
         );
 
@@ -55,7 +55,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             /*ui64 writeSpeed =*/ 20000000,
             /*TString user =*/ "",
             /*ui64 readSpeed =*/ 200000000,
-            /*TVector<TString> rr =*/ {},
+            /*TVector<TString> rr =*/ {"user"},
             /*TVector<TString> important =*/ {},
             mirrorFrom
         );
@@ -123,7 +123,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         auto createTopicReader = [&](const TString& topic) {
             auto settings = NTopic::TReadSessionSettings()
                     .AppendTopics(NTopic::TTopicReadSettings(topic))
-                    .ConsumerName("shared/user")
+                    .ConsumerName("user")
                     .Decompress(false);
 
             return NTopic::TTopicClient(*driver).CreateReadSession(settings);

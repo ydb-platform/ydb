@@ -33,6 +33,7 @@ struct TGRpcServersWrapper {
     TGRpcServers Servers;
     TGRpcServersFactory GrpcServersFactory;
     TMutex Mutex;
+    std::atomic<bool> IsDisabled = false;
 
     TGuard<TMutex> Guard() {
         return TGuard<TMutex>(Mutex);

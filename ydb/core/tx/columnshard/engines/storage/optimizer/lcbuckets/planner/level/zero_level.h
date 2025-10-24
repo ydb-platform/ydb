@@ -12,6 +12,7 @@ private:
     const ui64 PortionsCountAvailable;
     const ui64 HighPriorityContribution;
     const bool CompactAtLevel;
+    const ui64 Concurrency;
 
     std::set<TOrderedPortion> Portions;
 
@@ -77,12 +78,14 @@ private:
     virtual ui64 GetExpectedPortionSize() const override {
         return ExpectedBlobsSize;
     }
+    
+    ui64 GetMaxConcurrency() const;
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
         const std::shared_ptr<IOverloadChecker>& overloadChecker, const TDuration durationToDrop, const ui64 expectedBlobsSize,
         const ui64 portionsCountAvailable, const std::vector<std::shared_ptr<IPortionsSelector>>& selectors, const TString& defaultSelectorName,
-        const ui64 highPriorityContribution = 0, bool compactAtLevel = false);
+        const ui64 concurrency, const ui64 highPriorityContribution = 0, bool compactAtLevel = false);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

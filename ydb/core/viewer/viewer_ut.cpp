@@ -48,6 +48,8 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
+#include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
 using namespace NKikimr;
 using namespace NViewer;
@@ -1991,7 +1993,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             wsSettings.MessageGroupId(producerId);
             wsSettings.Codec(codec);
 
-            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
+            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(NYdb::NPersQueue::TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
             TString dataFiller{400u, 'a'};
 
             for (auto i = 0u; i < count; ++i) {
@@ -2289,12 +2291,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
         client->InitRoot();
         client->InitSourceIds();
-        NYdb::TDriverConfig driverCfg;\
+        NYdb::TDriverConfig driverCfg;
         TString message = "message_test";
         driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
                 .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
         TTestActorRuntime& runtime = *server.GetRuntime();
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
@@ -2303,23 +2306,64 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};
 
-        auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
+        // auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
+        TString autoscalingTopic = "/Root/test-topic";
+        NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup();
+        setup.CreateTopicWithAutoscale(autoscalingTopic, consumerName, 1, 10);
 
-        TString autoscalingTopic = "/Root/autoscalit-topic";
-        NYdb::NTopic::TCreateTopicSettings createSettings;
-        createSettings.BeginConfigurePartitioningSettings()
-                    .MinActivePartitions(5)
-                    .MaxActivePartitions(100)
-                    .BeginConfigureAutoPartitioningSettings()
-                        .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
-                    .EndConfigureAutoPartitioningSettings()
-                .EndConfigurePartitioningSettings()
-                .BeginAddConsumer(consumerName).EndAddConsumer();
-        auto result = topicClient.CreateTopic(autoscalingTopic, createSettings).GetValueSync();
-        Cerr << result.GetIssues().ToString() << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+        NKikimr::NPQ::NTest::TTopicClient topicClient = setup.MakeClient();
 
-        NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+        auto describeTopicResult = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
+        UNIT_ASSERT(describeTopicResult.IsSuccess());
+        UNIT_ASSERT_EQUAL(describeTopicResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        // auto writeSession = NKikimr::NPQ::NTest::CreateWriteSession(topicClient, "producer-1");
+        // UNIT_ASSERT(writeSession->Write(NKikimr::NPQ::NTest::Msg("message_1.1", 2)));
+
+        auto writeData = [&](NYdb::NPersQueue::ECodec codec, ui64 count, const TString& producerId) {
+            NYdb::NPersQueue::TWriteSessionSettings wsSettings;
+            wsSettings.Path(autoscalingTopic);
+            wsSettings.MessageGroupId(producerId);
+            wsSettings.Codec(codec);
+
+            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(NYdb::NPersQueue::TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
+            TString dataFiller{400u, 'a'};
+
+            for (auto i = 0u; i < count; ++i) {
+                writer->Write(TStringBuilder() << "Message " << i << " : " << dataFiller);
+            }
+            writer->Close();
+        };
+
+        writeData(ECodec::RAW, 5, "producer1");
+
+        ui64 txId = 1006;
+        NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
+
+        auto describeTopicResult1 = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
+        UNIT_ASSERT(describeTopicResult1.IsSuccess());
+        UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 3);
+
+        // NYdb::NTopic::TCreateTopicSettings createSettings;
+        // createSettings.BeginConfigurePartitioningSettings()
+        //             .MinActivePartitions(1)
+        //             .MaxActivePartitions(100)
+        //             .BeginConfigureAutoPartitioningSettings()
+        //                 .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp)
+        //             .EndConfigureAutoPartitioningSettings()
+        //         .EndConfigurePartitioningSettings()
+        //         .BeginAddConsumer(consumerName).EndAddConsumer();
+        // auto result = topicClient.CreateTopic(autoscalingTopic, createSettings).GetValueSync();
+        // Cerr << result.GetIssues().ToString() << Endl;
+        // UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
+
+
+
+        // auto describeTopicResult1 = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
+        // UNIT_ASSERT(describeTopicResult1.IsSuccess());
+        // Cerr << "Partitions count: " << describeTopicResult1.GetTopicDescription().GetPartitions().size() << Endl;
+        // UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 5);
+        // NKikimr::NViewerTests::WaitForHttpReady(httpClient);
 
         // checking that user with no UpdateRow rights cannot put record to topic
         auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 0);
@@ -2330,13 +2374,16 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 4);
         UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
 
+        auto postReturnCode3 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message);
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+
         NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
         rSSettings.AppendTopics({autoscalingTopic});
         auto readSession = topicClient.CreateReadSession(rSSettings);
         std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages = GetMessagesCount(readSession);
         ui64 messageCount = static_cast<ui64>(messages.size());
         Cerr << "Total messages: " << messageCount << Endl;
-        UNIT_ASSERT_EQUAL(messageCount, 1);
+        UNIT_ASSERT_EQUAL(messageCount, 3);
         auto& messageItem = messages[0];
 
         auto metaFields = messageItem.GetMessageMeta()->Fields;

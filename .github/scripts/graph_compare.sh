@@ -5,15 +5,16 @@
 
 set -exo pipefail
 
+if [[ -z "$YA_MAKE_COMMAND" ]]; then
+    echo "YA_MAKE_COMMAND not set"
+    exit 1
+fi
+
 workdir=$(mktemp -d)
 echo Workdir: $workdir
 echo Checkout base commit...
 git checkout $1
 echo Build graph for base commit...
-if [[ -z "$YA_MAKE_COMMAND" ]]; then
-    YA_MAKE_COMMAND="./ya make -ttt --build release --build-all"
-fi
-
 $YA_MAKE_COMMAND ydb -k -A --cache-tests -Gj0 | jq '.graph[]' > $workdir/graph_base
 
 echo Checkout head commit...

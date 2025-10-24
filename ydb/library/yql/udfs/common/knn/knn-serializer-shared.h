@@ -148,6 +148,70 @@ namespace NKnnVectorSerialization {
         }
     };
 
+    template <>
+    class TDeserializer<bool> {
+    private:
+        const TStringBuf Data_;
+
+    public:
+        TDeserializer() = delete;
+        TDeserializer(const TStringBuf data)
+            : Data_(data)
+        {
+            Y_ENSURE(data.size() > HeaderLen + 1);
+            Y_ENSURE(data[data.size() - HeaderLen] == Format<bool>);
+        }
+
+        size_t GetElementCount() const {
+            return (Data_.size() - HeaderLen - 1) * 8 - Data_[Data_.size() - HeaderLen - 1];
+        }
+
+        void DoDeserialize(std::function<void(const bool&)>&& elementHandler) const {
+            const size_t full64s = GetElementCount() / 64;
+            const auto ptr = reinterpret_cast<const ui64*>(Data_.data());
+            for (size_t i = 0; i < full64s; ++i) {
+                for (ui64 mask = static_cast<ui64>(1) << 63; mask; mask >>= 1) {
+                    elementHandler(mask & ptr[i]);
+                }
+            }
+
+            size_t unusedBits = static_cast<ui8>(Data_[Data_.size() - HeaderLen - 1]);
+            const auto readTailBlock = [&]<typename T>(const char* ptr) {
+                const T& x = *reinterpret_cast<const T*>(ptr);
+                for (ui64 mask = static_cast<T>(1) << (sizeof(T) * 8 - 1 - unusedBits); mask; mask >>= 1) {
+                    elementHandler(mask & x);
+                }
+            };
+
+            const char* const tail = Data_.data() + full64s * sizeof(ui64);
+            ui8 tailMask = Data_.size() - HeaderLen - 1 - full64s * sizeof(ui64);
+            for (ui8 ptr = 1; tailMask; tailMask &= ~ptr, ptr <<= 1) {
+                if (!(tailMask & ptr)) {
+                    continue;
+                }
+
+                tailMask &= ~ptr;
+                switch (ptr) {
+                    case sizeof(ui8):
+                        readTailBlock.template operator()<ui8>(tail + tailMask);
+                        break;
+                    case sizeof(ui16):
+                        readTailBlock.template operator()<ui16>(tail + tailMask);
+                        break;
+                    case sizeof(ui32):
+                        readTailBlock.template operator()<ui32>(tail + tailMask);
+                        break;
+                    case sizeof(ui64):
+                        readTailBlock.template operator()<ui64>(tail + tailMask);
+                        break;
+                    default:
+                        Y_UNREACHABLE();
+                }
+                unusedBits = 0;
+            }
+        }
+    };
+
     template <typename TTo>
     inline size_t GetBufferSize(const size_t elementCount) {
         if constexpr (std::is_same_v<TTo, bool>) {

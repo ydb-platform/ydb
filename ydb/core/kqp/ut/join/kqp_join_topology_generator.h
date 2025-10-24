@@ -78,7 +78,7 @@ public:
 
     std::string MakeQuery() const;
 
-    void DumpGraph(std::ostream &OS) const;
+    void DumpGraph(IOutputStream &OS) const;
 
     const TSchema& GetSchema() const {
         return Schema_;

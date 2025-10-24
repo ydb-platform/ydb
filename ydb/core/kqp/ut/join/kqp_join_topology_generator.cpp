@@ -228,7 +228,7 @@ std::string TRelationGraph::MakeQuery() const {
     return std::move(fromClause) + std::move(joinClause) + ";\n";
 }
 
-void TRelationGraph::DumpGraph(std::ostream &OS) const {
+void TRelationGraph::DumpGraph(IOutputStream &OS) const {
     OS << "graph {\n";
     for (unsigned i = 0; i < AdjacencyList_.size(); ++ i) {
         for (unsigned j = 0; j < AdjacencyList_[i].size(); ++ j) {

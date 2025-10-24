@@ -13,12 +13,37 @@ repo_path = os.path.abspath(f"{dir}/../../../")
 
 def get_data_from_query_with_metadata(ydb_wrapper, query, script_name):
     """Get data from query using ydb_wrapper and extract column metadata"""
-    results = ydb_wrapper.execute_scan_query(query, script_name)
+    # We need to access the raw scan query to get column metadata
+    # Since ydb_wrapper.execute_scan_query doesn't expose column types,
+    # we'll need to implement this differently
     
-    # We need to get column types from the first result
-    # Since ydb_wrapper doesn't expose column metadata, we'll need to get it differently
-    # For now, we'll return empty column_types and let the table creation handle it
-    column_types = None
+    # For now, let's use a workaround by running the query directly
+    import time
+    start_time = time.time()
+    
+    with ydb_wrapper.get_driver() as driver:
+        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+        table_client = ydb.TableClient(driver, tc_settings)
+        scan_query = ydb.ScanQuery(query, {})
+        it = table_client.scan_query(scan_query)
+        
+        results = []
+        column_types = None
+        
+        while True:
+            try:
+                result = next(it)
+                if column_types is None:
+                    column_types = [(col.name, col.type) for col in result.result_set.columns]
+                
+                results.extend(result.result_set.rows)
+            
+            except StopIteration:
+                break
+
+        end_time = time.time()
+        print(f'Captured {len(results)} rows, duration: {end_time - start_time}s')
+    
     return results, column_types
 
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):

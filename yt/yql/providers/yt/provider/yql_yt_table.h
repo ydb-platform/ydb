@@ -158,6 +158,7 @@ struct TYtOutTableInfo: public TYtTableBaseInfo {
         IsTemp = true;
     }
     TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeFlags, const TMaybe<TColumnOrder>& columnOrder = {});
+    TYtOutTableInfo(const TYqlRowSpecInfo::TPtr& rowSpec);
     TYtOutTableInfo(NNodes::TExprBase node) {
         Parse(node);
         IsTemp = true;

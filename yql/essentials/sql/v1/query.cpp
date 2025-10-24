@@ -1268,19 +1268,24 @@ public:
             opts = L(opts, Q(Y(Q("columnsDefaultValues"), Q(columnsDefaultValueSettings))));
         }
 
-        if (Table_.Service == RtmrProviderName) {
+        if (Table_.Service == YtProviderName || Table_.Service == RtmrProviderName) {
             if (!Params_.PkColumns.empty() && !Params_.PartitionByColumns.empty()) {
                 ctx.Error() << "Only one of PRIMARY KEY or PARTITION BY constraints may be specified";
                 return false;
             }
         } else {
             if (!Params_.OrderByColumns.empty()) {
-                ctx.Error() << "ORDER BY is supported only for " << RtmrProviderName << " provider";
+                ctx.Error() << "ORDER BY is supported only for " << YtProviderName << " or " << RtmrProviderName << " provider.";
                 return false;
             }
         }
 
         if (!Params_.PkColumns.empty()) {
+            if (Table_.Service == YtProviderName) {
+                ctx.Error() << "PRIMARY KEY is not supported by " << YtProviderName << " provider.";
+                return false;
+            }
+
             auto primaryKey = Y();
             for (auto& col : Params_.PkColumns) {
                 primaryKey = L(primaryKey, BuildQuotedAtom(col.Pos, col.Name));
@@ -1293,6 +1298,11 @@ public:
         }
 
         if (!Params_.PartitionByColumns.empty()) {
+            if (Table_.Service == YtProviderName) {
+                ctx.Error() << "PARTITION BY is not supported by " << YtProviderName << " provider.";
+                return false;
+            }
+
             auto partitionBy = Y();
             for (auto& col : Params_.PartitionByColumns) {
                 partitionBy = L(partitionBy, BuildQuotedAtom(col.Pos, col.Name));

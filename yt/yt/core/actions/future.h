@@ -289,8 +289,9 @@ public:
     TFuture<T> ToUncancelable() const;
 
     //! Returns a wrapper that handles cancellation requests by immediately becoming set
-    //! with NYT::EErrorCode::Canceled code.
-    TFuture<T> ToImmediatelyCancelable() const;
+    //! with NYT::EErrorCode::Canceled code;
+    //! propagates cancelation to original future if `propagateCancelation` is true.
+    TFuture<T> ToImmediatelyCancelable(bool propagateCancelation = true) const;
 
     //! Returns a future that is either set to an actual value (if the original one is set in timely manner)
     //! or to |EErrorCode::Timeout| (in case the deadline is reached).

@@ -2,7 +2,6 @@ ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusErrorWith_1_
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_1_1_VdiskErrors
 ydb/core/blobstorage/dsproxy/ut TDSProxyPutTest.TestBlock42PutStatusOkWith_2_0_VdiskErrors
 ydb/core/blobstorage/pdisk/ut TPDiskFailureInjection.TestSilentWriteFailPDisk
-ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
@@ -48,6 +47,7 @@ ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelS
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletReboots]
 ydb/core/tx/schemeshard/ut_index unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCaseWithDataColumns
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioning
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioningUniq
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
@@ -59,6 +59,7 @@ ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitByLoad.ConcurrentSplitTr
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitByLoad.DuplicateSplitTransactionIgnored
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
+ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data
@@ -346,6 +347,7 @@ ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quota
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_dlq_mechanics_in_cloud[tables_format_v1-tables_format_v0-fifo]
 ydb/tests/functional/sqs/cloud test_yandex_cloud_mode.py.TestSqsYandexCloudMode.test_yc_events_processor[tables_format_v0]
+ydb/tests/functional/statistics test_restarts.py.test_basic
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]

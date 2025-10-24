@@ -90,6 +90,26 @@ SELECT SUBSTRING("abcdefg", 3); -- defg
 SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 ```
 
+## Concat {#concat}
+
+Concatenate one or more strings.
+
+#### Signature
+
+```yql
+Concat((String|Utf8)[?], ...)->(String|Utf8)[?]
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+If at least one input string is of type `Optional`, then the result is also of type `Optional`.
+If all input strings are of type `Utf8`, then the result is also of type `Utf8`; otherwise, it is `String`.
+If at least one input string is `NULL`, then the result is also of type `NULL`.
+
+#### Examples
+
+```yql
+SELECT Concat("abc", "de", "f"); -- "abcdef"
+```
 
 
 ## FIND {#find}
@@ -911,6 +931,50 @@ A typical example of a `SemilatticeRT` side effect is to perform an `UPSERT` to 
 
 ```yql
 SELECT WithSideEffects(MyModule::Func(...)) FROM table
+```
+
+## ToDynamicLinear
+
+#### Signature
+
+```yql
+ToDynamicLinear(Linear<T>)->DynamicLinear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `ToDynamicLinear` function converts a value from a static [linear](../types/linear.md) type to a dynamic type.
+
+## FromDynamicLinear
+
+#### Signature
+
+```yql
+FromDynamicLinear(DynamicLinear<T>)->Linear<T>
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `FromDynamicLinear` function converts a value from a dynamic [linear](../types/linear.md) type to a static type.
+
+## Block
+
+#### Signature
+
+```yql
+Block(lambda((dependsOnArgument)->T))->T
+```
+
+This function is available since version [2025.04](../changelog/2025.04.md).
+The `Block` function evaluates a lambda with one argument (whose type is unspecified, as it should only be used as a dependent node) and returns its output value.
+Dependent nodes are those used to control the evaluation of nondeterministic functions such as [Random](#random) or functions that produce values ​​of [linear](../types/linear.md) types.
+
+#### Example
+
+```yql
+SELECT Block(($arg)->{
+    $dict = ToMutDict({'key1':123}, $arg); -- use a dependent node when creating a linear value
+    $dict = MutDictInsert($dict, 'key2', 456);
+    return FromMutDict($dict);
+}); -- {'key1':123, 'key2': 456}
 ```
 
 ## EvaluateExpr, EvaluateAtom {#evaluate_expr_atom}

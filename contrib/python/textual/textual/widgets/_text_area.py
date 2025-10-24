@@ -226,7 +226,9 @@ TextArea {
         Binding(
             "ctrl+f", "delete_word_right", "Delete right to start of word", show=False
         ),
-        Binding("ctrl+x", "delete_line", "Delete line", show=False),
+        Binding("ctrl+x", "cut", "Cut", show=False),
+        Binding("ctrl+c", "copy", "Copy", show=False),
+        Binding("ctrl+v", "paste", "Paste", show=False),
         Binding(
             "ctrl+u", "delete_to_start_of_line", "Delete to line start", show=False
         ),
@@ -234,6 +236,12 @@ TextArea {
             "ctrl+k",
             "delete_to_end_of_line_or_delete_line",
             "Delete to line end",
+            show=False,
+        ),
+        Binding(
+            "ctrl+shift+k",
+            "delete_line",
+            "Delete line",
             show=False,
         ),
         Binding("ctrl+z", "undo", "Undo", show=False),
@@ -264,13 +272,16 @@ TextArea {
     | ctrl+w                 | Delete from cursor to start of the word.     |
     | delete,ctrl+d          | Delete character to the right of cursor.     |
     | ctrl+f                 | Delete from cursor to end of the word.       |
-    | ctrl+x                 | Delete the current line.                     |
+    | ctrl+shift+k           | Delete the current line.                     |
     | ctrl+u                 | Delete from cursor to the start of the line. |
     | ctrl+k                 | Delete from cursor to the end of the line.   |
     | f6                     | Select the current line.                     |
     | f7                     | Select all text in the document.             |
     | ctrl+z                 | Undo.                                        |
     | ctrl+y                 | Redo.                                        |
+    | ctrl+x                 | Cut selection or line if no selection.       |
+    | ctrl+c                 | Copy selection to clipboard.                 |
+    | ctrl+v                 | Paste from clipboard.                        |
     """
 
     language: Reactive[str | None] = reactive(None, always_update=True, init=False)
@@ -2181,6 +2192,10 @@ TextArea {
 
     def action_delete_line(self) -> None:
         """Deletes the lines which intersect with the selection."""
+        self._delete_cursor_line()
+
+    def _delete_cursor_line(self) -> EditResult | None:
+        """Deletes the line (including the line terminator) that the cursor is on."""
         start, end = self.selection
         start, end = sorted((start, end))
         start_row, _start_column = start
@@ -2197,6 +2212,34 @@ TextArea {
         deletion = self._delete_via_keyboard(from_location, to_location)
         if deletion is not None:
             self.move_cursor_relative(columns=end_column, record_width=False)
+        return deletion
+
+    def action_cut(self) -> None:
+        """Cut text (remove and copy to clipboard)."""
+        if self.read_only:
+            return
+        start, end = self.selection
+        if start == end:
+            edit_result = self._delete_cursor_line()
+        else:
+            edit_result = self._delete_via_keyboard(start, end)
+
+        if edit_result is not None:
+            self.app.copy_to_clipboard(edit_result.replaced_text)
+
+    def action_copy(self) -> None:
+        """Copy selection to clipboard."""
+        selected_text = self.selected_text
+        if selected_text:
+            self.app.copy_to_clipboard(selected_text)
+
+    def action_paste(self) -> None:
+        """Paste from local clipboard."""
+        if self.read_only:
+            return
+        clipboard = self.app.clipboard
+        if result := self._replace_via_keyboard(clipboard, *self.selection):
+            self.move_cursor(result.end_location)
 
     def action_delete_to_start_of_line(self) -> None:
         """Deletes from the cursor location to the start of the line."""

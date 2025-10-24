@@ -10,6 +10,7 @@
 #include <yql/essentials/public/udf/udf_value.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yql/essentials/minikql/computation/mkql_datum_validate.h>
 
 #include <arrow/array/data.h>
 #include <arrow/datum.h>
@@ -17,6 +18,13 @@
 #include <util/generic/vector.h>
 
 namespace NKikimr::NMiniKQL {
+
+template<typename Buffer = NYql::NUdf::TResizeableBuffer>
+std::unique_ptr<arrow::ResizableBuffer> MakeBufferWithSize(int size, arrow::MemoryPool* pool){
+    auto buff = NUdf::AllocateResizableBuffer<Buffer>(size, pool);
+    ARROW_OK(buff->Resize(size));
+    return buff;
+}
 
 struct IColumnDataExtractor {
     using TPtr = std::unique_ptr<IColumnDataExtractor>;
@@ -75,8 +83,7 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
-        ARROW_OK(dataBuffer->Resize(bytesCount));
+        auto dataBuffer = MakeBufferWithSize(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
     }
@@ -132,8 +139,7 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto dataBuffer = NUdf::AllocateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(bytesCount, Pool_);
-        ARROW_OK(dataBuffer->Resize(bytesCount));
+        auto dataBuffer = MakeBufferWithSize<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(dataBuffer)});
     }
@@ -223,13 +229,11 @@ public:
         if (!isBitmapNull) {
             nullBitmap = NUdf::AllocateBitmapWithReserve(len, Pool_);
         }
-        auto offsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * (len + 1), Pool_);
-        ARROW_OK(offsetBuffer->Resize(sizeof(TOffset) * (len + 1)));
+        auto offsetBuffer = MakeBufferWithSize(sizeof(TOffset) * (len + 1), Pool_);
         // zeroize offsets buffer, or your code will die
         // low-level unpack expects that first offset is set to null
         std::memset(offsetBuffer->mutable_data(), 0, sizeof(TOffset) * (len + 1));
-        auto dataBuffer = NUdf::AllocateResizableBuffer(bytesCount, Pool_);
-        ARROW_OK(dataBuffer->Resize(bytesCount));
+        auto dataBuffer = MakeBufferWithSize(bytesCount, Pool_);
 
         return arrow::ArrayData::Make(std::move(type), len, {std::move(nullBitmap), std::move(offsetBuffer), std::move(dataBuffer)});
     }
@@ -576,6 +580,7 @@ public:
         TupleLayout_->Unpack(
             columnsData.data(), columnsNullBitmap.data(),
             packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
+        VALIDATE_DATUM_ARROW_BLOCK_CONSTRUCTOR(columns);
     }
 
     const NPackedTuple::TTupleLayout* GetTupleLayout() const override {

@@ -67,13 +67,6 @@ template <EJoinKind Kind> struct TRenamedOutput {
                     MKQL_ENSURE(tuple != nullptr, "null output row in semi/only join?");
                     for (int index = 0; index < std::ssize(Renames); ++index) {
                         auto thisRename = Renames[index];
-                        // if constexpr (Kind == EJoinKind::LeftOnly || Kind == EJoinKind::LeftSemi) {
-                        //     MKQL_ENSURE(thisRename.Side == JoinSide::kLeft,
-                        //                 "rename has right column for LeftOnly or LeftSemi join??");
-                        // } else {
-                        //     MKQL_ENSURE(thisRename.Side == JoinSide::kRight,
-                        //                 "rename has left column for RightOnly or RightSemi join??");
-                        // }
                         OutputBuffer.push_back(tuple[thisRename.Index]);
                     }
                 };
@@ -237,13 +230,10 @@ template <typename Source, EJoinKind Kind> class TJoin : public TComputationValu
 
 template <typename Source> class TJoinPackedTuples {
   public:
-    // using TPackResult = NKikimr::NMiniKQL::TPackResult;
     using TTable = NJoinTable::TNeumannJoinTable;
 
     TJoinPackedTuples(Source build, Source probe, NUdf::TLoggerPtr logger, TString componentName,
                       TSides<const NPackedTuple::TTupleLayout*> layouts)
-        //    : TBase(memInfo)
-        //    , Meta_(meta)
         : Logger_(logger)
         , LogComponent_(logger->RegisterComponent(componentName))
         , Sources_({.Build = std::move(build), .Probe = std::move(probe)})
@@ -251,25 +241,6 @@ template <typename Source> class TJoinPackedTuples {
         , Table_(Layouts_.Build)
     {}
 
-    // const TJoinMetadata& Meta() const {
-    //     return Meta_;
-    // }
-
-    // int ProbeSize() const {
-    //     return Sources_.Probe.UserDataSize();
-    // }
-
-    // int BuildSize() const {
-    //     return Sources_.Build.UserDataSize();
-    // }
-
-    // const NPackedTuple::TTupleLayout& BuildLayout() const {
-    //     return Sources_.Build.GetLayout();
-    // }
-
-    // const NPackedTuple::TTupleLayout& ProbeLayout() const {
-    //     return Sources_.Probe.GetLayout();
-    // }
     IBlockLayoutConverter::TPackResult Flatten(std::vector<IBlockLayoutConverter::TPackResult> tuples) {
         IBlockLayoutConverter::TPackResult flattened;
         flattened.NTuples = std::accumulate(tuples.begin(), tuples.end(), i64{0},
@@ -285,18 +256,12 @@ template <typename Source> class TJoinPackedTuples {
                             [](i64 summ, const auto& packRes) { return summ += std::ssize(packRes.Overflow); });
         flattened.Overflow.reserve(totaOverflowlSize);
 
-        // int tupleOffset = 0;
-        // int overflowOffset = 0;
         int tupleSize = Layouts_.Build->TotalRowSize;
         for (const IBlockLayoutConverter::TPackResult& tupleBatch : tuples) {
             Layouts_.Build->Concat(flattened.PackedTuples, flattened.Overflow,
                                    std::ssize(flattened.PackedTuples) / tupleSize,
                                    tupleBatch.PackedTuples.data(), tupleBatch.Overflow.data(),
                                    tupleBatch.PackedTuples.size() / tupleSize, tupleBatch.Overflow.size());
-            // std::ranges::copy(tupleBatch.PackedTuples, flattened.PackedTuples.data()+tupleOffset);
-            // std::ranges::copy(tupleBatch.Overflow, flattened.Overflow.data()+overflowOffset);
-            // tupleOffset += std::ssize(tupleBatch.PackedTuples);
-            // overflowOffset += std::ssize(tupleBatch.Overflow);
         }
         return flattened;
     }
@@ -305,8 +270,6 @@ template <typename Source> class TJoinPackedTuples {
                            JoinMatchFun<TTable::Tuple> auto consumeOneOrTwoTuples) {
         while (!Sources_.Build.Finished()) {
             FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
-            // Layouts_.Build->Concat(Bui, std::vector<ui8, TMKQLAllocator<ui8>> &dstOverflow, ui32 dstCount, const ui8
-            // *src, const ui8 *srcOverflow, ui32 srcCount, ui32 srcOverflowSize)
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
                 Table_.BuildWith(Flatten(BuildChunks_));
@@ -324,6 +287,9 @@ template <typename Source> class TJoinPackedTuples {
                 MKQL_ENSURE(false, "unreachable");
             }
         }
+        if (Table_.Empty()) {
+            return EFetchResult::Finish; // is it ok?
+        }
 
         if (!Sources_.Probe.Finished()) {
             const FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
@@ -332,7 +298,6 @@ template <typename Source> class TJoinPackedTuples {
             if (resEnum == EFetchResult::One) {
                 const IBlockLayoutConverter::TPackResult& thisPackResult =
                     std::get<One<IBlockLayoutConverter::TPackResult>>(var).Data;
-                Cout << Sprintf("get %i tuples to probe\n", thisPackResult.NTuples);
                 for (int index = 0; index < thisPackResult.NTuples; ++index) {
                     const ui8* thisRow = &thisPackResult.PackedTuples[index * Layouts_.Probe->TotalRowSize];
                     TTable::Tuple probeRow{thisRow, thisPackResult.Overflow.data()};
@@ -349,7 +314,6 @@ template <typename Source> class TJoinPackedTuples {
     }
 
   private:
-    // const TJoinMetadata Meta_;
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
     TSides<Source> Sources_;

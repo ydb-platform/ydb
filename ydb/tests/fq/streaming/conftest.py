@@ -71,6 +71,8 @@ def kikimr(request):
     ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
     logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
+    os.environ["DEFAULT_CHECKPOINTING_PERIOD_MS"] = "200"
+
     config = get_ydb_config()
     cluster = KiKiMR(config)
     cluster.start()
@@ -85,29 +87,3 @@ def kikimr(request):
     yield Kikimr(ydb_client, cluster)
     ydb_client.stop()
     cluster.stop()
-
-
-# @classmethod
-#     def get_metrics(cls, metrics: dict[str, dict[str, str]], db_only: bool = False, role: Optional[YdbCluster.Node.Role] = None, counters: str = 'tablets') -> dict[str, dict[str, float]]:
-#         def sensor_has_labels(sensor, labels: dict[str, str]) -> bool:
-#             for k, v in labels.items():
-#                 if sensor.get('labels', {}).get(k, '') != v:
-#                     return False
-#             return True
-#         nodes = cls.get_cluster_nodes(db_only=db_only, role=role)
-#         result = {}
-#         for node in nodes:
-#             url = f'http://{node.host}:{node.mon_port}/counters/'
-#             if counters:
-#                 url += f'counters={counters}/'
-#             url += 'json'
-#             response = requests.get(url)
-#             response.raise_for_status()
-#             sensor_values = {}
-#             for name, labels in metrics.items():
-#                 for sensor in response.json()['sensors']:
-#                     if sensor_has_labels(sensor, labels):
-#                         sensor_values.setdefault(name, 0.)
-#                         sensor_values[name] += sensor['value']
-#             result[node.slot] = sensor_values
-#         return result

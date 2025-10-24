@@ -247,8 +247,10 @@ class YDBWrapper:
                             results = results + result.result_set.rows
                             rows_affected += batch_size
                             
-                            elapsed = time.time() - start_time
-                            self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
+                            # Логируем прогресс только каждые 50 батчей или каждые 10000 строк
+                            if batch_count % 50 == 0 or rows_affected % 10000 == 0:
+                                elapsed = time.time() - start_time
+                                self._log("progress", f"Batch {batch_count}: {batch_size} rows (total: {rows_affected})", f"{elapsed:.2f}s")
                             
                         except StopIteration:
                             break

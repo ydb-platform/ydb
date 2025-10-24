@@ -23,6 +23,9 @@ public:
 
     void Init() override;
 
+    void ConfigureCommonOpts(NLastGetopt::TOpts& opts);
+    void ConfigureIndexOpts(NLastGetopt::TOpts& opts);
+
     TString TableName;
     TString QueryTableName;
     TString IndexName;

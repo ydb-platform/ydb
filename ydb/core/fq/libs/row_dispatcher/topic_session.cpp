@@ -161,7 +161,7 @@ private:
             return WatermarkExpr;
         }
 
-        [[nodiscard]] const TString& GetWhereFilter() const override {
+        [[nodiscard]] const TString& GetFilterExpr() const override {
             return Predicate;
         }
 

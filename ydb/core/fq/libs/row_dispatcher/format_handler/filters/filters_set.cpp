@@ -38,23 +38,17 @@ public:
         }
 
         const TInstant startProgram = TInstant::Now();
-        for (const auto& [_, runHandlers] : RunHandlers_) {
-            IProcessedDataConsumer::TPtr consumer;
-            for (const auto& [name, runHandler] : runHandlers) {
-                consumer = runHandler->GetConsumer();
-                if (!consumer->IsStarted()) {
-                    continue;
-                }
-                if (const auto nextOffset = consumer->GetNextMessageOffset(); nextOffset && offsets[numberRows - 1] < *nextOffset) {
-                    LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", historical offset");
-                    continue;
-                }
+        for (const auto& [_, runHandler] : RunHandlers_) {
+            const auto consumer = runHandler->GetConsumer();
+            if (!consumer->IsStarted()) {
+                continue;
+            }
+            if (const auto nextOffset = consumer->GetNextMessageOffset(); nextOffset && offsets[numberRows - 1] < *nextOffset) {
+                LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", historical offset");
+                continue;
+            }
 
-                PushToRunner(runHandler, offsets, columnIndex, values, numberRows);
-            }
-            if (consumer) {
-                consumer->OnBatchFinish();
-            }
+            PushToRunner(runHandler, offsets, columnIndex, values, numberRows);
         }
         Stats_.AddFilterLatency(TInstant::Now() - startProgram);
     }
@@ -75,7 +69,7 @@ public:
         }
         compileHandler->OnCompileResponse(ev);
 
-        auto runHandlerStatus = AddRunProgram(compileHandler->GetName(), compileHandler->GetConsumer(), compileHandler->GetProgram());
+        auto runHandlerStatus = AddRunProgram(compileHandler->GetConsumer(), compileHandler->GetProgram());
         if (runHandlerStatus.IsFail()) {
             LOG_ROW_DISPATCHER_ERROR(runHandlerStatus.GetError().GetErrorMessage());
             return;
@@ -84,13 +78,11 @@ public:
         StartProgram(compileHandler->GetConsumer());
     }
 
-    TStatus AddPrograms(IProcessedDataConsumer::TPtr consumer, std::unordered_map<TString, IProgramHolder::TPtr> programHolders) override {
-        for (auto [name, programHolder] : programHolders) {
-            auto status = AddProgram(std::move(name), consumer, std::move(programHolder));
-            if (!status) {
-                RemoveProgram(consumer->GetClientId());
-                return status;
-            }
+    TStatus AddPrograms(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) override {
+        auto status = AddProgram(consumer, std::move(programHolder));
+        if (!status) {
+            RemoveProgram(consumer->GetClientId());
+            return status;
         }
 
         StartProgram(consumer);
@@ -120,18 +112,18 @@ private:
         consumer->OnStart();
     }
 
-    TStatus AddProgram(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
+    TStatus AddProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
         LOG_ROW_DISPATCHER_TRACE("Create program with client id " << consumer->GetClientId());
 
         if (!programHolder) {
-            auto runHandlerStatus = AddRunProgram(std::move(name), std::move(consumer), std::move(programHolder));
+            auto runHandlerStatus = AddRunProgram(std::move(consumer), std::move(programHolder));
             return runHandlerStatus.IsSuccess() ? TStatus::Success() : runHandlerStatus.GetError();
         }
 
         LOG_ROW_DISPATCHER_TRACE("Create purecalc program for query '" << programHolder->GetQuery() << "' (client id: " << consumer->GetClientId() << ")");
 
         const auto cookie = NextCookie_++;
-        auto compileHandlerStatus = AddCompileProgram(std::move(name), std::move(consumer), std::move(programHolder), cookie);
+        auto compileHandlerStatus = AddCompileProgram(std::move(consumer), std::move(programHolder), cookie);
         if (compileHandlerStatus.IsFail()) {
             return compileHandlerStatus;
         }
@@ -141,20 +133,19 @@ private:
         return TStatus::Success();
     }
 
-    TValueStatus<IProgramCompileHandler::TPtr> AddCompileProgram(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie) {
+    TValueStatus<IProgramCompileHandler::TPtr> AddCompileProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder, ui64 cookie) {
         const auto clientId = consumer->GetClientId();
 
-        const auto [inflightIter, inflightInserted] = InFlightCompilations_.emplace(cookie, std::pair{clientId, name});
+        const auto [inflightIter, inflightInserted] = InFlightCompilations_.emplace(cookie, clientId);
         if (!inflightInserted) {
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, "Got duplicated compilation event id");
         }
 
-        auto compileHandler = CreateProgramCompileHandler(name, std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_);
-        auto& compileHandlers = CompileHandlers_[clientId];
-        auto [iter, inserted] = compileHandlers.emplace(name, std::move(compileHandler));
+        auto compileHandler = CreateProgramCompileHandler(std::move(consumer), std::move(programHolder), cookie, Config_.CompileServiceId, Owner_, Counters_);
+        auto [iter, inserted] = CompileHandlers_.emplace(clientId, std::move(compileHandler));
         if (!inserted) {
             InFlightCompilations_.erase(inflightIter);
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " and name \"" << name << "\" already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to compile new program, program with client id " << clientId << " already exists");
         }
         return iter->second;
     }
@@ -165,11 +156,11 @@ private:
             return;
         }
 
-        for (auto& [name, compileHandler] : iter->second) {
-            compileHandler->AbortCompilation();
-            const auto cookie = compileHandler->GetCookie();
-            InFlightCompilations_.erase(cookie);
-        }
+        iter->second->AbortCompilation();
+
+        const auto cookie = iter->second->GetCookie();
+        InFlightCompilations_.erase(cookie);
+
         CompileHandlers_.erase(iter);
     }
 
@@ -178,36 +169,26 @@ private:
         if (requestIter == InFlightCompilations_.end()) {
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie);
         }
-
-        const auto [clientId, name] = requestIter->second;
-
-        const auto handlersIter = CompileHandlers_.find(clientId);
-        if (handlersIter == CompileHandlers_.end()) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " and name \"" << name << "\" not found");
-        }
-
-        const auto iter = handlersIter->second.find(name);
-        if (iter == handlersIter->second.end()) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " and name \"" << name << "\" not found");
-        }
-
-        const auto result = iter->second;
-        handlersIter->second.erase(iter);
-        if (handlersIter->second.empty()) {
-            CompileHandlers_.erase(handlersIter);
-        }
+        const auto clientId = requestIter->second;
         InFlightCompilations_.erase(requestIter);
+
+        const auto iter = CompileHandlers_.find(clientId);
+        if (iter == CompileHandlers_.end()) {
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Compile response ignored for id " << cookie << ", program with client id " << clientId << " not found");
+        }
+        const auto result = iter->second;
+        CompileHandlers_.erase(iter);
+
         return result;
     }
 
-    TValueStatus<IProgramRunHandler::TPtr> AddRunProgram(TString name, IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
+    TValueStatus<IProgramRunHandler::TPtr> AddRunProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
         const auto clientId = consumer->GetClientId();
 
-        auto runHandler = CreateProgramRunHandler(name, std::move(consumer), std::move(programHolder), Counters_);
-        auto& runHandlers = RunHandlers_[clientId];
-        const auto [iter, inserted] = runHandlers.emplace(name, std::move(runHandler));
+        auto runHandler = CreateProgramRunHandler(std::move(consumer), std::move(programHolder), Counters_);
+        const auto [iter, inserted] = RunHandlers_.emplace(clientId, std::move(runHandler));
         if (!inserted) {
-            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with client id " << clientId << " and name \"" << name << "\" already exists");
+            return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to run new program, program with client id " << clientId << " already exists");
         }
         return iter->second;
     }
@@ -250,9 +231,9 @@ private:
     TTopicFiltersConfig Config_;
 
     ui64 NextCookie_ = 1;  // 0 <=> compilation is not started
-    std::unordered_map<ui64, std::pair<NActors::TActorId, TString>> InFlightCompilations_;
-    std::unordered_map<NActors::TActorId, std::unordered_map<TString, IProgramCompileHandler::TPtr>> CompileHandlers_;
-    std::unordered_map<NActors::TActorId, std::unordered_map<TString, IProgramRunHandler::TPtr>> RunHandlers_;
+    std::unordered_map<ui64, NActors::TActorId> InFlightCompilations_;
+    std::unordered_map<NActors::TActorId, IProgramCompileHandler::TPtr> CompileHandlers_;
+    std::unordered_map<NActors::TActorId, IProgramRunHandler::TPtr> RunHandlers_;
 
     // Metrics
     NMonitoring::TDynamicCounterPtr Counters_;

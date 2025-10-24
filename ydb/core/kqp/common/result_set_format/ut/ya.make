@@ -5,6 +5,7 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 SRCS(
+    kqp_formats_ut_helpers.cpp
     kqp_formats_arrow_ut.cpp
 )
 

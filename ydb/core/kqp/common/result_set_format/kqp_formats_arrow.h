@@ -2,67 +2,93 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_node.h>
 
 namespace NKikimr::NKqp::NFormats {
 
+namespace {
+
+template <typename TArrowType>
+struct TTypeWrapper {
+    using T = TArrowType;
+};
+
+} // namespace
+
+/**
+ * @brief Function to switch MiniKQL DataType correctly and uniformly converting
+ * it to arrow type using callback
+ *
+ * @tparam TFunc Callback type
+ * @param typeId Type callback work with.
+ * @param callback Template function of signature (TTypeWrapper) -> bool
+ * @return Result of execution of callback or false if the type typeId is not
+ * supported.
+ */
+template <typename TFunc>
+bool SwitchMiniKQLDataTypeToArrowType(NUdf::EDataSlot typeId, TFunc&& callback) {
+    switch (typeId) {
+        case NUdf::EDataSlot::Int8:
+            return callback(TTypeWrapper<arrow::Int8Type>());
+        case NUdf::EDataSlot::Uint8:
+        case NUdf::EDataSlot::Bool:
+            return callback(TTypeWrapper<arrow::UInt8Type>());
+        case NUdf::EDataSlot::Int16:
+            return callback(TTypeWrapper<arrow::Int16Type>());
+        case NUdf::EDataSlot::Date:
+        case NUdf::EDataSlot::Uint16:
+            return callback(TTypeWrapper<arrow::UInt16Type>());
+        case NUdf::EDataSlot::Int32:
+        case NUdf::EDataSlot::Date32:
+            return callback(TTypeWrapper<arrow::Int32Type>());
+        case NUdf::EDataSlot::Datetime:
+        case NUdf::EDataSlot::Uint32:
+            return callback(TTypeWrapper<arrow::UInt32Type>());
+        case NUdf::EDataSlot::Int64:
+        case NUdf::EDataSlot::Interval:
+        case NUdf::EDataSlot::Datetime64:
+        case NUdf::EDataSlot::Timestamp64:
+        case NUdf::EDataSlot::Interval64:
+            return callback(TTypeWrapper<arrow::Int64Type>());
+        case NUdf::EDataSlot::Uint64:
+        case NUdf::EDataSlot::Timestamp:
+            return callback(TTypeWrapper<arrow::UInt64Type>());
+        case NUdf::EDataSlot::Float:
+            return callback(TTypeWrapper<arrow::FloatType>());
+        case NUdf::EDataSlot::Double:
+            return callback(TTypeWrapper<arrow::DoubleType>());
+        case NUdf::EDataSlot::Utf8:
+        case NUdf::EDataSlot::Json:
+        case NUdf::EDataSlot::DyNumber:
+        case NUdf::EDataSlot::JsonDocument:
+            return callback(TTypeWrapper<arrow::StringType>());
+        case NUdf::EDataSlot::String:
+        case NUdf::EDataSlot::Yson:
+            return callback(TTypeWrapper<arrow::BinaryType>());
+        case NUdf::EDataSlot::Decimal:
+        case NUdf::EDataSlot::Uuid:
+            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
+        case NUdf::EDataSlot::TzDate:
+        case NUdf::EDataSlot::TzDatetime:
+        case NUdf::EDataSlot::TzTimestamp:
+        case NUdf::EDataSlot::TzDate32:
+        case NUdf::EDataSlot::TzDatetime64:
+        case NUdf::EDataSlot::TzTimestamp64:
+            return callback(TTypeWrapper<arrow::StructType>());
+    }
+}
+
+/**
+ * @brief Check if the type needs to be wrapped by external optional.
+ * For example, some types does not have validity bitmap.
+ *
+ * @param type Yql type to check
+ * @return true if the type needs to be wrapped by external optional, false otherwise
+ */
+bool NeedWrapByExternalOptional(const NMiniKQL::TType* type);
+
 /**
  * @brief Convert TType to the arrow::DataType object
- *
- * The logic of this conversion is from YQL-15332:
- *
- * Void, Null => NullType
- * Bool => Uint8
- * Integral => Uint8..Uint64, Int8..Int64
- * Floats => Float, Double
- * Date => Uint16
- * Datetime => Uint32
- * Timestamp => Uint64
- * Interval => Int64
- * Date32 => Int32
- * Interval64, Timestamp64, Datetime64 => Int64
- * Utf8, Json => String
- * String, Yson, JsonDocument => Binary
- * Decimal, UUID => FixedSizeBinary(16)
- * Timezone datetime type => StructArray<type, Uint16>
- * DyNumber => BinaryArray
- *
- * Struct, Tuple, EmptyList, EmptyDict => StructArray
- * Names of fields constructed from tuple are just empty strings.
- *
- * List => ListArray
- *
- * Variant => DenseUnionArray
- * If variant contains more than 127 items then we map
- * Variant => DenseUnionArray<DenseUnionArray>
- * TODO Implement convertion of data to DenseUnionArray<DenseUnionArray> and
- * back
- *
- * Optional<T> => StructArray<T> if T is Variant
- * Because DenseUnionArray does not have validity bitmap
- * Optional<T> => T for other types
- * By default, other types have a validity bitmap
- *
- * Optional<Optional<...<T>...>> =>
- * StructArray<StructArray<...StructArray<T>...>> For example:
- * - Optional<Optional<Int32>> => StructArray<Int32>
- *   Int32 has validity bitmap, so we wrap it in StructArray N - 1 times, where
- * N is the number of Optional levels
- * - Optional<Optional<Variant<Int32, Int64>>> =>
- * StructArray<StructArray<DenseUnionArray<Int32, Int64>>> DenseUnionArray does
- * not have validity bitmap, so we wrap it in StructArray N times, where N is
- * the number of Optional levels
- *
- * Dict<KeyType, ValueType> => StructArray<MapArray<KeyArray, ValueArray>,
- * Uint64Array (on demand, default: 0)> We do not use arrow::DictArray because
- * it must be used for encoding not for mapping keys to values.
- * (https://arrow.apache.org/docs/cpp/api/array.html#classarrow_1_1_dictionary_array)
- * If the type of dict key is optional then we map
- * Dict<Optional<KeyType>, ValueType> =>
- * StructArray<ListArray<StructArray<KeyArray, ValueArray>, Uint64Array (on
- * demand, default: 0)> because keys of MapArray can not be nullable
- *
  *
  * @param type Yql type to parse
  * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as
@@ -70,22 +96,22 @@ namespace NKikimr::NKqp::NFormats {
  */
 std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type);
 
+/**
+ * @brief Check if the type can be converted to arrow type.
+ *
+ * @param type Yql type to check
+ * @return true if the type is compatible with arrow, false otherwise
+ */
 bool IsArrowCompatible(const NMiniKQL::TType* type);
 
+/**
+ * @brief Append UnboxedValue to arrow Array via arrow Builder.
+ * This function is used in TArrowBatchBuilder.
+ *
+ * @param value value to append
+ * @param builder arrow Builder with proper type used to append converted value array
+ * @param type Yql type of the element
+ */
 void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type);
-
-namespace NTestUtils {
-
-std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type);
-
-std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType);
-
-NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array, ui64 row,
-    const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
-
-NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
-    const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
-
-} // namespace NTestUtils
 
 } // namespace NKikimr::NKqp::NFormats

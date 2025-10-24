@@ -333,9 +333,11 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().begin();
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
-            auto saver = GetIndexInfo().GetColumnSaver(columnId);
-            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed());
-            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast());
+            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_PrepareForWrite")
+                ("loader", loader->DebugString());
+            auto saver = GetIndexInfo().GetColumnSaver(columnId); // ??
+            saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed()); // ??
+            saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast()); // ??
             const auto& columnFeatures = GetIndexInfo().GetColumnFeaturesVerified(columnId);
             auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(incomingBatch->column(incomingIndex));
             TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> arrToWrite =

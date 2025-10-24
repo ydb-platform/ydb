@@ -13,7 +13,8 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    std::string_view Value;
+    NJson::TJsonValue Value;
+    std::string_view RawValue;
     bool IsColumnKeyFlag = false;
 
     void InitFromIterator(const TColumnsData::TIterator& iterator) {
@@ -22,6 +23,7 @@ private:
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
         Value = iterator.GetValue();
+        RawValue = iterator.GetRawValue();
     }
 
     void InitFromIterator(const TOthersData::TIterator& iterator) {
@@ -30,6 +32,7 @@ private:
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
         Value = iterator.GetValue();
+        RawValue = iterator.GetRawValue();
     }
 
     bool Initialize() {
@@ -148,10 +151,21 @@ public:
         AFL_VERIFY(IsValidFlag);
         return KeyIndex;
     }
-    std::string_view GetValue() const {
+
+    std::string_view GetRawValue() const {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TGeneralIterator:GetRawValue()")
+            ("view.size()", RawValue.size())("view", TString(RawValue.data(), RawValue.size()));
+        return RawValue;
+    }
+
+    NJson::TJsonValue GetValue() const {
         AFL_VERIFY(IsValidFlag);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TGeneralIterator:GetValue()")
+            ("view.size()", RawValue.size())("view", TString(RawValue.data(), RawValue.size()))
+            ("Value", Value);
         return Value;
     }
+
     bool HasValue() const {
         AFL_VERIFY(IsValidFlag);
         return HasValueFlag;
@@ -321,7 +335,7 @@ public:
             while (SortedIterators.size() && SortedIterators.front()->GetRecordIndex() == recordIndex) {
                 std::pop_heap(SortedIterators.begin(), SortedIterators.end(), TIteratorsComparator());
                 auto& itColumn = *SortedIterators.back();
-                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetValue(), itColumn.IsColumnKey());
+                kvActor(Addresses[itColumn.GetKeyIndex()].GetOriginalIndex(), itColumn.GetRawValue(), itColumn.IsColumnKey());
                 if (!itColumn.Next()) {
                     SortedIterators.pop_back();
                 } else {

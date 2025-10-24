@@ -47,6 +47,9 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
         return;
     }
     auto batch = preparedConclusion.DetachResult();
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TBuildBatchesTask::DoExecute")
+        ("batch", batch->ToString());
+
     std::shared_ptr<IMerger> merger;
     switch (WriteData.GetWriteMeta().GetModificationType()) {
         case NEvWrite::EModificationType::Upsert: {
@@ -54,10 +57,12 @@ void TBuildBatchesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
                 Context.GetActualSchema()->GetAbsentFields(batch.GetContainer()->schema());
             if (defaultFields.empty()) {
                 if (!Context.GetNoTxWrite()) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TBuildBatchesTask::->TBuildSlicesTask");
                     std::shared_ptr<NConveyor::ITask> task =
                         std::make_shared<NOlap::TBuildSlicesTask>(std::move(WriteData), batch.GetContainer(), Context);
                     NConveyorComposite::TInsertServiceOperator::SendTaskToExecute(task);
                 } else {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TBuildBatchesTask::->TWriteData");
                     NActors::TActivationContext::ActorSystem()->Send(Context.GetBufferizationPortionsActorId(),
                         new NWritingPortions::TEvAddInsertedDataToBuffer(
                             std::make_shared<NEvWrite::TWriteData>(WriteData), batch, std::make_shared<TWritingContext>(Context)));

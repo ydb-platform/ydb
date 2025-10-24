@@ -193,7 +193,12 @@ public:
     TString GetBlobByRangeVerified(const ui32 entityId, const ui32 chunkIdx) const;
 
     TString DebugString() const {
-        return TStringBuilder() << "blobs_count=" << Blobs.size() << ";";
+        auto res = TStringBuilder() << "blobs_count=" << Blobs.size() << "; [\n";
+        for (const auto& b : Blobs) {
+            res << b.GetResultBlob() << "\n";
+        }
+        res << "\n]";
+        return res;
     }
 
     void RegisterFakeBlobIds() {

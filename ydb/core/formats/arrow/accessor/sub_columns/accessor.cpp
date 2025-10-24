@@ -21,10 +21,10 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
     AFL_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(columnType, settings);
     IChunkedArray::TReader reader(sourceArray);
-    std::vector<std::shared_ptr<arrow::Array>> storage;
+    // std::vector<std::shared_ptr<arrow::Array>> storage; // ??
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
-        storage.emplace_back(address.GetArray());
+        // storage.emplace_back(address.GetArray()); // ??
         auto conclusion = settings.GetDataExtractor()->AddDataToBuilders(address.GetArray(), builder);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -72,7 +72,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     TMonotonic pred = TMonotonic::Now();
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
-        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
+        TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::binary(), externalInfo.GetDefaultSerializer());
         blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
@@ -126,7 +126,10 @@ public:
 
     TConclusion<NBinaryJson::TBinaryJson> Finish() {
         auto str = Result.GetStringRobust();
-        auto bJson = NBinaryJson::SerializeToBinaryJson(Result.GetStringRobust());
+        // return NBinaryJson::TBinaryJson(str.data(), str.size());
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_GetStringRobust")
+            ("str", str);
+        auto bJson = NBinaryJson::SerializeToBinaryJson(str);
         if (const TString* val = std::get_if<TString>(&bJson)) {
             return TConclusionStatus::Fail(*val);
         } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
@@ -136,7 +139,7 @@ public:
         }
     }
 
-    void SetValueByPath(const TString& path, const TString& valueStr) {
+    void SetValueByPath(const TString& path, const NJson::TJsonValue& valueStr) {
         ui32 start = 0;
         bool enqueue = false;
         bool wasEnqueue = false;
@@ -224,6 +227,7 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
     const ui32 start = context.GetStartIndex().value_or(0);
     const ui32 finish = start + context.GetRecordsCount().value_or(GetRecordsCount() - start);
     std::optional<std::vector<bool>> simpleFilter;
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TSubColumnsArray::BuildBJsonArray");
     if (context.GetFilter()) {
         simpleFilter = context.GetFilter()->BuildSimpleFilter();
     }
@@ -245,15 +249,15 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             }
         };
 
-        const auto addValueToJson = [&](const TString& path, const TString& valueStr) {
+        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& valueStr) {
             value.SetValueByPath(path, valueStr);
         };
 
-        auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
+        auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& value, const bool isColumn) {
             if (isColumn) {
-                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), value);
             } else {
-                addValueToJson(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(OthersData.GetStats().GetColumnNameString(index), value);
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);

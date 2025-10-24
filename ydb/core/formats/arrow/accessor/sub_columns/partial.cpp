@@ -26,7 +26,7 @@ std::shared_ptr<IChunkedArray> TSubColumnsPartialArray::GetPathAccessor(const st
         return OthersData->GetPathAccessor(svPath, recordsCount);
     } else {
         AFL_VERIFY(!Header.GetOtherStats().GetKeyIndexOptional(svPath));
-        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::utf8(), recordsCount));
+        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::binary(), recordsCount));
     }
 }
 

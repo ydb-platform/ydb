@@ -302,8 +302,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                     [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                         builder.FillNGrammHashes(NGrammSize, arr, inserter);
                     },
-                    [&](const std::string_view data, const ui32 /*hashBase*/) {
-                        builder.BuildNGramms(data.data(), data.size(), {}, NGrammSize, inserter);
+                    [&](const NJson::TJsonValue& data, const ui32 /*hashBase*/) {
+                        auto str = data.GetStringRobust();
+                        builder.BuildNGramms(str.data(), str.size(), {}, NGrammSize, inserter);
                     });
             }
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());

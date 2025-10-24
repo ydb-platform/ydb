@@ -286,6 +286,10 @@ public:
         }
     };
 
+    static TSparsedBuilder<arrow::BinaryType> MakeBuilderBinary(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
+        return TSparsedBuilder<arrow::BinaryType>(nullptr, reserveItems, reserveData);
+    }
+
     static TSparsedBuilder<arrow::StringType> MakeBuilderUtf8(const ui32 reserveItems = 0, const ui32 reserveData = 0) {
         return TSparsedBuilder<arrow::StringType>(nullptr, reserveItems, reserveData);
     }

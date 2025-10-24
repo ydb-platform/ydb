@@ -571,13 +571,13 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         auto snapshotSchema = TablesManager.GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(mvccSnapshot);
         if (snapshotSchema->GetVersion() != schema->GetVersion()) {
             const TString errorMessage = TStringBuilder() << "schema version mismatch with snapshot: "
-                << "tx_id=" << record.GetTxId() 
+                << "tx_id=" << record.GetTxId()
                 << ", snapshot=" << mvccSnapshot
                 << ", snapshot_schema_version=" << snapshotSchema->GetVersion()
                 << ", request_schema_version=" << schema->GetVersion()
                 << ", table_id=" << schemeShardLocalPathId
                 << ", lock_id=" << lockId;
-            
+
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "schema_version_mismatch")
                 ("tx_id", record.GetTxId())
                 ("snapshot", TStringBuilder() << mvccSnapshot)
@@ -588,7 +588,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
                 ("path_id", pathId)
                 ("source", source.ToString())
                 ("cookie", cookie);
-            
+
             LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), 0, "", false,
                 operation.GetIsBulk(), ToString(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST), errorMessage);
             sendError(errorMessage, NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
@@ -597,6 +597,9 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
     }
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
+
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_WriteTasksQueue->Enqueue")
+        ("arrowData", arrowData ? arrowData->DebugString() : "");
 
     WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, record.GetLockNodeId(), *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));

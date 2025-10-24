@@ -29,6 +29,7 @@ protected:
         sb << "SF:" << Scanner->IsFinished() << ";";
         sb << "PR:" << PartialResults.size() << ";";
         if (verbose) {
+            sb << "profile=" << SpecialReadContext->ProfileDebugString();
             sb << "intervals_schema=" << Scanner->DebugString();
         }
         return sb;

@@ -1,60 +1,146 @@
 
 
-
-![Textual splash image](https://raw.githubusercontent.com/Textualize/textual/main/imgs/textual.png)
-
 [![Discord](https://img.shields.io/discord/1026214085173461072)](https://discord.gg/Enf6Z3qhVr)
+[![Supported Python Versions](https://img.shields.io/pypi/pyversions/textual/0.87.1)](https://pypi.org/project/textual/)
+[![PyPI version](https://badge.fury.io/py/textual.svg)](https://badge.fury.io/py/textual)
+![OS support](https://img.shields.io/badge/OS-macOS%20Linux%20Windows-red)
 
+
+
+![textual-splash](https://github.com/user-attachments/assets/4caeb77e-48c0-4cf7-b14d-c53ded855ffd)
 
 # Textual
 
-Textual is a *Rapid Application Development* framework for Python.
+<img align="right" width="250" alt="clock" src="https://github.com/user-attachments/assets/63e839c3-5b8e-478d-b78e-cf7647eb85e8" />
 
-Build sophisticated user interfaces with a simple Python API. Run your apps in the terminal and a [web browser](https://github.com/Textualize/textual-web)!
+Build cross-platform user interfaces with a simple Python API. Run your apps in the terminal *or* a web browser.
+
+Textual's API combines modern Python with the best of developments from the web world, for a lean app development experience.
+De-coupled components and an advanced [testing](https://textual.textualize.io/guide/testing/) framework ensure you can maintain your app for the long-term.
+
+Want some more examples? See the [examples](https://github.com/Textualize/textual/tree/main/examples) directory.
+
+```python
+"""
+An App to show the current time.
+"""
+
+from datetime import datetime
+
+from textual.app import App, ComposeResult
+from textual.widgets import Digits
 
 
-<details>
-  <summary> 🎬 Demonstration </summary>
-  <hr>
+class ClockApp(App):
+    CSS = """
+    Screen { align: center middle; }
+    Digits { width: auto; }
+    """
 
-A quick run through of some Textual features.
+    def compose(self) -> ComposeResult:
+        yield Digits("")
+
+    def on_ready(self) -> None:
+        self.update_clock()
+        self.set_interval(1, self.update_clock)
+
+    def update_clock(self) -> None:
+        clock = datetime.now().time()
+        self.query_one(Digits).update(f"{clock:%T}")
+
+
+if __name__ == "__main__":
+    app = ClockApp()
+    app.run()
+```
+
+> [!TIP]
+> Textual is an asynchronous framework under the hood. Which means you can integrate your apps with async libraries &mdash; if you want to.
+> If you don't want or need to use async, Textual won't force it on you. 
 
 
 
-https://user-images.githubusercontent.com/554369/197355913-65d3c125-493d-4c05-a590-5311f16c40ff.mov
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="64"/>
+
+## Widgets
+
+Textual's library of [widgets](https://textual.textualize.io/widget_gallery/) covers everything from buttons, tree controls, data tables, inputs, text areas, and more…
+Combined with a flexible [layout](https://textual.textualize.io/how-to/design-a-layout/) system, you can realize any User Interface you need.
+
+Predefined themes ensure your apps will look good out of the box. 
 
 
+<table>
 
- </details>
+<tr>
+
+  <td>
+    
+  ![buttons](https://github.com/user-attachments/assets/2ac26387-aaa3-41ed-bc00-7d488600343c)
+    
+  </td>
+
+  <td>
+    
+![tree](https://github.com/user-attachments/assets/61ccd6e9-97ea-4918-8eda-3ee0f0d3770e)
+    
+  </td>
+  
+</tr>
 
 
-## About
+<tr>
 
-Textual adds interactivity to [Rich](https://github.com/Textualize/rich) with an API inspired by modern web development.
+  <td>
+    
+  ![datatables](https://github.com/user-attachments/assets/3e1f9f7a-f965-4901-a114-3c188bd17695)
+    
+  </td>
 
-On modern terminal software (installed by default on most systems), Textual apps can use **16.7 million** colors with mouse support and smooth flicker-free animation. A powerful layout engine and re-usable components makes it possible to build apps that rival the desktop and web experience.
+  <td>
+    
+![inputs](https://github.com/user-attachments/assets/b02aa203-7c37-42da-a1bb-2cb244b7d0d3)
+    
+  </td>
+  
+</tr>
+<tr>
 
-## Compatibility
+<td>
 
-Textual runs on Linux, macOS, and Windows. Textual requires Python 3.8 or above.
+![listview](https://github.com/user-attachments/assets/963603bc-aa07-4688-bd24-379962ece871)
+
+</td>
+
+<td>
+
+![textarea](https://github.com/user-attachments/assets/cd4ba787-5519-40e2-8d86-8224e1b7e506)
+  
+</td>
+
+  
+</tr>
+
+</table>
+
+
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
 
 ## Installing
 
 Install Textual via pip:
 
 ```
-pip install textual
+pip install textual textual-dev
 ```
 
-If you plan on developing Textual apps, you should also install the development tools with the following command:
+See [getting started](https://textual.textualize.io/getting_started/) for details.
 
-```
-pip install textual-dev
-```
 
-See the [docs](https://textual.textualize.io/getting_started/) if you need help getting started.
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
 
 ## Demo
+
 
 Run the following command to see a little of what Textual can do:
 
@@ -62,110 +148,64 @@ Run the following command to see a little of what Textual can do:
 python -m textual
 ```
 
-![Textual demo](https://raw.githubusercontent.com/Textualize/textual/main/imgs/demo.png)
+Or try the [textual demo](https://github.com/textualize/textual-demo) *without* installing (requires [uv](https://docs.astral.sh/uv/)):
 
-## Documentation
+```bash
+uvx --python 3.12 textual-demo
+```
 
-Head over to the [Textual documentation](http://textual.textualize.io/) to start building!
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
+
+## Dev Console
+
+<img align="right" width="40%" alt="devtools" src="https://github.com/user-attachments/assets/12c60d65-e342-4b2f-9372-bae0459a7552" />
+
+
+How do you debug an app in the terminal that is also running in the terminal?
+
+The `textual-dev` package supplies a dev console that connects to your application from another terminal.
+In addition to system messages and events, your logged messages and print statements will appear in the dev console.
+
+See [the guide](https://textual.textualize.io/guide/devtools/) for other helpful tools provided by the `textual-dev` package.
+
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
+
+## Command Palette
+
+
+Textual apps have a *fuzzy search* command palette.
+Hit `ctrl+p` to open the command palette.
+
+It is easy to extend the command palette with [custom commands](https://textual.textualize.io/guide/command_palette/) for your application.
+
+
+![Command Palette](https://github.com/user-attachments/assets/94d8ec5d-b668-4033-a5cb-bf820e1b8d60)
+
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
+
+# Textual ❤️ Web
+
+<img align="right" width="40%" alt="textual-serve" src="https://github.com/user-attachments/assets/a25820fb-87ae-433a-858b-ac3940169242">
+
+
+Textual apps are equally at home in the browser as they are the terminal. Any Textual app may be served with `textual serve` &mdash; so you can share your creations on the web.
+Here's how to serve the demo app:
+
+```
+textual serve "python -m textual"
+```
+
+In addition to serving your apps locally, you can serve apps with [Textual Web](https://github.com/Textualize/textual-web).
+
+Textual Web's firewall-busting technology can serve an unlimited number of applications.
+
+Since Textual apps have low system requirements, you can install them anywhere Python also runs. Turning any device in to a connected device.
+No desktop required!
+
+
+<img src="https://img.spacergif.org/spacer.gif" width="1" height="32"/>
+
 
 ## Join us on Discord
 
 Join the Textual developers and community on our [Discord Server](https://discord.gg/Enf6Z3qhVr).
-
-## Examples
-
-The Textual repository comes with a number of examples you can experiment with or use as a template for your own projects.
-
-
-<details>
-  <summary> 🎬 Code browser </summary>
-  <hr>
-
-  This is the [code_browser.py](https://github.com/Textualize/textual/blob/main/examples/code_browser.py) example which clocks in at 61 lines (*including* docstrings and blank lines).
-
-https://user-images.githubusercontent.com/554369/197188237-88d3f7e4-4e5f-40b5-b996-c47b19ee2f49.mov
-
- </details>
-
-
-<details>
-  <summary> 📷 Calculator </summary>
-  <hr>
-
-This is [calculator.py](https://github.com/Textualize/textual/blob/main/examples/calculator.py) which demonstrates Textual grid layouts.
-
-![calculator screenshot](https://raw.githubusercontent.com/Textualize/textual/main/imgs/calculator.png)
-</details>
-
-
-<details>
-  <summary> 🎬 Stopwatch </summary>
-  <hr>
-
-  This is the Stopwatch example from the [tutorial](https://textual.textualize.io/tutorial/).
-
-
-
-https://user-images.githubusercontent.com/554369/197360718-0c834ef5-6285-4d37-85cf-23eed4aa56c5.mov
-
-
-
-</details>
-
-
-
-## Reference commands
-
-The `textual` command has a few sub-commands to preview Textual styles.
-
-<details>
-  <summary> 🎬 Easing reference </summary>
-  <hr>
-
-This is the *easing* reference which demonstrates the easing parameter on animation, with both movement and opacity. You can run it with the following command:
-
-```bash
-textual easing
-```
-
-
-https://user-images.githubusercontent.com/554369/196157100-352852a6-2b09-4dc8-a888-55b53570aff9.mov
-
-
- </details>
-
-<details>
-  <summary> 🎬 Borders reference </summary>
-  <hr>
-
-This is the borders reference which demonstrates some of the borders styles in Textual. You can run it with the following command:
-
-```bash
-textual borders
-```
-
-
-https://user-images.githubusercontent.com/554369/196158235-4b45fb78-053d-4fd5-b285-e09b4f1c67a8.mov
-
-
-</details>
-
-
-<details>
-  <summary> 🎬 Colors reference </summary>
-  <hr>
-
-This is a reference for Textual's color design system.
-
-```bash
-textual colors
-```
-
-
-
-https://user-images.githubusercontent.com/554369/197357417-2d407aac-8969-44d3-8250-eea45df79d57.mov
-
-
-
-
-</details>

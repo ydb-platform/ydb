@@ -41,7 +41,8 @@ void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSourc
     if (!ProcessingStarted) {
         AFL_VERIFY(FetchingPlan);
         InitStageData(std::make_unique<TFetchedData>(
-            GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
+            GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+                GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations(), sourcePtr->GetRecordsCountOptional()));
         if (HasPortionAccessor()) {
             InitUsedRawBytes();
         }
@@ -465,11 +466,11 @@ TConclusion<bool> TPortionDataSource::DoStartReserveMemory(const NArrow::NSSA::T
 bool TPortionDataSource::DoAddTxConflict() {
     auto state = GetContext()->GetPortionStateAtScanStart(this->GetPortionInfo());
     if (state.Committed) {
-        GetContext()->GetReadMetadata()->SetBrokenWithCommitted();
+        GetContext()->GetReadMetadata()->SetBreakLockOnReadFinished();
         return true;
     } else if (!state.IsMyUncommitted()) {
         const auto* wPortion = static_cast<const TWrittenPortionInfo*>(Portion.get());
-        GetContext()->GetReadMetadata()->SetConflictedWriteId(wPortion->GetInsertWriteId());
+        GetContext()->GetReadMetadata()->SetWriteConflicting(wPortion->GetInsertWriteId());
         return true;
     }
     return false;

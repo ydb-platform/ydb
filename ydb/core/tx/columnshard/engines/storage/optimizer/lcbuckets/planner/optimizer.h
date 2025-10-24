@@ -53,7 +53,7 @@ private:
     void RefreshWeights() {
         LevelsByWeight.clear();
         for (ui32 i = 0; i < Levels.size(); ++i) {
-            LevelsByWeight.emplace(Levels[i]->GetWeight(IsHighPriority()), Levels[i]);
+            LevelsByWeight.emplace(Levels[i]->GetWeight(IsHighPriority() || Levels[i]->IsHighPriority()), Levels[i]);
         }
     }
 
@@ -106,7 +106,7 @@ protected:
         }
         RefreshWeights();
     }
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& locksManager) const override;
 
     virtual void DoActualize(const TInstant currentInstant) override {

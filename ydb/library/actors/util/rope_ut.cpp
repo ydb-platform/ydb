@@ -15,16 +15,18 @@ public:
         return {Buffer.data(), Buffer.size()};
     }
 
-    TMutableContiguousSpan GetDataMut() override {
-        return {Buffer.Detach(), Buffer.size()};
-    }
-
     TMutableContiguousSpan UnsafeGetDataMut() override {
         return {const_cast<char*>(Buffer.data()), Buffer.size()};
     }
 
     size_t GetOccupiedMemorySize() const override {
         return Buffer.capacity();
+    }
+
+    IContiguousChunk::TPtr Clone() override {
+        auto ptr = MakeIntrusive<TRopeStringBackend>(Buffer);
+        ptr->Buffer.Detach();
+        return ptr;
     }
 };
 

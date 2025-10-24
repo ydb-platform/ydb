@@ -10,7 +10,7 @@ using namespace NActors;
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcherService(
-    const NKikimrConfig::TSharedReadingConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

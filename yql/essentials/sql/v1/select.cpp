@@ -1128,8 +1128,6 @@ public:
                                           BuildLambda(Pos_, Y("row"), Args_[0]));
                     break;
                 }
-                default:
-                    YQL_ENSURE(false, "Unexpected REDUCE mode");
             }
         }
 

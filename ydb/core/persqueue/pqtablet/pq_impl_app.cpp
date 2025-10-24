@@ -36,7 +36,7 @@ namespace {
 }
 
 
-class TMonitoringProxy : public TBaseActor<TMonitoringProxy> {
+class TMonitoringProxy : public TBaseTabletActor<TMonitoringProxy> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_MON_ACTOR;
@@ -45,7 +45,7 @@ public:
     TMonitoringProxy(ui64 tabletId, const TActorId& tabletActorId, const TActorId& sender, const TString& query,
         const TMap<ui32, TActorId>&& partitions, const TActorId& cache, const TString& topicName, ui32 inflight,
         TString&& config, std::vector<TTransactionSnapshot>&& transactions)
-    : TBaseActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor(tabletId, tabletActorId, NKikimrServices::PERSQUEUE)
     , Sender(sender)
     , Query(query)
     , Partitions(std::move(partitions))

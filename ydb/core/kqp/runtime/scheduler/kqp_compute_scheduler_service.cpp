@@ -48,7 +48,7 @@ public:
 
     void Handle(TEvAddDatabase::TPtr& ev) {
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
         Scheduler->AddOrUpdateDatabase(ev->Get()->Id, attrs);
     }
@@ -62,7 +62,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto resourceWeight = std::max(ev->Get()->Params.ResourceWeight, 0.0); // TODO: resource weight shouldn't be negative!
         NHdrf::TStaticAttributes attrs = {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         if (ev->Get()->Params.TotalCpuLimitPercentPerNode >= 0) {
@@ -127,7 +127,7 @@ public:
         const auto& poolId = ev->Get()->PoolId;
         const auto& queryId = ev->Get()->QueryId;
         NHdrf::TStaticAttributes const attrs {
-            .Weight = std::max(ev->Get()->Weight, 0.0), // TODO: weight shouldn't be negative!
+            .Weight = ev->Get()->Weight, // TODO: weight shouldn't be negative!
         };
 
         auto query = Scheduler->AddOrUpdateQuery(databaseId, poolId.empty() ? NKikimr::NResourcePool::DEFAULT_POOL_ID : poolId, queryId, attrs);
@@ -205,6 +205,8 @@ ui64 TComputeScheduler::GetTotalCpuLimit() const {
 void TComputeScheduler::AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs) {
     TWriteGuard lock(Mutex);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
+
     if (auto database = Root->GetDatabase(databaseId)) {
         database->Update(attrs);
     } else {
@@ -218,6 +220,8 @@ void TComputeScheduler::AddOrUpdatePool(const TString& databaseId, const TString
     TWriteGuard lock(Mutex);
     auto database = Root->GetDatabase(databaseId);
     Y_ENSURE(database, "Database not found: " << databaseId);
+
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
 
     if (auto pool = database->GetPool(poolId)) {
         pool->Update(attrs);
@@ -235,6 +239,7 @@ TQueryPtr TComputeScheduler::AddOrUpdateQuery(const TString& databaseId, const T
     auto pool = database->GetPool(poolId);
     Y_ENSURE(pool, "Pool not found: " << poolId);
 
+    Y_ENSURE(attrs.GetWeight() > 0.0, "Weight should be positive");
     TQueryPtr query;
 
     if (query = std::static_pointer_cast<TQuery>(pool->GetQuery(queryId))) {
@@ -258,7 +263,7 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
     query->GetParent()->RemoveQuery(queryId);
 }
 
-void TComputeScheduler::UpdateFairShare() {
+void TComputeScheduler::UpdateFairShare(bool allowFairShareOverlimit) {
     auto startTime = TMonotonic::Now();
 
     NHdrf::NSnapshot::TRootPtr snapshot;
@@ -268,9 +273,7 @@ void TComputeScheduler::UpdateFairShare() {
     }
 
     snapshot->UpdateBottomUp(Root->TotalLimit);
-    // We want to allow FairShare to be over Limit.
-    // If you need to change this behaviour change variable's default value
-    snapshot->UpdateTopDown(true);
+    snapshot->UpdateTopDown(allowFairShareOverlimit);
 
     {
         TWriteGuard lock(Mutex);

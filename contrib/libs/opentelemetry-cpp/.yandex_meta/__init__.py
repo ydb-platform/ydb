@@ -6,7 +6,9 @@ def post_install(self):
     with self.yamakes["."] as m:
         m.CFLAGS.remove("-DOPENTELEMETRY_STL_VERSION=2023")
         m.CFLAGS.remove("-DPROTOBUF_USE_DLLS")
+        m.CFLAGS.remove("-DOPENTELEMETRY_ABI_VERSION_NO=1")
         m.CFLAGS.append(GLOBAL("-DOPENTELEMETRY_STL_VERSION=2023"))
+        m.CFLAGS.append(GLOBAL("-DOPENTELEMETRY_ABI_VERSION_NO=2"))
 
         self.yamakes["api"] = self.module(
             Library,

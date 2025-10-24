@@ -84,6 +84,18 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+
+        if (appConfig && appConfig->HasFeatureFlags()) {
+            const auto& appFlags = appConfig->GetFeatureFlags();
+            if (appFlags.GetEnableColumnshardBool()) {
+                featureFlags.SetEnableColumnshardBool(true);
+            }
+
+            if (appFlags.GetEnableColumnStore()) {
+                featureFlags.SetEnableColumnStore(true);
+            }
+        }
+
         if (!appConfig) {
             appConfig.emplace();
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
@@ -115,7 +127,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver),
             nullptr,
             driver);
 

@@ -287,14 +287,10 @@ namespace NActors {
         while (!StopFlag.load(std::memory_order_acquire)) {
             {
                 bool needToCheckSleep = false;
-                while (true) {
-                    ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
-                    if (checkToSleepWorkers == 0) {
-                        break;
-                    }
+                ui64 checkToSleepWorkers = CheckToSleepWorkers.load(std::memory_order_acquire);
+                if (checkToSleepWorkers != 0) {
                     needToCheckSleep = true;
                     CheckToSleepWorkers.compare_exchange_weak(checkToSleepWorkers, checkToSleepWorkers - 1, std::memory_order_release, std::memory_order_relaxed);
-                    break;
                 }
 
                 if (!needToCheckSleep) {

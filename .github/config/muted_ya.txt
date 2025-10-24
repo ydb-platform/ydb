@@ -80,6 +80,29 @@ ydb/tests/olap test_overloads.py.TestLogScenario.test_overloads_workload[1000-2]
 ydb/tests/olap upgrade_to_internal_path_id.py.TestUpgradeToInternalPathId.test
 ydb/tests/olap zip_bomb.py.TestZipBomb.test
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
+<<<<<<< HEAD
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/reconfig_state_storage_workload/tests test_board_workload.py.TestReconfigStateStorageBoardWorkload.test_state_storage_board
+=======
+ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
+ydb/tests/olap/ttl_tiering sole chunk chunk
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
+ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
+ydb/tests/olap/ttl_tiering ttl_unavailable_s3.py.TestUnavailableS3.test
+ydb/tests/sql/large sole chunk chunk
+ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_bulkupsert_delete_and_read_tpch
+ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_insert_delete_and_read_simple_tx
+ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_insert_delete_and_read_simpletable
+ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch
+ydb/tests/sql/large test_insert_delete_duplicate_records.py.TestConcurrentInsertDeleteAndRead.test_upsert_delete_and_read_tpch_tx
+ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_bulkinsert_and_count
+ydb/tests/sql/large test_insertinto_selectfrom.py.TestConcurrentInsertAndCount.test_concurrent_upsert_and_count
+ydb/tests/sql/large test_tiering.py.TestYdbS3TTL.test_basic_tiering_operations
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_pool_classifier_init[False]
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-False]
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
+ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
+ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
+ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
+>>>>>>> bac8dfc9943 (Update muted_ya.txt stable-25-2-1 (#27540))

@@ -130,7 +130,7 @@ public:
         w->SetCreateTimeMS(TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
         w->SetUncompressedSize(Message ? Message.size() : 0);
-        w->SetIgnoreQuotaDeadline(true);
+        w->SetIgnoreQuotaDeadline(false);
         w->SetExternalOperation(true);
         ui64 totalSize = Message ? Message.size() : 0;
         partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));

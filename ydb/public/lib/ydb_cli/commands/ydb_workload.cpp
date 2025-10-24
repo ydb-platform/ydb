@@ -9,6 +9,7 @@
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <ydb/library/workload/abstract/workload_factory.h>
+#include <ydb/library/workload/vector/vector.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_remove.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
@@ -48,6 +49,7 @@ TCommandWorkload::TCommandWorkload()
     AddCommand(std::make_unique<TCommandWorkloadTopic>());
     AddCommand(std::make_unique<TCommandWorkloadTransfer>());
     AddCommand(std::make_unique<TCommandTPCC>());
+    AddCommand(std::make_unique<TCommandVector>());
     for (const auto& key: NYdbWorkload::TWorkloadFactory::GetRegisteredKeys()) {
         AddCommand(std::make_unique<TWorkloadCommandRoot>(key.c_str()));
     }

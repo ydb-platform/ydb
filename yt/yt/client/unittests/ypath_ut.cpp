@@ -878,6 +878,40 @@ TEST_F(TYPathTest, RangesTypeHintsUint64)
         smallYpath.GetNewRanges(comparator, {NTableClient::EValueType::Int64, NTableClient::EValueType::Double}));
 }
 
+TEST_F(TYPathTest, RowIndexInRanges)
+{
+    auto hasRowIndex = [] (const auto& path) {
+        return TRichYPath::Parse(path).HasRowIndexInRanges();
+    };
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{exact={row_index=1}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{upper_limit={row_index=2}}]>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<ranges=[{lower_limit={row_index=0};upper_limit={row_index=2}}]>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<upper_limit={row_index=2}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0;key=[42;43]};upper_limit={row_index=2;key=[45;47]}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("<lower_limit={row_index=0};upper_limit={key=abc}>//path/to/table"));
+    EXPECT_TRUE(hasRowIndex("<lower_limit={key=abc};upper_limit={row_index=2}>//path/to/table"));
+
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:#2]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1,a:b]"));
+    EXPECT_TRUE(hasRowIndex("//path/to/table[#1:b]"));
+
+    EXPECT_FALSE(hasRowIndex("//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[a:b]"));
+    EXPECT_FALSE(hasRowIndex("//path/to/table[\"#1\"]"));
+    EXPECT_FALSE(hasRowIndex("<lower_limit={key=[0]};upper_limit={key=[2]}>//path/to/table"));
+    EXPECT_FALSE(hasRowIndex("<ranges=[{lower_limit={key=[0]};upper_limit={key=[2]}}]>//path/to/table"));
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TRichYPathToStringTest

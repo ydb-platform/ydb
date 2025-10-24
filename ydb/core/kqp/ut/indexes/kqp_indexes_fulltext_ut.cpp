@@ -1022,6 +1022,23 @@ Y_UNIT_TEST(UpdateRow) {
         [[100u];"love"];
         [[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
+
+    { // Update by ON
+        TString query = R"sql(
+            UPDATE `/Root/Texts` ON SELECT 200 AS `Key`, "Rabbits love birds." AS `Text`, "rabbits data" AS `Data`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"birds"];
+        [[200u];"birds"];
+        [[100u];"foxes"];
+        [[100u];"love"];
+        [[200u];"love"];
+        [[200u];"rabbits"]
+    ])", NYdb::FormatResultSetYson(index));
 }
 
 Y_UNIT_TEST(UpdateRowCovered) {
@@ -1072,6 +1089,23 @@ Y_UNIT_TEST(UpdateRowCovered) {
         [["cats data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
         [["cats data"];[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // Update by ON
+        TString query = R"sql(
+            UPDATE `/Root/Texts` ON SELECT 200 AS `Key`, "Rabbits love birds." AS `Text`, "rabbits data" AS `Data`;
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [["birds data"];[100u];"birds"];
+        [["rabbits data"];[200u];"birds"];
+        [["birds data"];[100u];"foxes"];
+        [["birds data"];[100u];"love"];
+        [["rabbits data"];[200u];"love"];
+        [["rabbits data"];[200u];"rabbits"]
     ])", NYdb::FormatResultSetYson(index));
 }
 
@@ -1166,6 +1200,27 @@ Y_UNIT_TEST(UpdateRowReturning) {
         [[100u];"love"];
         [[200u];"love"]
     ])", NYdb::FormatResultSetYson(index));
+
+    { // Update by ON
+        TString query = R"sql(
+            UPDATE `/Root/Texts` ON SELECT 200 AS `Key`, "Rabbits love birds." AS `Text`, "rabbits data" AS `Data`
+            RETURNING *
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["rabbits data"];[200u];["Rabbits love birds."]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [[100u];"birds"];
+        [[200u];"birds"];
+        [[100u];"foxes"];
+        [[100u];"love"];
+        [[200u];"love"];
+        [[200u];"rabbits"]
+    ])", NYdb::FormatResultSetYson(index));
 }
 
 Y_UNIT_TEST(UpdateRowCoveredReturning) {
@@ -1224,6 +1279,27 @@ Y_UNIT_TEST(UpdateRowCoveredReturning) {
         [["cats data"];[200u];"foxes"];
         [["birds data"];[100u];"love"];
         [["cats data"];[200u];"love"]
+    ])", NYdb::FormatResultSetYson(index));
+
+    { // Update by ON
+        TString query = R"sql(
+            UPDATE `/Root/Texts` ON SELECT 200 AS `Key`, "Rabbits love birds." AS `Text`, "rabbits data" AS `Data`
+            RETURNING *
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([
+            [["rabbits data"];[200u];["Rabbits love birds."]]
+        ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
+    }
+    index = ReadIndex(db);
+    CompareYson(R"([
+        [["birds data"];[100u];"birds"];
+        [["rabbits data"];[200u];"birds"];
+        [["birds data"];[100u];"foxes"];
+        [["birds data"];[100u];"love"];
+        [["rabbits data"];[200u];"love"];
+        [["rabbits data"];[200u];"rabbits"]
     ])", NYdb::FormatResultSetYson(index));
 }
 

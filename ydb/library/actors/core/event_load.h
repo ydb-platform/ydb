@@ -6,8 +6,6 @@
 #include <ydb/library/actors/util/rope.h>
 #include <ydb/library/actors/wilson/wilson_trace.h>
 
-#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
-
 namespace NActors {
     class IEventHandle;
 

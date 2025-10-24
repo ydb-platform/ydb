@@ -13,6 +13,8 @@ items:
   href: domains_config.md
 - name: feature_flags
   href: feature_flags.md
+- name: query_service_config
+  href: query_service_config.md
 - name: healthcheck_config
   href: healthcheck_config.md
 - name: hive_config

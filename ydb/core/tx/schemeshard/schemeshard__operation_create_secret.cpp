@@ -12,12 +12,8 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TString InterruptInheritanceExceptDescribe(const TString& parentAcl, const bool inheritPermissions) {
-    if (inheritPermissions) { // don't change parent ACL
-        return parentAcl;
-    }
-
-    NACLib::TACL secObj(parentAcl);
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
+    NACLib::TACL secObj(initialAcl);
     NACLib::TACL resultSecObj;
     resultSecObj.SetInterruptInheritance(true);
     for (auto& ace : *secObj.MutableACE()) {
@@ -250,7 +246,15 @@ public:
         if (!acl.empty()) {
             secretPath->ApplyACL(acl);
         } else {
-            secretPath->ACL = InterruptInheritanceExceptDescribe(parentPath.GetEffectiveACL(), createSecretProto.GetInheritPermissions());
+            /** By default, secrets should not inherit permissions from their parent object, except for the DescribeSchema grant.
+              * This is done to prevent users from accidentally granting permissions to such sensitive objects.
+              * However, the DescribeSchema grant is quite harmless and allows users to view the object's ACL to request access from the owner.
+              * There is also an inherit_permissions flag, which, when set, allows grant inheritance similarly to all other schema objects.
+              */
+            if (!createSecretProto.GetInheritPermissions()) {
+                secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL());
+                secretPath->ACLVersion++;
+            }
         }
 
         NKikimrSchemeOp::TSecretDescription secretDescription;

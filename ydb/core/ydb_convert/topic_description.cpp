@@ -25,6 +25,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     }
 
     out.set_important(in.GetImportant());
+    if (in.has_availabilityperiodms()) {
+        out.mutable_availability_period()->set_seconds(in.availabilityperiodms() / 1000);
+        out.mutable_availability_period()->set_nanos((in.availabilityperiodms() % 1000) * 1'000'000);
+    }
     TString serviceType = "";
     if (in.HasServiceType()) {
         serviceType = in.GetServiceType();

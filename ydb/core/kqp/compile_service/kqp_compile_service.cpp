@@ -359,6 +359,8 @@ private:
         bool enableTopSortSelectIndex = TableServiceConfig.GetEnableTopSortSelectIndex();
         bool enablePointPredicateSortAutoSelectIndex = TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex();
 
+        bool enableDqHashCombineByDefault = TableServiceConfig.GetEnableDqHashCombineByDefault();
+
         TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
         LOG_INFO(*TlsActivationContext, NKikimrServices::KQP_COMPILE_SERVICE, "Updated config");
 
@@ -404,7 +406,8 @@ private:
             TableServiceConfig.GetEnableOlapPushdownAggregate() != enableOlapPushdownAggregate ||
             TableServiceConfig.GetEnableOrderOptimizaionFSM() != enableOrderOptimizaionFSM ||
             TableServiceConfig.GetEnableTopSortSelectIndex() != enableTopSortSelectIndex ||
-            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex)
+            TableServiceConfig.GetEnablePointPredicateSortAutoSelectIndex() != enablePointPredicateSortAutoSelectIndex ||
+            TableServiceConfig.GetEnableDqHashCombineByDefault() != enableDqHashCombineByDefault)
         {
 
             QueryCache->Clear();

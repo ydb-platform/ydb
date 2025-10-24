@@ -219,7 +219,7 @@ private:
             }
 
             if (maxSizeLabelIt->Truncated) {
-                MaybeIssues = "coulnd't list metrics, all label values are too big for listing";
+                MaybeIssues = "couldn't list metrics, all label values are too big for listing";
                 TransitToErrorState();
                 return;
             }
@@ -527,7 +527,7 @@ NActors::IActor* CreateSolomonMetricsQueueActor(
         truePointsFindRange = FromString<ui64>(it->second);
     }
 
-    ui64 maxListingPageSize = 301;
+    ui64 maxListingPageSize = 20000;
     if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
         maxListingPageSize = FromString<ui64>(it->second);
     }

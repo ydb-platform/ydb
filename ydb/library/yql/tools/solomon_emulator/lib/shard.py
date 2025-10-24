@@ -186,7 +186,7 @@ class Shard(object):
             result.append({"labels": labels, "type": metric.kind})
         
         if len(matching_metrics) > 1000:
-            return (None, "Too many line for one listing request, should be under 2k, have: {}".format(len(metrics)))
+            return (None, "Too many lines for one listing request, should be under 2k, have: {}".format(len(matching_metrics)))
 
         return (sorted(result, key=lambda x: str(x)), None)
 

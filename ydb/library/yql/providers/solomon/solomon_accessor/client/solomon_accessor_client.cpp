@@ -719,7 +719,7 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
-    ui64 maxListingPageSize = 301;
+    ui64 maxListingPageSize = 20000;
     if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
         maxListingPageSize = FromString<ui64>(it->second);
     }

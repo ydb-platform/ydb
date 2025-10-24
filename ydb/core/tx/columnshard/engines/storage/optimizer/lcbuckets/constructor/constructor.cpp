@@ -1,8 +1,8 @@
 #include "constructor.h"
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/one_layer.h>
+#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/selector/transparent.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/zero_level.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/lcbuckets/planner/level/common_level.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 

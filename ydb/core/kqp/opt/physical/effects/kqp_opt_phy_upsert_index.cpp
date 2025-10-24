@@ -892,6 +892,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
                 deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
                     indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+            } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+                // For fulltext indexes, we need to tokenize the text from the rows being deleted
+                // and then delete the corresponding token rows from the index table
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
+                    indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -931,6 +936,10 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
                     indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+            } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
+                // For fulltext indexes, we need to tokenize the text and create index rows
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, inputColumnsSet,
+                    indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

@@ -367,7 +367,7 @@ TRelationGraph GenerateFullyConnected(std::mt19937 &mt, unsigned numNodes,
 }
 
 static std::vector<unsigned> GenerateRandomPruferSequence(std::mt19937 &mt, unsigned numNodes) {
-    assert(n >= 2);
+    assert(numNodes >= 2);
     std::uniform_int_distribution<> distribution(0, numNodes - 1);
 
     std::vector<unsigned> prufer(numNodes - 2);

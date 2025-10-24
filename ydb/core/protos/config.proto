@@ -2676,6 +2676,15 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TAwsClientConfig {
+    message TLogConfig {
+        optional int32 LogLevel = 1;
+        optional string FilenamePrefix = 2;
+    }
+
+    optional TLogConfig LogConfig = 1;
+}
+
 message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
@@ -2833,6 +2842,7 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+    optional TAwsClientConfig AwsClientConfig = 116;
 }
 
 message TYdbVersion {

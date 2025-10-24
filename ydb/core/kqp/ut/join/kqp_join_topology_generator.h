@@ -57,6 +57,8 @@ public:
         return Tables_.size();
     }
 
+    void Rename(std::vector<int> oldToNew);
+
 private:
     std::vector<TTable> Tables_;
 };
@@ -81,6 +83,15 @@ public:
     const TSchema& GetSchema() const {
         return Schema_;
     }
+
+    unsigned GetN() const {
+        return AdjacencyList_.size();
+    }
+
+    void ReorderDFS();
+
+    void Rename(const std::vector<int> &oldToNew);
+
 
 private:
     struct TEdge {

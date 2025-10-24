@@ -56,6 +56,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             extra_feature_flags={
                 "enable_parameterized_decimal": True,
                 "enable_table_datetime64": True,
+                "enable_columnshard_bool": True,
             },
             column_shard_config={
                 "disabled_on_scheme_shard": False,
@@ -256,7 +257,11 @@ class TestDataType(RestartToAnotherVersionFixture):
     def test_data_type(self):
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
-                pytest.skip("Decimal types are not supported in columnshard in this version")
+                types_not_supported_yet_in_columnshard.add("Decimal")
+
+        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (26, 1)):
+                types_not_supported_yet_in_columnshard.add("Bool")
 
         self.create_table()
 
@@ -273,7 +278,11 @@ class TestDataType(RestartToAnotherVersionFixture):
     def test_parametrized_data_type(self):
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
-                pytest.skip("Decimal types are not supported in columnshard in this version")
+                types_not_supported_yet_in_columnshard.add("Decimal")
+
+        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (26, 1)):
+                types_not_supported_yet_in_columnshard.add("Bool")
 
         self.create_table()
 

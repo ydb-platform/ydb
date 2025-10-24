@@ -250,7 +250,6 @@ non_pk_types = {
 }
 
 types_not_supported_yet_in_columnshard = {
-    "Bool",
     "DyNumber",
     "UUID",
     "Interval"

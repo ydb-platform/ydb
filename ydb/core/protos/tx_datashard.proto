@@ -2095,7 +2095,7 @@ message TReadVectorTopK {
     // Top-K pushdown by vector distance between Column and TargetVector
     optional uint32 Column = 1;
     optional Ydb.Table.VectorIndexSettings Settings = 2;
-    optional bytes TargetVector = 3;
+    optional string TargetVector = 3;
     optional uint32 Limit = 4;
 }
 

@@ -21,6 +21,7 @@
 #include <yql/essentials/core/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_paths.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/threading/future/future.h>
@@ -656,21 +657,107 @@ public:
     }
 
 private:
-    static bool CheckPartitionListArg(const TExprNode& partListNode) {
+    static bool ValidatePartitionList(const TExprNode& partListNode, TExprContext& ctx) {
         YQL_ENSURE(partListNode.IsCallable({MrPartitionListName, MrPartitionListStrictName}));
-        if (partListNode.ChildrenSize() != 1) {
+        const size_t argCount = partListNode.ChildrenSize();
+        const size_t minArgs = 1;
+        const size_t maxArgs = 2;
+        if (argCount < minArgs || argCount > maxArgs) {
+            ctx.AddError(TIssue(ctx.GetPosition(partListNode.Pos()),
+                TStringBuilder() << partListNode.Content() << " should have between " << minArgs << " and " << maxArgs << " arguments, but got: " << argCount));
             return false;
         }
+
+        if (argCount == maxArgs && !partListNode.Tail().IsAtom()) {
+            ctx.AddError(TIssue(ctx.GetPosition(partListNode.Pos()),
+                TStringBuilder() << "Last argument of " << partListNode.Content() << " should be an atom"));
+            return false;
+        }
+
         const auto& partList = partListNode.Head();
 
         // TODO: support empty list with user schema via BuildEmptyTableRead()
-        if (!partList.IsCallable("AsList") ||
-            partList.ChildrenSize() == 0 ||
-            !AllOf(partList.ChildrenList(), [](const auto& node) {
-                return node->IsCallable({"AsStruct", "Struct"}) && node->ChildrenSize() >= (node->IsCallable("AsStruct") ? 0 : 1);
-            }))
-        {
+        if (!partList.IsCallable("AsList") || partList.ChildrenSize() == 0) {
+            ctx.AddError(TIssue(ctx.GetPosition(partListNode.Pos()),
+                TStringBuilder() << "First argument of " << partListNode.Content() << " should be non-empty literal list"));
             return false;
+        }
+
+        for (size_t i = 0; i < partList.ChildrenSize(); ++i) {
+            auto listEntry = partList.Child(i);
+            if (!listEntry->IsCallable({"Struct", "AsStruct"})) {
+                ctx.AddError(TIssue(ctx.GetPosition(listEntry->Pos()),
+                    TStringBuilder() << "Expecting list of literal structs in " << partListNode.Content() << " first argument"));
+                return false;
+            }
+            size_t startIdx = listEntry->IsCallable("AsStruct") ? 0 : 1;
+            if (listEntry->ChildrenSize() <= startIdx) {
+                ctx.AddError(TIssue(ctx.GetPosition(listEntry->Pos()),
+                    TStringBuilder() << "Got empty struct in " << partListNode.Content() << " first argument"));
+                return false;
+            }
+            THashSet<TStringBuf> members;
+            for (size_t j = startIdx; j < listEntry->ChildrenSize(); ++j) {
+                auto structItem = listEntry->Child(j);
+                if (!structItem->IsList() || structItem->ChildrenSize() != 2) {
+                    ctx.AddError(TIssue(ctx.GetPosition(structItem->Pos()),
+                        TStringBuilder() << "Expecting literal 2-element tuple as argument of " << listEntry->Content()));
+                    return false;
+                }
+                if (!structItem->Head().IsAtom()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(structItem->Head().Pos()),
+                        TStringBuilder() << "First tuple element of " << listEntry->Content() << " should be an atom"));
+                    return false;
+                }
+
+                const TStringBuf member = structItem->Head().Content();
+                if (!members.insert(member).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(structItem->Head().Pos()),
+                        TStringBuilder() << "Duplicate struct member `" << member << "`"));
+                    return false;
+                }
+
+                if (member == MrPartitionListTableMember || member == MrPartitionListViewMember) {
+                    auto value = structItem->Child(1);
+                    if (member == MrPartitionListViewMember) {
+                        if (value->IsCallable("Nothing")) {
+                            continue;
+                        }
+                        if (value->IsCallable("Just")) {
+                            if (value->ChildrenSize() != 1) {
+                                ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                                    TStringBuilder() << "Callable Just should have single argument, got: " << value->ChildrenSize()));
+                                return false;
+                            }
+                            value = value->Child(0);
+                        }
+                    }
+                    if (!value->IsCallable({"String", "Utf8"})) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                            TStringBuilder() << "Member " << member << " has to be "
+                                << (member == MrPartitionListTableMember ? "" : "(optional) ") << "String or Utf8 literal"));
+                        return false;
+                    }
+
+                    if (value->ChildrenSize() != 1 || !value->Child(0)->IsAtom()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                            TStringBuilder() << "Detected invalid string literal value for " << member));
+                        return false;
+                    }
+
+                    if (value->Child(0)->Content().empty()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value->Pos()),
+                            TStringBuilder() << "Empty string is not allowed for " << member));
+                        return {};
+                    }
+                }
+            }
+
+            if (!members.contains(MrPartitionListTableMember)) {
+                ctx.AddError(TIssue(ctx.GetPosition(listEntry->Pos()),
+                    TStringBuilder() << "List entry for " << partListNode.Content() << " missing required member " << MrPartitionListTableMember));
+                return false;
+            }
         }
 
         return true;
@@ -692,8 +779,8 @@ private:
     static TExprNode::TPtr PrunePartitionList(TCoFilterBase filter, TExprContext& ctx) {
         TYtRead read = filter.Input().Maybe<TCoRight>().Input().Maybe<TYtRead>().Cast();
         const auto& partListNode = read.Arg(2).Ref();
-        if (!CheckPartitionListArg(partListNode)) {
-            return filter.Ptr();
+        if (!ValidatePartitionList(partListNode, ctx)) {
+            return {};
         }
         const auto& partList = partListNode.Head();
 
@@ -702,13 +789,10 @@ private:
             YQL_ENSURE(entry->IsCallable({"AsStruct", "Struct"}));
             for (ui32 i = entry->IsCallable("Struct") ? 1 : 0; i < entry->ChildrenSize(); ++i) {
                 auto structItem = entry->ChildPtr(i);
-                if (!structItem->IsList() || structItem->ChildrenSize() != 2 || !structItem->Head().IsAtom()) {
-                    return filter.Ptr();
+                auto member = structItem->Head().Content();
+                if (member != MrPartitionListTableMember && member != MrPartitionListViewMember) {
+                    extraColumns.insert(member);
                 }
-                if (structItem->Head().Content() == MrPartitionListTableMember) {
-                    continue;
-                }
-                extraColumns.insert(structItem->Head().Content());
             }
         }
         if (extraColumns.empty()) {
@@ -857,7 +941,7 @@ private:
 
         TExprNode::TPtr pruningLambda = ctx.ChangeChild(filter.Lambda().Ref(), TCoLambda::idx_Body, std::move(pruningPredicate));
 
-        auto newPartList = ctx.Builder(partListNode.Pos())
+        auto prunedPartList = ctx.Builder(partListNode.Pos())
             .Callable("Filter")
                 .Add(0, partListNode.HeadPtr())
                 .Lambda(1)
@@ -870,39 +954,39 @@ private:
             .Build();
 
 
-        auto newPartitions = ctx.Builder(partListNode.Pos())
-            .Callable(partListNode.Content())
-                .Callable(0, "EvaluateExpr")
-                    .Callable(0, "IfStrict")
-                        .Callable(0, "==")
-                            .Callable(0, "Length")
-                                .Add(0, newPartList)
-                            .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, 0)
-                            .Seal()
+        auto newPartList = ctx.Builder(partListNode.Pos())
+            .Callable("EvaluateExpr")
+                .Callable(0, "IfStrict")
+                    .Callable(0, "==")
+                        .Callable(0, "Length")
+                            .Add(0, prunedPartList)
                         .Seal()
-                        .Callable(1, "Top")
-                            .Add(0, partListNode.HeadPtr())
-                            .Callable(1, "Uint64")
-                                .Atom(0, 1)
-                            .Seal()
-                            .Callable(2, "Bool")
-                                .Atom(0, "false")
-                            .Seal()
-                            .Lambda(3)
-                                .Param("entry")
-                                .Callable("Member")
-                                    .Arg(0, "entry")
-                                    .Atom(1, MrPartitionListTableMember)
-                                .Seal()
-                            .Seal()
+                        .Callable(1, "Uint64")
+                            .Atom(0, 0)
                         .Seal()
-                        .Add(2, newPartList)
                     .Seal()
+                    .Callable(1, "Top")
+                        .Add(0, partListNode.HeadPtr())
+                        .Callable(1, "Uint64")
+                            .Atom(0, 1)
+                        .Seal()
+                        .Callable(2, "Bool")
+                            .Atom(0, "false")
+                        .Seal()
+                        .Lambda(3)
+                            .Param("entry")
+                            .Callable("Member")
+                                .Arg(0, "entry")
+                                .Atom(1, MrPartitionListTableMember)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Add(2, prunedPartList)
                 .Seal()
             .Seal()
             .Build();
+
+        auto newPartitions = ctx.ChangeChild(partListNode, 0, std::move(newPartList));
 
         YQL_CLOG(INFO, ProviderYt) << "Pruning " << partListNode.Content() << " with " << partListNode.Head().ChildrenSize() << " tables";
 
@@ -916,55 +1000,61 @@ private:
 
     static TExprNode::TPtr ExpandPartitionList(TYtRead read, TExprContext& ctx) {
         const auto& partListNode = read.Arg(2).Ref();
-        if (!CheckPartitionListArg(partListNode)) {
-            ctx.AddError(TIssue(ctx.GetPosition(partListNode.Pos()),
-                TStringBuilder() << "Single argument of " << partListNode.Content() << " should be non-empty literal list of non-empty structs"));
+        if (!ValidatePartitionList(partListNode, ctx)) {
             return {};
         }
 
         const auto& partList = partListNode.Head();
+        TMaybe<TStringBuf> tablePrefix;
+        if (partListNode.ChildrenSize() == 2) {
+            tablePrefix = partListNode.Tail().Content();
+        }
         TExprNodeList keys;
         for (auto entry : partList.ChildrenList()) {
             YQL_ENSURE(entry->IsCallable({"AsStruct", "Struct"}));
             TExprNodeList newChildren;
             TMaybe<TStringBuf> tablePath;
+            TMaybe<TStringBuf> tableView;
             for (ui32 i = entry->IsCallable("Struct") ? 1 : 0; i < entry->ChildrenSize(); ++i) {
                 auto structItem = entry->ChildPtr(i);
-                YQL_ENSURE(structItem->IsList() && structItem->ChildrenSize() == 2);
-                YQL_ENSURE(structItem->Head().IsAtom());
                 if (structItem->Head().Content() == MrPartitionListTableMember) {
-                    YQL_ENSURE(!tablePath.Defined(), "Duplicate member " << MrPartitionListTableMember);
-                    if (!structItem->Tail().IsCallable({"String", "Utf8"})) {
-                        ctx.AddError(TIssue(ctx.GetPosition(structItem->Pos()),
-                            TStringBuilder() << "Member " << MrPartitionListTableMember << " should be Strung/Utf8 literal"));
-                        return {};
-                    }
-
+                    YQL_ENSURE(structItem->Tail().IsCallable({"String", "Utf8"}));
                     tablePath = structItem->Tail().Head().Content();
+                } else if (structItem->Head().Content() == MrPartitionListViewMember) {
+                    auto value = structItem->Child(1);
+                    if (value->IsCallable("Nothing")) {
+                        continue;
+                    }
+                    if (value->IsCallable("Just")) {
+                        value = value->Child(0);
+                    }
+                    YQL_ENSURE(value->IsCallable({"String", "Utf8"}));
+                    tableView = value->Head().Content();
                 } else {
                     newChildren.emplace_back(structItem);
                 }
             }
-            if (!tablePath.Defined()) {
-                ctx.AddError(TIssue(ctx.GetPosition(entry->Pos()),
-                    TStringBuilder() << "Required member " << MrPartitionListTableMember << " not found"));
-                return {};
-            }
-            if (tablePath->empty()) {
-                ctx.AddError(TIssue(ctx.GetPosition(entry->Pos()),
-                    TStringBuilder() << "Empty table path in " << MrPartitionListTableMember));
-                return {};
-            }
+            YQL_ENSURE(tablePath.Defined());
 
             TExprNodeList keyArgs;
             keyArgs.push_back(ctx.Builder(entry->Pos())
                 .List()
                     .Atom(0, "table")
                     .Callable(1, "String")
-                        .Atom(0, *tablePath)
+                        .Atom(0, tablePrefix.Defined() ? BuildTablePath(*tablePrefix, *tablePath) : *tablePath)
                     .Seal()
                 .Seal()
                 .Build());
+            if (tableView.Defined()) {
+                keyArgs.push_back(ctx.Builder(entry->Pos())
+                    .List()
+                        .Atom(0, "view")
+                        .Callable(1, "String")
+                            .Atom(0, *tableView)
+                        .Seal()
+                    .Seal()
+                    .Build());
+            }
             if (!newChildren.empty()) {
                 keyArgs.push_back(ctx.Builder(entry->Pos())
                     .List()

@@ -46,8 +46,6 @@ private:
     TString Key;
     ui32 Cookie = 1;
     TVector<TMetadataItem> Metadata;
-    bool IsAutoScaledTopic = false;
-    TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo> PQGroupInfo;
     ui64 TabletId;
     TActorId WriteActorId;
 
@@ -160,12 +158,8 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
         }
 
-        PQGroupInfo = info.PQGroupInfo;
-        const auto& pqDescription = PQGroupInfo->Description;
-        if (pqDescription.GetPQTabletConfig().GetPartitionStrategy().HasPartitionStrategyType() &&
-            pqDescription.GetPQTabletConfig().GetPartitionStrategy().GetPartitionStrategyType() != 0) {
-                IsAutoScaledTopic = true;
-        }
+        const auto& pqDescription = info.PQGroupInfo->Description;
+
         if (!Params.Has("partition")) {
             auto chooser = NPQ::CreatePartitionChooser(pqDescription, false);
             if (!Key.empty()) {
@@ -240,6 +234,11 @@ public:
             ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Cookies mismatch in TEvWriteAccepted Handler."));
             return;
         }
+    }
+
+    void HandleDisconnected(NPQ::TEvPartitionWriter::TEvDisconnected::TPtr, const TActorContext&) {
+        ReplyAndPassAway(Viewer->GetHTTPINTERNALERROR(Event->Get(), "text/plain", "Partition writer is disconnected."));
+        return;
     }
 
     void ReplyAndPassAway() override {

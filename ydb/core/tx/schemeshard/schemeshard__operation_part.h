@@ -398,6 +398,7 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransacti
 TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
 
@@ -493,11 +494,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
-bool CreateConsistentCopyTables(
-    TOperationId nextId,
-    const TTxTransaction& tx,
-    TOperationContext& context,
+bool CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
     TVector<ISubOperation::TPtr>& result);
+THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& srcTable);
+void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -604,7 +605,7 @@ ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state)
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
@@ -633,6 +634,8 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+void AddMoveSequences(TOperationId nextId, TVector<ISubOperation::TPtr>& result,
+    const TPath& srcTable, const TString& dstPath, const THashSet<TString>& sequences);
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);

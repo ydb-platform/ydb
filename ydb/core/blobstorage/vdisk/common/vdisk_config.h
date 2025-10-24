@@ -123,6 +123,7 @@ namespace NKikimr {
         ui32 MinHugeBlobInBytes;
         ui32 MilestoneHugeBlobInBytes;
         ui32 HugeBlobOverhead;
+        ui32 HugeBlobStepsBetweenPowersOf2;
         ui32 HullCompLevel0MaxSstsAtOnce;
         ui32 HullCompSortedPartsNum;
         double HullCompLevelRateThreshold;
@@ -135,7 +136,7 @@ namespace NKikimr {
         ui64 AnubisOsirisMaxInFly;
         EBlobHeaderMode BlobHeaderMode;
 
-        static const ui32 TinyDiskHugeBlobOverhead;
+        static const ui32 TinyDiskHugeBlobStepsBetweenPowersOf2;
         static const ui32 TinyDiskHullCompLevel0MaxSstsAtOnce;
         static const ui32 TinyDiskHullCompSortedPartsNum;
 

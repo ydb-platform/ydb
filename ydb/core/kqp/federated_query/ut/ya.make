@@ -1,5 +1,7 @@
 UNITTEST_FOR(ydb/core/kqp/federated_query)
 
+SIZE(MEDIUM)
+
 PEERDIR(
     ydb/core/kqp/federated_query
     ydb/public/api/protos

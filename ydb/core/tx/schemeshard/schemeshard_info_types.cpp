@@ -856,11 +856,11 @@ NKikimrSchemeOp::TPartitionConfig TPartitionConfigMerger::DefaultConfig(const TA
 bool TPartitionConfigMerger::ApplyChanges(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
-    const TAppData *appData, TString &errDescr)
+    const TAppData *appData, const bool isServerlessDomain, TString &errDescr)
 {
     result.CopyFrom(src); // inherit all data from src
 
-    if (!ApplyChangesInColumnFamilies(result, src, changes, errDescr)) {
+    if (!ApplyChangesInColumnFamilies(result, src, changes, isServerlessDomain, errDescr)) {
         return false;
     }
 
@@ -1060,6 +1060,7 @@ bool TPartitionConfigMerger::ApplyChanges(
 bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
     NKikimrSchemeOp::TPartitionConfig &result,
     const NKikimrSchemeOp::TPartitionConfig &src, const NKikimrSchemeOp::TPartitionConfig &changes,
+    const bool isServerlessDomain,
     TString &errDescr)
 {
     result.MutableColumnFamilies()->CopyFrom(src.GetColumnFamilies());
@@ -1133,6 +1134,11 @@ bool TPartitionConfigMerger::ApplyChangesInColumnFamilies(
         }
 
         if (changesFamily.HasColumnCacheMode()) {
+            if (isServerlessDomain && changesFamily.GetColumnCacheMode() == NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory) {
+                errDescr = TStringBuilder()
+                    << "CacheMode InMemory is not supported in serverless databases. ColumnFamily id: " << familyId << " name: " << familyName;
+                return false;
+            }
             dstFamily.SetColumnCacheMode(changesFamily.GetColumnCacheMode());
         }
 
@@ -2523,6 +2529,59 @@ void TIndexBuildInfo::AddParent(const TSerializedTableRange& range, TShardIdx sh
 
     // Add the remaining range
     Cluster2Shards.emplace_hint(itFrom, parentTo, TClusterShards{.From = parentFrom, .Shards = {shard}});
+}
+
+bool TIndexBuildInfo::IsValidState(EState value)
+{
+    switch (value) {
+        case EState::Invalid:
+        case EState::AlterMainTable:
+        case EState::Locking:
+        case EState::GatheringStatistics:
+        case EState::Initiating:
+        case EState::Filling:
+        case EState::DropBuild:
+        case EState::CreateBuild:
+        case EState::LockBuild:
+        case EState::Applying:
+        case EState::Unlocking:
+        case EState::AlterSequence:
+        case EState::Done:
+        case EState::Cancellation_Applying:
+        case EState::Cancellation_Unlocking:
+        case EState::Cancellation_DroppingColumns:
+        case EState::Cancelled:
+        case EState::Rejection_Applying:
+        case EState::Rejection_Unlocking:
+        case EState::Rejection_DroppingColumns:
+        case EState::Rejected:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidSubState(ESubState value)
+{
+    switch (value) {
+        case ESubState::None:
+        case ESubState::UniqIndexValidation:
+            return true;
+    }
+    return false;
+}
+
+bool TIndexBuildInfo::IsValidBuildKind(EBuildKind value)
+{
+    switch (value) {
+        case EBuildKind::BuildKindUnspecified:
+        case EBuildKind::BuildSecondaryIndex:
+        case EBuildKind::BuildVectorIndex:
+        case EBuildKind::BuildPrefixedVectorIndex:
+        case EBuildKind::BuildSecondaryUniqueIndex:
+        case EBuildKind::BuildColumns:
+            return true;
+    }
+    return false;
 }
 
 TColumnFamiliesMerger::TColumnFamiliesMerger(NKikimrSchemeOp::TPartitionConfig &container)

@@ -4,6 +4,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/util/proto_duration.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 
@@ -14,6 +15,8 @@
 #include <util/string/vector.h>
 
 #include <library/cpp/digest/md5/md5.h>
+
+#include <expected>
 
 
 namespace NKikimr::NGRpcProxy::V1 {
@@ -55,6 +58,28 @@ namespace NKikimr::NGRpcProxy::V1 {
             serviceTypes.insert({name, {name, count, passwordHashes}});
         }
         return serviceTypes;
+    }
+
+    static std::expected<TDuration, TString> ConvertPositiveDuration(const google::protobuf::Duration& duration) {
+        if (duration.seconds() < 0) {
+            return std::unexpected(TStringBuilder() << "duration seconds cannot be negative, provided " << duration.seconds());
+        }
+        return NKikimr::GetDuration(duration);
+    }
+
+    static std::expected<TMaybe<TDuration>, TMsgPqCodes> ConvertConsumerAvailabilityPeriod(const google::protobuf::Duration& duration, std::string_view consumerName) {
+        if (auto val = ConvertPositiveDuration(duration); val.has_value()) {
+            if (val.value() == TDuration::Zero()) {
+                return Nothing();
+            } else {
+                return val.value();
+            }
+        } else {
+            return std::unexpected(TMsgPqCodes(
+                TStringBuilder() << "Invalid availability_period for consumer '" << consumerName << "': " << val.error(),
+                Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT
+            ));
+        }
     }
 
     TMsgPqCodes AddReadRuleToConfig(
@@ -130,6 +155,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (rr.important()) {
             consumer->SetImportant(true);
         }
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.consumer_name()); period.has_value()) {
+            if (period.value().Defined()) {
+                consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
+            } else {
+                consumer->ClearAvailabilityPeriodMs();
+            }
+        } else {
+            return period.error();
+        }
 
         if (!rr.service_type().empty()) {
             if (!supportedClientServiceTypes.contains(rr.service_type())) {
@@ -153,7 +187,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
 
-
     void ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
@@ -166,6 +199,12 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
         for (auto& pair : alter.alter_attributes()) {
             (*consumer.mutable_attributes())[pair.first] = pair.second;
+        }
+        if (alter.has_set_availability_period()) {
+            consumer.mutable_availability_period()->CopyFrom(alter.set_availability_period());
+        }
+        if (alter.has_reset_availability_period()) {
+            consumer.clear_availability_period();
         }
     }
 
@@ -277,6 +316,15 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
             consumer->SetImportant(true);
         }
+        if (auto period = ConvertConsumerAvailabilityPeriod(rr.availability_period(), rr.name()); period.has_value()) {
+            if (period.value().Defined()) {
+                consumer->SetAvailabilityPeriodMs(period.value()->MilliSeconds());
+            } else {
+                consumer->ClearAvailabilityPeriodMs();
+            }
+        } else {
+            return period.error();
+        }
 
         return TMsgPqCodes("", Ydb::PersQueue::ErrorCode::OK);
     }
@@ -326,6 +374,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return true;
             }
             readRuleConsumers.insert(consumer.GetName());
+
+            if (consumer.GetImportant() && consumer.HasAvailabilityPeriodMs()) {
+                error = TStringBuilder() << "Consumer '" << consumer.GetName() << "' has both an important flag and a limited availability_period, which are mutually exclusive";
+                return false;
+            }
         }
 
         for (const auto& t : supportedClientServiceTypes) {
@@ -1308,6 +1361,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             (*consumer.mutable_attributes())["_version"] = TStringBuilder() << c.GetVersion();
             for (ui32 codec : c.GetCodec().GetIds()) {
                 consumer.mutable_supported_codecs()->add_codecs(codec + 1);
+            }
+            if (ui64 ms = c.GetAvailabilityPeriodMs()) {
+                consumer.mutable_availability_period()->set_seconds(ms / 1000);
+                consumer.mutable_availability_period()->set_nanos((ms % 1000) * 1'000'000);
             }
         }
 

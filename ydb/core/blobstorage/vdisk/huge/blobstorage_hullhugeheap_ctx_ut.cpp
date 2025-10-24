@@ -30,6 +30,8 @@ namespace NKikimr {
                     cfg.MilestoneHugeBlobInBytes,
                     cfg.MaxLogoBlobDataSize,
                     cfg.HugeBlobOverhead,
+                    cfg.HugeBlobStepsBetweenPowersOf2,
+                    false,
                     cfg.HugeBlobsFreeChunkReservation,
                     logFunc);
 

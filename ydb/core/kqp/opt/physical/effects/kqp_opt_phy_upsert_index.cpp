@@ -918,7 +918,14 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
 
             if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
                 if (indexDesc->KeyColumns.size() > 1) {
-                    upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                    if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                        auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                        upsertIndexRows = std::move(res.first);
+                        effects.emplace_back(std::move(res.second));
+                    } else {
+                        // Handle old prefixed vector index tables without the sequence
+                        upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                    }
                 }
 
                 upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,

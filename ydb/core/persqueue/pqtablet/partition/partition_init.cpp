@@ -461,7 +461,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 
 void TInitInfoRangeStep::PostProcessing(const TActorContext& ctx) {
     auto& usersInfoStorage = Partition()->UsersInfoStorage;
-    for (auto& [_, userInfo] : usersInfoStorage->GetAll()) {
+    for (auto&& [_, userInfo] : usersInfoStorage->GetAll()) {
         userInfo.AnyCommits = userInfo.Offset > (i64)Partition()->BlobEncoder.StartOffset;
     }
 
@@ -778,6 +778,8 @@ void TInitDataRangeStep::FormHeadAndProceed() {
 
         cz.Head.Offset = headKey.GetOffset();
         cz.Head.PartNo = headKey.GetPartNo();
+
+        Partition()->WasTheLastBlobBig = false;
     }
 
     // FastWrite Body
@@ -919,6 +921,7 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
                 PQ_INIT_ENSURE(size == read.GetValue().size())("size", size)("read.GetValue().size()", read.GetValue().size());
 
                 for (TBlobIterator it(key, read.GetValue()); it.IsValid(); it.Next()) {
+                    PQ_LOG_D("add batch");
                     head.AddBatch(it.GetBatch());
                 }
                 head.PackedSize += size;
@@ -944,6 +947,8 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
 
         };
     }
+
+    Partition()->InitFirstCompactionPart();
 
     Done(ctx);
 }

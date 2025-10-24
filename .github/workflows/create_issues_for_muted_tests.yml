@@ -6,7 +6,6 @@ on:
       - submitted
     branches:
       - main
-      - 'stable-*'
   workflow_dispatch:
     inputs:
         pr_number: 
@@ -22,10 +21,11 @@ jobs:
   create-issues-for-muted-tests:
     runs-on: ubuntu-latest
     if: |
-        (github.event_name == 'pull_request_review' && 
-        github.event.review.state == 'approved' && 
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) || 
-        github.event_name == 'workflow_dispatch'
+      ((github.event_name == 'pull_request_review' && 
+      github.event.review.state == 'approved' && 
+      contains(github.event.pull_request.labels.*.name, 'mute-unmute') &&
+      github.event.pull_request.base.ref == 'main') || 
+      github.event_name == 'workflow_dispatch')
 
     steps:
       - name: Set environment variables for branches
@@ -41,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: |
             python -m pip install --upgrade pip
-            pip install ydb[yc] PyGithub requests
+            pip install ydb[yc] PyGithub requests matplotlib numpy
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
@@ -85,7 +85,9 @@ jobs:
           TEAM_CHANNELS: ${{ vars.TG_TEAM_CHANNELS }}
         run: |
           python .github/scripts/telegram/parse_and_send_team_issues.py \
+            --on-mute-change-update \
             --file "${{ steps.create_issues.outputs.created_issues_file }}" \
             --bot-token "$TELEGRAM_BOT_TOKEN" \
             --team-channels "$TEAM_CHANNELS" \
+            --include-plots \
             --delay 2

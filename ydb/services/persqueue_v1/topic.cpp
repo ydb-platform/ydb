@@ -157,7 +157,7 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
         "TopicService/"#NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
     ADD_REQUEST(CommitOffset, TopicService, CommitOffsetRequest, CommitOffsetResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx));
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx, &DoCommitOffsetRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), .RequestType =  NJaegerTracing::ERequestType::TOPIC_COMMITOFFSET}));
     })
 
     ADD_REQUEST(DropTopic, TopicService, DropTopicRequest, DropTopicResponse, {

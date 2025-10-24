@@ -13,6 +13,7 @@
 #define LOG_E(stream) LOG_ERROR_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
 #define LOG_C(stream) LOG_CRIT_S  (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
 #define LOG_A(stream) LOG_ALERT_S (*NActors::TlsActivationContext, Service, LOG_PREFIX_INT << stream)
+#define LOG(level, stream) LOG_LOG_S (*NActors::TlsActivationContext, level, Service, LOG_PREFIX_INT << stream)
 
 namespace NKikimr::NPQ {
 

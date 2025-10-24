@@ -2220,6 +2220,160 @@ Y_UNIT_TEST_SUITE(IncrementalBackup) {
         ExecSQL(server, edgeActor, "SELECT 1;");
     }
 
+    Y_UNIT_TEST(QueryIncrementalBackupImplTableAfterRestore) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableChangefeedInitialScan(true)
+            .SetEnableBackupService(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        // Create backup collection structure manually
+        ExecSQL(server, edgeActor, R"(
+            CREATE BACKUP COLLECTION `TestCollection`
+              ( TABLE `/Root/Table`
+              )
+            WITH
+              ( STORAGE = 'cluster'
+              , INCREMENTAL_BACKUP_ENABLED = 'true'
+              );
+            )", false);
+
+        // Manually create full backup table with initial data
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000001Z_full", "Table", SimpleTable());
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000001Z_full/Table` (key, value) VALUES
+                (1, 10), (2, 20), (3, 30), (4, 40), (5, 50);
+        )");
+
+        // Manually create first incremental backup table
+        auto incrOpts = TShardedTableOptions()
+            .AllowSystemColumnNames(true)
+            .Columns({
+                {"key", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+                {"__ydb_incrBackupImpl_changeMetadata", "String", false, false}
+            });
+
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000002Z_incremental", "Table", incrOpts);
+
+        auto normalMetadata = SerializeChangeMetadata(false); // Not deleted
+        auto deletedMetadata = SerializeChangeMetadata(true);  // Deleted
+
+        // First incremental backup: delete key=1, update key=2 to 200, insert key=6 with 600
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+              (1, NULL, ')" << deletedMetadata << R"(')
+            , (2, 200, ')" << normalMetadata << R"(')
+            , (6, 600, ')" << normalMetadata << R"(')
+            ;
+        )");
+
+        // Manually create second incremental backup table
+        CreateShardedTable(server, edgeActor, "/Root/.backups/collections/TestCollection/19700101000003Z_incremental", "Table", incrOpts);
+
+        // Second incremental backup: delete key=4, update key=3 to 300
+        ExecSQL(server, edgeActor, TStringBuilder() << R"(
+            UPSERT INTO `/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table` (key, value, __ydb_incrBackupImpl_changeMetadata) VALUES
+              (3, 300, ')" << normalMetadata << R"(')
+            , (4, NULL, ')" << deletedMetadata << R"(')
+            ;
+        )");
+
+        // Restore from backup collection
+        ExecSQL(server, edgeActor, R"(RESTORE `TestCollection`;)", false);
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Verify restored table has expected data (full backup + both incremental backups applied)
+        auto restoredData = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/Table`
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_VALUES_EQUAL(restoredData,
+            "{ items { uint32_value: 2 } items { uint32_value: 200 } }, "
+            "{ items { uint32_value: 3 } items { uint32_value: 300 } }, "
+            "{ items { uint32_value: 5 } items { uint32_value: 50 } }, "
+            "{ items { uint32_value: 6 } items { uint32_value: 600 } }");
+
+        // Now test querying incremental backup implementation tables
+        // These should still be accessible after restore
+
+        // Query the first incremental backup table
+        auto incrBackup1Result = KqpSimpleExec(runtime, R"(
+            SELECT key, value, LENGTH(__ydb_incrBackupImpl_changeMetadata) as metadata_len 
+            FROM `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table`
+            ORDER BY key
+        )");
+
+        // Should contain the changes from first incremental backup
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 1") != TString::npos,
+            "First incremental backup should contain deleted key 1");
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 2") != TString::npos,
+            "First incremental backup should contain updated key 2");
+        UNIT_ASSERT_C(incrBackup1Result.find("uint32_value: 6") != TString::npos,
+            "First incremental backup should contain new key 6");
+
+        // Query the second incremental backup table
+        auto incrBackup2Result = KqpSimpleExec(runtime, R"(
+            SELECT key, value, LENGTH(__ydb_incrBackupImpl_changeMetadata) as metadata_len
+            FROM `/Root/.backups/collections/TestCollection/19700101000003Z_incremental/Table`
+            ORDER BY key
+        )");
+
+        // Should contain the changes from second incremental backup
+        UNIT_ASSERT_C(incrBackup2Result.find("uint32_value: 3") != TString::npos,
+            "Second incremental backup should contain updated key 3");
+        UNIT_ASSERT_C(incrBackup2Result.find("uint32_value: 4") != TString::npos,
+            "Second incremental backup should contain deleted key 4");
+
+        // Verify we can also query with WHERE clause on incremental backup tables
+        auto filteredResult = KqpSimpleExec(runtime, R"(
+            SELECT key FROM `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table`
+            WHERE key > 1 AND key < 10
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_C(filteredResult.find("uint32_value: 2") != TString::npos,
+            "Filtered query should return key 2");
+        UNIT_ASSERT_C(filteredResult.find("uint32_value: 6") != TString::npos,
+            "Filtered query should return key 6");
+
+        // Verify we can join incremental backup table with restored table
+        auto joinResult = KqpSimpleExec(runtime, R"(
+            SELECT t.key, t.value as current_value
+            FROM `/Root/Table` as t
+            JOIN `/Root/.backups/collections/TestCollection/19700101000002Z_incremental/Table` as b
+            ON t.key = b.key
+            ORDER BY t.key
+        )");
+
+        // Should return keys that exist in both restored table and incremental backup
+        UNIT_ASSERT_C(joinResult.find("uint32_value: 2") != TString::npos,
+            "Join should include key 2");
+        UNIT_ASSERT_C(joinResult.find("uint32_value: 6") != TString::npos,
+            "Join should include key 6");
+
+        // Additional test: Verify full backup table is still queryable
+        auto fullBackupResult = KqpSimpleExec(runtime, R"(
+            SELECT key, value FROM `/Root/.backups/collections/TestCollection/19700101000001Z_full/Table`
+            ORDER BY key
+        )");
+
+        UNIT_ASSERT_C(fullBackupResult.find("uint32_value: 1") != TString::npos,
+            "Full backup should contain key 1");
+        UNIT_ASSERT_C(fullBackupResult.find("uint32_value: 10") != TString::npos,
+            "Full backup should contain original value 10");
+    }
+
 } // Y_UNIT_TEST_SUITE(IncrementalBackup)
 
 } // NKikimr

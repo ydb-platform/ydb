@@ -1345,6 +1345,7 @@ namespace NSQLTranslationV1 {
         };
 
         TNodePtr Important;
+        NYql::TResetableSetting<TNodePtr, void> AvailabilityPeriod;
         NYql::TResetableSetting<TNodePtr, void> ReadFromTs;
         NYql::TResetableSetting<TNodePtr, void> SupportedCodecs;
     };

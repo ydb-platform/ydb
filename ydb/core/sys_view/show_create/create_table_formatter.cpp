@@ -665,8 +665,20 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
         }
     }
 
+    TString cacheMode;
+    if (familyDesc.HasColumnCacheMode()) {
+        switch (familyDesc.GetColumnCacheMode()) {
+            case NKikimrSchemeOp::ColumnCacheModeRegular:
+                cacheMode = "regular";
+                break;
+            case NKikimrSchemeOp::ColumnCacheModeTryKeepInMemory:
+                cacheMode = "in_memory";
+                break;
+        }
+    }
+
     if (familyName == "default") {
-        if (!dataName && !compression) {
+        if (!dataName && !compression && !cacheMode) {
             return false;
         }
     }
@@ -685,6 +697,11 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
 
     if (compression) {
         Stream << del << "COMPRESSION = " << "\"" << compression << "\"";
+        del = ", ";
+    }
+
+    if (cacheMode) {
+        Stream << del << "CACHE_MODE = " << "\"" << cacheMode << "\"";
     }
 
     Stream << ")";

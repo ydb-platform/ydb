@@ -779,7 +779,9 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
 
     void ResumeInputsByCheckpoint() override final {
         for (auto& [id, channelInfo] : InputChannelsMap) {
-            channelInfo.ResumeByCheckpoint();
+            if (channelInfo.PendingCheckpoint) {
+                channelInfo.ResumeByCheckpoint();
+            }
         }
     }
 

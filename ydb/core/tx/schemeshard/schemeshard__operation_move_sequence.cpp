@@ -813,18 +813,28 @@ public:
                 .IsResolved()
                 .NotDeleted()
                 .NotUnderDeleting()
-                .IsCommonSensePath()
                 .NotAsyncReplicaTable();
 
             if (checks) {
-                if (srcParentPath->IsTable()) {
+                if (srcParentPath.Parent()->IsTableIndex()) {
+                    // Only __ydb_id sequence can be created in the prefixed index
+                    if (srcPath.LeafName() != NTableIndex::NKMeans::IdColumnSequence) {
+                        result->SetError(NKikimrScheme::EStatus::StatusNameConflict, "sequences are not allowed in indexes");
+                        return result;
+                    }
+                    if (srcParentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
+                    }
+                } else if (srcParentPath->IsTable()) {
                     // allow immediately inside a normal table
+                    checks.IsCommonSensePath();
                     if (srcParentPath.IsUnderOperation()) {
                         checks.IsUnderTheSameOperation(OperationId.GetTxId()); // allowed only as part of consistent operations
                     }
                 } else {
                     // otherwise don't allow unexpected object types
-                    checks.IsLikeDirectory();
+                    checks.IsCommonSensePath()
+                          .IsLikeDirectory();
                 }
             }
 
@@ -835,28 +845,6 @@ public:
         }
 
         TPath dstPath = TPath::Resolve(dstPathStr, context.SS);
-        TPath dstParentPath = dstPath.Parent();
-
-        {
-            TPath::TChecker checks = dstParentPath.Check();
-            checks
-                .NotUnderDomainUpgrade()
-                .IsAtLocalSchemeShard()
-                .IsResolved();
-
-            if (dstParentPath.IsUnderOperation()) {
-                checks
-                    .IsUnderTheSameOperation(OperationId.GetTxId());
-            } else {
-                checks
-                    .NotUnderOperation();
-            }
-
-            if (!checks) {
-                result->SetError(checks.GetStatus(), checks.GetError());
-                return result;
-            }
-        }
 
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
@@ -893,8 +881,51 @@ public:
                     .DepthLimit()
                     .IsValidLeafName(context.UserToken.Get())
                     .IsTheSameDomain(srcPath)
-                    .DirChildrenLimit()
                     .IsValidACL(acl);
+            }
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        // Parent is probably already modified and inactive, because it's either a regular table or an index
+        // implementation table which is in the process of moving. "Inactive" paths are only used in move
+        // operations and mean that the path isn't yet inserted into the child node map of its parent itself.
+        // Thus, dstParentPath checks are performed on the 'new' (inactive) version.
+
+        // Most checks on dstPath are performed on the 'old' path, but DirChildrenLimit requires dstParentPath
+        // to be resolved, so we perform it on the 'new' version of the path.
+
+        dstPath = TPath::ResolveWithInactive(OperationId, dstPathStr, context.SS);
+        TPath dstParentPath = dstPath.Parent();
+
+        {
+            TPath::TChecker checks = dstPath.Check();
+
+            checks
+                .DirChildrenLimit();
+
+            if (!checks) {
+                result->SetError(checks.GetStatus(), checks.GetError());
+                return result;
+            }
+        }
+
+        {
+            TPath::TChecker checks = dstParentPath.Check();
+
+            checks
+                .NotUnderDomainUpgrade()
+                .IsAtLocalSchemeShard()
+                .IsResolved();
+            if (dstParentPath.IsUnderOperation()) {
+                checks
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else {
+                checks
+                    .NotUnderOperation();
             }
 
             if (!checks) {

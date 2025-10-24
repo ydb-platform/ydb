@@ -21,10 +21,6 @@ void InitAsyncOutput(
     NSo::NProto::TDqSolomonShard&& settings,
     i64 freeSpace = 100000);
 
-void CleanupSolomon(TString cloudId, TString folderId, TString service, bool isCloud);
-
-TString GetSolomonMetrics(TString folderId, TString service);
-
 NSo::NProto::TDqSolomonShard BuildSolomonShardSettings(bool isCloud);
 
 NUdf::TUnboxedValue CreateStruct(

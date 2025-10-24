@@ -81,8 +81,7 @@ public:
         }
     }
 
-    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success)
-    {
+    TMaybe<TRemoveTaskContext> RemoveTask(ui64 txId, ui64 taskId, bool success, const TActorSystem* actorSystem) {
         TWriteGuard guard(RWLock);
         YQL_ENSURE(Requests.size() == SenderIdsByTxId.size());
         const auto senders = SenderIdsByTxId.equal_range(txId);
@@ -107,8 +106,7 @@ public:
                     if (auto query = requestIt->second.Query) {
                         auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
                         removeQueryEvent->Query = query;
-                        const auto& actorCtx = NActors::TActorContext::AsActorContext();
-                        actorCtx.Send(MakeKqpSchedulerServiceId(actorCtx.SelfID.NodeId()), removeQueryEvent.Release());
+                        actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
                     }
 
                     Requests.erase(*senderIt);

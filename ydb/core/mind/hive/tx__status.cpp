@@ -48,7 +48,7 @@ public:
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {
-                BLOG_D("THive::TTxStatus(" << nodeId << ")::Complete - continuing node drain");
+                BLOG_D("THive::TTxStatus(" << nodeId << ") - continuing node drain");
                 Y_DEBUG_ABORT_UNLESS(node.DrainActor == nullptr);
                 node.DrainActor = Self->StartHiveDrain(nodeId, {.Persist = true, .DownPolicy = NKikimrHive::EDrainDownPolicy::DRAIN_POLICY_NO_DOWN});
             }

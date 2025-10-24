@@ -5,9 +5,8 @@ TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32 cpu:4)
+
 
 SIZE(MEDIUM)
 

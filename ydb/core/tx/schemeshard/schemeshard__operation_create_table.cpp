@@ -578,9 +578,11 @@ public:
             return result;
         }
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
         std::optional<TString> defaultPoolKind = InferDefaultPoolKind(domainInfo->EffectiveStoragePools(), schema.GetPartitionConfig());
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData(), defaultPoolKind), schema.GetPartitionConfig(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -821,9 +823,11 @@ ISubOperation::TPtr CreateNewTable(TOperationId id, TTxState::ETxState state) {
     return MakeSubOperation<TCreateTable>(id, state);
 }
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx) {
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences) {
     auto obj = MakeSubOperation<TCreateTable>(id, tx);
-    static_cast<TCreateTable*>(obj.Get())->SetAllowShadowDataForBuildIndex();
+    TCreateTable *createTable = static_cast<TCreateTable*>(obj.Get());
+    createTable->SetAllowShadowDataForBuildIndex();
+    createTable->SetLocalSequences(localSequences);
     return obj;
 }
 

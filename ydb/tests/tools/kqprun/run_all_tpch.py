@@ -34,7 +34,7 @@ def run_query_text(query_text, suffix):
     # cmdline = './kqprun_with_rusage.py %s -c dq.conf -s s10.sql -p %s -C query --log KQP_YQL=trace -T script --result-file %s >%s 2>&1' % (rusage_file, query_file, result_file, err_file)
 
     # no tracing
-    cmdline = './kqprun_with_rusage.py %s -c dq.conf -s s10.sql -p %s -C query --result-file %s >%s 2>&1' % (rusage_file, query_file, result_file, err_file)
+    cmdline = './kqprun_with_rusage.py %s -c dq.conf -s s1.sql -p %s -C query --log KQP_YQL=trace -T script --result-file %s >%s 2>&1' % (rusage_file, query_file, result_file, err_file)
 
     logging.info('Cmdline: %s', cmdline)
     kqprun = subprocess.Popen(cmdline, shell=True, stdin=None, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -60,7 +60,7 @@ def run_query_text(query_text, suffix):
 def get_score(result):
     return -result.wall_time
 
-def run_query_text_n_times(query_text, suffix, trials=3):
+def run_query_text_n_times(query_text, suffix, trials=1):
     best_result = None
     for n in range(trials):
         logging.info('Running trial %d of %d' % (n + 1, trials))
@@ -132,12 +132,13 @@ def run_query(query_file, query_id):
     suffix_ref = 'wide_combine_q%d' % query_id
     suffix_new = 'dq_hash_combine_q%d' % query_id
 
-    res_ref = run_query_text_n_times(source_query_text, suffix_ref)
+    run_query_text = "pragma ydb.UseDqHashCombine = \"false\";\n" + source_query_text
+    res_ref = run_query_text_n_times(run_query_text, suffix_ref)
     if not res_ref.success:
         report_error(query_id, 'Failed to run test %s' % suffix_ref, res_ref.report_file)
 
-    source_query_text = "pragma ydb.UseDqHashCombine = \"true\";\n" + source_query_text
-    res_new = run_query_text_n_times(source_query_text, suffix_new)
+    run_query_text = "pragma ydb.UseDqHashCombine = \"true\";\n" + source_query_text
+    res_new = run_query_text_n_times(run_query_text, suffix_new)
     if not res_new.success:
         report_error(query_id, 'Failed to run test %s' % suffix_new, res_new.report_file)
 

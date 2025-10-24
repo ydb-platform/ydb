@@ -71,7 +71,11 @@ std::vector<std::string> TPredicateContainer::GetColumnNames() const {
 }
 
 bool TPredicateContainer::IsForwardInterval() const {
-    return IsEmpty() || GetCompareType() == NArrow::ECompareType::GREATER_OR_EQUAL || GetCompareType() == NArrow::ECompareType::GREATER;
+    return IsEmpty() || Object->IsFrom();
+}
+
+bool TPredicateContainer::IsBackwardInterval() const {
+    return IsEmpty() || Object->IsTo();
 }
 
 bool TPredicateContainer::IsInclude() const {

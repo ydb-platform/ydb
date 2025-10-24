@@ -42,11 +42,11 @@ public:
     }
 
     bool IsEqualPointTo(const TPredicateContainer& item) const {
-        if (!Object != !item.Object) {
+        if (IsEmpty() != item.IsEmpty()) {
             return false;
         }
         if (!Object) {
-            return IsForwardInterval() == item.IsForwardInterval();
+            return true;
         }
         return Object->IsEqualPointTo(*item.Object);
     }
@@ -80,6 +80,7 @@ public:
     }
 
     bool IsForwardInterval() const;
+    bool IsBackwardInterval() const;
 
     bool IsInclude() const;
 
@@ -111,7 +112,7 @@ public:
 
     std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> FindFirstExcluded(
         NArrow::NMerger::TRWSortableBatchPosition& begin) const {
-        AFL_VERIFY(!IsForwardInterval());
+        AFL_VERIFY(IsBackwardInterval());
         AFL_VERIFY(begin.GetRecordsCount());
 
         if (!Object) {

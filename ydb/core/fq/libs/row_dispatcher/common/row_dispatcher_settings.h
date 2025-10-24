@@ -33,6 +33,7 @@ public:
         YDB_ACCESSOR(ui64, BatchSizeBytes, 1_MB);
         YDB_ACCESSOR(TDuration, BatchCreationTimeout, TDuration::Seconds(1));
         YDB_ACCESSOR(ui64, BufferCellCount, 1000'000);
+        YDB_ACCESSOR(bool, SkipErrors, false);
     };
 
     class TCompileServiceSettings {

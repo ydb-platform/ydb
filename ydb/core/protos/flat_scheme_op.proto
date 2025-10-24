@@ -538,6 +538,7 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
+        optional uint64 Concurrency = 6;
     }
 
     message TOneLayer {

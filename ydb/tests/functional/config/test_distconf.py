@@ -234,13 +234,10 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                 );
                 """
             )
-        
-        def create_table_n(num):
-            return functools.partial(create_table, num)
 
         initial_slots = self.cluster.register_and_start_slots(database_path, count=1)
         self.cluster.wait_tenant_up(database_path)
-        pool.retry_operation_sync(create_table_n(1))
+        pool.retry_operation_sync(functools.partial(create_table, 1))
 
         initial_slots[0].stop()
 
@@ -256,7 +253,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             initial_slots[0].set_seed_nodes_file(seed_nodes_file.name)
             initial_slots[0].start()
 
-            pool.retry_operation_sync(create_table_n(2))
+            pool.retry_operation_sync(functools.partial(create_table, 2))
 
             def alter_table(num, session):
                 session.execute_scheme(
@@ -265,14 +262,8 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                     """
                 )
 
-            def alter_table_n(num):
-                return functools.partial(alter_table, num)
-
             def describe_table(num, session):
                 return session.describe_table(f"{database_path}/t{num}")
-
-            def describe_table_n(num):
-                return functools.partial(describe_table, num)
 
             def upsert_table(num, session):
                 session.transaction().execute(
@@ -280,24 +271,18 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
                     commit_tx=True,
                 )
 
-            def upsert_table_n(num):
-                return functools.partial(upsert_table, num)
-
             def select_table(num, session):
                 session.transaction().execute(
                     f"select id from `{database_path}/t{num}`;",
                     commit_tx=True,
                 )
 
-            def select_table_n(num):
-                return functools.partial(select_table, num)
-
             for num in [1, 2]:
-                pool.retry_operation_sync(alter_table_n(num))
-                desc = pool.retry_operation_sync(describe_table_n(num))
+                pool.retry_operation_sync(functools.partial(alter_table, num))
+                desc = pool.retry_operation_sync(functools.partial(describe_table, num))
                 assert any(c.name == 'value' for c in desc.columns)
-                pool.retry_operation_sync(upsert_table_n(num))
-                pool.retry_operation_sync(select_table_n(num))
+                pool.retry_operation_sync(functools.partial(upsert_table, num))
+                pool.retry_operation_sync(functools.partial(select_table, num))
         except Exception:
             assert False, 'Query unexpectedly failed with dynamic slots'
         finally:

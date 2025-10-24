@@ -24,12 +24,14 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 YDS_CONNECTION = "yds"
 COMPUTE_NODE_COUNT = 3
 
+
 class Param(object):
     def __init__(
         self,
         skip_errors=False,
     ):
         self.skip_errors = skip_errors
+
 
 @pytest.fixture
 def kikimr(request):
@@ -1224,3 +1226,4 @@ class TestPqRowDispatcher(TestYdsBase):
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
             time.sleep(1)
         pass
+        stop_yds_query(client, query_id)

@@ -31,6 +31,12 @@ message TEvLoadTestRequest {
         optional double Weight = 3;
     }
     message TStorageLoad {
+        message TContentType {
+            enum E {
+                Random = 1;
+                Validated = 2;
+            }
+        }
         message TInitialBlobAllocation {
             oneof DataSize {
                 uint64 TotalSize = 1;
@@ -91,6 +97,7 @@ message TEvLoadTestRequest {
             optional uint32 TracingThrottlerBurst = 19 [default = 0];
 
             optional uint32 NumberOfRandomGroupsToPick = 20 [default = 0];
+            optional TContentType.E ContentType = 21;
         };
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

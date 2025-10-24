@@ -1,6 +1,6 @@
 #include "sqs_topic_proxy.h"
 
-#include <ydb/core/grpc_services/service_ymq.h>
+#include <ydb/core/grpc_services/service_sqs_topic.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
@@ -15,11 +15,11 @@
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <util/folder/path.h>
-#include <ydb/core/ymq/actor/auth_factory.h>
+#include <ydb/core/ymq/actor/auth_factory.h>  // reuse auth factory from ymq
 
 #include <ydb/library/http_proxy/error/error.h>
 
-#include <ydb/services/ymq/rpc_params.h>
+#include <ydb/services/sqs_topic/rpc_params.h>
 
 #include "utils.h"
 //#include "ydb/core/ymq/actor/log.h"

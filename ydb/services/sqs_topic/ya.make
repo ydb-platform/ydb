@@ -20,6 +20,7 @@ PEERDIR(
     ydb/services/lib/sharding
     ydb/services/persqueue_v1
     ydb/services/ydb
+    ydb/services/ymq
     library/cpp/string_utils/url
 )
 

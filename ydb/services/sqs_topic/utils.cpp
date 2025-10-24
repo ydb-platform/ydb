@@ -2,29 +2,11 @@
 
 #include <util/string/builder.h>
 #include <util/string/split.h>
-#include <ydb/core/ymq/base/utils.h>
 #include <library/cpp/string_utils/url/url.h>
 
 #include <expected>
 
 namespace NKikimr::NSqsTopic {
-    std::pair<TString, TString> CloudIdAndResourceIdFromQueueUrl(const TStringBuf queueUrl) {
-        auto protocolSeparator = queueUrl.find("://");
-        if (protocolSeparator == TStringBuf::npos) {
-            return {"", ""};
-        }
-
-        auto restOfUrl = queueUrl.substr(protocolSeparator + 3);
-        auto parts = StringSplitter(restOfUrl).Split('/').ToList<TString>();
-        if (parts.size() < 3) {
-            return {"", ""};
-        }
-
-        bool isPrivateRequest = NKikimr::NSQS::IsPrivateRequest(restOfUrl);
-        TString queueName = NKikimr::NSQS::ExtractQueueNameFromPath(restOfUrl, isPrivateRequest);
-        TString accountName = NKikimr::NSQS::ExtractAccountNameFromPath(restOfUrl, isPrivateRequest);
-        return {accountName, queueName};
-    }
 
     constexpr TStringBuf QUEUE_URL_VERSION1_PREFIX = "/v1";
 
@@ -96,13 +78,6 @@ namespace NKikimr::NSqsTopic {
             return std::unexpected("TopicPath " + std::move(v.error()));
         }
 
-        if (auto v = ReadString(part); v.has_value()) {
-            result.QueueName = std::move(v.value().String);
-            part.Skip(v.value().NextPosition);
-        } else {
-            return std::unexpected("QueueName " + std::move(v.error()));
-        }
-
         return result;
     }
 
@@ -119,11 +94,10 @@ namespace NKikimr::NSqsTopic {
         TRichQueueUrl result{
             .Database = std::move(prev.first),
             .TopicPath = prev.second,
-            .QueueName = prev.second,
+
         };
         return result;
     }
-
 
     static void WriteLengthDelimitedString(IOutputStream& os, TStringBuf value) {
         os << '/' << value.size() << '/' << value;
@@ -135,7 +109,6 @@ namespace NKikimr::NSqsTopic {
         WriteLengthDelimitedString(result.Out, queueUrl.Database);
         WriteLengthDelimitedString(result.Out, queueUrl.Consumer);
         WriteLengthDelimitedString(result.Out, queueUrl.TopicPath);
-        WriteLengthDelimitedString(result.Out, queueUrl.QueueName);
         return result;
     }
 }

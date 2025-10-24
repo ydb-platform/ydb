@@ -1,6 +1,6 @@
 #include "grpc_service.h"
 
-#include <ydb/core/grpc_services/service_ymq.h>
+#include <ydb/core/grpc_services/service_sqs_topic.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/ticket_parser.h>
@@ -14,8 +14,6 @@ namespace NKikimr::NGRpcService {
 void TGRpcSqsTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    using std::placeholders::_1;
-    using std::placeholders::_2;
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
@@ -23,14 +21,14 @@ void TGRpcSqsTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
 
 #define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE) \
     MakeIntrusive<TGRpcRequest<Ydb::SqsTopic::V1::NAME##Request, Ydb::SqsTopic::V1::NAME##Response, TGRpcSqsTopicService>> \
-        (this, &Service_, CQ_,                                                                                                      \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                               \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
-                    new TGrpcRequestOperationCall<Ydb::SqsTopic::V1::NAME##Request, Ydb::SqsTopic::V1::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
-            }, &Ydb::SqsTopic::V1::SqsTopicService::AsyncService::RequestSqsTopic ## NAME,                                            \
-            #NAME, logger, getCounterBlock("ymq", #NAME))->Run();
+        (this, &Service_, CQ_,                                                                                             \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                   \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                           \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                                    \
+                    new TGrpcRequestOperationCall<Ydb::SqsTopic::V1::NAME##Request, Ydb::SqsTopic::V1::NAME##Response>     \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                     \
+            }, &Ydb::SqsTopic::V1::SqsTopicService::AsyncService::RequestSqsTopic ## NAME,                                 \
+            #NAME, logger, getCounterBlock("sqs_topic", #NAME))->Run();
 
     ADD_REQUEST(GetQueueUrl, DoSqsTopicGetQueueUrlRequest, nullptr, Off)
     ADD_REQUEST(CreateQueue, DoSqsTopicCreateQueueRequest, nullptr, Off)

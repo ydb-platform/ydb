@@ -45,7 +45,9 @@ private:
 
 public:
     TPKRangesFilter(TPKRangesFilter&& other)
-        : Data(other.Data)
+        : FakeRanges(other.FakeRanges)
+        , SortedRanges(std::move(other.SortedRanges))
+        , Data(other.Data)
         , MemoryGuard(other.MemoryGuard.GetBytes())
     {
     }

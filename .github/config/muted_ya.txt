@@ -174,3 +174,4 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_p
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
+ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex

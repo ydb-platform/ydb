@@ -38,7 +38,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ydb_qa_query_statistic
 
       - name: Install dependencies
         run: |
@@ -71,7 +71,7 @@ jobs:
       - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ydb_qa_query_statistic
           fetch-depth: 0
 
       - name: Install dependencies
@@ -219,7 +219,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
           # Возвращаемся на main для доступа к скриптам
-          git checkout main
+          git checkout ydb_qa_query_statistic
           
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \

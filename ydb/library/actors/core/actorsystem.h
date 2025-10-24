@@ -88,7 +88,6 @@ namespace NActors {
         TProxyWrapperFactory ProxyWrapperFactory;
     };
 
-    using TRcBufAllocator = std::function<TRcBuf(size_t size, size_t headRoom, size_t tailRoom)>;
     class TRdmaAllocatorWithFallback : public IRcBufAllocator {
     public:
         TRdmaAllocatorWithFallback(std::shared_ptr<NInterconnect::NRdma::IMemPool>  memPool) noexcept;

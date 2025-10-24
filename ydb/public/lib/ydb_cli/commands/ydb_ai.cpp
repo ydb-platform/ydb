@@ -1,8 +1,10 @@
 #include "ydb_ai.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_ai/line_reader.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_ai/models/model_openai.h>
 
 #include <util/string/strip.h>
+#include <util/system/env.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -31,6 +33,11 @@ int TCommandAi::Run(TConfig& config) {
 
     // AI-TODO: KIKIMR-24202 - robust file creation
     NAi::TLineReader lineReader("ydb-ai> ", (TFsPath(HomeDir) / ".ydb-ai/history").GetPath());
+    const auto model = NAi::CreateOpenAiModel({
+        .BaseUrl = "https://api.eliza.yandex.net/raw/internal/deepseek/v1", // AI-TODO: KIKIMR-24214 -- configure it
+        .ModelId = "deepseek-0324", // AI-TODO: KIKIMR-24214 -- configure it
+        .ApiKey = GetEnv("MODEL_TOKEN"), // AI-TODO: KIKIMR-24214 -- configure it
+    });
 
     while (const auto& maybeLine = lineReader.ReadLine()) {
         const auto& input = *maybeLine;
@@ -43,7 +50,7 @@ int TCommandAi::Run(TConfig& config) {
             return EXIT_SUCCESS;
         }
 
-        Cout << "Input value: " << input << Endl;
+        Cout << "Model answer:\n" << model->Chat(input) << Endl;
     }
 
     PrintExitMessage();

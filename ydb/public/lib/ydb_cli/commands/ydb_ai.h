@@ -4,7 +4,7 @@
 
 namespace NYdb::NConsoleClient {
 
-class TCommandAi : public TYdbCommand {
+class TCommandAi final : public TYdbCommand {
     using TBase = TYdbCommand;
 
 public:

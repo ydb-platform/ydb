@@ -10,3 +10,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE(
+    models
+)

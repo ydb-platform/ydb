@@ -85,6 +85,26 @@ void PrepareTables(TSession session) {
             INDEX idx GLOBAL ON (idx_a, idx_b)
         );
 
+        CREATE TABLE `Level1` ( `Id` Int32 NOT NULL, `Name` Utf8, `Date` Timestamp NOT NULL, `Level2_Name` Utf8, `OneToOne_Required_PK_Date` Timestamp, `Level1_Required_Id` Int32, `Level1_Optional_Id` Int32, `Level3_Name` Utf8,
+            `Level2_Required_Id` Int32, `Level2_Optional_Id` Int32, `Level4_Name` Utf8, `Level3_Required_Id` Int32, `Level3_Optional_Id` Int32, `OneToOne_Optional_PK_Inverse4Id` Int32, `OneToMany_Required_Inverse4Id` Int32,
+            `OneToMany_Optional_Inverse4Id` Int32, `OneToOne_Optional_PK_Inverse3Id` Int32, `OneToMany_Required_Inverse3Id` Int32, `OneToMany_Optional_Inverse3Id` Int32, `OneToOne_Optional_PK_Inverse2Id` Int32, `OneToMany_Required_Inverse2Id` Int32, `OneToMany_Optional_Inverse2Id` Int32,
+            INDEX `IX_Level1_Level1_Optional_Id` GLOBAL SYNC ON (`Level1_Optional_Id`),
+            INDEX `IX_Level1_Level1_Required_Id` GLOBAL SYNC ON (`Level1_Required_Id`),
+            INDEX `IX_Level1_Level2_Optional_Id` GLOBAL SYNC ON (`Level2_Optional_Id`),
+            INDEX `IX_Level1_Level2_Required_Id` GLOBAL SYNC ON (`Level2_Required_Id`),
+            INDEX `IX_Level1_Level3_Optional_Id` GLOBAL SYNC ON (`Level3_Optional_Id`),
+            INDEX `IX_Level1_Level3_Required_Id` GLOBAL SYNC ON (`Level3_Required_Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse2Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse2Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse3Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse3Id`),
+            INDEX `IX_Level1_OneToMany_Optional_Inverse4Id` GLOBAL SYNC ON (`OneToMany_Optional_Inverse4Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse2Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse2Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse3Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse3Id`),
+            INDEX `IX_Level1_OneToMany_Required_Inverse4Id` GLOBAL SYNC ON (`OneToMany_Required_Inverse4Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse2Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse2Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse3Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse3Id`),
+            INDEX `IX_Level1_OneToOne_Optional_PK_Inverse4Id` GLOBAL SYNC ON (`OneToOne_Optional_PK_Inverse4Id`),
+            PRIMARY KEY (`Id`)
+        );
         CREATE TABLE X (x_id Int32, a Int32, b Int32, PRIMARY KEY(x_id));
         CREATE TABLE Y (y_id Int32, a Int32, b Int32, c Int32, PRIMARY KEY(y_id), INDEX ix_a GLOBAL ON (a));
 
@@ -220,10 +240,12 @@ public:
     bool OnlineReadOnly = false;
     NYdb::TParamsBuilder ParamsBuilder;
     bool NeedParams = false;
+    bool FilterOptionalSide = true;
 
     TTester& Run() {
         auto settings = TKikimrSettings();
         settings.AppConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(StreamLookup);
+        settings.AppConfig.MutableTableServiceConfig()->SetFilterPushdownOverJoinOptionalSide(FilterOptionalSide);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
@@ -1113,6 +1135,55 @@ Y_UNIT_TEST_TWIN(LeftJoinOnRightTableOverIndex, StreamLookupJoin) {
         ])",
         .StreamLookup=StreamLookupJoin,
         .DoValidateStats=false,
+    };
+    tester.Run();
+}
+
+Y_UNIT_TEST_TWIN(TestEntityFramework, StreamLookupJoin) {
+    auto tester = TTester{
+        .Query=R"(
+            SELECT
+                `l1`.`Id`,
+                `l1`.`OneToOne_Required_PK_Date`,
+                `l1`.`Level1_Optional_Id`,
+                `l1`.`Level1_Required_Id`,
+                `l1`.`Level2_Name`,
+                `l1`.`OneToMany_Optional_Inverse2Id`,
+                `l1`.`OneToMany_Required_Inverse2Id`,
+                `l1`.`OneToOne_Optional_PK_Inverse2Id`
+            FROM `Level1` AS `l`
+            LEFT JOIN (
+                SELECT
+                    `l0`.`Id` AS `Id`,
+                    `l0`.`OneToOne_Required_PK_Date` AS `OneToOne_Required_PK_Date`,
+                    `l0`.`Level1_Optional_Id` AS `Level1_Optional_Id`,
+                    `l0`.`Level1_Required_Id` AS `Level1_Required_Id`,
+                    `l0`.`Level2_Name` AS `Level2_Name`,
+                    `l0`.`OneToMany_Optional_Inverse2Id` AS `OneToMany_Optional_Inverse2Id`,
+                    `l0`.`OneToMany_Required_Inverse2Id` AS `OneToMany_Required_Inverse2Id`,
+                    `l0`.`OneToOne_Optional_PK_Inverse2Id` AS `OneToOne_Optional_PK_Inverse2Id`
+                FROM `Level1` AS `l0`
+                WHERE
+                    `l0`.`OneToOne_Required_PK_Date` IS NOT NULL AND
+                    `l0`.`Level1_Required_Id` IS NOT NULL AND
+                    `l0`.`OneToMany_Required_Inverse2Id` IS NOT NULL
+            ) AS `l1`
+            ON
+                `l`.`Id` = CASE
+                    WHEN `l1`.`OneToOne_Required_PK_Date` IS NOT NULL AND `l1`.`Level1_Required_Id` IS NOT NULL AND `l1`.`OneToMany_Required_Inverse2Id` IS NOT NULL THEN `l1`.`Id`
+                ELSE NULL
+                END
+            LEFT JOIN `Level1` AS `l2` ON `l1`.`Level1_Required_Id` = `l2`.`Id`
+            WHERE
+                `l1`.`OneToOne_Required_PK_Date` IS NOT NULL AND
+                `l1`.`Level1_Required_Id` IS NOT NULL AND
+                `l1`.`OneToMany_Required_Inverse2Id` IS NOT NULL AND `l2`.`Id` IN (1, 2)
+        )",
+        .Answer=R"([
+        ])",
+        .StreamLookup=StreamLookupJoin,
+        .DoValidateStats=false,
+        .FilterOptionalSide=false // remove this to get failure
     };
     tester.Run();
 }

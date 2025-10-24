@@ -59,6 +59,13 @@ message TClearSessionResponse {
     EOperationStatus Status = 1;
 };
 
+message TDropTablesRequest {
+    repeated string TableIds = 1;
+}
+
+message TDropTablesResponse {
+}
+
 message TErrorResponse {
     string ErrorMessage = 1;
 }

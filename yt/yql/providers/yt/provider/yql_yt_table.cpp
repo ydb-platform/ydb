@@ -918,6 +918,17 @@ TYtOutTableInfo::TYtOutTableInfo(const TStructExprType* type, ui64 nativeYtTypeF
     IsTemp = true;
 }
 
+TYtOutTableInfo::TYtOutTableInfo(const TYqlRowSpecInfo::TPtr& rowSpec) {
+    RowSpec = rowSpec;
+
+    Meta = MakeIntrusive<TYtTableMetaInfo>();
+    Meta->CanWrite = true;
+    Meta->DoesExist = true;
+    Meta->YqlCompatibleScheme = true;
+
+    IsTemp = true;
+}
+
 bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
     if (!node.IsCallable(TYtOutTable::CallableName())) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtOutTable::CallableName()));

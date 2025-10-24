@@ -385,11 +385,27 @@
             ]
         },
         {
-            "Name": "TYtDropTable",
+            "Name": "TYtIsolatedOpBase",
             "Base": "TYtOpBase",
-            "Match": {"Type": "Callable", "Name": "YtDropTable!"},
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"},
             "Children": [
                 {"Index": 2, "Name": "Table", "Type": "TYtTable"}
+            ]
+        },
+        {
+            "Name": "TYtDropTable",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtDropTable!"}
+        },
+        {
+            "Name": "TYtCreateTable",
+            "Base": "TYtIsolatedOpBase",
+            "Match": {"Type": "Callable", "Name": "YtCreateTable!"},
+            "Children": [
+                {"Index": 3, "Name": "Columns", "Type": "TExprList"},
+                {"Index": 4, "Name": "OrderBy", "Type": "TCoNameValueTupleList"},
+                {"Index": 5, "Name": "Settings", "Type": "TCoNameValueTupleList"}
             ]
         },
         {

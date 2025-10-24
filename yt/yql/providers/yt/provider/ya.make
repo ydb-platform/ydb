@@ -55,6 +55,7 @@ SRCS(
 
     phy_opt/yql_yt_phy_opt.cpp
     phy_opt/yql_yt_phy_opt_content.cpp
+    phy_opt/yql_yt_phy_opt_create.cpp
     phy_opt/yql_yt_phy_opt_fuse.cpp
     phy_opt/yql_yt_phy_opt_helper.h
     phy_opt/yql_yt_phy_opt_lambda.cpp

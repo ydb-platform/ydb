@@ -1,9 +1,9 @@
 #pragma once
 
+#include <util/stream/output.h>
+
 #include <vector>
-#include <iostream>
 #include <cassert>
-#include <sstream>
 #include <random>
 #include <set>
 

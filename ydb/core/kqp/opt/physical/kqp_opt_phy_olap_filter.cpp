@@ -807,10 +807,12 @@ bool IsSuitableToCollectProjection(TExprBase node) {
 // Collects all operations for projections and returns a vector of pair - [columName, olap operation].
 TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections(const TExprNode::TPtr& node, const TExprNode& arg,
                                                                                  TNodeOnNodeOwnedMap& replaces,
-                                                                                 const THashSet<TString>& predicateMembers, TExprContext& ctx) {
+                                                                                 const THashSet<TString>& predicateMembers,
+                                                                                 TExprContext& ctx) {
     auto asStructPred = [](const TExprNode::TPtr& node) -> bool { return !!TMaybeNode<TCoAsStruct>(node); };
     auto memberPred = [](const TExprNode::TPtr& node) { return !!TMaybeNode<TCoMember>(node); };
     THashSet<TString> projectionMembers;
+    THashSet<TString> notSuitableToPushMembers;
     ui32 nextMemberId = 0;
 
     TVector<std::pair<TString, TExprNode::TPtr>> olapOperationsForProjections;
@@ -818,6 +820,7 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
     if (auto asStruct = FindNode(node, asStructPred)) {
         // Process each child for `AsStruct` callable.
         for (auto child : TExprBase(asStruct).Cast<TCoAsStruct>()) {
+            bool memberCollected = false;
             if (IsSuitableToCollectProjection(child.Item(1))) {
                 // Search for the `TCoMember` in expression, we need expression with only one `TCoMember`.
                 if (auto originalMembers = FindNodes(child.Item(1).Ptr(), memberPred); originalMembers.size() == 1) {
@@ -834,17 +837,20 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
                                 projectionMembers.insert(originalMemberName);
                             }
 
+                            // clang-format off
                             auto newMember = Build<TCoMember>(ctx, node->Pos())
                                 .Struct(originalMember.Struct())
                                 .Name<TCoAtom>()
                                     .Value(originalMemberName)
                                     .Build()
                             .Done();
+                            // clang-format on
 
                             auto olapOperation = olapOperations.front();
                             // Replace full expression with only member.
                             replaces[child.Item(1).Raw()] = newMember.Ptr();
                             olapOperationsForProjections.emplace_back(TString(newMember.Name()), olapOperation.Ptr());
+                            memberCollected = true;
 
                             YQL_CLOG(TRACE, ProviderKqp)
                                 << "[OLAP PROJECTION] Operation in olap dialect: " << KqpExprToPrettyString(olapOperation, ctx);
@@ -852,6 +858,18 @@ TVector<std::pair<TString, TExprNode::TPtr>> CollectOlapOperationsForProjections
                     }
                 }
             }
+            if (!memberCollected) {
+                auto members = FindNodes(child.Item(1).Ptr(), memberPred);
+                for (const auto& member : members) {
+                    notSuitableToPushMembers.insert(TString(TExprBase(member).Cast<TCoMember>().Name()));
+                }
+            }
+        }
+    }
+
+    for (const auto& [colName, expr] : olapOperationsForProjections) {
+        if (notSuitableToPushMembers.count(colName)) {
+            return {};
         }
     }
 

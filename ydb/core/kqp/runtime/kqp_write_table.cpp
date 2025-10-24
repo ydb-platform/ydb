@@ -1115,20 +1115,22 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
     std::vector<TConstArrayRef<TCell>> rows;
     rows.reserve(totalRows);
 
-    // We need only last written row for each key
-    for (auto it = batches.rbegin(); it != batches.rend(); ++it) {
-        auto* data = dynamic_cast<TRowBatch*>(it->Get());
+    for (const auto& batch : batches) {
+        auto* data = dynamic_cast<TRowBatch*>(batch.Get());
         AFL_ENSURE(data);
         const auto& batchRows = data->GetRows();
         rows.insert(rows.end(), batchRows.begin(), batchRows.end());
     }
+    // We need only last written row for each key
+    std::reverse(rows.begin(), rows.end());
 
     std::stable_sort(
         rows.begin(),
         rows.end(),
         [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
             AFL_ENSURE(lhs.size() == rhs.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) < 0;
+            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
+            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) < 0;
         });
 
     auto rowsToEraseBegin = std::unique(
@@ -1136,7 +1138,8 @@ std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
         rows.end(),
         [&keyColumnTypes](const TConstArrayRef<TCell>& lhs, const TConstArrayRef<TCell>& rhs) {
             AFL_ENSURE(lhs.size() == rhs.size());
-            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), lhs.size()) == 0;
+            AFL_ENSURE(lhs.size() >= keyColumnTypes.size());
+            return CompareTypedCellVectors(lhs.data(), rhs.data(), keyColumnTypes.data(), keyColumnTypes.size()) == 0;
         });
 
     rows.erase(rowsToEraseBegin, rows.end());
@@ -1540,11 +1543,6 @@ public:
 
     void FlushBuffer(const TWriteToken token) override {
         FlushSerializer(token, true);
-        const auto& writeInfo = WriteInfos.at(token);
-        if (writeInfo.Metadata.Priority != 0) {
-            AFL_ENSURE(writeInfo.Closed);
-            AFL_ENSURE(writeInfo.Serializer->IsFinished());
-        }
     }
 
     void FlushBuffers() override {
@@ -1566,11 +1564,6 @@ public:
         
         for (const TWriteToken token : writeTokensFoFlush) {
             FlushSerializer(token, true);
-            const auto& writeInfo = WriteInfos.at(token);
-            if (writeInfo.Metadata.Priority != 0) {
-                AFL_ENSURE(writeInfo.Closed);
-                AFL_ENSURE(writeInfo.Serializer->IsFinished());
-            }
         }
     }
 

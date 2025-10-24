@@ -1547,11 +1547,17 @@ private:
 
             const auto& keyColumnTypes = lookupInfo.Lookup->GetKeyColumnTypes();
 
+            for (const auto& batch : ProcessBatches) {
+                Memory -= batch->GetMemory();
+            }
+
             // TODO: uniq index check + insert uniq check
             ProcessCells = GetSortedUniqueRows(ProcessBatches, keyColumnTypes);
             for (size_t index = 0; index < ProcessCells.size(); ++index) {
                 const auto& row = ProcessCells[index];
                 KeyToIndex[row.first(keyColumnTypes.size())] = index;
+
+                Memory += EstimateSize(row);
             }
 
             lookupInfo.Lookup->AddLookupTask(
@@ -2426,7 +2432,6 @@ public:
 
             AFL_ENSURE(writeInfo.Actors.size() > settings.Indexes.size());
             for (auto& indexSettings : settings.Indexes) {
-                AFL_ENSURE(settings.Priority == 0);
                 auto projection = CreateDataBatchProjection(
                     settings.Columns,
                     settings.WriteIndex,

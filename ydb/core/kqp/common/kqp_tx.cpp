@@ -412,6 +412,14 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>());
                     NKikimrKqp::TKqpTableSinkSettings settings;
                     YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");
+
+                    if (!settings.GetLookupColumns().empty() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                        AFL_ENSURE(settings.GetType() != NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT);
+                        modifiedTables.insert(getTable(settings.GetTable()));
+                        return true;
+                    }
+                    // TODO: uniq index check here
+
                     modifiedTables.insert(getTable(settings.GetTable()));
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {
                         // INSERT with sink should be executed immediately, because it returns an error in case of duplicate rows.

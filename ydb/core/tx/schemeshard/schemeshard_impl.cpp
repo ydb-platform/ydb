@@ -4656,6 +4656,11 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                     generalVersion += result.GetSubDomainVersion();
                     generalVersion += result.GetSecurityStateVersion();
+
+                    if (ui64 version = subDomain->GetDomainStateVersion()) {
+                        result.SetSubDomainStateVersion(version);
+                        generalVersion += version;
+                    }
                 }
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:

@@ -1863,6 +1863,77 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST(LeftJoin) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        TKikimrRunner kikimr(settings);
+
+        auto tableClient = kikimr.GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto result = queryClient.GetSession().GetValueSync();
+        NStatusHelpers::ThrowOnError(result);
+        auto session2 = result.GetSession();
+
+        auto res = session.ExecuteSchemeQuery(
+            R"(
+            CREATE TABLE `/Root/Level1` 
+            (`Id` Int32 NOT NULL, `Name` Utf8, `Date` Timestamp NOT NULL, `Level2_Name` Utf8, `OneToOne_Required_PK_Date` Timestamp, `Level1_Required_Id` Int32, `Level1_Optional_Id` Int32, `Level3_Name` Utf8,
+            `Level2_Required_Id` Int32, `Level2_Optional_Id` Int32, `Level4_Name` Utf8, `Level3_Required_Id` Int32, `Level3_Optional_Id` Int32, `OneToOne_Optional_PK_Inverse4Id` Int32, `OneToMany_Required_Inverse4Id` Int32,
+            `OneToMany_Optional_Inverse4Id` Int32, `OneToOne_Optional_PK_Inverse3Id` Int32, `OneToMany_Required_Inverse3Id` Int32, `OneToMany_Optional_Inverse3Id` Int32, `OneToOne_Optional_PK_Inverse2Id` Int32, `OneToMany_Required_Inverse2Id` Int32, `OneToMany_Optional_Inverse2Id` Int32, primary key (`Id`))
+            PARTITION BY HASH(`Id`)
+            WITH (STORE = COLUMN);
+        )").GetValueSync();
+
+        UNIT_ASSERT(res.IsSuccess());
+
+        TString query =
+            R"(
+            pragma TablePathPrefix = "/Root/";
+
+            SELECT
+                `l1`.`Id`,
+                `l1`.`OneToOne_Required_PK_Date`,
+                `l1`.`Level1_Optional_Id`,
+                `l1`.`Level1_Required_Id`,
+                `l1`.`Level2_Name`,
+                `l1`.`OneToMany_Optional_Inverse2Id`,
+                `l1`.`OneToMany_Required_Inverse2Id`,
+                `l1`.`OneToOne_Optional_PK_Inverse2Id`
+            FROM `Level1` AS `l`
+            LEFT JOIN (
+                SELECT
+                    `l0`.`Id` AS `Id`,
+                    `l0`.`OneToOne_Required_PK_Date` AS `OneToOne_Required_PK_Date`,
+                    `l0`.`Level1_Optional_Id` AS `Level1_Optional_Id`,
+                    `l0`.`Level1_Required_Id` AS `Level1_Required_Id`,
+                    `l0`.`Level2_Name` AS `Level2_Name`,
+                    `l0`.`OneToMany_Optional_Inverse2Id` AS `OneToMany_Optional_Inverse2Id`,
+                    `l0`.`OneToMany_Required_Inverse2Id` AS `OneToMany_Required_Inverse2Id`,
+                    `l0`.`OneToOne_Optional_PK_Inverse2Id` AS `OneToOne_Optional_PK_Inverse2Id`
+                FROM `Level1` AS `l0`
+                WHERE
+                    `l0`.`OneToOne_Required_PK_Date` IS NOT NULL AND
+                    `l0`.`Level1_Required_Id` IS NOT NULL AND
+                    `l0`.`OneToMany_Required_Inverse2Id` IS NOT NULL
+            ) AS `l1`
+            ON
+                `l`.`Id` = CASE
+                    WHEN `l1`.`OneToOne_Required_PK_Date` IS NOT NULL AND `l1`.`Level1_Required_Id` IS NOT NULL AND `l1`.`OneToMany_Required_Inverse2Id` IS NOT NULL THEN `l1`.`Id`
+                ELSE NULL
+                END
+            LEFT JOIN `Level1` AS `l2` ON `l1`.`Level1_Required_Id` = `l2`.`Id`
+            WHERE
+                `l1`.`OneToOne_Required_PK_Date` IS NOT NULL AND
+                `l1`.`Level1_Required_Id` IS NOT NULL AND
+                `l1`.`OneToMany_Required_Inverse2Id` IS NOT NULL AND `l2`.`Id` IN (1, 2)
+        )";
+
+        auto r = session2.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(r.GetStatus(), EStatus::SUCCESS);
+    }
+
     // Unit tests for datetime pushdowns in query service
     Y_UNIT_TEST(PredicatePushdown_Datetime_QS) {
         auto settings = TKikimrSettings()

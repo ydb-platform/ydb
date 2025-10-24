@@ -848,12 +848,43 @@ namespace NYql::NConnector::NTest {
         }
 
         TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration = {}) override {
-            Cerr << "Call ReadSplits.\n"
-                 << request.Utf8DebugString() << Endl;
+            Cerr << "Call ReadSplits.\n" << request.Utf8DebugString() << Endl;
+            auto resultPromise = NThreading::NewPromise<TIteratorResult<IReadSplitsStreamIterator>>();
+
+            with_lock (Mutex_) {
+                if (ReadingLocked_) {
+                    Cerr << "Delay ReadSplits." << Endl;
+                    PendingReadSplits.push_back({request, resultPromise});
+                    return resultPromise.GetFuture();
+                }
+            }
+
+            ProcessReadSplits(request, resultPromise);
+            return resultPromise.GetFuture();
+        }
+
+        void LockReading() {
+            with_lock (Mutex_) {
+                ReadingLocked_ = true;
+            }
+        }
+
+        void UnlockReading() {
+            with_lock (Mutex_) {
+                ReadingLocked_ = false;
+                for (auto& pending : PendingReadSplits) {
+                    Cerr << "Process pending ReadSplits." << Endl;
+                    ProcessReadSplits(pending.Request, pending.ResultPromise);
+                }
+                PendingReadSplits.clear();
+            }
+        }
+
+    private:
+        void ProcessReadSplits(const NApi::TReadSplitsRequest& request, NThreading::TPromise<TIteratorResult<IReadSplitsStreamIterator>>& resultPromise) {
             auto result = ReadSplitsImpl(request);
-            Cerr << "ReadSplits result.\n"
-                 << StatusToDebugString(result.Status) << Endl;
-            return NThreading::MakeFuture(std::move(result));
+            Cerr << "ReadSplits result.\n" << StatusToDebugString(result.Status) << Endl;
+            resultPromise.SetValue(std::move(result));
         }
 
     protected:
@@ -871,5 +902,15 @@ namespace NYql::NConnector::NTest {
             }
             return std::move(s);
         }
+
+        template <typename TRequest, typename TResult>
+        struct TPendingResult {
+            TRequest Request;
+            NThreading::TPromise<TResult> ResultPromise;
+        };
+
+        std::vector<TPendingResult<NApi::TReadSplitsRequest, TIteratorResult<IReadSplitsStreamIterator>>> PendingReadSplits;
+        bool ReadingLocked_ = false;
+        TMutex Mutex_;
     };
 } // namespace NYql::NConnector::NTest

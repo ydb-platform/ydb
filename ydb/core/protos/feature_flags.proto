@@ -232,4 +232,5 @@ message TFeatureFlags {
     optional bool EnableStreamingQueries = 206 [default = false];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = false];
+    optional bool EnableSecureScriptExecutions = 209 [default = false];
 }

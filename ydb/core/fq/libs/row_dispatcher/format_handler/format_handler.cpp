@@ -6,15 +6,12 @@
 #include <util/generic/queue.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
-
-#include <ydb/core/protos/config.pb.h>
 
 namespace NFq::NRowDispatcher {
 
@@ -681,7 +678,7 @@ ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext&
     return ITopicFormatHandler::TPtr(handler);
 }
 
-TFormatHandlerConfig CreateFormatHandlerConfig(const NKikimrConfig::TSharedReadingConfig& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId) {
     return {
         .FunctionRegistry = functionRegistry,
         .JsonParserConfig = CreateJsonParserConfig(rowDispatcherConfig.GetJsonParser(), functionRegistry),

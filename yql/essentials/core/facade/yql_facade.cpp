@@ -554,6 +554,12 @@ bool TProgram::IsFullCaptureReady() const {
     return true;
 }
 
+void TProgram::CommitFullCapture() const {
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+    }
+}
+
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     NYT::TNode node;
@@ -2004,10 +2010,6 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
 
         CloseLastSessionFuture_ = promise.GetFuture();
-    }
-
-    if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;

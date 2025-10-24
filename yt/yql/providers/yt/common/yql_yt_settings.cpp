@@ -614,6 +614,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQCont
     REGISTER_SETTING(*this, _QueryDumpFolder);
     REGISTER_SETTING(*this, _QueryDumpTableSizeLimit);
     REGISTER_SETTING(*this, _QueryDumpTableCountPerClusterLimit);
+    REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

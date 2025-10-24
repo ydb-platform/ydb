@@ -1728,10 +1728,18 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     }
 
     auto* consumerConfig = ::NKikimr::NPQ::GetConsumer(TopicActor.TabletConfig, consumerName);
-    if (!consumerConfig || consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING) {
+    if (!consumerConfig) {
         auto response = std::make_unique<TEvPersQueue::TEvError>();
         response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
-        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" not found in topic " << Topic());
+        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" was not found in topic '" << Topic() << "'");
+        ctx.Send(ev->Sender, std::move(response));
+        return;
+    }
+
+    if (consumerConfig->GetType() != ::NKikimrPQ::TPQTabletConfig::EConsumerType::TPQTabletConfig_EConsumerType_CONSUMER_TYPE_STREAMING) {
+        auto response = std::make_unique<TEvPersQueue::TEvError>();
+        response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
+        response->Record.SetDescription(TStringBuilder() << "consumer \"" << consumerName << "\" is not streaming");
         ctx.Send(ev->Sender, std::move(response));
         return;
     }
@@ -1741,10 +1749,10 @@ void TBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TAc
     for (auto& group : r.GetGroups()) {
         auto partitionId = group - 1;
         if (group == 0 || !GetPartitionInfo(partitionId)) {
-            THolder<TEvPersQueue::TEvError> response(new TEvPersQueue::TEvError);
+            auto response = std::make_unique<TEvPersQueue::TEvError>();
             response->Record.SetCode(NPersQueue::NErrorCode::BAD_REQUEST);
             response->Record.SetDescription(TStringBuilder() << "no group " << group << " in topic " << Topic());
-            ctx.Send(ev->Sender, response.Release());
+            ctx.Send(ev->Sender, std::move(response));
             return;
         }
         partitions.push_back(partitionId);

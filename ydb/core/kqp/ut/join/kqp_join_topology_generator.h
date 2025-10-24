@@ -84,6 +84,8 @@ public:
         return Schema_;
     }
 
+    std::vector<int> GetDegrees() const;
+
     unsigned GetN() const {
         return AdjacencyList_.size();
     }

@@ -214,7 +214,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             raise
 
     def test_dynamic_node_start_with_seed_nodes(self):
-        database_path = os.path.join('/', self.cluster.domain_name, f'dyn_seed_db')
+        database_path = os.path.join('/', self.cluster.domain_name, 'dyn_seed_db')
         try:
             self.cluster.remove_database(database_path)
         except Exception:
@@ -249,7 +249,7 @@ class TestKiKiMRDistConfBasic(DistConfKiKiMRTest):
             yaml.dump(seed_nodes, seed_nodes_file)
             seed_nodes_file.close()
 
-            # start with seed nodes 
+            # start with seed nodes
             initial_slots[0].set_seed_nodes_file(seed_nodes_file.name)
             initial_slots[0].start()
 

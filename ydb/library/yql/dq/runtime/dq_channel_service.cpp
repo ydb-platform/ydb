@@ -10,6 +10,13 @@
 
 #include <ydb/library/actors/core/log.h>
 
+#define LOG_T(stream) LOG_TRACE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#define LOG_I(stream) LOG_INFO_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#define LOG_N(stream) LOG_NOTICE_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#define LOG_W(stream) LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+#define LOG_E(stream) LOG_ERROR_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, stream)
+
 namespace NYql::NDq {
 
 bool IChannelBuffer::GetLeading() {
@@ -347,6 +354,13 @@ void TInputBufferProxy::EarlyFinish() {
     Buffer->EarlyFinish();
 }
 
+TLocalBufferRegistry::~TLocalBufferRegistry() {
+    {
+        std::lock_guard lock(Mutex);
+        *LocalBufferCount -= LocalBuffers.size();
+    }
+}
+
 std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelInfo& info) {
     std::lock_guard lock(Mutex);
 
@@ -361,13 +375,23 @@ std::shared_ptr<TLocalBuffer> TLocalBufferRegistry::GetOrCreateLocalBuffer(const
     }
     auto result = std::make_shared<TLocalBuffer>(registry, info, ActorSystem, MaxInflightBytes, MinInflightBytes);
     LocalBuffers.emplace(info, result);
+    (*LocalBufferCount)++;
 
     return result;
 }
 
 void TLocalBufferRegistry::DeleteLocalBufferInfo(const TChannelInfo& info) {
+    (*LocalBufferCount)--;
     std::lock_guard lock(Mutex);
     LocalBuffers.erase(info);
+}
+
+TNodeState::~TNodeState() {
+    *OutputBufferCount -= OutputDescriptors.size();
+    *InputBufferCount -= InputBuffers.size();
+    *OutputBufferInflightBytes -= InflightBytes;
+    *OutputBufferInflightMessages -= Queue.size();
+    *OutputBufferWaiterCount -= WaitersQueue.size();
 }
 
 void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
@@ -383,11 +407,13 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         if (InflightBytes < MaxInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor)) {
                 descriptor->AddPushBytes(bytes);
-                InflightBytes += data.Bytes;
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
                 Queue.push_back(item);
                 SendMessage(item);
+                InflightBytes += data.Bytes;
+                *OutputBufferInflightBytes += data.Bytes;
+                (*OutputBufferInflightMessages)++;
                 return;
             }
         }
@@ -400,6 +426,7 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
             std::lock_guard lock(Mutex);
             descriptor->WaitTimestamp = timestamp;
             WaitersQueue.push(descriptor);
+            (*OutputBufferWaiterCount)++;
         }
     }
 }
@@ -590,11 +617,13 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         PeerGenMajor = record.GetGenMajor();
         PeerGenMinor = 0;
         Connected = true;
+        LOG_I("NODE CONNECTED, PeerGenMajor=" << PeerGenMajor << ", " << NodeActorId << " from " << PeerActorId);
     } else if (PeerActorId != ev->Sender || PeerGenMajor != record.GetGenMajor()) {
         PeerActorId = ev->Sender;
         PeerGenMajor = record.GetGenMajor();
         PeerGenMinor = 0;
         FailInputs(PeerActorId, PeerGenMajor);
+        LOG_W("NODE RECONNECTED, PeerGenMajor=" << PeerGenMajor << ", " << NodeActorId << " from " << PeerActorId);
         ConfirmedSeqNo = 0;
     }
 
@@ -603,10 +632,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
     auto seqNo = record.GetSeqNo();
 
     if (seqNo <= ConfirmedSeqNo) {
-        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "IGNORED DATA"
-            << ", SeqNo " << seqNo << ", ConfirmedSeqNo " << ConfirmedSeqNo
-            << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-        );
+        LOG_W("DATA IGNORED, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
         return;
     }
 
@@ -616,18 +642,12 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelDataV2::TPtr& ev) {
         }
         case 2: {
             // allow 1 out of order message
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "OUT OF ORDER DATA"
-                << ", SeqNo " << seqNo << ", ConfirmedSeqNo " << ConfirmedSeqNo
-                << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-            );
+            LOG_W("DATA OUT OF ORDER, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
             OutOfOrderMessage = ev.Release();
             return;
         }
         default: {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "ASK RESEND DATA"
-                << ", SeqNo " << seqNo << ", ConfirmedSeqNo " << ConfirmedSeqNo
-                << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-            );
+            LOG_W("DATA ASK RESEND, SeqNo=" << seqNo << ", ConfirmedSeqNo=" << ConfirmedSeqNo << ", " << NodeActorId << " from " << PeerActorId);
             auto evAck = MakeHolder<TEvDqCompute::TEvChannelAckV2>();
 
             evAck->Record.SetGenMajor(PeerGenMajor);
@@ -671,23 +691,27 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
         Y_ENSURE(!waiter->WaitQueue.empty());
 
         if (waiter->IsTerminatedOrAborted()) {
+            (*OutputBufferWaiterCount)--;
             continue;
         }
 
         auto& data = waiter->WaitQueue.front();
-        InflightBytes += data.Bytes;
         waiter->CheckGenMajor(GenMajor);
         auto item = std::make_shared<TOutputItem>(std::move(data), waiter);
         item->SeqNo = ++SeqNo;
+        InflightBytes += data.Bytes;
+        *OutputBufferInflightBytes += data.Bytes;
+        (*OutputBufferInflightMessages)++;
         Queue.push_back(item);
+        SendMessage(item);
 
         waiter->WaitQueue.pop();
         if (!waiter->WaitQueue.empty()) {
             waiter->WaitTimestamp = waiter->WaitQueue.front().Timestamp;
             WaitersQueue.push(waiter);
+        } else {
+            (*OutputBufferWaiterCount)--;
         }
-
-        SendMessage(item);
     }
 
     InflightBytes -= deltaBytes;
@@ -695,10 +719,12 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
 void TNodeState::RestartSession() {
     std::lock_guard lock(Mutex);
-    while (!Queue.empty()) {
-        auto& item = Queue.front();
+    *OutputBufferInflightBytes -= InflightBytes;
+    *OutputBufferInflightMessages -= Queue.size();
+    for (auto item : Queue) {
         item->Descriptor->AbortChannel("By Reconcilation");
     }
+    Queue.clear();
     GenMajor++;
     SeqNo = 0;
     Reconcilation.store(0);
@@ -710,10 +736,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     if (record.GetGenMajor() != GenMajor) {
-        LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "ACK IGNORED GenMajor "
-            << GenMajor << ", record.GetGenMajor() " << record.GetGenMajor()
-            << ", NodeService " << NodeActorId << " from peer " << ev->Sender
-        );
+        LOG_W("ACK IGNORED GenMajor=" << GenMajor << ", ack.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -723,11 +746,10 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
 
     auto status = record.GetStatus();
     auto seqNo = record.GetSeqNo();
-    if (seqNo <= ConfirmedSeqNo) {
-        LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "ACK IGNORED/O ConfirmedSeqNo "
-            << ConfirmedSeqNo << ", record.GetSeqNo() " << record.GetSeqNo()
-            << ", NodeService " << NodeActorId << " from peer " << ev->Sender
-        );
+
+    if (SeqNo < seqNo) {
+        LOG_E("SESSION RESTART (Large SeqNo), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+        RestartSession();
         return;
     }
 
@@ -740,67 +762,65 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor1 " << item->Descriptor->GenMajor << " vs " << GenMajor);
         }
         deltaBytes += item->Data.Bytes;
+        *OutputBufferInflightBytes -= item->Data.Bytes;
+        (*OutputBufferInflightMessages)--;
         Queue.pop_front();
     }
 
     if (Queue.empty()) {
-        RestartSession();
-        return;
-    }
+        if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
+            LOG_E("SESSION RESTART (Can't RESEND), SeqNo=" << SeqNo << ", ack.SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+            RestartSession();
+            return;
+        }
+    } else {
+        auto& item = Queue.front();
+        if (item->SeqNo != seqNo) {
+            LOG_E("SESSION RESTART (SeqNo desync), SeqNo=" << SeqNo << ", item.SeqNo=" << item->SeqNo << ", " << NodeActorId << " from peer " << ev->Sender);
+            RestartSession();
+            return;
+        }
 
-    auto& item = Queue.front();
-    if (item->SeqNo != seqNo) {
-        LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "RESTART SESSION"
-            << ", SeqNo " << seqNo << ", ConfirmedSeqNo " << ConfirmedSeqNo
-            << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-        );
-        RestartSession();
-        return;
-    }
+        if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
+            // if we're reconcilating, ignore next RESENDs
+            if (record.GetGenMinor() == GenMinor) {
+                LOG_W("DATA RESEND, SeqNo=" << seqNo << ", " << NodeActorId << " from peer " << PeerActorId);
+                GenMinor++;
+                Reconcilation.store(GenMinor);
+                SendMessage(item);
+                ScheduleReconcilationGuard();
+                if (deltaBytes) {
+                    // return to inflight possible confirmed prev msgs
+                    Y_ENSURE(InflightBytes >= deltaBytes);
+                    InflightBytes -= deltaBytes;
+                }
+            }
+            return;
+        }
 
-    if (status == NYql::NDqProto::TEvChannelAckV2::RESEND) {
-        // if we're reconcilating, ignore next RESENDs
-        if (record.GetGenMinor() == GenMinor) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "DO RESEND"
-                << ", SeqNo " << seqNo << ", ConfirmedSeqNo " << ConfirmedSeqNo
-                << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-            );
-            GenMinor++;
-            Reconcilation.store(GenMinor);
-            SendMessage(item);
-            ScheduleReconcilationGuard();
-            if (deltaBytes) {
-                // return to inflight possible confirmed prev msgs
-                Y_ENSURE(InflightBytes >= deltaBytes);
-                InflightBytes -= deltaBytes;
+        if (!item->Descriptor->IsTerminatedOrAborted()) {
+            if (item->Descriptor->GenMajor != GenMajor) {
+                item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor2 " << item->Descriptor->GenMajor << " vs " << GenMajor);
+            } else if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
+                item->Descriptor->AbortChannel("By Remote Side");
+            } else {
+                auto earlyFinished = record.GetEarlyFinished();
+                auto popBytes = record.GetPopBytes();
+                if (earlyFinished || popBytes) {
+                    item->Descriptor->HandleUpdate(earlyFinished, popBytes);
+                }
             }
         }
-        return;
-    }
 
-    if (!item->Descriptor->IsTerminatedOrAborted()) {
-        if (item->Descriptor->GenMajor != GenMajor) {
-            item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor2 " << item->Descriptor->GenMajor << " vs " << GenMajor);
-        } else if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
-            item->Descriptor->AbortChannel("By Remote Side");
-        } else {
-            auto earlyFinished = record.GetEarlyFinished();
-            auto popBytes = record.GetPopBytes();
-            if (earlyFinished || popBytes) {
-                item->Descriptor->HandleUpdate(earlyFinished, popBytes);
-            }
-        }
+        deltaBytes += item->Data.Bytes;
+        *OutputBufferInflightBytes -= item->Data.Bytes;
+        (*OutputBufferInflightMessages)--;
+        Queue.pop_front();
     }
-
-    deltaBytes += item->Data.Bytes;
-    Queue.pop_front();
 
     if (Reconcilation.exchange(0) > 0) {
         if (!Queue.empty()) {
-            LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "DO REPEAT " << Queue.front()->SeqNo << "-" << Queue.back()->SeqNo
-                << ", ConfirmedSeqNo " << ConfirmedSeqNo
-                << ", NodeService " << NodeActorId << " from peer " << PeerActorId
-            );
+            LOG_D("DATA REPEAT, SeqNo=" << Queue.front()->SeqNo << '/' << Queue.back()->SeqNo << ", " << NodeActorId << " from peer " << PeerActorId);
             for (auto item : Queue) {
                 SendMessage(item);
             }
@@ -815,10 +835,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
     auto& record = ev->Get()->Record;
 
     if (record.GetGenMajor() != GenMajor) {
-        LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "UPDATE IGNORED GenMajor "
-            << GenMajor << ", record.GetGenMajor() " << record.GetGenMajor()
-            << ", NodeService " << NodeActorId << " from peer " << ev->Sender
-        );
+        LOG_W("UPDATE IGNORED (by Gen) GenMajor=" << GenMajor << ", update.GenMajor=" << record.GetGenMajor() << ", " << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -833,9 +850,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto it = OutputDescriptors.find(info);
     if (it == OutputDescriptors.end()) {
-        LOG_WARN_S(*ActorSystem, NKikimrServices::KQP_CHANNELS, "UPDATE IGNORED not found desc "
-            << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId
-        );
+        LOG_D("UPDATE IGNORED (unknown) Info={" << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId << "}, " << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -876,12 +891,13 @@ void TNodeState::Handle(TEvPrivate::TEvUpdateProgress::TPtr& ev) {
 }
 
 std::shared_ptr<TOutputBuffer> TNodeState::CreateOutputBuffer(const TChannelInfo& info, ui64 maxInflightBytes, ui64 minInflightBytes) {
+    auto self = Self.lock();
+    Y_ENSURE(self);
     auto descriptor = std::make_shared<TOutputDescriptor>(info, ActorSystem, maxInflightBytes, minInflightBytes);
     std::lock_guard lock(Mutex);
     auto [_, inserted] = OutputDescriptors.emplace(info, descriptor);
     Y_ENSURE(inserted);
-    auto self = Self.lock();
-    Y_ENSURE(self);
+    (*OutputBufferCount)++;
     auto result = std::make_shared<TOutputBuffer>(self, descriptor);
     descriptor->Buffer = result;
     return result;
@@ -910,6 +926,7 @@ std::shared_ptr<TInputBuffer> TNodeState::GetOrCreateInputBuffer(const TChannelI
 
     auto result = std::make_shared<TInputBuffer>(NodeActorId, info, ActorSystem);
     InputBuffers.emplace(info, result);
+    (*InputBufferCount)++;
     if (!binded) {
         UnbindedInputs.emplace(info, TInstant::Now() + UnbindedWaitPeriod);
     }
@@ -920,11 +937,13 @@ void TNodeState::TerminateDescriptor(const std::shared_ptr<TOutputDescriptor>& d
     descriptor->Terminate();
     std::lock_guard lock(Mutex);
     OutputDescriptors.erase(descriptor->Info);
+    (*OutputBufferCount)--;
 }
 
 void TNodeState::TerminateInputBuffer(const std::shared_ptr<TInputBuffer>& inputBuffer) {
     std::lock_guard lock(Mutex);
     InputBuffers.erase(inputBuffer->Info);
+    (*InputBufferCount)--;
 }
 
 void TNodeState::CleanupUnbindedInputs() {
@@ -1024,7 +1043,7 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
     if (it != NodeStates.end()) {
         return it->second;
     } else {
-        auto nodeState = std::make_shared<TNodeState>(ActorSystem, Limits.NodeSessionIcInflightBytes);
+        auto nodeState = std::make_shared<TNodeState>(ActorSystem, Counters, Limits.NodeSessionIcInflightBytes);
         nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState));
         nodeState->PeerActorId = MakeChannelServiceActorID(nodeId);
         nodeState->Self = nodeState;
@@ -1037,7 +1056,7 @@ std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 no
     std::lock_guard lock(Mutex);
     Y_ENSURE(NodeStates.find(nodeId) == NodeStates.end());
 
-    auto nodeState = std::make_shared<TDebugNodeState>(ActorSystem, Limits.NodeSessionIcInflightBytes);
+    auto nodeState = std::make_shared<TDebugNodeState>(ActorSystem, Counters, Limits.NodeSessionIcInflightBytes);
     nodeState->NodeActorId = ActorSystem->Register(new TDebugNodeSessionActor(nodeState));
     nodeState->PeerActorId = MakeChannelServiceActorID(nodeId);
     nodeState->Self = nodeState;
@@ -1169,8 +1188,10 @@ bool TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorI
     return false;
 }
 
-NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId, const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service) {
-    auto channelService = std::make_shared<TDqChannelService>(actorSystem, nodeId, limits);
+NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,
+    NMonitoring::TDynamicCounterPtr counters,
+    const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service) {
+    auto channelService = std::make_shared<TDqChannelService>(actorSystem, nodeId, counters, limits);
     channelService->Self = channelService;
     service = channelService;
     return new TChannelServiceActor(channelService);

@@ -10,6 +10,8 @@
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 namespace NYql::NDq {
 
 class IDqChannelService;
@@ -124,6 +126,8 @@ struct TDqChannelLimits {
     ui64 NodeSessionIcInflightBytes = 64_MB;    // max bytes in network/IC per node-to-node session
 };
 
-NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId, const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service);
+NActors::IActor* CreateLocalChannelServiceActor(NActors::TActorSystem* actorSystem, ui32 nodeId,
+    NMonitoring::TDynamicCounterPtr counters,
+    const TDqChannelLimits& limits, std::shared_ptr<IDqChannelService>& service);
 
 } // namespace NYql::NDq

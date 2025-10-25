@@ -433,14 +433,22 @@ struct TEvPrivate {
 
 class TNodeState {
 public:
-    TNodeState(NActors::TActorSystem* actorSystem, ui64 maxInflightBytes)
+    TNodeState(NActors::TActorSystem* actorSystem, NMonitoring::TDynamicCounterPtr counters, ui64 maxInflightBytes)
         : ActorSystem(actorSystem)
         , Subscribed(false)
         , GenMajor(1), GenMinor(1)
         , MaxInflightBytes(maxInflightBytes)
         , Reconcilation(false)
-    {}
-    virtual ~TNodeState() {}
+    {
+        OutputBufferCount = counters->GetCounter("OutputBuffer/Count", false);
+        OutputBufferInflightBytes = counters->GetCounter("OutputBuffer/InflightBytes", false);
+        OutputBufferInflightMessages = counters->GetCounter("OutputBuffer/InflightMessages", false);
+        OutputBufferWaiterCount = counters->GetCounter("OutputBuffer/WaiterCount", false);
+        OutputBufferWaiterMessages = counters->GetCounter("OutputBuffer/WaiterMessages", false);
+        InputBufferCount = counters->GetCounter("InputBuffer/Count", false);
+    }
+
+    virtual ~TNodeState();
     void Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor);
     void SendMessage(std::shared_ptr<TOutputItem> item);
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev);
@@ -490,12 +498,18 @@ public:
     std::priority_queue<std::shared_ptr<TOutputDescriptor>, std::vector<std::shared_ptr<TOutputDescriptor>>, TOutputDescriptorCompare> WaitersQueue;
     const TDuration UnbindedWaitPeriod = TDuration::Minutes(10);
     std::atomic<ui64> Reconcilation;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferInflightMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferWaiterMessages;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferCount;
 };
 
 class TDebugNodeState : public TNodeState {
 public:
-    TDebugNodeState(NActors::TActorSystem* actorSystem, ui64 maxInflightBytes)
-        : TNodeState(actorSystem, maxInflightBytes)
+    TDebugNodeState(NActors::TActorSystem* actorSystem, NMonitoring::TDynamicCounterPtr counters, ui64 maxInflightBytes)
+        : TNodeState(actorSystem, counters, maxInflightBytes)
         , ChannelDataPaused(false)
         , ChannelAckPaused(false)
         , DataLossProbability(0.0), DataLossCount(0)
@@ -520,10 +534,13 @@ public:
 
 class TLocalBufferRegistry {
 public:
-    TLocalBufferRegistry(NActors::TActorSystem* actorSystem, ui64 maxInflightBytes, ui64 minInflightBytes)
+    TLocalBufferRegistry(NActors::TActorSystem* actorSystem, NMonitoring::TDynamicCounterPtr counters,
+        ui64 maxInflightBytes, ui64 minInflightBytes)
         : ActorSystem(actorSystem), MaxInflightBytes(maxInflightBytes), MinInflightBytes(minInflightBytes)
-    {}
-
+    {
+        LocalBufferCount = counters->GetCounter("LocalBuffer/Count", false);
+    }
+    ~TLocalBufferRegistry();
     std::shared_ptr<TLocalBuffer> GetOrCreateLocalBuffer(const std::shared_ptr<TLocalBufferRegistry>& registry, const TChannelInfo& info);
     void DeleteLocalBufferInfo(const TChannelInfo& info);
 
@@ -532,15 +549,17 @@ public:
     const ui64 MinInflightBytes;
     std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
     mutable std::mutex Mutex;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferCount;
 };
 
 class TDqChannelService : public IDqChannelService {
 public:
-    TDqChannelService(NActors::TActorSystem* actorSystem, ui32 nodeId, const TDqChannelLimits& limits)
+    TDqChannelService(NActors::TActorSystem* actorSystem, ui32 nodeId, NMonitoring::TDynamicCounterPtr counters, const TDqChannelLimits& limits)
         : ActorSystem(actorSystem)
         , NodeId(nodeId)
+        , Counters(counters)
         , Limits(limits) {
-        LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
+        LocalBufferRegistry = std::make_shared<TLocalBufferRegistry>(actorSystem, counters, Limits.LocalChannelInflightBytes, Limits.LocalChannelInflightBytes * 8 / 10);
     }
 
     std::shared_ptr<TNodeState> GetOrCreateNodeState(ui32 nodeId);
@@ -566,6 +585,7 @@ public:
 
     NActors::TActorSystem* ActorSystem;
     ui32 NodeId;
+    NMonitoring::TDynamicCounterPtr Counters;
     const TDqChannelLimits Limits;
     std::weak_ptr<TDqChannelService> Self;
     std::shared_ptr<TLocalBufferRegistry> LocalBufferRegistry;

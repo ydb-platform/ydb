@@ -306,7 +306,8 @@ public:
         // }
 
         auto channelServiceActorId = TActivationContext::Register(
-            NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(), limits, ChannelService),
+            NYql::NDq::CreateLocalChannelServiceActor(TActivationContext::ActorSystem(), SelfId().NodeId(),
+            Counters->GetChannelCounters(), limits, ChannelService),
             SelfId(), TMailboxType::HTSwap, icPoolId);
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::NDq::MakeChannelServiceActorID(SelfId().NodeId()), channelServiceActorId);

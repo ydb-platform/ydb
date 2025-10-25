@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.33.1)
+VERSION(1.33.2)
 
 LICENSE(Apache-2.0)
 
@@ -249,9 +249,16 @@ RESOURCE_FILES(
     botocore/data/bcm-data-exports/2023-11-26/endpoint-rule-set-1.json
     botocore/data/bcm-data-exports/2023-11-26/paginators-1.json
     botocore/data/bcm-data-exports/2023-11-26/service-2.json
+    botocore/data/bedrock-agent-runtime/2023-07-26/endpoint-rule-set-1.json
+    botocore/data/bedrock-agent-runtime/2023-07-26/paginators-1.json
+    botocore/data/bedrock-agent-runtime/2023-07-26/service-2.json
+    botocore/data/bedrock-agent/2023-06-05/endpoint-rule-set-1.json
+    botocore/data/bedrock-agent/2023-06-05/paginators-1.json
+    botocore/data/bedrock-agent/2023-06-05/service-2.json
     botocore/data/bedrock-runtime/2023-09-30/endpoint-rule-set-1.json
     botocore/data/bedrock-runtime/2023-09-30/paginators-1.json
     botocore/data/bedrock-runtime/2023-09-30/service-2.json
+    botocore/data/bedrock-runtime/2023-09-30/waiters-2.json
     botocore/data/bedrock/2023-04-20/endpoint-rule-set-1.json
     botocore/data/bedrock/2023-04-20/paginators-1.json
     botocore/data/bedrock/2023-04-20/service-2.json
@@ -1331,6 +1338,13 @@ RESOURCE_FILES(
     botocore/data/proton/2020-07-20/paginators-1.json
     botocore/data/proton/2020-07-20/service-2.json
     botocore/data/proton/2020-07-20/waiters-2.json
+    botocore/data/qbusiness/2023-11-27/endpoint-rule-set-1.json
+    botocore/data/qbusiness/2023-11-27/paginators-1.json
+    botocore/data/qbusiness/2023-11-27/paginators-1.sdk-extras.json
+    botocore/data/qbusiness/2023-11-27/service-2.json
+    botocore/data/qconnect/2020-10-19/endpoint-rule-set-1.json
+    botocore/data/qconnect/2020-10-19/paginators-1.json
+    botocore/data/qconnect/2020-10-19/service-2.json
     botocore/data/qldb-session/2019-07-11/endpoint-rule-set-1.json
     botocore/data/qldb-session/2019-07-11/examples-1.json
     botocore/data/qldb-session/2019-07-11/paginators-1.json

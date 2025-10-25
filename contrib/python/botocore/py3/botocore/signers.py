@@ -176,6 +176,10 @@ class RequestSigner:
                 kwargs['region_name'] = signing_context['region']
             if signing_context.get('signing_name'):
                 kwargs['signing_name'] = signing_context['signing_name']
+            if signing_context.get('request_credentials'):
+                kwargs['request_credentials'] = signing_context[
+                    'request_credentials'
+                ]
             if signing_context.get('identity_cache') is not None:
                 self._resolve_identity_cache(
                     kwargs,
@@ -249,7 +253,12 @@ class RequestSigner:
         return signature_version
 
     def get_auth_instance(
-        self, signing_name, region_name, signature_version=None, **kwargs
+        self,
+        signing_name,
+        region_name,
+        signature_version=None,
+        request_credentials=None,
+        **kwargs,
     ):
         """
         Get an auth instance which can be used to sign a request
@@ -285,7 +294,7 @@ class RequestSigner:
             auth = cls(frozen_token)
             return auth
 
-        credentials = self._credentials
+        credentials = request_credentials or self._credentials
         if getattr(cls, "REQUIRES_IDENTITY_CACHE", None) is True:
             cache = kwargs["identity_cache"]
             key = kwargs["cache_key"]
@@ -862,5 +871,7 @@ def _should_use_global_endpoint(client):
             s3_config.get('us_east_1_regional_endpoint') == 'regional'
             and client.meta.config.region_name == 'us-east-1'
         ):
+            return False
+        if s3_config.get('addressing_style') == 'virtual':
             return False
     return True

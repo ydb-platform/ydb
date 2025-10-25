@@ -1930,8 +1930,7 @@ class ContainerProvider(CredentialProvider):
             full_uri = self._fetcher.full_url(self._environ[self.ENV_VAR])
         else:
             full_uri = self._environ[self.ENV_VAR_FULL]
-        headers = self._build_headers()
-        fetcher = self._create_fetcher(full_uri, headers)
+        fetcher = self._create_fetcher(full_uri)
         creds = fetcher()
         return RefreshableCredentials(
             access_key=creds['access_key'],
@@ -1958,9 +1957,10 @@ class ContainerProvider(CredentialProvider):
         if "\r" in auth_token or "\n" in auth_token:
             raise ValueError("Auth token value is not a legal header value")
 
-    def _create_fetcher(self, full_uri, headers):
+    def _create_fetcher(self, full_uri, *args, **kwargs):
         def fetch_creds():
             try:
+                headers = self._build_headers()
                 response = self._fetcher.retrieve_full_uri(
                     full_uri, headers=headers
                 )

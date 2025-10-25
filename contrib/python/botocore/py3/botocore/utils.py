@@ -1063,11 +1063,7 @@ def datetime2timestamp(dt, default_timezone=None):
             default_timezone = tzutc()
         dt = dt.replace(tzinfo=default_timezone)
     d = dt.replace(tzinfo=None) - dt.utcoffset() - epoch
-    if hasattr(d, "total_seconds"):
-        return d.total_seconds()  # Works in Python 3.6+
-    return (
-        d.microseconds + (d.seconds + d.days * 24 * 3600) * 10**6
-    ) / 10**6
+    return d.total_seconds()
 
 
 def calculate_sha256(body, as_hex=False):
@@ -1672,22 +1668,15 @@ class S3ExpressIdentityResolver:
     def register(self, event_emitter=None):
         logger.debug('Registering S3Express Identity Resolver')
         emitter = event_emitter or self._client.meta.events
-        emitter.register(
-            'before-parameter-build.s3', self.inject_signing_cache_key
-        )
         emitter.register('before-call.s3', self.apply_signing_cache_key)
         emitter.register('before-sign.s3', self.resolve_s3express_identity)
-
-    def inject_signing_cache_key(self, params, context, **kwargs):
-        if 'Bucket' in params:
-            context['S3Express'] = {'bucket_name': params['Bucket']}
 
     def apply_signing_cache_key(self, params, context, **kwargs):
         endpoint_properties = context.get('endpoint_properties', {})
         backend = endpoint_properties.get('backend', None)
 
         # Add cache key if Bucket supplied for s3express request
-        bucket_name = context.get('S3Express', {}).get('bucket_name')
+        bucket_name = context.get('input_params', {}).get('Bucket')
         if backend == 'S3Express' and bucket_name is not None:
             context.setdefault('signing', {})
             context['signing']['cache_key'] = bucket_name

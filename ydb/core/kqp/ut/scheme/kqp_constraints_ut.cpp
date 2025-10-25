@@ -782,11 +782,14 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
             .SetEnableAddColumsWithDefaults(true)
+            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
         auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
         auto querySession = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); } );
+
+        auto tableClient = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
 
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
@@ -860,7 +863,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         auto alterQuery = R"(
             ALTER TABLE `/Root/AddNonColumnDoesnotReturnInternalError`
-            ADD COLUMN Value3 Int32 NOT NULL DEFAULT 7;
+            ADD COLUMN Value3 Int32 DEFAULT 7;
         )";
 
         auto alterFuture = kikimr.RunInThreadPool([&] { return session.ExecuteQuery(alterQuery, TTxControl::NoTx()).GetValueSync(); });
@@ -892,6 +895,29 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             )");
 
             UNIT_ASSERT_STRING_CONTAINS(result, R"([[1u;"Changed";"Updated"];[2u;"New";"text"]])");
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 10; i <= 15; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .Uint32(i)
+                    .AddMember("Value")
+                        .String("String")
+                    .AddMember("Value2")
+                        .String("String2")
+                    .EndStruct();
+
+            }
+            rowsBuilder.EndList();
+            auto result = kikimr.RunCall([&] {
+                return tableClient.BulkUpsert("/Root/AddNonColumnDoesnotReturnInternalError", rowsBuilder.Build()).GetValueSync();
+            });
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3");
         }
 
         {
@@ -933,8 +959,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
         auto result = runtime.WaitFuture(alterFuture);
         fCompareTable(R"([
-            [1u;"Changed";"Updated";7];
-            [2u;"New";"text";7]
+            [1u;"Changed";"Updated";[7]];
+            [2u;"New";"text";[7]]
         ])");
     }
 
@@ -1510,6 +1536,81 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Default values are not supported in column tables");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DefaultColumnAndBulkUpsert, DisableMissingDefaultColumnsInBulkUpsert) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableAddColumsWithDefaults(true)
+            .SetDisableMissingDefaultColumnsInBulkUpsert(DisableMissingDefaultColumnsInBulkUpsert)
+            .SetWithSampleTables(false));
+
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            auto query = R"(
+                CREATE TABLE `/Root/DefaultColumnAndBulkUpsert` (
+                    Key Uint32 NOT NULL,
+                    Value1 String DEFAULT "Default value",
+                    Value2 Int64 DEFAULT 123,
+                    PRIMARY KEY (Key),
+                );
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/DefaultColumnAndBulkUpsert` (Key) VALUES (1), (2);
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                UPSERT INTO `/Root/DefaultColumnAndBulkUpsert` (Key, Value1) VALUES (3, "Value1"), (4, "Value2");
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                ALTER TABLE `/Root/DefaultColumnAndBulkUpsert` ADD COLUMN Value3 Utf8 DEFAULT "Value3"u;
+            )";
+
+            auto result = queryClient.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto rowsBuilder = NYdb::TValueBuilder();
+            rowsBuilder.BeginList();
+            for (ui32 i = 10; i <= 15; ++i) {
+                rowsBuilder.AddListItem()
+                    .BeginStruct()
+                    .AddMember("Key")
+                        .Uint32(i)
+                    .AddMember("Value2")
+                        .OptionalInt64(0)
+                    .EndStruct();
+
+            }
+            rowsBuilder.EndList();
+
+            auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
+            if (DisableMissingDefaultColumnsInBulkUpsert) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
         }
     }
 

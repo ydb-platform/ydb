@@ -219,12 +219,14 @@ private:
     TIntervalPoint(const TPredicateContainer& point, const std::shared_ptr<arrow::Schema>& schema, const int includeState)
         : IncludeState(includeState)
     {
-        auto fields = schema->fields();
-        fields.resize(point.NumColumns());
-        auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
-        auto builders = NArrow::MakeBuilders(schemaTrimmed);
-        point.AppendPointTo(builders);
-        PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
+        if (!point.IsEmpty()) {
+            auto fields = schema->fields();
+            fields.resize(point.NumColumns());
+            auto schemaTrimmed = std::make_shared<arrow::Schema>(fields);
+            auto builders = NArrow::MakeBuilders(schemaTrimmed);
+            point.AppendPointTo(builders);
+            PrimaryKey = NArrow::TSimpleRow(arrow::RecordBatch::Make(schemaTrimmed, 1, NArrow::Finish(std::move(builders))), 0);
+        }
     }
 
 public:

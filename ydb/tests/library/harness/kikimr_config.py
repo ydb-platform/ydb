@@ -369,14 +369,13 @@ class KikimrConfigGenerator(object):
 
         self.naming_config = config_pb2.TAppConfig()
         dc_it = itertools.cycle(self._dcs)
-        module_it = itertools.count(start=1)
         rack_it = itertools.count(start=1)
         body_it = itertools.count(start=1)
         self.yaml_config["nameservice_config"] = {"node": []}
         self.breakpad_minidumps_path = breakpad_minidumps_path
         self.breakpad_minidumps_script = breakpad_minidumps_script
         for node_id in self.__node_ids:
-            dc, module, rack, body = next(dc_it), next(module_it), next(rack_it), next(body_it)
+            dc, rack, body = next(dc_it), next(rack_it), next(body_it)
             ic_port = self.port_allocator.get_node_port_allocator(node_id).ic_port
             node = self.naming_config.NameserviceConfig.Node.add(
                 NodeId=node_id,
@@ -386,7 +385,6 @@ class KikimrConfigGenerator(object):
             )
 
             node.WalleLocation.DataCenter = str(dc)
-            node.WalleLocation.Module = str(module)
             node.WalleLocation.Rack = str(rack)
             node.WalleLocation.Body = body
             self.yaml_config["nameservice_config"]["node"].append(
@@ -396,7 +394,6 @@ class KikimrConfigGenerator(object):
                     host='localhost',
                     walle_location=dict(
                         data_center=str(dc),
-                        module=str(module),
                         rack=str(rack),
                         body=body,
                     )

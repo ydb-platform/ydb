@@ -52,16 +52,13 @@ def ensure_path_exists(path):
 
 
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
-    def __init__(self, node_id, config_path, port_allocator, cluster_name,
-                 configurator, udfs_dir=None, role='node',
-                 node_broker_port=None, tenant_affiliation=None,
-                 encryption_key=None, binary_path=None, data_center=None,
-                 module=None, use_config_store=False, seed_nodes_file=None):
+    def __init__(self, node_id, config_path, port_allocator, cluster_name, configurator,
+                 udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
+                 binary_path=None, data_center=None, use_config_store=False, seed_nodes_file=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_id
         self.data_center = data_center
-        self.module = module
         self.__config_path = config_path
         self.__cluster_name = cluster_name
         self.__configurator = configurator
@@ -249,11 +246,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         if self.data_center is not None:
             command.append(
                 "--data-center=%s" % self.data_center
-            )
-
-        if self.module is not None:
-            command.append(
-                "--module=%s" % self.module
             )
 
         if self.__configurator.breakpad_minidumps_path:
@@ -553,16 +545,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if isinstance(configurator.dc_mapping, dict):
             if node_index in configurator.dc_mapping:
                 data_center = configurator.dc_mapping[node_index]
-
-        module = None
-        for node in configurator.naming_config.NameserviceConfig.Node:
-            if node.NodeId == node_index:
-                if node.HasField('WalleLocation'):
-                    module_value = node.WalleLocation.Module
-                    if module_value:  # if not empty
-                        module = module_value
-                break
-
         self._nodes[node_index] = KiKiMRNode(
             node_id=node_index,
             config_path=node_config_path,
@@ -573,7 +555,6 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             tenant_affiliation=configurator.yq_tenant,
             binary_path=configurator.get_binary_path(node_index),
             data_center=data_center,
-            module=module,
             seed_nodes_file=seed_nodes_file,
         )
         return self._nodes[node_index]

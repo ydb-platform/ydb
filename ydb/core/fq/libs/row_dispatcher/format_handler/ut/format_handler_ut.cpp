@@ -342,8 +342,8 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         ));
 
         messages = TVector<TMessages>{
-            {{firstOffset + 0, firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString("event1").AddString("str_first__large__"))},
-            {{firstOffset + 2, firstOffset + 3}, {}, TBatch().AddRow(TRow().AddString("event3").AddString("str_first__large__"))},
+            {{firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString("event1").AddString("str_first__large__"))},
+            {{firstOffset + 3}, {}, TBatch().AddRow(TRow().AddString("event3").AddString("str_first__large__"))},
         };
         CheckSuccess(MakeClient(
             {commonColumn, {"column_0", "[DataType; String]"}},
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
         ));
 
         messages = TVector<TMessages>{
-            {{firstOffset + 0, firstOffset + 1}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
+            {{firstOffset + 0}, {}, TBatch().AddRow(TRow().AddString("event0").AddString("str_second"))},
         };
         CheckSuccess(MakeClient(
             {commonColumn, {"column_1", "[DataType; String]"}},
@@ -656,13 +656,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
+                {firstOffset + 2},
                 TInstant::Seconds(40),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:44Z").AddUint64(1))
             },
             {
-                {firstOffset + 4, firstOffset + 5},
+                {firstOffset + 4},
                 TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
@@ -683,13 +683,13 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
+                {firstOffset + 4},
                 TInstant::Seconds(42),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:46Z").AddUint64(1))
             },
             {
-                {firstOffset + 6, firstOffset + 7},
+                {firstOffset + 6},
                 TInstant::Seconds(44),
                 TBatch()
                     .AddRow(TRow().AddString("1970-01-01T00:00:48Z").AddUint64(1))
@@ -733,12 +733,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         auto messages = TVector<TMessages>{
             {
-                {firstOffset + 2, firstOffset + 3},
+                {firstOffset + 3},
                 TInstant::Seconds(40),
                 TBatch()
             },
             {
-                {firstOffset + 4, firstOffset + 5},
+                {firstOffset + 5},
                 TInstant::Seconds(42),
                 TBatch()
             },
@@ -758,12 +758,12 @@ Y_UNIT_TEST_SUITE(TestFormatHandler) {
 
         messages = TVector<TMessages>{
             {
-                {firstOffset + 4, firstOffset + 5},
+                {firstOffset + 5},
                 TInstant::Seconds(42),
                 TBatch()
             },
             {
-                {firstOffset + 6, firstOffset + 7},
+                {firstOffset + 7},
                 TInstant::Seconds(44),
                 TBatch()
             },

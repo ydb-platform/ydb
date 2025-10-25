@@ -40,6 +40,8 @@ struct TEvPrivate {
         EvScanStats,
         EvReadFinished,
         EvPeriodicWakeup,
+        EvReportBaseStatistics,
+        EvReportExecutorStatistics,
         EvEviction,
         EvS3Settings,
         EvExport,
@@ -290,6 +292,10 @@ struct TEvPrivate {
 
         bool Manual;
     };
+
+    struct TEvReportBaseStatistics: public TEventLocal<TEvReportBaseStatistics, EvReportBaseStatistics> {};
+
+    struct TEvReportExecutorStatistics: public TEventLocal<TEvReportExecutorStatistics, EvReportExecutorStatistics> {};
 
     struct TEvPingSnapshotsUsage: public TEventLocal<TEvPingSnapshotsUsage, EvPingSnapshotsUsage> {
         TEvPingSnapshotsUsage() = default;

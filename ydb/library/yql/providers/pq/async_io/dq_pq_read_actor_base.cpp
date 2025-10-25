@@ -170,13 +170,17 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
         return;
     }
 
+    for (auto it = InflyIdlenessChecks.begin(); it != InflyIdlenessChecks.end() && *it <= systemTime; ) {
+        it = InflyIdlenessChecks.erase(it);
+    }
+
     const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-    if (!nextIdleCheckAt) {
+    if (!nextIdleCheckAt || *nextIdleCheckAt <= systemTime) {
         return;
     }
 
-    if (!NextIdlenessCheckAt.Defined() || nextIdleCheckAt != *NextIdlenessCheckAt) {
-        NextIdlenessCheckAt = *nextIdleCheckAt;
+    if (InflyIdlenessChecks.empty() || *InflyIdlenessChecks.cbegin() > *nextIdleCheckAt) {
+        InflyIdlenessChecks.insert(*nextIdleCheckAt);
         SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
         ScheduleSourcesCheck(*nextIdleCheckAt);
     }

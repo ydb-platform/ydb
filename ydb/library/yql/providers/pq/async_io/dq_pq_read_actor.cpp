@@ -78,6 +78,7 @@ struct TEvPrivate {
         EvReceivedClusters,
         EvDescribeTopicResult,
         EvExecuteTopicEvent,
+        EvWatermarkIdleness,
 
         EvEnd
     };
@@ -87,6 +88,12 @@ struct TEvPrivate {
     // Events
 
     struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
+    struct TEvWatermarkIdleness : public TEventLocal<TEvWatermarkIdleness, EvWatermarkIdleness> {
+        explicit TEvWatermarkIdleness(TInstant notifyTime)
+            : NotifyTime(notifyTime)
+        {}
+        TInstant NotifyTime;
+    };
     struct TEvReconnectSession : public TEventLocal<TEvReconnectSession, EvReconnectSession> {};
     struct TEvReceivedClusters : public NActors::TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
         explicit TEvReceivedClusters(
@@ -333,6 +340,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
+        hFunc(TEvPrivate::TEvWatermarkIdleness, Handle);
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -352,9 +360,19 @@ private:
                 clusterState.WaitEventStartedAt.Clear();
             }
         }
+        NotifyCA();
+    }
+
+    void NotifyCA() {
         Metrics.InFlyAsyncInputData->Set(1);
         Metrics.AsyncInputDataRate->Inc();
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
+    }
+
+    void Handle(TEvPrivate::TEvWatermarkIdleness::TPtr& ev) {
+        if (InflyIdlenessChecks.erase(ev->Get()->NotifyTime)) {
+            NotifyCA();
+        }
     }
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
@@ -515,7 +533,6 @@ private:
         SRC_LOG_T("SessionId: " << GetSessionId() << " GetAsyncInputData freeSpace = " << freeSpace);
 
         const auto now = TInstant::Now();
-        MaybeScheduleNextIdleCheck(now);
 
         if (!InflightReconnect && ReconnectPeriod != TDuration::Zero()) {
             Metrics.ReconnectRate->Inc();
@@ -566,10 +583,11 @@ private:
 
             if (watermark) {
                 const auto t = watermark;
-                SRC_LOG_T("SessionId: " << GetSessionId() << " Fake watermark " << t << " was produced");
+                SRC_LOG_T("SessionId: " << GetSessionId() << " Idleness watermark " << t << " was produced");
                 PushWatermarkToReady(*watermark);
                 recheckBatch = true;
             }
+            MaybeScheduleNextIdleCheck(now);
         }
 
         if (recheckBatch) {
@@ -606,7 +624,7 @@ private:
     }
 
     void ScheduleSourcesCheck(TInstant at) override {
-        Schedule(at, new TEvPrivate::TEvSourceDataReady());
+        Schedule(at, new TEvPrivate::TEvWatermarkIdleness(at));
     }
 
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {

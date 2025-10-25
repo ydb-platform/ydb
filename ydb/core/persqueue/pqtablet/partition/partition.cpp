@@ -803,9 +803,6 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (userInfo.Offset >= static_cast<i64>(GetEndOffset())) {
         result.LastCommittedMessage.CreateTimestamp = now;
         result.LastCommittedMessage.WriteTimestamp = now;
-    } else if (userInfo.ActualTimestamps) {
-        result.LastCommittedMessage.CreateTimestamp = userInfo.CreateTimestamp;
-        result.LastCommittedMessage.WriteTimestamp = userInfo.WriteTimestamp;
     } else {
         auto timestamp = GetWriteTimeEstimate(userInfo.Offset);
         result.LastCommittedMessage.CreateTimestamp = timestamp;
@@ -827,14 +824,14 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
         result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
     } else {
         auto timestamp = GetWriteTimeEstimate(readOffset);
-        result.LastCommittedMessage.CreateTimestamp = timestamp;
-        result.LastCommittedMessage.WriteTimestamp = timestamp;
+        result.LastReadMessage.CreateTimestamp = timestamp;
+        result.LastReadMessage.WriteTimestamp = timestamp;
     }
 
     if (readOffset < (i64)GetEndOffset()) {
         result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
     }
-    result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
+    result.CommitedLag = now - result.LastCommittedMessage.WriteTimestamp;
     result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
 
     return result;

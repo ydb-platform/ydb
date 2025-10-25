@@ -17,7 +17,14 @@
 
 {%- macro PatchArg(arg, object_index, ins, outs, is_path = false) -%}
 {%-     set in_bindir = arg|replace(codegenBindir, '') != arg -%}
-{%-     if (outs|select("eq", arg)|length) or (outs|select("eq", codegenBindir + "/" + arg)|length) or (in_bindir and outs|join('|') != outs|join('|')|replace(arg + "/", '')) -%}
+{%-     set souts = outs|join('|') -%}
+{%-     set souts_bindir = codegenBindir + '/' + outs|join('|' + codegenBindir + '/') -%}
+{%-     set souts_bindir = souts_bindir|replace(codegenBindir + '/' + codegenBindir + '/', codegenBindir + '/') -%}
+{%-     set outs_bindir = split(souts_bindir, '|') -%}
+{%-     set sins_bindir = codegenBindir + '/' + ins|join('|' + codegenBindir + '/') -%}
+{%-     set sins_bindir = sins_bindir|replace(codegenBindir + '/' + codegenBindir + '/', codegenBindir + '/') -%}
+{%-     set ins_bindir = split(sins_bindir, '|') -%}
+{%-     if outs|select("eq", arg)|length or (in_bindir and not(ins_bindir|select('eq', arg)|length) and outs_bindir|select("in", arg)|length) or (in_bindir and not(ins_bindir|select('eq', arg)|length) and souts != souts|replace(arg, '')) or (in_bindir and not(ins_bindir|select('eq', arg)|length) and souts_bindir != souts_bindir|replace(arg, '')) -%}
 {%-         if proto_template -%}
 {{ PatchGeneratedProto(arg, false, object_index) }}
 {%-         else -%}

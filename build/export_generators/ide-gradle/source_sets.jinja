@@ -2,13 +2,7 @@
 .include({%- for glob in some_set.globs -%}"{{ glob }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
 {%- endmacro -%}
 
-{%- macro SomeSet(some_set, module, reldir = "") -%}
-{%-     set dir = some_set.dir -%}
-{%-     if (reldir != "") and (dir[0] != "/") -%}
-{#-         Relative path in tests #}
-{%-         set dir = reldir + dir -%}
-{%-     endif %}
-        {{ module }}.srcDir({{ PatchRoots(dir) }})
+{%- macro PrintGlobs(module, some_set, dir) -%}
 {%-     if module == 'resources' -%}
 {%-         if not('**/*' in some_set.globs) -%}
 {{ IncludeGlobs(some_set, dir) }}
@@ -25,12 +19,49 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro SomeSets(some_sets, module, reldir = "") -%}
+{%- macro SomeSet(some_set, module, reldir, current_target) -%}
+{%-     set dir = some_set.dir -%}
+{%-     if (reldir != "") and (dir[0] != "/") -%}
+{#-         Relative path in tests #}
+{%-         set dir = reldir + dir -%}
+{%-     endif -%}
+{%-     if dir|replace(export_root, "") != dir -%}
+{#-         Generated (re)sources -#}
+{%-         set runs_out = current_target.runs|selectattr('out')|map(attribute='out')|sum|select('in', dir) -%}
+{%-         set runs_outdir = current_target.runs|selectattr('out_dir')|map(attribute='out_dir')|sum|select('in', dir) -%}
+{%-         set cruns_outputs = current_target.custom_runs|selectattr('outputs')|map(attribute='outputs')|sum|select('in', dir) -%}
+{%-         if runs_out|length -%}
+{%-             for run in current_target.runs -%}
+{%-                 if run.out|select('in', dir)|length %}
+        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
+{%-                 endif -%}
+{%-             endfor -%}
+{%-         elif runs_outdir|length -%}
+{%-             for run in current_target.runs -%}
+{%-                 if run.out_dir|select('in', dir)|length %}
+        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
+{%-                 endif -%}
+{%-             endfor -%}
+{%-         elif cruns_outputs|length -%}
+{%-             for custom_run in current_target.custom_runs -%}
+{%-                 if custom_run.outputs|select('in', dir)|length %}
+        {{ module }}.srcDir({{ PatchRoots(dir, false, 'collect') }}){{ PrintGlobs(module, some_set, dir) }}
+{%-                 endif -%}
+{%-             endfor -%}
+{%-         else %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
+{%-         endif -%}
+{%-     else %}
+        {{ module }}.srcDir({{ PatchRoots(dir) }}){{ PrintGlobs(module, some_set, dir) }}
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro SomeSets(some_sets, module, reldir, current_target) -%}
 {%-     if some_sets|length -%}
 {%-         set dirs = some_sets|map(attribute='dir')|unique -%}
 {%-         for dir in dirs -%}
 {%-             set some_set = some_sets|selectattr('dir', 'eq', dir)|first -%}
-{{ SomeSet(some_set, module, reldir) }}
+{{ SomeSet(some_set, module, reldir, current_target) }}
 {%-         endfor -%}
 {%-     endif -%}
 {%- endmacro -%}
@@ -45,7 +76,7 @@
 {%-     else -%}
 {%-         set source_sets = [] -%}
 {%-     endif -%}
-{{ SomeSets(source_sets, "java", reldir) }}
+{{ SomeSets(source_sets, "java", reldir, current_target) }}
 {%-     if current_target.resource_sets|length -%}
 {%-         set resource_sets = current_target.resource_sets -%}
 {%-     else -%}
@@ -57,11 +88,12 @@
 {%-             set resource_sets = resource_sets + source2resource_sets -%}
 {%-         endif -%}
 {%-     endif -%}
-{{ SomeSets(resource_sets, "resources", reldir) }}
+{{ SomeSets(resource_sets, "resources", reldir, current_target) }}
 {%- endmacro %}
 
 sourceSets {
-{%- if target.source_sets|length or target.resource_sets|length or proto_template %}
+{%- if target.source_sets|length or target.resource_sets|length or proto_template -%}
+{%-     set varprefix = MAIN_VARPREFIX %}
     main {
 {#- glue -#}
 {{ TargetSets(target, "main") }}
@@ -83,6 +115,8 @@ sourceSets {
 {%-         if extra_target.test_reldir -%}
 {%-             set reldir = extra_target.test_reldir + "/" -%}
 {%-         endif -%}
+{#-         TestN target codegen -#}
+{%-         set varprefix = "test" + loop.index0|tojson + "Codegen" -%}
 {{ TargetSets(extra_target, "test", reldir) }}
 {%-     endfor %}
     }

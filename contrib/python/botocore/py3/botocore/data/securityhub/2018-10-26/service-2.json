@@ -77,7 +77,8 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"LimitExceededException"}
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Disables the standards specified by the provided <code>StandardsSubscriptionArns</code>.</p> <p>For more information, see <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards.html\">Security Standards</a> section of the <i>Security Hub User Guide</i>.</p>"
     },
@@ -93,7 +94,8 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"LimitExceededException"}
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Enables the standards specified by the provided <code>StandardsArn</code>. To obtain the ARN for a standard, use the <code>DescribeStandards</code> operation.</p> <p>For more information, see the <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards.html\">Security Standards</a> section of the <i>Security Hub User Guide</i>.</p>"
     },
@@ -114,6 +116,24 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p> Retrieves a list of details for automation rules based on rule Amazon Resource Names (ARNs). </p>"
+    },
+    "BatchGetConfigurationPolicyAssociations":{
+      "name":"BatchGetConfigurationPolicyAssociations",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicyAssociation/batchget"
+      },
+      "input":{"shape":"BatchGetConfigurationPolicyAssociationsRequest"},
+      "output":{"shape":"BatchGetConfigurationPolicyAssociationsResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Returns associations between an Security Hub configuration and a batch of target accounts, organizational units, or the root. Only the Security Hub delegated administrator can invoke this operation from the home Region. A configuration can refer to a configuration policy or to a self-managed configuration. </p>"
     },
     "BatchGetSecurityControls":{
       "name":"BatchGetSecurityControls",
@@ -208,7 +228,8 @@
         {"shape":"InternalException"},
         {"shape":"LimitExceededException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"InvalidInputException"}
+        {"shape":"InvalidInputException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p> For a batch of security controls and standards, this operation updates the enablement status of a control in a standard. </p>"
     },
@@ -245,6 +266,24 @@
         {"shape":"LimitExceededException"}
       ],
       "documentation":"<p> Creates an automation rule based on input parameters. </p>"
+    },
+    "CreateConfigurationPolicy":{
+      "name":"CreateConfigurationPolicy",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicy/create"
+      },
+      "input":{"shape":"CreateConfigurationPolicyRequest"},
+      "output":{"shape":"CreateConfigurationPolicyResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceConflictException"}
+      ],
+      "documentation":"<p> Creates a configuration policy with the defined configuration. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
     },
     "CreateFindingAggregator":{
       "name":"CreateFindingAggregator",
@@ -293,7 +332,8 @@
         {"shape":"InvalidInputException"},
         {"shape":"LimitExceededException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"ResourceConflictException"}
+        {"shape":"ResourceConflictException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Creates a member association in Security Hub between the specified accounts and the account used to make the request, which is the administrator account. If you are integrated with Organizations, then the administrator account is designated by the organization management account.</p> <p> <code>CreateMembers</code> is always used to add accounts that are not organization members.</p> <p>For accounts that are managed using Organizations, <code>CreateMembers</code> is only used in the following cases:</p> <ul> <li> <p>Security Hub is not configured to automatically add new organization accounts.</p> </li> <li> <p>The account was disassociated or deleted in Security Hub.</p> </li> </ul> <p>This action can only be used by an account that has Security Hub enabled. To enable Security Hub, you can use the <code>EnableSecurityHub</code> operation.</p> <p>For accounts that are not organization members, you create the account association and then send an invitation to the member account. To send the invitation, you use the <code>InviteMembers</code> operation. If the account owner accepts the invitation, the account becomes a member account in Security Hub.</p> <p>Accounts that are managed using Organizations do not receive an invitation. They automatically become a member account in Security Hub.</p> <ul> <li> <p>If the organization account does not have Security Hub enabled, then Security Hub and the default standards are automatically enabled. Note that Security Hub cannot be enabled automatically for the organization management account. The organization management account must enable Security Hub before the administrator account enables it as a member account.</p> </li> <li> <p>For organization accounts that already have Security Hub enabled, Security Hub does not make any other changes to those accounts. It does not change their enabled standards or controls.</p> </li> </ul> <p>A permissions policy is added that permits the administrator account to view the findings generated in the member account.</p> <p>To remove the association between the administrator and member accounts, use the <code>DisassociateFromMasterAccount</code> or <code>DisassociateMembers</code> operation.</p>"
     },
@@ -328,6 +368,25 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Deletes a custom action target from Security Hub.</p> <p>Deleting a custom action target does not affect any findings or insights that were already sent to Amazon CloudWatch Events using the custom action.</p>"
+    },
+    "DeleteConfigurationPolicy":{
+      "name":"DeleteConfigurationPolicy",
+      "http":{
+        "method":"DELETE",
+        "requestUri":"/configurationPolicy/{Identifier}"
+      },
+      "input":{"shape":"DeleteConfigurationPolicyRequest"},
+      "output":{"shape":"DeleteConfigurationPolicyResponse"},
+      "errors":[
+        {"shape":"AccessDeniedException"},
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceConflictException"}
+      ],
+      "documentation":"<p> Deletes a configuration policy. Only the Security Hub delegated administrator can invoke this operation from the home Region. For the deletion to succeed, you must first disassociate a configuration policy from target accounts, organizational units, or the root by invoking the <code>StartConfigurationPolicyDisassociation</code> operation. </p>"
     },
     "DeleteFindingAggregator":{
       "name":"DeleteFindingAggregator",
@@ -445,7 +504,7 @@
         {"shape":"InvalidAccessException"},
         {"shape":"LimitExceededException"}
       ],
-      "documentation":"<p>Returns information about the Organizations configuration for Security Hub. Can only be called from a Security Hub administrator account.</p>"
+      "documentation":"<p>Returns information about the way your organization is configured in Security Hub. Only the Security Hub administrator account can invoke this operation.</p>"
     },
     "DescribeProducts":{
       "name":"DescribeProducts",
@@ -523,7 +582,8 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"LimitExceededException"}
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Disables a Security Hub administrator account. Can only be called by the organization management account.</p>"
     },
@@ -539,7 +599,8 @@
         {"shape":"InternalException"},
         {"shape":"LimitExceededException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"ResourceNotFoundException"}
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Disables Security Hub in your account only in the current Amazon Web Services Region. To disable Security Hub in all Regions, you must submit one request per Region where you have enabled Security Hub.</p> <p>You can't disable Security Hub in an account that is currently the Security Hub administrator.</p> <p>When you disable Security Hub, your existing findings and insights and any Security Hub configuration settings are deleted after 90 days and cannot be recovered. Any standards that were enabled are disabled, and your administrator and member account associations are removed.</p> <p>If you want to save your existing findings, you must export them before you disable Security Hub.</p>"
     },
@@ -592,7 +653,8 @@
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
         {"shape":"LimitExceededException"},
-        {"shape":"ResourceNotFoundException"}
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Disassociates the specified member accounts from the associated administrator account.</p> <p>Can be used to disassociate both accounts that are managed using Organizations and accounts that were invited manually.</p>"
     },
@@ -625,7 +687,8 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"LimitExceededException"}
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Designates the Security Hub administrator account for an organization. Can only be called by the organization management account.</p>"
     },
@@ -662,6 +725,42 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Provides the details for the Security Hub administrator account for the current member account.</p> <p>Can be used by both member accounts that are managed using Organizations and accounts that were invited manually.</p>"
+    },
+    "GetConfigurationPolicy":{
+      "name":"GetConfigurationPolicy",
+      "http":{
+        "method":"GET",
+        "requestUri":"/configurationPolicy/get/{Identifier}"
+      },
+      "input":{"shape":"GetConfigurationPolicyRequest"},
+      "output":{"shape":"GetConfigurationPolicyResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Provides information about a configuration policy. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
+    },
+    "GetConfigurationPolicyAssociation":{
+      "name":"GetConfigurationPolicyAssociation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicyAssociation/get"
+      },
+      "input":{"shape":"GetConfigurationPolicyAssociationRequest"},
+      "output":{"shape":"GetConfigurationPolicyAssociationResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Returns the association between a configuration and a target account, organizational unit, or the root. The configuration can be a configuration policy or self-managed behavior. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
     },
     "GetEnabledStandards":{
       "name":"GetEnabledStandards",
@@ -815,6 +914,23 @@
       ],
       "documentation":"<p>Returns the details for the Security Hub member accounts for the specified account IDs.</p> <p>An administrator account can be either the delegated Security Hub administrator account for an organization or an administrator account that enabled Security Hub manually.</p> <p>The results include both member accounts that are managed using Organizations and accounts that were invited manually.</p>"
     },
+    "GetSecurityControlDefinition":{
+      "name":"GetSecurityControlDefinition",
+      "http":{
+        "method":"GET",
+        "requestUri":"/securityControl/definition"
+      },
+      "input":{"shape":"GetSecurityControlDefinitionRequest"},
+      "output":{"shape":"GetSecurityControlDefinitionResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"}
+      ],
+      "documentation":"<p> Retrieves the definition of a security control. The definition includes the control title, description, Region availability, parameter definitions, and other details. </p>"
+    },
     "InviteMembers":{
       "name":"InviteMembers",
       "http":{
@@ -848,6 +964,41 @@
         {"shape":"LimitExceededException"}
       ],
       "documentation":"<p> A list of automation rules and their metadata for the calling account. </p>"
+    },
+    "ListConfigurationPolicies":{
+      "name":"ListConfigurationPolicies",
+      "http":{
+        "method":"GET",
+        "requestUri":"/configurationPolicy/list"
+      },
+      "input":{"shape":"ListConfigurationPoliciesRequest"},
+      "output":{"shape":"ListConfigurationPoliciesResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Lists the configuration policies that the Security Hub delegated administrator has created for your organization. Only the delegated administrator can invoke this operation from the home Region. </p>"
+    },
+    "ListConfigurationPolicyAssociations":{
+      "name":"ListConfigurationPolicyAssociations",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicyAssociation/list"
+      },
+      "input":{"shape":"ListConfigurationPolicyAssociationsRequest"},
+      "output":{"shape":"ListConfigurationPolicyAssociationsResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Provides information about the associations for your configuration policies and self-managed behavior. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
     },
     "ListEnabledProductsForImport":{
       "name":"ListEnabledProductsForImport",
@@ -976,6 +1127,42 @@
       ],
       "documentation":"<p>Returns a list of tags associated with a resource.</p>"
     },
+    "StartConfigurationPolicyAssociation":{
+      "name":"StartConfigurationPolicyAssociation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicyAssociation/associate"
+      },
+      "input":{"shape":"StartConfigurationPolicyAssociationRequest"},
+      "output":{"shape":"StartConfigurationPolicyAssociationResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Associates a target account, organizational unit, or the root with a specified configuration. The target can be associated with a configuration policy or self-managed behavior. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
+    },
+    "StartConfigurationPolicyDisassociation":{
+      "name":"StartConfigurationPolicyDisassociation",
+      "http":{
+        "method":"POST",
+        "requestUri":"/configurationPolicyAssociation/disassociate"
+      },
+      "input":{"shape":"StartConfigurationPolicyDisassociationRequest"},
+      "output":{"shape":"StartConfigurationPolicyDisassociationResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Disassociates a target account, organizational unit, or the root from a specified configuration. When you disassociate a configuration from its target, the target inherits the configuration of the closest parent. If there’s no configuration to inherit, the target retains its settings but becomes a self-managed account. A target can be disassociated from a configuration policy or self-managed behavior. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
+    },
     "TagResource":{
       "name":"TagResource",
       "http":{
@@ -1022,6 +1209,25 @@
         {"shape":"ResourceNotFoundException"}
       ],
       "documentation":"<p>Updates the name and description of a custom action target in Security Hub.</p>"
+    },
+    "UpdateConfigurationPolicy":{
+      "name":"UpdateConfigurationPolicy",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/configurationPolicy/{Identifier}"
+      },
+      "input":{"shape":"UpdateConfigurationPolicyRequest"},
+      "output":{"shape":"UpdateConfigurationPolicyResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceConflictException"}
+      ],
+      "documentation":"<p> Updates a configuration policy. Only the Security Hub delegated administrator can invoke this operation from the home Region. </p>"
     },
     "UpdateFindingAggregator":{
       "name":"UpdateFindingAggregator",
@@ -1087,9 +1293,31 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"LimitExceededException"}
+        {"shape":"LimitExceededException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceConflictException"}
       ],
-      "documentation":"<p>Used to update the configuration related to Organizations. Can only be called from a Security Hub administrator account.</p>"
+      "documentation":"<p>Updates the configuration of your organization in Security Hub. Only the Security Hub administrator account can invoke this operation.</p>"
+    },
+    "UpdateSecurityControl":{
+      "name":"UpdateSecurityControl",
+      "http":{
+        "method":"PATCH",
+        "requestUri":"/securityControl/update"
+      },
+      "input":{"shape":"UpdateSecurityControlRequest"},
+      "output":{"shape":"UpdateSecurityControlResponse"},
+      "errors":[
+        {"shape":"InternalException"},
+        {"shape":"InvalidInputException"},
+        {"shape":"InvalidAccessException"},
+        {"shape":"LimitExceededException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"ResourceInUseException"},
+        {"shape":"AccessDeniedException"}
+      ],
+      "documentation":"<p> Updates the properties of a security control. </p>"
     },
     "UpdateSecurityHubConfiguration":{
       "name":"UpdateSecurityHubConfiguration",
@@ -1104,7 +1332,8 @@
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
         {"shape":"LimitExceededException"},
-        {"shape":"ResourceNotFoundException"}
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Updates configuration options for Security Hub.</p>"
     },
@@ -1120,7 +1349,8 @@
         {"shape":"InternalException"},
         {"shape":"InvalidInputException"},
         {"shape":"InvalidAccessException"},
-        {"shape":"ResourceNotFoundException"}
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"AccessDeniedException"}
       ],
       "documentation":"<p>Used to control whether an individual security standard control is enabled or disabled.</p>"
     }
@@ -1375,6 +1605,10 @@
       "max":10,
       "min":1
     },
+    "AlphaNumericNonEmptyString":{
+      "type":"string",
+      "pattern":"^[-_ a-zA-Z0-9]+$"
+    },
     "ArnList":{
       "type":"list",
       "member":{"shape":"NonEmptyString"}
@@ -1392,6 +1626,24 @@
     "AssociatedStandardsList":{
       "type":"list",
       "member":{"shape":"AssociatedStandard"}
+    },
+    "AssociationFilters":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ARN or UUID of the configuration policy. </p>"
+        },
+        "AssociationType":{
+          "shape":"AssociationType",
+          "documentation":"<p> Indicates whether the association between a target and a configuration was directly applied by the Security Hub delegated administrator or inherited from a parent. </p>"
+        },
+        "AssociationStatus":{
+          "shape":"ConfigurationPolicyAssociationStatus",
+          "documentation":"<p> The current status of the association between a target and a configuration policy. </p>"
+        }
+      },
+      "documentation":"<p> Options for filtering the <code>ListConfigurationPolicyAssociations</code> response. You can filter by the Amazon Resource Name (ARN) or universally unique identifier (UUID) of a configuration policy, <code>AssociationType</code>, or <code>AssociationStatus</code>. </p>"
     },
     "AssociationSetDetails":{
       "type":"structure",
@@ -1446,6 +1698,13 @@
       "enum":[
         "ENABLED",
         "DISABLED"
+      ]
+    },
+    "AssociationType":{
+      "type":"string",
+      "enum":[
+        "INHERITED",
+        "APPLIED"
       ]
     },
     "AutoEnableStandards":{
@@ -1575,7 +1834,7 @@
         },
         "AwsAccountId":{
           "shape":"StringFilterList",
-          "documentation":"<p> The Amazon Web Services account ID in which a finding was generated. </p> <p> Array Members: Minimum number of 1 item. Maximum number of 100 items. </p>"
+          "documentation":"<p>The Amazon Web Services account ID in which a finding was generated.</p> <p> Array Members: Minimum number of 1 item. Maximum number of 100 items. </p>"
         },
         "Id":{
           "shape":"StringFilterList",
@@ -1708,6 +1967,18 @@
         "UserDefinedFields":{
           "shape":"MapFilterList",
           "documentation":"<p> A list of user-defined name and value string pairs added to a finding. </p> <p> Array Members: Minimum number of 1 item. Maximum number of 20 items. </p>"
+        },
+        "ResourceApplicationArn":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The Amazon Resource Name (ARN) of the application that is related to a finding. </p> <p> Array Members: Minimum number of 1 item. Maximum number of 20 items. </p>"
+        },
+        "ResourceApplicationName":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The name of the application that is related to a finding. </p> <p> Array Members: Minimum number of 1 item. Maximum number of 20 items. </p>"
+        },
+        "AwsAccountName":{
+          "shape":"StringFilterList",
+          "documentation":"<p>The name of the Amazon Web Services account in which a finding was generated. </p> <p> Array Members: Minimum number of 1 item. Maximum number of 20 items. </p>"
         }
       },
       "documentation":"<p> The criteria that determine which findings a rule applies to. </p>"
@@ -3770,7 +4041,7 @@
           "documentation":"<p>An origin that is not an Amazon S3 bucket, with one exception. If the Amazon S3 bucket is configured with static website hosting, use this attribute. If the Amazon S3 bucket is not configured with static website hosting, use the <code>S3OriginConfig</code> type instead. </p>"
         }
       },
-      "documentation":"<p>A complex type that describes the Amazon S3 bucket, HTTP server (for example, a web server), AWS Elemental MediaStore, or other server from which CloudFront gets your files.</p>"
+      "documentation":"<p>A complex type that describes the Amazon S3 bucket, HTTP server (for example, a web server), Elemental MediaStore, or other server from which CloudFront gets your files.</p>"
     },
     "AwsCloudFrontDistributionOriginItemList":{
       "type":"list",
@@ -13342,6 +13613,14 @@
         "GeneratorDetails":{
           "shape":"GeneratorDetails",
           "documentation":"<p>Provides metadata for the Amazon CodeGuru detector associated with a finding. This field pertains to findings that relate to Lambda functions. Amazon Inspector identifies policy violations and vulnerabilities in Lambda function code based on internal detectors developed in collaboration with Amazon CodeGuru. Security Hub receives those findings. </p>"
+        },
+        "ProcessedAt":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>An ISO8601-formatted timestamp that indicates when Security Hub received a finding and begins to process it.</p> <p>A correctly formatted example is <code>2020-05-21T20:16:34.724Z</code>. The value cannot contain spaces, and date and time should be separated by <code>T</code>. For more information, see <a href=\"https://www.rfc-editor.org/rfc/rfc3339#section-5.6\">RFC 3339 section 5.6, Internet Date/Time Format</a>.</p>"
+        },
+        "AwsAccountName":{
+          "shape":"NonEmptyString",
+          "documentation":"<p>The name of the Amazon Web Services account from which a finding was generated. </p>"
         }
       },
       "documentation":"<p>Provides a consistent format for Security Hub findings. <code>AwsSecurityFinding</code> format allows you to share findings between Amazon Web Services security services and third-party solutions.</p> <note> <p>A finding is a potential security issue generated either by Amazon Web Services services or by the integrated third-party solutions and standards checks.</p> </note>"
@@ -13355,7 +13634,7 @@
         },
         "AwsAccountId":{
           "shape":"StringFilterList",
-          "documentation":"<p>The Amazon Web Services account ID that a finding is generated in.</p>"
+          "documentation":"<p>The Amazon Web Services account ID in which a finding is generated.</p>"
         },
         "Id":{
           "shape":"StringFilterList",
@@ -13744,9 +14023,37 @@
         "ComplianceAssociatedStandardsId":{
           "shape":"StringFilterList",
           "documentation":"<p> The unique identifier of a standard in which a control is enabled. This field consists of the resource portion of the Amazon Resource Name (ARN) returned for a standard in the <a href=\"https://docs.aws.amazon.com/securityhub/1.0/APIReference/API_DescribeStandards.html\">DescribeStandards</a> API response. </p>"
+        },
+        "VulnerabilitiesExploitAvailable":{
+          "shape":"StringFilterList",
+          "documentation":"<p> Indicates whether a software vulnerability in your environment has a known exploit. You can filter findings by this field only if you use Security Hub and Amazon Inspector. </p>"
+        },
+        "VulnerabilitiesFixAvailable":{
+          "shape":"StringFilterList",
+          "documentation":"<p> Indicates whether a vulnerability is fixed in a newer version of the affected software packages. You can filter findings by this field only if you use Security Hub and Amazon Inspector. </p>"
+        },
+        "ComplianceSecurityControlParametersName":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The name of a security control parameter. </p>"
+        },
+        "ComplianceSecurityControlParametersValue":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The current value of a security control parameter. </p>"
+        },
+        "AwsAccountName":{
+          "shape":"StringFilterList",
+          "documentation":"<p>The name of the Amazon Web Services account in which a finding is generated.</p>"
+        },
+        "ResourceApplicationName":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The name of the application that is related to a finding. </p>"
+        },
+        "ResourceApplicationArn":{
+          "shape":"StringFilterList",
+          "documentation":"<p> The ARN of the application that is related to a finding. </p>"
         }
       },
-      "documentation":"<p>A collection of attributes that are applied to all active Security Hub-aggregated findings and that result in a subset of findings that are included in this insight.</p> <p>You can filter by up to 10 finding attributes. For each attribute, you can provide up to 20 filter values.</p>"
+      "documentation":"<p>A collection of filters that are applied to all active findings aggregated by Security Hub.</p> <p>You can filter by up to ten finding attributes. For each attribute, you can provide up to 20 filter values.</p>"
     },
     "AwsSecurityFindingIdentifier":{
       "type":"structure",
@@ -14868,6 +15175,29 @@
         }
       }
     },
+    "BatchGetConfigurationPolicyAssociationsRequest":{
+      "type":"structure",
+      "required":["ConfigurationPolicyAssociationIdentifiers"],
+      "members":{
+        "ConfigurationPolicyAssociationIdentifiers":{
+          "shape":"ConfigurationPolicyAssociationsList",
+          "documentation":"<p> Specifies one or more target account IDs, organizational unit (OU) IDs, or the root ID to retrieve associations for. </p>"
+        }
+      }
+    },
+    "BatchGetConfigurationPolicyAssociationsResponse":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyAssociations":{
+          "shape":"ConfigurationPolicyAssociationList",
+          "documentation":"<p> Describes associations for the target accounts, OUs, or the root. </p>"
+        },
+        "UnprocessedConfigurationPolicyAssociations":{
+          "shape":"UnprocessedConfigurationPolicyAssociationList",
+          "documentation":"<p> An array of configuration policy associations, one for each configuration policy association identifier, that was specified in the request but couldn’t be processed due to an error. </p>"
+        }
+      }
+    },
     "BatchGetSecurityControlsRequest":{
       "type":"structure",
       "required":["SecurityControlIds"],
@@ -15083,6 +15413,16 @@
       }
     },
     "Boolean":{"type":"boolean"},
+    "BooleanConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"Boolean",
+          "documentation":"<p> The Security Hub default value for a boolean parameter. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter with a boolean. For a boolean parameter, the options are <code>true</code> and <code>false</code>. </p>"
+    },
     "BooleanFilter":{
       "type":"structure",
       "members":{
@@ -15265,6 +15605,10 @@
         "AssociatedStandards":{
           "shape":"AssociatedStandardsList",
           "documentation":"<p>The enabled security standards in which a security control is currently enabled. </p>"
+        },
+        "SecurityControlParameters":{
+          "shape":"SecurityControlParametersList",
+          "documentation":"<p> An object that includes security control parameter names and values. </p>"
         }
       },
       "documentation":"<p>Contains finding details that are specific to control-based findings. Only returned for findings generated from controls.</p>"
@@ -15277,6 +15621,143 @@
         "FAILED",
         "NOT_AVAILABLE"
       ]
+    },
+    "ConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "Integer":{
+          "shape":"IntegerConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is an integer. </p>"
+        },
+        "IntegerList":{
+          "shape":"IntegerListConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a list of integers. </p>"
+        },
+        "Double":{
+          "shape":"DoubleConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a double. </p>"
+        },
+        "String":{
+          "shape":"StringConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a string data type. </p>"
+        },
+        "StringList":{
+          "shape":"StringListConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a list of strings. </p>"
+        },
+        "Boolean":{
+          "shape":"BooleanConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a boolean. For a boolean parameter, the options are <code>true</code> and <code>false</code>. </p>"
+        },
+        "Enum":{
+          "shape":"EnumConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is an enum. </p>"
+        },
+        "EnumList":{
+          "shape":"EnumListConfigurationOptions",
+          "documentation":"<p> The options for customizing a security control parameter that is a list of enums. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter. </p>",
+      "union":true
+    },
+    "ConfigurationPolicyAssociation":{
+      "type":"structure",
+      "members":{
+        "Target":{
+          "shape":"Target",
+          "documentation":"<p> The target account, organizational unit, or the root. </p>"
+        }
+      },
+      "documentation":"<p> Provides details about the association between an Security Hub configuration and a target account, organizational unit, or the root. An association can exist between a target and a configuration policy, or between a target and self-managed behavior. </p>"
+    },
+    "ConfigurationPolicyAssociationList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationPolicyAssociationSummary"}
+    },
+    "ConfigurationPolicyAssociationStatus":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "SUCCESS",
+        "FAILED"
+      ]
+    },
+    "ConfigurationPolicyAssociationSummary":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The universally unique identifier (UUID) of the configuration policy. </p>"
+        },
+        "TargetId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The identifier of the target account, organizational unit, or the root. </p>"
+        },
+        "TargetType":{
+          "shape":"TargetType",
+          "documentation":"<p> Specifies whether the target is an Amazon Web Services account, organizational unit, or the root. </p>"
+        },
+        "AssociationType":{
+          "shape":"AssociationType",
+          "documentation":"<p> Indicates whether the association between the specified target and the configuration was directly applied by the Security Hub delegated administrator or inherited from a parent. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy association was last updated. </p>"
+        },
+        "AssociationStatus":{
+          "shape":"ConfigurationPolicyAssociationStatus",
+          "documentation":"<p> The current status of the association between the specified target and the configuration. </p>"
+        },
+        "AssociationStatusMessage":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The explanation for a <code>FAILED</code> value for <code>AssociationStatus</code>. </p>"
+        }
+      },
+      "documentation":"<p> An object that contains the details of a configuration policy association that’s returned in a <code>ListConfigurationPolicyAssociations</code> request. </p>"
+    },
+    "ConfigurationPolicyAssociationSummaryList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationPolicyAssociationSummary"}
+    },
+    "ConfigurationPolicyAssociationsList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationPolicyAssociation"}
+    },
+    "ConfigurationPolicySummary":{
+      "type":"structure",
+      "members":{
+        "Arn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) of the configuration policy. </p>"
+        },
+        "Id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The universally unique identifier (UUID) of the configuration policy. </p>"
+        },
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was last updated. </p>"
+        },
+        "ServiceEnabled":{
+          "shape":"Boolean",
+          "documentation":"<p> Indicates whether the service that the configuration policy applies to is enabled in the policy. </p>"
+        }
+      },
+      "documentation":"<p> An object that contains the details of an Security Hub configuration policy that’s returned in a <code>ListConfigurationPolicies</code> request. </p>"
+    },
+    "ConfigurationPolicySummaryList":{
+      "type":"list",
+      "member":{"shape":"ConfigurationPolicySummary"}
     },
     "ContainerDetails":{
       "type":"structure",
@@ -15384,7 +15865,7 @@
       "members":{
         "Tags":{
           "shape":"TagMap",
-          "documentation":"<p> User-defined tags that help you label the purpose of a rule. </p>"
+          "documentation":"<p> User-defined tags associated with an automation rule. </p>"
         },
         "RuleStatus":{
           "shape":"RuleStatus",
@@ -15422,6 +15903,64 @@
         "RuleArn":{
           "shape":"NonEmptyString",
           "documentation":"<p> The Amazon Resource Name (ARN) of the automation rule that you created. </p>"
+        }
+      }
+    },
+    "CreateConfigurationPolicyRequest":{
+      "type":"structure",
+      "required":[
+        "Name",
+        "ConfigurationPolicy"
+      ],
+      "members":{
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "ConfigurationPolicy":{
+          "shape":"Policy",
+          "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If you provide a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If you provide a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p>"
+        },
+        "Tags":{
+          "shape":"TagMap",
+          "documentation":"<p> User-defined tags associated with a configuration policy. For more information, see <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/tagging-resources.html\">Tagging Security Hub resources</a> in the <i>Security Hub user guide</i>. </p>"
+        }
+      }
+    },
+    "CreateConfigurationPolicyResponse":{
+      "type":"structure",
+      "members":{
+        "Arn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) of the configuration policy. </p>"
+        },
+        "Id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The universally unique identifier (UUID) of the configuration policy. </p>"
+        },
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was last updated. </p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was created. </p>"
+        },
+        "ConfigurationPolicy":{
+          "shape":"Policy",
+          "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If the request included a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If the request included a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p>"
         }
       }
     },
@@ -15556,6 +16095,10 @@
       },
       "documentation":"<p>Contains an instance of sensitive data that was detected by a customer-defined identifier.</p>"
     },
+    "CustomizableProperties":{
+      "type":"list",
+      "member":{"shape":"SecurityControlProperty"}
+    },
     "Cvss":{
       "type":"structure",
       "members":{
@@ -15679,6 +16222,23 @@
           "shape":"NonEmptyString",
           "documentation":"<p>The ARN of the custom action target that was deleted.</p>"
         }
+      }
+    },
+    "DeleteConfigurationPolicyRequest":{
+      "type":"structure",
+      "required":["Identifier"],
+      "members":{
+        "Identifier":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or universally unique identifier (UUID) of the configuration policy. </p>",
+          "location":"uri",
+          "locationName":"Identifier"
+        }
+      }
+    },
+    "DeleteConfigurationPolicyResponse":{
+      "type":"structure",
+      "members":{
       }
     },
     "DeleteFindingAggregatorRequest":{
@@ -15831,7 +16391,7 @@
       "members":{
         "AutoEnable":{
           "shape":"Boolean",
-          "documentation":"<p>Whether to automatically enable Security Hub for new accounts in the organization.</p> <p>If set to <code>true</code>, then Security Hub is enabled for new accounts. If set to false, then new accounts are not added automatically.</p>"
+          "documentation":"<p>Whether to automatically enable Security Hub in new member accounts when they join the organization.</p> <p>If set to <code>true</code>, then Security Hub is automatically enabled in new accounts. If set to <code>false</code>, then Security Hub isn't enabled in new accounts automatically. The default value is <code>false</code>.</p> <p>If the <code>ConfigurationType</code> of your organization is set to <code>CENTRAL</code>, then this field is set to <code>false</code> and can't be changed in the home Region and linked Regions. However, in that case, the delegated administrator can create a configuration policy in which Security Hub is enabled and associate the policy with new organization accounts.</p>"
         },
         "MemberAccountLimitReached":{
           "shape":"Boolean",
@@ -15839,8 +16399,9 @@
         },
         "AutoEnableStandards":{
           "shape":"AutoEnableStandards",
-          "documentation":"<p>Whether to automatically enable Security Hub <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html\">default standards</a> for new member accounts in the organization.</p> <p>The default value of this parameter is equal to <code>DEFAULT</code>.</p> <p>If equal to <code>DEFAULT</code>, then Security Hub default standards are automatically enabled for new member accounts. If equal to <code>NONE</code>, then default standards are not automatically enabled for new member accounts.</p>"
-        }
+          "documentation":"<p>Whether to automatically enable Security Hub <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html\">default standards</a> in new member accounts when they join the organization.</p> <p>If equal to <code>DEFAULT</code>, then Security Hub default standards are automatically enabled for new member accounts. If equal to <code>NONE</code>, then default standards are not automatically enabled for new member accounts. The default value of this parameter is equal to <code>DEFAULT</code>.</p> <p>If the <code>ConfigurationType</code> of your organization is set to <code>CENTRAL</code>, then this field is set to <code>NONE</code> and can't be changed in the home Region and linked Regions. However, in that case, the delegated administrator can create a configuration policy in which specific security standards are enabled and associate the policy with new organization accounts.</p>"
+        },
+        "OrganizationConfiguration":{"shape":"OrganizationConfiguration"}
       }
     },
     "DescribeProductsRequest":{
@@ -15989,6 +16550,10 @@
       "members":{
       }
     },
+    "DisabledSecurityControlIdentifierList":{
+      "type":"list",
+      "member":{"shape":"NonEmptyString"}
+    },
     "DisassociateFromAdministratorAccountRequest":{
       "type":"structure",
       "members":{
@@ -16043,6 +16608,24 @@
       "documentation":"<p>Provided if <code>ActionType</code> is <code>DNS_REQUEST</code>. It provides details about the DNS request that was detected.</p>"
     },
     "Double":{"type":"double"},
+    "DoubleConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"Double",
+          "documentation":"<p> The Security Hub default value for a control parameter that is a double. </p>"
+        },
+        "Min":{
+          "shape":"Double",
+          "documentation":"<p> The minimum valid value for a control parameter that is a double. </p>"
+        },
+        "Max":{
+          "shape":"Double",
+          "documentation":"<p> The maximum valid value for a control parameter that is a double. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is a double. </p>"
+    },
     "EnableImportFindingsForProductRequest":{
       "type":"structure",
       "required":["ProductArn"],
@@ -16098,6 +16681,46 @@
       "type":"structure",
       "members":{
       }
+    },
+    "EnabledSecurityControlIdentifierList":{
+      "type":"list",
+      "member":{"shape":"NonEmptyString"}
+    },
+    "EnabledStandardIdentifierList":{
+      "type":"list",
+      "member":{"shape":"NonEmptyString"}
+    },
+    "EnumConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Security Hub default value for a control parameter that is an enum. </p>"
+        },
+        "AllowedValues":{
+          "shape":"StringList",
+          "documentation":"<p> The valid values for a control parameter that is an enum. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is an enum. </p>"
+    },
+    "EnumListConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"StringList",
+          "documentation":"<p> The Security Hub default value for a control parameter that is a list of enums. </p>"
+        },
+        "MaxItems":{
+          "shape":"Integer",
+          "documentation":"<p> The maximum number of list items that an enum list control parameter can accept. </p>"
+        },
+        "AllowedValues":{
+          "shape":"StringList",
+          "documentation":"<p> The valid values for a control parameter that is a list of enums. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is a list of enums. </p>"
     },
     "FieldMap":{
       "type":"map",
@@ -16377,6 +17000,94 @@
         "Administrator":{"shape":"Invitation"}
       }
     },
+    "GetConfigurationPolicyAssociationRequest":{
+      "type":"structure",
+      "required":["Target"],
+      "members":{
+        "Target":{
+          "shape":"Target",
+          "documentation":"<p> The target account ID, organizational unit ID, or the root ID to retrieve the association for. </p>"
+        }
+      }
+    },
+    "GetConfigurationPolicyAssociationResponse":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The universally unique identifier (UUID) of a configuration policy. For self-managed behavior, the value is <code>SELF_MANAGED_SECURITY_HUB</code>. </p>"
+        },
+        "TargetId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The target account ID, organizational unit ID, or the root ID for which the association is retrieved. </p>"
+        },
+        "TargetType":{
+          "shape":"TargetType",
+          "documentation":"<p> Specifies whether the target is an Amazon Web Services account, organizational unit, or the organization root. </p>"
+        },
+        "AssociationType":{
+          "shape":"AssociationType",
+          "documentation":"<p> Indicates whether the association between the specified target and the configuration was directly applied by the Security Hub delegated administrator or inherited from a parent. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy association was last updated. </p>"
+        },
+        "AssociationStatus":{
+          "shape":"ConfigurationPolicyAssociationStatus",
+          "documentation":"<p> The current status of the association between the specified target and the configuration. </p>"
+        },
+        "AssociationStatusMessage":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The explanation for a <code>FAILED</code> value for <code>AssociationStatus</code>. </p>"
+        }
+      }
+    },
+    "GetConfigurationPolicyRequest":{
+      "type":"structure",
+      "required":["Identifier"],
+      "members":{
+        "Identifier":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or universally unique identifier (UUID) of the configuration policy. </p>",
+          "location":"uri",
+          "locationName":"Identifier"
+        }
+      }
+    },
+    "GetConfigurationPolicyResponse":{
+      "type":"structure",
+      "members":{
+        "Arn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ARN of the configuration policy. </p>"
+        },
+        "Id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The UUID of the configuration policy. </p>"
+        },
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was last updated. </p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was created. </p>"
+        },
+        "ConfigurationPolicy":{
+          "shape":"Policy",
+          "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If the policy includes a list of security controls that are enabled, Security Hub disables all other controls (including newly released controls). If the policy includes a list of security controls that are disabled, Security Hub enables all other controls (including newly released controls). </p>"
+        }
+      }
+    },
     "GetEnabledStandardsRequest":{
       "type":"structure",
       "members":{
@@ -16615,6 +17326,25 @@
         }
       }
     },
+    "GetSecurityControlDefinitionRequest":{
+      "type":"structure",
+      "required":["SecurityControlId"],
+      "members":{
+        "SecurityControlId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ID of the security control to retrieve the definition for. This field doesn’t accept an Amazon Resource Name (ARN). </p>",
+          "location":"querystring",
+          "locationName":"SecurityControlId"
+        }
+      }
+    },
+    "GetSecurityControlDefinitionResponse":{
+      "type":"structure",
+      "required":["SecurityControlDefinition"],
+      "members":{
+        "SecurityControlDefinition":{"shape":"SecurityControlDefinition"}
+      }
+    },
     "IcmpTypeCode":{
       "type":"structure",
       "members":{
@@ -16734,9 +17464,49 @@
       "documentation":"<p>The insight results returned by the <code>GetInsightResults</code> operation.</p>"
     },
     "Integer":{"type":"integer"},
+    "IntegerConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"Integer",
+          "documentation":"<p> The Security Hub default value for a control parameter that is an integer. </p>"
+        },
+        "Min":{
+          "shape":"Integer",
+          "documentation":"<p> The minimum valid value for a control parameter that is an integer. </p>"
+        },
+        "Max":{
+          "shape":"Integer",
+          "documentation":"<p> The maximum valid value for a control parameter that is an integer. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is an integer. </p>"
+    },
     "IntegerList":{
       "type":"list",
       "member":{"shape":"Integer"}
+    },
+    "IntegerListConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"IntegerList",
+          "documentation":"<p> The Security Hub default value for a control parameter that is a list of integers. </p>"
+        },
+        "Min":{
+          "shape":"Integer",
+          "documentation":"<p> The minimum valid value for a control parameter that is a list of integers. </p>"
+        },
+        "Max":{
+          "shape":"Integer",
+          "documentation":"<p> The maximum valid value for a control parameter that is a list of integers. </p>"
+        },
+        "MaxItems":{
+          "shape":"Integer",
+          "documentation":"<p> The maximum number of list items that an interger list control parameter can accept. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is a list of integers. </p>"
     },
     "IntegrationType":{
       "type":"string",
@@ -16934,6 +17704,66 @@
         "NextToken":{
           "shape":"NextToken",
           "documentation":"<p> A pagination token for the response. </p>"
+        }
+      }
+    },
+    "ListConfigurationPoliciesRequest":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p> The NextToken value that's returned from a previous paginated <code>ListConfigurationPolicies</code> request where <code>MaxResults</code> was used but the results exceeded the value of that parameter. Pagination continues from the <code>MaxResults</code> was used but the results exceeded the value of that parameter. Pagination continues from the end of the previous response that returned the <code>NextToken</code> value. This value is <code>null</code> when there are no more results to return. </p>",
+          "location":"querystring",
+          "locationName":"NextToken"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p> The maximum number of results that's returned by <code>ListConfigurationPolicies</code> in each page of the response. When this parameter is used, <code>ListConfigurationPolicies</code> returns the specified number of results in a single page and a <code>NextToken</code> response element. You can see the remaining results of the initial request by sending another <code>ListConfigurationPolicies</code> request with the returned <code>NextToken</code> value. A valid range for <code>MaxResults</code> is between 1 and 100. </p>",
+          "location":"querystring",
+          "locationName":"MaxResults"
+        }
+      }
+    },
+    "ListConfigurationPoliciesResponse":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicySummaries":{
+          "shape":"ConfigurationPolicySummaryList",
+          "documentation":"<p> Provides metadata for each of your configuration policies. </p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p> The <code>NextToken</code> value to include in the next <code>ListConfigurationPolicies</code> request. When the results of a <code>ListConfigurationPolicies</code> request exceed <code>MaxResults</code>, this value can be used to retrieve the next page of results. This value is <code>null</code> when there are no more results to return. </p>"
+        }
+      }
+    },
+    "ListConfigurationPolicyAssociationsRequest":{
+      "type":"structure",
+      "members":{
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p> The <code>NextToken</code> value that's returned from a previous paginated <code>ListConfigurationPolicyAssociations</code> request where <code>MaxResults</code> was used but the results exceeded the value of that parameter. Pagination continues from the end of the previous response that returned the <code>NextToken</code> value. This value is <code>null</code> when there are no more results to return. </p>"
+        },
+        "MaxResults":{
+          "shape":"MaxResults",
+          "documentation":"<p> The maximum number of results that's returned by <code>ListConfigurationPolicies</code> in each page of the response. When this parameter is used, <code>ListConfigurationPolicyAssociations</code> returns the specified number of results in a single page and a <code>NextToken</code> response element. You can see the remaining results of the initial request by sending another <code>ListConfigurationPolicyAssociations</code> request with the returned <code>NextToken</code> value. A valid range for <code>MaxResults</code> is between 1 and 100. </p>"
+        },
+        "Filters":{
+          "shape":"AssociationFilters",
+          "documentation":"<p> Options for filtering the <code>ListConfigurationPolicyAssociations</code> response. You can filter by the Amazon Resource Name (ARN) or universally unique identifier (UUID) of a configuration, <code>AssociationType</code>, or <code>AssociationStatus</code>. </p>"
+        }
+      }
+    },
+    "ListConfigurationPolicyAssociationsResponse":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyAssociationSummaries":{
+          "shape":"ConfigurationPolicyAssociationSummaryList",
+          "documentation":"<p> An object that contains the details of each configuration policy association that’s returned in a <code>ListConfigurationPolicyAssociations</code> request. </p>"
+        },
+        "NextToken":{
+          "shape":"NextToken",
+          "documentation":"<p> The <code>NextToken</code> value to include in the next <code>ListConfigurationPolicyAssociations</code> request. When the results of a <code>ListConfigurationPolicyAssociations</code> request exceed <code>MaxResults</code>, this value can be used to retrieve the next page of results. This value is <code>null</code> when there are no more results to return. </p>"
         }
       }
     },
@@ -17548,6 +18378,14 @@
         "Eq":{
           "shape":"Double",
           "documentation":"<p>The equal-to condition to be applied to a single field when querying for findings.</p>"
+        },
+        "Gt":{
+          "shape":"Double",
+          "documentation":"<p> The greater-than condition to be applied to a single field when querying for findings. </p>"
+        },
+        "Lt":{
+          "shape":"Double",
+          "documentation":"<p> The less-than condition to be applied to a single field when querying for findings. </p>"
         }
       },
       "documentation":"<p>A number filter for querying findings.</p>"
@@ -17582,6 +18420,39 @@
       },
       "documentation":"<p>The detected occurrences of sensitive data.</p>"
     },
+    "OrganizationConfiguration":{
+      "type":"structure",
+      "members":{
+        "ConfigurationType":{
+          "shape":"OrganizationConfigurationConfigurationType",
+          "documentation":"<p> Indicates whether the organization uses local or central configuration. </p> <p>If you use local configuration, the Security Hub delegated administrator can set <code>AutoEnable</code> to <code>true</code> and <code>AutoEnableStandards</code> to <code>DEFAULT</code>. This automatically enables Security Hub and default security standards in new organization accounts. These new account settings must be set separately in each Amazon Web Services Region, and settings may be different in each Region. </p> <p> If you use central configuration, the delegated administrator can create configuration policies. Configuration policies can be used to configure Security Hub, security standards, and security controls in multiple accounts and Regions. If you want new organization accounts to use a specific configuration, you can create a configuration policy and associate it with the root or specific organizational units (OUs). New accounts will inherit the policy from the root or their assigned OU. </p>"
+        },
+        "Status":{
+          "shape":"OrganizationConfigurationStatus",
+          "documentation":"<p> Describes whether central configuration could be enabled as the <code>ConfigurationType</code> for the organization. If your <code>ConfigurationType</code> is local configuration, then the value of <code>Status</code> is always <code>ENABLED</code>. </p>"
+        },
+        "StatusMessage":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> Provides an explanation if the value of <code>Status</code> is equal to <code>FAILED</code> when <code>ConfigurationType</code> is equal to <code>CENTRAL</code>. </p>"
+        }
+      },
+      "documentation":"<p> Provides information about the way an organization is configured in Security Hub. </p>"
+    },
+    "OrganizationConfigurationConfigurationType":{
+      "type":"string",
+      "enum":[
+        "CENTRAL",
+        "LOCAL"
+      ]
+    },
+    "OrganizationConfigurationStatus":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "ENABLED",
+        "FAILED"
+      ]
+    },
     "Page":{
       "type":"structure",
       "members":{
@@ -17603,6 +18474,95 @@
     "Pages":{
       "type":"list",
       "member":{"shape":"Page"}
+    },
+    "ParameterConfiguration":{
+      "type":"structure",
+      "required":["ValueType"],
+      "members":{
+        "ValueType":{
+          "shape":"ParameterValueType",
+          "documentation":"<p> Identifies whether a control parameter uses a custom user-defined value or the Security Hub default value. </p>"
+        },
+        "Value":{
+          "shape":"ParameterValue",
+          "documentation":"<p> The current value of a control parameter. </p>"
+        }
+      },
+      "documentation":"<p> An object that provides the current value of a security control parameter and identifies whether it has been customized. </p>"
+    },
+    "ParameterDefinition":{
+      "type":"structure",
+      "required":[
+        "Description",
+        "ConfigurationOptions"
+      ],
+      "members":{
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> Description of a control parameter. </p>"
+        },
+        "ConfigurationOptions":{
+          "shape":"ConfigurationOptions",
+          "documentation":"<p> The options for customizing a control parameter. Customization options vary based on the data type of the parameter. </p>"
+        }
+      },
+      "documentation":"<p> An object that describes a security control parameter and the options for customizing it. </p>"
+    },
+    "ParameterDefinitions":{
+      "type":"map",
+      "key":{"shape":"NonEmptyString"},
+      "value":{"shape":"ParameterDefinition"}
+    },
+    "ParameterValue":{
+      "type":"structure",
+      "members":{
+        "Integer":{
+          "shape":"Integer",
+          "documentation":"<p> A control parameter that is an integer. </p>"
+        },
+        "IntegerList":{
+          "shape":"IntegerList",
+          "documentation":"<p> A control parameter that is a list of integers. </p>"
+        },
+        "Double":{
+          "shape":"Double",
+          "documentation":"<p> A control parameter that is a double. </p>"
+        },
+        "String":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> A control parameter that is a string. </p>"
+        },
+        "StringList":{
+          "shape":"StringList",
+          "documentation":"<p> A control parameter that is a list of strings. </p>"
+        },
+        "Boolean":{
+          "shape":"Boolean",
+          "documentation":"<p> A control parameter that is a boolean. </p>"
+        },
+        "Enum":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> A control parameter that is an enum. </p>"
+        },
+        "EnumList":{
+          "shape":"StringList",
+          "documentation":"<p> A control parameter that is a list of enums. </p>"
+        }
+      },
+      "documentation":"<p> An object that includes the data type of a security control parameter and its current value. </p>",
+      "union":true
+    },
+    "ParameterValueType":{
+      "type":"string",
+      "enum":[
+        "DEFAULT",
+        "CUSTOM"
+      ]
+    },
+    "Parameters":{
+      "type":"map",
+      "key":{"shape":"NonEmptyString"},
+      "value":{"shape":"ParameterConfiguration"}
     },
     "Partition":{
       "type":"string",
@@ -17662,6 +18622,17 @@
         }
       },
       "documentation":"<p>Provides an overview of the patch compliance status for an instance against a selected compliance standard.</p>"
+    },
+    "Policy":{
+      "type":"structure",
+      "members":{
+        "SecurityHub":{
+          "shape":"SecurityHubPolicy",
+          "documentation":"<p> The Amazon Web Service that the configuration policy applies to. </p>"
+        }
+      },
+      "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If you provide a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If you provide a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p>",
+      "union":true
     },
     "PortProbeAction":{
       "type":"structure",
@@ -17973,6 +18944,14 @@
         "Details":{
           "shape":"ResourceDetails",
           "documentation":"<p>Additional details about the resource related to a finding.</p>"
+        },
+        "ApplicationName":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the application that is related to a finding. </p>"
+        },
+        "ApplicationArn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) of the application that is related to a finding. </p>"
         }
       },
       "documentation":"<p>A resource related to a finding.</p>"
@@ -18372,6 +19351,16 @@
         }
       },
       "documentation":"<p>Additional details about a resource related to a finding.</p> <p>To provide the details, use the object that corresponds to the resource type. For example, if the resource type is <code>AwsEc2Instance</code>, then you use the <code>AwsEc2Instance</code> object to provide the details.</p> <p>If the type-specific object does not contain all of the fields you want to populate, then you use the <code>Other</code> object to populate those additional fields.</p> <p>You also use the <code>Other</code> object to populate the details when the selected type does not have a corresponding object.</p>"
+    },
+    "ResourceInUseException":{
+      "type":"structure",
+      "members":{
+        "Message":{"shape":"NonEmptyString"},
+        "Code":{"shape":"NonEmptyString"}
+      },
+      "documentation":"<p> The request was rejected because it conflicts with the resource's availability. For example, you tried to update a security control that's currently in the <code>UPDATING</code> state. </p>",
+      "error":{"httpStatusCode":400},
+      "exception":true
     },
     "ResourceList":{
       "type":"list",
@@ -18872,9 +19861,39 @@
         "SecurityControlStatus":{
           "shape":"ControlStatus",
           "documentation":"<p> The enablement status of a security control in a specific standard. </p>"
+        },
+        "UpdateStatus":{
+          "shape":"UpdateStatus",
+          "documentation":"<p> Identifies whether customizable properties of a security control are reflected in Security Hub findings. A status of <code>READY</code> indicates findings include the current parameter values. A status of <code>UPDATING</code> indicates that all findings may not include the current parameter values. </p>"
+        },
+        "Parameters":{
+          "shape":"Parameters",
+          "documentation":"<p> An object that identifies the name of a control parameter, its current value, and whether it has been customized. </p>"
+        },
+        "LastUpdateReason":{
+          "shape":"AlphaNumericNonEmptyString",
+          "documentation":"<p> The most recent reason for updating the customizable properties of a security control. This differs from the <code>UpdateReason</code> field of the <a href=\"https://docs.aws.amazon.com/securityhub/1.0/APIReference/API_BatchUpdateStandardsControlAssociations.html\"> <code>BatchUpdateStandardsControlAssociations</code> </a> API, which tracks the reason for updating the enablement status of a control. This field accepts alphanumeric characters in addition to white spaces, dashes, and underscores. </p>"
         }
       },
       "documentation":"<p> A security control in Security Hub describes a security best practice related to a specific resource. </p>"
+    },
+    "SecurityControlCustomParameter":{
+      "type":"structure",
+      "members":{
+        "SecurityControlId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ID of the security control. </p>"
+        },
+        "Parameters":{
+          "shape":"Parameters",
+          "documentation":"<p> An object that specifies parameter values for a control in a configuration policy. </p>"
+        }
+      },
+      "documentation":"<p> A list of security controls and control parameter values that are included in a configuration policy. </p>"
+    },
+    "SecurityControlCustomParametersList":{
+      "type":"list",
+      "member":{"shape":"SecurityControlCustomParameter"}
     },
     "SecurityControlDefinition":{
       "type":"structure",
@@ -18910,6 +19929,14 @@
         "CurrentRegionAvailability":{
           "shape":"RegionAvailabilityStatus",
           "documentation":"<p> Specifies whether a security control is available in the current Amazon Web Services Region. </p>"
+        },
+        "CustomizableProperties":{
+          "shape":"CustomizableProperties",
+          "documentation":"<p> Security control properties that you can customize. Currently, only parameter customization is supported for select controls. An empty array is returned for controls that don’t support custom properties. </p>"
+        },
+        "ParameterDefinitions":{
+          "shape":"ParameterDefinitions",
+          "documentation":"<p> An object that provides a security control parameter name, description, and the options for customizing it. This object is excluded for a control that doesn't support custom parameters. </p>"
         }
       },
       "documentation":"<p> Provides metadata for a security control, including its unique standard-agnostic identifier, title, description, severity, availability in Amazon Web Services Regions, and a link to remediation steps. </p>"
@@ -18918,13 +19945,71 @@
       "type":"list",
       "member":{"shape":"SecurityControlDefinition"}
     },
+    "SecurityControlParameter":{
+      "type":"structure",
+      "members":{
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of a </p>"
+        },
+        "Value":{
+          "shape":"TypeList",
+          "documentation":"<p> The current value of a control parameter. </p>"
+        }
+      },
+      "documentation":"<p> A parameter that a security control accepts. </p>"
+    },
+    "SecurityControlParametersList":{
+      "type":"list",
+      "member":{"shape":"SecurityControlParameter"}
+    },
+    "SecurityControlProperty":{
+      "type":"string",
+      "enum":["Parameters"]
+    },
     "SecurityControls":{
       "type":"list",
       "member":{"shape":"SecurityControl"}
     },
+    "SecurityControlsConfiguration":{
+      "type":"structure",
+      "members":{
+        "EnabledSecurityControlIdentifiers":{
+          "shape":"EnabledSecurityControlIdentifierList",
+          "documentation":"<p> A list of security controls that are enabled in the configuration policy. Security Hub disables all other controls (including newly released controls) other than the listed controls. </p>"
+        },
+        "DisabledSecurityControlIdentifiers":{
+          "shape":"DisabledSecurityControlIdentifierList",
+          "documentation":"<p> A list of security controls that are disabled in the configuration policy. Security Hub enables all other controls (including newly released controls) other than the listed controls. </p>"
+        },
+        "SecurityControlCustomParameters":{
+          "shape":"SecurityControlCustomParametersList",
+          "documentation":"<p> A list of security controls and control parameter values that are included in a configuration policy. </p>"
+        }
+      },
+      "documentation":"<p> An object that defines which security controls are enabled in an Security Hub configuration policy. The enablement status of a control is aligned across all of the enabled standards in an account. </p>"
+    },
     "SecurityGroups":{
       "type":"list",
       "member":{"shape":"NonEmptyString"}
+    },
+    "SecurityHubPolicy":{
+      "type":"structure",
+      "members":{
+        "ServiceEnabled":{
+          "shape":"Boolean",
+          "documentation":"<p> Indicates whether Security Hub is enabled in the policy. </p>"
+        },
+        "EnabledStandardIdentifiers":{
+          "shape":"EnabledStandardIdentifierList",
+          "documentation":"<p> A list that defines which security standards are enabled in the configuration policy. </p>"
+        },
+        "SecurityControlsConfiguration":{
+          "shape":"SecurityControlsConfiguration",
+          "documentation":"<p> An object that defines which security controls are enabled in the configuration policy. The enablement status of a control is aligned across all of the enabled standards in an account. </p>"
+        }
+      },
+      "documentation":"<p> An object that defines how Security Hub is configured. The configuration policy includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If you provide a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If you provide a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p>"
     },
     "SensitiveDataDetections":{
       "type":"structure",
@@ -18975,7 +20060,7 @@
       "members":{
         "Product":{
           "shape":"Double",
-          "documentation":"<p>Deprecated. This attribute is being deprecated. Instead of providing <code>Product</code>, provide <code>Original</code>.</p> <p>The native severity as defined by the Amazon Web Services service or integrated partner product that generated the finding.</p>"
+          "documentation":"<p>Deprecated. This attribute isn't included in findings. Instead of providing <code>Product</code>, provide <code>Original</code>.</p> <p>The native severity as defined by the Amazon Web Services service or integrated partner product that generated the finding.</p>"
         },
         "Label":{
           "shape":"SeverityLabel",
@@ -18983,7 +20068,7 @@
         },
         "Normalized":{
           "shape":"Integer",
-          "documentation":"<p>Deprecated. The normalized severity of a finding. This attribute is being deprecated. Instead of providing <code>Normalized</code>, provide <code>Label</code>.</p> <p>If you provide <code>Label</code> and do not provide <code>Normalized</code>, then <code>Normalized</code> is set automatically as follows.</p> <ul> <li> <p> <code>INFORMATIONAL</code> - 0</p> </li> <li> <p> <code>LOW</code> - 1</p> </li> <li> <p> <code>MEDIUM</code> - 40</p> </li> <li> <p> <code>HIGH</code> - 70</p> </li> <li> <p> <code>CRITICAL</code> - 90</p> </li> </ul>"
+          "documentation":"<p>Deprecated. The normalized severity of a finding. Instead of providing <code>Normalized</code>, provide <code>Label</code>.</p> <p>If you provide <code>Label</code> and do not provide <code>Normalized</code>, then <code>Normalized</code> is set automatically as follows.</p> <ul> <li> <p> <code>INFORMATIONAL</code> - 0</p> </li> <li> <p> <code>LOW</code> - 1</p> </li> <li> <p> <code>MEDIUM</code> - 40</p> </li> <li> <p> <code>HIGH</code> - 70</p> </li> <li> <p> <code>CRITICAL</code> - 90</p> </li> </ul>"
         },
         "Original":{
           "shape":"NonEmptyString",
@@ -19302,11 +20387,11 @@
         },
         "UpdatedAt":{
           "shape":"Timestamp",
-          "documentation":"<p> The last time that a control's enablement status in a specified standard was updated. </p>"
+          "documentation":"<p>The last time that a control's enablement status in a specified standard was updated.</p>"
         },
         "UpdatedReason":{
           "shape":"NonEmptyString",
-          "documentation":"<p> The reason for updating the control's enablement status in a specified standard. </p>"
+          "documentation":"<p>The reason for updating a control's enablement status in a specified standard.</p>"
         },
         "StandardsControlTitle":{
           "shape":"NonEmptyString",
@@ -19457,6 +20542,75 @@
       "type":"list",
       "member":{"shape":"StandardsSubscription"}
     },
+    "StartConfigurationPolicyAssociationRequest":{
+      "type":"structure",
+      "required":[
+        "ConfigurationPolicyIdentifier",
+        "Target"
+      ],
+      "members":{
+        "ConfigurationPolicyIdentifier":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or universally unique identifier (UUID) of the configuration policy. </p>"
+        },
+        "Target":{
+          "shape":"Target",
+          "documentation":"<p> The identifier of the target account, organizational unit, or the root to associate with the specified configuration. </p>"
+        }
+      }
+    },
+    "StartConfigurationPolicyAssociationResponse":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The UUID of the configuration policy. </p>"
+        },
+        "TargetId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The identifier of the target account, organizational unit, or the organization root with which the configuration is associated. </p>"
+        },
+        "TargetType":{
+          "shape":"TargetType",
+          "documentation":"<p> Indicates whether the target is an Amazon Web Services account, organizational unit, or the organization root. </p>"
+        },
+        "AssociationType":{
+          "shape":"AssociationType",
+          "documentation":"<p> Indicates whether the association between the specified target and the configuration was directly applied by the Security Hub delegated administrator or inherited from a parent. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy association was last updated. </p>"
+        },
+        "AssociationStatus":{
+          "shape":"ConfigurationPolicyAssociationStatus",
+          "documentation":"<p> The current status of the association between the specified target and the configuration. </p>"
+        },
+        "AssociationStatusMessage":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> An explanation for a <code>FAILED</code> value for <code>AssociationStatus</code>. </p>"
+        }
+      }
+    },
+    "StartConfigurationPolicyDisassociationRequest":{
+      "type":"structure",
+      "required":["ConfigurationPolicyIdentifier"],
+      "members":{
+        "Target":{
+          "shape":"Target",
+          "documentation":"<p> The identifier of the target account, organizational unit, or the root to disassociate from the specified configuration. </p>"
+        },
+        "ConfigurationPolicyIdentifier":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or universally unique identifier (UUID) of the configuration policy. </p>"
+        }
+      }
+    },
+    "StartConfigurationPolicyDisassociationResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
     "StatelessCustomActionDefinition":{
       "type":"structure",
       "members":{
@@ -19517,6 +20671,24 @@
       "type":"list",
       "member":{"shape":"StatusReason"}
     },
+    "StringConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Security Hub default value for a control parameter that is a string. </p>"
+        },
+        "Re2Expression":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> An RE2 regular expression that Security Hub uses to validate a user-provided control parameter string. </p>"
+        },
+        "ExpressionDescription":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the RE2 regular expression. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is a string. </p>"
+    },
     "StringFilter":{
       "type":"structure",
       "members":{
@@ -19549,6 +20721,28 @@
     "StringList":{
       "type":"list",
       "member":{"shape":"NonEmptyString"}
+    },
+    "StringListConfigurationOptions":{
+      "type":"structure",
+      "members":{
+        "DefaultValue":{
+          "shape":"StringList",
+          "documentation":"<p> The Security Hub default value for a control parameter that is a list of strings. </p>"
+        },
+        "Re2Expression":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> An RE2 regular expression that Security Hub uses to validate a user-provided list of strings for a control parameter. </p>"
+        },
+        "MaxItems":{
+          "shape":"Integer",
+          "documentation":"<p> The maximum number of list items that a string list control parameter can accept. </p>"
+        },
+        "ExpressionDescription":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the RE2 regular expression. </p>"
+        }
+      },
+      "documentation":"<p> The options for customizing a security control parameter that is a list of strings. </p>"
     },
     "TagKey":{
       "type":"string",
@@ -19596,6 +20790,32 @@
     "TagValue":{
       "type":"string",
       "max":256
+    },
+    "Target":{
+      "type":"structure",
+      "members":{
+        "AccountId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Web Services account ID of the target account. </p>"
+        },
+        "OrganizationalUnitId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The organizational unit ID of the target organizational unit. </p>"
+        },
+        "RootId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ID of the organization root. </p>"
+        }
+      },
+      "documentation":"<p> The target account, organizational unit, or the root that is associated with an Security Hub configuration. The configuration can be a configuration policy or self-managed behavior. </p>",
+      "union":true
+    },
+    "TargetType":{
+      "type":"string",
+      "enum":[
+        "ACCOUNT",
+        "ORGANIZATIONAL_UNIT"
+      ]
     },
     "Threat":{
       "type":"structure",
@@ -19713,6 +20933,28 @@
     "UnprocessedAutomationRulesList":{
       "type":"list",
       "member":{"shape":"UnprocessedAutomationRule"}
+    },
+    "UnprocessedConfigurationPolicyAssociation":{
+      "type":"structure",
+      "members":{
+        "ConfigurationPolicyAssociationIdentifiers":{
+          "shape":"ConfigurationPolicyAssociation",
+          "documentation":"<p> Configuration policy association identifiers that were specified in a <code>BatchGetConfigurationPolicyAssociations</code> request but couldn’t be processed due to an error. </p>"
+        },
+        "ErrorCode":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> An HTTP status code that identifies why the configuration policy association failed. </p>"
+        },
+        "ErrorReason":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> A string that identifies why the configuration policy association failed. </p>"
+        }
+      },
+      "documentation":"<p> An array of configuration policy associations, one for each configuration policy association identifier, that was specified in a <code>BatchGetConfigurationPolicyAssociations</code> request but couldn’t be processed due to an error. </p>"
+    },
+    "UnprocessedConfigurationPolicyAssociationList":{
+      "type":"list",
+      "member":{"shape":"UnprocessedConfigurationPolicyAssociation"}
     },
     "UnprocessedErrorCode":{
       "type":"string",
@@ -19897,6 +21139,67 @@
       "max":100,
       "min":1
     },
+    "UpdateConfigurationPolicyRequest":{
+      "type":"structure",
+      "required":["Identifier"],
+      "members":{
+        "Identifier":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or universally unique identifier (UUID) of the configuration policy. </p>",
+          "location":"uri",
+          "locationName":"Identifier"
+        },
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "UpdatedReason":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The reason for updating the configuration policy. </p>"
+        },
+        "ConfigurationPolicy":{
+          "shape":"Policy",
+          "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If you provide a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If you provide a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p> <p>When updating a configuration policy, provide a complete list of standards that you want to enable and a complete list of controls that you want to enable or disable. The updated configuration replaces the current configuration.</p>"
+        }
+      }
+    },
+    "UpdateConfigurationPolicyResponse":{
+      "type":"structure",
+      "members":{
+        "Arn":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The ARN of the configuration policy. </p>"
+        },
+        "Id":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The UUID of the configuration policy. </p>"
+        },
+        "Name":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The name of the configuration policy. </p>"
+        },
+        "Description":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The description of the configuration policy. </p>"
+        },
+        "UpdatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was last updated. </p>"
+        },
+        "CreatedAt":{
+          "shape":"Timestamp",
+          "documentation":"<p> The date and time, in UTC and ISO 8601 format, that the configuration policy was created. </p>"
+        },
+        "ConfigurationPolicy":{
+          "shape":"Policy",
+          "documentation":"<p> An object that defines how Security Hub is configured. It includes whether Security Hub is enabled or disabled, a list of enabled security standards, a list of enabled or disabled security controls, and a list of custom parameter values for specified controls. If the request included a list of security controls that are enabled in the configuration policy, Security Hub disables all other controls (including newly released controls). If the request included a list of security controls that are disabled in the configuration policy, Security Hub enables all other controls (including newly released controls). </p>"
+        }
+      }
+    },
     "UpdateFindingAggregatorRequest":{
       "type":"structure",
       "required":[
@@ -19997,15 +21300,42 @@
       "members":{
         "AutoEnable":{
           "shape":"Boolean",
-          "documentation":"<p>Whether to automatically enable Security Hub for new accounts in the organization.</p> <p>By default, this is <code>false</code>, and new accounts are not added automatically.</p> <p>To automatically enable Security Hub for new accounts, set this to <code>true</code>.</p>"
+          "documentation":"<p>Whether to automatically enable Security Hub in new member accounts when they join the organization.</p> <p>If set to <code>true</code>, then Security Hub is automatically enabled in new accounts. If set to <code>false</code>, then Security Hub isn't enabled in new accounts automatically. The default value is <code>false</code>.</p> <p>If the <code>ConfigurationType</code> of your organization is set to <code>CENTRAL</code>, then this field is set to <code>false</code> and can't be changed in the home Region and linked Regions. However, in that case, the delegated administrator can create a configuration policy in which Security Hub is enabled and associate the policy with new organization accounts.</p>"
         },
         "AutoEnableStandards":{
           "shape":"AutoEnableStandards",
-          "documentation":"<p>Whether to automatically enable Security Hub <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html\">default standards</a> for new member accounts in the organization.</p> <p>By default, this parameter is equal to <code>DEFAULT</code>, and new member accounts are automatically enabled with default Security Hub standards.</p> <p>To opt out of enabling default standards for new member accounts, set this parameter equal to <code>NONE</code>.</p>"
-        }
+          "documentation":"<p>Whether to automatically enable Security Hub <a href=\"https://docs.aws.amazon.com/securityhub/latest/userguide/securityhub-standards-enable-disable.html\">default standards</a> in new member accounts when they join the organization.</p> <p>The default value of this parameter is equal to <code>DEFAULT</code>.</p> <p>If equal to <code>DEFAULT</code>, then Security Hub default standards are automatically enabled for new member accounts. If equal to <code>NONE</code>, then default standards are not automatically enabled for new member accounts.</p> <p>If the <code>ConfigurationType</code> of your organization is set to <code>CENTRAL</code>, then this field is set to <code>NONE</code> and can't be changed in the home Region and linked Regions. However, in that case, the delegated administrator can create a configuration policy in which specific security standards are enabled and associate the policy with new organization accounts.</p>"
+        },
+        "OrganizationConfiguration":{"shape":"OrganizationConfiguration"}
       }
     },
     "UpdateOrganizationConfigurationResponse":{
+      "type":"structure",
+      "members":{
+      }
+    },
+    "UpdateSecurityControlRequest":{
+      "type":"structure",
+      "required":[
+        "SecurityControlId",
+        "Parameters"
+      ],
+      "members":{
+        "SecurityControlId":{
+          "shape":"NonEmptyString",
+          "documentation":"<p> The Amazon Resource Name (ARN) or ID of the control to update. </p>"
+        },
+        "Parameters":{
+          "shape":"Parameters",
+          "documentation":"<p> An object that specifies which security control parameters to update. </p>"
+        },
+        "LastUpdateReason":{
+          "shape":"AlphaNumericNonEmptyString",
+          "documentation":"<p> The most recent reason for updating the properties of the security control. This field accepts alphanumeric characters in addition to white spaces, dashes, and underscores. </p>"
+        }
+      }
+    },
+    "UpdateSecurityControlResponse":{
       "type":"structure",
       "members":{
       }
@@ -20052,6 +21382,13 @@
       "type":"structure",
       "members":{
       }
+    },
+    "UpdateStatus":{
+      "type":"string",
+      "enum":[
+        "READY",
+        "UPDATING"
+      ]
     },
     "VerificationState":{
       "type":"string",

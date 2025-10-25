@@ -227,6 +227,7 @@ public:
         , EarlyFinished(false)
         , Terminated(false)
         , Aborted(false)
+        , Flushed(false)
     {}
     void AddPushBytes(ui64 bytes);
     void UpdatePopBytes(ui64 bytes);
@@ -237,7 +238,7 @@ public:
     void Terminate();
     bool IsTerminatedOrAborted();
     void AbortChannel(const TString& message);
-    void HandleUpdate(bool earlyFinished, ui64 popBytes);
+    void HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes);
 
     TChannelInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -256,6 +257,7 @@ public:
     TInstant WaitTimestamp;
     ui64 GenMajor = 0;
     std::atomic<bool> Aborted;
+    std::atomic<bool> Flushed;
 };
 
 struct TOutputDescriptorCompare {
@@ -542,6 +544,7 @@ public:
         ui64 maxInflightBytes, ui64 minInflightBytes)
         : ActorSystem(actorSystem), MaxInflightBytes(maxInflightBytes), MinInflightBytes(minInflightBytes)
     {
+        LocalBufferBytes = counters->GetCounter("LocalBuffer/Bytes", true);
         LocalBufferCount = counters->GetCounter("LocalBuffer/Count", false);
     }
     ~TLocalBufferRegistry();
@@ -553,6 +556,7 @@ public:
     const ui64 MinInflightBytes;
     std::unordered_map<TChannelInfo, std::weak_ptr<TLocalBuffer>> LocalBuffers;
     mutable std::mutex Mutex;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr LocalBufferCount;
 };
 

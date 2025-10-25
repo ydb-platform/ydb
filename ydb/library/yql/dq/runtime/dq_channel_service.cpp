@@ -48,6 +48,7 @@ void TLocalBuffer::Push(TDataChunk&& data) {
     PushStats.Rows += data.Rows;
     PushStats.Bytes += data.Bytes;
     InflightBytes += data.Bytes;
+    // *Registry->LocalBufferBytes += data.Bytes;
 
     std::lock_guard lock(Mutex);
 
@@ -198,13 +199,7 @@ void TOutputDescriptor::PushToWaitQueue(TDataChunk&& data) {
 }
 
 bool TOutputDescriptor::IsFlushed() {
-    std::lock_guard lock(Mutex);
-    if (PushBytes.load() > PopBytes.load()) {
-        NeedToNotifyOutput = true;
-        return false;
-    } else {
-        return true;
-    }
+    return Flushed.load();
 }
 
 void TOutputDescriptor::Terminate() {
@@ -221,13 +216,24 @@ void TOutputDescriptor::AbortChannel(const TString& message) {
     }
 }
 
-void TOutputDescriptor::HandleUpdate(bool earlyFinished, ui64 popBytes) {
+void TOutputDescriptor::HandleUpdate(bool flushed, bool earlyFinished, ui64 popBytes) {
     if (!IsTerminatedOrAborted()) {
         if (popBytes) {
             std::lock_guard lock(Mutex);
             UpdatePopBytes(popBytes);
         }
-        if (earlyFinished && !EarlyFinished.exchange(true)) {
+
+        bool notify = false;
+
+        if (flushed) {
+            notify |= !Flushed.exchange(true);
+        }
+
+        if (earlyFinished) {
+            notify |= !EarlyFinished.exchange(true);
+        }
+
+        if (notify) {
             ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
         }
     }
@@ -768,6 +774,8 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
         }
         if (item->Descriptor->GenMajor != GenMajor) {
             item->Descriptor->AbortChannel(TStringBuilder() << "By Outdated GenMajor1 " << item->Descriptor->GenMajor << " vs " << GenMajor);
+        } else if (item->Data.Finished) {
+            item->Descriptor->HandleUpdate(true, false, 0);
         }
         deltaBytes += item->Data.Bytes;
         *OutputBufferInflightBytes -= item->Data.Bytes;
@@ -812,10 +820,11 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelAckV2::TPtr& ev) {
             } else if (status == NYql::NDqProto::TEvChannelAckV2::ERROR) {
                 item->Descriptor->AbortChannel("By Remote Side");
             } else {
+                auto flushed = item->Data.Finished;
                 auto earlyFinished = record.GetEarlyFinished();
                 auto popBytes = record.GetPopBytes();
-                if (earlyFinished || popBytes) {
-                    item->Descriptor->HandleUpdate(earlyFinished, popBytes);
+                if (flushed || earlyFinished || popBytes) {
+                    item->Descriptor->HandleUpdate(flushed, earlyFinished, popBytes);
                 }
             }
         }
@@ -858,7 +867,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
 
     auto it = OutputDescriptors.find(info);
     if (it == OutputDescriptors.end()) {
-        LOG_D("UPDATE IGNORED (unknown) Info={" << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId << "}, " << NodeActorId << " from peer " << ev->Sender);
+        // LOG_D("UPDATE IGNORED (unknown) Info={" << info.ChannelId << ", " << info.OutputActorId << ", " << info.InputActorId << "}, " << NodeActorId << " from peer " << ev->Sender);
         return;
     }
 
@@ -870,7 +879,7 @@ void TNodeState::Handle(TEvDqCompute::TEvChannelUpdateV2::TPtr& ev) {
             auto earlyFinished = record.GetEarlyFinished();
             auto popBytes = record.GetPopBytes();
             if (earlyFinished || popBytes) {
-                descriptor->HandleUpdate(earlyFinished, popBytes);
+                descriptor->HandleUpdate(false, earlyFinished, popBytes);
             }
         }
     }

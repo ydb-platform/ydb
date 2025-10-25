@@ -28,24 +28,36 @@ The information about each operation is saved to the audit log as a separate eve
 || Attribute | Description ||
 || **Common attributes** | > ||
 || `subject` | Event source SID (`<login>@<subsystem>` format). Unless mandatory authentication is enabled, the attribute will be set to `{none}`.<br/>Required. ||
-|| `operation` | Names of operations or actions are similar to the YQL syntax (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
+|| `sanitized_token` | A partially masked authentication token used to link related events while keeping the original credentials hidden. If authentication was not performed, the value will be `{none}`.<br/>Optional. ||
+|| `operation` | Operation name (for example, `ALTER DATABASE`, `CREATE TABLE`).<br/>Required. ||
 || `status` | Operation completion status.<br/>Acceptable values:<ul><li>`SUCCESS`: The operation completed successfully.</li><li>`ERROR`: The operation failed.</li><li>`IN-PROCESS`: The operation is in progress.</li></ul>Required. ||
 || `reason` | Error message.<br/>Optional. ||
-|| `component` | Name of the {{ ydb-short-name }} component that generated the event (for example, `schemeshard`).<br/>Optional. ||
+|| `component` | Name of the {{ ydb-short-name }} component that generated the event. Common values include: `schemeshard`, `grpc-proxy`, `grpc-conn`, `grpc-login`, `web-login`, `console`, `bsc`, `monitoring`, `audit`, `distconf`, `ymq`.<br/>Optional. ||
 || `request_id` | Unique ID of the request that invoked the operation. You can use the `request_id` to differentiate events related to different operations and link the events together to build a single audit-related operation context.<br/>Optional. ||
 || `remote_address` | The IP of the client that delivered the request.<br/>Optional. ||
 || `detailed_status` | The status delivered by a {{ ydb-short-name }} component (for example, `StatusAccepted`, `StatusInvalidParameter`, `StatusNameConflict`).<br/>Optional. ||
-|| **Ownership and permission attributes** | > ||
+|| `cloud_id` | Cloud identifier of the {{ ydb-short-name }} database.<br/>Optional. ||
+|| `folder_id` | Folder identifier of the {{ ydb-short-name }} database.<br/>Optional. ||
+|| `resource_id` | Resource identifier of the {{ ydb-short-name }} database.<br/>Optional. ||
+|| `database` | Database path (for example, `/my_dir/db`).<br/>Optional. ||
+|| **Attributes of the SchemeShard component** | > ||
 || `new_owner` | The SID of the new owner of the object when ownership is transferred. <br/>Optional. ||
 || `acl_add` | List of added permissions in [short notation](./short-access-control-notation.md) (for example, `[+R:someuser]`).<br/>Optional. ||
 || `acl_remove` | List of revoked permissions in [short notation](./short-access-control-notation.md) (for example, `[-R:someuser]`).<br/>Optional. ||
-|| **Custom attributes** | > ||
 || `user_attrs_add` | List of custom attributes added when creating objects or updating attributes (for example, `[attr_name1: A, attr_name2: B]`).<br/>Optional. ||
 || `user_attrs_remove` | List of custom attributes removed when creating objects or updating attributes (for example, `[attr_name1, attr_name2]`).<br/>Optional. ||
-|| **Attributes of the SchemeShard component** | > ||
 || `tx_id` | Unique transaction ID. Similarly to `request_id`, this ID can be used to differentiate events related to different operations.<br/>Required. ||
-|| `database` | Database path (for example, `/my_dir/db`).<br/>Required. ||
 || `paths` | List of paths in the database that are changed by the operation (for example, `[/my_dir/db/table-a, /my_dir/db/table-b]`).<br/>Required. ||
+|| **Attributes of the gRPC proxy component** | > ||
+|| `grpc_method` | Fully qualified RPC method that triggered the request (for example, `Ydb.Table.V1.TableService/AlterTable`).<br/>Optional. ||
+|| `start_time` | ISO 8601 timestamp when request processing started.<br/>Required. ||
+|| `end_time` | ISO 8601 timestamp describing when request finished.<br/>Required. ||
+|| `request` | Textual representation of the RPC payload that was sent to {{ ydb-short-name }}. Large requests may be truncated.<br/>Optional. ||
+|| **Attributes of the monitoring service** | > ||
+|| `method` | HTTP method of the request (for example, `POST`).<br/>Required. ||
+|| `url` | Requested URL path.<br/>Required. ||
+|| `params` | Query string parameters that accompanied the HTTP request.<br/>Optional. ||
+|| `body` | HTTP request body. Over 2MB - truncated.<br/>Optional. ||
 |#
 
 ## Enabling audit log {#enabling-audit-log}
@@ -72,6 +84,52 @@ audit_config:
 | `unified_agent_backend` | Stream the audit log to the Unified Agent. In addition, you need to define the `uaclient_config` section in the [cluster configuration](../reference/configuration/index.md).</ul>Optional. |
 | `log_name` | The session metadata delivered with the message. Using the metadata, you can redirect the log stream to one or more child channels based on the condition: `_log_name: "session_meta_log_name"`.<br/>Optional. |
 | `stderr_backend` | Forward the audit log to the standard error stream (`stderr`).</ul>Optional. |
+| `log_class_config` | Each entry lets you select a log class, enable or disable logging for |
+| `log_class_config.log_class` | Selects the request class to configure. Uses values from the [log classes](#log-classes) list.<br/>Optional (defaults to `Default`). |
+| `log_class_config.enable_logging` | Enables audit event emission for the selected log class.<br/>Optional. |
+| `log_class_config.exclude_account_type` | Array of account type (`Anonymous`, `User`, `Service`, `ServiceImpersonatedFromUser`) that should exclude events even if logging is enabled.<br/>Optional. |
+| `log_class_config.log_phase` | Array of request [processing phases to log](#log-phases).<br/>Optional. |
+| `unified_agent_backend.log_json_envelope` | Same as `stderr_backend.log_json_envelope`, but applied to the Unified Agent destination.<br/>Optional. |
+| `heartbeat` | Configures periodic heartbeat events emitted by the `AuditHeartbeat` log class. This key accepts the nested fields listed below.<br/>Optional. |
+| `heartbeat.interval_seconds` | Interval in seconds between heartbeat records.<br/>Optional. |
+
+Heartbeat events help you monitor the health of the audit logging subsystem. They let you set alerts for missing audit events without triggering false positives on workloads that legitimately stay idle for extended periods.
+
+When a JSON envelope is configured, each audit event is substituted into the template before being delivered to the backend. The following configuration produces the static envelope expected by observability pipelines that require a `destination` field and an `event.text_data` payload:
+
+```yaml
+audit_config:
+  stderr_backend:
+    format: JSON
+    log_json_envelope: '{ "destination": "topicname", "event": { "text_data": "%message%" } }'
+```
+
+### Log classes {#log-classes}
+The supported log classes cover different API surfaces:
+
+| Log class | Value | Description |
+| --- | --- | --- |
+| `ClusterAdmin` | `1` | Cluster operations. |
+| `DatabaseAdmin` | `2` | Database operations. |
+| `Login` | `3` | Login operations. |
+| `NodeRegistration` | `4` | Node registration. |
+| `Ddl` | `5` | Ddl operations. |
+| `Dml` | `6` | Dml operations. |
+| `Operations` | `7` | Operations ?. |
+| `ExportImport` | `8` | Export and import operations. |
+| `Acl` | `9` | Access control operations. |
+| `AuditHeartbeat` | `10` | Synthetic heartbeat messages that confirm audit logging remains operational. |
+| `Default` | `1000` | Default settings for any component that doesn't have a configuration entry. |
+
+### Log phases {#log-phases}
+The log phases are defined as follows:
+
+| Log phase | Description |
+| --- | --- |
+| `Received` | Event was received. |
+| `Completed` | Event processing is complete. |
+
+### Config samples {#config-samples}
 
 Sample configuration that saves the audit log text to `/var/log/ydb-audit.log`:
 
@@ -80,6 +138,10 @@ audit_config:
   file_backend:
     format: TXT
     file_path: "/var/log/ydb-audit.log"
+  log_class_config:
+    - log_class: Default
+      enable_logging: true
+      log_phase: [Received, Completed]
 ```
 
 Sample configuration that saves the audit log text to Yandex Unified Agent with the `audit` label and outputs it to `stderr` in JSON format:
@@ -91,6 +153,16 @@ audit_config:
     log_name: audit
   stderr_backend:
     format: JSON
+  log_class_config:
+    - log_class: ClusterAdmin
+      enable_logging: true
+      log_phase: [Received, Completed]
+    - log_class: AuditHeartbeat
+      enable_logging: true
+      log_phase: [Completed]
+      exclude_account_type: [Anonymous]
+  heartbeat:
+    interval_seconds: 60
 ```
 
 ## Examples {#examples}

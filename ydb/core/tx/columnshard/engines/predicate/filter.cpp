@@ -256,8 +256,9 @@ void TRangesBuilder::AddRange(TSerializedTableRange&& range) {
     AFL_VERIFY(leftPrefix <= YdbPK.size());
     AFL_VERIFY(rightPrefix <= YdbPK.size());
 
-    const bool fromInclusive = range.FromInclusive || (leftPrefix != YdbPK.size());
-    const bool toInclusive = range.ToInclusive && (leftPrefix == YdbPK.size());
+    // TODO: figure out why it worked before
+    const bool fromInclusive = range.FromInclusive/* || (leftPrefix != YdbPK.size())*/;
+    const bool toInclusive = range.ToInclusive/* && (leftPrefix == YdbPK.size())*/;
 
     RangesInfo.emplace_back(
         TPredicateInfo(fromInclusive ? NKernels::EOperation::GreaterEqual : NKernels::EOperation::Greater, leftPrefix, BatchBuilder.Rows() - 2),

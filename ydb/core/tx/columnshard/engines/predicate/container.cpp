@@ -136,4 +136,30 @@ TConclusion<TPredicateContainer> TPredicateContainer::BuildPredicateTo(std::opti
     }
 }
 
+std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> TPredicateContainer::FindFirstIncluded(
+    NArrow::NMerger::TRWSortableBatchPosition& begin) const {
+    AFL_VERIFY(IsForwardInterval());
+    AFL_VERIFY(begin.GetRecordsCount());
+
+    if (!Object) {
+        return NArrow::NMerger::TSortableBatchPosition::TFoundPosition(begin.GetPosition(), std::partial_ordering::equivalent);
+    }
+
+    return NArrow::NMerger::TSortableBatchPosition::FindBound(
+        begin, begin.GetPosition(), begin.GetRecordsCount() - 1, Object->Batch, !Object->IsInclusive());
+}
+
+std::optional<NArrow::NMerger::TSortableBatchPosition::TFoundPosition> TPredicateContainer::FindFirstExcluded(
+    NArrow::NMerger::TRWSortableBatchPosition& begin) const {
+    AFL_VERIFY(IsBackwardInterval());
+    AFL_VERIFY(begin.GetRecordsCount());
+
+    if (!Object) {
+        return std::nullopt;
+    }
+
+    return NArrow::NMerger::TSortableBatchPosition::FindBound(
+        begin, begin.GetPosition(), begin.GetRecordsCount() - 1, Object->Batch, Object->IsInclusive());
+}
+
 }   // namespace NKikimr::NOlap

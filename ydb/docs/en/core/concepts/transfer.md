@@ -67,9 +67,3 @@ Different types of errors can occur during the transfer process:
 
 To resume a transfer operation, eliminate the cause of the error and execute the `ALTER TRANSFER` command. For example, if the error was in the lambda function, change the lambda function. If the error is not related to the transfer configuration, for example, missing read permissions, then after eliminating the cause of the error, the transfer must be restarted by [temporarily stopping](#pause-and-resume) and then [resuming](#pause-and-resume) its operation.
 
-## See Also
-
-* [CREATE TRANSFER](../yql/reference/syntax/create-transfer.md)
-* [ALTER TRANSFER](../yql/reference/syntax/alter-transfer.md)
-* [DROP TRANSFER](../yql/reference/syntax/drop-transfer.md)
-* [{#T}](../recipes/transfer/index.md)

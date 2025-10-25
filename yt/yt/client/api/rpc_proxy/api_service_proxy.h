@@ -221,6 +221,13 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteTableFragment,
         .SetStreamingEnabled(true));
 
+    // Distributed file client
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PingDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, FinishDistributedWriteFileSession);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteFileFragment,
+        .SetStreamingEnabled(true));
+
     // Shuffle service
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, StartShuffle);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, WriteShuffleData,

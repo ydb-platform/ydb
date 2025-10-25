@@ -96,6 +96,7 @@ public:
     IYtflowIntegration* GetYtflowIntegration() override;
     IYtflowOptimization* GetYtflowOptimization() override;
     NLayers::ILayersIntegrationPtr GetLayersIntegration() const override;
+    bool IsFullCaptureReady() override;
 
 protected:
     THolder<IGraphTransformer> DefConstraintTransformer_;

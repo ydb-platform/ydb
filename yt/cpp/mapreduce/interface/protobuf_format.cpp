@@ -1102,18 +1102,29 @@ NTi::TTypePtr CreateStruct(TStringBuf fieldName, TVector<TMember> members)
 
 TMaybe<TVector<TString>> InferColumnFilter(const ::google::protobuf::Descriptor& descriptor)
 {
-    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor& field) {
-        return GetFieldOptions(&field).Type == EProtobufType::OtherColumns;
+    auto isOtherColumns = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).Type == EProtobufType::OtherColumns;
+    };
+    auto isEmbeddedColumn = [] (const ::google::protobuf::FieldDescriptor* field) {
+        return GetFieldOptions(field).SerializationMode == EProtobufSerializationMode::Embedded;
     };
 
     TVector<TString> result;
     result.reserve(descriptor.field_count());
     for (int i = 0; i < descriptor.field_count(); ++i) {
-        const auto& field = *descriptor.field(i);
+        auto field = descriptor.field(i);
         if (isOtherColumns(field)) {
             return {};
         }
-        result.push_back(GetColumnName(field));
+        if (isEmbeddedColumn(field) && field->message_type() != nullptr) {
+            auto embeddedFilter = InferColumnFilter(*field->message_type());
+            if (!embeddedFilter) {
+                return {};
+            }
+            result.insert(result.end(), embeddedFilter->begin(), embeddedFilter->end());
+        } else {
+            result.push_back(GetColumnName(*field));
+        }
     }
     return result;
 }

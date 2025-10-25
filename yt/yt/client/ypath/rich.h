@@ -180,6 +180,9 @@ public:
     // "access_method"
     std::optional<TString> GetAccessMethod() const;
 
+    // "input_query"
+    std::optional<TString> GetInputQuery() const;
+
 private:
     TYPath Path_;
     NYTree::IAttributeDictionaryPtr Attributes_;

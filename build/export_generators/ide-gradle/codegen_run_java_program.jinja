@@ -23,14 +23,25 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
     }
     classpath = files(classpaths)
 {%-            endfor -%}
+{%-        endif -%}
+
+{%-        set run_args = run.args|reject('startsWith', '-D')|reject('startsWith', '-X') %}
+{%-        set run_jvm_args = run.args|reject('in', run_args) -%}
+{%-        if run_jvm_args|length %}
+
+    jvmArgs = listOf(
+{%-            for run_jvm_arg in run_jvm_args %}
+        "{{ run_jvm_arg }}",
+{%-            endfor %}
+    )
 {%-        endif %}
 
-    mainClass.set("{{ run.args[0] }}")
-{%-        if run.args|length > 1 %}
+    mainClass.set("{{ run_args[0] }}")
+{%-        if run_args|length > 1 %}
 
     args = listOf(
-{%-            for arg in run.args -%}
-{%-                if not loop.first %}
+{%-            for arg in run_args -%}
+{%-                if not loop.first -%}
 {%-                    if (run.out_dir|select("eq", arg)|length) or (run.out_dir[0] == '/' and run.out_dir|select("in", arg)|length) or (run.out|select("eq", arg)|length) or (run.out[0] == '/' and run.out|select("in", arg)|length) -%}
 {%-                        if proto_template %}
         {{ PatchGeneratedProto(arg) }},

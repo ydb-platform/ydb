@@ -99,6 +99,8 @@ private:
                 RETURN_IF_NOT_SUCCESS(value.get(v));
                 return v.raw_json();
             }
+            case simdjson::ondemand::json_type::unknown:
+                return TConclusionStatus::Fail("unknown value type");
         }
     }
 
@@ -167,6 +169,8 @@ private:
                 }
                 break;
             }
+            case simdjson::ondemand::json_type::unknown:
+                return TConclusionStatus::Fail("unknown value type");
         }
 
         return TConclusionStatus::Success();

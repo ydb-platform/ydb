@@ -629,6 +629,10 @@ public:
         return State_->YtflowOptimization_.Get();
     }
 
+    bool IsFullCaptureReady() override {
+        return State_->FullCapture_ ? State_->FullCapture_->IsReady() : false;
+    }
+
 private:
     static void WriteColumns(NYson::TYsonWriter& writer, TExprBase columns) {
         if (auto maybeList = columns.Maybe<TExprList>()) {

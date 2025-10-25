@@ -10,6 +10,8 @@
 # distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
+from functools import lru_cache
+
 from s3transfer.compat import accepts_kwargs
 from s3transfer.exceptions import InvalidSubscriberMethodError
 
@@ -28,6 +30,7 @@ class BaseSubscriber:
         return super().__new__(cls)
 
     @classmethod
+    @lru_cache()
     def _validate_subscriber_methods(cls):
         for subscriber_type in cls.VALID_SUBSCRIBER_TYPES:
             subscriber_method = getattr(cls, 'on_' + subscriber_type)

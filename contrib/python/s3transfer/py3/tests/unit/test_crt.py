@@ -54,7 +54,7 @@ def mock_s3_crt_client():
 @pytest.fixture
 def mock_get_recommended_throughput_target_gbps():
     with mock.patch(
-        's3transfer.crt.get_recommended_throughput_target_gbps'
+        'awscrt.s3.get_recommended_throughput_target_gbps'
     ) as mock_get_target_gbps:
         yield mock_get_target_gbps
 

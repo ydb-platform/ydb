@@ -23,18 +23,17 @@ TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<NComm
 
 TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
     const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
-    auto filter =
-        MakeSnapshotFilter(source->GetStageData().GetTable().ToTable(
-                               std::set<ui32>({ (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP, (ui32)IIndexInfo::ESpecialColumn::TX_ID }),
-                               source->GetContext()->GetCommonContext()->GetResolver()),
-            source->GetContext()->GetReadMetadata()->GetRequestSnapshot());
-    if (filter.GetFilteredCount().value_or(source->GetRecordsCount()) != source->GetRecordsCount()) {
-        if (source->AddTxConflict()) {
-            return true;
-        }
-    }
-    source->MutableStageData().AddFilter(filter);
+
+    auto* portionSource = static_cast<TPortionDataSource*>(source.get());
+    auto status = portionSource->GetContext()->GetPortionStateAtScanStart(portionSource->GetPortionInfo());
+    // We may have here only conflicting portions.
+    AFL_VERIFY(status.Conflicting);
+    AFL_VERIFY(source->GetRecordsCount() > 0);
+    source->AddTxConflict();
     return true;
+
+
+    
 }
 
 TConclusion<bool> TDeletionFilter::DoExecuteInplace(

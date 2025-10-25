@@ -14,7 +14,7 @@ from contextlib import contextmanager
 class YDBWrapper:
     """Обертка для работы с YDB с логированием статистики"""
     
-    def __init__(self, config_path: str = None, enable_statistics: bool = None, connection_timeout: int = 10):
+    def __init__(self, config_path: str = None, enable_statistics: bool = None):
         if config_path is None:
             dir = os.path.dirname(__file__)
             config_path = f"{dir}/../../config/ydb_qa_db.ini"
@@ -26,10 +26,17 @@ class YDBWrapper:
         self.database_endpoint = self.config["QA_DB"]["DATABASE_ENDPOINT"]
         self.database_path = self.config["QA_DB"]["DATABASE_PATH"]
         
+        # Таймаут подключения: переменная окружения > INI файл (по умолчанию 15 секунд)
+        self._connection_timeout = int(os.environ.get("YDB_CONNECTION_TIMEOUT", 
+                                                      self.config["QA_DB"].get("CONNECTION_TIMEOUT", "15")))
+        
         # База данных для статистики
         self.stats_endpoint = self.config["STATISTICS_DB"]["DATABASE_ENDPOINT"]
         self.stats_path = self.config["STATISTICS_DB"]["DATABASE_PATH"]
         self.stats_table = self.config["STATISTICS_DB"]["STATISTICS_TABLE"]
+        
+        # Таймаут ожидания завершения записи статистики при закрытии (в секундах)
+        self.stats_shutdown_timeout = int(self.config["STATISTICS_DB"].get("STATISTICS_SHUTDOWN_TIMEOUT", "30"))
         
         # Настройки статистики
         if enable_statistics is None:
@@ -39,19 +46,6 @@ class YDBWrapper:
         self._cluster_version = None
         self._stats_available = None
         self._session_id = str(uuid.uuid4())  # Уникальный ID для сессии выполнения скрипта
-        
-        # Настройка таймаута подключения
-        if connection_timeout == 10:  # Значение по умолчанию
-            env_timeout = os.environ.get("YDB_CONNECTION_TIMEOUT")
-            if env_timeout:
-                try:
-                    self._connection_timeout = int(env_timeout)
-                except ValueError:
-                    self._connection_timeout = 10
-            else:
-                self._connection_timeout = 10
-        else:
-            self._connection_timeout = connection_timeout
         
         # Асинхронная очередь для статистики
         self._stats_queue = queue.Queue()
@@ -69,11 +63,24 @@ class YDBWrapper:
     def _stop_stats_thread(self):
         """Остановка потока статистики"""
         if self._stats_thread and self._stats_thread.is_alive():
+            # Проверяем размер очереди перед остановкой
+            queue_size = self._stats_queue.qsize()
+            if queue_size > 0:
+                self._log("info", f"Stopping statistics thread, waiting for {queue_size} pending operations to complete (timeout: {self.stats_shutdown_timeout}s)")
+            else:
+                self._log("info", f"Stopping statistics thread, no pending operations")
+            
             self._stats_thread_running = False
             # Добавляем сигнал завершения в очередь
             self._stats_queue.put(None)
-            self._stats_thread.join(timeout=5)
-            self._log("info", "Statistics thread stopped")
+            self._stats_thread.join(timeout=self.stats_shutdown_timeout)
+            
+            # Проверяем, остались ли необработанные операции после таймаута
+            remaining = self._stats_queue.qsize()
+            if remaining > 0:
+                self._log("warning", f"Statistics thread stopped with {remaining} operations still pending (timeout reached)")
+            else:
+                self._log("info", "Statistics thread stopped, all operations completed")
     
     def _stats_worker(self):
         """Рабочий поток для записи статистики"""
@@ -235,7 +242,7 @@ class YDBWrapper:
         
         # Подготавливаем данные для асинхронной записи
         stats_data = {
-            'timestamp': datetime.datetime.now(),
+            'timestamp': datetime.datetime.now(datetime.timezone.utc),
             'session_id': self._session_id,
             'operation_type': operation_type,
             'query': query,
@@ -281,6 +288,7 @@ class YDBWrapper:
                 credentials=ydb.credentials_from_env_variables()
             )
             try:
+                # Подключаемся к базе статистики
                 driver.wait(timeout=self._connection_timeout, fail_fast=True)
                 # Создаем таблицу статистики если не существует
                 self._ensure_stats_table_exists(driver)
@@ -329,6 +337,7 @@ class YDBWrapper:
             error_type = type(e).__name__
             error_msg = str(e)
             self._log("warning", f"Failed to log statistics ({error_type}): {error_msg}")
+            self._log("debug", f"Statistics DB endpoint: {self.stats_endpoint}, path: {self.stats_path}")
             
             # Если это ошибка подключения, попробуем сбросить статус доступности
             if "timeout" in error_msg.lower() or "connection" in error_msg.lower() or "endpoint" in error_msg.lower():
@@ -431,6 +440,36 @@ class YDBWrapper:
                     
                     return results
                 
+                elif operation_type == "scan_query_with_metadata":
+                    # Для scan_query_with_metadata используем operation_func
+                    result = operation_func(driver)
+                    
+                    # Если операция вернула кортеж (данные + метаданные), извлекаем количество строк
+                    if isinstance(result, tuple) and len(result) == 2:
+                        data, metadata = result
+                        rows_affected = len(data) if isinstance(data, list) else 0
+                    else:
+                        rows_affected = 0
+                    
+                    end_time = time.time()
+                    duration = end_time - start_time
+                    
+                    self._log("success", f"Scan query with metadata completed", f"Total results: {rows_affected} rows, Duration: {duration:.2f}s")
+                    
+                    # Логируем статистику (используем "scan_query" для обоих типов scan операций)
+                    self._log_statistics(
+                        operation_type="scan_query",
+                        query=query,
+                        duration=duration,
+                        status=status,
+                        rows_affected=rows_affected,
+                        script_name=script_name,
+                        cluster_version=cluster_version,
+                        table_path=table_path
+                    )
+                    
+                    return result
+                
                 else:
                     # Для других операций
                     result = operation_func(driver)
@@ -520,7 +559,7 @@ class YDBWrapper:
             
             return results, column_types
         
-        return self._execute_with_logging("scan_query", operation, query, script_name, None)
+        return self._execute_with_logging("scan_query_with_metadata", operation, query, script_name, None)
     
     def create_table(self, table_path: str, create_sql: str, script_name: str = None):
         """Создание таблицы с логированием"""
@@ -594,36 +633,36 @@ class YDBWrapper:
         return table_path
     
     def get_cluster_info(self) -> Dict[str, Any]:
-        """Получение информации о кластере и статистике"""
+        """Получение информации о кластере и статистике (без создания нового подключения)"""
         try:
-            with self.get_driver() as driver:
-                version = self._cluster_version
-                
-                # Проверяем статус статистики
-                stats_status = "disabled"
-                if self._enable_statistics:
-                    if self._stats_available is None:
-                        self._stats_available = self._check_stats_availability()
-                    
+            # Используем уже полученную версию, не создаём новое подключение
+            version = self._cluster_version
+            
+            # Проверяем статус статистики
+            stats_status = "disabled"
+            if self._enable_statistics:
+                if self._stats_available is not None:
                     stats_status = "enabled_and_available" if self._stats_available else "enabled_but_unavailable"
-                
-                # Получаем информацию о GitHub Action
-                github_info = self._get_github_action_info()
-                
-                return {
-                    'session_id': self._session_id,
-                    'version': version,
-                    'endpoint': self.database_endpoint,
-                    'database': self.database_path,
-                    'statistics_enabled': self._enable_statistics,
-                    'statistics_status': stats_status,
-                    'statistics_endpoint': self.stats_endpoint,
-                    'statistics_database': self.stats_path,
-                    'statistics_table': self.stats_table,
-                    'github_workflow': github_info['workflow_name'],
-                    'github_run_id': github_info['run_id'],
-                    'github_run_url': github_info['run_url']
-                }
+                else:
+                    stats_status = "enabled_not_checked"
+            
+            # Получаем информацию о GitHub Action
+            github_info = self._get_github_action_info()
+            
+            return {
+                'session_id': self._session_id,
+                'version': version,
+                'endpoint': self.database_endpoint,
+                'database': self.database_path,
+                'statistics_enabled': self._enable_statistics,
+                'statistics_status': stats_status,
+                'statistics_endpoint': self.stats_endpoint,
+                'statistics_database': self.stats_path,
+                'statistics_table': self.stats_table,
+                'github_workflow': github_info['workflow_name'],
+                'github_run_id': github_info['run_id'],
+                'github_run_url': github_info['run_url']
+            }
                 
         except Exception as e:
             return {

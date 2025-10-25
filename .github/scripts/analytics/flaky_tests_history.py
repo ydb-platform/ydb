@@ -27,18 +27,7 @@ def main():
     # Инициализируем YDB обертку с контекстным менеджером для автоматического закрытия
     with YDBWrapper() as ydb_wrapper:
         script_name = os.path.basename(__file__)
-        
-        # Получаем информацию о кластере
-        cluster_info = ydb_wrapper.get_cluster_info()
-        print(f'🏷️  Cluster info:')
-        print(f'   📊 Version: {cluster_info.get("version", "unknown")}')
-        print(f'   🔗 Endpoint: {cluster_info.get("endpoint", "unknown")}')
-        print(f'   💾 Database: {cluster_info.get("database", "unknown")}')
-        print(f'   📈 Statistics: {cluster_info.get("statistics_status", "unknown")}')
-        if cluster_info.get("statistics_enabled"):
-            print(f'   📊 Stats DB: {cluster_info.get("statistics_database", "unknown")}')
-            print(f'   📋 Stats Table: {cluster_info.get("statistics_table", "unknown")}')
-        
+      
         # Получаем последнюю дату из истории
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
         last_date_query = f"""
@@ -210,7 +199,7 @@ def main():
                     .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
                     .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
                     .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                    .add_column("mute_count", ydb.OptionalType(ydb.OptionalType.Uint64))
+                    .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                     .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                     .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                 )

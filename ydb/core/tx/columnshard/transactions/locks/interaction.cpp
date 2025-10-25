@@ -5,22 +5,22 @@ namespace NKikimr::NOlap::NTxInteractions {
 TIntervalPoint TIntervalPoint::From(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
     i32 shift = container.IsInclude() ? 0 : 1;
-    if (!container.GetReplaceKey()) {
+    if (container.IsEmpty()) {
         shift = -1;
-    } else if (container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
+    } else if (container.NumColumns() < (ui32)pkSchema->num_fields()) {
         shift = 1;
     }
-    return TIntervalPoint(container.GetReplaceKey(), shift);
+    return TIntervalPoint(container, pkSchema, shift);
 }
 
 TIntervalPoint TIntervalPoint::To(
     const TPredicateContainer& container, const std::shared_ptr<arrow::Schema>& pkSchema) {
     i32 shift = container.IsInclude() ? 0 : -1;
-    if (!container.GetReplaceKey() || container.GetReplaceKey()->GetColumnsCount() < (ui32)pkSchema->num_fields()) {
+    if (container.NumColumns() < (ui32)pkSchema->num_fields()) {
         shift = Max<i32>();
     }
 
-    return TIntervalPoint(container.GetReplaceKey(), shift);
+    return TIntervalPoint(container, pkSchema, shift);
 }
 
 }   // namespace NKikimr::NOlap::NTxInteractions

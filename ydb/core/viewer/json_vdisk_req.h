@@ -86,11 +86,8 @@ public:
             NodeId = FromStringWithDefault<ui32>(Params.Get("node_id"), 0);
             PDiskId = FromStringWithDefault<ui32>(Params.Get("pdisk_id"), Max<ui32>());
             VSlotId = FromStringWithDefault<ui32>(Params.Get("vslot_id"), Max<ui32>());
-            if (PDiskId == Max<ui32>()) {
-                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'pdisk_id' is required"));
-            }
-            if (VSlotId == Max<ui32>()) {
-                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "field 'vslot_id' is required"));
+            if (PDiskId == Max<ui32>() || VSlotId == Max<ui32>()) {
+                return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "You must specify either vdisk_id, or all three of the following: node_id, pdisk_id, and vslot_id"));
             }
             if (!NodeId) {
                 NodeId = TlsActivationContext->ActorSystem()->NodeId;

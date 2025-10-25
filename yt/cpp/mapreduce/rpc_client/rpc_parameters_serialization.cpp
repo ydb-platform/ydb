@@ -782,9 +782,6 @@ NApi::TListJobsOptions SerializeOptionsForListJobs(const TListJobsOptions& optio
 NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptions& options)
 {
     NApi::TGetJobTraceOptions result;
-    if (options.JobId_) {
-        result.JobId = NJobTrackerClient::TJobId(YtGuidFromUtilGuid(*options.JobId_));
-    }
     if (options.TraceId_) {
         result.TraceId = NJobTrackerClient::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
     }
@@ -793,12 +790,6 @@ NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptio
     }
     if (options.ToTime_) {
         result.ToTime = *options.ToTime_;
-    }
-    if (options.FromEventIndex_) {
-        result.FromEventIndex = *options.FromEventIndex_;
-    }
-    if (options.ToEventIndex_) {
-        result.ToEventIndex = *options.ToEventIndex_;
     }
     return result;
 }

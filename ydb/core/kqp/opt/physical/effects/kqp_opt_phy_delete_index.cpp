@@ -74,34 +74,47 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
 
         auto deleteIndexKeys = project(indexTableColumns);
 
-        if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-            if (indexDesc->KeyColumns.size() > 1) {
-                const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
-                    << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
-                deleteIndexKeys = BuildVectorIndexPrefixRows(table, prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumns, del.Pos(), ctx);
+        switch (indexDesc->Type) {
+            case TIndexDescription::EType::GlobalSync:
+            case TIndexDescription::EType::GlobalAsync:
+            case TIndexDescription::EType::GlobalSyncUnique: {
+                // deleteIndexKeys are already correct 
+                break;
             }
-
-            auto resolveUnion = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
-                indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
-
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(resolveUnion)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(indexDelete);
-        } else {
-            auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-                .Table(tableNode)
-                .Input(deleteIndexKeys)
-                .ReturningColumns<TCoAtomList>().Build()
-                .IsBatch(ctx.NewAtom(del.Pos(), "false"))
-                .Done();
-
-            effects.emplace_back(std::move(indexDelete));
+            case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                if (indexDesc->KeyColumns.size() > 1) {
+                    const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
+                        << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumns, del.Pos(), ctx);
+                }
+                deleteIndexKeys = BuildVectorIndexPostingRows(table, del.Table(), indexDesc->Name,
+                    indexTableColumns, deleteIndexKeys, false, del.Pos(), ctx);
+                break;
+            }
+            case TIndexDescription::EType::GlobalFulltext: {
+                // For fulltext indexes, we need to tokenize the text from the rows being deleted
+                // and then delete the corresponding token rows from the index table
+                auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
+                    .Connection<TDqCnUnionAll>()
+                        .Output()
+                            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                            .Index().Build("0")
+                            .Build()
+                        .Build()
+                    .Done();
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
+                    del.Pos(), ctx);
+                break;
+            }
         }
+
+        auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+            .Table(tableNode)
+            .Input(deleteIndexKeys)
+            .ReturningColumns<TCoAtomList>().Build()
+            .IsBatch(ctx.NewAtom(del.Pos(), "false"))
+            .Done();
+        effects.emplace_back(std::move(indexDelete));
     }
 
     return Build<TExprList>(ctx, del.Pos())

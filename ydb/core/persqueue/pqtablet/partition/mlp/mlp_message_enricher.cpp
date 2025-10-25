@@ -119,9 +119,11 @@ void TMessageEnricherActor::ProcessQueue() {
             continue;
         }
 
-        auto offset = reply.Offsets.front();
-        LOG_D("Fetching from offset " << offset << " from " << PartitionActorId);
-        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, offset, 1 /* message count */, ++Cookie));
+        auto firstOffset = reply.Offsets.front();
+        auto lastOffset = Queue.back().Offsets.back();
+        auto count = lastOffset - firstOffset + 1;
+        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << PartitionActorId);
+        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
 
         return;
     }

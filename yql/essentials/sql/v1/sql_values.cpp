@@ -110,10 +110,8 @@ TSourcePtr TSqlValues::ValuesSource(const TRule_values_source& node, const TVect
             }
             return BuildWriteValues(pos, "UPDATE", columnsHint, std::move(source));
         }
-        default:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownValuesSource");
-            AltNotImplemented("values_source", node);
-            return nullptr;
+        case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
@@ -127,10 +125,12 @@ TSourcePtr TSqlIntoValues::Build(const TRule_into_values_source& node, const TSt
             }
             return ValuesSource(alt.GetRule_values_source2(), columnsHint, operationName);
         }
-        default:
+        case NSQLv1Generated::TRule_into_values_source::kAltIntoValuesSource2:
             Ctx_.IncrementMonCounter("sql_errors", "DefaultValuesOrOther");
             AltNotImplemented("into_values_source", node);
             return nullptr;
+        case NSQLv1Generated::TRule_into_values_source::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 
@@ -144,10 +144,8 @@ TSourcePtr TSqlAsValues::Build(const TRule_values_source& node, const TString& o
         case TRule_values_source::kAltValuesSource2: {
             return ValuesSource(node, {}, operationName);
         }
-        default:
-            Ctx_.IncrementMonCounter("sql_errors", "UnknownValuesSource");
-            AltNotImplemented("values_source", node);
-            return nullptr;
+        case NSQLv1Generated::TRule_values_source::ALT_NOT_SET:
+            Y_UNREACHABLE();
     }
 }
 

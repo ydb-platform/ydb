@@ -251,8 +251,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--data-center=%s" % self.data_center
             )
 
-        # The --module option was added after stable-25-3-1, check if binary supports it
-        if self.module is not None and self.__binary_supports_module_option():
+        if self.module is not None:
             command.append(
                 "--module=%s" % self.module
             )
@@ -323,14 +322,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 break
             version_info.append(line)
         return '\n'.join(version_info)
-
-    def __binary_supports_module_option(self):
-        try:
-            help_output = yatest.common.execute([self.binary_path, 'server', '--help']).std_out.decode('utf-8')
-            return '--module' in help_output
-        except Exception:
-            # If we can't check, assume it doesn't support it (safer for old binaries)
-            return False
 
     def enable_config_dir(self):
         self.__use_config_store = True

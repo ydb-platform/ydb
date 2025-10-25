@@ -456,11 +456,20 @@ void ConvertSequence(
     cursor->Next();
 
     consumer->OnBeginList();
+    bool endList = false;
     for (const auto& converter : converters) {
-        EnsureYsonItemTypeNotEqual(cursor->GetCurrent(), EYsonItemType::EndList);
-        converter(cursor, consumer, totalLimit);
+        if (!endList) {
+            endList = EYsonItemType::EndList == cursor->GetCurrent().GetType();
+        }
+        if (endList) {
+            consumer->OnEntity();
+        } else {
+            converter(cursor, consumer, totalLimit);
+        }
     }
-    EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::EndList);
+    if (!endList) {
+        EnsureYsonItemTypeEqual(cursor->GetCurrent(), EYsonItemType::EndList);
+    }
     consumer->OnEndList();
 
     cursor->Next();

@@ -149,16 +149,16 @@ TLoggingContext GetLoggingContext();
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Sets the minimum logging level for messages in current thread.
-// NB: In fiber environment, min log level is attached to a fiber,
-// so after context switch thread min log level might change.
+//! NB: In fiber environment, min log level is attached to a fiber,
+//! so after context switch thread min log level might change.
 void SetThreadMinLogLevel(ELogLevel minLogLevel);
 ELogLevel GetThreadMinLogLevel();
 
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Sets an extra tag for messages in current thread.
-// NB: Same as above, in fiber environment messages tags
-// are attached to a fiber.
+//! NB: Same as above, in fiber environment messages tags
+//! are attached to a fiber.
 void SetThreadMessageTag(std::string messageTag);
 std::string& GetThreadMessageTag();
 

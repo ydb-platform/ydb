@@ -2456,6 +2456,33 @@ TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashMap<TStringBuf, std::pair<TStringBuf, const TTypeAnnotationNode*>> aggTraitsMap;
+    for (const auto& item : TExprBase(input->ChildPtr(TKqpOpAggregate::idx_AggregationTraitsList)).Cast<TExprList>()) {
+        const auto aggTrait = TExprBase(item).Cast<TKqpOpAggregationTraits>();
+        const auto originalColName = aggTrait.OriginalColName();
+        const auto resultColName = aggTrait.ResultColName();
+        const auto* resultType = aggTrait.AggregationFunctionResultType().Ptr()->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        aggTraitsMap[originalColName] = {resultColName, resultType};
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto* itemType : structType->GetItems()) {
+        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->second.first, it->second.second));
+        } else {
+            newItemTypes.push_back(itemType);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
@@ -2695,6 +2722,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpSort::Match(input.Get())) {
                 return AnnotateOpSort(input, ctx);
+            }
+
+            if (TKqpOpAggregate::Match(input.Get())) {
+                return AnnotateOpAggregate(input, ctx);
             }
 
             if (TKqpOpRoot::Match(input.Get())) {

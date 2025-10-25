@@ -15,6 +15,7 @@ import threading
 from io import BytesIO
 
 import awscrt.http
+import awscrt.s3
 import botocore.awsrequest
 import botocore.session
 from awscrt.auth import AwsCredentials, AwsCredentialsProvider
@@ -25,13 +26,7 @@ from awscrt.io import (
     EventLoopGroup,
     TlsContextOptions,
 )
-from awscrt.s3 import (
-    S3Client,
-    S3RequestTlsMode,
-    S3RequestType,
-    S3ResponseError,
-    get_recommended_throughput_target_gbps,
-)
+from awscrt.s3 import S3Client, S3RequestTlsMode, S3RequestType
 from botocore import UNSIGNED
 from botocore.compat import urlsplit
 from botocore.config import Config
@@ -124,7 +119,6 @@ def create_s3_crt_client(
             use. Specify this argument if you want to use a custom CA cert
             bundle instead of the default one on your system.
     """
-
     event_loop_group = EventLoopGroup(num_threads)
     host_resolver = DefaultHostResolver(event_loop_group)
     bootstrap = ClientBootstrap(event_loop_group, host_resolver)
@@ -159,7 +153,7 @@ def create_s3_crt_client(
 
 def _get_crt_throughput_target_gbps(provided_throughput_target_bytes=None):
     if provided_throughput_target_bytes is None:
-        target_gbps = get_recommended_throughput_target_gbps()
+        target_gbps = awscrt.s3.get_recommended_throughput_target_gbps()
         logger.debug(
             'Recommended CRT throughput target in gbps: %s', target_gbps
         )
@@ -544,7 +538,7 @@ class BotocoreCRTRequestSerializer(BaseCRTRequestSerializer):
         return crt_request
 
     def translate_crt_exception(self, exception):
-        if isinstance(exception, S3ResponseError):
+        if isinstance(exception, awscrt.s3.S3ResponseError):
             return self._translate_crt_s3_response_error(exception)
         else:
             return None

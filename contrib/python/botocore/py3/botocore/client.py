@@ -18,6 +18,7 @@ from botocore.auth import AUTH_TYPE_MAPS
 from botocore.awsrequest import prepare_request_dict
 from botocore.compress import maybe_compress_request
 from botocore.config import Config
+from botocore.credentials import RefreshableCredentials
 from botocore.discovery import (
     EndpointDiscoveryHandler,
     EndpointDiscoveryManager,
@@ -45,6 +46,7 @@ from botocore.utils import (
     CachedProperty,
     EventbridgeSignerSetter,
     S3ControlArnParamHandlerv2,
+    S3ExpressIdentityResolver,
     S3RegionRedirectorv2,
     ensure_boolean,
     get_service_module_name,
@@ -179,6 +181,7 @@ class ClientCreator:
             client_config=client_config,
             scoped_config=scoped_config,
         )
+        self._register_s3express_events(client=service_client)
         self._register_s3_control_events(client=service_client)
         self._register_endpoint_discovery(
             service_client, endpoint_url, client_config
@@ -371,6 +374,18 @@ class ClientCreator:
             endpoint_url=endpoint_url,
         ).register(client.meta.events)
 
+    def _register_s3express_events(
+        self,
+        client,
+        endpoint_bridge=None,
+        endpoint_url=None,
+        client_config=None,
+        scoped_config=None,
+    ):
+        if client.meta.service_model.service_name != 's3':
+            return
+        S3ExpressIdentityResolver(client, RefreshableCredentials).register()
+
     def _register_s3_events(
         self,
         client,
@@ -458,6 +473,9 @@ class ClientCreator:
         """
         if signature_version.startswith('v4a'):
             return
+
+        if signature_version.startswith('v4-s3express'):
+            return f'{signature_version}'
 
         for suffix in ['-query', '-presign-post']:
             if signature_version.endswith(suffix):
@@ -930,9 +948,17 @@ class BaseClient:
             operation_model=operation_model,
             context=request_context,
         )
-        endpoint_url, additional_headers = self._resolve_endpoint_ruleset(
+        (
+            endpoint_url,
+            additional_headers,
+            properties,
+        ) = self._resolve_endpoint_ruleset(
             operation_model, api_params, request_context
         )
+        if properties:
+            # Pass arbitrary endpoint info with the Request
+            # for use during construction.
+            request_context['endpoint_properties'] = properties
         request_dict = self._convert_to_request_dict(
             api_params=api_params,
             operation_model=operation_model,
@@ -1075,6 +1101,7 @@ class BaseClient:
         if self._ruleset_resolver is None:
             endpoint_url = self.meta.endpoint_url
             additional_headers = {}
+            endpoint_properties = {}
         else:
             endpoint_info = self._ruleset_resolver.construct_endpoint(
                 operation_model=operation_model,
@@ -1083,6 +1110,7 @@ class BaseClient:
             )
             endpoint_url = endpoint_info.url
             additional_headers = endpoint_info.headers
+            endpoint_properties = endpoint_info.properties
             # If authSchemes is present, overwrite default auth type and
             # signing context derived from service model.
             auth_schemes = endpoint_info.properties.get('authSchemes')
@@ -1099,7 +1127,7 @@ class BaseClient:
                 else:
                     request_context['signing'] = signing_context
 
-        return endpoint_url, additional_headers
+        return endpoint_url, additional_headers, endpoint_properties
 
     def get_paginator(self, operation_name):
         """Create a paginator for an operation.

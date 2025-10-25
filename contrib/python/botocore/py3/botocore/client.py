@@ -975,7 +975,10 @@ class BaseClient:
         )
 
         if http.status_code >= 300:
-            error_code = parsed_response.get("Error", {}).get("Code")
+            error_info = parsed_response.get("Error", {})
+            error_code = error_info.get("QueryErrorCode") or error_info.get(
+                "Code"
+            )
             error_class = self.exceptions.from_code(error_code)
             raise error_class(parsed_response, operation_name)
         else:
@@ -1062,7 +1065,7 @@ class BaseClient:
         returned.
 
         Use ignore_signing_region for generating presigned URLs or any other
-        situtation where the signing region information from the ruleset
+        situation where the signing region information from the ruleset
         resolver should be ignored.
 
         Returns tuple of URL and headers dictionary. Additionally, the
@@ -1249,6 +1252,13 @@ class BaseClient:
         return self._exceptions_factory.create_client_exceptions(
             self._service_model
         )
+
+    def _get_credentials(self):
+        """
+        This private interface is subject to abrupt breaking changes, including
+        removal, in any botocore release.
+        """
+        return self._request_signer._credentials
 
 
 class ClientMeta:

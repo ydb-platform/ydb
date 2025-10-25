@@ -778,7 +778,7 @@
         {"shape":"ThrottlingException"},
         {"shape":"InternalFailureException"}
       ],
-      "documentation":"<p>Create a thing group.</p> <note> <p>This is a control plane operation. See <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/iot-authorization.html\">Authorization</a> for information about authorizing control plane actions.</p> </note> <p>Requires permission to access the <a href=\"https://docs.aws.amazon.com/service-authorization/latest/reference/list_awsiot.html#awsiot-actions-as-permissions\">CreateThingGroup</a> action.</p>"
+      "documentation":"<p>Create a thing group.</p> <note> <p>This is a control plane operation. See <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/iot-authorization.html\">Authorization</a> for information about authorizing control plane actions.</p> <p>If the <code>ThingGroup</code> that you create has the exact same attributes as an existing <code>ThingGroup</code>, you will get a 200 success response. </p> </note> <p>Requires permission to access the <a href=\"https://docs.aws.amazon.com/service-authorization/latest/reference/list_awsiot.html#awsiot-actions-as-permissions\">CreateThingGroup</a> action.</p>"
     },
     "CreateThingType":{
       "name":"CreateThingType",
@@ -5655,6 +5655,10 @@
         "suppressAlerts":{
           "shape":"SuppressAlerts",
           "documentation":"<p> Suppresses alerts. </p>"
+        },
+        "exportMetric":{
+          "shape":"ExportMetric",
+          "documentation":"<p>Value indicates exporting metrics related to the behavior when it is true.</p>"
         }
       },
       "documentation":"<p>A Device Defender security profile behavior.</p>"
@@ -7046,7 +7050,7 @@
         },
         "destinationPackageVersions":{
           "shape":"DestinationPackageVersions",
-          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single string. Up to five strings are allowed.</p>"
+          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single ARN. Up to 25 package version ARNs are allowed.</p>"
         }
       }
     },
@@ -7114,7 +7118,7 @@
         },
         "destinationPackageVersions":{
           "shape":"DestinationPackageVersions",
-          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single string. Up to five strings are allowed.</p>"
+          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single ARN. Up to 25 package version ARNs are allowed.</p>"
         }
       }
     },
@@ -7765,6 +7769,10 @@
         "tags":{
           "shape":"TagList",
           "documentation":"<p>Metadata that can be used to manage the security profile.</p>"
+        },
+        "metricsExportConfig":{
+          "shape":"MetricsExportConfig",
+          "documentation":"<p>Specifies the MQTT topic and role ARN required for metric export.</p>"
         }
       }
     },
@@ -8371,6 +8379,7 @@
         }
       }
     },
+    "DeleteMetricsExportConfig":{"type":"boolean"},
     "DeleteMitigationActionRequest":{
       "type":"structure",
       "required":["actionName"],
@@ -9495,7 +9504,7 @@
         },
         "destinationPackageVersions":{
           "shape":"DestinationPackageVersions",
-          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single string. Up to five strings are allowed.</p>"
+          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single ARN. Up to 25 package version ARNs are allowed.</p>"
         }
       }
     },
@@ -9820,6 +9829,10 @@
         "lastModifiedDate":{
           "shape":"Timestamp",
           "documentation":"<p>The time the security profile was last modified.</p>"
+        },
+        "metricsExportConfig":{
+          "shape":"MetricsExportConfig",
+          "documentation":"<p>Specifies the MQTT topic and role ARN required for metric export.</p>"
         }
       }
     },
@@ -10778,6 +10791,7 @@
       },
       "documentation":"<p>Allows you to create an exponential rate of rollout for a job.</p>"
     },
+    "ExportMetric":{"type":"boolean"},
     "FailedChecksCount":{"type":"integer"},
     "FailedFindingsCount":{"type":"long"},
     "FailedThings":{"type":"integer"},
@@ -10950,6 +10964,24 @@
     "FunctionArn":{"type":"string"},
     "GenerationId":{"type":"string"},
     "GenericLongValue":{"type":"long"},
+    "GeoLocationTarget":{
+      "type":"structure",
+      "members":{
+        "name":{
+          "shape":"TargetFieldName",
+          "documentation":"<p>The <code>name</code> of the geolocation target field. If the target field is part of a named shadow, you must select the named shadow using the <code>namedShadow</code> filter.</p>"
+        },
+        "order":{
+          "shape":"TargetFieldOrder",
+          "documentation":"<p>The <code>order</code> of the geolocation target field. This field is optional. The default value is <code>LatLon</code>.</p>"
+        }
+      },
+      "documentation":"<p>A geolocation target that you select to index. Each geolocation target contains a <code>name</code> and <code>order</code> key-value pair that specifies the geolocation target fields.</p>"
+    },
+    "GeoLocationsFilter":{
+      "type":"list",
+      "member":{"shape":"GeoLocationTarget"}
+    },
     "GetBehaviorModelTrainingSummariesRequest":{
       "type":"structure",
       "members":{
@@ -11747,9 +11779,13 @@
         "namedShadowNames":{
           "shape":"NamedShadowNamesFilter",
           "documentation":"<p>The shadow names that you select to index. The default maximum number of shadow names for indexing is 10. To increase the limit, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/iot_device_management.html#fleet-indexing-limits\">Amazon Web Services IoT Device Management Quotas</a> in the <i>Amazon Web Services General Reference</i>. </p>"
+        },
+        "geoLocations":{
+          "shape":"GeoLocationsFilter",
+          "documentation":"<p>The list of geolocation targets that you select to index. The default maximum number of geolocation targets for indexing is <code>1</code>. To increase the limit, see <a href=\"https://docs.aws.amazon.com/general/latest/gr/iot_device_management.html#fleet-indexing-limits\">Amazon Web Services IoT Device Management Quotas</a> in the <i>Amazon Web Services General Reference</i>.</p>"
         }
       },
-      "documentation":"<p>Provides additional filters for specific data sources. Named shadow is the only data source that currently supports and requires a filter. To add named shadows to your fleet indexing configuration, set <code>namedShadowIndexingMode</code> to be <code>ON</code> and specify your shadow names in <code>filter</code>.</p>"
+      "documentation":"<p>Provides additional selections for named shadows and geolocation data. </p> <p>To add named shadows to your fleet indexing configuration, set <code>namedShadowIndexingMode</code> to be ON and specify your shadow names in <code>namedShadowNames</code> filter.</p> <p>To add geolocation data to your fleet indexing configuration: </p> <ul> <li> <p>If you store geolocation data in a class/unnamed shadow, set <code>thingIndexingMode</code> to be <code>REGISTRY_AND_SHADOW</code> and specify your geolocation data in <code>geoLocations</code> filter. </p> </li> <li> <p>If you store geolocation data in a named shadow, set <code>namedShadowIndexingMode</code> to be <code>ON</code>, add the shadow name in <code>namedShadowNames</code> filter, and specify your geolocation data in <code>geoLocations</code> filter. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html\">Managing fleet indexing</a>.</p> </li> </ul>"
     },
     "InlineDocument":{"type":"string"},
     "InputName":{
@@ -12054,7 +12090,7 @@
         },
         "destinationPackageVersions":{
           "shape":"DestinationPackageVersions",
-          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single string. Up to five strings are allowed.</p>"
+          "documentation":"<p>The package version Amazon Resource Names (ARNs) that are installed on the device when the job successfully completes. </p> <p> <b>Note:</b>The following Length Constraints relates to a single ARN. Up to 25 package version ARNs are allowed.</p>"
         }
       },
       "documentation":"<p>The <code>Job</code> object contains details about a job.</p>"
@@ -15321,6 +15357,10 @@
         "metricDimension":{
           "shape":"MetricDimension",
           "documentation":"<p>The dimension of a metric. This can't be used with custom metrics.</p>"
+        },
+        "exportMetric":{
+          "shape":"ExportMetric",
+          "documentation":"<p>Value added in both Behavior and AdditionalMetricsToRetainV2 to indicate if Device Defender Detect should export the corresponding metrics.</p>"
         }
       },
       "documentation":"<p>The metric you want to retain. Dimensions are optional.</p>"
@@ -15354,6 +15394,24 @@
         }
       },
       "documentation":"<p>The value to be compared with the <code>metric</code>.</p>"
+    },
+    "MetricsExportConfig":{
+      "type":"structure",
+      "required":[
+        "mqttTopic",
+        "roleArn"
+      ],
+      "members":{
+        "mqttTopic":{
+          "shape":"MqttTopic",
+          "documentation":"<p>The MQTT topic that Device Defender Detect should publish messages to for metrics export.</p>"
+        },
+        "roleArn":{
+          "shape":"RoleArn",
+          "documentation":"<p>This role ARN has permission to publish MQTT messages, after which Device Defender Detect can assume the role and publish messages on your behalf.</p>"
+        }
+      },
+      "documentation":"<p>Set configurations for metrics export.</p>"
     },
     "Minimum":{"type":"double"},
     "MinimumNumberOfExecutedThings":{
@@ -15538,6 +15596,11 @@
     "MqttPassword":{
       "type":"blob",
       "max":65535,
+      "min":1
+    },
+    "MqttTopic":{
+      "type":"string",
+      "max":512,
       "min":1
     },
     "MqttUsername":{
@@ -17175,7 +17238,7 @@
         },
         "maxResults":{
           "shape":"QueryMaxResults",
-          "documentation":"<p>The maximum number of results to return at one time.</p>"
+          "documentation":"<p>The maximum number of results to return per page at one time. The response might contain fewer results but will never contain more.</p>"
         },
         "queryVersion":{
           "shape":"QueryVersion",
@@ -17454,7 +17517,7 @@
       "type":"string",
       "max":64,
       "min":1,
-      "pattern":"[a-zA-Z0-9:_-]+"
+      "pattern":"[$a-zA-Z0-9:_-]+"
     },
     "SigV4Authorization":{
       "type":"structure",
@@ -18055,6 +18118,14 @@
       "type":"list",
       "member":{"shape":"AuditCheckName"}
     },
+    "TargetFieldName":{"type":"string"},
+    "TargetFieldOrder":{
+      "type":"string",
+      "enum":[
+        "LatLon",
+        "LonLat"
+      ]
+    },
     "TargetSelection":{
       "type":"string",
       "enum":[
@@ -18435,7 +18506,7 @@
         },
         "managedFields":{
           "shape":"Fields",
-          "documentation":"<p>Contains fields that are indexed and whose types are already known by the Fleet Indexing service. This is an optional field. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html#managed-field\">Managed fields</a> in the <i>Amazon Web Services IoT Core Developer Guide</i>.</p>"
+          "documentation":"<p>Contains fields that are indexed and whose types are already known by the Fleet Indexing service. This is an optional field. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html#managed-field\">Managed fields</a> in the <i>Amazon Web Services IoT Core Developer Guide</i>.</p> <note> <p>You can't modify managed fields by updating fleet indexing configuration.</p> </note>"
         },
         "customFields":{
           "shape":"Fields",
@@ -18530,7 +18601,7 @@
         },
         "managedFields":{
           "shape":"Fields",
-          "documentation":"<p>Contains fields that are indexed and whose types are already known by the Fleet Indexing service.</p>"
+          "documentation":"<p>Contains fields that are indexed and whose types are already known by the Fleet Indexing service. This is an optional field. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html#managed-field\">Managed fields</a> in the <i>Amazon Web Services IoT Core Developer Guide</i>.</p> <note> <p>You can't modify managed fields by updating fleet indexing configuration.</p> </note>"
         },
         "customFields":{
           "shape":"Fields",
@@ -18538,7 +18609,7 @@
         },
         "filter":{
           "shape":"IndexingFilter",
-          "documentation":"<p>Provides additional filters for specific data sources. Named shadow is the only data source that currently supports and requires a filter. To add named shadows to your fleet indexing configuration, set <code>namedShadowIndexingMode</code> to be <code>ON</code> and specify your shadow names in <code>filter</code>.</p>"
+          "documentation":"<p>Provides additional selections for named shadows and geolocation data. </p> <p>To add named shadows to your fleet indexing configuration, set <code>namedShadowIndexingMode</code> to be ON and specify your shadow names in <code>namedShadowNames</code> filter.</p> <p>To add geolocation data to your fleet indexing configuration: </p> <ul> <li> <p>If you store geolocation data in a class/unnamed shadow, set <code>thingIndexingMode</code> to be <code>REGISTRY_AND_SHADOW</code> and specify your geolocation data in <code>geoLocations</code> filter. </p> </li> <li> <p>If you store geolocation data in a named shadow, set <code>namedShadowIndexingMode</code> to be <code>ON</code>, add the shadow name in <code>namedShadowNames</code> filter, and specify your geolocation data in <code>geoLocations</code> filter. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-fleet-index.html\">Managing fleet indexing</a>.</p> </li> </ul>"
         }
       },
       "documentation":"<p>The thing indexing configuration. For more information, see <a href=\"https://docs.aws.amazon.com/iot/latest/developerguide/managing-index.html\">Managing Thing Indexing</a>.</p>"
@@ -19926,6 +19997,14 @@
           "documentation":"<p>The expected version of the security profile. A new version is generated whenever the security profile is updated. If you specify a value that is different from the actual version, a <code>VersionConflictException</code> is thrown.</p>",
           "location":"querystring",
           "locationName":"expectedVersion"
+        },
+        "metricsExportConfig":{
+          "shape":"MetricsExportConfig",
+          "documentation":"<p>Specifies the MQTT topic and role ARN required for metric export.</p>"
+        },
+        "deleteMetricsExportConfig":{
+          "shape":"DeleteMetricsExportConfig",
+          "documentation":"<p>Set the value as true to delete metrics export related configurations.</p>"
         }
       }
     },
@@ -19973,6 +20052,10 @@
         "lastModifiedDate":{
           "shape":"Timestamp",
           "documentation":"<p>The time the security profile was last modified.</p>"
+        },
+        "metricsExportConfig":{
+          "shape":"MetricsExportConfig",
+          "documentation":"<p>Specifies the MQTT topic and role ARN required for metric export.</p>"
         }
       }
     },

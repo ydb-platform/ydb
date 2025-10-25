@@ -1,6 +1,9 @@
 #include "mem_pool.h"
 #include "link_manager.h"
+
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
 #include "ctx.h"
+#endif
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -17,7 +20,9 @@
 #include <mutex>
 #include <thread>
 
+#if defined(_linux_)
 #include <sys/mman.h>
+#endif
 
 static constexpr size_t HPageSz = (1 << 21);
 
@@ -40,9 +45,13 @@ namespace NInterconnect::NRdma {
             return;
         }
         auto addr = MRs.front()->addr;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
         for (auto& m: MRs) {
             ibv_dereg_mr(m);
         }
+#else
+        free(MRs.front());
+#endif
         std::free(addr);
         MRs.clear();
     }
@@ -186,10 +195,12 @@ namespace NInterconnect::NRdma {
         }
         void* buf = std::aligned_alloc(alignment, size);
         if (hp) {
+#if defined(_linux_)
             if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
                 fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
                     strerror(errno), errno);
             }
+#endif
             for (size_t i = 0; i < size; i += HPageSz) {
                 // We use THP right now. We need to touch each page to promote it to HUGE.
                 ((char*)buf)[i] = 0;
@@ -200,6 +211,7 @@ namespace NInterconnect::NRdma {
 
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
         std::vector<ibv_mr*> res;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
         res.reserve(ctxs.size());
         for (const auto& [_, ctx]: ctxs) {
             ibv_mr* mr = ibv_reg_mr(
@@ -214,6 +226,15 @@ namespace NInterconnect::NRdma {
             }
             res.push_back(mr);
         }
+#else
+        Y_UNUSED(ctxs);
+        // Just emulate registration if platform is not support rdma code compilation.
+        // Probably ibdrv should be fixed to support compilation on windows 
+        struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
+        dummy->addr = addr;
+        dummy->length = size;
+        res.push_back(dummy);
+#endif
         return res;
     }
 

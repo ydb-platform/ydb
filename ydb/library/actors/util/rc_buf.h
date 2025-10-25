@@ -1126,7 +1126,7 @@ public:
     }
 
     size_t Headroom() const {
-        if (Backend.CanGrowFront(Begin)) {
+        if (Backend.CanGrowFront(Begin) || IsPrivate()) {
             return UnsafeHeadroom();
         }
 
@@ -1134,7 +1134,7 @@ public:
     }
 
     size_t Tailroom() const {
-        if (Backend.CanGrowBack(End)) {
+        if (Backend.CanGrowBack(End) || IsPrivate()) {
             return UnsafeTailroom();
         }
 
@@ -1149,3 +1149,12 @@ public:
         return TMutableContiguousSpan(GetDataMut(), GetSize());
     }
 };
+
+class IRcBufAllocator {
+public:
+    virtual ~IRcBufAllocator() = default;
+    virtual TRcBuf AllocRcBuf(size_t size, size_t headRoom, size_t tailRoom) noexcept = 0;
+    virtual TRcBuf AllocPageAlignedRcBuf(size_t size, size_t tailRoom) noexcept = 0;
+};
+
+IRcBufAllocator* GetDefaultRcBufAllocator() noexcept;

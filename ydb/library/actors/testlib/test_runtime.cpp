@@ -12,6 +12,7 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
+#include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/util/queue_oneone_inplace.h>
 
 #include <util/generic/maybe.h>
@@ -509,7 +510,7 @@ namespace NActors {
         SingleSysEnv = true;
     }
 
-    TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads)
+    TTestActorRuntimeBase::TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool useRealThreads, bool useRdmaAllocator)
         : ScheduledCount(0)
         , ScheduledLimit(100000)
         , MainThreadId(TThread::CurrentThreadId())
@@ -518,6 +519,7 @@ namespace NActors {
         , NodeCount(nodeCount)
         , DataCenterCount(dataCenterCount)
         , UseRealThreads(useRealThreads)
+        , UseRdmaAllocator(useRdmaAllocator)
         , LocalId(0)
         , DispatchCyclesCount(0)
         , DispatchedEventsCount(0)
@@ -1764,6 +1766,11 @@ namespace NActors {
             setup->Scheduler.Reset(new TSchedulerThreadStub(this, node));
             setup->Executors.Reset(new TAutoPtr<IExecutorPool>[1]);
             setup->Executors[0].Reset(new TExecutorPoolStub(this, nodeIndex, node, 0));
+        }
+
+        if (UseRdmaAllocator) {
+            auto memPool = NInterconnect::NRdma::CreateDummyMemPool();
+            setup->RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(memPool);
         }
 
         InitActorSystemSetup(*setup, node);

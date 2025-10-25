@@ -72,10 +72,8 @@ bool TLocalBuffer::IsEarlyFinished() {
 
 bool TLocalBuffer::IsFlushed() {
     std::lock_guard lock(Mutex);
-    auto result = Queue.empty();
-    if (!result && !NeedToNotifyOutput) {
-        NeedToNotifyOutput = true;
-    }
+    auto result = InputBinded.load() || Queue.empty();
+    NeedToNotifyOutput |= !result;
     return result;
 }
 
@@ -122,6 +120,16 @@ bool TLocalBuffer::Pop(TDataChunk& data) {
 
 void TLocalBuffer::EarlyFinish() {
     EarlyFinished.store(true);
+}
+
+void TLocalBuffer::BindInput() {
+    if (!InputBinded.exchange(true)) {
+        std::lock_guard lock(Mutex);
+        if (NeedToNotifyOutput) {
+            NeedToNotifyOutput = false;
+            ActorSystem->Send(Info.OutputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+        }
+    }
 }
 
 void TOutputDescriptor::AddPushBytes(ui64 bytes) {
@@ -1078,12 +1086,12 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(ui64 channelId
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetOutputBuffer(const TChannelInfo& info) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
-    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info) : GetRemoteOutputBuffer(info);
+    return (info.InputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, false) : GetRemoteOutputBuffer(info);
 }
 
 std::shared_ptr<IChannelBuffer> TDqChannelService::GetInputBuffer(const TChannelInfo& info) {
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info) : GetRemoteInputBuffer(info);
+    return (info.OutputActorId.NodeId() == NodeId) ? GetLocalBuffer(info, true) : GetRemoteInputBuffer(info);
 }
 
 // remote buffers
@@ -1102,10 +1110,14 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetRemoteInputBuffer(const TC
 
 // local buffer
 
-std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelInfo& info) {
+std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannelInfo& info, bool bindInput) {
     Y_ENSURE(info.OutputActorId.NodeId() == NodeId);
     Y_ENSURE(info.InputActorId.NodeId() == NodeId);
-    return LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
+    auto buffer = LocalBufferRegistry->GetOrCreateLocalBuffer(LocalBufferRegistry, info);
+    if (bindInput) {
+        buffer->BindInput();
+    }
+    return buffer;
 }
 
 // unbinded channels

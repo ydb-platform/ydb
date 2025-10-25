@@ -176,6 +176,7 @@ public:
         , MaxInflightBytes(maxInflightBytes)
         , MinInflightBytes(minInflightBytes)
         , EarlyFinished(false)
+        , InputBinded(false)
     {
         PopStats.ChannelId = info.ChannelId;
         PushStats.ChannelId = info.ChannelId;
@@ -193,6 +194,8 @@ public:
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
 
+    void BindInput();
+
     std::shared_ptr<TLocalBufferRegistry> Registry;
     TChannelInfo Info;
     NActors::TActorSystem* ActorSystem;
@@ -206,6 +209,7 @@ public:
     bool NeedToNotifyOutput = false;
     bool NeedToNotifyInput = false;
     std::atomic<bool> EarlyFinished;
+    std::atomic<bool> InputBinded;
 };
 
 class TOutputBuffer;
@@ -575,7 +579,7 @@ public:
     std::shared_ptr<IChannelBuffer> GetRemoteOutputBuffer(const TChannelInfo& info);
     std::shared_ptr<IChannelBuffer> GetRemoteInputBuffer(const TChannelInfo& info);
     // local buffer
-    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelInfo& info);
+    std::shared_ptr<IChannelBuffer> GetLocalBuffer(const TChannelInfo& info, bool bindInput);
     // unbinded channels
     IDqOutputChannel::TPtr GetOutputChannel(const TDqChannelParams& params) final;
     IDqInputChannel::TPtr GetInputChannel(const TDqChannelParams& params) final;

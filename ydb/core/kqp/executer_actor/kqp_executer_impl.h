@@ -1197,6 +1197,12 @@ protected:
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
+        {
+            auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
+            removeQueryEvent->QueryId = TxId;
+            this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
+        }
+
         for (auto channelPair: ResultChannelProxies) {
             LOG_D("terminate result channel " << channelPair.first << " proxy at " << channelPair.second->SelfId());
 

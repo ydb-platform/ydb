@@ -105,7 +105,6 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     start_date = today - datetime.timedelta(days=days_window-1)
     end_date = today
     
-    query_start_time = datetime.datetime.now()
     logging.info(f"Executing query for branch='{branch}', build_type='{build_type}', days_window={days_window}")
     logging.info(f"Date range: {start_date} to {end_date}")
     
@@ -136,32 +135,26 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     logging.info(f"SQL Query:\n{query_string}")
     
     try:
-        # Initialize YDB wrapper
-        ydb_wrapper = YDBWrapper()
-        script_name = os.path.basename(__file__)
-        
-        # Check credentials
-        if not ydb_wrapper.check_credentials():
-            return []
-        
-        logging.info("Successfully connected to YDB")
-        
-        logging.info("Starting to fetch results...")
-        results = ydb_wrapper.execute_scan_query(query_string, script_name)
-        
-        query_end_time = datetime.datetime.now()
-        query_duration = query_end_time - query_start_time
-        logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
-        logging.info(f"Query execution time: {query_duration.total_seconds():.2f} seconds")
-        return results
+        # Initialize YDB wrapper with context manager for automatic cleanup
+        with YDBWrapper() as ydb_wrapper:
+            script_name = os.path.basename(__file__)
+            
+            # Check credentials
+            if not ydb_wrapper.check_credentials():
+                return []
+            
+            logging.info("Successfully connected to YDB")
+            
+            logging.info("Starting to fetch results...")
+            results = ydb_wrapper.execute_scan_query(query_string, script_name)
+            
+            logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
+            return results
         
     except Exception as e:
-        query_end_time = datetime.datetime.now()
-        query_duration = query_end_time - query_start_time
         logging.error(f"Error executing query: {e}")
         logging.error(f"Query parameters: branch='{branch}', build_type='{build_type}', days_window={days_window}")
         logging.error(f"Date range: {start_date} to {end_date}")
-        logging.error(f"Query execution time before error: {query_duration.total_seconds():.2f} seconds")
         raise
 
 
@@ -837,33 +830,33 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
 
-    logging.info(f"Starting mute worker with mode: {args.mode}")
-    logging.info(f"Branch: {args.branch}")
-    
-    # Используем переданный файл или дефолтный
-    input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
-    logging.info(f"Using muted_ya file: {input_muted_ya_path}")
-    
-    mute_check = YaMuteCheck()
-    mute_check.load(input_muted_ya_path)
-    logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
+        logging.info(f"Starting mute worker with mode: {args.mode}")
+        logging.info(f"Branch: {args.branch}")
+        
+        # Используем переданный файл или дефолтный
+        input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+        logging.info(f"Using muted_ya file: {input_muted_ya_path}")
+        
+        mute_check = YaMuteCheck()
+        mute_check.load(input_muted_ya_path)
+        logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
-    logging.info("Executing single query for 7 days window...")
-    
-    # Один запрос за максимальный период (7 дней)
-    all_data = execute_query(args.branch, days_window=7)
-    logging.info(f"Query returned {len(all_data)} test records")
-    
-    # Используем универсальную агрегацию для разных периодов
-    aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
+        logging.info("Executing single query for 7 days window...")
+        
+        # Один запрос за максимальный период (7 дней)
+        all_data = execute_query(args.branch, days_window=7)
+        logging.info(f"Query returned {len(all_data)} test records")
+        
+        # Используем универсальную агрегацию для разных периодов
+        aggregated_for_mute = aggregate_test_data(all_data, MUTE_DAYS)  # MUTE_DAYS дней для mute
     aggregated_for_unmute = aggregate_test_data(all_data, UNMUTE_DAYS)  # UNMUTE_DAYS дней для unmute
     aggregated_for_delete = aggregate_test_data(all_data, DELETE_DAYS)  # DELETE_DAYS дней для delete
     

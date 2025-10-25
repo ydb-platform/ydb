@@ -12,21 +12,20 @@ from ydb_wrapper import YDBWrapper
 
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return {}
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return {}
 
-    results = {}
-    batch_size = 500
-    start_time = time.time()
-    
-    for start in range(0, len(test_names_array), batch_size):
-        test_names_batch = test_names_array[start:start + batch_size]
-        history_query = f"""
+        results = {}
+        batch_size = 500
+        
+        for start in range(0, len(test_names_array), batch_size):
+            test_names_batch = test_names_array[start:start + batch_size]
+            history_query = f"""
     PRAGMA AnsiInForEmptyOrNullableItemsCollections;
     DECLARE $test_names AS List<Utf8>;
     DECLARE $rn_max AS Int32;
@@ -90,26 +89,24 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
         run_timestamp;
 
 """
-        query_result = ydb_wrapper.execute_scan_query(history_query, script_name)
+            query_result = ydb_wrapper.execute_scan_query(history_query, script_name)
 
-        for row in query_result:
-            if not row["full_name"].decode("utf-8") in results:
-                results[row["full_name"].decode("utf-8")] = {}
+            for row in query_result:
+                if not row["full_name"].decode("utf-8") in results:
+                    results[row["full_name"].decode("utf-8")] = {}
 
-            results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
-                "branch": row["branch"],
-                "status": row["status"],
-                "commit": row["commit"],
-                "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
-                "status_description": row["status_description"].replace(';;','\n'),
-                "job_id": row["job_id"],
-                "job_name": row["job_name"]
-            }
-    
-    end_time = time.time()
-    print(
-        f'durations of getting history for {len(test_names_array)} tests :{end_time-start_time} sec')
-    return results
+                results[row["full_name"].decode("utf-8")][row["run_timestamp"]] = {
+                    "branch": row["branch"],
+                    "status": row["status"],
+                    "commit": row["commit"],
+                    "datetime": datetime.datetime.fromtimestamp(int(row["run_timestamp"] / 1000000)).strftime("%H:%m %B %d %Y"),
+                    "status_description": row["status_description"].replace(';;','\n'),
+                    "job_id": row["job_id"],
+                    "job_name": row["job_name"]
+                }
+        
+        print(f'Retrieved history for {len(test_names_array)} tests')
+        return results
 
 
 if __name__ == "__main__":

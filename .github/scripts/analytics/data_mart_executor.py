@@ -13,37 +13,8 @@ repo_path = os.path.abspath(f"{dir}/../../../")
 
 def get_data_from_query_with_metadata(ydb_wrapper, query, script_name):
     """Get data from query using ydb_wrapper and extract column metadata"""
-    # We need to access the raw scan query to get column metadata
-    # Since ydb_wrapper.execute_scan_query doesn't expose column types,
-    # we'll need to implement this differently
-    
-    # For now, let's use a workaround by running the query directly
-    import time
-    start_time = time.time()
-    
-    with ydb_wrapper.get_driver() as driver:
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-        table_client = ydb.TableClient(driver, tc_settings)
-        scan_query = ydb.ScanQuery(query, {})
-        it = table_client.scan_query(scan_query)
-        
-        results = []
-        column_types = None
-        
-        while True:
-            try:
-                result = next(it)
-                if column_types is None:
-                    column_types = [(col.name, col.type) for col in result.result_set.columns]
-                
-                results.extend(result.result_set.rows)
-            
-            except StopIteration:
-                break
-
-        end_time = time.time()
-        print(f'Captured {len(results)} rows, duration: {end_time - start_time}s')
-    
+    # Use the new method that returns both data and column metadata in one call
+    results, column_types = ydb_wrapper.execute_scan_query_with_metadata(query, script_name)
     return results, column_types
 
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):
@@ -141,42 +112,42 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
 
-    table_path = args.table_path
-    batch_size = 1000
-    script_name = os.path.basename(__file__)
+        table_path = args.table_path
+        batch_size = 1000
+        script_name = os.path.basename(__file__)
 
-    # Read SQL query from file
-    sql_query_path = os.path.join(repo_path, args.query_path)
-    print(f'Query found: {sql_query_path}')
-    with open(sql_query_path, 'r') as file:
-        sql_query = file.read()
+        # Read SQL query from file
+        sql_query_path = os.path.join(repo_path, args.query_path)
+        print(f'Query found: {sql_query_path}')
+        with open(sql_query_path, 'r') as file:
+            sql_query = file.read()
 
-    # Run query to get sample data and column types
-    results, column_types = get_data_from_query_with_metadata(ydb_wrapper, sql_query, script_name)
-    if not results:
-        print("No data to create table from.")
-        return
+        # Run query to get sample data and column types
+        results, column_types = get_data_from_query_with_metadata(ydb_wrapper, sql_query, script_name)
+        if not results:
+            print("No data to create table from.")
+            return
 
-    # Create table if not exists based on sample column types
-    full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
-    create_table_if_not_exists(
-        ydb_wrapper, full_table_path, column_types, args.store_type,
-        args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key, script_name
-    )
+        # Create table if not exists based on sample column types
+        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
+        create_table_if_not_exists(
+            ydb_wrapper, full_table_path, column_types, args.store_type,
+            args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key, script_name
+        )
 
-    print(f'Preparing to upsert: {len(results)} rows')
-    for start in range(0, len(results), batch_size):
-        batch_rows = results[start:start + batch_size]
-        print(f'Upserting: {start}-{start + len(batch_rows)}/{len(results)} rows')
-        bulk_upsert(ydb_wrapper, full_table_path, batch_rows, column_types, args.store_type, script_name)
-    print('Data uploaded')
+        print(f'Preparing to upsert: {len(results)} rows')
+        
+        for start in range(0, len(results), batch_size):
+            batch_rows = results[start:start + batch_size]
+            bulk_upsert(ydb_wrapper, full_table_path, batch_rows, column_types, args.store_type, script_name)
+        
+        print('Data uploaded')
 
 
 if __name__ == "__main__":

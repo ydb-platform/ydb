@@ -98,33 +98,33 @@ def get_missed_data_for_upload(ydb_wrapper, script_name):
 
 
 def main():
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
-    
-    table_path = "test_results/analytics/test_history_fast"
-    full_table_path = f'{ydb_wrapper.database_path}/{table_path}'
-    batch_size = 1000
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
+        
+        table_path = "test_results/analytics/test_history_fast"
+        full_table_path = f'{ydb_wrapper.database_path}/{table_path}'
+        batch_size = 1000
 
-    # Create table if it doesn't exist
-    create_test_history_fast_table(ydb_wrapper, full_table_path, script_name)
-    
-    # Get missed data for upload
-    prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, script_name)
-    print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
-    
-    if prepared_for_upload_rows:
-        for start in range(0, len(prepared_for_upload_rows), batch_size):
-            batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
-            print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
-            bulk_upsert(ydb_wrapper, full_table_path, batch_rows_for_upload, script_name)
-        print('Tests uploaded')
-    else:
-        print('Nothing to upload')
+        # Create table if it doesn't exist
+        create_test_history_fast_table(ydb_wrapper, full_table_path, script_name)
+        
+        # Get missed data for upload
+        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, script_name)
+        print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
+        
+        if prepared_for_upload_rows:
+            for start in range(0, len(prepared_for_upload_rows), batch_size):
+                batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
+                print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
+                bulk_upsert(ydb_wrapper, full_table_path, batch_rows_for_upload, script_name)
+            print('Tests uploaded')
+        else:
+            print('Nothing to upload')
 
 
 if __name__ == "__main__":

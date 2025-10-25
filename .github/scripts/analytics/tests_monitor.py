@@ -295,37 +295,37 @@ def main():
     branch = args.branch
     concurrent_mode = args.concurrent_mode
 
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
-    
-    base_date = datetime.datetime(1970, 1, 1)
-    default_start_date = datetime.date(2025, 2, 1)
-    today = datetime.date.today()
-    table_path = f'test_results/analytics/tests_monitor'
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
+        
+        base_date = datetime.datetime(1970, 1, 1)
+        default_start_date = datetime.date(2025, 2, 1)
+        today = datetime.date.today()
+        table_path = f'test_results/analytics/tests_monitor'
 
-    # Get last existing day
-    print("Geting date of last collected monitor data")
-    query_last_exist_day = f"""
-        SELECT MAX(date_window) AS last_exist_day
-        FROM `{table_path}`
-        WHERE build_type = '{build_type}'
-        AND branch = '{branch}'
-    """
-    
-    try:
-        results = ydb_wrapper.execute_scan_query(query_last_exist_day, script_name)
-        last_exist_day = results[0]['last_exist_day'] if results else None
-    except Exception as e:
-        print(f"Error during fetching last existing day: {e}")
-        last_exist_day = None
+        # Get last existing day
+        print("Geting date of last collected monitor data")
+        query_last_exist_day = f"""
+            SELECT MAX(date_window) AS last_exist_day
+            FROM `{table_path}`
+            WHERE build_type = '{build_type}'
+            AND branch = '{branch}'
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(query_last_exist_day, script_name)
+            last_exist_day = results[0]['last_exist_day'] if results else None
+        except Exception as e:
+            print(f"Error during fetching last existing day: {e}")
+            last_exist_day = None
 
-    last_exist_df = None
-    last_day_data = None
+        last_exist_df = None
+        last_day_data = None
 
     # If no data exists, try to find when this branch was created
     if last_exist_day is None:
@@ -505,11 +505,7 @@ def main():
                     AND hist.date_window = owners_t.date;
             """
             # Execute query using ydb_wrapper
-            start_time = time.time()
             results = ydb_wrapper.execute_scan_query(query_get_history, script_name)
-            end_time = time.time()
-            print(f'Captured raw data for {date} duration: {end_time - start_time}')
-            start_time = time.time()
 
             # Check if new data was found
             if results:

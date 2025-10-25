@@ -24,43 +24,43 @@ def main():
     print(f'   🔧 Build type: {build_type}')
     print(f'   🌿 Branch: {branch}')
     
-    # Инициализируем YDB обертку
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Получаем информацию о кластере
-    cluster_info = ydb_wrapper.get_cluster_info()
-    print(f'🏷️  Cluster info:')
-    print(f'   📊 Version: {cluster_info.get("version", "unknown")}')
-    print(f'   🔗 Endpoint: {cluster_info.get("endpoint", "unknown")}')
-    print(f'   💾 Database: {cluster_info.get("database", "unknown")}')
-    print(f'   📈 Statistics: {cluster_info.get("statistics_status", "unknown")}')
-    if cluster_info.get("statistics_enabled"):
-        print(f'   📊 Stats DB: {cluster_info.get("statistics_database", "unknown")}')
-        print(f'   📋 Stats Table: {cluster_info.get("statistics_table", "unknown")}')
-    
-    # Получаем последнюю дату из истории
-    table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
-    last_date_query = f"""
-        select max(date_window) as max_date_window from `{table_path}`
-        where build_type = '{build_type}' and branch = '{branch}'
-    """
-    
-    try:
-        results = ydb_wrapper.execute_scan_query(last_date_query, script_name)
+    # Инициализируем YDB обертку с контекстным менеджером для автоматического закрытия
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
         
-        default_start_date = datetime.date(2024, 9, 1)
+        # Получаем информацию о кластере
+        cluster_info = ydb_wrapper.get_cluster_info()
+        print(f'🏷️  Cluster info:')
+        print(f'   📊 Version: {cluster_info.get("version", "unknown")}')
+        print(f'   🔗 Endpoint: {cluster_info.get("endpoint", "unknown")}')
+        print(f'   💾 Database: {cluster_info.get("database", "unknown")}')
+        print(f'   📈 Statistics: {cluster_info.get("statistics_status", "unknown")}')
+        if cluster_info.get("statistics_enabled"):
+            print(f'   📊 Stats DB: {cluster_info.get("statistics_database", "unknown")}')
+            print(f'   📋 Stats Table: {cluster_info.get("statistics_table", "unknown")}')
         
-        if results[0] and results[0].get('max_date_window', default_start_date) is not None and results[0].get('max_date_window', default_start_date) > default_start_date:
-            last_datetime = results[0].get('max_date_window', default_start_date)
-        else:
-            last_datetime = default_start_date
+        # Получаем последнюю дату из истории
+        table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
+        last_date_query = f"""
+            select max(date_window) as max_date_window from `{table_path}`
+            where build_type = '{build_type}' and branch = '{branch}'
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(last_date_query, script_name)
             
-        last_date = last_datetime.strftime('%Y-%m-%d')
-        print(f'📅 Last history date: {last_date}')
-        
-        # Создаем таблицу если не существует
-        create_table_sql = f"""
+            default_start_date = datetime.date(2024, 9, 1)
+            
+            if results[0] and results[0].get('max_date_window', default_start_date) is not None and results[0].get('max_date_window', default_start_date) > default_start_date:
+                last_datetime = results[0].get('max_date_window', default_start_date)
+            else:
+                last_datetime = default_start_date
+                
+            last_date = last_datetime.strftime('%Y-%m-%d')
+            print(f'📅 Last history date: {last_date}')
+            
+            # Создаем таблицу если не существует
+            create_table_sql = f"""
             CREATE table IF NOT EXISTS `{table_path}` (
                 `test_name` Utf8 NOT NULL,
                 `suite_folder` Utf8 NOT NULL,
@@ -83,19 +83,19 @@ def main():
                 PARTITION BY HASH(`full_name`,build_type,branch)
                 WITH (STORE = COLUMN)
         """
-        
-        ydb_wrapper.create_table(table_path, create_table_sql, script_name)
-        
-        # Обрабатываем каждую дату
-        today = datetime.date.today()
-        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
-        
-        print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
-        
-        for i, date in enumerate(sorted(date_list), 1):
-            print(f'📅 Processing date {i}/{len(date_list)}: {date}')
             
-            query_get_history = f"""
+            ydb_wrapper.create_table(table_path, create_table_sql, script_name)
+            
+            # Обрабатываем каждую дату
+            today = datetime.date.today()
+            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_datetime).days+1)]
+            
+            print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
+            
+            for i, date in enumerate(sorted(date_list), 1):
+                print(f'📅 Processing date {i}/{len(date_list)}: {date}')
+                
+                query_get_history = f"""
                 select
                     full_name,
                     date_base,
@@ -166,63 +166,63 @@ def main():
                     GROUP BY full_name,suite_folder,test_name,date_base,build_type,branch,owners
                 )
             """
-            
-            results = ydb_wrapper.execute_scan_query(query_get_history, script_name)
-            print(f'📈 History data captured, {len(results)} rows')
-            
-            # Подготавливаем данные для upsert
-            prepared_for_update_rows = []
-            for row in results:
-                row['count'] = dict(zip(list(row['history_list']), [list(
-                    row['history_list']).count(i) for i in list(row['history_list'])]))   
-                prepared_for_update_rows.append({
-                    'suite_folder': row['suite_folder'],
-                    'test_name': row['test_name'],
-                    'full_name': row['full_name'],
-                    'date_window': row['date_base'],
-                    'days_ago_window': history_for_n_day,
-                    'build_type': row['build_type'],
-                    'branch': row['branch'],
-                    'first_run': row['first_run'],
-                    'last_run': row['last_run'],
-                    'history': ','.join(row['history_list']).encode('utf8'),
-                    'history_class': row['dist_hist'],
-                    'pass_count': row['count'].get('passed', 0),
-                    'mute_count': row['count'].get('mute', 0),
-                    'fail_count': row['count'].get('failure', 0),
-                    'skip_count': row['count'].get('skipped', 0),
-                })
-            
-            print(f'💾 Upserting history for date {date}')
-            
-            # Подготавливаем column types для bulk upsert
-            column_types = (
-                ydb.BulkUpsertColumns()
-                .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-                .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-                .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
-                .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
-                .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
-                .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("mute_count", ydb.OptionalType(ydb.OptionalType.Uint64))
-                .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-                .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-            )
-            
-            full_path = f"{ydb_wrapper.database_path}/{table_path}"
-            ydb_wrapper.bulk_upsert(full_path, prepared_for_update_rows, column_types, script_name)
+                
+                results = ydb_wrapper.execute_scan_query(query_get_history, script_name)
+                print(f'📈 History data captured, {len(results)} rows')
+                
+                # Подготавливаем данные для upsert
+                prepared_for_update_rows = []
+                for row in results:
+                    row['count'] = dict(zip(list(row['history_list']), [list(
+                        row['history_list']).count(i) for i in list(row['history_list'])]))   
+                    prepared_for_update_rows.append({
+                        'suite_folder': row['suite_folder'],
+                        'test_name': row['test_name'],
+                        'full_name': row['full_name'],
+                        'date_window': row['date_base'],
+                        'days_ago_window': history_for_n_day,
+                        'build_type': row['build_type'],
+                        'branch': row['branch'],
+                        'first_run': row['first_run'],
+                        'last_run': row['last_run'],
+                        'history': ','.join(row['history_list']).encode('utf8'),
+                        'history_class': row['dist_hist'],
+                        'pass_count': row['count'].get('passed', 0),
+                        'mute_count': row['count'].get('mute', 0),
+                        'fail_count': row['count'].get('failure', 0),
+                        'skip_count': row['count'].get('skipped', 0),
+                    })
+                
+                print(f'💾 Upserting history for date {date}')
+                
+                # Подготавливаем column types для bulk upsert
+                column_types = (
+                    ydb.BulkUpsertColumns()
+                    .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("first_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                    .add_column("last_run", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                    .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+                    .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("history", ydb.OptionalType(ydb.PrimitiveType.String))
+                    .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.String))
+                    .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("mute_count", ydb.OptionalType(ydb.OptionalType.Uint64))
+                    .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                    .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                )
+                
+                full_path = f"{ydb_wrapper.database_path}/{table_path}"
+                ydb_wrapper.bulk_upsert(full_path, prepared_for_update_rows, column_types, script_name)
 
-        print('✅ History updated successfully')
+            print('✅ History updated successfully')
 
-    except Exception as e:
-        print(f'❌ Script failed: {e}')
-        raise
+        except Exception as e:
+            print(f'❌ Script failed: {e}')
+            raise
 
 
 if __name__ == "__main__":

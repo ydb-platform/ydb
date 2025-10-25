@@ -119,50 +119,49 @@ def main():
     script_start_time = time.time()
     script_name = os.path.basename(__file__)
     
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
-    
-    table_path = "test_results/analytics/github_issue_mapping"
-    full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
-    
-    try:
-        # Get GitHub issues data
-        issues_data = get_github_issues_data(ydb_wrapper, script_name)
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
         
-        if not issues_data:
-            print("No GitHub issues data found")
-            return 0
+        table_path = "test_results/analytics/github_issue_mapping"
+        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
         
-        # Create test-to-issue mapping using shared utilities
-        print("Creating test-to-issue mapping...")
-        test_to_issue = create_test_issue_mapping(issues_data)
-        print(f"Created mapping for {len(test_to_issue)} unique test names")
+        try:
+            # Get GitHub issues data
+            issues_data = get_github_issues_data(ydb_wrapper, script_name)
+            
+            if not issues_data:
+                print("No GitHub issues data found")
+                return 0
+            
+            # Create test-to-issue mapping using shared utilities
+            print("Creating test-to-issue mapping...")
+            test_to_issue = create_test_issue_mapping(issues_data)
+            print(f"Created mapping for {len(test_to_issue)} unique test names")
+            
+            # Convert mapping to table data format
+            mapping_data = convert_mapping_to_table_data(test_to_issue)
+            print(f"Converted to {len(mapping_data)} table records")
+            
+            # Create mapping table
+            create_test_issue_mapping_table(ydb_wrapper, full_table_path, script_name)
+            
+            # Bulk upsert mapping data
+            if mapping_data:
+                bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data, script_name)
+            else:
+                print("No mapping data to insert")
         
-        # Convert mapping to table data format
-        mapping_data = convert_mapping_to_table_data(test_to_issue)
-        print(f"Converted to {len(mapping_data)} table records")
+            script_elapsed = time.time() - script_start_time
+            print(f"Script completed successfully, total time: {script_elapsed:.2f}s")
+            
+        except Exception as e:
+            print(f"Error during execution: {e}")
+            return 1
         
-        # Create mapping table
-        create_test_issue_mapping_table(ydb_wrapper, full_table_path, script_name)
-        
-        # Bulk upsert mapping data
-        if mapping_data:
-            bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data, script_name)
-        else:
-            print("No mapping data to insert")
-    
-        script_elapsed = time.time() - script_start_time
-        print(f"Script completed successfully, total time: {script_elapsed:.2f}s")
-        
-    except Exception as e:
-        print(f"Error during execution: {e}")
-        return 1
-    
-    return 0
+        return 0
 
 
 if __name__ == "__main__":

@@ -654,92 +654,92 @@ def main():
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        print("Error: YDB credentials check failed")
-        return 1
-    
-    # Check GitHub token
-    if "GITHUB_TOKEN" not in os.environ:
-        print("Error: Environment variable GITHUB_TOKEN is missing")
-        return 1
-    
-    table_path = "github_data/issues"
-    full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
-    batch_size = 100
-    
-    try:
-        # Create table if needed
-        create_issues_table(ydb_wrapper, table_path)
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
         
-        # Check if this is an incremental update
-        last_update_time = get_last_update_time(ydb_wrapper, table_path)
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            print("Error: YDB credentials check failed")
+            return 1
         
-        if last_update_time:
-            print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
-            # Add a small buffer to avoid missing issues due to timing issues
-            since_time = last_update_time - timedelta(minutes=5)
-        else:
-            print("Full export: fetching all issues")
-            since_time = None
+        # Check GitHub token
+        if "GITHUB_TOKEN" not in os.environ:
+            print("Error: Environment variable GITHUB_TOKEN is missing")
+            return 1
         
-        # Fetch issues from GitHub
-        issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+        table_path = "github_data/issues"
+        full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
+        batch_size = 100
         
-        if not issues:
-            print("No issues fetched from GitHub")
-            return 0
-        
-        # Get project fields if PROJECT_ID is specified
-        project_fields = {}
-        if PROJECT_ID:
-            issue_numbers = []
-            for issue in issues:
-                number = issue.get('number')
-                if number is not None and isinstance(number, int):
-                    issue_numbers.append(number)
-            if issue_numbers:
-                project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
-        
-        # Transform issues for YDB
-        transformed_issues = transform_issues_for_ydb(issues, project_fields)
-        
-        # Upsert issues in batches
-        print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
-        upload_start_time = time.time()
-        
-        for start in range(0, len(transformed_issues), batch_size):
-            batch_start_time = time.time()
-            batch_issues = transformed_issues[start:start + batch_size]
+        try:
+            # Create table if needed
+            create_issues_table(ydb_wrapper, table_path)
             
-            print(f"Uploading batch {start//batch_size + 1}: issues {start+1}-{start+len(batch_issues)}")
-            bulk_upsert_issues(ydb_wrapper, full_table_path, batch_issues)
+            # Check if this is an incremental update
+            last_update_time = get_last_update_time(ydb_wrapper, table_path)
             
-            batch_elapsed = time.time() - batch_start_time
-            print(f"Batch completed (took {batch_elapsed:.2f}s)")
+            if last_update_time:
+                print(f"Incremental update: fetching issues updated since {last_update_time.isoformat()}")
+                # Add a small buffer to avoid missing issues due to timing issues
+                since_time = last_update_time - timedelta(minutes=5)
+            else:
+                print("Full export: fetching all issues")
+                since_time = None
+            
+            # Fetch issues from GitHub
+            issues = fetch_repository_issues(ORG_NAME, REPO_NAME, since_time)
+            
+            if not issues:
+                print("No issues fetched from GitHub")
+                return 0
+            
+            # Get project fields if PROJECT_ID is specified
+            project_fields = {}
+            if PROJECT_ID:
+                issue_numbers = []
+                for issue in issues:
+                    number = issue.get('number')
+                    if number is not None and isinstance(number, int):
+                        issue_numbers.append(number)
+                if issue_numbers:
+                    project_fields = get_project_fields_for_issues(ORG_NAME, PROJECT_ID, issue_numbers)
+            
+            # Transform issues for YDB
+            transformed_issues = transform_issues_for_ydb(issues, project_fields)
+            
+            # Upsert issues in batches
+            print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
+            upload_start_time = time.time()
+            
+            for start in range(0, len(transformed_issues), batch_size):
+                batch_start_time = time.time()
+                batch_issues = transformed_issues[start:start + batch_size]
+                
+                print(f"Uploading batch {start//batch_size + 1}: issues {start+1}-{start+len(batch_issues)}")
+                bulk_upsert_issues(ydb_wrapper, full_table_path, batch_issues)
+                
+                batch_elapsed = time.time() - batch_start_time
+                print(f"Batch completed (took {batch_elapsed:.2f}s)")
+            
+            upload_elapsed = time.time() - upload_start_time
+            print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")
+            
+            # Show cluster info
+            cluster_info = ydb_wrapper.get_cluster_info()
+            print(f"\n📊 Export Summary:")
+            print(f"   Session ID: {cluster_info.get('session_id')}")
+            print(f"   Cluster Version: {cluster_info.get('version')}")
+            print(f"   Statistics Status: {cluster_info.get('statistics_status')}")
+            
+            script_elapsed = time.time() - script_start_time
+            print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
+            
+        except Exception as e:
+            print(f"Error during execution: {e}")
+            return 1
         
-        upload_elapsed = time.time() - upload_start_time
-        print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")
-        
-        # Show cluster info
-        cluster_info = ydb_wrapper.get_cluster_info()
-        print(f"\n📊 Export Summary:")
-        print(f"   Session ID: {cluster_info.get('session_id')}")
-        print(f"   Cluster Version: {cluster_info.get('version')}")
-        print(f"   Statistics Status: {cluster_info.get('statistics_status')}")
-        
-        script_elapsed = time.time() - script_start_time
-        print(f"Script completed successfully (total time: {script_elapsed:.2f}s)")
-        
-    except Exception as e:
-        print(f"Error during execution: {e}")
-        return 1
-    
-    return 0
+        return 0
 
 if __name__ == "__main__":
     exit(main()) 

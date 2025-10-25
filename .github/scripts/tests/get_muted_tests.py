@@ -26,24 +26,24 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return []
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return []
 
-    # geting last date from history
-    today = datetime.date.today().strftime('%Y-%m-%d')
-    print(f'📅 Using date: {today}')
-    
-    if job_id and branch:  # extend all tests from main by new tests from pr
-        print(f'🔄 Mode: Extend all tests from main by new tests from PR')
-        print(f'   - job_id: {job_id}')
-        print(f'   - branch: {branch}')
+        # geting last date from history
+        today = datetime.date.today().strftime('%Y-%m-%d')
+        print(f'📅 Using date: {today}')
+        
+        if job_id and branch:  # extend all tests from main by new tests from pr
+            print(f'🔄 Mode: Extend all tests from main by new tests from PR')
+            print(f'   - job_id: {job_id}')
+            print(f'   - branch: {branch}')
 
-        tests_query = f"""
+            tests_query = f"""
         SELECT * FROM (
             SELECT 
                 suite_folder,
@@ -64,12 +64,12 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
                 and branch = '{branch}'
         )
         """
-    else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
-        print(f'🎯 Mode: Get all tests with run_timestamp_last from test_runs_column')
-        print(f'   - branch: {branch}')
-        print(f'   - build_type: {build_type}')
+        else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
+            print(f'🎯 Mode: Get all tests with run_timestamp_last from test_runs_column')
+            print(f'   - branch: {branch}')
+            print(f'   - build_type: {build_type}')
 
-        tests_query = f"""
+            tests_query = f"""
         SELECT 
             t.suite_folder as suite_folder,
             t.test_name as test_name,
@@ -89,19 +89,17 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             GROUP BY suite_folder, test_name
         ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
         """
-    
-    print(f'📝 Executing SQL query:')
-    print(tests_query)
-    
-    print(f'⏱️  Starting query execution...')
-    start_time = time.time()
-    results = ydb_wrapper.execute_scan_query(tests_query, script_name)
-    
-    end_time = time.time()
-    print(f'✅ Query completed in {end_time - start_time:.2f} seconds')
-    print(f'📊 Total results: {len(results)} tests')
-    
-    return results
+        
+        print(f'📝 Executing SQL query:')
+        print(tests_query)
+        
+        print(f'⏱️  Starting query execution...')
+        results = ydb_wrapper.execute_scan_query(tests_query, script_name)
+        
+        print(f'✅ Query completed successfully')
+        print(f'📊 Total results: {len(results)} tests')
+        
+        return results
 
 
 def create_tables(ydb_wrapper, table_path, script_name):
@@ -145,11 +143,9 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
     print(f'🔧 Column types configured')
     print(f'⏱️  Executing bulk upsert...')
     
-    start_time = time.time()
     ydb_wrapper.bulk_upsert(table_path, rows, column_types, script_name)
-    end_time = time.time()
     
-    print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
+    print(f'✅ Bulk upsert completed successfully')
     print(f'📊 Successfully upserted {len(rows)} rows')
 
 
@@ -162,30 +158,28 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return
 
-    table_path = f'test_results/all_tests_with_owner_and_mute'
-    print(f'📋 Target table: {table_path}')
+        table_path = f'test_results/all_tests_with_owner_and_mute'
+        print(f'📋 Target table: {table_path}')
 
-    print(f'🏗️  Creating table if not exists...')
-    create_tables(ydb_wrapper, table_path, script_name)
-    
-    full_path = f"{ydb_wrapper.database_path}/{table_path}"
-    print(f'📤 Starting bulk upsert to: {full_path}')
-    print(f'   - Records to upload: {len(tests)}')
-    
-    start_time = time.time()
-    bulk_upsert(ydb_wrapper, full_path, tests, script_name)
-    end_time = time.time()
-    
-    print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
-    print(f'📊 Successfully uploaded {len(tests)} test records')
+        print(f'🏗️  Creating table if not exists...')
+        create_tables(ydb_wrapper, table_path, script_name)
+        
+        full_path = f"{ydb_wrapper.database_path}/{table_path}"
+        print(f'📤 Starting bulk upsert to: {full_path}')
+        print(f'   - Records to upload: {len(tests)}')
+        
+        bulk_upsert(ydb_wrapper, full_path, tests, script_name)
+        
+        print(f'✅ Bulk upsert completed successfully')
+        print(f'📊 Successfully uploaded {len(tests)} test records')
 
 
 def to_str(data):

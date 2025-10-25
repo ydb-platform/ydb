@@ -41,17 +41,17 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
 
 
 def main():    
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
-    
-    table_path = f'test_results/analytics/testowners'    
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return 1
+        
+        table_path = f'test_results/analytics/testowners'    
 
-    query_get_owners = f"""
+        query_get_owners = f"""
    select 
         DISTINCT test_name, 
         suite_folder, 
@@ -85,10 +85,7 @@ def main():
     """
     
     # Execute query using ydb_wrapper
-    start_time = time.time()
     results = ydb_wrapper.execute_scan_query(query_get_owners, script_name)
-    end_time = time.time()
-    print(f'transaction duration: {end_time - start_time}')
 
     print(f'testowners data captured, {len(results)} rows')
     test_list = []

@@ -400,6 +400,9 @@ class ClientCreator:
         self._set_s3_presign_signature_version(
             client.meta, client_config, scoped_config
         )
+        client.meta.events.register(
+            'before-parameter-build.s3', self._inject_s3_input_parameters
+        )
 
     def _register_s3_control_events(
         self,
@@ -455,6 +458,15 @@ class ClientCreator:
         client_meta.events.register(
             'choose-signer.s3', self._default_s3_presign_to_sigv2
         )
+
+    def _inject_s3_input_parameters(self, params, context, **kwargs):
+        context['input_params'] = {}
+        inject_parameters = ('Bucket', 'Delete', 'Key', 'Prefix')
+        for inject_parameter in inject_parameters:
+            if inject_parameter in params:
+                context['input_params'][inject_parameter] = params[
+                    inject_parameter
+                ]
 
     def _default_s3_presign_to_sigv2(self, signature_version, **kwargs):
         """
@@ -1144,7 +1156,7 @@ class BaseClient:
             pageable.  You can use the ``client.can_paginate`` method to
             check if an operation is pageable.
 
-        :rtype: L{botocore.paginate.Paginator}
+        :rtype: ``botocore.paginate.Paginator``
         :return: A paginator object.
 
         """
@@ -1243,7 +1255,7 @@ class BaseClient:
             section of the service docs for a list of available waiters.
 
         :returns: The specified waiter object.
-        :rtype: botocore.waiter.Waiter
+        :rtype: ``botocore.waiter.Waiter``
         """
         config = self._get_waiter_config()
         if not config:

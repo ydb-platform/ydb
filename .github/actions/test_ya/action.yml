@@ -166,7 +166,7 @@ runs:
             ;;
           release-asan)
             params+=(
-              --build "release" --sanitize="address"
+              --build "release" --sanitize="undefined"
             )
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1

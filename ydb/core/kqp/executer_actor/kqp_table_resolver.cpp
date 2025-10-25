@@ -27,10 +27,11 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        TKqpTasksGraph& tasksGraph)
+        TKqpTasksGraph& tasksGraph, bool skipUnresolvedNames)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
+        , SkipUnresolvedNames(skipUnresolvedNames)
         , TasksGraph(tasksGraph) {}
 
     void Bootstrap() {
@@ -324,6 +325,7 @@ private:
     void ResolveKeys() {
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = TasksGraph.GetMeta().Database; 
         request->ResultSet.reserve(TasksGraph.GetStagesInfo().size());
         if (UserToken && !UserToken->GetSerializedToken().empty()) {
             request->UserToken = UserToken;
@@ -334,7 +336,7 @@ private:
             for (const auto& [_, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (!stageInfo.Meta.ShardOperations.empty()) {
                     const auto& tableInfo = stageInfo.Meta.TableConstInfo;
-                    if (!tableInfo) {
+                    if (!tableInfo && !SkipUnresolvedNames) {
                         AFL_ENSURE(!stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
                         needToResolveNames = true;
@@ -421,7 +423,7 @@ private:
                         if (requestNavigate->DatabaseName.empty()) {
                             requestNavigate->DatabaseName = TasksGraph.GetMeta().Database;
                         }
-                    } else {
+                    } else if (!SkipUnresolvedNames) {
                         // CTAS
                         AFL_ENSURE(stageInfo.Meta.TableId);
                         AFL_ENSURE(stageInfo.Meta.TablePath);
@@ -507,6 +509,7 @@ private:
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TString, TVector<TStageId>> TableRequestPathes;
     THashMap<TTableId, TString> TablePathsById;
+    const bool SkipUnresolvedNames;
     bool ResolvingNamesFinished = false;
     bool NavigationFinished = false;
     bool ResolvingFinished = false;
@@ -522,8 +525,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph) {
-    return new TKqpTableResolver(owner, txId, userToken, tasksGraph);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph, bool skipUnknownNames) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph, skipUnknownNames);
 }
 
 } // namespace NKikimr::NKqp

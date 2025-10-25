@@ -27,6 +27,7 @@
 {#-             Output is relative in export_root -#}
 {%-             set out_set = all_sets|selectattr('realdir', 'startsWith', export_root)|rejectattr('dir', 'startsWith', export_root)|selectattr('realdir', 'in', export_root + "/" + bindir) -%}
 {%-             if out_set|length -%}
+{#-                 Real output dir != output dir (symlink to output dir) -#}
 {%-                 set out_set = out_set|first -%}
 {%-                 set out_dir = out_set.dir -%}
 {%-                 if current_target.test_reldir -%}
@@ -39,7 +40,7 @@
 "$arcadia_root/{{ curdir }}/{{ out_dir }}{{ tail }}"
 {%-             else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
+"{{ (export_root + "/" + bindir)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
 {%-             endif -%}
 {%-         else -%}
 "{{ arg|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"

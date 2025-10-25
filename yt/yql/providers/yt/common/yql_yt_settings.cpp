@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <library/cpp/yson/node/node_io.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/regex/pcre/regexp.h>
 #include <library/cpp/string_utils/parse_size/parse_size.h>
 
@@ -283,6 +284,41 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             LayerPaths[cluster] = value;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, LayerCaches)
+        .Parser([](const TString& v) {
+            NJson::TJsonValue val;
+            if (!NJson::ReadJsonTree(v, &val)) {
+                throw yexception() << "yt.LayerCaches must be a valid JSON string";
+            };
+            if (!val.Has("name")) {
+                throw yexception() << "yt.LayerCaches must contain layer name";
+            }
+            if (!val.Has("paths")) {
+                throw yexception() << "yt.LayerCaches must contain layer paths";
+            }
+            if (!val["paths"].IsArray()) {
+                throw yexception() << "yt.LayerCaches's paths must be an array";
+            }
+            for (const auto& path: val["paths"].GetArray()) {
+                if (!path.IsString()) {
+                    throw yexception() << "yt.LayerCaches's path must be a string";
+                }
+            }
+            THashMap<TString, TVector<TString>> res;
+            TVector<TString> paths;
+            paths.reserve(val["paths"].GetArray().size());
+            for (const auto& path: val["paths"].GetArray()) {
+                paths.emplace_back(path.GetString());
+            }
+            res[val["name"].GetString()] = std::move(paths);
+            return res;
+        })
+        .ValueSetter([this](const TString& cluster, const THashMap<TString, TVector<TString>>& val) {
+            for (const auto& [name, paths]: val) {
+                LayerCaches[cluster][name] = paths;
+            }
+        });
+
     REGISTER_SETTING(*this, DockerImage).NonEmpty()
         .ValueSetter([this](const TString& cluster, const TString& value) {
             DockerImage[cluster] = value;
@@ -472,6 +508,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
     REGISTER_SETTING(*this, UseNativeYtDefaultColumnOrder);
+    REGISTER_SETTING(*this, EarlyPartitionPruning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -566,6 +603,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
+    REGISTER_SETTING(*this, ValidatePool);
+    REGISTER_SETTING(*this, ValidateClusters);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

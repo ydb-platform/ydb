@@ -1,5 +1,3 @@
-ENABLE(YQL_STYLE_CPP)
-
 SRCDIR(
     yql/essentials/public/purecalc/io_specs/arrow
 )

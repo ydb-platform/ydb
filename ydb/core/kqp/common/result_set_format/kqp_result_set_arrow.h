@@ -68,23 +68,23 @@ namespace NKikimr::NKqp::NFormats {
  * @return std::shared_ptr<arrow::DataType> arrow type of the same structure as
  * type
  */
-std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType *type);
+std::shared_ptr<arrow::DataType> GetArrowType(const NMiniKQL::TType* type);
 
-void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder *builder, const NMiniKQL::TType *type);
+bool IsArrowCompatible(const NMiniKQL::TType* type);
+
+void AppendElement(NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NMiniKQL::TType* type);
 
 namespace NTestUtils {
 
-bool IsArrowCompatible(const NMiniKQL::TType *type);
+std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType* type);
 
-std::unique_ptr<arrow::ArrayBuilder> MakeArrowBuilder(const NMiniKQL::TType *type);
+std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector& values, const NMiniKQL::TType* itemType);
 
-std::shared_ptr<arrow::Array> MakeArray(NMiniKQL::TUnboxedValueVector &values, const NMiniKQL::TType *itemType);
+NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array>& array, ui64 row,
+    const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
 
-NUdf::TUnboxedValue ExtractUnboxedValue(const std::shared_ptr<arrow::Array> &array, ui64 row,
-    const NMiniKQL::TType *itemType, const NMiniKQL::THolderFactory &holderFactory);
-
-NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array> &array,
-    const NMiniKQL::TType *itemType, const NMiniKQL::THolderFactory &holderFactory);
+NMiniKQL::TUnboxedValueVector ExtractUnboxedValues(const std::shared_ptr<arrow::Array>& array,
+    const NMiniKQL::TType* itemType, const NMiniKQL::THolderFactory& holderFactory);
 
 } // namespace NTestUtils
 

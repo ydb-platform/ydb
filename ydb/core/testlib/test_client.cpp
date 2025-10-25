@@ -537,11 +537,49 @@ namespace Tests {
         Runtime->AddAppDataInit([this](ui32 nodeIdx, NKikimr::TAppData& appData) {
             Y_UNUSED(nodeIdx);
 
-            appData.AuthConfig.MergeFrom(Settings->AuthConfig);
-            appData.PQConfig.MergeFrom(Settings->PQConfig);
-            appData.PQClusterDiscoveryConfig.MergeFrom(Settings->PQClusterDiscoveryConfig);
-            appData.NetClassifierConfig.MergeFrom(Settings->NetClassifierConfig);
-            appData.StreamingConfig.MergeFrom(Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+#define MERGE_APP_CFG_FROM(cfg, src) appData.cfg.MergeFrom(src)
+#define MERGE_CFG_FROM_APP_CFG(cfg) MERGE_APP_CFG_FROM(cfg, Settings->AppConfig->Get ## cfg())
+#define MERGE_CFG_FROM_SETTINGS(cfg) MERGE_APP_CFG_FROM(cfg, Settings->cfg)
+            MERGE_CFG_FROM_SETTINGS(AuthConfig);
+            MERGE_APP_CFG_FROM(StreamingConfig, Settings->AppConfig->GetGRpcConfig().GetStreamingConfig());
+            MERGE_CFG_FROM_APP_CFG(PQConfig);
+            MERGE_CFG_FROM_SETTINGS(PQConfig);
+            MERGE_CFG_FROM_APP_CFG(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_SETTINGS(PQClusterDiscoveryConfig);
+            MERGE_CFG_FROM_APP_CFG(KafkaProxyConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierConfig);
+            MERGE_CFG_FROM_SETTINGS(NetClassifierConfig);
+            MERGE_CFG_FROM_APP_CFG(NetClassifierDistributableConfig);
+            MERGE_CFG_FROM_APP_CFG(SqsConfig);
+            MERGE_CFG_FROM_APP_CFG(AuthConfig);
+            MERGE_CFG_FROM_APP_CFG(KeyConfig);
+            MERGE_CFG_FROM_APP_CFG(PDiskKeyConfig);
+            MERGE_CFG_FROM_APP_CFG(FeatureFlags);
+            MERGE_CFG_FROM_APP_CFG(HiveConfig);
+            MERGE_CFG_FROM_APP_CFG(DataShardConfig);
+            MERGE_CFG_FROM_APP_CFG(ColumnShardConfig);
+            MERGE_CFG_FROM_APP_CFG(SchemeShardConfig);
+            MERGE_CFG_FROM_APP_CFG(MeteringConfig);
+            MERGE_CFG_FROM_APP_CFG(CompactionConfig);
+            MERGE_CFG_FROM_APP_CFG(DomainsConfig);
+            MERGE_CFG_FROM_APP_CFG(AwsCompatibilityConfig);
+            MERGE_CFG_FROM_APP_CFG(S3ProxyResolverConfig);
+            MERGE_CFG_FROM_APP_CFG(BackgroundCleaningConfig);
+            MERGE_CFG_FROM_APP_CFG(GraphConfig);
+            MERGE_CFG_FROM_APP_CFG(SharedCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MetadataCacheConfig);
+            MERGE_CFG_FROM_APP_CFG(MemoryControllerConfig);
+            MERGE_CFG_FROM_APP_CFG(HealthCheckConfig);
+            MERGE_CFG_FROM_APP_CFG(WorkloadManagerConfig);
+            MERGE_CFG_FROM_APP_CFG(QueryServiceConfig);
+            MERGE_CFG_FROM_APP_CFG(BridgeConfig);
+            MERGE_CFG_FROM_SETTINGS(BridgeConfig);
+            MERGE_CFG_FROM_APP_CFG(StatisticsConfig);
+            MERGE_CFG_FROM_APP_CFG(SystemTabletBackupConfig);
+#undef MERGE_CFG_FROM_SETTINGS
+#undef MERGE_APP_CFG_FROM
+#undef MERGE_CFG_FROM_APP_CFG
+
             auto& securityConfig = Settings->AppConfig->GetDomainsConfig().GetSecurityConfig();
             appData.EnforceUserTokenRequirement = securityConfig.GetEnforceUserTokenRequirement();
             appData.EnforceUserTokenCheckRequirement = securityConfig.GetEnforceUserTokenCheckRequirement();
@@ -549,23 +587,13 @@ namespace Tests {
             appData.AdministrationAllowedSIDs = std::move(administrationAllowedSIDs);
             TVector<TString> registerDynamicNodeAllowedSIDs(securityConfig.GetRegisterDynamicNodeAllowedSIDs().cbegin(), securityConfig.GetRegisterDynamicNodeAllowedSIDs().cend());
             appData.RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
-            appData.DomainsConfig.MergeFrom(Settings->AppConfig->GetDomainsConfig());
-            appData.ColumnShardConfig.MergeFrom(Settings->AppConfig->GetColumnShardConfig());
             appData.PersQueueGetReadSessionsInfoWorkerFactory = Settings->PersQueueGetReadSessionsInfoWorkerFactory.get();
             appData.DataStreamsAuthFactory = Settings->DataStreamsAuthFactory.get();
             appData.PersQueueMirrorReaderFactory = Settings->PersQueueMirrorReaderFactory.get();
-            appData.HiveConfig.MergeFrom(Settings->AppConfig->GetHiveConfig());
-            appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
-            appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
-            appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
             appData.TransferWriterFactory = Settings->TransferWriterFactory;
-            appData.WorkloadManagerConfig.MergeFrom(Settings->AppConfig->GetWorkloadManagerConfig());
-            appData.QueryServiceConfig.MergeFrom(Settings->AppConfig->GetQueryServiceConfig());
-            appData.BridgeConfig.MergeFrom(Settings->BridgeConfig);
             if (appData.BridgeConfig.PilesSize() > 0) {
                 appData.BridgeModeEnabled = true;
             }
-            appData.StatisticsConfig.MergeFrom(Settings->AppConfig->GetStatisticsConfig());
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;
@@ -1346,8 +1374,9 @@ namespace Tests {
 
                 auto actorSystemPtr = std::make_shared<NKikimr::TDeferredActorLogBackend::TAtomicActorSystemPtr>(nullptr);
                 actorSystemPtr->store(Runtime->GetActorSystem(nodeIdx));
-                auto driver = std::make_shared<NYdb::TDriver>(NYdb::TDriverConfig()
-                    .SetLog(std::make_unique<NKikimr::TDeferredActorLogBackend>(actorSystemPtr, NKikimrServices::EServiceKikimr::YDB_SDK)));
+
+                auto driver = NKqp::MakeYdbDriver(actorSystemPtr, queryServiceConfig.GetStreamingQueries().GetTopicSdkSettings());
+                auto pqGateway = NKqp::MakePqGateway(driver);
 
                 federatedQuerySetupFactory = std::make_shared<NKikimr::NKqp::TKqpFederatedQuerySetupFactoryMock>(
                     NKqp::MakeHttpGateway(queryServiceConfig.GetHttpGateway(), Runtime->GetAppData(nodeIdx).Counters),
@@ -1364,7 +1393,7 @@ namespace Tests {
                     NYql::NDq::CreateReadActorFactoryConfig(queryServiceConfig.GetS3()),
                     Settings->DqTaskTransformFactory,
                     NYql::TPqGatewayConfig{},
-                    Settings->PqGateway ? Settings->PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+                    Settings->PqGateway ? Settings->PqGateway : pqGateway,
                     actorSystemPtr,
                     driver);
             }

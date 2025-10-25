@@ -51,30 +51,86 @@ struct TWideUnboxedHasher {
     const TKeyTypes& Types;
 };
 
-inline bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result)
-{
-    bool hasBlock = false;
-    bool hasNonBlock = false;
+bool UnwrapBlockTypes(const TArrayRef<TType* const>& typeComponents, std::vector<TType*>& result);
 
-    result.reserve(typeComponents.size());
-    for (TType* type : typeComponents) {
-        if (type->GetKind() == TType::EKind::Block) {
-            hasBlock = true;
-            type = static_cast<const TBlockType*>(type)->GetItemType();
-        } else {
-            hasNonBlock = true;
-        }
-        result.push_back(type);
+void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb);
+
+int ArrowScalarAsInt(const TArrowBlock& scalar);
+
+bool ForceLeftOptional(EJoinKind kind);
+
+// Left join causes all right columns to be nullable
+bool ForceRightOptional(EJoinKind kind);
+
+constexpr bool SemiOrOnlyJoin(EJoinKind kind) {
+    switch (kind) {
+        using enum EJoinKind;
+    case RightOnly:
+    case RightSemi:
+    case LeftOnly:
+    case LeftSemi:
+        return true;
+    default:
+        return false;
     }
-    MKQL_ENSURE(hasBlock != hasNonBlock, "Inconsistent wide item types: mixing of blocks and non-blocks detected");
-    return hasBlock;
+}
+
+constexpr bool
+ContainsRowsFromInnerJoin(EJoinKind kind) { // true if kind is a join that contains all rows from inner join output.
+    switch (kind) {
+        using enum EJoinKind;
+    case Inner:
+    case Full:
+    case Left:
+    case Right:
+    case Cross:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool LeftSemiOrOnly(EJoinKind kind) {
+    switch (kind) {
+        using enum EJoinKind;
+    case LeftOnly:
+    case LeftSemi:
+        return true;
+    default:
+        return false;
+    }
+}
+
+constexpr bool RightSemiOrOnly(EJoinKind kind) {
+    switch (kind) {
+        using enum EJoinKind;
+    case RightSemi:
+    case RightOnly:
+        return true;
+    default:
+        return false;
+    }
+}
+
+enum class JoinSide { kLeft, kRight };
+
+struct TIndexAndSide {
+    int Index;
+    JoinSide Side;
 };
 
-inline void WrapArrayBlockTypes(std::vector<TType*>& types, const TProgramBuilder& pb)
-{
-    std::transform(types.begin(), types.end(), types.begin(),
-                   [&](TType* type) { return pb.NewBlockType(type, TBlockType::EShape::Many); });
-}
+using TDqRenames = std::vector<TIndexAndSide>;
+
+void ValidateRenames(const TDqRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth);
+
+struct TGraceJoinRenames {
+    TVector<ui32> Left;
+    TVector<ui32> Right;
+    static TGraceJoinRenames FromRuntimeNodes(TRuntimeNode left, TRuntimeNode right);
+    static TGraceJoinRenames FromDq(const TDqRenames& dqJoinRenames);
+};
+
+TDqRenames FromGraceFormat(const TGraceJoinRenames& graceJoinRenames);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

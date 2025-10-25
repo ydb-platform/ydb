@@ -100,13 +100,6 @@ void TRelativeThroughputThrottlerConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TThroughputThrottlerConfig::operator==(const NConcurrency::TThroughputThrottlerConfig& other)
-{
-    return Limit == other.Limit && Period == other.Period;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 void TPrefetchingThrottlerConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("enable", &TThis::Enable)

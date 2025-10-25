@@ -475,6 +475,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("table_writer_version").Value(::ToString(config.TableWriterVersion))
         .Item("redirect_stdout_to_stderr").Value(config.RedirectStdoutToStderr)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
+        .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
     .EndMap();
 }
 
@@ -545,6 +546,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("table_writer_version", config.TableWriterVersion);
     DESERIALIZE_ITEM("redirect_stdout_to_stderr", config.RedirectStdoutToStderr);
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
+    DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
 }
 
 #undef DESERIALIZE_ITEM

@@ -121,6 +121,49 @@ IF (CGO_ENABLED)
         ENDIF()
     ENDIF()
 
+    IF (OS_ANDROID)
+        CGO_LDFLAGS(-ldl -llog)
+
+        SRCS(
+            callbacks_traceback.go
+            CGO_EXPORT gcc_android.c
+            CGO_EXPORT gcc_libinit.c
+            CGO_EXPORT gcc_setenv.c
+            CGO_EXPORT gcc_stack_unix.c
+            CGO_EXPORT gcc_traceback.c
+            linux.go
+            CGO_EXPORT linux_syscall.c
+            setenv.go
+        )
+
+        IF (ARCH_ARM64 OR ARCH_X86_64)
+            SRCS(
+                CGO_EXPORT gcc_sigaction.c
+                CGO_EXPORT gcc_mmap.c
+                mmap.go
+                sigaction.go
+            )
+        ENDIF()
+
+        IF (ARCH_ARM64)
+            SRCS(
+                CGO_EXPORT gcc_linux_arm64.c
+            )
+        ENDIF()
+
+        IF (ARCH_X86_64)
+            SRCS(
+                CGO_EXPORT gcc_linux_amd64.c
+            )
+        ENDIF()
+
+        IF (ARCH_ARM6 OR ARCH_ARM7)
+            SRCS(
+                CGO_EXPORT gcc_linux.c
+            )
+        ENDIF()
+    ENDIF()
+
     IF (OS_WINDOWS)
         SRCS(
             CGO_EXPORT gcc_libinit_windows.c

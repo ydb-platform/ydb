@@ -92,7 +92,7 @@ protected:
 
     virtual int GetMaxChildCount() const;
 
-    void ValidateChildCount(const TYPath& path, int childCount) const;
+    void ValidateChildCount(TYPathBuf path, int childCount) const;
 
     virtual void SetChildValue(
         INodeFactory* factory,

@@ -1,7 +1,7 @@
 #include "query_utils.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
@@ -147,7 +147,7 @@ struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const TToken*>(&message)) {
             const auto& value = token->GetValue();
-            if (token->GetId() != NALPDefault::SQLv1LexerTokens::TOKEN_EOF) {
+            if (token->GetValue() != "<EOF>") {
                 if (!Tokens.empty()) {
                     Tokens << ' ';
                 }

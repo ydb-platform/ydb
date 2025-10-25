@@ -507,7 +507,7 @@ bool TKqpQueryState::TryMergeTopicOffsets(const NTopic::TTopicOperations &operat
 
 std::unique_ptr<NSchemeCache::TSchemeCacheNavigate> TKqpQueryState::BuildSchemeCacheNavigate() {
     auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-    navigate->DatabaseName = CanonizePath(GetDatabase());
+    navigate->DatabaseName = GetDatabase();
 
     const auto& operations = GetTopicOperationsFromRequest();
     TMaybe<TString> consumer;

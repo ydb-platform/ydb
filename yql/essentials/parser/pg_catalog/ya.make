@@ -1,6 +1,7 @@
 LIBRARY()
 
-#ENABLE(YQL_STYLE_CPP) need to avoid generated files
+# need to avoid generated files
+ENABLE(SKIP_YQL_STYLE_CPP)
 
 RESOURCE(data/pg_operator.dat pg_operator.dat)
 RESOURCE(data/pg_proc.dat pg_proc.dat)

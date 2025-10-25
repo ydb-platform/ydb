@@ -316,7 +316,7 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_column_stats
     ut_compaction
-    ut_vacuum
+    ut_disk_quotas
     ut_erase_rows
     ut_export
     ut_external_blobs
@@ -344,6 +344,7 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_trace
     ut_upload_rows
+    ut_vacuum
     ut_volatile
     ut_write
 )

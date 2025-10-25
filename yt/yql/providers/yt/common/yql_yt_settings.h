@@ -114,6 +114,7 @@ public:
     NCommon::TConfSetting<EBlockOutputMode, StaticPerCluster> JobBlockOutput;
     NCommon::TConfSetting<TSet<TString>, StaticPerCluster> JobBlockOutputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, StaticPerCluster> JobBlockOutputSupportedDataTypes;
+    NCommon::TConfSetting<bool, StaticPerCluster> ValidatePool;
 
     // static global
     NCommon::TConfSetting<TString, Static> Auth;
@@ -152,6 +153,8 @@ public:
     NCommon::TConfSetting<bool, Static> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, Static> UseDefaultArrowAllocatorInJobs;
     NCommon::TConfSetting<bool, Static> UseNativeYtDefaultColumnOrder;
+    NCommon::TConfSetting<bool, Static> EarlyPartitionPruning;
+    NCommon::TConfSetting<bool, Static> ValidateClusters;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;
@@ -209,6 +212,7 @@ public:
     NCommon::TConfSetting<TString, Dynamic> PublishedAutoMerge;
     NCommon::TConfSetting<TString, Dynamic> TemporaryAutoMerge;
     NCommon::TConfSetting<TVector<TString>, Dynamic> LayerPaths;
+    NCommon::TConfSetting<THashMap<TString, TVector<TString>>, StaticPerCluster> LayerCaches;
     NCommon::TConfSetting<TString, Dynamic> DockerImage;
     NCommon::TConfSetting<NYT::TNode, Dynamic> JobEnv;
     NCommon::TConfSetting<NYT::TNode, Dynamic> OperationSpec;

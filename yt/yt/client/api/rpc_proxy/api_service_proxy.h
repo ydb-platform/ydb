@@ -124,7 +124,8 @@ public:
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobInputPaths);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobSpec);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobStderr);
-    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobTrace,
+        .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetJobFailContext);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, AbandonJob);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PollJobShell);

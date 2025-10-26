@@ -67,7 +67,9 @@ public:
           TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>,
           TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>,
           TMessageBusSimpleTabletRequest<TDerived, TTabletReplyEvent, Activity>>(std::forward<Args>(args)...)
-    {}
+    {
+        this->SetInternalToken(this->GetInternalToken()); // No effect if token is nullptr
+    }
 };
 
 template <typename TDerived, typename TTabletReplyEvent>
@@ -106,7 +108,9 @@ public:
           TMessageBusTabletRequest<TDerived, TTabletReplyEvent>,
           TMessageBusSecureRequest<TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>,
           TMessageBusTabletRequest<TDerived, TTabletReplyEvent>>(std::forward<Args>(args)...)
-    {}
+    {
+        this->SetInternalToken(this->GetInternalToken()); // No effect if token is nullptr
+    }
 };
 
 }

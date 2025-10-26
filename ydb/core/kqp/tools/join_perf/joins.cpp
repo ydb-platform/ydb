@@ -88,9 +88,9 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                 }();
                 descr.LeftSource.KeyColumnIndexes = keyColumns;
                 descr.RightSource.KeyColumnIndexes = keyColumns;
+                    for (auto algo : params.Algorithms) {
                 for (int sample = 0; sample < params.Samples; ++sample) {
 
-                    for (auto algo : params.Algorithms) {
 
                         TBenchmarkCaseResult result;
                         result.CaseName = CaseName(algo, keyType, flavour, params, tableSizes);

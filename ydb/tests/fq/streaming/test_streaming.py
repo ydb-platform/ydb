@@ -4,9 +4,7 @@ import time
 import random
 import string
 import pytest
-import requests
 
-#from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
@@ -33,14 +31,14 @@ class TestStreamingInYdb(TestYdsBase):
     def get_sensors(self, kikimr, node_id, counters):
         url = self.monitoring_endpoint(kikimr, node_id) + "/counters/counters={}/json".format(counters)
         return load_metrics(url)
-    
+
     def get_checkpoint_coordinator_metric(self, kikimr, query_id, metric_name, expect_counters_exist=False):
         sum = 0
         found = False
         for node_id in kikimr.Cluster.nodes:
             sensor = self.get_sensors(kikimr, node_id, "kqp").find_sensor(
                 {
-            #        "query_id": query_id,  # TODO
+                    # "query_id": query_id,  # TODO
                     "subsystem": "checkpoint_coordinator",
                     "sensor": metric_name
                 }
@@ -50,7 +48,7 @@ class TestStreamingInYdb(TestYdsBase):
                 sum += sensor
         assert found or not expect_counters_exist
         return sum
-    
+
     def get_completed_checkpoints(self, kikimr, query_id):
         return self.get_checkpoint_coordinator_metric(kikimr, query_id, "CompletedCheckpoints")
 
@@ -129,14 +127,14 @@ class TestStreamingInYdb(TestYdsBase):
         query_id = "query_id"  # TODO
         kikimr.YdbClient.query(sql.format(query_name=name, source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         self.wait_completed_checkpoints(kikimr, query_id)
-        
+
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time']
         self.write_stream(data)
 
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, query_id)
-      
+
         kikimr.YdbClient.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
         time.sleep(0.5)
 
@@ -150,7 +148,7 @@ class TestStreamingInYdb(TestYdsBase):
         kikimr.YdbClient.query(f"DROP STREAMING QUERY `{name}`;")
 
     @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
-    def test_read_topic_shared_reading_insert_to_topic999(self, kikimr):
+    def test_read_topic_shared_reading_insert_to_topic(self, kikimr):
         sourceName = "source3_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)
         self.create_source(kikimr, sourceName, True)
@@ -176,7 +174,7 @@ class TestStreamingInYdb(TestYdsBase):
 
         query_id = "query_id"  # TODO
         self.wait_completed_checkpoints(kikimr, query_id)
-      
+
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
         kikimr.YdbClient.query(sql.format(query_name="query1"))
         kikimr.YdbClient.query(sql.format(query_name="query2"))
@@ -192,16 +190,10 @@ class TestStreamingInYdb(TestYdsBase):
         kikimr.YdbClient.query(sql.format(query_name="query2"))
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 
-
         # sql = R'''DROP STREAMING QUERY `{query_name}`;'''
         # kikimr.YdbClient.query(sql.format(query_name="query1"))
         # kikimr.YdbClient.query(sql.format(query_name="query2"))
 
-   # @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
-  #  def test_read_topic_shared_reading_insert_to_topic11(self, kikimr):
-    
-         
-    # TODO
     # @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     # def test_read_topic_shared_reading_restart_nodes(self, kikimr):
     #     sourceName = "source4_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))

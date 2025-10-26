@@ -90,12 +90,13 @@ private:
 
 struct TLocalSession : public ISession { 
 
-    TLocalSession() {
-        QuerySessionId = NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQuerySession().release());
+    TLocalSession()
+        : ActorSystem(NActors::TActivationContext::ActorSystem())
+        , QuerySessionId(NActors::TActivationContext::AsActorContext().RegisterWithSameMailbox(MakeQuerySession().release())) {
     }
 
     ~TLocalSession() {
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new NActors::TEvents::TEvPoison());
+        ActorSystem->Send(QuerySessionId, new NActors::TEvents::TEvPoison());
     }
 
     NThreading::TFuture<NYdb::NTable::TDataQueryResult> ExecuteDataQuery(
@@ -104,7 +105,7 @@ struct TLocalSession : public ISession {
         std::shared_ptr<NYdb::TParamsBuilder> params,
         NYdb::NTable::TExecDataQuerySettings execDataQuerySettings = NYdb::NTable::TExecDataQuerySettings()) override {
         auto promise = NThreading::NewPromise<NYdb::NTable::TDataQueryResult>();
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvExecuteDataQuery(
+        ActorSystem->Send(QuerySessionId, new TEvQuerySession::TEvExecuteDataQuery(
             sql,
             params,
             TEvQuerySession::TTxControl{txControl.Begin_, txControl.Commit_, txControl.Continue_, txControl.SnapshotRead_},
@@ -120,7 +121,7 @@ struct TLocalSession : public ISession {
     }
 
     NYdb::TAsyncStatus Rollback() override {
-        NActors::TActivationContext::AsActorContext().Send(QuerySessionId, new TEvQuerySession::TEvRollbackTransaction());
+        ActorSystem->Send(QuerySessionId, new TEvQuerySession::TEvRollbackTransaction());
         HasTransaction = false;
         return NThreading::MakeFuture(NYdb::TStatus{NYdb::EStatus::SUCCESS, {}});
     }
@@ -144,7 +145,8 @@ struct TLocalSession : public ISession {
         return HasTransaction;
     }
 
-private: 
+private:
+    NActors::TActorSystem* ActorSystem = nullptr;
     NActors::TActorId QuerySessionId;
     bool HasTransaction = false;
 };

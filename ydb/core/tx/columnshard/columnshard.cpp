@@ -445,10 +445,6 @@ void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_pt
             periodicTableStats.SetNodeId(ctx.SelfID.NodeId());
             periodicTableStats.SetStartTime(StartTime().MilliSeconds());
 
-            if (auto* resourceMetrics = executor->GetResourceMetrics()) {
-                resourceMetrics->Fill(*periodicTableStats.MutableTabletMetrics());
-            }
-
             tableStatsBuilder.FillTableStats(pathIdBySSpathId[periodicTableStats.GetTableLocalId()], *(periodicTableStats.MutableTableStats()));
         }
     }

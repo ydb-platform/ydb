@@ -1,6 +1,6 @@
 # Data transfer
 
-Transfer in {{ ydb-short-name }} is an asynchronous mechanism for moving data from a [topic](glossary.md#topic) to a table. Creating a transfer instance, modifying it, and deleting it is done using YQL. The transfer runs inside the database and works in the background. Transfer is used to solve the task of delivering data from a topic to a table.
+Transfer in {{ ydb-short-name }} is an asynchronous mechanism for moving data from a [topic](glossary.md#topic) to a table. [Creating](../yql/reference/syntax/create-transfer.md) a transfer instance, [modifying](../yql/reference/syntax/alter-transfer.md) it, and [deleting](../yql/reference/syntax/drop-transfer.md) it is done using YQL. The transfer runs inside the database and works in the background. Transfer is used to solve the task of delivering data from a topic to a table.
 
 In practice, it's often more convenient to write data not directly to a table, but to a topic, and then asynchronously rewrite it from the topic to the table. This approach allows for even load distribution and handling spikes, since writing to a message queue is a lighter operation. Depending on the number of messages written to the topic, the delay in data availability for reading from the table after adding to the topic can range from several seconds to several minutes.
 
@@ -48,7 +48,7 @@ Data processing speed and delays can be monitored using [consumer metrics](../re
 
 Transfer operation can be temporarily paused and then resumed. After resuming transfer operation, messages following the last processed message in the topic will start being processed.
 
-To pause the transfer, you should change the transfer status to `PAUSED`. To resume the transfer, change the status to `ACTIVE`.
+To pause the transfer, you should [change](../yql/reference/syntax/alter-transfer.md#examples) the transfer status to `PAUSED`. To resume the transfer, change the status to `ACTIVE`.
 
 {% note warning %}
 

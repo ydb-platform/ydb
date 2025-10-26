@@ -614,6 +614,21 @@ public:
 
 }; // TDebeziumJsonSerializer
 
+class TLongIntegerJsonSerializer: public TYdbJsonSerializer {
+protected:
+    void SerializeToJson(NJson::TJsonValue& json, const TChangeRecord& record) override {
+        TYdbJsonSerializer::SerializeToJson(json, record);
+        for (auto &keyValue: json.GetMap()) {
+            if (keyValue.second.IsInteger()) {
+                keyValue.second = NJson::TJsonValue(std::to_string(keyValue.second.GetInteger()));
+            }
+        }
+    }
+
+public:
+    using TYdbJsonSerializer::TYdbJsonSerializer;
+}; // TLongIntegerJsonSerializer
+
 TChangeRecordSerializerOpts TChangeRecordSerializerOpts::DebugOpts() {
     TChangeRecordSerializerOpts opts;
     opts.Debug = true;
@@ -630,6 +645,8 @@ IChangeRecordSerializer* CreateChangeRecordSerializer(const TChangeRecordSeriali
         return new TDynamoDBStreamsJsonSerializer(opts);
     case TUserTable::TCdcStream::EFormat::ECdcStreamFormatDebeziumJson:
         return new TDebeziumJsonSerializer(opts);
+    case TUserTable::TCdcStream::EFormat::ECdcStreamFormatLongInteger:
+        return new TLongIntegerJsonSerializer(opts);
     default:
         Y_ENSURE(false, "Unsupported format");
     }

@@ -242,12 +242,12 @@ runs:
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
 
           set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 
           if [ $RC -ne 0 ]; then
-            echo "graph_compare.sh returned $RC, build failed"
+            echo "graph_compare.py returned $RC, build failed"
             echo "status=failed" >> $GITHUB_OUTPUT
             BUILD_FAILED=1
             echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red

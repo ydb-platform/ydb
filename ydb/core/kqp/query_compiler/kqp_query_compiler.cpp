@@ -636,10 +636,19 @@ public:
         queryProto.SetForceImmediateEffectsExecution(
             Config->KqpForceImmediateEffectsExecution.Get().GetOrElse(false));
 
+        TVector<bool> resultDiscardFlags;
         for (const auto& queryBlock : dataQueryBlocks) {
             auto queryBlockSettings = TKiDataQueryBlockSettings::Parse(queryBlock);
             if (queryBlockSettings.HasUncommittedChangesRead) {
                 queryProto.SetHasUncommittedChangesRead(true);
+            }
+
+            for (const auto& kiResult : queryBlock.Results()) {
+                if (kiResult.Maybe<TKiResult>()) {
+                    auto result = kiResult.Cast<TKiResult>();
+                    bool discard = result.Discard().Value() == "true";
+                    resultDiscardFlags.push_back(discard);
+                }
             }
 
             auto ops = TableOperationsToProto(queryBlock.Operations(), ctx);
@@ -670,6 +679,12 @@ public:
             }
         }
 
+        ui32 resultIdx = 0; // to skip discard results
+
+        // For backward compatibility: ignore discard flag for Data and Scan queries
+        bool ignoreDiscard = (querySettings.Type == EPhysicalQueryType::Data ||
+                              querySettings.Type == EPhysicalQueryType::Scan);
+
         for (ui32 i = 0; i < query.Results().Size(); ++i) {
             const auto& result = query.Results().Item(i);
 
@@ -683,12 +698,17 @@ public:
             auto& txResult = *queryProto.MutableTransactions(txIndex)->MutableResults(txResultIndex);
 
             YQL_ENSURE(txResult.GetIsStream());
-            txResult.SetQueryResultIndex(i);
 
             auto& queryBindingProto = *queryProto.AddResultBindings();
             auto& txBindingProto = *queryBindingProto.MutableTxResultBinding();
             txBindingProto.SetTxIndex(txIndex);
             txBindingProto.SetResultIndex(txResultIndex);
+
+            bool isDiscard = !ignoreDiscard && (i < resultDiscardFlags.size() && resultDiscardFlags[i]); // is it not always true?: i < resultDiscardFlags.size()
+            if (!isDiscard) {
+                txResult.SetQueryResultIndex(resultIdx);
+                resultIdx++;
+            }
 
             auto type = binding.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             YQL_ENSURE(type);

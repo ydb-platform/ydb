@@ -9,21 +9,23 @@
 namespace NKikimr::NGRpcService {
 
 TKeyValueGRpcService::TKeyValueGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
-    : ActorSystem(actorSystem)
-    , Counters(std::move(counters))
-    , GRpcRequestProxyId(grpcRequestProxyId)
+    : ActorSystem_(actorSystem)
+    , Counters_(std::move(counters))
+    , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
 TKeyValueGRpcService::~TKeyValueGRpcService() = default;
 
 void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
+    CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
 void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+
+    using namespace Ydb::KeyValue;
 
     #define SETUP_KV_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
         SETUP_METHOD( \
@@ -31,7 +33,6 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             method, \
             rlMode, \
             requestType, \
-            KeyValue, \
             keyvalue, \
             auditModeFlags \
         )

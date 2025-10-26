@@ -9,24 +9,26 @@
 namespace NKikimr::NGRpcService {
 
 TConfigGRpcService::TConfigGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId) \
-    : ActorSystem(actorSystem) \
-    , Counters(std::move(counters))
-    , GRpcRequestProxyId(grpcRequestProxyId)
+    : ActorSystem_(actorSystem) \
+    , Counters_(std::move(counters))
+    , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
 TConfigGRpcService::~TConfigGRpcService() = default;
 
 void TConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
+    CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
 void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+
+    using namespace Ydb::Config;
 
     #define SETUP_BS_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, Config, config, auditModeFlags)
+        SETUP_METHOD(methodName, method, rlMode, requestType, config, auditModeFlags)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
@@ -35,7 +37,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 
     #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
-        SETUP_RUNTIME_EVENT_METHOD(methodName, method, rlMode, requestType, Config, config, auditModeFlags, BOOTSTRAP_CLUSTER)
+        SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), method, rlMode, requestType, config, auditModeFlags, BOOTSTRAP_CLUSTER)
 
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

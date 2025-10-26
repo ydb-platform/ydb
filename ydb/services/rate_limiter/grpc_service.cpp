@@ -11,25 +11,27 @@ TRateLimiterGRpcService::TRateLimiterGRpcService(
     NActors::TActorSystem* actorSystem,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     NActors::TActorId grpcRequestProxyId)
-    : ActorSystem(actorSystem)
-    , Counters(std::move(counters))
-    , GRpcRequestProxyId(grpcRequestProxyId)
+    : ActorSystem_(actorSystem)
+    , Counters_(std::move(counters))
+    , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
 TRateLimiterGRpcService::~TRateLimiterGRpcService() = default;
 
 void TRateLimiterGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
+    CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
 void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+
+    using namespace Ydb::RateLimiter;
     using namespace NGRpcService;
 
     #define SETUP_RL_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, RateLimiter, rate_limiter, auditModeFlags)
+        SETUP_METHOD(methodName, method, rlMode, requestType, rate_limiter, auditModeFlags)
 
     SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, RATELIMITER_CREATE_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, RATELIMITER_ALTER_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

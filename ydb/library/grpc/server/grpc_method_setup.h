@@ -5,28 +5,35 @@
 #include <string>
 #include <grpcpp/grpcpp.h>
 
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, method, rlMode, requestType, serviceType, counterName, auditMode, runtimeEventType)    \
+#include <type_traits>
+
+// Implies using namespace for request/response types
+#define YDB_API_DEFAULT_REQUEST_TYPE(methodName) Y_CAT(methodName, Request)
+#define YDB_API_DEFAULT_RESPONSE_TYPE(methodName) Y_CAT(methodName, Response)
+
+// Implies usage from inside grpc service class, derived from TGrpcServiceBase
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterName, auditMode, runtimeEventType)    \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                         \
-        Ydb::serviceType::Y_CAT(methodName, Request),                                                 \
-        Ydb::serviceType::Y_CAT(methodName, Response),                                                \
-        T##serviceType##GRpcService>>                                                                 \
+        inputType,                                                                                    \
+        outputType,                                                                                   \
+        std::remove_reference_t<decltype(*this)>>>                                                    \
     (                                                                                                 \
         this,                                                                                         \
         &Service_,                                                                                    \
-        CQ,                                                                                           \
+        CQ_,                                                                                          \
         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                               \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer());                        \
-            ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestOperationCall<                      \
-                Ydb::serviceType::Y_CAT(methodName, Request),                                         \
-                Ydb::serviceType::Y_CAT(methodName, Response),                                        \
-                NRuntimeEvents::EType::runtimeEventType>(reqCtx, &method,                             \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer());                       \
+            ActorSystem_->Send(GRpcRequestProxyId_, new TGrpcRequestOperationCall<                    \
+                inputType,                                                                            \
+                outputType,                                                                           \
+                NRuntimeEvents::EType::runtimeEventType>(reqCtx, methodCallback,                      \
                     TRequestAuxSettings {                                                             \
                         .RlMode = TRateLimiterMode::rlMode,                                           \
                         .AuditMode = auditMode,                                                       \
                         .RequestType = NJaegerTracing::ERequestType::requestType,                     \
                     }));                                                                              \
         },                                                                                            \
-        &Ydb::serviceType::V1::Y_CAT(serviceType, Service)::AsyncService::Y_CAT(Request, methodName), \
+        &TGrpcAsyncService::Y_CAT(Request, methodName),                                               \
         Y_STRINGIZE(methodName),                                                                      \
         logger,                                                                                       \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                            \
@@ -34,7 +41,7 @@
 
 
 // Общий макрос для настройки методов gRPC
-#define SETUP_METHOD(methodName, method, rlMode, requestType, serviceType, counterName, auditMode)    \
-    SETUP_RUNTIME_EVENT_METHOD(methodName, method, rlMode, requestType, serviceType, counterName, auditMode, COMMON)
+#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)    \
+    SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, counterName, auditMode, COMMON)
 
 #endif // GRPC_METHOD_SETUP_H

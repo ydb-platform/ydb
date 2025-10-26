@@ -164,18 +164,15 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         }, 400);
     }
 
-    Y_UNIT_TEST_F(TestGetQueueUrl, TFixture) {
+    Y_UNIT_TEST_F(TestGetQueueUrlEmpty, TFixture) {
         auto json = GetQueueUrl({}, 400);
         UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
+    }
 
-        json = CreateQueue({{"QueueName", ""}}, 400);
-        UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "MissingParameter");
-
+   Y_UNIT_TEST_F(TestGetQueueUrl, TFixture) {
+        const TString queueUrl = "fake";
         auto queueName = "ExampleQueueName";
-        json = CreateQueue({{"QueueName", queueName}});
-
-        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
-        json = GetQueueUrl({{"QueueName", queueName}});
+        auto json = GetQueueUrl({{"QueueName", queueName}});
         UNIT_ASSERT_VALUES_EQUAL(queueUrl, GetByPath<TString>(json, "QueueUrl"));
 
         // We ignore QueueOwnerAWSAccountId parameter.

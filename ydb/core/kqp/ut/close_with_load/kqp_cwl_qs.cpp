@@ -34,7 +34,9 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_QUERY_SERVICE, NLog::PRI_DEBUG);
+
+
+        
         NYdb::NQuery::TQueryClient db = kikimr->GetQueryClient();
 
         const ui32 SessionsCount = 50;

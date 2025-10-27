@@ -51,13 +51,13 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
 1. Edit the Prometheus [configuration files](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus):
 
     1. In the `targets` section of [`ydbd-storage.yml`](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/prometheus/ydbd-storage.yml), specify the addresses of all {{ ydb-short-name }} cluster servers and the ports of storage nodes running on the servers.
-       
+
         ```json
         - labels:
             container: ydb-static
           targets:
           - "ydb-s1.example.com:8765"
-   - "ydb-s2.example.com:8765"
+          - "ydb-s2.example.com:8765"
           - "ydb-s3.example.com:8765"
         ```
 

@@ -94,7 +94,7 @@ public:
         if (UseYdbSdk) {
             Connection = CreateSdkYdbConnection(config, NKikimr::CreateYdbCredentialsProviderFactory, driver);
         } else {
-            Connection = CreateLocalYdbConnection(Server->GetRuntime()->GetAppData().TenantName, ".metadata/checkpoints");
+            Connection = CreateLocalYdbConnection(Server->GetRuntime()->GetAppData().TenantName, ".metadata/streaming/checkpoints");
         }
 
         auto desc = TTableBuilder()

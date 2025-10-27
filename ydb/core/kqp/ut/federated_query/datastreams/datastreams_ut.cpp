@@ -589,7 +589,7 @@ public:
         std::optional<uint64_t> minSeqNo;
         WaitFor(TEST_OPERATION_TIMEOUT, "checkpoint update", [&](TString& error) {
             const auto& result = ExecQuery(fmt::format(R"(
-                SELECT MIN(seq_no) AS seq_no FROM `.metadata/checkpoints/checkpoints_metadata`
+                SELECT MIN(seq_no) AS seq_no FROM `.metadata/streaming/checkpoints/checkpoints_metadata`
                 WHERE graph_id = "{checkpoint_id}";
             )", "checkpoint_id"_a = checkpointId));
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
@@ -1434,7 +1434,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto& result = ExecQuery(fmt::format(R"(
             SELECT COUNT(*) AS states_count FROM (
-                SELECT DISTINCT task_id FROM `.metadata/checkpoints/states`
+                SELECT DISTINCT task_id FROM `.metadata/streaming/checkpoints/states`
                 WHERE graph_id = "{checkpoint_id}"
             )
         )", "checkpoint_id"_a = checkpointId));
@@ -1786,6 +1786,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         LAST(V1.key) as v1,
                         LAST(V4.key) as v4
                     ONE ROW PER MATCH
+                    AFTER MATCH SKIP TO NEXT ROW
                     PATTERN (V1 V? V4)
                     DEFINE 
                         V1 as V1.value = "value1",

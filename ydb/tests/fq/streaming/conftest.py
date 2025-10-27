@@ -49,7 +49,8 @@ def kikimr(request):
             query_service_config={"available_external_data_sources": ["Ydb"]},
             table_service_config={},
             nodes=2,
-            default_clusteradmin="root@builtin"
+            default_clusteradmin="root@builtin",
+            use_in_memory_pdisks=False
         )
 
         config.yaml_config["log_config"]["default_level"] = 8
@@ -57,9 +58,6 @@ def kikimr(request):
         query_service_config = config.yaml_config.setdefault("query_service_config", {})
         query_service_config["available_external_data_sources"] = ["ObjectStorage", "Ydb", "YdbTopics"]
         query_service_config["enable_match_recognize"] = True
-
-        # monitoring_config = config.yaml_config.setdefault("monitoring_config", {})
-        # monitoring_config["monitoring_port"] = 8765
 
         database_connection = query_service_config.setdefault("streaming_queries", {}).setdefault("external_storage", {}).setdefault("database_connection", {})
         if not local_checkpoints:

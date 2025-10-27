@@ -32,6 +32,8 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+constexpr char CHECKPOINTS_TABLE_PREFIX[] = ".metadata/streaming/checkpoints";
+
 struct TStorageProxyMetrics : public TThrRefBase {
     explicit TStorageProxyMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
         : Counters(counters)
@@ -176,7 +178,7 @@ void TStorageProxy::Bootstrap() {
         ydbConnection = CreateSdkYdbConnection(StorageConfig, CredentialsProviderFactory, Driver);
     } else {
         LOG_STREAMS_STORAGE_SERVICE_INFO("Create local ydb connection");
-        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, ".metadata/checkpoints");
+        ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX);
     }
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
     StateStorage = NewYdbStateStorage(Config, ydbConnection);

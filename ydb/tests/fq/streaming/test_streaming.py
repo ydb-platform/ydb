@@ -53,7 +53,7 @@ class TestStreamingInYdb(TestYdsBase):
         return self.get_checkpoint_coordinator_metric(kikimr, query_id, "CompletedCheckpoints")
 
     def wait_completed_checkpoints(self, kikimr, query_id,
-                                   timeout=plain_or_under_sanitizer_wrapper(30, 150)):
+                                   timeout=plain_or_under_sanitizer_wrapper(120, 150)):
         current = self.get_checkpoint_coordinator_metric(kikimr, query_id, "CompletedCheckpoints")
         checkpoints_count = current + 2
         deadline = time.time() + timeout
@@ -166,13 +166,14 @@ class TestStreamingInYdb(TestYdsBase):
 
         kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
         kikimr.YdbClient.query(sql.format(query_name="query2", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
-        time.sleep(3)
+
+        query_id = "query_id"  # TODO
+        self.wait_completed_checkpoints(kikimr, query_id)
+
         data = ['{"time": "lunch time"}']
         expected_data = ['lunch time', 'lunch time']
         self.write_stream(data)
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
-
-        query_id = "query_id"  # TODO
         self.wait_completed_checkpoints(kikimr, query_id)
 
         sql = R'''ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);'''
@@ -190,66 +191,107 @@ class TestStreamingInYdb(TestYdsBase):
         kikimr.YdbClient.query(sql.format(query_name="query2"))
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
 
-        # sql = R'''DROP STREAMING QUERY `{query_name}`;'''
-        # kikimr.YdbClient.query(sql.format(query_name="query1"))
-        # kikimr.YdbClient.query(sql.format(query_name="query2"))
+        sql = R'''DROP STREAMING QUERY `{query_name}`;'''
+        kikimr.YdbClient.query(sql.format(query_name="query1"))
+        kikimr.YdbClient.query(sql.format(query_name="query2"))
 
-    # @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
-    # def test_read_topic_shared_reading_restart_nodes(self, kikimr):
-    #     sourceName = "source4_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-    #     self.init_topics(sourceName, partitions_count=10)
-    #     self.create_source(kikimr, sourceName, True)
-    #     sql = R'''
-    #         CREATE STREAMING QUERY `{query_name}` AS
-    #         DO BEGIN
-    #             pragma FeatureR010="prototype";
-    #             PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
+    def test_read_topic_shared_reading_restart_nodes(self, kikimr):
+        sourceName = "source_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.init_topics(sourceName, partitions_count=10)
+        self.create_source(kikimr, sourceName, True)
 
-    #             $in = SELECT * FROM {source_name}.`{input_topic}`
-    #                 WITH (
-    #                     FORMAT="json_each_row",
-    #                     SCHEMA=(dt UINT64, str STRING));
-    #             $mr = SELECT * FROM $in
-    #                 MATCH_RECOGNIZE(
-    #                     MEASURES
-    #                     LAST(A.dt) as dt_begin,
-    #                     LAST(C.dt) as dt_end,
-    #                     LAST(A.str) as a_str,
-    #                     LAST(B.str) as b_str,
-    #                     LAST(C.str) as c_str
-    #                     ONE ROW PER MATCH
-    #                     PATTERN ( A B C )
-    #                     DEFINE
-    #                         A as A.str='A',
-    #                         B as B.str='B',
-    #                         C as C.str='C');
-    #             INSERT INTO {source_name}.`{output_topic}`
-    #                 SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
-    #         END DO;'''
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM {source_name}.`{input_topic}`
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(value String NOT NULL))
+                WHERE value like "%value%";
+                INSERT INTO {source_name}.`{output_topic}` SELECT value FROM $in;
+            END DO;'''
 
-    #     kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        query_id = "query_id"  # TODO
+        self.wait_completed_checkpoints(kikimr, query_id)
 
-    #     time.sleep(4)
-    #     data = [
-    #         '{"dt": 1696849942000001, "str": "A" }',
-    #         '{"dt": 1696849942500001, "str": "B" }',
-    #         '{"dt": 1696849943000001, "str": "C" }'
-    #     ]
-    #     self.write_stream(data)
-    #     time.sleep(2)
-    #     logging.debug("Stop node 1")
+        self.write_stream(['{"value": "value1"}'])
+        expected_data = ['value1']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        self.wait_completed_checkpoints(kikimr, query_id)
 
-    #     node = kikimr.Cluster.nodes[1]
-    #     node.kill()
-    #     logging.debug("Start node 1")
-    #     node.start()
-    #     time.sleep(4)
+        logging.debug("Restart node 1")
+        node = kikimr.Cluster.nodes[1]
+        node.stop()
+        node.start()
 
-    #     data = [
-    #         '{"dt": 1696849942000001, "str": "A" }',
-    #         '{"dt": 1696849942500001, "str": "B" }',
-    #         '{"dt": 1696849943000001, "str": "C" }'
-    #         ]
-    #     self.write_stream(data)
+        self.write_stream(['{"value": "value2"}'])
+        expected_data = ['value2']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        self.wait_completed_checkpoints(kikimr, query_id)
 
-    #     time.sleep(30)
+        logging.debug("Restart node 2")
+        node = kikimr.Cluster.nodes[2]
+        node.stop()
+        node.start()
+
+        self.write_stream(['{"value": "value3"}'])
+        expected_data = ['value3']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
+    def test_read_topic_restore_state(self, kikimr):
+        sourceName = "source4_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+        self.init_topics(sourceName, partitions_count=1)
+        self.create_source(kikimr, sourceName, True)
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                pragma FeatureR010="prototype";
+                PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+
+                $in = SELECT * FROM {source_name}.`{input_topic}`
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(dt UINT64, str STRING));
+                $mr = SELECT * FROM $in
+                    MATCH_RECOGNIZE(
+                        MEASURES
+                        LAST(A.dt) as a_time,
+                        LAST(B.dt) as b_time,
+                        LAST(C.dt) as c_time
+                        ONE ROW PER MATCH
+                        AFTER MATCH SKIP TO NEXT ROW
+                        PATTERN ( ( A | B ) ( B | C ) )
+                        DEFINE
+                            A as A.str='A',
+                            B as B.str='B',
+                            C as C.str='C');
+                INSERT INTO {source_name}.`{output_topic}`
+                    SELECT ToBytes(Unwrap(Json::SerializeJson(Yson::From(TableRow())))) FROM $mr;
+            END DO;'''
+
+        kikimr.YdbClient.query(sql.format(query_name="query1", source_name=sourceName, input_topic=self.input_topic, output_topic=self.output_topic))
+        query_id = "query_id"  # TODO
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+        data = [
+            '{"dt": 1696849942000001, "str": "A" }',
+            '{"dt": 1696849942500001, "str": "B" }'
+        ]
+        self.write_stream(data)
+        expected_data = ['{"a_time":1696849942000001,"b_time":1696849942500001,"c_time":null}']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
+        self.wait_completed_checkpoints(kikimr, query_id)
+
+        logging.debug("Restart node 1")
+        node = kikimr.Cluster.nodes[1]
+        node.stop()
+        node.start()
+
+        data = ['{"dt": 1696849943000001, "str": "C" }']
+        self.write_stream(data)
+        expected_data = ['{"a_time":null,"b_time":1696849942500001,"c_time":1696849943000001}']
+        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data

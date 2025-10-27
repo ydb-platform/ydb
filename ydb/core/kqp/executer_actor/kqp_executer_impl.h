@@ -605,7 +605,7 @@ protected:
 
         LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
 
-        if (!databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+        if (IsSchedulable()) {
             const auto schedulerServiceId = MakeKqpSchedulerServiceId(SelfId().NodeId());
 
             // TODO: deliberately create the database here - since database doesn't have any useful scheduling properties for now.
@@ -1197,8 +1197,7 @@ protected:
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
-        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
-        if (!GetUserRequestContext()->DatabaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
+        if (IsSchedulable()) {
             auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
             removeQueryEvent->QueryId = TxId;
             this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());
@@ -1278,6 +1277,12 @@ protected:
 
     NYql::NDqProto::TDqTask* SerializeTaskToProto(const TTask& task, bool serializeAsyncIoSettings) {
         return TasksGraph.ArenaSerializeTaskToProto(task, serializeAsyncIoSettings);
+    }
+
+    inline bool IsSchedulable() const {
+        const auto& databaseId = GetUserRequestContext()->DatabaseId;
+        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
+        return !databaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler);
     }
 
 protected:

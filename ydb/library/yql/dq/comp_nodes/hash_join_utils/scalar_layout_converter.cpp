@@ -1,3 +1,4 @@
+
 #include "scalar_layout_converter.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
@@ -14,6 +15,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <util/generic/vector.h>
+#include <util/stream/str.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -30,6 +32,9 @@ struct IColumnDataPacker {
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
+    
+    // How many pointers this packer adds to columnsData/columnsNullBitmap arrays
+    virtual ui32 GetPointersCount() const { return 1; }
     
     virtual void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) = 0;
 };
@@ -200,14 +205,23 @@ public:
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         auto& bitmapStorage = tempStorage.emplace_back(1);
         
+        // Create offset buffer for variable-size column (2 offsets: start=0, end=size)
+        auto& offsetStorage = tempStorage.emplace_back(2 * sizeof(ui32));
+        ui32* offsets = reinterpret_cast<ui32*>(offsetStorage.data());
+        
         if constexpr (Nullable) {
             if (!value) {
                 bitmapStorage[0] = 0;
-                // For string, we store empty data
-                auto& emptyData = tempStorage.emplace_back(0);
+                offsets[0] = 0;
+                offsets[1] = 0; // empty string
                 
-                columnsData.push_back(nullptr); // offset
-                columnsData.push_back(emptyData.data()); // empty data
+                // For null strings, we still need a valid pointer (not nullptr)
+                // Create 1-byte buffer to avoid nullptr
+                auto& emptyData = tempStorage.emplace_back(1);
+                emptyData[0] = 0;
+                
+                columnsData.push_back(offsetStorage.data());
+                columnsData.push_back(emptyData.data());
                 columnsNullBitmap.push_back(bitmapStorage.data());
                 columnsNullBitmap.push_back(nullptr);
                 return;
@@ -216,12 +230,22 @@ public:
         
         bitmapStorage[0] = 1;
         auto ref = value.AsStringRef();
+        ui32 size = ref.Size();
+        
+        // Set offsets: [0, size]
+        offsets[0] = 0;
+        offsets[1] = size;
         
         // Copy string data to temp storage to keep it alive
-        auto& stringData = tempStorage.emplace_back(ref.Size());
-        std::memcpy(stringData.data(), ref.Data(), ref.Size());
+        // Always allocate at least 1 byte to avoid nullptr from data()
+        auto& stringData = tempStorage.emplace_back(size > 0 ? size : 1);
+        if (size > 0) {
+            std::memcpy(stringData.data(), ref.Data(), size);
+        } else {
+            stringData[0] = 0; // Just to have valid data
+        }
         
-        columnsData.push_back(nullptr); // offset will be calculated during pack
+        columnsData.push_back(offsetStorage.data());
         columnsData.push_back(stringData.data());
         columnsNullBitmap.push_back(bitmapStorage.data());
         columnsNullBitmap.push_back(nullptr);
@@ -256,6 +280,10 @@ public:
         return NPackedTuple::EColumnSizeType::Variable;
     }
 
+    ui32 GetPointersCount() const override {
+        return 2; // offset buffer + data buffer
+    }
+    
     void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
         packers.push_back(this);
     }
@@ -453,6 +481,7 @@ public:
             auto prevSize = InnerPackers_.size();
             packer->AppendInnerPackers(InnerPackers_);
 
+            // Each InnerPacker creates one ColumnDesc
             for (size_t j = 0; j < InnerPackers_.size() - prevSize; ++j) {
                 NPackedTuple::TColumnDesc descr;
                 descr.Role = roles[i];
@@ -460,25 +489,75 @@ public:
                 mapping.push_back(colCounter);
                 colCounter++;
             }
+            
+            // But each packer may produce more pointers than ColumnDescs (strings produce 2)
+            // We need to track these extra pointers in mapping too
+            ui32 pointersCount = packer->GetPointersCount();
+            ui32 descrsCount = InnerPackers_.size() - prevSize;
+            for (ui32 j = descrsCount; j < pointersCount; ++j) {
+                mapping.push_back(colCounter);
+                colCounter++;
+            }
         }
 
         for (size_t i = 0; i < columnDescrs.size(); ++i) {
             auto& descr = columnDescrs[i];
-            descr.DataSize = InnerPackers_[i]->GetElementSize();
-            descr.SizeType = InnerPackers_[i]->GetElementSizeType();
+            auto* packer = InnerPackers_[i];
+            descr.DataSize = packer->GetElementSize();
+            descr.SizeType = packer->GetElementSizeType();
         }
 
         TupleLayout_ = NPackedTuple::TTupleLayout::Create(columnDescrs);
     }
 
     void Pack(const NYql::NUdf::TUnboxedValue* values, TPackResult& packed) override {
+        // Static dummy buffer to use instead of nullptr
+        static ui8 DummyBuffer[8] = {0};
+        
         TVector<const ui8*> columnsData;
         TVector<const ui8*> columnsNullBitmap;
         TVector<TVector<ui8>> tempStorage;
         
-        for (size_t i = 0; i < Packers_.size(); ++i) {
-            Packers_[i]->ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+        // Calculate total pointers count
+        size_t totalPointers = 0;
+        for (const auto& packer : Packers_) {
+            totalPointers += packer->GetPointersCount();
         }
+        
+        // Reserve space to avoid reallocation which could invalidate pointers
+        columnsData.reserve(totalPointers);
+        columnsNullBitmap.reserve(totalPointers);
+        tempStorage.reserve(totalPointers * 2); // Estimate
+        
+        for (size_t i = 0; i < Packers_.size(); ++i) {
+            size_t beforeSize = columnsData.size();
+            Packers_[i]->ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+            
+            // Validate that packer added correct number of pointers
+            size_t added = columnsData.size() - beforeSize;
+            Y_ENSURE(added == Packers_[i]->GetPointersCount(),
+                "Packer " << i << " added " << added << " pointers, but GetPointersCount() returns " << Packers_[i]->GetPointersCount());
+            
+            // Replace any nullptr with dummy buffer to avoid segfaults
+            for (size_t j = beforeSize; j < columnsData.size(); ++j) {
+                if (columnsData[j] == nullptr) {
+                    columnsData[j] = DummyBuffer;
+                }
+            }
+            
+            // Also replace nullptr in bitmaps (for secondary string buffers)
+            for (size_t j = beforeSize; j < columnsNullBitmap.size(); ++j) {
+                if (columnsNullBitmap[j] == nullptr) {
+                    columnsNullBitmap[j] = DummyBuffer;
+                }
+            }
+        }
+        
+        // Now columnsData.size() != InnerPackers_.size() for strings!
+        // InnerPackers_.size() = number of ColumnDescs
+        // columnsData.size() = total number of pointers
+        Y_ENSURE(columnsData.size() == totalPointers, 
+            "columnsData size mismatch: expected " << totalPointers << ", got " << columnsData.size());
         
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;
@@ -502,27 +581,56 @@ public:
         TupleLayout_->CalculateColumnSizes(
             packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
 
+        // Calculate total pointers needed (InnerPackers corresponds to ColumnDescs)
+        Y_ENSURE(bytesPerColumn.size() == InnerPackers_.size(),
+            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerPackers size " << InnerPackers_.size());
+
         TVector<TVector<ui8>> columnsDataStorage;
         TVector<TVector<ui8>> columnsNullBitmapStorage;
         
         TVector<ui8*> columnsData;
         TVector<ui8*> columnsNullBitmap;
         
+        // Create buffers based on InnerPackers (= ColumnDescs count)
         for (size_t i = 0; i < InnerPackers_.size(); ++i) {
-            columnsDataStorage.emplace_back(bytesPerColumn[i]);
-            columnsData.push_back(columnsDataStorage.back().data());
+            auto* packer = InnerPackers_[i];
             
-            // Allocate bitmap storage
-            ui32 bitmapBytes = (packed.NTuples + 7) / 8;
-            columnsNullBitmapStorage.emplace_back(bitmapBytes);
-            columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            // For variable-size columns (strings), we need to create offset buffer first
+            if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
+                // Offset buffer: (NTuples + 1) * sizeof(ui32)
+                columnsDataStorage.emplace_back((packed.NTuples + 1) * sizeof(ui32));
+                std::memset(columnsDataStorage.back().data(), 0, (packed.NTuples + 1) * sizeof(ui32));
+                columnsData.push_back(columnsDataStorage.back().data());
+                
+                // Null bitmap for offset buffer
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+                
+                // Data buffer
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+                
+                // Null bitmap for data buffer (dummy)
+                columnsNullBitmapStorage.emplace_back(1);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            } else {
+                // For fixed-size columns, just allocate data buffer
+                columnsDataStorage.emplace_back(bytesPerColumn[i]);
+                columnsData.push_back(columnsDataStorage.back().data());
+                
+                // Allocate bitmap storage
+                ui32 bitmapBytes = (packed.NTuples + 7) / 8;
+                columnsNullBitmapStorage.emplace_back(bitmapBytes);
+                columnsNullBitmap.push_back(columnsNullBitmapStorage.back().data());
+            }
         }
 
         TupleLayout_->Unpack(
             columnsData.data(), columnsNullBitmap.data(),
             packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
         
-        // Now extract the specific tuple
+        // Now extract the specific tuple for each packer
         for (size_t i = 0; i < Packers_.size(); ++i) {
             const auto& mapping = InnerMapping_[i];
             size_t offset = mapping.front();
@@ -562,4 +670,5 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
 }
 
 } // namespace NKikimr::NMiniKQL
+
 

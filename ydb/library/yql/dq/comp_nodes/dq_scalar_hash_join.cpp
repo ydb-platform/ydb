@@ -1,3 +1,4 @@
+
 #include "dq_scalar_hash_join.h"
 #include "dq_join_common.h"
 #include <dq_hash_join_table.h>
@@ -147,11 +148,12 @@ struct TScalarPackedOutput : NNonCopyable::TMoveOnly {
         };
     }
 
-    std::vector<NYql::NUdf::TUnboxedValue> FlushAndApplyRenames() {
-        std::vector<NYql::NUdf::TUnboxedValue> result;
-        result.reserve(Renames_.size() * Output_.NItems);
+    void FlushToBuffer() {
+        if (Output_.NItems == 0) {
+            return;
+        }
         
-        // Unpack tuples from both sides
+        // Unpack all tuples and store in OutputBuffer
         for (i64 tupleIdx = 0; tupleIdx < Output_.NItems; ++tupleIdx) {
             TSides<std::vector<NYql::NUdf::TUnboxedValue>> sideValues;
             
@@ -165,8 +167,6 @@ struct TScalarPackedOutput : NNonCopyable::TMoveOnly {
                 auto& values = sideValues.SelectSide(side);
                 
                 // Get column count for this side
-                // We need to know how many columns to unpack
-                // For now, we'll infer from the tuple layout
                 size_t columnCount = 0;
                 if (side == ESide::Build) {
                     for (const auto& rename : Renames_) {
@@ -186,12 +186,12 @@ struct TScalarPackedOutput : NNonCopyable::TMoveOnly {
                 converter->Unpack(packResult, tupleIdx, values.data(), HolderFactory_);
             });
             
-            // Apply renames
+            // Apply renames and add to buffer
             for (const auto& rename : Renames_) {
                 if (rename.Side == EJoinSide::kLeft) {
-                    result.push_back(sideValues.Probe[rename.Index]);
+                    OutputBuffer.push_back(sideValues.Probe[rename.Index]);
                 } else {
-                    result.push_back(sideValues.Build[rename.Index]);
+                    OutputBuffer.push_back(sideValues.Build[rename.Index]);
                 }
             }
         }
@@ -202,12 +202,21 @@ struct TScalarPackedOutput : NNonCopyable::TMoveOnly {
         Output_.Data.Build.Overflow.clear();
         Output_.Data.Probe.PackedTuples.clear();
         Output_.Data.Probe.Overflow.clear();
-        
-        return result;
     }
+    
+    int TupleSize() const {
+        return Renames_.size();
+    }
+    
+    int SizeTuplesInBuffer() const {
+        MKQL_ENSURE(OutputBuffer.size() % TupleSize() == 0, "buffer contains tuple parts??");
+        return OutputBuffer.size() / TupleSize();
+    }
+    
+    std::vector<NYql::NUdf::TUnboxedValue> OutputBuffer;
+    TuplePairs Output_;
 
 private:
-    TuplePairs Output_;
     TDqUserRenames Renames_;
     TSides<IScalarLayoutConverter*> Converters_;
     const THolderFactory& HolderFactory_;
@@ -287,11 +296,13 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
     {}
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
-        while (Output_.SizeTuples() == 0) {
+        while (Output_.SizeTuplesInBuffer() == 0) {
             auto res = Join_.MatchRows(ctx, Output_.MakeConsumeFn());
             switch (res) {
             case EFetchResult::Finish:
-                if (Output_.SizeTuples() == 0) {
+                // Flush any remaining packed tuples
+                Output_.FlushToBuffer();
+                if (Output_.SizeTuplesInBuffer() == 0) {
                     return EFetchResult::Finish;
                 }
                 break;
@@ -300,15 +311,22 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
             case EFetchResult::One:
                 break;
             }
+            
+            // Flush packed tuples to buffer when we have enough
+            if (Output_.SizeTuples() > 0) {
+                Output_.FlushToBuffer();
+            }
         }
         
-        auto outputBuffer = Output_.FlushAndApplyRenames();
-        const int outputTupleSize = Output_.Columns();
-        MKQL_ENSURE(std::ssize(outputBuffer) >= outputTupleSize, "Output_ must contain at least one tuple");
+        // Return one tuple from buffer
+        const int outputTupleSize = Output_.TupleSize();
+        MKQL_ENSURE(std::ssize(Output_.OutputBuffer) >= outputTupleSize, "Output_ must contain at least one tuple");
         
         for (int index = 0; index < outputTupleSize; ++index) {
-            *output[index] = outputBuffer[index];
+            int bufferIndex = std::ssize(Output_.OutputBuffer) - outputTupleSize + index;
+            *output[index] = Output_.OutputBuffer[bufferIndex];
         }
+        Output_.OutputBuffer.resize(std::ssize(Output_.OutputBuffer) - outputTupleSize);
         
         return EFetchResult::One;
     }
@@ -473,3 +491,4 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                                                         std::move(rightFlowItems), std::move(rightKeyColumns), renames);
 }
 } // namespace NKikimr::NMiniKQL
+

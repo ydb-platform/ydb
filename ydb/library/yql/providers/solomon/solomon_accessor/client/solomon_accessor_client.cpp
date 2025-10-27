@@ -176,7 +176,7 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsLabelsResponse("Monitoring api list metrics labels response is not a valid json" );
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response is not a valid json: " << e.what());
     }
 
     if (!json.IsMap() || !json.Has("labels") || !json.Has("totalCount")) {
@@ -190,27 +190,25 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
     result.TotalCount = json["totalCount"].GetInteger();
 
     for (const auto& label : json["labels"].GetArray()) {
-        if (!label.IsMap() ||
-            !label.Has("name") || !label["name"].IsString() ||
-            !label.Has("absent") || !label["absent"].IsBoolean() ||
-            !label.Has("truncated") || !label["truncated"].IsBoolean() ||
-            !label.Has("values") || !label["values"].IsArray()) {
-            return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid labels");
-        }
-
-        TString name = label["name"].GetString();
-        bool absent = label["absent"].GetBoolean();
-        bool truncated = label["truncated"].GetBoolean();
-        std::vector<TString> values;
-
-        for (const auto& labelValue : label["values"].GetArray()) {
-            if (!labelValue.IsString()) {
-                return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");
+        try {
+            TString name = label["name"].GetStringSafe();
+            bool absent = label["absent"].GetBooleanSafe();
+            bool truncated = label["truncated"].GetBooleanSafe();
+            const auto& jsonValues = label["values"].GetArraySafe();
+            std::vector<TString> values(jsonValues.size());
+    
+            for (const auto& labelValue : jsonValues) {
+                if (!labelValue.IsString()) {
+                    return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");
+                }
+                values.push_back(labelValue.GetString());
             }
-            values.push_back(labelValue.GetString());
+    
+            result.Labels.emplace_back(name, absent, truncated, std::move(values));
+        } catch (const NJson::TJsonException& e) {
+            return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
         }
 
-        result.Labels.emplace_back(name, absent, truncated, std::move(values));
     }
 
     return TListMetricsLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());

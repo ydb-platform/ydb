@@ -115,6 +115,23 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
+TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
+    if (!input->Type) {
+        return input->GetOutputIUs();
+    }
+
+    const auto *inputType = input->Type;
+    TVector<TInfoUnit> hashableKeys;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto &item : structType->GetItems()) {
+        if (item->GetItemType()->IsHashable()) {
+            hashableKeys.push_back(TInfoUnit(TString(item->GetName())));
+        }
+    }
+
+    return hashableKeys;
+}
+
 bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     Y_UNUSED(ctx);
 #ifdef DEBUG_PREDICATE
@@ -576,8 +593,9 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOCont
         const auto newStageId = props.StageGraph.AddStage();
         aggregate->Props.StageId = newStageId;
         const bool isInputSourceStage = props.StageGraph.IsSourceStage(inputStageId);
+        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
 
-        props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TShuffleConnection>(aggregate->KeyColumns, isInputSourceStage));
+        props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TShuffleConnection>(shuffleKeys, isInputSourceStage));
         YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
     } else {
         Y_ENSURE(false, "Unknown operator encountered");

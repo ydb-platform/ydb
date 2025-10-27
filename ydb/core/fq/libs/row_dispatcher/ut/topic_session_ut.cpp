@@ -644,7 +644,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         };
         
         auto test = [&](const TString& wrongJson) {
-            writeRead({ wrongJson}, { });
+            writeRead({ wrongJson }, { });
             Sleep(TDuration::MilliSeconds(100));
             writeRead({ Json1, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
             writeRead({ wrongJson, Json2, Json3 }, { JsonMessage(2), JsonMessage(3) });

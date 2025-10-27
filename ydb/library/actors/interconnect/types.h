@@ -58,6 +58,8 @@ namespace NActors {
         bool UseExternalDataChannel = {};
         bool UseXxhash = {};
         bool UseXdcShuffle = {};
+        bool UseRdma = {};
+        bool ChecksumRdmaEvent = {};
         TString AuthCN;
         NActors::TScopeId PeerScopeId;
     };

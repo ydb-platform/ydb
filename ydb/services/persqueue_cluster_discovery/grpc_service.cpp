@@ -55,6 +55,19 @@ void TGRpcPQClusterDiscoveryService::DecRequest() {
     }
 }
 
+static void DoDiscoverPQClustersRequest(std::unique_ptr<IRequestOpCtx> ctx, const IFacilityProvider&) {
+    auto ev = dynamic_cast<TEvDiscoverPQClustersRequest*>(ctx.release());
+    Y_ENSURE(ev);
+
+    auto evHandle = std::make_unique<NActors::IEventHandle>(
+        NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID(),
+        NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID(),
+        ev
+    );
+    evHandle->Rewrite(TRpcServices::EvDiscoverPQClusters, NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID());
+    NActors::TActivationContext::Send(std::move(evHandle));
+}
+
 void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
@@ -70,7 +83,7 @@ void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr 
         #NAME, logger, getCounterBlock("pq_cluster_discovery", #NAME))->Run();
 
         ADD_REQUEST(DiscoverClusters, DiscoverClustersRequest, DiscoverClustersResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx));
+            ActorSystem_->Send(GRpcRequestProxyId_, new TEvDiscoverPQClustersRequest(ctx, DoDiscoverPQClustersRequest, TRequestAuxSettings{TRateLimiterMode::Off, nullptr, TAuditMode::NonModifying()}));
         })
 #undef ADD_REQUEST
 
@@ -78,10 +91,6 @@ void TGRpcPQClusterDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr 
 
 void TGRpcPQClusterDiscoveryService::StopService() noexcept {
     TGrpcServiceBase::StopService();
-}
-
-void TGRpcRequestProxyHandleMethods::Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(ev->Forward(NPQ::NClusterDiscovery::MakeClusterDiscoveryServiceID()));
 }
 
 } // namespace NKikimr::NGRpcService

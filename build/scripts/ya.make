@@ -43,6 +43,7 @@ ELSEIF (PYTHON3)
         build_info_gen.py
         build_java_codenav_index.py
         build_java_with_error_prone2.py
+        bundle_output.py
         cat.py
         cgo1_wrapper.py
         check_config_h.py

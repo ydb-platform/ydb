@@ -1,0 +1,5 @@
+<tmp_path>/program.sql:<main>: Warning: Parse Sql
+
+    <tmp_path>/program.sql:<main>:1:18: Warning: Consider using function DateTime::Get* instead to avoid performance overhead
+    	select SimplePg::date_part('minute', DateTime('2015-01-01T02:03:04Z'))
+	                 ^

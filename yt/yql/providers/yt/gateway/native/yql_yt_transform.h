@@ -29,7 +29,7 @@ namespace NNative {
 
 class TGatewayTransformer {
 public:
-    TGatewayTransformer(const TExecContextBase& execCtx, TYtSettings::TConstPtr settings, const TString& optLLVM,
+    TGatewayTransformer(TExecContextBase& execCtx, TYtSettings::TConstPtr settings, const TString& optLLVM,
         TUdfModulesTable udfModules, IUdfResolver::TPtr udfResolver, TTransactionCache::TEntry::TPtr entry,
         NKikimr::NMiniKQL::TProgramBuilder& builder, TTempFiles& tmpFiles, TMaybe<ui32> publicId);
 
@@ -73,18 +73,22 @@ public:
         return *UsedMem_;
     }
 
+    bool HasFilesToDump() const {
+        return *HasFilesToDump_;
+    }
+
     void ApplyJobProps(TYqlJobBase& job);
     void ApplyUserJobSpec(NYT::TUserJobSpec& spec, bool localRun);
 
 private:
     NYT::ITransactionPtr GetTx();
     TTransactionCache::TEntry::TPtr GetEntry();
-    void AddFile(TString alias, const TUserFiles::TFileInfo& fileInfo, const TString& udfPrefix = {});
+    void AddFile(TString alias, TUserFiles::TFileInfo fileInfo, const TString& udfPrefix = {});
     TString FindUdfPath(const TStringBuf moduleName) const;
     TString FindUdfPrefix(const TStringBuf moduleName) const;
 
 private:
-    const TExecContextBase& ExecCtx_;
+    TExecContextBase& ExecCtx_;
     TYtSettings::TConstPtr Settings_;
     TUdfModulesTable UdfModules_;
     IUdfResolver::TPtr UdfResolver_;
@@ -107,6 +111,7 @@ private:
     std::shared_ptr<TVector<NYT::TRichYPath>> RemoteFiles_;
     std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> LocalFiles_;
     std::shared_ptr<TVector<std::pair<TString, TLocalFileInfo>>> DeferredUdfFiles_;
+    std::shared_ptr<bool> HasFilesToDump_;
 };
 
 } // NNative

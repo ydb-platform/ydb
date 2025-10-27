@@ -11,6 +11,7 @@ SRCS(
     config.cpp
     cypress_commands.cpp
     distributed_table_commands.cpp
+    distributed_file_commands.cpp
     driver.cpp
     etc_commands.cpp
     file_commands.cpp

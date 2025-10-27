@@ -395,7 +395,6 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
     BuildYsonFluently(consumer).BeginMap()
         .Item("hosts").Value(config.Hosts)
         .Item("pool").Value(config.Pool)
-        .Item("token").Value(config.Token)
         .Item("prefix").Value(config.Prefix)
         .Item("api_version").Value(config.ApiVersion)
         .Item("log_level").Value(config.LogLevel)
@@ -484,7 +483,6 @@ void Deserialize(TConfig& config, const TNode& node)
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("hosts", config.Hosts);
     DESERIALIZE_ITEM("pool", config.Pool);
-    DESERIALIZE_ITEM("token", config.Token);
     DESERIALIZE_ITEM("prefix", config.Prefix);
     DESERIALIZE_ITEM("api_version", config.ApiVersion);
     DESERIALIZE_ITEM("log_level", config.LogLevel);

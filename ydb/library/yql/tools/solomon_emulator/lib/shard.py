@@ -56,7 +56,7 @@ class Shard(object):
             for key, value in selectors.items():
                 if key == "project" or key == "cluster" or key == "service":
                     continue
-                
+
                 if value.find("|") == -1:
                     if value == "-":
                         if key in self.labels:
@@ -137,7 +137,7 @@ class Shard(object):
                     result.add(key)
 
         return list(result)
-    
+
     def get_labels(self, selectors):
         all_label_values = dict()
 
@@ -153,15 +153,15 @@ class Shard(object):
 
         matching_metrics = self.get_matching_metrics(selectors)
         for metric in matching_metrics:
-            metric_labels = set() 
+            metric_labels = set()
             for key, value in metric.labels.items():
                 all_label_values[key]["values"].add(value)
                 metric_labels.add(key)
-            
+
             for name, data in all_label_values.items():
                 if name not in metric_labels:
-                    all_label_values[name]["absent"] = True
-        
+                    data["absent"] = True
+
         result = []
         for name, data in all_label_values.items():
             if len(data["values"]) > 1:
@@ -184,7 +184,7 @@ class Shard(object):
             labels["cluster"] = self._cluster
             labels["service"] = self._service
             result.append({"labels": labels, "type": metric.kind})
-        
+
         if len(matching_metrics) > 1000:
             return (None, "Too many lines for one listing request, should be under 2k, have: {}".format(len(matching_metrics)))
 

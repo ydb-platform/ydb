@@ -2,7 +2,6 @@ from aiohttp import web
 import json
 import logging
 import re
-from math import ceil
 from concurrent import futures
 
 from library.python.monlib.encoder import loads
@@ -136,7 +135,7 @@ class SolomonEmulator(object):
 
         if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
             return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
-        
+
         project = selectors["project"]
         cluster = selectors["cluster"]
         service = selectors["service"]

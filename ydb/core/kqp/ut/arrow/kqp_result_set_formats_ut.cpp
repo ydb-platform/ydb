@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 break;
             }
 
-            
+
             if (part.HasResultSet()) {
                 auto resultSet = part.ExtractResultSet();
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
@@ -382,7 +382,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             }
         }
 
-        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+        UNIT_ASSERT_GT_C(count, 100000, "Expected at least 2 result sets");
     }
 
     /**
@@ -455,7 +455,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 0);
                 }
 
-                ++count;
             }
         }
 

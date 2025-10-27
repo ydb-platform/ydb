@@ -901,7 +901,6 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create deleted rows
-                    deleteIndexKeys = ReadInput(deleteIndexKeys, pos, ctx);
                     deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
                         indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
                     break;
@@ -954,7 +953,6 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
                     // For fulltext indexes, we need to tokenize the text and create upserted rows
-                    upsertIndexRows = ReadInput(upsertIndexRows, pos, ctx);
                     upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
                         indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
                     break;

@@ -39,6 +39,8 @@ YT_DEFINE_STRONG_TYPEDEF(TVersion, i64);
 
 inline const std::string PipelineFormatVersionAttribute("pipeline_format_version");
 inline const std::string LeaderControllerAddressAttribute("leader_controller_address");
+inline const std::string MonitoringProjectAttribute("monitoring_project");
+inline const std::string MonitoringClusterAttribute("monitoring_cluster");
 
 constexpr int CurrentPipelineFormatVersion = 1;
 

@@ -64,7 +64,7 @@ public:
         columnsNullBitmap.push_back(bitmapStorage.data());
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(holderFactory);
         
         if constexpr (Nullable) {
@@ -125,7 +125,7 @@ public:
         columnsNullBitmap.push_back(bitmapStorage.data());
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(holderFactory);
         
         if constexpr (Nullable) {
@@ -172,7 +172,7 @@ public:
         columnsNullBitmap.push_back(nullptr);
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         Y_UNUSED(columnsData, columnsNullBitmap, tupleIndex, holderFactory);
         return NYql::NUdf::TUnboxedValuePod::Void();
     }
@@ -227,7 +227,7 @@ public:
         columnsNullBitmap.push_back(nullptr);
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         if constexpr (Nullable) {
             ui8 byte = columnsNullBitmap[0][tupleIndex / 8];
             bool isNull = !(byte & (1 << (tupleIndex % 8)));
@@ -289,7 +289,7 @@ public:
         }
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         NYql::NUdf::TUnboxedValue* items = nullptr;
         auto result = holderFactory.CreateDirectArrayHolder(Children_.size(), items);
         
@@ -352,16 +352,15 @@ public:
 
 class TExternalOptionalColumnDataPacker : public IColumnDataPacker {
 public:
-    TExternalOptionalColumnDataPacker(IColumnDataPacker::TPtr inner, TType* type)
+    TExternalOptionalColumnDataPacker(IColumnDataPacker::TPtr inner, [[maybe_unused]] TType* type)
         : Inner_(std::move(inner))
-        , Type_(type)
     {}
 
     void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) override {
         Inner_->ExtractForPack(value, columnsData, columnsNullBitmap, tempStorage);
     }
 
-    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) override {
+    NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, [[maybe_unused]] const THolderFactory& holderFactory) override {
         return Inner_->CreateFromUnpack(columnsData, columnsNullBitmap, tupleIndex, holderFactory);
     }
 
@@ -379,7 +378,6 @@ public:
 
 private:
     IColumnDataPacker::TPtr Inner_;
-    TType* Type_;
 };
 
 // ------------------------------------------------------------

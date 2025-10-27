@@ -63,8 +63,9 @@ class TScalarRowSource : public NNonCopyable::TMoveOnly {
 // New packed tuple source for scalar join
 class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
   public:
-    TScalarPackedTupleSource(IComputationWideFlowNode* flow, const std::vector<TType*>& types, IScalarLayoutConverter* converter)
-        : Flow_(flow)
+    TScalarPackedTupleSource(TComputationContext& ctx, IComputationWideFlowNode* flow, const std::vector<TType*>& types, IScalarLayoutConverter* converter)
+        : Ctx_(&ctx)
+        , Flow_(flow)
         , ConsumeBuff_(types.size())
         , Pointers_(types.size())
         , Converter_(converter)
@@ -82,11 +83,11 @@ class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
         return ConsumeBuff_.size();
     }
 
-    FetchResult<IScalarLayoutConverter::TPackResult> FetchRow(TComputationContext& ctx) {
+    FetchResult<IScalarLayoutConverter::TPackResult> FetchRow() {
         if (Finished()) {
             return Finish{};
         }
-        auto res = Flow_->FetchValues(ctx, Pointers_.data());
+        auto res = Flow_->FetchValues(*Ctx_, Pointers_.data());
         if (res != EFetchResult::One) {
             if (res == EFetchResult::Finish) {
                 Finished_ = true;
@@ -102,6 +103,7 @@ class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
 
   private:
     bool Finished_ = false;
+    TComputationContext* Ctx_;
     IComputationWideFlowNode* Flow_;
     std::vector<NYql::NUdf::TUnboxedValue> ConsumeBuff_;
     std::vector<NYql::NUdf::TUnboxedValue*> Pointers_;
@@ -258,7 +260,8 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
 // New version using packed tuples with layout converter
 template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputationValue<TScalarPackedHashJoinState<Kind>> {
   public:
-    TScalarPackedHashJoinState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* leftFlow,
+    TScalarPackedHashJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
+                               IComputationWideFlowNode* leftFlow,
                                IComputationWideFlowNode* rightFlow, 
                                [[maybe_unused]] const std::vector<ui32>& leftKeyColumns,
                                [[maybe_unused]] const std::vector<ui32>& rightKeyColumns, 
@@ -269,9 +272,10 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
                                TDqUserRenames renames, const THolderFactory& holderFactory)
         : NKikimr::NMiniKQL::TComputationValue<TScalarPackedHashJoinState>(memInfo)
         , Converters_(std::move(converters))
-        , Join_(memInfo, 
-                TScalarPackedTupleSource{leftFlow, leftColumnTypes, Converters_.Probe.get()}, 
-                TScalarPackedTupleSource{rightFlow, rightColumnTypes, Converters_.Build.get()},
+        , Join_(TSides<TScalarPackedTupleSource>{
+                    .Build = TScalarPackedTupleSource{ctx, rightFlow, rightColumnTypes, Converters_.Build.get()},
+                    .Probe = TScalarPackedTupleSource{ctx, leftFlow, leftColumnTypes, Converters_.Probe.get()}
+                },
                 logger, componentName,
                 TSides<const NPackedTuple::TTupleLayout*>{
                     .Build = Converters_.Build->GetTupleLayout(),
@@ -376,7 +380,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
             });
             
             state = ctx.HolderFactory.Create<TScalarPackedHashJoinState<Kind>>(
-                LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, 
+                ctx, LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, 
                 LeftColumnTypes_, RightColumnTypes_, 
                 std::move(layouts), logger, "ScalarHashJoin", Renames_, ctx.HolderFactory);
         } else {

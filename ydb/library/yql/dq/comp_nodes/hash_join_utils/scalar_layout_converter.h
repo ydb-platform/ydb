@@ -5,6 +5,7 @@
 #include <yql/essentials/public/udf/udf_value.h>
 
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/tuple.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -12,12 +13,8 @@ class THolderFactory;
 
 class IScalarLayoutConverter : private TNonCopyable {
 public:
-    struct TPackResult {
-        std::vector<ui8, TMKQLAllocator<ui8>> PackedTuples;
-        std::vector<ui8, TMKQLAllocator<ui8>> Overflow;
-        int NTuples{0};
-    };
-
+    // Use the same TPackResult as IBlockLayoutConverter for compatibility
+    using TPackResult = IBlockLayoutConverter::TPackResult;
     using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
     using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
 

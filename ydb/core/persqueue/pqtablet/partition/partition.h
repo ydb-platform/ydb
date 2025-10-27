@@ -751,10 +751,10 @@ private:
         TMaybe<i16> KafkaProducerEpoch = 0;
     };
 
-    THashSet<TString> TxAffectedSourcesIds;
-    THashSet<TString> WriteAffectedSourcesIds;
-    THashSet<TString> TxAffectedConsumers;
-    THashSet<TString> SetOffsetAffectedConsumers;
+    THashMap<TString, size_t> TxAffectedSourcesIds;
+    THashMap<TString, size_t> WriteAffectedSourcesIds;
+    THashMap<TString, size_t> TxAffectedConsumers;
+    THashMap<TString, size_t> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
     THashMap<TString, TSeqNoProducerEpoch> TxInflightMaxSeqNoPerSourceId;
 

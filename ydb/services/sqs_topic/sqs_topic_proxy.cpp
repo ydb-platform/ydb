@@ -1,5 +1,6 @@
 #include "sqs_topic_proxy.h"
 #include "codes.h"
+#include "utils.h"
 
 #include <ydb/services/sqs_topic/rpc_params.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
@@ -22,8 +23,6 @@ using namespace NActors;
 using namespace NKikimrClient;
 
 namespace NKikimr::NSqsTopic::V1 {
-
-
 
     template <class TRequest>
     static const TRequest& GetRequest(NGRpcService::IRequestOpCtx* ctx) {
@@ -53,11 +52,12 @@ namespace NKikimr::NSqsTopic::V1 {
 
     private:
         void ReplyAndDie(const TActorContext& ctx);
-        NKikimrSchemeOp::TDirEntry SelfInfo;
+        TString Consumer;
     };
 
     TGetQueueUrlActor::TGetQueueUrlActor(NKikimr::NGRpcService::IRequestOpCtx* request)
-        : TBase(request, GetRequest<TProtoRequest>(request).queue_name())
+        : TBase(request, ToString(SplitExtendedQueueName(GetRequest<TProtoRequest>(request).queue_name()).QueueName))
+        , Consumer(SplitExtendedQueueName(GetRequest<TProtoRequest>(request).queue_name()).Consumer)
     {
     }
 
@@ -94,7 +94,16 @@ namespace NKikimr::NSqsTopic::V1 {
 
     void TGetQueueUrlActor::ReplyAndDie(const TActorContext& ctx) {
         Ydb::SqsTopic::V1::GetQueueUrlResult result;
-        result.set_queue_url("foobarr");
+
+        const TRichQueueUrl queueUrl{
+            .Database = this->Database,
+            .TopicPath = this->TopicPath,
+            .Consumer = this->Consumer.empty() ? DEFAULT_SQS_CONSUMER : this->Consumer,
+            .Fifo = AsciiHasSuffixIgnoreCase(this->Consumer, ".fifo"),
+        };
+
+        TString path = PackQueueUrlPath(queueUrl);
+        result.set_queue_url(std::move(path));
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
 

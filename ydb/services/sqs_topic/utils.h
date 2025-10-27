@@ -6,11 +6,10 @@
 namespace NKikimr::NSqsTopic {
 
     struct TQueueNameWithConsumer {
-        TStringBuf TopicName;
+        TStringBuf QueueName;
         TStringBuf Consumer;
     };
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt Y_LIFETIME_BOUND);
-
 
 }

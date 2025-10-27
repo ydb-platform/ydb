@@ -905,7 +905,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
                         .Connection<TDqCnUnionAll>()
                             .Output()
-                                .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                                .Stage(ReadInputToStage(deleteIndexKeys, ctx))
                                 .Index().Build("0")
                                 .Build()
                             .Build()
@@ -964,13 +964,13 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     auto upsertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
                         .Connection<TDqCnUnionAll>()
                             .Output()
-                                .Stage(ReadTableToStage(upsertIndexRows, ctx))
+                                .Stage(ReadInputToStage(upsertIndexRows, ctx))
                                 .Index().Build("0")
                                 .Build()
                             .Build()
                         .Done();
                     THashSet<TStringBuf> upsertInputColumns(indexTableColumns.begin(), indexTableColumns.end());
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertRowsPrecompute, upsertInputColumns,
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, upsertInputColumns,
                         indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
                     break;
                 }

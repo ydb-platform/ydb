@@ -35,7 +35,7 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
     auto resolveInput = (inputRows.Maybe<TDqCnUnionAll>()
         ? inputRows.Maybe<TDqCnUnionAll>().Cast().Output()
         : Build<TDqOutput>(ctx, pos)
-            .Stage(ReadTableToStage(inputRows, ctx))
+            .Stage(ReadInputToStage(inputRows, ctx))
             .Index().Build(0)
             .Done());
 
@@ -190,7 +190,7 @@ TVectorIndexPrefixLookup BuildVectorIndexPrefixLookup(
         ? inputRows
         : Build<TDqCnUnionAll>(ctx, pos)
             .Output<TDqOutput>()
-                .Stage(ReadTableToStage(inputRows, ctx))
+                .Stage(ReadInputToStage(inputRows, ctx))
                 .Index().Build(0)
                 .Build()
             .Done());

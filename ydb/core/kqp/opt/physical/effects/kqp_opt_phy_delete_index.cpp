@@ -97,7 +97,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
                     .Connection<TDqCnUnionAll>()
                         .Output()
-                            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                            .Stage(ReadInputToStage(deleteIndexKeys, ctx))
                             .Index().Build("0")
                             .Build()
                         .Build()

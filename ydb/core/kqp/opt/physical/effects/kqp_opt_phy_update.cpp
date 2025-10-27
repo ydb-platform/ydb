@@ -240,7 +240,18 @@ TExprBase KqpBuildUpdateStages(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 }
 
-TDqStageBase ReadTableToStage(const TExprBase& expr, TExprContext& ctx) {
+TExprBase ReadInput(const TExprBase& expr, TPositionHandle pos, TExprContext& ctx) {
+    return Build<TDqPhyPrecompute>(ctx, pos)
+        .Connection<TDqCnUnionAll>()
+            .Output()
+                .Stage(ReadInputToStage(expr, ctx))
+                .Index().Build("0")
+                .Build()
+            .Build()
+        .Done();
+}
+
+TDqStageBase ReadInputToStage(const TExprBase& expr, TExprContext& ctx) {
     if (expr.Maybe<TDqStageBase>()) {
         return expr.Cast<TDqStageBase>();
     }

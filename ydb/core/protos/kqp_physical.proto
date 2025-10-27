@@ -8,6 +8,7 @@ import "google/protobuf/any.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/proto/dq_tasks.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/sys_view_types.proto";
@@ -313,12 +314,53 @@ message TKqpPhyCnStreamLookup {
     bool IsTableImmutable = 10;
 }
 
+message TKqpPhyCnVectorResolve {
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    TKqpPhyTableId Table = 2;
+    TKqpPhyTableId LevelTable = 3;
+    repeated string Columns = 4;
+    uint32 VectorColumnIndex = 5;
+    repeated uint32 CopyColumnIndexes = 6;
+    bytes InputType = 7;
+    bytes OutputType = 8;
+    uint32 ClusterColumnOutPos = 9;
+    optional uint32 RootClusterColumnIndex = 10;
+}
+
 message TKqpPhyCnSequencer {
     TKqpPhyTableId Table = 1;
     repeated string Columns = 2;
     repeated string AutoIncrementColumns = 3;
     bytes InputType = 4;
     bytes OutputType = 5;
+}
+
+message TKqpPhyCnDqSourceStreamLookup {
+    // <Input DQ stage>
+    //        |<- InputStageRowType
+    // [maybe wide DQ channel]              <DQ lookup source>
+    //        |<- ConnectionInputRowType            |<- LookupRowType
+    // <stream lookup connection> ------------------+
+    //        |<- ConnectionOutputRowType
+    // [maybe wide DQ channel]
+    //        |<- OutputStageRowType
+    // <Output DQ stage>
+
+    bytes InputStageRowType = 1;
+    bytes OutputStageRowType = 2;
+    bytes LookupRowType = 3;
+    bytes ConnectionInputRowType = 4;
+    bytes ConnectionOutputRowType = 5;
+    TKqpExternalSource LookupSource = 6;
+    string LeftLabel = 7;
+    string RightLabel = 8;
+    string JoinType = 9;
+    repeated string LeftJoinKeyNames = 10;
+    repeated string RightJoinKeyNames = 11;
+    uint64 CacheLimit = 12;
+    uint64 CacheTtlSeconds = 13;
+    uint64 MaxDelayedRows = 14;
+    bool IsMultiGet = 15;
 }
 
 message TKqpPhyConnection {
@@ -339,6 +381,8 @@ message TKqpPhyConnection {
         TKqpPhyCnStreamLookup StreamLookup = 12;
         TKqpPhyCnSequencer Sequencer = 14;
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
+        TKqpPhyCnVectorResolve VectorResolve = 16;
+        TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
     };
 }
 
@@ -366,7 +410,7 @@ message TKqpExternalSource {
 
     // Partitioning
     string TaskParamKey = 3;
-    repeated string PartitionedTaskParams = 4;
+    repeated bytes PartitionedTaskParams = 4;
 
     string SourceName = 5;
     string AuthInfo = 6;
@@ -513,6 +557,13 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
+        NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
+        NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 56;
+        NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 57;
+        NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 58;
+        NKikimrSchemeOp.TModifyScheme CreateSecret = 59;
+        NKikimrSchemeOp.TModifyScheme AlterSecret = 60;
+        NKikimrSchemeOp.TModifyScheme DropSecret = 61;
     }
 }
 

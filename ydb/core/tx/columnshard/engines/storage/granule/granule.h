@@ -281,9 +281,9 @@ public:
 
     void BuildActualizationTasks(NActualizer::TTieringProcessContext& context, const TDuration actualizationLag) const;
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> self, const std::shared_ptr<NDataLocks::TManager>& locksManager) const {
-        return OptimizerPlanner->GetOptimizationTask(self, locksManager);
+        return OptimizerPlanner->GetOptimizationTasks(self, locksManager);
     }
 
     const NGranule::NPortionsIndex::TPortionsIndex& GetPortionsIndex() const {
@@ -400,12 +400,17 @@ public:
         }
     }
 
-    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion) const {
-        auto it = Portions.find(portion);
-        if (it == Portions.end()) {
+    std::shared_ptr<TPortionInfo> GetPortionOptional(const ui64 portion, const bool committedOnly = true) const {
+        if (auto it = Portions.find(portion); it != Portions.end()) {
+            return it->second;
+        }
+
+        if (committedOnly) {
             return nullptr;
         }
-        return it->second;
+
+        auto it = InsertedPortionsById.find(portion);
+        return it != InsertedPortionsById.end() ? it->second : nullptr;
     }
 
     bool ErasePortion(const ui64 portion);

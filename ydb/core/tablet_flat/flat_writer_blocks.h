@@ -14,9 +14,10 @@ namespace NWriter {
     class TBlocks {
     public:
         using ECache = NTable::NPage::ECache;
+        using ECacheMode = NTable::NPage::ECacheMode;
         using EPage = NTable::NPage::EPage;
         using TPageId = NTable::NPage::TPageId;
-        using TCache = TPrivatePageCache::TInfo;
+        using TPageCollection = TPrivatePageCache::TPageCollection;
 
         struct TResult : TMoveOnly {
             TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
@@ -24,10 +25,11 @@ namespace NWriter {
             TVector<NPageCollection::TLoadedPage> StickyPages;
         };
 
-        TBlocks(ICone *cone, ui8 channel, ECache cache, ui32 block, bool stickyFlatIndex)
+        TBlocks(ICone *cone, ui8 channel, ECache cache, ECacheMode cacheMode, ui32 block, bool stickyFlatIndex)
             : Cone(cone)
             , Channel(channel)
             , Cache(cache)
+            , CacheMode(cacheMode)
             , StickyFlatIndex(stickyFlatIndex)
             , Writer(Cone->CookieRange(1), Channel, block)
         {
@@ -64,7 +66,8 @@ namespace NWriter {
 
             if (NTable::TLoader::NeedIn(type) || Cache == ECache::Ever || StickyFlatIndex && type == EPage::FlatIndex) {
                 Result.StickyPages.emplace_back(pageId, std::move(raw));
-            } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex) {
+            } else if (bool(Cache) && type == EPage::DataPage || type == EPage::BTreeIndex || CacheMode == ECacheMode::TryKeepInMemory) {
+                // TODO: take into account memory limits for TryKeepInMemory mode
                 // Note: save b-tree index pages to shared cache regardless of a cache mode
                 Result.RegularPages.emplace_back(pageId, std::move(raw));
             }
@@ -87,6 +90,7 @@ namespace NWriter {
         ICone * const Cone = nullptr;
         const ui8 Channel = Max<ui8>();
         const ECache Cache = ECache::None;
+        const ECacheMode CacheMode = ECacheMode::Regular;
         const bool StickyFlatIndex;
 
         NPageCollection::TWriter Writer;

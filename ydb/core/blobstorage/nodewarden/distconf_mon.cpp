@@ -134,9 +134,36 @@ namespace NKikimr::NStorage {
                 return res;
             };
 
+            auto getAllBoundNodes = [&] {
+                NJson::TJsonValue res(NJson::JSON_ARRAY);
+
+                for (const auto& [nodeId, node] : AllBoundNodes) {
+                    NJson::TJsonValue item(NJson::JSON_MAP);
+                    item["node_id"] = NJson::TJsonMap{
+                        {"host", std::get<0>(nodeId)},
+                        {"port", std::get<1>(nodeId)},
+                        {"node_id", std::get<2>(nodeId)},
+                    };
+
+                    NJson::TJsonValue refs(NJson::JSON_MAP);
+                    for (const auto& [refererNodeId, it] : node.Refs) {
+                        refs[ToString(refererNodeId)] = NJson::TJsonMap{
+                            {"generation", it->GetGeneration()},
+                            {"fingerprint", HexEncode(it->GetFingerprint())},
+                        };
+                    }
+                    item["refs"] = std::move(refs);
+
+                    res.AppendValue(std::move(item));
+                }
+
+                return res;
+            };
+
             NJson::TJsonValue root = NJson::TJsonMap{
                 {"binding", getBinding()},
                 {"direct_bound_nodes", getDirectBoundNodes()},
+                {"all_bound_nodes", getAllBoundNodes()},
                 {"root_state", TString(TStringBuilder() << RootState)},
                 {"error_reason", ErrorReason},
                 {"has_quorum", GlobalQuorum},
@@ -310,6 +337,46 @@ namespace NKikimr::NStorage {
                                         TABLED() { out << info.SessionId; }
                                         TABLED() { out << makeBoundNodeIds(); }
                                         TABLED() { out << FormatList(info.ScatterTasks); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                DIV_CLASS("panel panel-info") {
+                    DIV_CLASS("panel-heading") {
+                        out << "Bound nodes";
+                    }
+                    DIV_CLASS("panel-body") {
+                        TABLE_CLASS("table table-condensed") {
+                            TABLEHEAD() {
+                                TABLER() {
+                                    TABLEH() { out << "NodeId"; }
+                                    TABLEH() { out << "FQDN:IcPort"; }
+                                    TABLEH() { out << "RefererNodeId"; }
+                                    TABLEH() { out << "Generation"; }
+                                    TABLEH() { out << "Fingerprint"; }
+                                }
+                            }
+                            TABLEBODY() {
+                                auto r = AllBoundNodes | std::views::keys;
+                                std::vector<TNodeIdentifier> nodeIds(r.begin(), r.end());
+                                std::ranges::sort(nodeIds);
+                                for (const auto& nodeId : nodeIds) {
+                                    auto& node = AllBoundNodes.at(nodeId);
+                                    auto r = node.Refs | std::views::keys;
+                                    std::vector<ui32> refererNodeIds(r.begin(), r.end());
+                                    std::ranges::sort(refererNodeIds);
+                                    for (ui32 refererNodeId : refererNodeIds) {
+                                        const auto& it = node.Refs.at(refererNodeId);
+                                        TABLER() {
+                                            TABLED() { out << nodeId.NodeId(); }
+                                            TABLED() { out << std::get<0>(nodeId) << ':' << std::get<1>(nodeId); }
+                                            TABLED() { out << refererNodeId; }
+                                            TABLED() { out << it->GetGeneration(); }
+                                            TABLED() { out << HexEncode(it->GetFingerprint()); }
+                                        }
                                     }
                                 }
                             }

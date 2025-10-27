@@ -18,8 +18,7 @@ namespace NMiniKQL {
 // TDefaultValueBuilder
 ///////////////////////////////////////////////////////////////////////////////
 class TDefaultValueBuilder final: public NUdf::IValueBuilder, private TNonCopyable, public ITerminator,
-    public NUdf::IDateBuilder
-{
+                                  public NUdf::IDateBuilder {
 public:
     explicit TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy = NUdf::EValidatePolicy::Fail);
 
@@ -34,7 +33,7 @@ public:
     NUdf::TUnboxedValue ConcatStrings(NUdf::TUnboxedValuePod first, NUdf::TUnboxedValuePod second) const final;
 
     NUdf::TUnboxedValue AppendString(NUdf::TUnboxedValuePod value, const NUdf::TStringRef& ref) const final;
-    NUdf::TUnboxedValue PrependString(const NUdf::TStringRef& ref,NUdf::TUnboxedValuePod value) const final;
+    NUdf::TUnboxedValue PrependString(const NUdf::TStringRef& ref, NUdf::TUnboxedValuePod value) const final;
 
     NUdf::TUnboxedValue SubString(NUdf::TUnboxedValuePod value, ui32 offset, ui32 size) const final;
     NUdf::TUnboxedValue NewList(NUdf::TUnboxedValue* items, ui64 count) const final; // Destroys (moves out from) items
@@ -54,7 +53,7 @@ public:
         return *this;
     }
 
-    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final;
+    bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const final;
     const NUdf::TSourcePosition* CalleePosition() const final;
     NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const final;
     void ExportArrowBlock(NUdf::TUnboxedValuePod value, ui32 chunk, ArrowArray* out) const final;
@@ -72,18 +71,18 @@ public:
     bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui16 tzId, i32& value) const final;
 
     bool FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                       ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                           ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
 
     bool FindTimezoneName(ui32 id, NUdf::TStringRef& name) const final;
     bool FindTimezoneId(const NUdf::TStringRef& name, ui32& id) const final;
 
     bool EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const final;
     bool FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
 
     const NUdf::IPgBuilder& GetPgBuilder() const final {
         return *PgBuilder_;
@@ -92,13 +91,13 @@ public:
     NUdf::TUnboxedValue NewArray64(ui64 count, NUdf::TUnboxedValue*& itemsPtr) const final;
 
     bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
-            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                       ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool SplitTzDatetime64(i64 datetime, i32& year, ui32& month, ui32& day,
-            ui32& hour, ui32& minute, ui32& second,
-            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
+                           ui32& hour, ui32& minute, ui32& second,
+                           ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
     bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId = 0) const final;
     bool MakeTzDatetime64(i32 year, ui32 month, ui32 day,
-            ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const final;
+                          ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const final;
 
     NUdf::IListValueBuilder::TPtr NewListBuilder() const final;
 
@@ -112,4 +111,4 @@ private:
 };
 
 } // namespace NMiniKQL
-} // namespace Nkikimr
+} // namespace NKikimr

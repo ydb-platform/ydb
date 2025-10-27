@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/grpc_services/service_topic.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/library/cloud_permissions/cloud_permissions.h>
 
 #include "actors/update_offsets_in_transaction_actor.h"
 
@@ -48,15 +49,6 @@ using namespace NKikimr;
 
 void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
     static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
-    //full list of permissions for compatibility. remove old permissions later.
-    static const TVector<TString> permissions = {
-        "ydb.databases.list",
-        "ydb.databases.create",
-        "ydb.databases.connect",
-        "ydb.tables.select",
-        "ydb.schemas.getMetadata",
-        "ydb.streams.write"
-    };
     TVector<std::pair<TString, TString>> attributes;
     attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
     for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
@@ -65,7 +57,8 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
         }
     }
     if (!attributes.empty()) {
-        checker->SetEntries({{permissions, attributes}});
+        //full list of permissions for compatibility. remove old permissions later.
+        checker->SetEntries({{NCloudPermissions::TCloudPermissions<NCloudPermissions::EType::DEFAULT>::Get(), attributes}});
     }
 }
 
@@ -92,12 +85,12 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicWriteRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMWRITE,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
+                    *ActorSystem_, "StreamWrite", getCounterBlock("topic", "StreamWrite", true), nullptr
                 );
     }
 
@@ -117,12 +110,12 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicReadRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
+                    *ActorSystem_, "StreamRead", getCounterBlock("topic", "StreamRead", true), nullptr
                 );
     }
 
@@ -142,12 +135,12 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamTopicDirectReadRequest(context,
                             TRequestAuxSettings{
-                                .RlMode = RLSWITCH(TRateLimiterMode::RuManual),
+                                .RlMode = RLSWITCH(TRateLimiterMode::RuTopic),
                                 .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml),
                                 .RequestType = NJaegerTracing::ERequestType::TOPIC_STREAMDIRECTREAD,
                             }));
                     },
-                    *ActorSystem_, "TopicService/StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
+                    *ActorSystem_, "StreamDirectRead", getCounterBlock("topic", "StreamDirectRead", true), nullptr
                 );
     }
 
@@ -161,10 +154,10 @@ void TGRpcTopicService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::Topic::V1::SVC::AsyncService::Request ## NAME, \
-        "TopicService/"#NAME, logger, getCounterBlock("topic", #NAME))->Run();
+        #NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
     ADD_REQUEST(CommitOffset, TopicService, CommitOffsetRequest, CommitOffsetResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx));
+        ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCommitOffsetRequest(ctx, &DoCommitOffsetRequest, TRequestAuxSettings{.RlMode = RLSWITCH(TRateLimiterMode::Rps), .AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), .RequestType =  NJaegerTracing::ERequestType::TOPIC_COMMITOFFSET}));
     })
 
     ADD_REQUEST(DropTopic, TopicService, DropTopicRequest, DropTopicResponse, {

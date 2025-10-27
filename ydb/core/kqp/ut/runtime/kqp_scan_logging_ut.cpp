@@ -30,30 +30,31 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
 
 void RunTestForQuery(const std::string& query, const std::string& expectedLog, bool enabledLogs) {
     TStringStream logsStream;
+    {
+        Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
+        TKikimrRunner kikimr(AppSettings(logsStream));
 
-    Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppSettings(logsStream));
+        if (enabledLogs) {
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
+        }
 
-    if (enabledLogs) {
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_TASKS_RUNNER, NActors::NLog::PRI_DEBUG);
+        auto db = kikimr.GetQueryClient();
+
+        FillTableWithData(db);
+
+        auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
+        auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
+        Cerr << planres.GetIssues().ToString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
+
+        Cerr << planres.GetStats()->GetAst() << Endl;
+
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TString output = FormatResultSetYson(result.GetResultSet(0));
+        Cout << output << Endl;
     }
-
-    auto db = kikimr.GetQueryClient();
-
-    FillTableWithData(db);
-
-    auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
-    auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
-    Cerr << planres.GetIssues().ToString() << Endl;
-    UNIT_ASSERT_VALUES_EQUAL_C(planres.GetStatus(), EStatus::SUCCESS, planres.GetIssues().ToString());
-
-    Cerr << planres.GetStats()->GetAst() << Endl;
-
-    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx().CommitTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-    TString output = FormatResultSetYson(result.GetResultSet(0));
-    Cout << output << Endl;
 
     bool hasExpectedLog = false;
     TString line;
@@ -76,7 +77,7 @@ Y_UNIT_TEST_TWIN(WideCombine, EnabledLogs) {
         select count(t.Key) from `/Root/KeyValue` as t group by t.Value
     )";
 
-    RunTestForQuery(query, "[WideCombine]", EnabledLogs);
+    RunTestForQuery(query, "[DqHashCombine]", EnabledLogs);
 }
 
 Y_UNIT_TEST_TWIN(GraceJoin, EnabledLogs) {

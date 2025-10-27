@@ -134,6 +134,8 @@ namespace NActors {
 
         guard->Terminate(std::move(Pool), XdcSocket, TlsActivationContext->AsActorContext());
 
+        SetOutputStuckFlag(false);
+
         TActor::PassAway();
     }
 
@@ -335,6 +337,7 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS06", "rewind SendQueue size# %zu LastConfirmed# %" PRIu64 " NextSerial# %" PRIu64,
             SendQueue.size(), LastConfirmed, serial);
 
+        SetOutputStuckFlag(NumEventsInQueue != 0);
         SwitchStuckPeriod();
 
         LastHandshakeDone = TActivationContext::Now();
@@ -550,6 +553,7 @@ namespace NActors {
             LostConnectionWatchdog.Rearm(SelfId());
             Proxy->Metrics->SetConnected(0);
             Proxy->RegisterDisconnect();
+            SetOutputStuckFlag(false);
             LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] disconnected", Proxy->PeerNodeId);
         }
         if (XdcSocket) {
@@ -1099,7 +1103,7 @@ namespace NActors {
                 .Utilization = Utilized,
                 .ConnectTime = LastHandshakeDone.MilliSeconds(),
                 .BytesWrittenToSocket = BytesWrittenToSocket,
-                .PeerBridgePileName = Proxy->Common->BridgePileName.value_or(""),
+                .PeerBridgePileName = Proxy->PeerBridgePileName.value_or(""),
             });
         }
 
@@ -1122,6 +1126,12 @@ namespace NActors {
             lastpair.first += GetCycleCountFast();
 
         OutputStuckFlag = state;
+
+        if (state) {
+            Proxy->Common->AddSessionWithDataInQueue();
+        } else {
+            Proxy->Common->RemoveSessionWithDataInQueue();
+        }
     }
 
     void TInterconnectSessionTCP::SwitchStuckPeriod() {

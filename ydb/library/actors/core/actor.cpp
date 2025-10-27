@@ -72,62 +72,6 @@ namespace NActors {
         }
     }
 
-    template<i64 Increment>
-    static void UpdateQueueSizeAndTimestamp(TActorUsageImpl<true>& impl, ui64 time) {
-        ui64 usedTimeIncrement = 0;
-        using T = TActorUsageImpl<true>;
-
-        for (;;) {
-            uint64_t value = impl.QueueSizeAndTimestamp.load();
-            ui64 count = value >> T::TimestampBits;
-
-            count += Increment;
-            Y_ABORT_UNLESS((count & ~T::CountMask) == 0);
-
-            ui64 timestamp = value;
-            if (Increment == 1 && count == 1) {
-                timestamp = time;
-            } else if (Increment == -1 && count == 0) {
-                usedTimeIncrement = (static_cast<ui64>(time) - timestamp) & T::TimestampMask;
-                timestamp = 0; // reset timestamp to some zero value
-            }
-
-            const ui64 updated = (timestamp & T::TimestampMask) | (count << T::TimestampBits);
-            if (impl.QueueSizeAndTimestamp.compare_exchange_weak(value, updated)) {
-                break;
-            }
-        }
-
-        if (usedTimeIncrement && impl.LastUsageTimestamp <= time) {
-            impl.UsedTime += usedTimeIncrement;
-        }
-    }
-
-    void TActorUsageImpl<true>::OnEnqueueEvent(ui64 time) {
-        UpdateQueueSizeAndTimestamp<+1>(*this, time);
-    }
-
-    void TActorUsageImpl<true>::OnDequeueEvent() {
-        UpdateQueueSizeAndTimestamp<-1>(*this, GetCycleCountFast());
-    }
-
-    double TActorUsageImpl<true>::GetUsage(ui64 time) {
-        ui64 used = UsedTime.exchange(0);
-        if (const ui64 value = QueueSizeAndTimestamp.load(); value >> TimestampBits) {
-            used += (static_cast<ui64>(time) - value) & TimestampMask;
-        }
-
-        Y_ABORT_UNLESS(LastUsageTimestamp <= time);
-        ui64 passed = time - LastUsageTimestamp;
-        LastUsageTimestamp = time;
-
-        if (!passed) {
-            return 0;
-        }
-
-        return (double)Min(passed, used) / passed;
-    }
-
     void IActor::Describe(IOutputStream &out) const {
         SelfActorId.Out(out);
     }
@@ -405,23 +349,23 @@ namespace NActors {
             if (!HandleResumeRunnable(ev) && !HandleRegisteredEvent(ev)) {
                 (this->*StateFunc_)(ev);
             }
-        } catch (const std::exception& exc) {
-            if (!OnUnhandledExceptionSafe(exc)) {
+        } catch (...) {
+            if (!OnUnhandledExceptionSafe(std::current_exception())) {
                 throw;
             }
         }
     }
 
-    bool IActor::OnUnhandledExceptionSafe(const std::exception& originalExc) {
+    bool IActor::OnUnhandledExceptionSafe(const std::exception_ptr& excPtr) {
         auto* handler = dynamic_cast<IActorExceptionHandler*>(this);
         if (!handler) {
             return false;
         }
 
         try {
-            return handler->OnUnhandledException(originalExc);
+            return handler->OnUnhandledException(excPtr);
         } catch (const std::exception& handleExc) {
-            Cerr << "OnUnhandledException throws unhandled exception " 
+            Cerr << "OnUnhandledException throws unhandled exception "
                 << TypeName(handleExc) << ": " << handleExc.what() << Endl
                 << TBackTrace::FromCurrentException().PrintToString()
                 << Endl;
@@ -435,7 +379,7 @@ namespace NActors {
             if (!TlsThreadContext || TlsThreadContext->CheckSendingType(ESendingType::Common)) {
                 sys->Send(eh);
             } else {
-                sys->SpecificSend(eh);
+                sys->SpecificSend(std::unique_ptr<IEventHandle>(eh.Release()));
             }
         }
     }
@@ -444,6 +388,11 @@ namespace NActors {
         if (TlsThreadContext) {
             TlsThreadContext->IsEnoughCpu = isEnough;
         }
+    }
+
+    void IActor::SetActivityType(TActorActivityType activityType) {
+        Y_ENSURE(!SelfActorId, "Cannot change activity type for registered actors");
+        ActivityType = activityType;
     }
 
     template bool TExecutorThread::Send<ESendingType::Common>(TAutoPtr<IEventHandle> ev);
@@ -672,9 +621,22 @@ namespace NActors {
     template <ESendingType SendingType>
     bool TActorSystem::Send(TAutoPtr<IEventHandle> ev) const {
         if constexpr (SendingType == ESendingType::Common) {
-            return this->GenericSend< &IExecutorPool::Send>(ev);
+            return this->GenericSend< &IExecutorPool::Send>(std::unique_ptr<IEventHandle>(ev.Release()));
         } else {
-            return this->SpecificSend(ev, SendingType);
+            return this->SpecificSend(std::unique_ptr<IEventHandle>(ev.Release()), SendingType);
+        }
+    }
+
+    template bool TActorSystem::Send<ESendingType::Common>(std::unique_ptr<IEventHandle>&& ev) const;
+    template bool TActorSystem::Send<ESendingType::Lazy>(std::unique_ptr<IEventHandle>&& ev) const;
+    template bool TActorSystem::Send<ESendingType::Tail>(std::unique_ptr<IEventHandle>&& ev) const;
+
+    template <ESendingType SendingType>
+    bool TActorSystem::Send(std::unique_ptr<IEventHandle>&& ev) const {
+        if constexpr (SendingType == ESendingType::Common) {
+            return this->GenericSend< &IExecutorPool::Send>(std::move(ev));
+        } else {
+            return this->SpecificSend(std::move(ev), SendingType);
         }
     }
 

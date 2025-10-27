@@ -99,6 +99,36 @@ SELECT
   ) AS ab; -- ("a": 1, "b": 2)
 ```
 
+## ReplaceMember {#replacemember}
+
+Изменение поля в структуре, включая изменение его типа. Если необходимо изменить несколько полей, то предпочтительнее использовать [RemoveMembers](#removemembers) и [ExpandStruct](#expandstruct).
+
+В случае отсутствия поля будет возвращена ошибка.
+
+#### Сигнатура
+
+```yql
+ReplaceMember(struct:Struct<...key:T..>, key:String, new_value:U) -> Struct<...key:U...>
+```
+
+Аргументы:
+
+1. struct - исходная структура;
+2. key - имя поля;
+3. new_value - новое значение поля.
+
+#### Примеры
+
+```yql
+$struct = <|a:1, b:2|>;
+SELECT
+  ReplaceMember(
+    $struct,
+    "b",
+    "foo"
+  ) AS ab; -- ("a": 1, "b": "foo")
+```
+
 ## RemoveMember {#removemember}
 
 Удаление поля из структуры. Если указанного поля не существовало, будет возвращена ошибка.

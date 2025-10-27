@@ -10,27 +10,35 @@
 #ifndef BOOST_ANYS_BASIC_ANY_HPP_INCLUDED
 #define BOOST_ANYS_BASIC_ANY_HPP_INCLUDED
 
+#include <boost/any/detail/config.hpp>
+
+#if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
+
+/// \file boost/any/basic_any.hpp
+/// \brief \copybrief boost::anys::basic_any
+
+#ifndef BOOST_ANY_INTERFACE_UNIT
 #include <boost/config.hpp>
 #ifdef BOOST_HAS_PRAGMA_ONCE
 # pragma once
 #endif
 
-/// \file boost/any/basic_any.hpp
-/// \brief \copybrief boost::anys::basic_any
-
-#include <boost/any/bad_any_cast.hpp>
-#include <boost/any/fwd.hpp>
-#include <boost/assert.hpp>
-#include <boost/type_index.hpp>
-#include <boost/throw_exception.hpp>
-
 #include <memory>  // for std::addressof
 #include <type_traits>
 
+#include <boost/assert.hpp>
+#include <boost/type_index.hpp>
+#include <boost/throw_exception.hpp>
+#endif  // #ifndef BOOST_ANY_INTERFACE_UNIT
+
+#include <boost/any/bad_any_cast.hpp>
+#include <boost/any/fwd.hpp>
 
 namespace boost {
 
 namespace anys {
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
     /// \brief A class with customizable Small Object Optimization whose
     /// instances can hold instances of any type that satisfies
@@ -546,11 +554,19 @@ namespace anys {
     }
     /// @endcond
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace anys
+
+BOOST_ANY_BEGIN_MODULE_EXPORT
 
 using boost::anys::any_cast;
 using boost::anys::unsafe_any_cast;
 
+BOOST_ANY_END_MODULE_EXPORT
+
 } // namespace boost
+
+#endif  // #if !defined(BOOST_USE_MODULES) || defined(BOOST_ANY_INTERFACE_UNIT)
 
 #endif // #ifndef BOOST_ANYS_BASIC_ANY_HPP_INCLUDED

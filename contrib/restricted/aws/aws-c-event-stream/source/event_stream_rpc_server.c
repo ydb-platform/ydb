@@ -716,13 +716,13 @@ void aws_event_stream_rpc_server_connection_close(
     struct aws_event_stream_rpc_server_connection *connection,
     int shutdown_error_code) {
 
-    if (aws_event_stream_rpc_server_connection_is_open(connection)) {
+    size_t expect_open = 1U;
+    if (aws_atomic_compare_exchange_int(&connection->is_open, &expect_open, 0U)) {
         AWS_LOGF_DEBUG(
             AWS_LS_EVENT_STREAM_RPC_SERVER,
             "id=%p: closing connection with error %s",
             (void *)connection,
             aws_error_debug_str(shutdown_error_code));
-        aws_atomic_store_int(&connection->is_open, 0U);
         aws_channel_shutdown(connection->channel, shutdown_error_code);
 
         if (!connection->bootstrap_owned) {

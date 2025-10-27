@@ -6,6 +6,7 @@
 #include <ydb/core/base/auth.h>
 #include <ydb/core/base/bridge.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/driver_lib/run/grpc_servers_manager.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -24,9 +25,11 @@ namespace {
         if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPrimaryPile)) {
             return Ydb::Bridge::PileState::PRIMARY;
         } else if (pileId == TBridgePileId::FromProto(&from, &NKikimrBridge::TClusterState::GetPromotedPile)) {
-            return Ydb::Bridge::PileState::PROMOTE;
+            return Ydb::Bridge::PileState::PROMOTED;
         } else {
             switch (from.GetPerPileState(pileId.GetPileIndex())) {
+                case NKikimrBridge::TClusterState::SUSPENDED:
+                    return Ydb::Bridge::PileState::SUSPENDED;
                 case NKikimrBridge::TClusterState::DISCONNECTED:
                     return Ydb::Bridge::PileState::DISCONNECTED;
                 case NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1:
@@ -49,12 +52,15 @@ void CopyFromInternalClusterState(const NKikimrBridge::TClusterState& from, cons
         state->set_pile_name(pile->Name);
         state->set_state(GetPublicState(from, TBridgePileId::FromPileIndex(i)));
     }
+    to.set_generation(from.GetGeneration());
 }
 
 class TUpdateClusterStateRequest : public TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest,
     Ydb::Bridge::UpdateClusterStateResult> {
     using TBase = TBridgeRequestGrpc<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest, Ydb::Bridge::UpdateClusterStateResult>;
     using TRpcBase = TRpcOperationRequestActor<TUpdateClusterStateRequest, TEvUpdateClusterStateRequest>;
+
+    bool IsDisconnectingRequest = false;
 
 public:
     using TBase::TBase;
@@ -111,7 +117,7 @@ public:
                     }
                     primary = update.pile_name();
                     break;
-                case Ydb::Bridge::PileState::PROMOTE:
+                case Ydb::Bridge::PileState::PROMOTED:
                     if (promoted) {
                         status = Ydb::StatusIds::BAD_REQUEST;
                         issues.AddIssue("multiple promoted piles are not allowed in a single request");
@@ -160,7 +166,17 @@ private:
 
         THashMap<TBridgePileId, Ydb::Bridge::PileState::State> updates;
         for (const auto& update : GetProtoRequest()->updates()) {
-            updates[nameToId.at(update.pile_name())] = update.state();
+            const auto pileId = nameToId.at(update.pile_name());
+            updates[pileId] = update.state();
+        }
+
+        // prohibit updates to suspended piles
+        for (const auto& [pileId, state] : updates) {
+            if (currentClusterState.GetPerPileState(pileId.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+                self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "cannot update suspended pile: " << pileId,
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                return;
+            }
         }
 
         std::optional<TBridgePileId> finalPrimary;
@@ -181,7 +197,7 @@ private:
                     return;
                 }
                 finalPrimary = pileId;
-            } else if (publicState == Ydb::Bridge::PileState::PROMOTE) {
+            } else if (publicState == Ydb::Bridge::PileState::PROMOTED) {
                 if (finalPromoted) {
                     self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Multiple promoted piles are not allowed, found " << *finalPromoted << " and " << pileId, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
                     return;
@@ -192,7 +208,7 @@ private:
             NKikimrBridge::TClusterState::EPileState internalState;
             switch (publicState) {
                 case Ydb::Bridge::PileState::PRIMARY:
-                case Ydb::Bridge::PileState::PROMOTE:
+                case Ydb::Bridge::PileState::PROMOTED:
                 case Ydb::Bridge::PileState::SYNCHRONIZED:
                     internalState = NKikimrBridge::TClusterState::SYNCHRONIZED;
                     break;
@@ -200,8 +216,10 @@ private:
                     internalState = NKikimrBridge::TClusterState::NOT_SYNCHRONIZED_1;
                     break;
                 case Ydb::Bridge::PileState::DISCONNECTED:
-                case Ydb::Bridge::PileState::SUSPENDED:
                     internalState = NKikimrBridge::TClusterState::DISCONNECTED;
+                    break;
+                case Ydb::Bridge::PileState::SUSPENDED:
+                    internalState = NKikimrBridge::TClusterState::SUSPENDED;
                     break;
                 default:
                     self->Reply(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported pile state", NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
@@ -218,9 +236,33 @@ private:
             finalPromoted = finalPrimary;
         }
 
+        if (finalPrimary && newClusterState.GetPerPileState(finalPrimary->GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+            self->Reply(Ydb::StatusIds::BAD_REQUEST, "primary pile cannot be suspended",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
+        if (finalPromoted && newClusterState.GetPerPileState(finalPromoted->GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+            self->Reply(Ydb::StatusIds::BAD_REQUEST, "promoted pile cannot be suspended",
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+            return;
+        }
+
         finalPrimary->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPrimaryPile);
         finalPromoted->CopyToProto(&newClusterState, &NKikimrBridge::TClusterState::SetPromotedPile);
         newClusterState.SetGeneration(currentClusterState.GetGeneration() + 1);
+
+        // check if current node is transitioning to DISCONNECTED state
+        // if so, notify GRpcServersManager to wait for this request before shutting down
+        const auto selfNodePileId = bridgeInfo->SelfNodePile->BridgePileId;
+        if (selfNodePileId.GetPileIndex() < newClusterState.PerPileStateSize()) {
+            const auto newSelfState = newClusterState.GetPerPileState(selfNodePileId.GetPileIndex());
+            if (newSelfState == NKikimrBridge::TClusterState::DISCONNECTED ||
+                newSelfState == NKikimrBridge::TClusterState::SUSPENDED) {
+                IsDisconnectingRequest = true;
+                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
+                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestStarted());
+            }
+        }
 
         auto request = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
         auto *cmd = request->Record.MutableSwitchBridgeClusterState();
@@ -228,6 +270,11 @@ private:
 
         for (const auto& name : GetProtoRequest()->quorum_piles()) {
             if (const auto it = nameToId.find(name); it != nameToId.end()) {
+                if (newClusterState.GetPerPileState(it->second.GetPileIndex()) == NKikimrBridge::TClusterState::SUSPENDED) {
+                    self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "quorum cannot include suspended pile: " << name,
+                        NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+                    return;
+                }
                 it->second.CopyToProto(cmd, &std::decay_t<decltype(*cmd)>::AddSpecificBridgePileIds);
             } else {
                 self->Reply(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "Unknown pile name in quorum: " << name,
@@ -249,13 +296,23 @@ private:
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr& ev) {
         const auto& response = ev->Get()->Record;
         auto* self = Self();
-        if (response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
-            Ydb::Bridge::UpdateClusterStateResult result;
-            self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+        const bool success = response.GetStatus() == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+        auto notifyDisconnectFinished = [&]() {
+            if (IsDisconnectingRequest) {
+                self->ActorContext().Send(NKikimr::MakeGRpcServersManagerId(self->SelfId().NodeId()),
+                    new NKikimr::TEvGRpcServersManager::TEvDisconnectRequestFinished());
+            }
+        };
+
+        if (!success) {
+            notifyDisconnectFinished();
+            self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
+                NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
             return;
         }
-        self->Reply(Ydb::StatusIds::INTERNAL_ERROR, response.GetErrorReason(),
-            NKikimrIssues::TIssuesIds::DEFAULT_ERROR, self->ActorContext());
+        Ydb::Bridge::UpdateClusterStateResult result;
+        self->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, self->ActorContext());
+        notifyDisconnectFinished();
     }
 };
 

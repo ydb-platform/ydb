@@ -5,4 +5,4 @@ namespace NKikimr::NMiniKQL {
 
 using NYql::NUdf::TBlockItem;
 
-}
+} // namespace NKikimr::NMiniKQL

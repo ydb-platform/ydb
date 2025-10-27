@@ -13,7 +13,7 @@ PEERDIR(
     ydb/core/grpc_services
     ydb/core/mind/address_classification
     ydb/core/mon
-    ydb/core/persqueue
+    ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/util
     ydb/public/api/grpc

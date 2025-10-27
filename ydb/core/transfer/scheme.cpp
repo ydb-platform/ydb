@@ -89,11 +89,11 @@ NYT::TNode CreateOptionalTypeNode(const TString& fieldType) {
         .Add(CreateTypeNode(fieldType));
 }
 
-void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType) {
+void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldType, bool nullable) {
     node.Add(
         NYT::TNode::CreateList()
             .Add(fieldName)
-            .Add(CreateOptionalTypeNode(fieldType))
+            .Add(nullable ? CreateOptionalTypeNode(fieldType) : CreateTypeNode(fieldType))
     );
 }
 
@@ -102,9 +102,9 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
 NYT::TNode MakeOutputSchema(const TVector<TSchemeColumn>& columns) {
     auto structMembers = NYT::TNode::CreateList();
 
-    AddField(structMembers, SystemColumns::TargetTable, "String");
+    AddField(structMembers, SystemColumns::TargetTable, "String", true);
     for (const auto& column : columns) {
-        AddField(structMembers, column.Name, column.TypeName());
+        AddField(structMembers, column.Name, column.TypeName(), column.Nullable);
     }
 
     auto rootMembers = NYT::TNode::CreateList();

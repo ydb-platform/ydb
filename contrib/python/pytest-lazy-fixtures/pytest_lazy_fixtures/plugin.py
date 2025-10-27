@@ -4,7 +4,7 @@ import pytest
 
 from .fixture_collector import collect_fixtures
 from .lazy_fixture import LazyFixtureWrapper
-from .loader import load_lazy_fixtures
+from .loader import LazyFixtureLoader
 from .normalizer import normalize_metafunc_calls
 
 
@@ -12,7 +12,7 @@ from .normalizer import normalize_metafunc_calls
 def pytest_fixture_setup(fixturedef: pytest.FixtureDef, request: pytest.FixtureRequest):  # noqa: ARG001
     val = getattr(request, "param", None)
     if val is not None:
-        request.param = load_lazy_fixtures(val, request)
+        request.param = LazyFixtureLoader(request).load_lazy_fixtures(val)
 
 
 def pytest_make_parametrize_id(config: pytest.Config, val, argname):  # noqa: ARG001

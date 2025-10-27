@@ -36,12 +36,12 @@ TString CanonizeAstLogicalId(TString ast) {
 }  // anonymous namespace
 
 class TFqRunner::TImpl {
-    using EVerbose = TFqSetupSettings::EVerbose;
+    using EVerbosity = TFqSetupSettings::EVerbosity;
 
 public:
     explicit TImpl(const TRunnerOptions& options)
         : Options(options)
-        , VerboseLevel(options.FqSettings.VerboseLevel)
+        , VerbosityLevel(options.FqSettings.VerbosityLevel)
         , FqSetup(options.FqSettings)
         , CerrColors(NColorizer::AutoColors(Cerr))
         , CoutColors(NColorizer::AutoColors(Cout))
@@ -50,7 +50,7 @@ public:
     bool ExecuteQuery(const TRequestOptions& query) {
         StartTraceOpt(query.QueryId);
 
-        if (VerboseLevel >= EVerbose::QueriesText) {
+        if (VerbosityLevel >= EVerbosity::QueriesText) {
             Cout << CoutColors.Cyan() << "Starting " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
@@ -88,7 +88,7 @@ public:
         if (Options.ResultOutput) {
             Cout << CoutColors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Writing query results..." << CoutColors.Default() << Endl;
             for (size_t i = 0; i < ResultSets.size(); ++i) {
-                if (ResultSets.size() > 1 && VerboseLevel >= EVerbose::Info) {
+                if (ResultSets.size() > 1 && VerbosityLevel >= EVerbosity::Info) {
                     *Options.ResultOutput << CoutColors.Cyan() << "Result set " << i + 1 << ":" << CoutColors.Default() << Endl;
                 }
                 PrintResultSet(Options.ResultOutputFormat, *Options.ResultOutput, ResultSets[i]);
@@ -98,7 +98,7 @@ public:
 
     bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) {
         for (const auto& connection : connections) {
-            if (VerboseLevel >= EVerbose::QueriesText) {
+            if (VerbosityLevel >= EVerbosity::QueriesText) {
                 Cout << CoutColors.Cyan() << "Creating connection:\n" << CoutColors.Default() << Endl << connection.DebugString() << Endl;
             }
 
@@ -121,7 +121,7 @@ public:
 
     bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const {
         for (auto binding : bindings) {
-            if (VerboseLevel >= EVerbose::QueriesText) {
+            if (VerbosityLevel >= EVerbosity::QueriesText) {
                 Cout << CoutColors.Cyan() << "Creating binding:\n" << CoutColors.Default() << Endl << binding.DebugString() << Endl;
             }
 
@@ -146,7 +146,7 @@ public:
     void ExecuteQueryAsync(const TRequestOptions& query) const {
         StartTraceOpt(query.QueryId);
 
-        if (VerboseLevel >= EVerbose::QueriesText) {
+        if (VerbosityLevel >= EVerbosity::QueriesText) {
             Cout << CoutColors.Cyan() << "Starting async " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
@@ -179,7 +179,7 @@ private:
             TExecutionMeta meta;
             const TRequestResult status = FqSetup.DescribeQuery(QueryId, CurrentOptions, meta);
 
-            if (const auto newIssues = meta.TransientIssues.ToString(); newIssues && previousIssues != newIssues && VerboseLevel >= EVerbose::Info) {
+            if (const auto newIssues = meta.TransientIssues.ToString(); newIssues && previousIssues != newIssues && VerbosityLevel >= EVerbosity::Info) {
                 previousIssues = newIssues;
                 Cerr << CerrColors.Red() << "Query transient issues updated:" << CerrColors.Default() << Endl << newIssues << Endl;
             }
@@ -199,7 +199,7 @@ private:
         }
 
         printStats(ExecutionMeta, true);
-        if (VerboseLevel >= EVerbose::Info) {
+        if (VerbosityLevel >= EVerbosity::Info) {
             Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
         }
 
@@ -228,7 +228,7 @@ private:
         }
 
         return TCachedPrinter(astOutput, [this](TString ast, IOutputStream& output) {
-            if (VerboseLevel >= EVerbose::Info) {
+            if (VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
             }
             if (Options.CanonicalOutput) {
@@ -246,7 +246,7 @@ private:
         }
 
         return TCachedPrinter(planOutput, [this](TString plan, IOutputStream& output) {
-            if (VerboseLevel >= EVerbose::Info) {
+            if (VerbosityLevel >= EVerbosity::Info) {
                 Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
             }
             if (!plan) {
@@ -279,7 +279,7 @@ private:
 
 private:
     const TRunnerOptions Options;
-    const EVerbose VerboseLevel;
+    const EVerbosity VerbosityLevel;
     const TFqSetup FqSetup;
     const NColorizer::TColors CerrColors;
     const NColorizer::TColors CoutColors;

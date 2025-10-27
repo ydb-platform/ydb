@@ -91,7 +91,6 @@ from ._cffi import (  # type: ignore
     lib,
 )
 
-
 backend_features = set()  # type: ignore
 
 COMPRESSION_RECOMMENDED_INPUT_SIZE = lib.ZSTD_CStreamInSize()
@@ -100,7 +99,6 @@ DECOMPRESSION_RECOMMENDED_INPUT_SIZE = lib.ZSTD_DStreamInSize()
 DECOMPRESSION_RECOMMENDED_OUTPUT_SIZE = lib.ZSTD_DStreamOutSize()
 
 new_nonzero = ffi.new_allocator(should_clear_after_alloc=False)
-
 
 MAX_COMPRESSION_LEVEL = lib.ZSTD_maxCLevel()
 MAGIC_NUMBER = lib.ZSTD_MAGICNUMBER
@@ -1826,17 +1824,17 @@ class ZstdCompressor(object):
 
         if compression_params and write_checksum is not None:
             raise ValueError(
-                "cannot define compression_params and " "write_checksum"
+                "cannot define compression_params and write_checksum"
             )
 
         if compression_params and write_content_size is not None:
             raise ValueError(
-                "cannot define compression_params and " "write_content_size"
+                "cannot define compression_params and write_content_size"
             )
 
         if compression_params and write_dict_id is not None:
             raise ValueError(
-                "cannot define compression_params and " "write_dict_id"
+                "cannot define compression_params and write_dict_id"
             )
 
         if compression_params and threads:
@@ -2560,7 +2558,7 @@ def frame_header_size(data):
     return zresult
 
 
-def get_frame_parameters(data):
+def get_frame_parameters(data, format=FORMAT_ZSTD1):
     """
     Parse a zstd frame header into frame parameters.
 
@@ -2571,13 +2569,17 @@ def get_frame_parameters(data):
 
     :param data:
        Data from which to read frame parameters.
+    :param format:
+       Set the format of data for the decoder.
     :return:
        :py:class:`FrameParameters`
     """
-    params = ffi.new("ZSTD_frameHeader *")
+    params = ffi.new("ZSTD_FrameHeader *")
 
     data_buffer = ffi.from_buffer(data)
-    zresult = lib.ZSTD_getFrameHeader(params, data_buffer, len(data_buffer))
+    zresult = lib.ZSTD_getFrameHeader_advanced(
+        params, data_buffer, len(data_buffer), format
+    )
     if lib.ZSTD_isError(zresult):
         raise ZstdError(
             "cannot get frame parameters: %s" % _zstd_error(zresult)
@@ -2635,7 +2637,7 @@ class ZstdCompressionDict(object):
 
     Dictionaries have unique integer IDs. You can retrieve this ID via:
 
-    >>> dict_id = zstandard.dictionary_id(dict_data)
+    >>> dict_id = dict_data.dict_id()
 
     You can obtain the raw data in the dict (useful for persisting and constructing
     a ``ZstdCompressionDict`` later) via ``as_bytes()``:
@@ -2710,7 +2712,7 @@ class ZstdCompressionDict(object):
         """
         if level and compression_params:
             raise ValueError(
-                "must only specify one of level or " "compression_params"
+                "must only specify one of level or compression_params"
             )
 
         if not level and not compression_params:
@@ -2867,10 +2869,10 @@ def train_dictionary(
         if not isinstance(sample, bytes):
             raise ValueError("samples must be bytes")
 
-        l = len(sample)
-        ffi.memmove(samples_buffer + offset, sample, l)
-        offset += l
-        sample_sizes[i] = l
+        sample_len = len(sample)
+        ffi.memmove(samples_buffer + offset, sample, sample_len)
+        offset += sample_len
+        sample_sizes[i] = sample_len
 
     dict_data = new_nonzero("char[]", dict_size)
 
@@ -3421,22 +3423,18 @@ class ZstdDecompressionReader(object):
                 raise OSError("cannot seek to negative position with SEEK_SET")
 
             if pos < self._bytes_decompressed:
-                raise OSError(
-                    "cannot seek zstd decompression stream " "backwards"
-                )
+                raise OSError("cannot seek zstd decompression stream backwards")
 
             read_amount = pos - self._bytes_decompressed
 
         elif whence == os.SEEK_CUR:
             if pos < 0:
-                raise OSError(
-                    "cannot seek zstd decompression stream " "backwards"
-                )
+                raise OSError("cannot seek zstd decompression stream backwards")
 
             read_amount = pos
         elif whence == os.SEEK_END:
             raise OSError(
-                "zstd decompression streams cannot be seeked " "with SEEK_END"
+                "zstd decompression streams cannot be seeked with SEEK_END"
             )
 
         while read_amount:
@@ -3822,13 +3820,14 @@ class ZstdDecompressor(object):
 
         data_buffer = ffi.from_buffer(data)
 
-        output_size = lib.ZSTD_getFrameContentSize(
-            data_buffer, len(data_buffer)
+        params = ffi.new("ZSTD_FrameHeader *")
+        zresult = lib.ZSTD_getFrameHeader_advanced(
+            params, data_buffer, len(data_buffer), self._format
         )
-
-        if output_size == lib.ZSTD_CONTENTSIZE_ERROR:
+        if zresult != 0:
             raise ZstdError("error determining content size from frame header")
-        elif output_size == 0:
+        output_size = params.frameContentSize
+        if output_size == 0:
             return b""
         elif output_size == lib.ZSTD_CONTENTSIZE_UNKNOWN:
             if not max_output_size:
@@ -4289,7 +4288,7 @@ class ZstdDecompressor(object):
 
         # All chunks should be zstd frames and should have content size set.
         chunk_buffer = ffi.from_buffer(chunk)
-        params = ffi.new("ZSTD_frameHeader *")
+        params = ffi.new("ZSTD_FrameHeader *")
         zresult = lib.ZSTD_getFrameHeader(
             params, chunk_buffer, len(chunk_buffer)
         )

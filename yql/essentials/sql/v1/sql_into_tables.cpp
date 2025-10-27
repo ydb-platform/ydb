@@ -17,8 +17,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         {"InsertOrRevertInto", ESQLWriteColumnMode::InsertOrRevertInto},
         {"UpsertInto", ESQLWriteColumnMode::UpsertInto},
         {"ReplaceInto", ESQLWriteColumnMode::ReplaceInto},
-        {"InsertIntoWithTruncate", ESQLWriteColumnMode::InsertIntoWithTruncate}
-    };
+        {"InsertIntoWithTruncate", ESQLWriteColumnMode::InsertIntoWithTruncate}};
 
     auto& modeBlock = node.GetBlock1();
 
@@ -31,22 +30,19 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {
                 modeBlock.GetAlt2().GetToken1(),
                 modeBlock.GetAlt2().GetToken2(),
-                modeBlock.GetAlt2().GetToken3()
-            };
+                modeBlock.GetAlt2().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt3:
             modeTokens = {
                 modeBlock.GetAlt3().GetToken1(),
                 modeBlock.GetAlt3().GetToken2(),
-                modeBlock.GetAlt3().GetToken3()
-            };
+                modeBlock.GetAlt3().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt4:
             modeTokens = {
                 modeBlock.GetAlt4().GetToken1(),
                 modeBlock.GetAlt4().GetToken2(),
-                modeBlock.GetAlt4().GetToken3()
-            };
+                modeBlock.GetAlt4().GetToken3()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::kAlt5:
             modeTokens = {modeBlock.GetAlt5().GetToken1()};
@@ -55,7 +51,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             modeTokens = {modeBlock.GetAlt6().GetToken1()};
             break;
         case TRule_into_table_stmt_TBlock1::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     TVector<TString> modeStrings;
@@ -90,31 +86,45 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
     auto cluster = Ctx_.Scoped->CurrCluster;
     std::pair<bool, TDeferredAtom> nameOrAt;
     bool isBinding = false;
+
+    const bool isClusterSpecified = ((tableRefCore.HasAlt_simple_table_ref_core1() &&
+                                      tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) ||
+                                     (tableRefCore.HasAlt_simple_table_ref_core2() &&
+                                      tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1()));
+
+    const bool hasAt = ((tableRefCore.HasAlt_simple_table_ref_core1() &&
+                         tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1()) ||
+                        (tableRefCore.HasAlt_simple_table_ref_core2() &&
+                         tableRefCore.GetAlt_simple_table_ref_core2().HasBlock2()));
+
+    if (isClusterSpecified) {
+        const auto& clusterExpr = tableRefCore.HasAlt_simple_table_ref_core1()
+                                      ? tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1()
+                                      : tableRefCore.GetAlt_simple_table_ref_core2().GetBlock1().GetRule_cluster_expr1();
+
+        const bool result = !hasAt
+                                ? ClusterExprOrBinding(clusterExpr, service, cluster, isBinding)
+                                : ClusterExpr(clusterExpr, false, service, cluster);
+
+        if (!result) {
+            return nullptr;
+        }
+    }
+
+    if (!isBinding && cluster.Empty()) {
+        Ctx_.Error() << "No cluster name given and no default cluster is selected";
+        return nullptr;
+    }
+
     switch (tableRefCore.Alt_case()) {
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore1: {
-            if (tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().HasBlock1()) {
-                const auto& clusterExpr = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetBlock1().GetRule_cluster_expr1();
-                bool hasAt = tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2().HasBlock1();
-                bool result = !hasAt ?
-                    ClusterExprOrBinding(clusterExpr, service, cluster, isBinding) : ClusterExpr(clusterExpr, false, service, cluster);
-                if (!result) {
-                    return nullptr;
-                }
-            }
-
-            if (!isBinding && cluster.Empty()) {
-                Ctx_.Error() << "No cluster name given and no default cluster is selected";
-                return nullptr;
-            }
-
             auto id = Id(tableRefCore.GetAlt_simple_table_ref_core1().GetRule_object_ref1().GetRule_id_or_at2(), *this);
             nameOrAt = std::make_pair(id.first, TDeferredAtom(Ctx_.Pos(), id.second));
             break;
         }
         case TRule_simple_table_ref_core::AltCase::kAltSimpleTableRefCore2: {
-            auto at = tableRefCore.GetAlt_simple_table_ref_core2().HasBlock1();
             TString name;
-            if (!NamedNodeImpl(tableRefCore.GetAlt_simple_table_ref_core2().GetRule_bind_parameter2(), name, *this)) {
+            if (!NamedNodeImpl(tableRefCore.GetAlt_simple_table_ref_core2().GetRule_bind_parameter3(), name, *this)) {
                 return nullptr;
             }
             auto named = GetNamedNode(name);
@@ -123,18 +133,14 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
             }
 
             named->SetRefPos(Ctx_.Pos());
-            if (cluster.Empty()) {
-                Ctx_.Error() << "No cluster name given and no default cluster is selected";
-                return nullptr;
-            }
 
             TDeferredAtom table;
             MakeTableFromExpression(Ctx_.Pos(), Ctx_, named, table);
-            nameOrAt = std::make_pair(at, table);
+            nameOrAt = std::make_pair(hasAt, table);
             break;
         }
         case TRule_simple_table_ref_core::AltCase::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            Y_UNREACHABLE();
     }
 
     bool withTruncate = false;
@@ -150,7 +156,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
                 withTruncate = true;
             }
         }
-        std::erase_if(*hints, [](const auto &hint) { return to_upper(hint.first) == "TRUNCATE"; });
+        std::erase_if(*hints, [](const auto& hint) { return to_upper(hint.first) == "TRUNCATE"; });
         tableHints = std::move(*hints);
     }
 
@@ -162,8 +168,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
         }
 
         PureColumnListStr(
-            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns
-        );
+            intoTableRef.GetBlock2().GetRule_pure_column_list3(), *this, eraseColumns);
     }
 
     if (withTruncate) {
@@ -214,7 +219,7 @@ TNodePtr TSqlIntoTable::Build(const TRule_into_table_stmt& node) {
 }
 
 bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const TTableRef& table,
-    ESQLWriteColumnMode mode, const TPosition& pos) {
+                                        ESQLWriteColumnMode mode, const TPosition& pos) {
     Y_UNUSED(node);
     auto serviceName = table.Service;
     if (serviceName == UnknownProviderName) {

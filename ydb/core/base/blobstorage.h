@@ -496,6 +496,8 @@ struct TEvBlobStorage {
         EvGetBlock,
         EvCheckIntegrity,
 
+        EvExplicitMultiPut, // for debugging purposes
+
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
         EvGetResult,
@@ -764,6 +766,7 @@ struct TEvBlobStorage {
         EvReleaseSyncToken,
         EvBSQueueResetConnection, // for test purposes
         EvYardResize,                                           // 268 636 340
+        EvChangeExpectedSlotCount,
 
         EvYardInitResult = EvPut + 9 * 512,                     /// 268 636 672
         EvLogResult,
@@ -818,6 +821,9 @@ struct TEvBlobStorage {
         EvPreShredCompactVDiskResult,
         EvShredVDiskResult,
         EvYardResizeResult,
+        EvCommitVDiskMetadata,
+        EvCommitVDiskMetadataDone,
+        EvChangeExpectedSlotCountResult,
 
         // internal proxy interface
         EvUnusedLocal1 = EvPut + 10 * 512, // Not used.    /// 268 637 184
@@ -880,6 +886,7 @@ struct TEvBlobStorage {
         EvControllerFetchConfigResponse             = 0x1003162c,
         EvControllerDistconfRequest                 = 0x1003162d,
         EvControllerDistconfResponse                = 0x1003162e,
+        EvControllerUpdateSyncerState               = 0x1003162f,
 
         // BSC interface result section
         EvControllerNodeServiceSetUpdate            = 0x10031802,
@@ -928,8 +935,7 @@ struct TEvBlobStorage {
         EvNodeWardenUnsubscribeFromCache,
         EvNodeWardenNotifyConfigMismatch,
         EvNodeWardenUpdateConfigFromPeer,
-        EvNodeWardenManageSyncers,
-        EvNodeWardenManageSyncersResult,
+        EvNodeWardenNotifySyncerFinished,
 
         // Other
         EvRunActor = EvPut + 15 * 512,
@@ -979,6 +985,49 @@ struct TEvBlobStorage {
     struct TEvRequestCommon {
         ui32 RestartCounter = 0;
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
+        std::optional<ui32> ForceGroupGeneration;
+
+        static TString GetRequestName(ui32 eventType) {
+            switch (eventType) {
+            case EvPut:
+                return "Put";
+            case EvGet:
+                return "Get";
+            case EvBlock:
+                return "Block";
+            case EvCollectGarbage:
+                return "CollectGarbase";
+            case EvDiscover:
+                return "Discover";
+            case EvPatch:
+                return "Patch";
+            case EvInplacePatch:
+                return "InplacePatch";
+            case EvCheckIntegrity:
+                return "CheckIntegrity";
+            case EvRange:
+                return "Range";
+            case EvStatus:
+                return "Status";
+            case EvAssimilate:
+                return "Assimilate";
+            case EvGetBlock:
+                return "GetBlock";
+            default:
+                return "Unknown";
+            }
+        }
+    };
+
+    struct TEvResultCommon {
+        NKikimrProto::EReplyStatus Status;
+        TString ErrorReason;
+        std::shared_ptr<TExecutionRelay> ExecutionRelay;
+        ui32 RacingGeneration = 0;
+
+        TEvResultCommon(NKikimrProto::EReplyStatus status)
+            : Status(status)
+        {}
     };
 
     struct TEvPut
@@ -1004,7 +1053,7 @@ struct TEvBlobStorage {
             }
         };
         const TLogoBlobID Id;
-        const TRcBuf Buffer; //FIXME(innokentii) const members prevent usage of move-semantics elsewhere
+        TRope Buffer;
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
@@ -1024,7 +1073,7 @@ struct TEvBlobStorage {
             , ExtraBlockChecks(origin.ExtraBlockChecks)
         {}
 
-        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+        TEvPut(const TLogoBlobID &id, TRope &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false)
             : Id(id)
@@ -1049,17 +1098,23 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
+        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
+            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag)
+        {}
+
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
         TString Print(bool isFull) const {
@@ -1096,21 +1151,21 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvPutResult : public TEventLocal<TEvPutResult, EvPutResult> {
-        NKikimrProto::EReplyStatus Status;
+    struct TEvPutResult
+        : TEventLocal<TEvPutResult, EvPutResult>
+        , TEvResultCommon
+    {
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
         const ui32 GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
-        TString ErrorReason;
         bool WrittenBeyondBarrier = false; // was this blob written beyond the barrier?
         mutable NLWTrace::TOrbit Orbit;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
         const TString StorageId;
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 TGroupId groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
-            : Status(status)
+            : TEvResultCommon(status)
             , Id(id)
             , StatusFlags(statusFlags)
             , GroupId(groupId.GetRawId())
@@ -1120,7 +1175,7 @@ struct TEvBlobStorage {
 
         TEvPutResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, const TStorageStatusFlags statusFlags,
                 ui32 groupId, float approximateFreeSpaceShare, const TString& storageId = Default<TString>())
-            : Status(status)
+            : TEvResultCommon(status)
             , Id(id)
             , StatusFlags(statusFlags)
             , GroupId(groupId)
@@ -1198,6 +1253,7 @@ struct TEvBlobStorage {
         bool ReportDetailedPartMap = false;
         bool PhantomCheck = false;
         bool Decommission = false; // is it generated by decommission actor and should be handled by the underlying proxy?
+        bool DoNotReportIndexRestoreGetMissingBlobs = false;
 
         struct TTabletData {
             TTabletData() = default;
@@ -1330,7 +1386,10 @@ struct TEvBlobStorage {
         }
     };
 
-    struct TEvGetResult : public TEventLocal<TEvGetResult, EvGetResult> {
+    struct TEvGetResult
+        : TEventLocal<TEvGetResult, EvGetResult>
+        , TEvResultCommon
+    {
         struct TPartMapItem {
             ui32 DiskOrderNumber;
             ui32 PartIdRequested;
@@ -1357,37 +1416,33 @@ struct TEvBlobStorage {
             {}
         };
 
-        NKikimrProto::EReplyStatus Status;
-
         // todo: replace with queue-like thing
         ui32 ResponseSz;
         TArrayHolder<TResponse> Responses;
         const ui32 GroupId;
         ui32 BlockedGeneration = 0; // valid only for requests with non-zero TabletId and true AcquireBlockedGeneration.
         TString DebugInfo;
-        TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         // to measure blobstorage->client hop
         TInstant Sent;
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TGroupId groupId)
-            : Status(status)
+            : TEvResultCommon(status)
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId.GetRawId())
         {}
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, ui32 groupId)
-            : Status(status)
+            : TEvResultCommon(status)
             , ResponseSz(sz)
             , Responses(sz == 0 ? nullptr : new TResponse[sz])
             , GroupId(groupId)
         {}
 
         TEvGetResult(NKikimrProto::EReplyStatus status, ui32 sz, TArrayHolder<TResponse> responses, TGroupId groupId)
-            : Status(status)
+            : TEvResultCommon(status)
             , ResponseSz(sz)
             , Responses(std::move(responses))
             , GroupId(groupId.GetRawId())
@@ -1492,14 +1547,15 @@ struct TEvBlobStorage {
             NKikimrProto::EReplyStatus status, const TString& errorReason, TGroupId groupId);
     };
 
-    struct TEvCheckIntegrityResult : public TEventLocal<TEvCheckIntegrityResult, EvCheckIntegrityResult> {
+    struct TEvCheckIntegrityResult
+        : TEventLocal<TEvCheckIntegrityResult, EvCheckIntegrityResult>
+        , TEvResultCommon
+    {
         TLogoBlobID Id;
-        NKikimrProto::EReplyStatus Status;
-        // OK - we were able to check the integrity
+
+        // Status=OK - we were able to check the integrity
         // any other status - some problem prevents the check, ErrorReason contains detailed info
         // for example if the group is disintegrated, the status is ERROR
-
-        TString ErrorReason;
 
         enum EPlacementStatus {
             PS_OK = 1,                      // blob parts are placed according to fail model
@@ -1552,7 +1608,7 @@ struct TEvBlobStorage {
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvCheckIntegrityResult(NKikimrProto::EReplyStatus status)
-            : Status(status)
+            : TEvResultCommon(status)
         {}
 
         TString Print(bool /*isFull*/) const {
@@ -1612,15 +1668,15 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvGetBlockResult : public TEventLocal<TEvGetBlockResult, EvGetBlockResult> {
-        NKikimrProto::EReplyStatus Status;
+    struct TEvGetBlockResult
+        : TEventLocal<TEvGetBlockResult, EvGetBlockResult>
+        , TEvResultCommon
+    {
         ui64 TabletId;
         ui32 BlockedGeneration;
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvGetBlockResult(NKikimrProto::EReplyStatus status, ui64 tabletId, ui32 blockedGeneration)
-            : Status(status)
+            : TEvResultCommon(status)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
         {}
@@ -1697,13 +1753,12 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvBlockResult : public TEventLocal<TEvBlockResult, EvBlockResult> {
-        NKikimrProto::EReplyStatus Status;
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
-
+    struct TEvBlockResult
+        : TEventLocal<TEvBlockResult, EvBlockResult>
+        , TEvResultCommon
+    {
         TEvBlockResult(NKikimrProto::EReplyStatus status)
-            : Status(status)
+            : TEvResultCommon(status)
         {}
 
         TString Print(bool isFull) const {
@@ -1913,19 +1968,19 @@ struct TEvBlobStorage {
                 const TString& errorReason, TGroupId groupId);
     };
 
-    struct TEvPatchResult : public TEventLocal<TEvPatchResult, EvPatchResult> {
-        NKikimrProto::EReplyStatus Status;
+    struct TEvPatchResult
+        : TEventLocal<TEvPatchResult, EvPatchResult>
+        , TEvResultCommon
+    {
         const TLogoBlobID Id;
         const TStorageStatusFlags StatusFlags;
         const TGroupId GroupId;
         const float ApproximateFreeSpaceShare; // 0.f has special meaning 'data could not be obtained'
-        TString ErrorReason;
         mutable NLWTrace::TOrbit Orbit;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvPatchResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &id, TStorageStatusFlags statusFlags,
                 TGroupId groupId, float approximateFreeSpaceShare)
-            : Status(status)
+            : TEvResultCommon(status)
             , Id(id)
             , StatusFlags(statusFlags)
             , GroupId(groupId)
@@ -2107,18 +2162,17 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvDiscoverResult : public TEventLocal<TEvDiscoverResult, EvDiscoverResult> {
-        NKikimrProto::EReplyStatus Status;
-
+    struct TEvDiscoverResult
+        : TEventLocal<TEvDiscoverResult, EvDiscoverResult>
+        , TEvResultCommon
+    {
         TLogoBlobID Id;
         ui32 MinGeneration;
         TString Buffer;
         ui32 BlockedGeneration;
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvDiscoverResult(NKikimrProto::EReplyStatus status, ui32 minGeneration, ui32 blockedGeneration)
-            : Status(status)
+            : TEvResultCommon(status)
             , MinGeneration(minGeneration)
             , BlockedGeneration(blockedGeneration)
         {
@@ -2126,7 +2180,7 @@ struct TEvBlobStorage {
         }
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer)
-            : Status(NKikimrProto::OK)
+            : TEvResultCommon(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
             , Buffer(buffer)
@@ -2134,7 +2188,7 @@ struct TEvBlobStorage {
         {}
 
         TEvDiscoverResult(const TLogoBlobID &id, ui32 minGeneration, const TString &buffer, ui32 blockedGeneration)
-            : Status(NKikimrProto::OK)
+            : TEvResultCommon(NKikimrProto::OK)
             , Id(id)
             , MinGeneration(minGeneration)
             , Buffer(buffer)
@@ -2226,7 +2280,10 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvRangeResult : public TEventLocal<TEvRangeResult, EvRangeResult> {
+    struct TEvRangeResult
+        : TEventLocal<TEvRangeResult, EvRangeResult>
+        , TEvResultCommon
+    {
         struct TResponse {
             TLogoBlobID Id;
             TString Buffer;
@@ -2244,24 +2301,21 @@ struct TEvBlobStorage {
             {}
         };
 
-        NKikimrProto::EReplyStatus Status;
         TLogoBlobID From;
         TLogoBlobID To;
 
         TVector<TResponse> Responses;
         const ui32 GroupId;
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, TGroupId groupId)
-            : Status(status)
+            : TEvResultCommon(status)
             , From(from)
             , To(to)
             , GroupId(groupId.GetRawId())
         {}
 
         TEvRangeResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &from, const TLogoBlobID &to, ui32 groupId)
-            : Status(status)
+            : TEvResultCommon(status)
             , From(from)
             , To(to)
             , GroupId(groupId)
@@ -2444,19 +2498,18 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvCollectGarbageResult : public TEventLocal<TEvCollectGarbageResult, EvCollectGarbageResult> {
-        NKikimrProto::EReplyStatus Status;
-
+    struct TEvCollectGarbageResult
+        : TEventLocal<TEvCollectGarbageResult, EvCollectGarbageResult>
+        , TEvResultCommon
+    {
         ui64 TabletId;
         ui32 RecordGeneration;
         ui32 PerGenerationCounter;
         ui32 Channel;
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvCollectGarbageResult(NKikimrProto::EReplyStatus status, ui64 tabletId,
                 ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel)
-            : Status(status)
+            : TEvResultCommon(status)
             , TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(perGenerationCounter)
@@ -2519,20 +2572,15 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvStatusResult : public TEventLocal<TEvStatusResult, EvStatusResult> {
-        NKikimrProto::EReplyStatus Status;
+    struct TEvStatusResult
+        : TEventLocal<TEvStatusResult, EvStatusResult>
+        , TEvResultCommon
+    {
         TStorageStatusFlags StatusFlags;
         float ApproximateFreeSpaceShare = 0.0f; // zero means absence of correct data
-        TString ErrorReason;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
-        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags)
-            : Status(status)
-            , StatusFlags(statusFlags)
-        {}
-
-        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare)
-            : Status(status)
+        TEvStatusResult(NKikimrProto::EReplyStatus status, TStorageStatusFlags statusFlags, float approximateFreeSpaceShare = 0.0f)
+            : TEvResultCommon(status)
             , StatusFlags(statusFlags)
             , ApproximateFreeSpaceShare(approximateFreeSpaceShare)
         {}
@@ -2569,6 +2617,7 @@ struct TEvBlobStorage {
             : SkipBlocksUpTo(origin.SkipBlocksUpTo)
             , SkipBarriersUpTo(origin.SkipBarriersUpTo)
             , SkipBlobsUpTo(origin.SkipBlobsUpTo)
+            , IgnoreDecommitState(origin.IgnoreDecommitState)
             , Reverse(origin.Reverse)
         {}
 
@@ -2613,7 +2662,10 @@ struct TEvBlobStorage {
             TGroupId groupId);
     };
 
-    struct TEvAssimilateResult : TEventLocal<TEvAssimilateResult, EvAssimilateResult> {
+    struct TEvAssimilateResult
+        : TEventLocal<TEvAssimilateResult, EvAssimilateResult>
+        , TEvResultCommon
+    {
         struct TBlock {
             ui64 TabletId = 0;
             ui32 BlockedGeneration = 0;
@@ -2698,17 +2750,15 @@ struct TEvBlobStorage {
             }
         };
 
-        NKikimrProto::EReplyStatus Status;
-        TString ErrorReason;
         std::deque<TBlock> Blocks;
         std::deque<TBarrier> Barriers;
         std::deque<TBlob> Blobs;
-        std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
         TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
-            : Status(status)
-            , ErrorReason(std::move(errorReason))
-        {}
+            : TEvResultCommon(status)
+        {
+            ErrorReason = std::move(errorReason);
+        }
 
         TString Print(bool isFull) const {
             TStringStream str;
@@ -2844,6 +2894,7 @@ struct TEvBlobStorage {
     struct TEvControllerFetchConfigResponse;
     struct TEvControllerDistconfRequest;
     struct TEvControllerDistconfResponse;
+    struct TEvControllerUpdateSyncerState;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

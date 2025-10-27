@@ -141,4 +141,10 @@ constexpr bool DEFAULT_FORBID_SENSITIVE_DATA_IN_OPERATION_SPEC = false;
 
 constexpr ui64 DEFAULT_LOCAL_TABLE_CONTENT_LIMIT = 10_GB;
 
+constexpr bool DEFAULT_USE_NATIVE_YT_DEFAULT_COLUMN_ORDER = false;
+
+constexpr bool DEFAULT_EARLY_PARTITION_PRUNING = false;
+
+constexpr bool DEFAULT_VALIDATE_CLUSTERS = false;
+
 } // NYql

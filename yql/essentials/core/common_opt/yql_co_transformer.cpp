@@ -1,5 +1,6 @@
 #include "yql_co_transformer.h"
 #include "yql_co.h"
+#include "yql_co_blocks.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
@@ -91,6 +92,13 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(TExprNode::TPtr in
     status = DoTransform(input = std::move(output), output, ctx, TCoCallableRules::Instance().Finalizers);
     if (status.Level != IGraphTransformer::TStatus::Ok) {
         return status;
+    }
+
+    if (TypeCtx_->LangVer >= MakeLangVersion(2025, 4)) {
+        status = OptimizeBlocks(input = std::move(output), output, ctx, *TypeCtx_);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
     }
 
     if (!ScanErrors(*output, ctx)) {

@@ -118,7 +118,9 @@ public:
 
         TUpdateConfigOpContext opCtx;
         Self->ReplaceMainConfigMetadata(Config, false, opCtx);
-        Self->ValidateMainConfig(opCtx);
+        if (!Force) {
+            Self->ValidateMainConfig(opCtx);
+        }
 
         bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
         if (opCtx.Error) {
@@ -264,7 +266,9 @@ public:
 
         TUpdateDatabaseConfigOpContext opCtx;
         Self->ReplaceDatabaseConfigMetadata(Config, false, opCtx);
-        Self->ValidateDatabaseConfig(opCtx);
+        if (!Force) {
+            Self->ValidateDatabaseConfig(opCtx);
+        }
 
         bool hasForbiddenUnknown = !opCtx.UnknownFields.empty() && !AllowUnknownFields;
         if (opCtx.Error) {

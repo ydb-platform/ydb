@@ -89,23 +89,25 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TSimple
     if (SortedRanges.empty()) {
         return TPKRangeFilter::EUsageClass::FullUsage;
     }
-    for (auto&& i : SortedRanges) {
-        switch (i.GetUsageClass(start, end)) {
-            case TPKRangeFilter::EUsageClass::FullUsage:
-                return TPKRangeFilter::EUsageClass::FullUsage;
-            case TPKRangeFilter::EUsageClass::PartialUsage:
-                return TPKRangeFilter::EUsageClass::PartialUsage;
-            case TPKRangeFilter::EUsageClass::NoUsage:
-                break;
-        }
+
+    const TPredicateContainer startPredicate = TPredicateContainer::BuildPredicateFrom(
+        std::make_shared<TPredicate>(NKernels::EOperation::GreaterEqual, start.ToBatch()), start.GetSchema())
+                                                   .DetachResult();
+    const auto rangesBegin = std::lower_bound(
+        SortedRanges.begin(), SortedRanges.end(), startPredicate, [](const TPKRangeFilter& range, const TPredicateContainer& predicate) {
+            return !range.GetPredicateTo().CrossRanges(predicate);
+        });
+
+    if (rangesBegin == SortedRanges.end()) {
+        return TPKRangeFilter::EUsageClass::NoUsage;
     }
-    return TPKRangeFilter::EUsageClass::NoUsage;
+    return rangesBegin->GetUsageClass(start, end);
 }
 
 TPKRangesFilter::TPKRangesFilter() {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
-    Y_ABORT_UNLESS(range);
-    SortedRanges.emplace_back(*range);
+    Y_ABORT_UNLESS(range.IsSuccess());
+    SortedRanges.emplace_back(range.DetachResult());
 }
 
 std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(const std::shared_ptr<arrow::Schema>& pkSchema) const {
@@ -189,6 +191,21 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromStrin
 
 TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const {
     return NArrow::NSerialization::TNativeSerializer().SerializeFull(SerializeToRecordBatch(pkSchema));
+}
+
+TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
+    const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
+    TPKRangesFilter result;
+    for (auto& protoRange : proto.GetRanges()) {
+        auto fromPredicate = std::make_shared<TPredicate>();
+        auto toPredicate = std::make_shared<TPredicate>();
+        std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk, arrPk);
+        auto status = result.Add(fromPredicate, toPredicate, arrPk);
+        if (status.IsFail()) {
+            return status;
+        }
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap

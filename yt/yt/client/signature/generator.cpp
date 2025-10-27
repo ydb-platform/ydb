@@ -2,6 +2,8 @@
 
 #include "signature.h"
 
+#include <yt/yt/client/api/public.h>
+
 #include <yt/yt/core/ytree/convert.h>
 
 namespace NYT::NSignature {
@@ -34,7 +36,8 @@ struct TAlwaysThrowingSignatureGenerator
 {
     void Resign(const TSignaturePtr& /*signature*/) const final
     {
-        THROW_ERROR_EXCEPTION("Signature generation is unsupported");
+        THROW_ERROR_EXCEPTION(NYT::NApi::EErrorCode::SignatureGenerationIsUnsupported,
+            "Signature generation is unsupported");
     }
 };
 

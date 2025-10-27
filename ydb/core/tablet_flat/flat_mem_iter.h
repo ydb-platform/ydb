@@ -150,6 +150,15 @@ namespace NTable {
             return update->RowVersion.Step == Max<ui64>();
         }
 
+        bool IsDeltaLockOnly() const
+        {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+            Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            return update->Rop == ERowOp::Absent;
+        }
+
         ui64 GetDeltaTxId() const
         {
             auto* update = GetCurrentVersion();
@@ -159,6 +168,17 @@ namespace NTable {
             return update->RowVersion.TxId;
         }
 
+        std::tuple<ELockMode, ui64> GetLockInfo() const {
+            auto* update = GetCurrentVersion();
+            Y_ENSURE(update);
+
+            if (update->RowVersion.Step == Max<ui64>() && update->Lock != ELockMode::None) {
+                return { update->Lock, update->RowVersion.TxId };
+            } else {
+                return { ELockMode::None, 0 };
+            }
+        }
+
         void ApplyDelta(TRowState& row) const
         {
             Y_ENSURE(row.Size() == Remap->Size(), "row state doesn't match the remap index");
@@ -166,6 +186,11 @@ namespace NTable {
             auto* update = GetCurrentVersion();
             Y_ENSURE(update);
             Y_ENSURE(update->RowVersion.Step == Max<ui64>());
+
+            if (update->Rop == ERowOp::Absent) {
+                // Skip lock only updates
+                return;
+            }
 
             if (row.Touch(update->Rop)) {
                 for (auto& up : **update) {
@@ -195,23 +220,25 @@ namespace NTable {
 
             for (;;) {
                 const bool isDelta = update->RowVersion.Step == Max<ui64>();
-                const TRowVersion* commitVersion;
-                if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
-                    if (!isDelta) {
-                        transactionObserver.OnApplyCommitted(update->RowVersion);
-                    } else {
-                        transactionObserver.OnApplyCommitted(*commitVersion, update->RowVersion.TxId);
-                    }
-                    if (row.Touch(update->Rop)) {
-                        for (auto& up : **update) {
-                            ApplyColumn(row, up);
+                if (update->Rop != ERowOp::Absent) {
+                    const TRowVersion* commitVersion;
+                    if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
+                        if (!isDelta) {
+                            transactionObserver.OnApplyCommitted(update->RowVersion);
+                        } else {
+                            transactionObserver.OnApplyCommitted(*commitVersion, update->RowVersion.TxId);
                         }
+                        if (row.Touch(update->Rop)) {
+                            for (auto& up : **update) {
+                                ApplyColumn(row, up);
+                            }
+                        }
+                        if (isDelta && row.IsFinalized()) {
+                            break;
+                        }
+                    } else {
+                        transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                     }
-                    if (isDelta && row.IsFinalized()) {
-                        break;
-                    }
-                } else {
-                    transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                 }
                 if (!isDelta) {
                     break;
@@ -252,12 +279,21 @@ namespace NTable {
             auto* chain = GetCurrentVersion();
             Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
-            // Skip uncommitted deltas
-            while (chain->RowVersion.Step == Max<ui64>() && !committedTransactions.Find(chain->RowVersion.TxId)) {
-                // We cannot cache when there are uncompacted deltas
+            // Skip uncommitted and lock only deltas
+            while (chain->RowVersion.Step == Max<ui64>()) {
+                bool isCommitted = bool(committedTransactions.Find(chain->RowVersion.TxId));
+                if (isCommitted && chain->Rop != ERowOp::Absent) {
+                    break;
+                }
+
+                // We cannot cache when there are uncompacted deltas (including lock only)
                 stats.UncertainErase = true;
 
-                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                // Lock only deltas are not observed (whether committed or not)
+                if (chain->Rop != ERowOp::Absent) {
+                    transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                }
+
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return false;
@@ -276,6 +312,9 @@ namespace NTable {
                     stats.UncertainErase = true;
                 }
             } else {
+                // We must have skipped to the first non lock only update
+                Y_DEBUG_ABORT_UNLESS(chain->Rop != ERowOp::Absent);
+
                 // We cannot cache when there are uncompacted deltas
                 stats.UncertainErase = true;
 
@@ -306,6 +345,12 @@ namespace NTable {
                     // We cannot cache when there are uncompacted deltas
                     stats.UncertainErase = true;
 
+                    if (chain->Rop == ERowOp::Absent) {
+                        // Lock only deltas are ignored on the data path
+                        // They don't trigger observer callbacks and don't affect invisible row skips
+                        continue;
+                    }
+
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                     if (commitVersion && *commitVersion <= rowVersion) {
                         CurrentVersion = chain;
@@ -330,20 +375,27 @@ namespace NTable {
          */
         std::optional<TRowVersion> SkipToCommitted(
                 NTable::ITransactionMapSimplePtr committedTransactions,
-                NTable::ITransactionObserverSimplePtr transactionObserver)
+                NTable::ITransactionObserverSimplePtr transactionObserver,
+                ELockMode& lockMode, ui64& lockTxId)
         {
             Y_DEBUG_ABORT_UNLESS(IsValid(), "Attempt to access an invalid row");
 
             auto* chain = GetCurrentVersion();
             Y_DEBUG_ABORT_UNLESS(chain, "Unexpected empty chain");
 
-            // Skip uncommitted deltas
+            // Skip uncommitted and lock only deltas
             while (chain->RowVersion.Step == Max<ui64>()) {
-                auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
-                if (commitVersion) {
-                    return *commitVersion;
+                if (chain->Lock != ELockMode::None && lockMode == ELockMode::None) {
+                    lockMode = chain->Lock;
+                    lockTxId = chain->RowVersion.TxId;
                 }
-                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                if (chain->Rop != ERowOp::Absent) {
+                    auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
+                    if (commitVersion) {
+                        return *commitVersion;
+                    }
+                    transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                }
                 if (!(chain = chain->Next)) {
                     CurrentVersion = nullptr;
                     return { };

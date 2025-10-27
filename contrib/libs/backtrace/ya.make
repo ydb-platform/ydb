@@ -6,9 +6,9 @@ LICENSE(BSD-3-Clause)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2025-04-10)
+VERSION(2025-09-28)
 
-ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/793921876c981ce49759114d7bb89bb89b2d3a2d.tar.gz)
+ORIGINAL_SOURCE(https://github.com/ianlancetaylor/libbacktrace/archive/2f67a3abfd1947ddec71fc11965a9cf9191d45ad.tar.gz)
 
 ADDINCL(
     contrib/libs/backtrace
@@ -40,7 +40,7 @@ IF (OS_DARWIN)
     SRCS(
         macho.c
     )
-ELSEIF (OS_LINUX OR OS_ANDROID)
+ELSEIF (OS_LINUX OR OS_ANDROID OR OS_FREEBSD)
     SRCS(
         elf.c
     )

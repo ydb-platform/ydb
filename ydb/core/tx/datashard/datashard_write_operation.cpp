@@ -393,6 +393,7 @@ void TWriteOperation::FillTxData(TDataShard* self, const TActorId& target, const
     Y_ENSURE(!WriteRequest);
 
     Target = target;
+
     SetTxBody(txBody);
 
     if (locks.size()) {
@@ -417,7 +418,6 @@ void TWriteOperation::FillVolatileTxData(TDataShard* self)
     BuildWriteTx(self);
     Y_ENSURE(WriteTx->Ready());
 
-
     TrackMemory();
 }
 
@@ -439,21 +439,31 @@ TString TWriteOperation::GetTxBody() const {
     return str;
 }
 
-void TWriteOperation::SetTxBody(const TString& txBody) {
+bool TWriteOperation::TrySetTxBody(const TString& txBody) {
     Y_ENSURE(!WriteRequest);
 
     NKikimrTxDataShard::TSerializedEvent proto;
     const bool success = proto.ParseFromString(txBody);
-    Y_ENSURE(success);
+    if (!success) {
+        return false;
+    }
 
     TEventSerializationInfo serializationInfo;
     serializationInfo.IsExtendedFormat = proto.GetIsExtendedFormat();
 
     TEventSerializedData buffer(proto.GetEventData(), std::move(serializationInfo));
     NKikimr::NEvents::TDataEvents::TEvWrite* writeRequest = static_cast<NKikimr::NEvents::TDataEvents::TEvWrite*>(NKikimr::NEvents::TDataEvents::TEvWrite::Load(&buffer));
-    Y_ENSURE(writeRequest);
+    if (!writeRequest) {
+        return false;
+    }
 
     WriteRequest.reset(writeRequest);
+    return true;
+}
+
+void TWriteOperation::SetTxBody(const TString& txBody) {
+    const bool success = TrySetTxBody(txBody);
+    Y_ENSURE(success);
 }
 
 void TWriteOperation::ClearTxBody() {
@@ -462,13 +472,13 @@ void TWriteOperation::ClearTxBody() {
     TrackMemory();
 }
 
-TValidatedWriteTx::TPtr TWriteOperation::BuildWriteTx(TDataShard* self)
+bool TWriteOperation::BuildWriteTx(TDataShard* self)
 {
     if (!WriteTx) {
         Y_ENSURE(WriteRequest);
         WriteTx = std::make_shared<TValidatedWriteTx>(self, GetGlobalTxId(), GetReceivedAt(), *WriteRequest, IsMvccSnapshotRead());
     }
-    return WriteTx;
+    return bool(WriteTx);
 }
 
 void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& provider) {
@@ -599,20 +609,25 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
         Y_ENSURE(!loaded);
         plan.push_back(EExecutionUnitKind::CheckWrite);
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         plan.push_back(EExecutionUnitKind::FinishProposeWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     } else if (HasVolatilePrepareFlag()) {
-        Y_ENSURE(!loaded);
-        plan.push_back(EExecutionUnitKind::CheckWrite);
-        plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
-        plan.push_back(EExecutionUnitKind::FinishProposeWrite);
-        Y_ENSURE(!GetStep());
-        plan.push_back(EExecutionUnitKind::WaitForPlan);
+        // Note: loaded == true when migrating from previous generations
+        if (!loaded) {
+            plan.push_back(EExecutionUnitKind::CheckWrite);
+            plan.push_back(EExecutionUnitKind::StoreWrite);  // note: stores in memory
+            plan.push_back(EExecutionUnitKind::FinishProposeWrite);
+        }
+        if (!GetStep()) {
+            plan.push_back(EExecutionUnitKind::WaitForPlan);
+        }
         plan.push_back(EExecutionUnitKind::PlanQueue);
         plan.push_back(EExecutionUnitKind::LoadWriteDetails);  // note: reloads from memory
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
         // Note: execute will also prepare and send readsets
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
         // Note: it is important that plan here is the same as regular
         // distributed tx, since normal tx may decide to commit in a
@@ -633,16 +648,72 @@ void TWriteOperation::BuildExecutionPlan(bool loaded)
 
         plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
 
-        plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
-        plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
-        plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
-        plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        if (AppData()->FeatureFlags.GetEnableDataShardWriteAlwaysVolatile()) {
+            // Note: previous generation may have persisted InReadSets
+            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
+            plan.push_back(EExecutionUnitKind::LoadInRS);
+        } else {
+            plan.push_back(EExecutionUnitKind::BuildWriteOutRS);
+            plan.push_back(EExecutionUnitKind::StoreAndSendWriteOutRS);
+            plan.push_back(EExecutionUnitKind::PrepareWriteTxInRS);
+            plan.push_back(EExecutionUnitKind::LoadAndWaitInRS);
+        }
+
+        plan.push_back(EExecutionUnitKind::BlockFailPoint);
         plan.push_back(EExecutionUnitKind::ExecuteWrite);
 
         plan.push_back(EExecutionUnitKind::CompleteWrite);
         plan.push_back(EExecutionUnitKind::CompletedOperations);
     }
     RewriteExecutionPlan(plan);
+}
+
+std::optional<TString> TWriteOperation::OnMigration(TDataShard& self, const TActorContext&) {
+    if (!IsImmediate() && HasVolatilePrepareFlag() && !HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+        self.SendRestartNotification(this);
+        return GetTxBody();
+    }
+
+    return std::nullopt;
+}
+
+bool TWriteOperation::OnRestoreMigrated(TDataShard&, const TString& body) {
+    if (WriteRequest || WriteTx) {
+        // Unexpected: write request already exists
+        return false;
+    }
+
+    if (!TrySetTxBody(body)) {
+        return false;
+    }
+
+    // Make sure event is tracked as soon as possible
+    TrackMemory();
+
+    return true;
+}
+
+bool TWriteOperation::OnFinishMigration(TDataShard& self, const NTable::TScheme& scheme) {
+    if (!WriteTx) {
+        if (!BuildWriteTx(&self)) {
+            return false;
+        }
+        Y_ENSURE(WriteTx);
+    }
+
+    if (!WriteTx->Ready()) {
+        return false;
+    }
+
+    WriteTx->ExtractKeys(scheme, true);
+
+    if (!WriteTx->Ready()) {
+        return false;
+    }
+
+    BuildExecutionPlan(true);
+    ClearWriteTx();
+    return true;
 }
 
 bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
@@ -672,28 +743,12 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
         // Immediate ops become ready when stopping flag is set
         return true;
     } else if (HasVolatilePrepareFlag()) {
-        // Volatile transactions may be aborted at any time unless executed
-        // Note: we need to send the result (and discard the transaction) as
-        // soon as possible, because new transactions are unlikely to execute
-        // and commits will even more likely fail.
-        if (!HasResultSentFlag() && !Result() && !HasCompletedFlag()) {
-            auto status = NKikimrDataEvents::TEvWriteResult::STATUS_ABORTED;
-            TString reason = TStringBuilder()
-                << "DataShard " << TabletId << " is restarting";
-            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, std::move(reason));
-
-            ctx.Send(GetTarget(), result.release(), 0, GetCookie());
-
-            // Make sure we also send acks and nodata readsets to expecting participants
-            std::vector<std::unique_ptr<IEventHandle>> cleanupReplies;
-            self.GetCleanupReplies(this, cleanupReplies);
-
-            for (auto& ev : cleanupReplies) {
-                TActivationContext::Send(ev.release());
-            }
-
-            SetResultSentFlag();
-            return true;
+        // Volatile transactions may be aborted at any time unless executed,
+        // but we want them to migrate and run to completion when possible.
+        if (!HasCompletedFlag() && !HasResultSentFlag() && !Result()) {
+            // It is possible this transaction already migrated or will migrate soon
+            self.SendRestartNotification(this);
+            return false;
         }
 
         // Executed transactions will have to wait until committed
@@ -702,8 +757,7 @@ bool TWriteOperation::OnStopping(TDataShard& self, const TActorContext& ctx) {
     } else {
         // Distributed operations send notification when proposed
         if (GetTarget() && !HasCompletedFlag()) {
-            auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(self.TabletID(), GetTxId());
-            ctx.Send(GetTarget(), notify.Release(), 0, GetCookie());
+            self.SendRestartNotification(this);
         }
 
         // Distributed ops avoid doing new work when stopping

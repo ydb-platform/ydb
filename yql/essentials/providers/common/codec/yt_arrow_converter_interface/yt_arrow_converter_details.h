@@ -13,7 +13,11 @@ using namespace NYson::NDetail;
 
 class TYsonBuffer {
 public:
-    TYsonBuffer(const std::string_view& s) : Data_(s.data()), Available_(s.size()) {}
+    TYsonBuffer(const std::string_view& s)
+        : Data_(s.data())
+        , Available_(s.size())
+    {
+    }
 
     constexpr char Next() {
         YQL_ENSURE(Available_-- > 0);
@@ -69,8 +73,9 @@ public:
     size_t Available() const {
         return Available_;
     }
+
 private:
-    template<typename T>
+    template <typename T>
     constexpr T ReadVarSlow() {
         T shift = 0;
         T value = Current() & 0x7f;
@@ -89,7 +94,6 @@ private:
     size_t Available_;
 };
 
-
 class IYsonComplexTypeReader {
 public:
     using TPtr = std::unique_ptr<IYsonComplexTypeReader>;
@@ -97,4 +101,4 @@ public:
     virtual NUdf::TBlockItem GetItem(TYsonBuffer& buf) = 0;
 };
 
-}
+} // namespace NYql

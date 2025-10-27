@@ -6,7 +6,6 @@ import yatest
 import os
 import json
 import sys
-import math
 
 from enum import Enum
 
@@ -23,6 +22,9 @@ class TestExportImportS3(MixedClusterFixture):
     class SchemeObject(Enum):
         TABLE = 0
         TOPIC = 1
+
+    def _is_topic_export_avaliable(self):
+        return min(self.versions) >= (25, 3)
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -64,9 +66,6 @@ class TestExportImportS3(MixedClusterFixture):
 
         return s3_endpoint, s3_access_key, s3_secret_key, s3_bucket
 
-    def _is_current_version(self):
-        return len(self.versions) == 1 and math.isnan(self.versions[0][0])
-
     def _execute_command_and_get_result(self, command):
         with tempfile.NamedTemporaryFile(mode='w+', delete=True) as temp_file:
             yatest.common.execute(command, wait=True, stdout=temp_file, stderr=sys.stderr)
@@ -98,6 +97,8 @@ class TestExportImportS3(MixedClusterFixture):
                     self.settings = self.settings.with_source_and_destination(table_name, table_name)
 
     def _create_topics(self):
+        if not self._is_topic_export_avaliable():
+            return
         with ydb.SessionPool(self.driver, size=1) as pool:
             with pool.checkout() as session:
                 for num in range(1, 6):
@@ -108,8 +109,7 @@ class TestExportImportS3(MixedClusterFixture):
                         f"CONSUMER consumerB_{num}"
                         f");"
                     )
-                    if self._is_current_version():
-                        self.settings = self.settings.with_source_and_destination(topic_name, topic_name)
+                    self.settings = self.settings.with_source_and_destination(topic_name, topic_name)
 
     def _create_items(self):
         self._create_tables()
@@ -138,7 +138,7 @@ class TestExportImportS3(MixedClusterFixture):
                 keys_expected.add(table_name + "/metadata.json")
                 keys_expected.add(table_name + "/scheme.pb")
 
-            if self._is_current_version():
+            if self._is_topic_export_avaliable():
                 if "TOPIC" in scheme_objects:
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     keys_expected.add(topic_name + "/create_topic.pb")
@@ -173,7 +173,7 @@ class TestExportImportS3(MixedClusterFixture):
                 imported_table_name = f"/Root/{imported_prefix}/sample_table_{num}"
                 import_settings = import_settings.with_source_and_destination(table_name, imported_table_name)
 
-            if self._is_current_version():
+            if self._is_topic_export_avaliable():
                 if "TOPIC" in scheme_objects:
                     topic_name = f"Root/{self.prefix_topics}/sample_topic_{num}"
                     imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
@@ -196,7 +196,7 @@ class TestExportImportS3(MixedClusterFixture):
                         desc = session.describe_table(imported_table_name)
                         assert desc is not None, f"Table {imported_table_name} not found after import"
 
-                    if self._is_current_version():
+                    if self._is_topic_export_avaliable():
                         if "TOPIC" in scheme_objects:
                             imported_topic_name = f"/Root/{imported_prefix}/sample_topic_{num}"
                             desc = TopicClient(self.driver, None).describe_topic(imported_topic_name)
@@ -214,10 +214,12 @@ class TestExportImportS3(MixedClusterFixture):
         self._import_check_table()
 
     def test_topics(self):
-        if self._is_current_version():
-            self._create_topics()
-            self._export_check_topic()
-            self._import_check_topic()
+        if not self._is_topic_export_avaliable():
+            pytest.skip("Topic export is available since 25-3")
+
+        self._create_topics()
+        self._export_check_topic()
+        self._import_check_topic()
 
     def test_all_scheme_objects(self):
         self._create_items()

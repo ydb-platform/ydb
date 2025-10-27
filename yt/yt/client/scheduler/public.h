@@ -16,12 +16,6 @@ class TSpecPatch;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
-
-extern const TJobTraceId NullJobTraceId;
-
-////////////////////////////////////////////////////////////////////////////////
-
 YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
 
 extern const TAllocationId NullAllocationId;
@@ -101,6 +95,7 @@ DEFINE_ENUM(ESchemaInferenceMode,
 
 // NB(eshcherbin): This enum must be synchronized at schedulers ans CAs.
 // If you change it, you must bump the controller agent tracker service protocol version!
+// COMPAT(eshcherbin): Remove NodeFairShareTreeChanged in favor of NodePoolTreeChanged.
 DEFINE_ENUM(EAbortReason,
     ((None)                            (  0))
     ((Scheduler)                       (  1))
@@ -162,6 +157,7 @@ DEFINE_ENUM(EAbortReason,
     ((UnexpectedNodeJobPhase)          ( 58))
     ((JobCountChangedByUserRequest)    ( 59))
     ((NbdError)                        ( 60))
+    ((NodePoolTreeChanged)             ( 61))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))
@@ -171,6 +167,7 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingOperationDisabled)     (106))
     ((SchedulingOperationIsNotAlive)   (107))
     ((SchedulingLast)                  (199))
+    ((CookieGroupDisbanded)            (200))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);

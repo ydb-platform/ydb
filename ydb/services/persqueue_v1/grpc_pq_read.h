@@ -4,7 +4,7 @@
 #include "actors/direct_read_actor.h"
 
 #include <ydb/core/client/server/grpc_base.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 
 #include <ydb/library/actors/core/actorid.h>
@@ -45,8 +45,7 @@ private:
             HFunc(NGRpcService::TEvStreamTopicReadRequest, Handle);
             HFunc(NGRpcService::TEvStreamTopicDirectReadRequest, Handle);
             HFunc(NGRpcService::TEvStreamPQMigrationReadRequest, Handle);
-            HFunc(NGRpcService::TEvCommitOffsetRequest, Handle);
-            HFunc(NGRpcService::TEvPQReadInfoRequest, Handle);
+            FFunc(TRpcServices::EvPQReadInfo, HandleReadInfo);
             HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
             HFunc(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate, Handle);
             HFunc(TEvPQProxy::TEvSessionDead, Handle);
@@ -60,8 +59,7 @@ private:
     void Handle(NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvStreamTopicDirectReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NGRpcService::TEvCommitOffsetRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
+    void HandleReadInfo(TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx);
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
     void Handle(NNetClassifier::TEvNetClassifier::TEvClassifierUpdate::TPtr& ev, const TActorContext& ctx);
 

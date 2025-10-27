@@ -5,6 +5,7 @@
 #include <ydb/core/change_exchange/change_record.h>
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tx/replication/service/lightweight_schema.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -70,62 +71,108 @@ private:
         auto& upsert = *record.MutableUpsert();
 
         switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert: {
-            // Check if NewImage is available, otherwise fall back to Upsert
-            if (ProtoBody.GetCdcDataChange().HasNewImage()) {
-                *upsert.MutableTags() = {
-                    ProtoBody.GetCdcDataChange().GetNewImage().GetTags().begin(),
-                    ProtoBody.GetCdcDataChange().GetNewImage().GetTags().end()};
-                auto it = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
-                Y_ABORT_UNLESS(it != Schema->ValueColumns.end(), "Invariant violation");
-                upsert.AddTags(it->second.Tag);
+        case NKikimrChangeExchange::TDataChange::kUpsert: 
+        case NKikimrChangeExchange::TDataChange::kReset: {
+            TVector<NTable::TTag> tags;
+            TVector<TCell> cells;
+            NKikimrBackup::TChangeMetadata changeMetadata;
+            
+            changeMetadata.SetIsDeleted(false);
 
-                TString serializedCellVec = ProtoBody.GetCdcDataChange().GetNewImage().GetData();
-                Y_ABORT_UNLESS(
-                    TSerializedCellVec::UnsafeAppendCells({TCell::Make<bool>(false)}, serializedCellVec),
-                    "Invalid cell format, can't append cells");
-
-                upsert.SetData(serializedCellVec);
-            } else {
-                *upsert.MutableTags() = {
-                    ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
-                    ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
-                auto it = Schema->ValueColumns.find("__ydb_incrBackupImpl_deleted");
-                Y_ABORT_UNLESS(it != Schema->ValueColumns.end(), "Invariant violation");
-                upsert.AddTags(it->second.Tag);
-
-                TString serializedCellVec = ProtoBody.GetCdcDataChange().GetUpsert().GetData();
-                Y_ABORT_UNLESS(
-                    TSerializedCellVec::UnsafeAppendCells({TCell::Make<bool>(false)}, serializedCellVec),
-                    "Invalid cell format, can't append cells");
-
-                upsert.SetData(serializedCellVec);
+            // Handle both Upsert and Reset operations
+            const bool isResetOperation = ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset;
+            const auto& operationData = isResetOperation 
+                ? ProtoBody.GetCdcDataChange().GetReset()
+                : ProtoBody.GetCdcDataChange().GetUpsert();
+            
+            TSerializedCellVec originalCells;
+            Y_ABORT_UNLESS(TSerializedCellVec::TryParse(operationData.GetData(), originalCells));
+            
+            tags.assign(operationData.GetTags().begin(), operationData.GetTags().end());
+            cells.assign(originalCells.GetCells().begin(), originalCells.GetCells().end());
+            
+            THashSet<NTable::TTag> presentTags(operationData.GetTags().begin(), operationData.GetTags().end());
+            for (const auto& [name, columnInfo] : Schema->ValueColumns) {
+                if (name == "__ydb_incrBackupImpl_changeMetadata") {
+                    continue;
+                }
+                
+                auto* columnState = changeMetadata.AddColumnStates();
+                columnState->SetTag(columnInfo.Tag);
+                
+                if (presentTags.contains(columnInfo.Tag)) {
+                    auto it = std::find(operationData.GetTags().begin(), operationData.GetTags().end(), columnInfo.Tag);
+                    if (it != operationData.GetTags().end()) {
+                        size_t idx = std::distance(operationData.GetTags().begin(), it);
+                        if (idx < originalCells.GetCells().size()) {
+                            columnState->SetIsNull(originalCells.GetCells()[idx].IsNull());
+                        } else {
+                            columnState->SetIsNull(true);
+                        }
+                    } else {
+                        columnState->SetIsNull(true);
+                    }
+                    columnState->SetIsChanged(true);
+                } else {
+                    if (isResetOperation) {
+                        columnState->SetIsNull(true);
+                        columnState->SetIsChanged(true);
+                    } else {
+                        columnState->SetIsNull(false);
+                        columnState->SetIsChanged(false);
+                    }
+                }
             }
+
+            auto metadataIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_changeMetadata");
+            Y_ABORT_UNLESS(metadataIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(metadataIt->second.Tag);
+            
+            TString serializedMetadata;
+            Y_ABORT_UNLESS(changeMetadata.SerializeToString(&serializedMetadata));
+            cells.emplace_back(TCell(serializedMetadata.data(), serializedMetadata.size()));
+
+            *upsert.MutableTags() = {tags.begin(), tags.end()};
+            upsert.SetData(TSerializedCellVec::Serialize(cells));
             break;
         }
         case NKikimrChangeExchange::TDataChange::kErase: {
             size_t size = Schema->ValueColumns.size();
             TVector<NTable::TTag> tags;
             TVector<TCell> cells;
+            NKikimrBackup::TChangeMetadata changeMetadata;
+            
+            changeMetadata.SetIsDeleted(true);
 
             tags.reserve(size);
             cells.reserve(size);
 
-            for (const auto& [name, value] : Schema->ValueColumns) {
-                tags.push_back(value.Tag);
-                if (name != "__ydb_incrBackupImpl_deleted") {
-                    cells.emplace_back();
-                } else {
-                    cells.emplace_back(TCell::Make<bool>(true));
+            for (const auto& [name, columnInfo] : Schema->ValueColumns) {
+                if (name == "__ydb_incrBackupImpl_changeMetadata") {
+                    continue;
                 }
+                
+                tags.push_back(columnInfo.Tag);
+                cells.emplace_back();
+                
+                auto* columnState = changeMetadata.AddColumnStates();
+                columnState->SetTag(columnInfo.Tag);
+                columnState->SetIsNull(true);
+                columnState->SetIsChanged(true);
             }
+
+            auto metadataIt = Schema->ValueColumns.find("__ydb_incrBackupImpl_changeMetadata");
+            Y_ABORT_UNLESS(metadataIt != Schema->ValueColumns.end(), "Invariant violation");
+            tags.push_back(metadataIt->second.Tag);
+            
+            TString serializedMetadata;
+            Y_ABORT_UNLESS(changeMetadata.SerializeToString(&serializedMetadata));
+            cells.emplace_back(TCell(serializedMetadata.data(), serializedMetadata.size()));
 
             *upsert.MutableTags() = {tags.begin(), tags.end()};
             upsert.SetData(TSerializedCellVec::Serialize(cells));
-
             break;
         }
-        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }
@@ -139,27 +186,29 @@ private:
         record.SetKey(ProtoBody.GetCdcDataChange().GetKey().GetData());
 
         switch (ProtoBody.GetCdcDataChange().GetRowOperationCase()) {
-        case NKikimrChangeExchange::TDataChange::kUpsert: {
+        case NKikimrChangeExchange::TDataChange::kUpsert:
+        case NKikimrChangeExchange::TDataChange::kReset: {
             auto& upsert = *record.MutableUpsert();
-            // Check if NewImage is available, otherwise fall back to Upsert
+            // Check if NewImage is available, otherwise fall back to Upsert/Reset
             if (ProtoBody.GetCdcDataChange().has_newimage()) {
                 *upsert.MutableTags() = {
                     ProtoBody.GetCdcDataChange().GetNewImage().GetTags().begin(),
                     ProtoBody.GetCdcDataChange().GetNewImage().GetTags().end()};
                 upsert.SetData(ProtoBody.GetCdcDataChange().GetNewImage().GetData());
-            } else {
+            } else if (ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kUpsert) {
                 // Fallback to Upsert field if NewImage is not available
                 *upsert.MutableTags() = {
                     ProtoBody.GetCdcDataChange().GetUpsert().GetTags().begin(),
                     ProtoBody.GetCdcDataChange().GetUpsert().GetTags().end()};
                 upsert.SetData(ProtoBody.GetCdcDataChange().GetUpsert().GetData());
+            } else if (ProtoBody.GetCdcDataChange().GetRowOperationCase() == NKikimrChangeExchange::TDataChange::kReset) {
+                Y_ABORT("Reset operation is not supported, all operations must be converted to Upsert");
             }
             break;
         }
         case NKikimrChangeExchange::TDataChange::kErase:
             record.MutableErase();
             break;
-        case NKikimrChangeExchange::TDataChange::kReset: [[fallthrough]];
         default:
             Y_FAIL_S("Unexpected row operation: " << static_cast<int>(ProtoBody.GetCdcDataChange().GetRowOperationCase()));
         }

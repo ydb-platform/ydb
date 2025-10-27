@@ -3,7 +3,8 @@
 namespace NYql {
 namespace NUdf {
 
-IBlockTypeHelper::IBlockTypeHelper() {}
+IBlockTypeHelper::IBlockTypeHelper() {
+}
 
 } // namespace NUdf
 } // namespace NYql

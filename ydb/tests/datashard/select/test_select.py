@@ -18,17 +18,21 @@ from ydb.tests.datashard.lib.types_of_variables import (
     index_zero_sync,
 )
 
-unsuppored_time_types = [
-    "Date32",
-    "Datetime64",
-    "Timestamp64",
-    "Interval64",
-]  # https://github.com/ydb-platform/ydb/issues/16930
 unsuppored_distinct_types = [
     "DyNumber",
     "UUID",  # https://github.com/ydb-platform/ydb/issues/17484
 ]
 uncomparable_types = ["Json", "JsonDocument", "Yson"]
+
+
+def numeric_sort_key(s):
+    if isinstance(s, bytes):
+        s = s.decode('utf-8')
+    if isinstance(s, str):
+        if s.startswith('String') or s.startswith('Utf8'):
+            parts = s.split(' ', 1)
+            return parts[0] + ' ' + ('%04d' % int(parts[1]))
+    return s
 
 
 class TestDML(TestBase):
@@ -100,14 +104,11 @@ class TestDML(TestBase):
     ):
         selected_columns = []
         for type in all_types.keys():
-            if type not in unsuppored_time_types:
-                selected_columns.append(f"col_{cleanup_type_name(type)}")
+            selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
-            if type not in unsuppored_time_types:
-                selected_columns.append(f"pk_{cleanup_type_name(type)}")
+            selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
-            if type not in unsuppored_time_types:
-                selected_columns.append(f"col_index_{cleanup_type_name(type)}")
+            selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "":
             selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
         return selected_columns
@@ -124,17 +125,14 @@ class TestDML(TestBase):
     ):
         col_idx = 0
         for type in all_types.keys():
-            if type not in unsuppored_time_types:
-                dml.assert_type(all_types, type, value, row[col_idx])
-                col_idx += 1
+            dml.assert_type(all_types, type, value, row[col_idx])
+            col_idx += 1
         for type in pk_types.keys():
-            if type not in unsuppored_time_types:
-                dml.assert_type(pk_types, type, value, row[col_idx])
-                col_idx += 1
+            dml.assert_type(pk_types, type, value, row[col_idx])
+            col_idx += 1
         for type in index.keys():
-            if type not in unsuppored_time_types:
-                dml.assert_type(index, type, value, row[col_idx])
-                col_idx += 1
+            dml.assert_type(index, type, value, row[col_idx])
+            col_idx += 1
         if ttl != "":
             dml.assert_type(ttl_types, ttl, value, row[col_idx])
             col_idx += 1
@@ -165,25 +163,28 @@ class TestDML(TestBase):
     ):
         for type in all_types.keys():
             if (
-                type not in unsuppored_time_types
-                and type not in unsuppored_distinct_types
+                type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
         for type in pk_types.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
+            if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
         for type in index.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
+            if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(index, type, i + 1, rows_distinct[i][0])
         if ttl != "" and ttl != "DyNumber":
             rows_distinct = self.query(f"SELECT DISTINCT ttl_{cleanup_type_name(ttl)} from {table_name}")
+            rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
             for i in range(len(rows_distinct)):
                 dml.assert_type(ttl_types, ttl, i + 1, rows_distinct[i][0])
 
@@ -199,16 +200,15 @@ class TestDML(TestBase):
         selected_columns = []
         for type in all_types.keys():
             if (
-                type not in unsuppored_time_types
-                and type not in unsuppored_distinct_types
+                type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
                 selected_columns.append(f"col_{cleanup_type_name(type)}")
         for type in pk_types.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
+            if type not in unsuppored_distinct_types:
                 selected_columns.append(f"pk_{cleanup_type_name(type)}")
         for type in index.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
+            if type not in unsuppored_distinct_types:
                 selected_columns.append(f"col_index_{cleanup_type_name(type)}")
         if ttl != "" and ttl != "DyNumber":
             selected_columns.append(f"ttl_{cleanup_type_name(ttl)}")
@@ -221,23 +221,26 @@ class TestDML(TestBase):
         )
         for type in all_types.keys():
             if (
-                type not in unsuppored_time_types
-                and type not in unsuppored_distinct_types
+                type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
-                for line in range(len(rows)):
-                    dml.assert_type(all_types, type, line + 1, rows[line][f"col_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(all_types, type, line + 1, sorted_rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(pk_types, type, line + 1, rows[line][f"pk_{cleanup_type_name(type)}"])
+            if type not in unsuppored_distinct_types:
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"pk_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(pk_types, type, line + 1, sorted_rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
-            if type not in unsuppored_time_types and type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(index, type, line + 1, rows[line][f"col_index_{cleanup_type_name(type)}"])
+            if type not in unsuppored_distinct_types:
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_index_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(index, type, line + 1, sorted_rows[line][f"col_index_{cleanup_type_name(type)}"])
         if ttl != "" and ttl != "DyNumber":
-            for line in range(len(rows)):
-                dml.assert_type(ttl_types, ttl, line + 1, rows[line][f"ttl_{cleanup_type_name(ttl)}"])
+            sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"ttl_{cleanup_type_name(ttl)}"]))
+            for line in range(len(sorted_rows)):
+                dml.assert_type(ttl_types, ttl, line + 1, sorted_rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
     def select_with(
         self,
@@ -271,31 +274,17 @@ class TestDML(TestBase):
     def without(
         self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str
     ):
-        selected_columns_without = []
         for type_name in all_types.keys():
-            if type_name in unsuppored_time_types:
-                selected_columns_without.append(f"col_{cleanup_type_name(type_name)}")
+            self.create_without(table_name, f"col_{cleanup_type_name(type_name)}")
         for type_name in pk_types.keys():
-            if type_name in unsuppored_time_types:
-                selected_columns_without.append(f"pk_{cleanup_type_name(type_name)}")
+            self.create_without(table_name, f"pk_{cleanup_type_name(type_name)}")
         for type_name in index.keys():
-            if type_name in unsuppored_time_types:
-                selected_columns_without.append(f"col_index_{cleanup_type_name(type_name)}")
-
-        for type_name in all_types.keys():
-            if type_name not in unsuppored_time_types:
-                self.create_without(table_name, selected_columns_without, f"col_{cleanup_type_name(type_name)}")
-        for type_name in pk_types.keys():
-            if type_name not in unsuppored_time_types:
-                self.create_without(table_name, selected_columns_without, f"pk_{cleanup_type_name(type_name)}")
-        for type_name in index.keys():
-            if type_name not in unsuppored_time_types:
-                self.create_without(table_name, selected_columns_without, f"col_index_{cleanup_type_name(type_name)}")
+            self.create_without(table_name, f"col_index_{cleanup_type_name(type_name)}")
         if ttl != "":
-            self.create_without(table_name, selected_columns_without, f"ttl_{cleanup_type_name(ttl)}")
+            self.create_without(table_name, f"ttl_{cleanup_type_name(ttl)}")
 
-    def create_without(self, table_name, selected_columns_without, without):
-        rows = self.query(f"select * without {", ".join(selected_columns_without)}, {without} from {table_name}")
+    def create_without(self, table_name, without):
+        rows = self.query(f"select * without {without} from {table_name}")
         for col_name in rows[0].keys():
             assert col_name != without, f"a column {without} in the table {table_name} was not excluded"
 
@@ -378,10 +367,9 @@ class TestDML(TestBase):
         all_types = {**pk_types, **non_pk_types}
         statements = []
         for type_name in all_types.keys():
-            if type_name not in unsuppored_time_types:
-                statements.append(
-                    f"{format_sql_value(all_types[type_name](1), type_name)} AS pk_{cleanup_type_name(type_name)}"
-                )
+            statements.append(
+                f"{format_sql_value(all_types[type_name](1), type_name)} AS pk_{cleanup_type_name(type_name)}"
+            )
         list_sql = f"""
             $data = AsList(
                 AsStruct({", ".join(statements)})
@@ -394,15 +382,9 @@ class TestDML(TestBase):
                    """
         )
         for type_name in all_types.keys():
-            if (
-                type_name != "Date32"
-                and type_name != "Datetime64"
-                and type_name != "Timestamp64"
-                and type_name != 'Interval64'
-            ):
-                if type_name == "Utf8":
-                    dml.assert_type(
-                        all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"].decode("utf-8")
-                    )
-                else:
-                    dml.assert_type(all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"])
+            if type_name == "Utf8":
+                dml.assert_type(
+                    all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"].decode("utf-8")
+                )
+            else:
+                dml.assert_type(all_types, type_name, 1, rows[0][f"pk_{cleanup_type_name(type_name)}"])

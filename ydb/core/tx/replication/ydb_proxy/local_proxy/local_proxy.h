@@ -18,10 +18,11 @@ public:
 
     void Bootstrap();
 
+private:
     ui64 GetChannelBufferSize() const override;
     TActorId RegisterActor(IActor* actor) const override;
+    TString MakeLocalPath(TString path) const;
 
-private:
     void Handle(TEvYdbProxy::TEvAlterTopicRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev);
     void Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev);
@@ -30,7 +31,6 @@ private:
     void Handle(TEvYdbProxy::TEvDescribeTopicRequest::TPtr& ev);
 
     STATEFN(StateWork);
-
 
 private:
     const TString Database;

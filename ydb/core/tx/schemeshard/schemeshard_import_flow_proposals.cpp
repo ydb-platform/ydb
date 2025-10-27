@@ -1,6 +1,7 @@
 #include "schemeshard_import_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
 #include <ydb/core/protos/s3_settings.pb.h>
@@ -24,7 +25,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTablePropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Table);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
 
     auto& modifyScheme = *record.AddTransaction();
@@ -135,9 +136,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Table);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRestore);
     modifyScheme.SetInternal(true);
 
@@ -255,6 +257,7 @@ THolder<TEvIndexBuilder::TEvCancelRequest> CancelIndexBuildPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     TSchemeShard* ss,
     TTxId txId,
+    const TImportInfo& importInfo,
     const TImportInfo::TItem& item,
     TString& error
 ) {
@@ -264,8 +267,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
     const auto& changefeed = importChangefeedTopic.GetChangefeed();
     const auto& topic = importChangefeedTopic.GetTopic();
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreateCdcStream);
     auto& cdcStream = *modifyScheme.MutableCreateCdcStream();
@@ -284,16 +288,33 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
         cdcStream.SetRetentionPeriodSeconds(topic.retention_period().seconds());
     }
 
-    if (topic.has_partitioning_settings()) {
-        i64 minActivePartitions =
-            topic.partitioning_settings().min_active_partitions();
-        if (minActivePartitions < 0) {
-            error = "minActivePartitions must be >= 0";
-            return nullptr;
-        } else if (minActivePartitions == 0) {
-            minActivePartitions = 1;
+    auto tableDesc = GetTableDescription(ss, dstPath->PathId);
+    Y_ABORT_UNLESS(!tableDesc.GetKeyColumnIds().empty());
+    const auto& keyId = tableDesc.GetKeyColumnIds()[0];
+    bool isPartitioningAvailable = false;
+    
+    // Explicit specification of the number of partitions when creating CDC
+    // is possible only if the first component of the primary key 
+    // of the source table is Uint32 or Uint64
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetId() == keyId) {
+            isPartitioningAvailable = column.GetType() == "Uint32" || column.GetType() == "Uint64";
+            break;
         }
-        cdcStream.SetTopicPartitions(minActivePartitions);
+    }
+
+    if (topic.has_partitioning_settings()) {
+        if (isPartitioningAvailable) {
+            i64 minActivePartitions =
+                topic.partitioning_settings().min_active_partitions();
+            if (minActivePartitions < 0) {
+                error = "minActivePartitions must be >= 0";
+                return nullptr;
+            } else if (minActivePartitions == 0) {
+                minActivePartitions = 1;
+            }
+            cdcStream.SetTopicPartitions(minActivePartitions);
+        }
 
         if (topic.partitioning_settings().has_auto_partitioning_settings()) {
             auto& partitioningSettings = topic.partitioning_settings().auto_partitioning_settings();
@@ -316,6 +337,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateChangefeedPropose(
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     TSchemeShard* ss,
     TTxId txId,
+    const TImportInfo& importInfo,
     TImportInfo::TItem& item
 ) {
     Y_ABORT_UNLESS(item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size());
@@ -323,8 +345,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateConsumersPropose(
     const auto& importChangefeedTopic = item.Changefeeds.GetChangefeeds()[item.NextChangefeedIdx];
     const auto& topic = importChangefeedTopic.GetTopic();
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
     auto& pqGroup = *modifyScheme.MutableAlterPersQueueGroup();
@@ -377,8 +400,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateTopicPropose(
     const auto& item = importInfo.Items.at(itemIdx);
     Y_ABORT_UNLESS(item.Topic);
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
+
     auto& modifyScheme = *record.AddTransaction();
 
     const TPath domainPath = TPath::Init(importInfo.DomainPathId, ss);

@@ -9,9 +9,11 @@ items:
   href: containers.md
 - name: Special
   href: special.md
+- name: Linear
+  href: linear.md
 - name: Type casting
   href: cast.md
 - name: Text representation of data types
   href: type_string.md
-- name: JSON
+- name: Parameter transfer in JSON format
   href: json.md

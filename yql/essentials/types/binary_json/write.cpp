@@ -415,10 +415,12 @@ private:
 /**
  * @brief Callbacks for textual JSON parser. Essentially wrapper around TJsonIndex methods
  */
-class TBinaryJsonCallbacks : public TJsonCallbacks {
+class TBinaryJsonCallbacks: public TJsonCallbacks {
 public:
     TBinaryJsonCallbacks(bool throwException, bool allowInf)
-        : TJsonCallbacks(/* throwException */ throwException), AllowInf_(allowInf) {
+        : TJsonCallbacks(/* throwException */ throwException)
+        , AllowInf_(allowInf)
+    {
     }
 
     bool OnNull() override {
@@ -723,7 +725,7 @@ template <typename TOnDemandValue>
     return simdjson::SUCCESS;
 #undef RETURN_IF_NOT_SUCCESS
 }
-}
+} // namespace
 
 std::variant<TBinaryJson, TString> SerializeToBinaryJsonImpl(const TStringBuf json, bool allowInf) {
     std::variant<TBinaryJson, TString> res;
@@ -760,5 +762,4 @@ TBinaryJson SerializeToBinaryJson(const NUdf::TUnboxedValue& value) {
     return std::move(serializer).Serialize();
 }
 
-}
-
+} // namespace NKikimr::NBinaryJson

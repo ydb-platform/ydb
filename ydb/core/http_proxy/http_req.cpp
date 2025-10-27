@@ -1154,7 +1154,7 @@ namespace NKikimr::NHttpProxy {
                 Request->URL + " " +
                 Request->Protocol + "/" + Request->Version + "\r\n" +
                 Request->Headers +
-                Request->Content;
+                Request->Body;
             signature = MakeHolder<NKikimr::NSQS::TAwsRequestSignV4>(fullRequest);
         }
 
@@ -1425,7 +1425,7 @@ namespace NKikimr::NHttpProxy {
             , ServiceConfig(context.ServiceConfig)
             , IamToken(context.IamToken)
             , Authorize(!context.Driver)
-            , DatabasePath(context.DatabasePath)
+            , DatabasePath(CanonizePath(context.DatabasePath))
             , StreamName(context.StreamName)
         {
         }
@@ -1456,7 +1456,7 @@ namespace NKikimr::NHttpProxy {
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.SyncVersion = false;
             schemeCacheRequest->ResultSet.emplace_back(entry);
-            schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
+            schemeCacheRequest->DatabaseName = DatabasePath;
             ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
         }
 
@@ -1474,7 +1474,7 @@ namespace NKikimr::NHttpProxy {
                 FolderId = description.GetPQTabletConfig().GetYcFolderId();
                 CloudId = description.GetPQTabletConfig().GetYcCloudId();
                 DatabaseId = description.GetPQTabletConfig().GetYdbDatabaseId();
-                DatabasePath = description.GetPQTabletConfig().GetYdbDatabasePath();
+                DatabasePath = CanonizePath(description.GetPQTabletConfig().GetYdbDatabasePath());
             }
             for (const auto& attr : navigate->ResultSet.front().Attributes) {
                 if (attr.first == "folder_id") FolderId = attr.second;
@@ -1551,14 +1551,19 @@ namespace NKikimr::NHttpProxy {
                     signature.Region = Signature->GetRegion();
                     signature.SignedAt = signedAt;
 
-                    THolder<TEvTicketParser::TEvAuthorizeTicket> request =
-                        MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::move(signature), "", entries);
-                    ctx.Send(MakeTicketParserID(), request.Release());
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                        .Signature = std::move(signature),
+                        .Database = DatabasePath,
+                        .PeerName = "",
+                        .Entries = entries
+                    }));
                 } else {
-                    THolder<TEvTicketParser::TEvAuthorizeTicket> request =
-                        MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(IamToken, "", entries);
-                    ctx.Send(MakeTicketParserID(), request.Release());
-
+                    ctx.Send(MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
+                        .Ticket = IamToken,
+                        .Database = DatabasePath,
+                        .PeerName = "",
+                        .Entries = entries
+                    }));
                 }
                 return;
             }

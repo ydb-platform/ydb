@@ -48,7 +48,11 @@ SELECT * FROM postgresql_datasource.<table_name>
 
 1. {% include [!](_includes/supported_requests.md) %}
 1. {% include [!](_includes/datetime_limits.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+   {% include [!](_includes/predicate_pushdown_examples.md) %}
+
+    Поддерживаемые типы данных для пушдауна фильтров:
 
     |Тип данных {{ ydb-short-name }}|
     |----|
@@ -59,6 +63,7 @@ SELECT * FROM postgresql_datasource.<table_name>
     |`Int64`|
     |`Float`|
     |`Double`|
+    |`Decimal`|
 
 ## Поддерживаемые типы данных
 
@@ -91,3 +96,4 @@ SELECT * FROM postgresql_datasource.<table_name>
 |`character varying`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 |`text`|`Optional<Utf8>`|[Правила сортировки](https://www.postgresql.org/docs/current/collation.html) по умолчанию.|
 |`json`|`Optional<Json>`||
+|`numeric(p,s)`|`Optional<Decimal(p,s)>`|`p` (precision) - общее количество знаков в числе, `s` (scale) - количество знаков после запятой. Типы `numeric` без указания параметров (так называемые «неограниченные», unconstrained) преобразуются в `Optional<Decimal(35, 0)>`. Типы `numeric`, у которых `p > 35` или `s < 0`, не поддерживаются.|

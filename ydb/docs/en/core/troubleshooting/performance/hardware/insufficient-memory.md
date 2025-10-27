@@ -54,4 +54,4 @@ Consider the following solutions for addressing insufficient memory:
 
 - If the load on {{ ydb-short-name }} has increased due to new usage patterns or increased query rate, try optimizing the application to reduce the load on {{ ydb-short-name }} or add more {{ ydb-short-name }} nodes.
 
-- If the load on {{ ydb-short-name }} has not changed but nodes are still restarting, consider adding more {{ ydb-short-name }} nodes or raising the hard memory limit for the nodes. For more information about memory management in {{ ydb-short-name }}, see [{#T}](../../../reference/configuration/index.md#memory-controller).
+- If the load on {{ ydb-short-name }} has not changed but nodes are still restarting, consider adding more {{ ydb-short-name }} nodes or raising the hard memory limit for the nodes. For more information about memory management in {{ ydb-short-name }}, see [{#T}](../../../reference/configuration/memory_controller_config.md).

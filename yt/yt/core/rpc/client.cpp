@@ -345,21 +345,25 @@ TClientContextPtr TClientRequest::CreateClientContext()
         Header().set_user_agent(GetRpcUserAgent());
     }
 
+    auto requestId = GetRequestId();
+
     if (StreamingEnabled_) {
         RequestAttachmentsStream_ = New<TAttachmentsOutputStream>(
+            requestId,
             RequestCodec_,
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             BIND(&TClientRequest::OnPullRequestAttachmentsStream, MakeWeak(this)),
             ClientAttachmentsStreamingParameters_.WindowSize,
             ClientAttachmentsStreamingParameters_.WriteTimeout);
         ResponseAttachmentsStream_ = New<TAttachmentsInputStream>(
+            requestId,
             BIND(&TClientRequest::OnResponseAttachmentsStreamRead, MakeWeak(this)),
             TDispatcher::Get()->GetCompressionPoolInvoker(),
             ClientAttachmentsStreamingParameters_.ReadTimeout);
     }
 
     return New<TClientContext>(
-        GetRequestId(),
+        requestId,
         std::move(traceContext),
         GetService(),
         GetMethod(),

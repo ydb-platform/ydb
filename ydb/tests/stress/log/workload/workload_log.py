@@ -13,15 +13,22 @@ logger = logging.getLogger("YdbLogWorkload")
 
 
 class YdbLogWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, store_type, tables_prefix):
+    def __init__(self, endpoint, database, duration, store_type, tables_prefix):
         super().__init__(None, tables_prefix, 'log', None)
         self.store_type = store_type
         self.endpoint = endpoint
         self.database = database
+        self.duration = str(duration)
+        self.update_duration = str(duration // 3)
+        self.tempdir = None
         self._unpack_resource('ydb_cli')
 
+    def __del__(self):
+        self.tempdir.cleanup()
+
     def _unpack_resource(self, name):
-        self.working_dir = os.path.join(tempfile.gettempdir(), "ydb_cli")
+        self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())
+        self.working_dir = os.path.join(self.tempdir.name, "log_ydb_cli")
         os.makedirs(self.working_dir, exist_ok=True)
         res = resource.find(name)
         path_to_unpack = os.path.join(self.working_dir, name)
@@ -32,7 +39,7 @@ class YdbLogWorkload(WorkloadBase):
         os.chmod(path_to_unpack, st.st_mode | stat.S_IEXEC)
         self.cli_path = path_to_unpack
 
-    def get_command_prefix(self, subcmds: list[str], path: str) -> list[str]:
+    def get_command_prefix(self, subcmds: list[str]) -> list[str]:
         return [
             self.cli_path,
             '--verbose',
@@ -40,7 +47,7 @@ class YdbLogWorkload(WorkloadBase):
             '--database={}'.format(self.database),
             'workload', 'log'
         ] + subcmds + [
-            '--path', path
+            '--path', f'{self.table_prefix}_{self.store_type}'
         ]
 
     def cmd_run(self, cmd):
@@ -59,34 +66,39 @@ class YdbLogWorkload(WorkloadBase):
     def __loop(self):
         upload_commands = [
             # import command
-            self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator'], path=self.store_type) + self.get_insert_command_params() + ['--rows', '100000'],
+            self.get_command_prefix(subcmds=['import', '--bulk-size', '1000', '-t', '1', 'generator']) + self.get_insert_command_params() + ['--rows', '100000'],
             # bulk upsert workload
-            self.get_command_prefix(subcmds=['run', 'bulk_upsert'], path=self.store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'bulk_upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
             # upsert workload
-            self.get_command_prefix(subcmds=['run', 'upsert'], path=self.store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'upsert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
 
             # insert workload
-            self.get_command_prefix(subcmds=['run', 'insert'], path=self.store_type) + self.get_insert_command_params() + ['--seconds', '10', '--threads', '10'],
+            self.get_command_prefix(subcmds=['run', 'insert']) + self.get_insert_command_params() + ['--seconds', self.update_duration, '--threads', '10'],
         ]
+
+        self.cmd_run(
+            self.get_command_prefix(subcmds=['clean'])
+        )
 
         # init
 
         self.cmd_run(
-            self.get_command_prefix(subcmds=['init'], path=self.store_type) + self.get_insert_command_params() + [
+            self.get_command_prefix(subcmds=['init']) + self.get_insert_command_params() + [
                 '--store', self.store_type,
                 '--min-partitions', '100',
                 '--partition-size', '10',
                 '--auto-partition', '0',
             ],
         )
+
         with ThreadPoolExecutor() as executor:
             executor.submit(
                 self.cmd_run,
-                self.get_command_prefix(subcmds=['run', 'select'], path=self.store_type) + [
+                self.get_command_prefix(subcmds=['run', 'select']) + [
                     '--client-timeout', '10000',
                     '--threads', '10',
-                    '--seconds', str(10 * len(upload_commands)),
+                    '--seconds', self.duration,
                 ]
             )
 

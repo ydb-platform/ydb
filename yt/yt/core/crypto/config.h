@@ -30,9 +30,6 @@ DEFINE_REFCOUNTED_TYPE(TPemBlobConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! FIXME: Enabled during migration, because this code has always been broken.
-constexpr bool DefaultInsecureSkipVerify = true;
-
 struct TSslContextCommand
     : public NYTree::TYsonStruct
 {

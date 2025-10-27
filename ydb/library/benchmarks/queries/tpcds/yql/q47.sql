@@ -5,8 +5,8 @@ $v1 = (
  select item.i_category i_category, item.i_brand i_brand,
         store.s_store_name s_store_name, store.s_company_name s_company_name,
         date_dim.d_year d_year, date_dim.d_moy d_moy,
-        sum($todecimal(ss_sales_price, 7, 2)) sum_sales,
-        avg(sum($todecimal(ss_sales_price, 7, 2))) over
+        sum(ss_sales_price) sum_sales,
+        avg(sum(ss_sales_price)) over
           (partition by item.i_category, item.i_brand,
                      store.s_store_name, store.s_company_name, date_dim.d_year)
           avg_monthly_sales,
@@ -53,7 +53,7 @@ select *
  from $v2
  where  d_year = 1999 and
         avg_monthly_sales > 0 and
-        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > $todecimal(0.1,7,2)
+        case when avg_monthly_sales > 0 then abs(sum_sales - avg_monthly_sales) / avg_monthly_sales else null end > $todecimal(0.1,'7','2')
  order by sum_sales - avg_monthly_sales, s_store_name
  limit 100;
 

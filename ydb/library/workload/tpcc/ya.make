@@ -23,6 +23,7 @@ SRCS(
     transaction_payment.cpp
     transaction_simulation.cpp
     transaction_stocklevel.cpp
+    tui_base.cpp
     util.cpp
 )
 

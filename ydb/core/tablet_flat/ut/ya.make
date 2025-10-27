@@ -9,6 +9,10 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+IF (SANITIZER_TYPE)
+    REQUIREMENTS(ram:32 cpu:4)
+ENDIF()
+
 SRCS(
     flat_cxx_database_ut.cpp
     ut_db_iface.cpp
@@ -24,8 +28,6 @@ SRCS(
     flat_test_db.cpp
     flat_test_db_helpers.h
     shared_cache_s3fifo_ut.cpp
-    shared_cache_clock_pro_ut.cpp
-    shared_cache_switchable_ut.cpp
     shared_cache_tiered_ut.cpp
     shared_handle_ut.cpp
     ut_btree_index_nodes.cpp
@@ -47,6 +49,7 @@ SRCS(
     ut_pages.cpp
     ut_redo.cpp
     ut_rename_table_column.cpp
+    ut_rowlocks.cpp
     ut_other.cpp
     ut_forward.cpp
     ut_screen.cpp
@@ -57,6 +60,7 @@ SRCS(
     ut_slice_loader.cpp
     ut_vacuum.cpp
     ut_versions.cpp
+    ut_backup.cpp
 )
 
 RESOURCE(

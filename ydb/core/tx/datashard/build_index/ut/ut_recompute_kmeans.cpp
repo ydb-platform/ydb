@@ -14,7 +14,7 @@
 namespace NKikimr {
 using namespace Tests;
 using Ydb::Table::VectorIndexSettings;
-using namespace NTableIndex::NTableVectorKmeansTreeIndex;
+using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
 static constexpr const char* kMainTable = "/Root/table-main";
@@ -54,7 +54,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         *rec.MutableSettings() = settings;
 
         rec.SetParent(0);
-        rec.AddClusters("abc");
+        rec.AddClusters("ab\2");
         rec.SetEmbeddingColumn("embedding");
 
         setupRequest(rec);
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         NKikimr::DoBadRequest<TEvDataShard::TEvRecomputeKMeansResponse>(server, sender, std::move(ev), datashards[0], expectedError, expectedErrorSubstring);
     }
 
-    static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent,
+    static TString DoRecomputeKMeans(Tests::TServer::TPtr server, TActorId sender, NTableIndex::NKMeans::TClusterId parent,
                                      const std::vector<TString>& level,
                                      VectorIndexSettings::VectorType type, VectorIndexSettings::Metric metric)
     {
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
     {
         options.AllowSystemColumnNames(true);
         options.Columns({
-            {ParentColumn, NTableIndex::ClusterIdTypeName, true, true},
+            {ParentColumn, NTableIndex::NKMeans::ClusterIdTypeName, true, true},
             {"key", "Uint32", true, true},
             {"embedding", "String", false, false},
             {"data", "String", false, false},
@@ -186,13 +186,10 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
-        }, "{ <main>: Error: Wrong vector type }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
-            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
-        }, "{ <main>: Error: TODO(mbkkt) bit vector type is not supported }");
+        }, "{ <main>: Error: vector_type should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
             request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
-        }, "{ <main>: Error: Wrong similarity }");
+        }, "{ <main>: Error: either distance or similarity should be set }");
 
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvRecomputeKMeansRequest& request) {
             request.ClearClusters();
@@ -237,29 +234,29 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (key, embedding, data)
         VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x28\3\", \"two\"),"
-                "(3, \"\x29\x31\3\", \"three\"),"
-                "(4, \"\x20\x40\3\", \"four\"),"
-                "(5, \"\x15\x40\3\", \"five\"),"
-                "(6, \"\x10\x40\3\", \"six\");");
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x28\2\", \"two\"),"
+                "(3, \"\x29\x31\2\", \"three\"),"
+                "(4, \"\x20\x40\2\", \"four\"),"
+                "(5, \"\x15\x40\2\", \"five\"),"
+                "(6, \"\x10\x40\2\", \"six\");");
 
-        std::vector<TString> level = { "\x30\x30\3", "\x10\x40\3" };
+        std::vector<TString> level = { "\x30\x30\2", "\x10\x40\2" };
 
         auto recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x17\x40\3 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x17\x40\3 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2A\x32\3 size = 4\ncluster = \x12\x40\3 size = 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2A\x32\2 size = 4\ncluster = \x12\x40\2 size = 2\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x17\x40\3 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x17\x40\3 size = 3\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x17\x40\2 size = 3\n");
 
     }
 
@@ -287,29 +284,29 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (__ydb_parent, key, embedding, data)
         VALUES )"
-                "(10, 1, \"\x30\x30\3\", \"one\"),"
-                "(10, 2, \"\x31\x28\3\", \"two\"),"
-                "(10, 3, \"\x29\x31\3\", \"three\"),"
-                "(10, 4, \"\x20\x40\3\", \"four\"),"
-                "(11, 5, \"\x15\x40\3\", \"five\"),"
-                "(11, 6, \"\x10\x40\3\", \"six\");");
+                "(10, 1, \"\x30\x30\2\", \"one\"),"
+                "(10, 2, \"\x31\x28\2\", \"two\"),"
+                "(10, 3, \"\x29\x31\2\", \"three\"),"
+                "(10, 4, \"\x20\x40\2\", \"four\"),"
+                "(11, 5, \"\x15\x40\2\", \"five\"),"
+                "(11, 6, \"\x10\x40\2\", \"six\");");
 
-        std::vector<TString> level = { "\x30\x30\3", "\x20\x40\3" };
+        std::vector<TString> level = { "\x30\x30\2", "\x20\x40\2" };
 
         auto recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\3 size = 2\ncluster = \x24\x38\3 size = 2\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x30\x2C\2 size = 2\ncluster = \x24\x38\2 size = 2\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
 
         recomputed = DoRecomputeKMeans(server, sender, 10, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\3 size = 3\ncluster = \x20\x40\3 size = 1\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x2E\x2D\2 size = 3\ncluster = \x20\x40\2 size = 1\n");
     }
 
     Y_UNIT_TEST(EmptyCluster) {
@@ -336,16 +333,16 @@ Y_UNIT_TEST_SUITE (TTxDataShardRecomputeKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (key, embedding, data)
         VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x28\3\", \"two\"),"
-                "(3, \"\x29\x31\3\", \"three\"),"
-                "(4, \"\x20\x40\3\", \"four\"),"
-                "(5, \"\x15\x40\3\", \"five\"),"
-                "(6, \"\x10\x40\3\", \"six\");");
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x28\2\", \"two\"),"
+                "(3, \"\x29\x31\2\", \"three\"),"
+                "(4, \"\x20\x40\2\", \"four\"),"
+                "(5, \"\x15\x40\2\", \"five\"),"
+                "(6, \"\x10\x40\2\", \"six\");");
 
-        std::vector<TString> level = { "\x30\x30\3", "\x10\x10\3" };
+        std::vector<TString> level = { "\x30\x30\2", "\x10\x10\2" };
         auto recomputed = DoRecomputeKMeans(server, sender, 0, level, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::SIMILARITY_COSINE);
-        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x22\x36\3 size = 6\ncluster = \x10\x10\3 size = 0\n");
+        UNIT_ASSERT_VALUES_EQUAL(recomputed, "cluster = \x22\x36\2 size = 6\ncluster = \x10\x10\2 size = 0\n");
 
     }
 

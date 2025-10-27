@@ -1,10 +1,13 @@
 {#- empty string #}
 plugins {
-{%- if mainClass %}
+{%- if not(proto_template) and mainClass %}
     `application`
 {%- else %}
     `java-library`
 {%- endif %}
+{%- if proto_template %}
+    id("com.google.protobuf") version "{{ ver_protobuf }}"
+{%- endif -%}
 {%- if publish %}
     `maven-publish`
     `signing`
@@ -29,19 +32,31 @@ plugins {
 {%- endif -%}
 
 {%- if with_errorprone or with_test_errorprone %}
-    id("net.ltgt.errorprone") version "4.1.0"
+    id("net.ltgt.errorprone") version "{{ ver_errorprone }}"
 {%- endif -%}
 
 {%- if with_lombok_plugin %}
-    id("io.freefair.lombok") version "8.14"
+    id("io.freefair.lombok") version "{{ ver_lombok_plugin }}"
 {%- endif %}
 }
 
 {%- if jdk_version %}
 
 java {
+{%-     if jdk11_compatibility_mode and proto_template %}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("11")
+    }
+{%-     else %}
     toolchain {
         languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
     }
+{%-     endif %}
+}
+
+{#- Can be removed after Gradle 9. See https://github.com/gradle/gradle/issues/16791 #}
+
+tasks.withType<JavaExec>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor(java.toolchain))
 }
 {%  endif -%}

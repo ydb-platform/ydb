@@ -332,6 +332,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
             tx->GetDataTx()->GetVolatileChangeGroup(),
             tx->GetDataTx()->GetVolatileCommitOrdered(),
             /* arbiter */ false,
+            /* disable expectations */ false,
             txc);
     }
 

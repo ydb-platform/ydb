@@ -353,6 +353,15 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
                 }
             }
 
+            env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->GetTypeRewrite() == TEvents::TEvGone::EventType) {
+                    if (ev->Recipient == MakeBlobStorageNodeWardenID(ev->Recipient.NodeId())) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+
             // terminate peer disks
             for (ui32 i = 1; i < info->GetTotalVDisksNum(); ++i) {
                 const TActorId& actorId = info->GetActorId(i);
@@ -363,6 +372,10 @@ Y_UNIT_TEST_SUITE(BlobScrubbing) {
             Cerr << "*** blobIdsToValidate.size# " << blobIdsToValidate.size() << Endl;
 
             Validate(env, vdiskId, data, info->Type, blobIdsToValidate);
+
+            env.Sim(TDuration::Seconds(10));
+
+            env.Runtime->FilterFunction = {};
 
             env.Cleanup();
             env.Initialize();
@@ -415,11 +428,11 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
     };
 
     enum ECorruptionMask : ui32 {
-        Val_OneCorrupted = 0b1,
-        Val_TwoCorrruptedMain = 0b1001,
-        Val_OneCorruptedMainOneCorruptedHandoff = 0b10001,
-        Val_TwoCorruptedHandoff = 0b000011,
-        Val_TwoCorrruptedInSameDc = 0b11,
+        Val_OneCorrupted                        = 0b000001,
+        Val_TwoCorrruptedMain                   = 0b001001,
+        Val_OneCorruptedMainOneCorruptedHandoff = 0b010001,
+        Val_TwoCorruptedHandoff                 = 0b110000,
+        Val_TwoCorrruptedInSameDc               = 0b000011,
     };
 
     struct TTestCtx : public TTestCtxBase {
@@ -427,6 +440,7 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
             : TTestCtxBase(TEnvironmentSetup::TSettings{
                 .NodeCount = erasure.BlobSubgroupSize() + 1,
                 .Erasure = erasure,
+                .PDiskSize = 10_TB,
                 .EnableDeepScrubbing = true,
             })
             , BlobSize(blobSize)
@@ -444,7 +458,7 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                 return counters->GetSubgroup("subsystem", "deepScrubbing")
                         ->GetSubgroup("blobSize", IsHuge ? "huge" : "small")
                         ->GetSubgroup("erasure", TErasureType::ErasureSpeciesName(Erasure))
-                        ->GetCounter(CounterName, true)->Val();
+                        ->GetCounter(CounterName, false)->Val();
             }
 
             TString CounterName;
@@ -498,11 +512,21 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             UNIT_ASSERT_VALUES_UNEQUAL(nodesWithCorruptedPartsMask, 0);
 
+            Env->Runtime->FilterFunction = {};
+
             WriteCompressedData({
                 .GroupId = GroupId,
                 .TotalBlobs = 100,
                 .BlobSize = blobSize,
             });
+
+            {
+                NKikimrBlobStorage::TConfigRequest request;
+                auto* setPeriod = request.AddCommand()->MutableSetScrubPeriodicity();
+                setPeriod->SetScrubPeriodicity(1);
+                auto response = Env->Invoke(request);
+                UNIT_ASSERT(response.GetSuccess());
+            }
 
             Env->Runtime->FilterFunction = {};
 
@@ -525,20 +549,21 @@ Y_UNIT_TEST_SUITE(DeepScrubbing) {
                 }
             }
 
-            bool isHuge = (BlobSize == EBlobSize::Val_HugeBlob);
-
             std::vector<ui32> pdiskLayout = MakePDiskLayout(BaseConfig, groupInfo->GetTopology(), GroupId);
 
             ui64 blobsScrubbed =
                     Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, TAggregateScrubMetrics("BlobsChecked", isHuge, Erasure.GetErasure()));
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("BlobsChecked", false, Erasure.GetErasure())) +
+                    Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("BlobsChecked", true, Erasure.GetErasure()));
             ui64 dataIssues =
                     Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
-                            GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", isHuge, Erasure.GetErasure()));
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", false, Erasure.GetErasure())) +
+                    Env->AggregateVDiskCountersWithCallback(Env->StoragePoolName, NodeCount, Erasure.BlobSubgroupSize(),
+                            GroupId, pdiskLayout, TAggregateScrubMetrics("DataIssues", true, Erasure.GetErasure()));
 
             UNIT_ASSERT_VALUES_UNEQUAL_C(blobsScrubbed, 0, makePrefix());
-            UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix()
-        );
+            UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, makePrefix());
         }
 
     private:

@@ -9,7 +9,7 @@ namespace NYql {
 namespace {
 
 TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext& ctx,
-    const TIntrusivePtr<TTypeAnnotationContext>& typesCtx)
+                                      const TIntrusivePtr<TTypeAnnotationContext>& typesCtx)
 {
     if (!node->IsCallable("RangeComputeFor")) {
         return node;
@@ -18,7 +18,7 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
     YQL_CLOG(DEBUG, Core) << "Expanding " << node->Content();
 
     TPositionHandle pos = node->Pos();
-    TExprNode::TPtr result = ctx.NewCallable(pos, "Nothing", { ExpandType(pos, *node->GetTypeAnn(), ctx) });
+    TExprNode::TPtr result = ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *node->GetTypeAnn(), ctx)});
 
     TPredicateExtractorSettings settings;
     settings.HaveNextValueCallable = true;
@@ -42,7 +42,6 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
         return result;
     }
 
-
     auto buildResult = extractor->BuildComputeNode(indexKeys, ctx, *typesCtx);
     if (!buildResult.ComputeNode) {
         YQL_CLOG(DEBUG, Core) << "BuildComputeNode: ranges can not be built for predicate";
@@ -56,6 +55,7 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
         prunedLambdaSerialized = "__yql_ast:" + ast.Root->ToString(TAstPrintFlags::PerLine | TAstPrintFlags::ShortQuote);
     }
 
+    // clang-format off
     result = ctx.Builder(pos)
         .Callable("Just")
             .List(0)
@@ -69,6 +69,7 @@ TExprNode::TPtr ExpandRangeComputeFor(const TExprNode::TPtr& node, TExprContext&
             .Seal()
         .Seal()
         .Build();
+    // clang-format on
 
     return result;
 }
@@ -82,8 +83,7 @@ THolder<IGraphTransformer> MakeExpandRangeComputeForTransformer(const TIntrusive
             settings.CustomInstantTypeTransformer = types->CustomInstantTypeTransformer.Get();
             using namespace std::placeholders;
             return OptimizeExpr(input, output, std::bind(&ExpandRangeComputeFor, _1, _2, types), ctx, settings);
-        }
-    );
+        });
 }
 
 } // namespace NYql

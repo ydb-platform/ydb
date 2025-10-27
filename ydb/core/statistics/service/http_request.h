@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
+#include <ydb/core/util/ulid.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -21,22 +22,31 @@ public:
     }
 
     void Bootstrap();
-   
+
     enum class ERequestType {
         ANALYZE,
         STATUS,
-        COUNT_MIN_SKETCH_PROBE
+        PROBE_COUNT_MIN_SKETCH,
+        PROBE_BASE_STATS,
     };
 
     enum class EParamType {
-        DATABASE,
         PATH,
         OPERATION_ID,
         COLUMN_NAME,
         CELL_VALUE
     };
 
-    THttpRequest(ERequestType requestType, const std::unordered_map<EParamType, TString>& params, const TActorId& replyToActorId);
+    enum class EResponseContentType {
+        HTML,
+        JSON,
+    };
+
+    THttpRequest(
+        ERequestType requestType,
+        const std::unordered_map<EParamType, TString>& params,
+        EResponseContentType contentType,
+        const TActorId& replyToActorId);
 
 private:
     using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -62,16 +72,20 @@ private:
     void DoRequest(const TNavigate::TEntry& entry);
     void DoAnalyze(const TNavigate::TEntry& entry);
     void DoStatus(const TNavigate::TEntry& entry);
-    void DoCountMinSketchProbe(const TNavigate::TEntry& entry);
+    void DoProbeDoCountMinSketch(const TNavigate::TEntry& entry);
+    void DoProbeBaseStats(const TNavigate::TEntry& entry);
 
     void HttpReply(const TString& msg);
+    void HttpReplyError(const TString& msg);
 
     void PassAway();
 
 private:
     const ERequestType RequestType;
     std::unordered_map<EParamType, TString> Params;
+    const EResponseContentType ContentType;
     const TActorId ReplyToActorId;
+    TULIDGenerator UlidGen;
 };
 
 } // NStat

@@ -1,50 +1,40 @@
 #pragma once
 
-#include "shared_cache_counters.h"
-#include "shared_cache_switchable.h"
+#include "shared_cache_s3fifo.h"
 
 namespace NKikimr::NSharedCache {
 
     template <typename TPage, typename TPageTraits>
     class TTieredCache {
-        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
-        using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
-        using TCache = TSwitchableCache<TPage, TPageTraits>;
+        using TCache = TS3FIFOCache<TPage, TPageTraits>;
 
     public:
-        template <typename TCacheBuilder>
-        TTieredCache(ui64 limit, TCacheBuilder createCache, TReplacementPolicy policy, TSharedPageCacheCounters& cacheCounters)
+        TTieredCache(ui64 limit)
             : CacheTiers(::Reserve(2))
         {
-            CacheTiers.emplace_back(limit, createCache(), cacheCounters.ReplacementPolicySize(policy));
+            CacheTiers.emplace_back(limit);
             RegularTier = &CacheTiers.back();
 
-            CacheTiers.emplace_back(0, createCache(), cacheCounters.ReplacementPolicySize(policy));
+            CacheTiers.emplace_back(0);
             TryKeepInMemoryTier = &CacheTiers.back();
         }
 
-        template <typename TCacheBuilder>
-        TIntrusiveList<TPage> Switch(TCacheBuilder createCache, TCounterPtr sizeCounter) Y_WARN_UNUSED_RESULT {
-            TIntrusiveList<TPage> evictedList;
-
-            for (auto& cacheTier : CacheTiers) {
-                evictedList.Append(cacheTier.Switch(createCache(), sizeCounter));
-            }
-
-            return evictedList;
-        }
-
-        TIntrusiveList<TPage> EvictNext() Y_WARN_UNUSED_RESULT {
-            if (auto evicted = RegularTier->EvictNext(); evicted) {
-                return std::move(evicted);
+        TPage* EvictNext() Y_WARN_UNUSED_RESULT {
+            if (TPage* evictedPage = RegularTier->EvictNext(); evictedPage) {
+                return evictedPage;
             } else {
                 return TryKeepInMemoryTier->EvictNext();
             }
         }
 
-        TIntrusiveList<TPage> Touch(TPage *page) Y_WARN_UNUSED_RESULT {
+        TIntrusiveList<TPage> Insert(TPage *page) Y_WARN_UNUSED_RESULT {
             ui32 tier = TPageTraits::GetTier(page);
-            return CacheTiers[tier].Touch(page);
+            return CacheTiers[tier].Insert(page);
+        }
+
+        TIntrusiveList<TPage> InsertUntouched(TPage *page) Y_WARN_UNUSED_RESULT {
+            ui32 tier = TPageTraits::GetTier(page);
+            return CacheTiers[tier].InsertUntouched(page);
         }
 
         void Erase(TPage *page) {
@@ -58,12 +48,18 @@ namespace NKikimr::NSharedCache {
             TryKeepInMemoryTier->UpdateLimit(tryKeepInMemoryLimit);
         }
 
+        TIntrusiveList<TPage> EnsureLimits() Y_WARN_UNUSED_RESULT {
+            auto evicted = RegularTier->EnsureLimits();
+            evicted.Append(TryKeepInMemoryTier->EnsureLimits());
+            return evicted;
+        }
+
+        ui64 GetLimit() const {
+            return RegularTier->GetLimit() + TryKeepInMemoryTier->GetLimit();
+        }
+
         ui64 GetSize() const {
-            ui64 result = 0;
-            for (const auto& cacheTier : CacheTiers) {
-                result += cacheTier.GetSize();
-            }
-            return result;
+            return RegularTier->GetSize() + TryKeepInMemoryTier->GetSize();
         }
 
         TString Dump() const {
@@ -80,6 +76,23 @@ namespace NKikimr::NSharedCache {
             }
         
             return result;
+        }
+
+        struct TStats {
+            ui64 RegularBytes;
+            ui64 TryKeepInMemoryBytes;
+            ui64 RegularLimit;
+            ui64 TryKeepInMemoryLimit;
+        };
+
+        // for ut
+        TStats GetStats() const {
+            return {
+                .RegularBytes = RegularTier->GetSize(),
+                .TryKeepInMemoryBytes = TryKeepInMemoryTier->GetSize(),
+                .RegularLimit = RegularTier->GetLimit(),
+                .TryKeepInMemoryLimit = TryKeepInMemoryTier->GetLimit()
+            };
         }
 
     private:

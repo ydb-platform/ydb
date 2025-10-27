@@ -8,7 +8,12 @@ TEST_SRCS(
 )
 
 SIZE(MEDIUM)
-REQUIREMENTS(ram:32)
+REQUIREMENTS(ram:32 cpu:4)
+
+IF (SANITIZER_TYPE == "memory")
+    ENV(YDB_STRESS_TEST_LIMIT_MEMORY=1)
+ENDIF()
+
 
 DEPENDS(
     ydb/apps/ydb

@@ -53,8 +53,8 @@ public:
     void AddOrderByAscendingExpression(std::string expression);
     void AddOrderByDescendingExpression(std::string expression);
 
-    void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type);
-    void AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type);
+    void AddJoinExpression(std::string table, std::string alias, std::string onExpression, ETableJoinType type, std::string predicate = "");
+    void AddArrayJoinExpression(const std::vector<std::string>& expressions,  const std::vector<std::string>& aliases, ETableJoinType type, std::string predicate = "");
 
     void SetOffset(i64 offset);
     void SetLimit(i64 limit);
@@ -81,6 +81,7 @@ private:
         std::string OnExpression;
         ETableJoinType Type;
         std::vector<TEntryWithAlias> ArrayJoinFields;
+        std::string Predicate;
     };
 
 private:

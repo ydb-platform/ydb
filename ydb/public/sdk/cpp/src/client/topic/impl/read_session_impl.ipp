@@ -11,7 +11,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <google/protobuf/util/time_util.h>
@@ -24,6 +24,7 @@
 #include <util/generic/yexception.h>
 #include <util/stream/mem.h>
 
+#include <atomic>
 #include <utility>
 #include <variant>
 
@@ -32,6 +33,7 @@ namespace NYdb::inline Dev::NTopic {
 
 static const bool RangesMode = !std::string{std::getenv("PQ_OFFSET_RANGES_MODE") ? std::getenv("PQ_OFFSET_RANGES_MODE") : ""}.empty();
 static const bool ExperimentalDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") ? std::getenv("PQ_EXPERIMENTAL_DIRECT_READ") : ""}.empty();
+static const bool DecompressEverything = !std::string{std::getenv("PQ_DECOMPRESS_EVERYTHING") ? std::getenv("PQ_DECOMPRESS_EVERYTHING") : ""}.empty();
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1361,7 +1363,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
 
     if (graceful) {
         auto committedOffset = partitionStream->GetMaxCommittedOffset();
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1422 TStopPartitionSessionEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             // TODO(qyryq) Is it safe to use GetMaxCommittedOffset here instead of StopPartitionSessionRequest.commmitted_offset?
@@ -1374,7 +1375,6 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
         released.set_partition_session_id(partitionStream->GetAssignId());
         WriteToProcessorImpl(std::move(req));
         PartitionStreams.erase(partitionSessionId);
-        LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "XXXXX PushEvent 1435 TPartitionSessionClosedEvent");
         pushRes = EventsQueue->PushEvent(
             partitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
@@ -1702,7 +1702,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     bool pushRes = EventsQueue->PushEvent(partitionStreamIt->second,
                             TReadSessionEvent::TPartitionSessionStatusEvent(
                                 partitionStreamIt->second, msg.committed_offset(),
-                                0, // TODO: support read offset in status
+                                msg.read_offset(),
                                 msg.partition_offsets().end(),
                                 TInstant::MilliSeconds(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(
                                     msg.write_time_high_watermark()))),
@@ -1735,11 +1735,13 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::StartDecompressionTask
     UpdateMemoryUsageStatisticsImpl();
     const i64 limit = GetDecompressedDataSizeLimit();
     Y_ABORT_UNLESS(limit > 0);
-    while (DecompressedDataSize < limit
-           && (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) < Settings.MaxMemoryUsageBytes_
-               || DecompressedDataSize == 0 /* Allow decompression of at least one message even if memory is full. */)
-           && !DecompressionQueue.empty())
-    {
+    while (
+        !DecompressionQueue.empty()
+        && (DecompressEverything
+            || (DecompressedDataSize < limit
+                && (static_cast<size_t>(CompressedDataSize + DecompressedDataSize) < Settings.MaxMemoryUsageBytes_
+                    || DecompressedDataSize == 0 /* Allow decompression of at least one message even if memory is full. */)))
+    ) {
         TDecompressionQueueItem& current = DecompressionQueue.front();
         auto sentToDecompress = current.BatchInfo->StartDecompressionTasks(Settings.DecompressionExecutor_,
                                                                            Max(limit - DecompressedDataSize, static_cast<i64>(1)),
@@ -2073,12 +2075,16 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RegisterParentPartition(ui32 partitionId, ui32 parentPartitionId, ui64 parentPartitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     auto& values = HierarchyData[partitionId];
     values.push_back({parentPartitionId, parentPartitionSessionId});
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     for (auto it = HierarchyData.begin(); it != HierarchyData.end();) {
         auto& values = it->second;
         for (auto v = values.begin(); v != values.end();) {
@@ -2098,6 +2104,8 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::UnregisterPartition(ui
 
 template<bool UseMigrationProtocol>
 std::vector<ui64> TSingleClusterReadSessionImpl<UseMigrationProtocol>::GetParentPartitionSessions(ui32 partitionId, ui64 partitionSessionId) {
+    std::lock_guard guard(HierarchyDataLock);
+
     auto it = HierarchyData.find(partitionId);
     if (it == HierarchyData.end()) {
         return {};
@@ -2780,7 +2788,7 @@ std::exception_ptr TDataDecompressionInfo<UseMigrationProtocol>::GetDecompressio
 
 template <bool UseMigrationProtocol>
 i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
-    const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, i64 availableMemory,
+    const typename IExecutor::TPtr& executor, i64 availableMemory,
     TDeferredActions<UseMigrationProtocol>& deferred)
 {
     auto session = CbContext->LockShared();
@@ -2978,7 +2986,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::OnDataDecompressed(i64 source
     if (auto session = CbContext->LockShared()) {
         // TODO (ildar-khisam@): distribute total ServerBytesSize in proportion of source size
         // Use CompressedDataSize, sourceSize, ServerBytesSize
-        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, std::exchange(ServerBytesSize, 0));
+        session->OnDataDecompressed(sourceSize, estimatedDecompressedSize, decompressedSize, messagesCount, ServerBytesSize.exchange(0));
     }
 }
 
@@ -3057,16 +3065,15 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         data.set_data(TStringType{decompressed});
                     }
                 }
-
-                DecompressedSize += data.data().size();
             } catch (...) {
                 parent->PutDecompressionError(std::current_exception(), messages.Batch, i);
-                data.clear_data(); // Free memory, because we don't count it.
 
                 if (auto session = parent->CbContext->LockShared()) {
                     session->GetLog() << TLOG_INFO << "Error decompressing data: " << CurrentExceptionMessage();
                 }
             }
+
+            DecompressedSize += data.data().size();
         }
     }
 
@@ -3168,7 +3175,7 @@ void TDeferredActions<UseMigrationProtocol>::DeferReadFromProcessor(const typena
 }
 
 template<bool UseMigrationProtocol>
-void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor, typename IAExecutor<UseMigrationProtocol>::TFunction&& task) {
+void TDeferredActions<UseMigrationProtocol>::DeferStartExecutorTask(const typename IExecutor::TPtr& executor, typename IExecutor::TFunction&& task) {
     ExecutorsTasks.emplace_back(executor, std::move(task));
 }
 

@@ -1,14 +1,14 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/driver/constants.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/grpc_connections/grpc_connections.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/driver/constants.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/grpc_connections/grpc_connections.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <library/cpp/logger/log.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/parser.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/getenv.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/parser.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/common/getenv.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 #include <util/stream/file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_ca.h>
@@ -41,7 +41,7 @@ public:
     size_t GetMaxQueuedRequests() const override { return MaxQueuedRequests; }
     TTcpKeepAliveSettings GetTcpKeepAliveSettings() const override { return TcpKeepAliveSettings; }
     bool GetDrinOnDtors() const override { return DrainOnDtors; }
-    TBalancingSettings GetBalancingSettings() const override { return BalancingSettings; }
+    TBalancingPolicy::TImpl GetBalancingSettings() const override { return BalancingSettings; }
     TDuration GetGRpcKeepAliveTimeout() const override { return GRpcKeepAliveTimeout; }
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
@@ -50,6 +50,7 @@ public:
     uint64_t GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
     uint64_t GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
+    std::shared_ptr<IExecutor> GetExecutor() const override { return Executor; }
 
     std::string Endpoint;
     size_t NetworkThreadsNum = 2;
@@ -69,7 +70,7 @@ public:
             TCP_KEEPALIVE_INTERVAL
         };
     bool DrainOnDtors = true;
-    TBalancingSettings BalancingSettings = TBalancingSettings{EBalancingPolicy::UsePreferableLocation, std::string()};
+    TBalancingPolicy::TImpl BalancingSettings = TBalancingPolicy::TImpl::UsePreferableLocation(std::nullopt);
     TDuration GRpcKeepAliveTimeout = TDuration::Seconds(10);
     bool GRpcKeepAlivePermitWithoutCalls = true;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
@@ -78,6 +79,7 @@ public:
     uint64_t MaxOutboundMessageSize = 0;
     uint64_t MaxMessageSize = 0;
     TLog Log; // Null by default.
+    std::shared_ptr<IExecutor> Executor;
 };
 
 TDriverConfig::TDriverConfig(const std::string& connectionString)
@@ -170,9 +172,13 @@ TDriverConfig& TDriverConfig::SetDrainOnDtors(bool allowed) {
     return *this;
 }
 
-TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const std::string& params) {
-    Impl_->BalancingSettings = TBalancingSettings{policy, params};
+TDriverConfig& TDriverConfig::SetBalancingPolicy(TBalancingPolicy&& policy) {
+    Impl_->BalancingSettings = std::move(*policy.Impl_);
     return *this;
+}
+
+TDriverConfig& TDriverConfig::SetBalancingPolicy(EBalancingPolicy policy, const std::string& params) {
+    return SetBalancingPolicy(TBalancingPolicy(policy, params));
 }
 
 TDriverConfig& TDriverConfig::SetGRpcKeepAliveTimeout(TDuration timeout) {
@@ -207,6 +213,11 @@ TDriverConfig& TDriverConfig::SetMaxMessageSize(uint64_t maxMessageSize) {
 
 TDriverConfig& TDriverConfig::SetLog(std::unique_ptr<TLogBackend>&& log) {
     Impl_->Log.ResetBackend(THolder(log.release()));
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetExecutor(std::shared_ptr<IExecutor> executor) {
+    Impl_->Executor = executor;
     return *this;
 }
 
@@ -253,7 +264,7 @@ TDriverConfig TDriver::GetConfig() const {
         Impl_->TcpKeepAliveSettings_.Interval
     );
     config.SetDrainOnDtors(Impl_->DrainOnDtors_);
-    config.SetBalancingPolicy(Impl_->BalancingSettings_.Policy, Impl_->BalancingSettings_.PolicyParams);
+    config.SetBalancingPolicy(std::make_unique<TBalancingPolicy::TImpl>(Impl_->BalancingSettings_));
     config.SetGRpcKeepAliveTimeout(Impl_->GRpcKeepAliveTimeout_);
     config.SetGRpcKeepAlivePermitWithoutCalls(Impl_->GRpcKeepAlivePermitWithoutCalls_);
     config.SetSocketIdleTimeout(Impl_->SocketIdleTimeout_);

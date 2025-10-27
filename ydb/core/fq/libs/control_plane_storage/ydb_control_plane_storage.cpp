@@ -527,7 +527,7 @@ NThreading::TFuture<void> TYdbControlPlaneStorageActor::PickTask(
         taskParams.PrepareParams, requestCounters, debugInfo, validators, transactionMode, taskParams.RetryOnTli)
             .Apply([=, responseTasks=responseTasks, queryId = taskParams.QueryId](const auto& future) {
                 const auto status = future.GetValue();
-                if (responseTasks && status.GetStatus() == EStatus::GENERIC_ERROR) {
+                if (responseTasks && !status.IsSuccess()) {
                     responseTasks->SafeEraseTaskBlocking(queryId);
                 }
             });

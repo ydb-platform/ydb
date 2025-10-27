@@ -162,9 +162,9 @@ namespace NOps {
                 Y_ENSURE(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
-                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
+                    TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
-                    PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
+                    PageCollections[slot] = new TPrivatePageCache::TPageCollection(std::move(pageCollection));
                     Y_ENSURE(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
@@ -239,7 +239,7 @@ namespace NOps {
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
             EPriority ReadPriority;
-            TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
+            TVector<TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
             std::optional<NTable::TLoader> Loader;

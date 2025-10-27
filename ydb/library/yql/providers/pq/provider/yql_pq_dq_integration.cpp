@@ -267,6 +267,7 @@ public:
                 }
 
                 srcDesc.SetFormat(format);
+                srcDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
                 if (auto maybeToken = TMaybeNode<TCoSecureParam>(topicSource.Token().Raw())) {
                     srcDesc.MutableToken()->SetName(TString(maybeToken.Cast().Name().Value()));
@@ -290,7 +291,7 @@ public:
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
                 YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
-                TString predicateSql = NYql::FormatWhere(predicateProto);
+                TString predicateSql = NYql::FormatPredicate(predicateProto);
                 if (sharedReading) {
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);
@@ -301,6 +302,9 @@ public:
                     auto taskSensorLabel = srcDesc.AddTaskSensorLabel();
                     taskSensorLabel->SetLabel(label);
                     taskSensorLabel->SetValue(value);
+                }
+                for (auto nodeId : State_->NodeIds) {
+                    srcDesc.AddNodeIds(nodeId);
                 }
 
                 NYql::NConnector::NApi::TExpression watermarkExprProto;
@@ -344,6 +348,8 @@ public:
                     sinkDesc.SetTopicPath(TString(topicPath));
                     sinkDesc.SetDatabase(TString(topicDatabase));
                 }
+
+                sinkDesc.SetUseActorSystemThreadsInTopicClient(State_->UseActorSystemThreadsInTopicClient);
 
                 size_t const settingsCount = topicSink.Settings().Size();
                 for (size_t i = 0; i < settingsCount; ++i) {

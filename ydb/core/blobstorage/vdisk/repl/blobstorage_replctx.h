@@ -53,8 +53,6 @@ namespace NKikimr {
         {
             Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
         }
-
-        bool GetAddHeader() const { return !HullCtx || HullCtx->AddHeader; }
     };
 
 } // NKikimr

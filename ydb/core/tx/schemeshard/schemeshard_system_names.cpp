@@ -19,7 +19,6 @@ const TVector<TString> ReservedNames = {
     ".metadata",
 
     // Database has this place for the system views.
-    // (Feature flag EnableSystemViews manages it's use.)
     ".sys",
 
     // Database has this directory for keeping kqp-session bound temporary objects (tables etc)

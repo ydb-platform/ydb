@@ -1,7 +1,7 @@
 import pytest
 import io
 
-from build.plugins.lib.nots.package_manager.pnpm.lockfile import PnpmLockfile, PnpmLockfileHelper
+from build.plugins.lib.nots.package_manager.pnpm.pnpm_lockfile import PnpmLockfile, PnpmLockfileHelper
 
 
 @pytest.fixture()

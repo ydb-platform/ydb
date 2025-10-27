@@ -40,31 +40,31 @@ TString TExtensionFinal::FixReferenceInHtml(TStringBuf html, TStringBuf host) {
 void TExtensionFinal::SetProxyResponseHeaders() {
     auto& params = Context->Params;
 
-    THolder<NHttp::THeadersBuilder> headers = std::move(params->HeadersOverride);
+    THolder<NHttp::THeadersBuilder> headers = std::move(params.HeadersOverride);
 
-    params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
     for (const auto& header : Settings.RESPONSE_HEADERS_WHITE_LIST) {
         if (headers->Has(header)) {
-            params->HeadersOverride->Set(header, headers->Get(header));
+            params.HeadersOverride->Set(header, headers->Get(header));
         }
     }
 
     if (headers->Has(LOCATION_HEADER)) {
-        params->HeadersOverride->Set(LOCATION_HEADER, GetFixedLocationHeader(headers->Get(LOCATION_HEADER)));
+        params.HeadersOverride->Set(LOCATION_HEADER, GetFixedLocationHeader(headers->Get(LOCATION_HEADER)));
     }
 }
 
 void TExtensionFinal::SetProxyResponseBody() {
     auto& params = Context->Params;
 
-    TStringBuf contentType = params->HeadersOverride->Get("Content-Type").NextTok(';');
+    TStringBuf contentType = params.HeadersOverride->Get("Content-Type").NextTok(';');
     if (contentType == "text/html") {
-        params->BodyOverride = FixReferenceInHtml(params->BodyOverride, params->ProtectedPage->Host);
+        params.BodyOverride = FixReferenceInHtml(params.BodyOverride, params.ProtectedPage->Host);
     }
 }
 
 TString TExtensionFinal::GetFixedLocationHeader(TStringBuf location) {
-    auto& page = Context->Params->ProtectedPage;
+    auto& page = Context->Params.ProtectedPage;
     if (location.StartsWith("//")) {
         return TStringBuilder() << '/' << (page->Scheme.empty() ? "" : TString(page->Scheme) + "://") << location.SubStr(2);
     } else if (location.StartsWith('/')) {
@@ -83,7 +83,7 @@ TString TExtensionFinal::GetFixedLocationHeader(TStringBuf location) {
 
 void TExtensionFinal::Execute(TIntrusivePtr<TExtensionContext> ctx) {
     Context = std::move(ctx);
-    if (Context->Params->StatusOverride) {
+    if (!Context->Params.StatusOverride.empty()) {
         SetProxyResponseHeaders();
         SetProxyResponseBody();
     }

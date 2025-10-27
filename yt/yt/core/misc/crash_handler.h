@@ -24,13 +24,6 @@ void CrashSignalHandler(int signal, siginfo_t* si, void* uc);
 void CrashSignalHandler(int signal);
 #endif
 
-template <class TCallback>
-void DumpStackTrace(TCallback flushCallback, void* startPC = nullptr);
-
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT
-
-#define CRASH_HANDLER_INL_H_
-#include "crash_handler-inl.h"
-#undef CRASH_HANDLER_INL_H_

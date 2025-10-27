@@ -1,3 +1,14 @@
+====================Apache-2.0 AND MIT====================
+ * SPDX-License-Identifier: (Apache-2.0 OR MIT)
+
+
+====================Apache-2.0 OR MIT====================
+ * be copied, modified, or distributed except according to those terms.
+ *
+ * Distributed on an "AS IS" BASIS, WITHOUT WARRANTY OF ANY KIND, either
+ * express or implied.  See your chosen license for details.
+
+
 ====================BSD-3-Clause====================
  * // Use of this source code is governed by a BSD-style license that can be
  * // found in the LICENSE file.
@@ -40,6 +51,10 @@ Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2020 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
  * Copyright (c) 2021 ngtcp2 contributors
 
 
@@ -57,6 +72,16 @@ Software Foundation, Inc.
 
 ====================COPYRIGHT====================
  * Copyright (c) 2025 ngtcp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2025 ngtcp2 contributors
+ * Copyright (c) 2023 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright 2014-2019 Melissa O'Neill <oneill@pcg-random.org>,
+ *                     and the PCG Project contributors.
 
 
 ====================COPYRIGHT====================
@@ -110,13 +135,16 @@ Marin Rukavina
 Mark Chiou
 Martin Thomson
 Michael White
+Mike L.
 Moritz Buhl
 NKTelnet
 Natris
+Niek Bouman
 Nishant Nori
 Patrick Griffis
 Pavel Otchertsov
 Peter Wu
+Petr Menšík
 Samuel Henrique
 Stefan Eissing
 Tal Regev
@@ -133,8 +161,10 @@ flx413
 hondaxiao
 hyunjic
 junqiw
+krant
 msoxzw
 nickfajones
+niekbouman
 rhoxn
 scw00
 shibin k v
@@ -190,3 +220,11 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ====================MIT====================
 The MIT License
+
+
+====================MIT AND Apache-2.0====================
+ * Licensed under the Apache License, Version 2.0 (provided in
+ * LICENSE-APACHE.txt and at http://www.apache.org/licenses/LICENSE-2.0)
+ * or under the MIT license (provided in LICENSE-MIT.txt and at
+ * http://opensource.org/licenses/MIT), at your option. This file may not
+ * be copied, modified, or distributed except according to those terms.

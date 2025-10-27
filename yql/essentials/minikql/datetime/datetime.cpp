@@ -20,4 +20,4 @@ TInstant DoAddYears(TInstant current, i64 years, const NUdf::IDateBuilder& build
     return TInstant::FromValue(storage.ToTimestamp(builder));
 }
 
-}
+} // namespace NYql::DateTime

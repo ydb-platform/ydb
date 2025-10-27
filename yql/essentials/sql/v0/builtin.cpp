@@ -1241,7 +1241,7 @@ public:
 
         const auto memberPos = Args_[0]->GetPos();
         TVector<TNodePtr> repackArgs = {BuildAtom(memberPos, "row", NYql::TNodeFlags::Default)};
-        if (auto literal = Args_[1]->GetLiteral("String")) {
+        if (/*auto literal =*/ Args_[1]->GetLiteral("String")) {
             TString targetType;
             if (!GetDataTypeStringNode(ctx, *this, 1, &targetType)) {
                 return false;
@@ -1327,7 +1327,7 @@ private:
     ui32 ArgsCount_;
 };
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNodePtr externalTypes) {
     TVector<TNodePtr> argsTypeItems;
     for (auto& arg : args) {
         argsTypeItems.push_back(new TCallNodeImpl(pos, "TypeOf", TVector<TNodePtr>(1, arg)));
@@ -1336,8 +1336,8 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     TVector<TNodePtr> userTypeItems;
     userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", argsTypeItems));
     userTypeItems.push_back(new TCallNodeImpl(pos, "StructType", {}));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -1345,13 +1345,13 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, const TVector<TNodePtr>& args, TNode
     return new TCallNodeImpl(pos, "TupleType", userTypeItems);
 }
 
-TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     TVector<TNodePtr> userTypeItems;
     userTypeItems.reserve(3);
     userTypeItems.push_back(positionalArgs->Y("TypeOf", positionalArgs));
     userTypeItems.push_back(positionalArgs->Y("TypeOf", namedArgs));
-    if (customUserType) {
-        userTypeItems.push_back(customUserType);
+    if (externalTypes) {
+        userTypeItems.push_back(externalTypes);
     } else {
         userTypeItems.push_back(new TCallNodeImpl(pos, "TupleType", {}));
     }
@@ -1360,7 +1360,7 @@ TNodePtr BuildUdfUserTypeArg(TPosition pos, TNodePtr positionalArgs, TNodePtr na
 }
 
 TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector<TNodePtr>& args,
-        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr customUserType) {
+        TNodePtr positionalArgs, TNodePtr namedArgs, TNodePtr externalTypes) {
     if (!ctx.Settings.EnableGenericUdfs) {
         return {};
     }
@@ -1368,9 +1368,9 @@ TVector<TNodePtr> BuildUdfArgs(const TContext& ctx, TPosition pos, const TVector
     udfArgs.push_back(new TAstListNodeImpl(pos));
     udfArgs[0]->Add(new TAstAtomNodeImpl(pos, "Void", 0));
     if (namedArgs) {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, positionalArgs, namedArgs, externalTypes));
     } else {
-        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, customUserType));
+        udfArgs.push_back(BuildUdfUserTypeArg(pos, args, externalTypes));
     }
     return udfArgs;
 }
@@ -1414,16 +1414,16 @@ public:
                 src->AllColumns();
             }
         } else {
-            TNodePtr customUserType = nullptr;
+            TNodePtr externalTypes = nullptr;
             if (Module_ == "Tensorflow" && Name_ == "RunBatch") {
                 if (Args_.size() > 2) {
                     auto passThroughAtom = Q("PassThrough");
                     auto passThroughType = Y("StructMemberType", Y("ListItemType", Y("TypeOf", Args_[1])), passThroughAtom);
-                    customUserType = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
+                    externalTypes = Y("AddMemberType", Args_[2], passThroughAtom, passThroughType);
                     Args_.erase(Args_.begin() + 2);
                 }
             }
-            auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, customUserType);
+            auto udfArgs = BuildUdfArgs(ctx, Pos_, Args_, nullptr, nullptr, externalTypes);
             Node_ = BuildUdf(ctx, Pos_, Module_, Name_, udfArgs);
         }
         return Node_->Init(ctx, src);
@@ -2291,8 +2291,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             usedArgs = positionalArgsElements;
         }
 
-        TNodePtr customUserType = nullptr;
-        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType);
+        TNodePtr externalTypes = nullptr;
+        const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, externalTypes);
         TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs);
         TVector<TNodePtr> applyArgs = { udfNode };
         applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end());
@@ -2470,10 +2470,10 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
     auto usedArgs = reuseArgs ? reuseArgs : args;
 
-    TNodePtr customUserType = nullptr;
+    TNodePtr externalTypes = nullptr;
     if (ns == "yson") {
         if (name == "ConvertTo" && usedArgs.size() > 1) {
-            customUserType = usedArgs[1];
+            externalTypes = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
         ui32 optionsIndex = name.Contains("Lookup") ? 2 : 1;
@@ -2485,7 +2485,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             << "Json UDF is deprecated and is going to be removed, please switch to Yson UDF that also supports Json input: https://yql.yandex-team.ru/docs/yt/udf/list/yson/";
     }
 
-    const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, customUserType);
+    const auto& udfArgs = BuildUdfArgs(ctx, pos, usedArgs, positionalArgs, namedArgs, externalTypes);
     TNodePtr udfNode = BuildUdf(ctx, pos, nameSpace, name, udfArgs);
     TVector<TNodePtr> applyArgs = { udfNode };
     applyArgs.insert(applyArgs.end(), usedArgs.begin(), usedArgs.end());

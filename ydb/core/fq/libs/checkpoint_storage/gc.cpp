@@ -172,12 +172,12 @@ void TActorGC::Handle(TEvCheckpointStorage::TEvNewCheckpointSucceeded::TPtr& ev)
         });
 }
 
-} // namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewGC(
-    const NConfig::TCheckpointGcConfig&,
+    const TCheckpointStorageSettings::TGcSettings&,
     const TCheckpointStoragePtr& checkpointStorage,
     const TStateStoragePtr& stateStorage)
 {

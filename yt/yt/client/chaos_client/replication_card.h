@@ -163,6 +163,11 @@ void CanonizeReplicationProgress(TReplicationProgress* progress);
 
 NTransactionClient::TTimestamp GetReplicationProgressMinTimestamp(const TReplicationProgress& progress);
 NTransactionClient::TTimestamp GetReplicationProgressMaxTimestamp(const TReplicationProgress& progress);
+NTransactionClient::TTimestamp GetReplicationCardProgressMinTimestamp(
+    const TReplicationCard& replicationCard,
+    NTableClient::TLegacyKey lower,
+    NTableClient::TLegacyKey upper);
+
 NTransactionClient::TTimestamp GetReplicationProgressMinTimestamp(
     const TReplicationProgress& progress,
     NTableClient::TLegacyKey lower,

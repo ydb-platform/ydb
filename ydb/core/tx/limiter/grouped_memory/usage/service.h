@@ -29,6 +29,10 @@ private:
         return TMemoryLimiterPolicy::ConsumerKind;
     }
 
+    static ui64 GetHardLimitMultiplier() {
+        return TMemoryLimiterPolicy::HardLimitMultiplier;
+    }
+
 public:
     static std::shared_ptr<TStageFeatures> BuildStageFeatures(const TString& name, const ui64 limit) {
         if (!IsEnabled()) {
@@ -86,7 +90,7 @@ public:
     }
     static NActors::IActor* CreateService(const TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> signals) {
         Register(config);
-        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), signals, GetConsumerKind());
+        return new TMemoryLimiterActor(config, GetMemoryLimiterName(), signals, GetConsumerKind(), GetHardLimitMultiplier());
     }
 };
 
@@ -95,6 +99,7 @@ public:
     static const inline TString Name = "Scan";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesScanGroupedMemory;
     static constexpr bool ExternalProcessIdAllocation = true;
+    static constexpr ui64 HardLimitMultiplier = 1;
 };
 
 using TScanMemoryLimiterOperator = TServiceOperatorImpl<TScanMemoryLimiterPolicy>;
@@ -104,6 +109,7 @@ public:
     static const inline TString Name = "Comp";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesCompGroupedMemory;
     static constexpr bool ExternalProcessIdAllocation = false;
+    static constexpr ui64 HardLimitMultiplier = 4;
 };
 
 using TCompMemoryLimiterOperator = TServiceOperatorImpl<TCompMemoryLimiterPolicy>;
@@ -113,6 +119,7 @@ public:
     static const inline TString Name = "Dedu";
     static const inline NMemory::EMemoryConsumerKind ConsumerKind = NMemory::EMemoryConsumerKind::ColumnTablesDeduplicationGroupedMemory;
     static constexpr bool ExternalProcessIdAllocation = false;
+    static constexpr ui64 HardLimitMultiplier = 1;
 };
 
 using TDeduplicationMemoryLimiterOperator = TServiceOperatorImpl<TDeduplicationMemoryLimiterPolicy>;

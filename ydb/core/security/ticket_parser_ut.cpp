@@ -8,10 +8,13 @@
 #include <ydb/library/testlib/service_mocks/user_account_service_mock.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/nebius_access_service_mock.h>
+#include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <util/system/tempfile.h>
 
 #include <ydb/core/security/certificate_check/cert_auth_utils.h>
+#include <ydb/core/security/token_manager/token_manager.h>
+#include <ydb/core/util/actorsys_test/testactorsys.h>
 #include "ticket_parser.h"
 
 namespace NKikimr {
@@ -60,6 +63,14 @@ constexpr bool IsApiKeySupported() {
 template <class TAccessServiceMock>
 constexpr bool IsSignatureSupported() {
     return !IsNebiusAccessService<TAccessServiceMock>();
+}
+
+template <typename HttpType>
+void EatWholeString(TIntrusivePtr<HttpType>& request, const TString& data) {
+    request->EnsureEnoughSpaceAvailable(data.size());
+    auto size = std::min(request->Avail(), data.size());
+    memcpy(request->Pos(), data.data(), size);
+    request->Advance(size);
 }
 
 } // namespace
@@ -1224,7 +1235,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1239,7 +1250,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1314,7 +1325,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1327,7 +1338,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         if (IsSignatureSupported<TAccessServiceMock>()) {
             runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2172,4 +2183,290 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         AuthorizationModify<NKikimr::TNebiusAccessServiceMock>();
     }
 }
+
+Y_UNIT_TEST_SUITE(AuthorizeRequestToAccessService) {
+
+struct TAuthConfigSettings {
+    struct TProviderSettings {
+        TString SuccessRefreshPeriod = "1h";
+        TString MinErrorRefreshPeriod = "1s";
+        TString MaxErrorRefreshPeriod = "1m";
+        TString RequestTimeout = "1m";
+    };
+
+    struct TVmMetadataInfoSettings {
+        TString Id;
+        TString Endpoint;
+    };
+
+    struct TVmMetadataProviderInitializer {
+        std::vector<TVmMetadataInfoSettings> VmMetadataInfo;
+        TProviderSettings Settings;
+    };
+
+    bool UseBlackBox = false;
+    bool UseStaff = false;
+    bool UseAccessServiceTLS = false;
+    TString AccessServiceEndpoint;
+    TString AccessServiceTokenName;
+    bool EnableTokenManager = true;
+    TVmMetadataProviderInitializer VmMetadataProviderInitializer;
+};
+
+NKikimrProto::TAuthConfig CreateAuthConfig(const TAuthConfigSettings& authConfigSettings) {
+    NKikimrProto::TAuthConfig authConfig;
+    authConfig.SetUseBlackBox(authConfigSettings.UseBlackBox);
+    SetUseAccessService<TTicketParserAccessServiceMockV2>(authConfig);
+    authConfig.SetUseAccessServiceApiKey(IsApiKeySupported<TTicketParserAccessServiceMockV2>());
+    authConfig.SetUseAccessServiceTLS(authConfigSettings.UseAccessServiceTLS);
+    authConfig.SetAccessServiceEndpoint(authConfigSettings.AccessServiceEndpoint);
+    authConfig.SetUseStaff(authConfigSettings.UseStaff);
+    authConfig.SetAccessServiceTokenName(authConfigSettings.AccessServiceTokenName);
+    auto tokenManagerConfig = authConfig.MutableTokenManager();
+    tokenManagerConfig->SetEnable(authConfigSettings.EnableTokenManager);
+    auto vmMetadataTokenProviderConfig = tokenManagerConfig->MutableVmMetadataProvider();
+    auto vmMetadataInfos = vmMetadataTokenProviderConfig->MutableProvidersInfo();
+    const auto& vmMetadataInitializer = authConfigSettings.VmMetadataProviderInitializer;
+    for (const auto& infoSettings : vmMetadataInitializer.VmMetadataInfo) {
+        auto vmMetadataInfo = vmMetadataInfos->Add();
+        vmMetadataInfo->SetId(infoSettings.Id);
+        vmMetadataInfo->SetEndpoint(infoSettings.Endpoint);
+    }
+    auto vmMetadataProviderSettings = vmMetadataTokenProviderConfig->MutableSettings();
+    vmMetadataProviderSettings->SetSuccessRefreshPeriod(vmMetadataInitializer.Settings.SuccessRefreshPeriod);
+    vmMetadataProviderSettings->SetMinErrorRefreshPeriod(vmMetadataInitializer.Settings.MinErrorRefreshPeriod);
+    vmMetadataProviderSettings->SetMaxErrorRefreshPeriod(vmMetadataInitializer.Settings.MaxErrorRefreshPeriod);
+    vmMetadataProviderSettings->SetRequestTimeout(vmMetadataInitializer.Settings.RequestTimeout);
+    return authConfig;
+}
+
+struct TVmMetadataHandlerSettings {
+    struct TResponse {
+        TString Code = "200";
+        TString Message = "OK";
+    };
+
+    TString AccessTokenField = "\"access_token\":\"ydb.service.token\"";
+    TString ExpiresInField = "\"expires_in\":86400";
+    bool IsNetworkUnreachable = false;
+    TResponse Response;
+};
+
+void HandleVmMetadataRequest(TTestActorRuntime* runtime, const TVmMetadataHandlerSettings& settings) {
+    TAutoPtr<IEventHandle> handle;
+    NHttp::TEvHttpProxy::TEvHttpOutgoingRequest* outgoingRequestEv = runtime->GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingRequest>(handle);
+    TActorId fakeHttpProxy = runtime->AllocateEdgeActor();
+    if (settings.IsNetworkUnreachable) {
+        runtime->Send(new IEventHandle(handle->Sender, fakeHttpProxy, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, nullptr, "Network is unreachable")));
+        return;
+    }
+    const TString contentResponse = "{"
+                                        + settings.AccessTokenField + (settings.AccessTokenField.empty() ? "" : ",")
+                                        + settings.ExpiresInField + (settings.ExpiresInField.empty() ? "" : ",") +
+                                        "\"token_type\":\"Bearer\""
+                                    "}";
+    NHttp::THttpIncomingResponsePtr incomingResponse = new NHttp::THttpIncomingResponse(outgoingRequestEv->Request);
+    EatWholeString(incomingResponse, "HTTP/1.1 " + settings.Response.Code + " " + settings.Response.Message + "\r\n"
+                                                "Connection: close\r\n"
+                                                "Content-Type: application/json; charset=utf-8\r\n"
+                                                "Content-Length: " + ToString(contentResponse.length()) + "\r\n\r\n" + contentResponse);
+    runtime->Send(new IEventHandle(handle->Sender, fakeHttpProxy, new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(outgoingRequestEv->Request, incomingResponse)));
+}
+
+Y_UNIT_TEST(CanAuthorizeYdbInAccessService) {
+    using namespace Tests;
+
+    TPortManager tp;
+    const ui16 port = tp.GetPort(2134);
+    const ui16 accessServicePort = tp.GetPort(4284);
+    const TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
+
+    const TString accessServiceTokenName = "token-for-access-service";
+    NKikimrProto::TAuthConfig authConfig = CreateAuthConfig({
+        .UseBlackBox = false,
+        .UseStaff = false,
+        .UseAccessServiceTLS = false,
+        .AccessServiceEndpoint = accessServiceEndpoint,
+        .AccessServiceTokenName = accessServiceTokenName,
+        .VmMetadataProviderInitializer = {
+            .VmMetadataInfo = {
+                {
+                    .Id = accessServiceTokenName,
+                    .Endpoint = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
+                }
+            },
+            .Settings = {}
+        }
+    });
+
+    auto settings = TServerSettings(port, authConfig);
+    settings.SetEnableAccessServiceBulkAuthorization(true);
+    settings.SetDomainName("Root");
+    settings.CreateTicketParser = NKikimr::CreateTicketParser;
+
+    TServer server(settings);
+    TTestActorRuntime* runtime = server.GetRuntime();
+    runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+    runtime->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+    runtime->SetLogPriority(NKikimrServices::TOKEN_MANAGER, NLog::PRI_TRACE);
+
+    // Create Access Service mock
+    TTicketParserAccessServiceMockV2 accessServiceMock;
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+    std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+    accessServiceMock.AllowedServiceAuthTokens = {"Bearer ydb-service-account"};
+
+    // Handle vm metadata request
+    HandleVmMetadataRequest(runtime, {
+        .AccessTokenField = "\"access_token\":\"ydb-service-account\"",
+        .ExpiresInField = "\"expires_in\":41133",
+        .Response = {}
+    });
+
+    TString userToken = "Bearer user1";
+    TActorId ticketParserClient = runtime->AllocateEdgeActor();
+    TVector<std::pair<TString, TString>> attrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
+
+    // Authorization successful.
+    runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                                                                userToken,
+                                                                                attrs,
+                                                                                {"something.read"})));
+    TAutoPtr<IEventHandle> handle;
+    TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+    // waiting for ticket parser get success token for access service from service token manager
+    while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                        userToken,
+                                        attrs,
+                                        {"something.read"})));
+        authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+    }
+    UNIT_ASSERT_C(authorizeTicketResultEv->Error.empty(), authorizeTicketResultEv->Error);
+    UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user1@as", authorizeTicketResultEv->Token->GetUserSID());
+    UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+    UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+    UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+}
+
+Y_UNIT_TEST(CanRefreshTokenForAccessService) {
+    using namespace Tests;
+
+    TPortManager tp;
+    const ui16 port = tp.GetPort(2134);
+    const ui16 accessServicePort = tp.GetPort(4284);
+    const TString accessServiceEndpoint = "localhost:" + ToString(accessServicePort);
+
+    const TString accessServiceTokenName = "token-for-access-service";
+    NKikimrProto::TAuthConfig authConfig = CreateAuthConfig({
+        .UseBlackBox = false,
+        .UseStaff = false,
+        .UseAccessServiceTLS = false,
+        .AccessServiceEndpoint = accessServiceEndpoint,
+        .AccessServiceTokenName = accessServiceTokenName,
+        .VmMetadataProviderInitializer = {
+            .VmMetadataInfo = {
+                {
+                    .Id = accessServiceTokenName,
+                    .Endpoint = "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token"
+                }
+            },
+            .Settings = {
+                .SuccessRefreshPeriod = "2s",
+                .MinErrorRefreshPeriod = "1s",
+                .MaxErrorRefreshPeriod = "5s"
+            }
+        }
+    });
+
+    auto settings = TServerSettings(port, authConfig);
+    settings.SetEnableAccessServiceBulkAuthorization(true);
+    settings.SetDomainName("Root");
+    settings.CreateTicketParser = NKikimr::CreateTicketParser;
+
+    TServer server(settings);
+    TTestActorRuntime* runtime = server.GetRuntime();
+    runtime->SetLogPriority(NKikimrServices::TICKET_PARSER, NLog::PRI_TRACE);
+    runtime->SetLogPriority(NKikimrServices::GRPC_CLIENT, NLog::PRI_TRACE);
+    runtime->SetLogPriority(NKikimrServices::TOKEN_MANAGER, NLog::PRI_TRACE);
+
+    // Create Access Service mock
+    TTicketParserAccessServiceMockV2 accessServiceMock;
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
+    std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
+    accessServiceMock.AllowedUserPermissions.insert("user2-something.read");
+    accessServiceMock.AllowedServiceAuthTokens = {"Bearer ydb-service-account"};
+
+    // Handle vm metadata request
+    TAutoPtr<IEventHandle> handle;
+     HandleVmMetadataRequest(runtime, {
+        .AccessTokenField = "\"access_token\":\"ydb-service-account\"",
+        .ExpiresInField = "\"expires_in\":41133",
+        .Response = {}
+    });
+
+    TActorId ticketParserClient = runtime->AllocateEdgeActor();
+    TVector<std::pair<TString, TString>> attrs = {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}};
+
+    // Authorization successful.
+    {
+        TString userToken = "Bearer user1";
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            attrs,
+                                            {"something.read"})));
+        TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        // waiting for ticket parser get success token for access service from service token manager
+        while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            attrs,
+                                            {"something.read"})));
+            authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        }
+        UNIT_ASSERT_C(authorizeTicketResultEv->Error.empty(), authorizeTicketResultEv->Error);
+        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user1@as", authorizeTicketResultEv->Token->GetUserSID());
+        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+    }
+
+    // Change allowed token for authorization in access service. Jld token is not accepted
+    accessServiceMock.AllowedServiceAuthTokens = {"Bearer new-ydb-service-account"};
+
+    // Update token in token manager
+     HandleVmMetadataRequest(runtime, {
+        .AccessTokenField = "\"access_token\":\"new-ydb-service-account\"",
+        .ExpiresInField = "\"expires_in\":41133",
+        .Response = {}
+    });
+
+    // Authorization successful.
+    {
+        TString userToken = "Bearer user2";
+        runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            attrs,
+                                            {"something.read"})));
+        TEvTicketParser::TEvAuthorizeTicketResult* authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        // waiting for ticket parser get success token for access service from service token manager
+        while (authorizeTicketResultEv->Error.Retryable && authorizeTicketResultEv->Error.Message == "Unauthenticated service") {
+            runtime->Send(new IEventHandle(MakeTicketParserID(), ticketParserClient, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            attrs,
+                                            {"something.read"})));
+            authorizeTicketResultEv = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+        }
+        UNIT_ASSERT_C(authorizeTicketResultEv->Error.empty(), authorizeTicketResultEv->Error);
+        UNIT_ASSERT_EQUAL_C(authorizeTicketResultEv->Token->GetUserSID(), "user2@as", authorizeTicketResultEv->Token->GetUserSID());
+        UNIT_ASSERT_EQUAL(authorizeTicketResultEv->Token->GetSubjectType(), NACLibProto::ESubjectType::SUBJECT_TYPE_USER);
+        UNIT_ASSERT_C(authorizeTicketResultEv->Token->IsExist("something.read-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+        UNIT_ASSERT_C(!authorizeTicketResultEv->Token->IsExist("something.write-bbbb4554@as"), authorizeTicketResultEv->Token->ShortDebugString());
+    }
+}
+
+} // Test suite AuthorizeRequestToAccessService
+
 }

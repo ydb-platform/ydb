@@ -795,6 +795,14 @@
             "Match": {"Type": "Callable", "Name": "Sync!"}
         },
         {
+            "Name": "TCoSeq",
+            "Base": "TFreeArgCallable",
+            "Match": {"Type": "Callable", "Name": "Seq!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoDataSource",
             "Base": "TFreeArgCallable",
             "Match": {"Type": "Callable", "Name": "DataSource"},
@@ -996,6 +1004,11 @@
             "Match": {"Type": "Callable", "Name": "Json"}
         },
         {
+            "Name": "TCoJsonDocument",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "JsonDocument"}
+        },
+        {
             "Name": "TCoBool",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Bool"}
@@ -1095,6 +1108,11 @@
             "Name": "TCoUuid",
             "Base": "TCoDataCtor",
             "Match": {"Type": "Callable", "Name": "Uuid"}
+        },
+        {
+            "Name": "TCoDyNumber",
+            "Base": "TCoDataCtor",
+            "Match": {"Type": "Callable", "Name": "DyNumber"}
         },
         {
             "Name": "TCoAsList",
@@ -2632,6 +2650,32 @@
             "Name": "TCoPgResultItem",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "PgResultItem"},
+            "Children": [
+                {"Index": 0, "Name": "ExpandedColumns", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Type", "Type": "TCallable"},
+                {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoYqlSelect",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YqlSelect"},
+            "Children": [
+                {"Index": 0, "Name": "SelectOptions", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
+            "Name": "TCoYqlSetItem",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YqlSetItem"},
+            "Children": [
+                {"Index": 0, "Name": "SetItemOptions", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name": "TCoYqlResultItem",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YqlResultItem"},
             "Children": [
                 {"Index": 0, "Name": "ExpandedColumns", "Type": "TExprBase"},
                 {"Index": 1, "Name": "Type", "Type": "TCallable"},

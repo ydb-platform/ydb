@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.2.13)
+VERSION(0.2.14)
 
 LICENSE(MIT)
 
@@ -11,6 +11,7 @@ NO_LINT()
 PY_SRCS(
     TOP_LEVEL
     wcwidth/__init__.py
+    wcwidth/table_vs15.py
     wcwidth/table_vs16.py
     wcwidth/table_wide.py
     wcwidth/table_zero.py

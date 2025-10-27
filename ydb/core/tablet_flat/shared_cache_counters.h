@@ -1,7 +1,7 @@
 #pragma once
 
+#include "defs.h"
 #include <ydb/core/protos/shared_cache.pb.h>
-#include <ydb/core/util/cache_cache.h>
 
 namespace NKikimr::NSharedCache {
 
@@ -10,11 +10,6 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     using TReplacementPolicy = NKikimrSharedCache::TReplacementPolicy;
 
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-
-    // lru cache counters:
-    const TCounterPtr FreshBytes;
-    const TCounterPtr StagingBytes;
-    const TCounterPtr WarmBytes;
 
     // page counters:
     const TCounterPtr MemLimitBytes;
@@ -32,7 +27,8 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr CacheMissBytes;
     const TCounterPtr LoadInFlyPages;
     const TCounterPtr LoadInFlyBytes;
-    const TCounterPtr TryKeepInMemoryBytes;
+    const TCounterPtr TargetInMemoryBytes;
+    const TCounterPtr ActiveInMemoryBytes;
 
     // page collection counters:
     const TCounterPtr PageCollections;
@@ -45,8 +41,6 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr FailedRequests;
 
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
-
-    TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);
 };
 
 } // namespace NKikimr::NSharedCache

@@ -11,7 +11,6 @@ import ytest
 from _common import (
     rootrel_arc_src,
     sort_uniq,
-    strip_roots,
     to_yesno,
 )
 from _dart_fields import create_dart_record
@@ -131,12 +130,7 @@ class NotsUnitType(UnitType):
         Turn on code navigation indexing
         """
 
-    def on_from_npm(self, args: UnitType.PluginArgs) -> None:
-        """
-        TODO remove after removing on_from_pnpm_lockfiles
-        """
-
-    def on_setup_install_node_modules_recipe(self) -> None:
+    def on_setup_install_node_modules_recipe(self, args: UnitType.PluginArgs) -> None:
         """
         Setup test recipe to install node_modules before running tests
         """
@@ -149,6 +143,11 @@ class NotsUnitType(UnitType):
     def on_setup_extract_output_tars_recipe(self, args: UnitType.PluginArgs) -> None:
         """
         Setup test recipe to extract peer's output before running tests
+        """
+
+    def on_ts_proto_auto_prepare_deps_configure(self) -> None:
+        """
+        Configure prepare deps for TS_PROTO_AUTO
         """
 
 
@@ -166,6 +165,7 @@ TS_TEST_FIELDS_BASE = (
     df.TestName.value,
     df.TestRecipes.value,
     df.TestTimeout.from_unit,
+    df.TsConfigPath.from_unit,
 )
 
 TS_TEST_SPECIFIC_FIELDS = {
@@ -224,6 +224,7 @@ TS_TEST_SPECIFIC_FIELDS = {
         df.Requirements.from_unit,
     ),
     TsTestType.TS_STYLELINT: (
+        df.Size.from_unit,
         df.TsStylelintConfig.value,
         df.TestFiles.stylesheets,
         df.NodeModulesBundleFilename.value,
@@ -274,6 +275,10 @@ class PluginLogger(object):
 logger = PluginLogger()
 
 
+def _wrap_file_path(s: str) -> str:
+    return f"'{s}'" if " " in s else s
+
+
 def _parse_list_var(unit: UnitType, var_name: str, sep: str) -> list[str]:
     return [x.strip() for x in unit.get(var_name).removeprefix(f"${var_name}").split(sep) if x.strip()]
 
@@ -316,6 +321,10 @@ def _get_var_name(s: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _is_real_file(path: str) -> bool:
+    return os.path.isfile(path) and not os.path.islink(path)
+
+
 def _build_directives(flags: list[str] | tuple[str], paths: list[str]) -> str:
     parts = [p for p in (flags or []) if p]
     parts_str = ";".join(parts)
@@ -338,19 +347,22 @@ def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
     return _build_directives([hide_part, "output"], paths)
 
 
+def _arc_path(unit: NotsUnitType, path: str) -> str:
+    return unit.resolve(unit.resolve_arc_path(path))
+
+
 def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
-    erm_packages_path = unit.get("ERM_PACKAGES_PATH")
-    path = unit.resolve(unit.resolve_arc_path(erm_packages_path))
+    erm_packages_path = _arc_path(unit, unit.get("ERM_PACKAGES_PATH"))
 
-    return ErmJsonLite.load(path)
+    return ErmJsonLite.load(erm_packages_path)
 
 
 def _get_pm_type(unit: NotsUnitType) -> 'PackageManagerType':
     resolved: PackageManagerType | None = unit.get("PM_TYPE")
     if not resolved:
-        raise Exception("PM_TYPE is not set yet. Macro _SET_PACKAGE_MANAGER() should be called before.")
+        raise Exception("PM_TYPE is not set yet.")
 
     return resolved
 
@@ -380,34 +392,6 @@ def _create_pm(unit: NotsUnitType) -> 'BasePackageManager':
 
 
 @_with_report_configure_error
-def on_set_package_manager(unit: NotsUnitType) -> None:
-    pm_type = "pnpm"  # projects without any lockfile are processed by pnpm
-
-    source_path = _get_source_path(unit)
-
-    for pm_key, lockfile_name in [("pnpm", "pnpm-lock.yaml"), ("npm", "package-lock.json")]:
-        lf_path = os.path.join(source_path, lockfile_name)
-        lf_path_resolved = unit.resolve_arc_path(strip_roots(lf_path))
-
-        if lf_path_resolved:
-            pm_type = pm_key
-            break
-
-    if pm_type == 'npm' and "devtools/dummy_arcadia/typescript/npm" not in source_path:
-        ymake.report_configure_error(
-            "\n"
-            "Project is configured to use npm as a package manager. \n"
-            "Only pnpm is supported at the moment.\n"
-            "Please follow the instruction to migrate your project:\n"
-            "https://docs.yandex-team.ru/frontend-in-arcadia/tutorials/migrate#migrate-to-pnpm"
-        )
-
-    unit.on_peerdir_ts_resource(pm_type)
-    unit.set(["PM_TYPE", pm_type])
-    unit.set(["PM_SCRIPT", f"${pm_type.upper()}_SCRIPT"])
-
-
-@_with_report_configure_error
 def on_set_append_with_directive(unit: NotsUnitType, var_name: str, directive: str, *values: str) -> None:
     wrapped = [f'${{{directive}:"{v}"}}' for v in values]
 
@@ -433,7 +417,7 @@ def _check_nodejs_version(unit: NotsUnitType, major: int) -> None:
 def on_peerdir_ts_resource(unit: NotsUnitType, *resources: str) -> None:
     from lib.nots.package_manager import BasePackageManager
 
-    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)), empty_if_missing=True)
     erm_json = _create_erm_json(unit)
     dirs = []
 
@@ -482,16 +466,17 @@ def on_ts_configure(unit: NotsUnitType) -> None:
 
     mod_dir = unit.get("MODDIR")
     cur_dir = unit.get("TS_TEST_FOR_PATH") if unit.get("TS_TEST_FOR") else mod_dir
-    pj_path = build_pj_path(unit.resolve(unit.resolve_arc_path(cur_dir)))
+    pj_path = build_pj_path(_arc_path(unit, cur_dir))
     dep_paths = PackageJson.load(pj_path).get_dep_paths_by_names()
 
     # reversed for using the first tsconfig as the config for include processor (legacy)
     for tsconfig_path in reversed(tsconfig_paths):
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+        abs_tsconfig_path = _arc_path(unit, tsconfig_path)
         if not abs_tsconfig_path:
             raise Exception("tsconfig not found: {}".format(tsconfig_path))
 
-        tsconfig = TsConfig.load(abs_tsconfig_path)
+        source_dir = _arc_path(unit, _get_source_path(unit))
+        tsconfig = TsConfig.load(abs_tsconfig_path, source_dir)
         config_files = tsconfig.inline_extend(dep_paths)
         config_files = [rootrel_arc_src(path, unit) for path in config_files]
 
@@ -526,6 +511,16 @@ def on_ts_configure(unit: NotsUnitType) -> None:
     _setup_stylelint(unit)
 
 
+def _should_setup_build_env(unit: NotsUnitType) -> bool:
+    build_env_for = unit.get("TS_BUILD_ENV_FOR")
+    if build_env_for is None:
+        return True
+
+    target = unit.get("MODDIR")
+
+    return target in build_env_for.split(":")
+
+
 @_with_report_configure_error
 def on_setup_build_env(unit: NotsUnitType) -> None:
     build_env_var = unit.get("TS_BUILD_ENV")
@@ -535,7 +530,7 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
 
     options = []
     names = set()
-    if build_env_var:
+    if build_env_var and _should_setup_build_env(unit):
         for name in build_env_var.split(","):
             value = unit.get(f"TS_ENV_{name}")
             if value is None:
@@ -555,7 +550,6 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
         options.append(f'"{name}={double_quote_escaped_value}"')
 
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
-    logger.print_vars("NOTS_TOOL_BUILD_ENV")
 
 
 def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
@@ -583,14 +577,17 @@ def _filter_inputs_by_rules_from_tsconfig(unit: NotsUnitType, tsconfig: 'TsConfi
     mod_dir = unit.get("MODDIR")
     target_path = os.path.join("${ARCADIA_ROOT}", mod_dir, "")  # To have "/" in the end
 
-    all_files = [__strip_prefix(target_path, f) for f in unit.get("TS_GLOB_FILES").split(" ")]
-    filtered_files = tsconfig.filter_files(all_files)
-
-    __set_append(unit, "TS_INPUT_FILES", [os.path.join(target_path, f) for f in filtered_files])
+    for from_var, to_var in [("TS_GLOB_FILES", "TS_INPUT_FILES"), ("TS_GLOB_TEST_FILES", "TS_INPUT_TEST_FILES")]:
+        # TS_GLOB_* variables contain space-separated paths.
+        # Spaces in paths cause issues, so we split by target_path instead of space.
+        # https://st.yandex-team.ru/DEVTOOLSSUPPORT-69193
+        all_files = __strip_prefix(target_path, unit.get(from_var)).split(f" {target_path}")
+        filtered_files = tsconfig.filter_files(all_files)
+        __set_append(unit, to_var, [_wrap_file_path(f) for f in filtered_files])
 
 
 def _is_tests_enabled(unit: NotsUnitType) -> bool:
-    return unit.get("TIDY") != "yes"
+    return unit.get("CPP_ANALYSIS_MODE") != "yes"
 
 
 def _setup_eslint(unit: NotsUnitType) -> None:
@@ -600,24 +597,24 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     if unit.get("_NO_LINT_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.ts_lint_srcs(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.ts_lint_srcs(unit, (), {})
     if not test_files:
         return
 
     unit.on_peerdir_ts_resource("eslint")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.ESLINT
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type, "MODDIR")
@@ -631,7 +628,7 @@ def _setup_eslint(unit: NotsUnitType) -> None:
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
 
     if unit.get("TS_LOCAL_CLI") != "yes":
@@ -652,11 +649,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if unit.get("_TS_TYPECHECK_VALUE") == "none":
         return
 
-    test_files = df.TestFiles.ts_input_files(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.tsc_typecheck_input_files(unit, (), {})
     if not test_files:
         return
 
-    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    tsconfig_paths = unit.get("_TS_TYPECHECK_TSCONFIG").split(" ")
+    if len(tsconfig_paths) > 1:
+        raise Exception(
+            f"You have set several tsconfig files for TS_TYPECHECK: {tsconfig_paths}. "
+            f"Only one tsconfig is allowed for `TS_TYPECHECK(<config_filename>)` macro."
+        )
+
+    tsconfig_path = tsconfig_paths[0]
     if not tsconfig_path:
         tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
         if len(tsconfig_paths) > 1:
@@ -665,24 +669,24 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
 
         tsconfig_path = tsconfig_paths[0]
 
-    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    abs_tsconfig_path = _arc_path(unit, tsconfig_path)
     if not abs_tsconfig_path:
         raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
-    user_recipes = unit.get("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE")
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.TSC_TYPECHECK
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -696,7 +700,7 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
     dart_record[df.TsConfigPath.KEY] = tsconfig_path
 
@@ -714,7 +718,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
     if unit.get("_TS_STYLELINT_VALUE") == "no":
         return
 
-    test_files = df.TestFiles.stylesheets(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.stylesheets(unit, (), {})
     if not test_files:
         return
 
@@ -722,17 +726,17 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
 
     from lib.nots.package_manager import constants
 
-    recipes_value = unit.get("TEST_RECIPES_VALUE")
-    unit.on_setup_install_node_modules_recipe()
+    recipes_value = unit.get_subst("TEST_RECIPES_VALUE")
+    pm = _create_pm(unit)
+
+    unit.on_setup_install_node_modules_recipe(pm.module_path)
 
     test_type = TsTestType.TS_STYLELINT
 
-    peers = _create_pm(unit).get_peers_from_package_json()
+    peers = pm.get_local_peers_from_package_json()
 
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_type} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_type,)
@@ -742,7 +746,7 @@ def _setup_stylelint(unit: NotsUnitType) -> None:
         TS_TEST_FIELDS_BASE + TS_TEST_SPECIFIC_FIELDS[test_type], unit, flat_args, spec_args
     )
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
 
     data = ytest.dump_test(unit, dart_record)
@@ -803,7 +807,15 @@ def _select_matching_version(
 
 @_with_report_configure_error
 def on_prepare_deps_configure(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager.base.utils import build_pj_path
+
     pm = _create_pm(unit)
+
+    if not _is_real_file(build_pj_path(pm.sources_path)) and unit.get("TS_PROTO_PREPARE_DEPS") == "yes":
+        # if this is a PREPARE_DEPS for TS_PROTO and there is no package.json - this is TS_PROTO_AUTO
+        unit.on_ts_proto_auto_prepare_deps_configure()
+        return
+
     pj = pm.load_package_json_from_dir(pm.sources_path)
     has_deps = pj.has_dependencies()
     local_cli = unit.get("TS_LOCAL_CLI") == "yes"
@@ -819,6 +831,18 @@ def on_prepare_deps_configure(unit: NotsUnitType) -> None:
     else:
         __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["output"], sorted(outs)))
         unit.set(["_PREPARE_DEPS_CMD", "$_PREPARE_NO_DEPS_CMD"])
+
+
+@_with_report_configure_error
+def on_ts_proto_auto_prepare_deps_configure(unit: NotsUnitType) -> None:
+    deps_path = unit.get("_TS_PROTO_AUTO_DEPS")
+    unit.onpeerdir([deps_path])
+
+    pm = _create_pm(unit)
+    local_cli = unit.get("TS_LOCAL_CLI") == "yes"
+    _, outs, _ = pm.calc_prepare_deps_inouts_and_resources(store_path="", has_deps=False, local_cli=local_cli)
+    __set_append(unit, "_PREPARE_DEPS_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
+    unit.set(["_PREPARE_DEPS_TS_PROTO_AUTO_FLAG", f"--ts-proto-auto-deps-path {deps_path}"])
 
 
 def _node_modules_bundle_needed(unit: NotsUnitType, arc_path: str) -> bool:
@@ -905,14 +929,20 @@ def on_ts_test_for_configure(
     if unit.enabled('TS_COVERAGE'):
         unit.on_peerdir_ts_resource("nyc")
 
-    for_mod_path = df.TsTestForPath.value(unit, (), {})[df.TsTestForPath.KEY]
+    for_mod_path = df.TsTestForPath.value(unit, (), {})
     unit.onpeerdir([for_mod_path])
 
     # user-defined recipes should be in the end
-    user_recipes = unit.get("TEST_RECIPES_VALUE").replace("$TEST_RECIPES_VALUE", "").strip()
+    user_recipes = unit.get_subst("TEST_RECIPES_VALUE").strip()
     unit.set(["TEST_RECIPES_VALUE", ""])
-    unit.on_setup_extract_node_modules_recipe([for_mod_path])
+
+    if test_runner in [TsTestType.JEST]:
+        unit.on_setup_install_node_modules_recipe([for_mod_path])
+    else:
+        unit.on_setup_extract_node_modules_recipe([for_mod_path])
+
     unit.on_setup_extract_output_tars_recipe([for_mod_path])
+
     __set_append(unit, "TEST_RECIPES_VALUE", user_recipes)
 
     build_root = "$B" if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE] else "$(BUILD_ROOT)"
@@ -923,19 +953,17 @@ def on_ts_test_for_configure(
         config_path = os.path.join(for_mod_path, default_config)
         unit.set(["TS_TEST_CONFIG_PATH", config_path])
 
-    test_files = df.TestFiles.ts_test_srcs(unit, (), {})[df.TestFiles.KEY]
+    test_files = df.TestFiles.ts_test_srcs(unit, (), {})
     if not test_files:
         ymake.report_configure_error(f"No tests found for {test_runner}")
         return
 
     from lib.nots.package_manager import constants
 
-    peers = _create_pm(unit).get_peers_from_package_json()
-    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {})[df.CustomDependencies.KEY].split()
+    peers = _create_pm(unit).get_local_peers_from_package_json()
+    deps = df.CustomDependencies.nots_with_recipies(unit, (peers,), {}).split()
 
     if deps:
-        joined_deps = "\n".join(deps)
-        logger.info(f"{test_runner} deps: \n{joined_deps}")
         unit.ondepends(deps)
 
     flat_args = (test_runner, "TS_TEST_FOR_PATH")
@@ -950,7 +978,7 @@ def on_ts_test_for_configure(
     dart_record[df.TestFiles.KEY] = test_files
     dart_record[df.NodeModulesBundleFilename.KEY] = constants.NODE_MODULES_WORKSPACE_BUNDLE_FILENAME
 
-    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {})[df.CustomDependencies.KEY].split()
+    extra_deps = df.CustomDependencies.test_depends_only(unit, (), {}).split()
     dart_record[df.CustomDependencies.KEY] = " ".join(sort_uniq(deps + extra_deps))
     if test_runner in [TsTestType.HERMIONE, TsTestType.PLAYWRIGHT_LARGE]:
         dart_record[df.Size.KEY] = "LARGE"
@@ -1025,7 +1053,6 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
     new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
     __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
-    logger.print_vars("_TS_PROJECT_SETUP_CMD")
 
     __on_ts_files(unit, in_files, out_files)
 
@@ -1066,3 +1093,25 @@ def on_run_javascript_after_build_process_inputs(unit: NotsUnitType, js_script: 
         processed_inputs.append(_build_cmd_input_paths([js_script], hide=True))
 
     unit.set(["_RUN_JAVASCRIPT_AFTER_BUILD_INPUTS", " ".join(processed_inputs)])
+
+
+@_with_report_configure_error
+def on_ts_next_experimental_build_mode(unit: NotsUnitType) -> None:
+    from lib.nots.package_manager import BasePackageManager
+    from lib.nots.semver import Version
+
+    pj = BasePackageManager.load_package_json_from_dir(unit.resolve(_get_source_path(unit)))
+    erm_json = _create_erm_json(unit)
+    version = _select_matching_version(erm_json, "next", pj.get_dep_specifier("next"))
+
+    var_name = "TS_NEXT_COMMAND"
+
+    if version >= Version.from_str("14.1.2"):
+        # For Next >=v14: build --experimental-build-mode=compile
+        # https://github.com/vercel/next.js/commit/47f73cd8ec79d0a6c248139088aa536453b23ae1
+        unit.set([var_name, "build --experimental-build-mode=compile"])
+    elif version >= Version.from_str("13.5.3"):
+        # For Next <v14: experimental-compile
+        unit.set([var_name, "experimental-compile"])
+    else:
+        raise Exception(f"Unsupported Next.js version: {version} for TS_NEXT_EXPERIMENTAL_BUILD_MODE()")

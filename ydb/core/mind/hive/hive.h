@@ -246,6 +246,8 @@ extern const std::unordered_map<TString, TTabletTypes::EType> TABLET_TYPE_BY_SHO
 
 class THive;
 
+class THiveDrain;
+
 struct THiveSharedSettings {
     NKikimrConfig::THiveConfig CurrentConfig;
 
@@ -327,6 +329,7 @@ struct TNodeFilter {
     TVector<TDataCenterId> AllowedDataCenters;
     TSubDomainKey ObjectDomain;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
+    bool MustBePrimaryPile = true;
 
     const THive* Hive;
 

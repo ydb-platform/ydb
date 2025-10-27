@@ -7,6 +7,7 @@
 #include "yql_yt_native_folders.h"
 
 #include <yt/yql/providers/yt/gateway/lib/map_builder.h>
+#include <yt/yql/providers/yt/gateway/lib/yt_attrs.h>
 #include <yt/yql/providers/yt/gateway/lib/yt_helpers.h>
 #include <yt/yql/providers/yt/lib/config_clusters/config_clusters.h>
 #include <yt/yql/providers/yt/lib/log/yt_logger.h>
@@ -1699,6 +1700,7 @@ public:
 
     void SetStatUploader(IStatUploader::TPtr statUploader) final {
         YQL_ENSURE(!StatUploader_, "StatUploader already set");
+        YQL_CLOG(DEBUG, ProviderYt) << "Setting StatUploader";
         StatUploader_ = statUploader;
     }
 
@@ -3345,7 +3347,7 @@ private:
         if (cluster.empty()) {
             cluster = Clusters_->GetDefaultClusterName();
         }
-        auto execCtx = MakeExecCtx(std::move(options), session, cluster, pull.Raw(), &ctx);
+        auto execCtx = MakeExecCtx(std::move(options), session, cluster, nullptr, nullptr);
 
         if (auto read = pull.Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>()) {
             execCtx->SetInput(read.Cast().Input(), false, {});
@@ -4922,6 +4924,11 @@ private:
             bool localRun = !testRun &&
                 (execCtx->Config_->HasExecuteUdfLocallyIfPossible()
                     ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false);
+            bool hasLayerPaths = false;
+            if constexpr (NPrivate::THasLayersPaths<TRunOptions>::value) {
+                hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
+                localRun &= execCtx->Options_.LayersPaths().empty();
+            }
             {
                 TUserJobSpec userJobSpec;
                 TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(),
@@ -4943,7 +4950,7 @@ private:
                     execCtx->Options_.OptLLVM("OFF");
                 }
 
-                if (transform.CanExecuteInternally() && !testRun) {
+                if (!hasLayerPaths && transform.CanExecuteInternally() && !testRun) {
                     const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
                     execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                     execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
@@ -5115,6 +5122,7 @@ private:
             NNative::GetPool(*execCtx, execCtx->Options_.Config())
         };
         execCtx->SetNodeExecProgress("Running");
+        YQL_ENSURE(StatUploader_);
         return StatUploader_->Upload(std::move(statUploadOptions));
     }
 
@@ -5523,6 +5531,11 @@ private:
         auto tmpFiles = std::make_shared<TTempFiles>(execCtx->FileStorage_->GetTemp());
 
         bool localRun = execCtx->Config_->HasExecuteUdfLocallyIfPossible() ? execCtx->Config_->GetExecuteUdfLocallyIfPossible() : false;
+        bool hasLayerPaths = false;
+        if constexpr (NPrivate::THasLayersPaths<decltype(execCtx->Options_)>::value) {
+            hasLayerPaths |= !execCtx->Options_.LayersPaths().empty();
+            localRun &= execCtx->Options_.LayersPaths().empty();
+        }
         {
             execCtx->SetNodeExecProgress("Preparing");
             TUserJobSpec userJobSpec;
@@ -5549,7 +5562,7 @@ private:
                 execCtx->Options_.OptLLVM("OFF");
             }
 
-            if (transform.CanExecuteInternally()) {
+            if (!hasLayerPaths && transform.CanExecuteInternally()) {
                 execCtx->SetNodeExecProgress("Waiting for concurrency limit");
                 execCtx->Session_->InitLocalCalcSemaphore(execCtx->Options_.Config());
                 TGuard<TFastSemaphore> guard(*execCtx->Session_->LocalCalcSemaphore_);
@@ -5698,66 +5711,6 @@ private:
                 entry->RemoveInternal(tmpTable);
                 return res;
             });
-    }
-
-    template <class TExecParamsPtr>
-    static void PrepareCommonAttributes(
-            NYT::TNode& attrs,
-            const TExecParamsPtr& execCtx,
-            const TString& cluster,
-            bool createTable)
-    {
-        if (auto compressionCodec = execCtx->Options_.Config()->TemporaryCompressionCodec.Get(cluster)) {
-            attrs["compression_codec"] = *compressionCodec;
-        }
-        if (auto erasureCodec = execCtx->Options_.Config()->TemporaryErasureCodec.Get(cluster)) {
-            attrs["erasure_codec"] = ToString(*erasureCodec);
-        }
-        if (auto optimizeFor = execCtx->Options_.Config()->OptimizeFor.Get(cluster)) {
-            attrs["optimize_for"] = ToString(*optimizeFor);
-        }
-        if (auto ttl = execCtx->Options_.Config()->TempTablesTtl.Get().GetOrElse(TDuration::Zero())) {
-            attrs["expiration_timeout"] = ttl.MilliSeconds();
-        }
-
-        if (createTable) {
-            if (auto replicationFactor = execCtx->Options_.Config()->TemporaryReplicationFactor.Get(cluster)) {
-                attrs["replication_factor"] = static_cast<i64>(*replicationFactor);
-            }
-            if (auto media = execCtx->Options_.Config()->TemporaryMedia.Get(cluster)) {
-                attrs["media"] = *media;
-            }
-            if (auto primaryMedium = execCtx->Options_.Config()->TemporaryPrimaryMedium.Get(cluster)) {
-                attrs["primary_medium"] = *primaryMedium;
-            }
-        }
-    }
-
-    template <class TExecParamsPtr>
-    static void PrepareAttributes(
-        NYT::TNode& attrs,
-        const TOutputInfo& out,
-        const TExecParamsPtr& execCtx,
-        const TString& cluster,
-        bool createTable,
-        const TSet<TString>& securityTags = {})
-    {
-        PrepareCommonAttributes<TExecParamsPtr>(attrs, execCtx, cluster, createTable);
-
-        NYT::MergeNodes(attrs, out.AttrSpec);
-
-        if (createTable) {
-            const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(cluster).GetOrElse(NTCF_LEGACY);
-            attrs["schema"] = RowSpecToYTSchema(out.Spec[YqlRowSpecAttribute], nativeTypeCompat, out.ColumnGroups).ToNode();
-        }
-
-        if (!securityTags.empty()) {
-            auto tagsAttrNode = NYT::TNode::CreateList();
-            for (const auto& tag : securityTags) {
-                tagsAttrNode.Add(tag);
-            }
-            attrs[SecurityTagsName] = std::move(tagsAttrNode);
-        }
     }
 
     template <class TExecParamsPtr>
@@ -5913,7 +5866,7 @@ private:
         return ctx;
     }
 
-    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) const override {
         try {
             auto session =  GetSession(options.SessionId(), true);
             auto ytServer = Clusters_->GetServer(options.Cluster());
@@ -5921,11 +5874,14 @@ private:
             TClusterConnectionResult clusterConnectionResult{};
             clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
             clusterConnectionResult.YtServerName = ytServer;
-            auto auth = options.Config()->Auth.Get();
-            if (!auth || auth->empty()) {
-                auth = Clusters_->GetAuth(options.Cluster());
+            clusterConnectionResult.Token = Nothing(); // Supporting requests without config, which only need transactionId.
+            if (options.Config()) {
+                auto auth = options.Config()->Auth.Get();
+                if (!auth || auth->empty()) {
+                    auth = Clusters_->GetAuth(options.Cluster());
+                }
+                clusterConnectionResult.Token = auth;
             }
-            clusterConnectionResult.Token = auth;
             clusterConnectionResult.SetSuccess();
             return clusterConnectionResult;
         } catch (...) {
@@ -5962,6 +5918,27 @@ private:
             return TOperationProgress::EOpBlockStatus::None;
         } else {
             YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
+        }
+    }
+
+    NThreading::TFuture<TLayersSnapshotResult> SnapshotLayers(TSnapshotLayersOptions&& options) override {
+        try {
+            TSession::TPtr session = GetSession(options.SessionId());
+            auto execCtx = MakeExecCtx(TSnapshotLayersOptions(options), session, options.Cluster(), nullptr, nullptr);
+            auto logCtx = NYql::NLog::CurrentLogContextPath();
+            return session->Queue_->Async([session, execCtx, logCtx, paths = options.Layers(), cluster = options.Cluster()] () {
+                YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
+                try {
+                    TLayersSnapshotResult result;
+                    result.Data = execCtx->GetOrCreateEntry()->GetLayersSnapshot(paths);
+                    result.SetSuccess();
+                    return result;
+                } catch (...) {
+                    return ResultFromCurrentException<TLayersSnapshotResult>();
+                }
+            });
+        } catch (...) {
+            return MakeFuture(ResultFromCurrentException<TLayersSnapshotResult>());
         }
     }
 

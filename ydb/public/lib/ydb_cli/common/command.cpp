@@ -51,31 +51,27 @@ TClientCommand::TClientCommand(
     Opts.GetOpts().SetWrap(Max(Opts.GetOpts().Wrap_, static_cast<ui32>(lineLength)));
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(TClientCommand::TConfig::EVerbosityLevel lvl) {
+ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriority(ui32 lvl) {
     switch (lvl) {
-        case TClientCommand::TConfig::EVerbosityLevel::NONE:
-            return ELogPriority::TLOG_EMERG;
-        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
-            return ELogPriority::TLOG_DEBUG;
-        case TClientCommand::TConfig::EVerbosityLevel::INFO:
-            return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+        case 0:
             return ELogPriority::TLOG_WARNING;
+        case 1:
+            return ELogPriority::TLOG_NOTICE;
+        case 2:
+            return ELogPriority::TLOG_INFO;
+        case 3:
         default:
-            return ELogPriority::TLOG_ERR;
+            return ELogPriority::TLOG_DEBUG;
     }
 }
 
-ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(TClientCommand::TConfig::EVerbosityLevel lvl) {
+ELogPriority TClientCommand::TConfig::VerbosityLevelToELogPriorityChatty(ui32 lvl) {
     switch (lvl) {
-        case TClientCommand::TConfig::EVerbosityLevel::NONE:
+        case 0:
             return ELogPriority::TLOG_INFO;
-        case TClientCommand::TConfig::EVerbosityLevel::DEBUG:
-        case TClientCommand::TConfig::EVerbosityLevel::INFO:
-        case TClientCommand::TConfig::EVerbosityLevel::WARN:
+        default:
             return ELogPriority::TLOG_DEBUG;
     }
-    return ELogPriority::TLOG_INFO;
 }
 
 size_t TClientCommand::TConfig::ParseHelpCommandVerbosilty(int argc, char** argv) {
@@ -236,6 +232,9 @@ void TClientCommand::Config(TConfig& config) {
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
+    if (Local) {
+        config.LocalCommand = true;
+    }
 }
 
 void TClientCommand::Parse(TConfig& config) {
@@ -418,6 +417,10 @@ void TClientCommand::MarkDangerous() {
     Dangerous = true;
 }
 
+void TClientCommand::MarkLocal() {
+    Local = true;
+}
+
 void TClientCommand::UseOnlyExplicitProfile() {
     OnlyExplicitProfile = true;
 }
@@ -445,6 +448,11 @@ void TClientCommandTree::AddHiddenCommand(std::unique_ptr<TClientCommand> comman
 void TClientCommandTree::AddDangerousCommand(std::unique_ptr<TClientCommand> command) {
     command->MarkDangerous();
     command->UseOnlyExplicitProfile();
+    AddCommand(std::move(command));
+}
+
+void TClientCommandTree::AddLocalCommand(std::unique_ptr<TClientCommand> command) {
+    command->MarkLocal();
     AddCommand(std::move(command));
 }
 

@@ -4,12 +4,7 @@
 
 std::string ConvertVectorToBytes(const std::vector<float>& vector)
 {
-    std::string result;
-    for (const auto& value : vector) {
-        const char* bytes = reinterpret_cast<const char*>(&value);
-        result += std::string(bytes, sizeof(float));
-    }
-    return result + "\x01";
+    return std::string{reinterpret_cast<const char*>(vector.data()), vector.size() * sizeof(float)} + "\x01";
 }
 
 void DropVectorTable(NYdb::NQuery::TQueryClient& client, const std::string& tableName)

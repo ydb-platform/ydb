@@ -252,13 +252,13 @@ void init_fill_random_impl(unsigned int major_ver, unsigned int minor_ver, unsig
 void init_directory_iterator_impl() noexcept;
 #endif // defined(BOOST_WINDOWS_API)
 
+namespace {
+
 //--------------------------------------------------------------------------------------//
 //                                                                                      //
 //                        helpers (all operating systems)                               //
 //                                                                                      //
 //--------------------------------------------------------------------------------------//
-
-namespace {
 
 // The number of retries remove_all should make if it detects that the directory it is about to enter has been replaced with a symlink or a regular file
 BOOST_CONSTEXPR_OR_CONST unsigned int remove_all_directory_replaced_retry_count = 5u;
@@ -267,6 +267,12 @@ BOOST_CONSTEXPR_OR_CONST unsigned int remove_all_directory_replaced_retry_count 
 BOOST_CONSTEXPR_OR_CONST std::size_t small_path_size = 1024u;
 
 #if defined(BOOST_POSIX_API)
+
+//--------------------------------------------------------------------------------------//
+//                                                                                      //
+//                            POSIX-specific helpers                                    //
+//                                                                                      //
+//--------------------------------------------------------------------------------------//
 
 // Absolute maximum path length, in character code units, that we're willing to accept from various system calls.
 // This value is arbitrary, it is supposed to be a hard limit to avoid memory exhaustion
@@ -278,8 +284,6 @@ BOOST_CONSTEXPR_OR_CONST std::size_t small_path_size = 1024u;
 // - GNU/Hurd: no hard limit
 BOOST_CONSTEXPR_OR_CONST std::size_t absolute_path_max = 32u * 1024u;
 
-#endif // defined(BOOST_POSIX_API)
-
 // Maximum number of resolved symlinks before we register a loop
 BOOST_CONSTEXPR_OR_CONST unsigned int symloop_max =
 #if defined(SYMLOOP_MAX)
@@ -288,16 +292,6 @@ BOOST_CONSTEXPR_OR_CONST unsigned int symloop_max =
     40
 #endif
 ;
-
-//  general helpers  -----------------------------------------------------------------//
-
-#ifdef BOOST_POSIX_API
-
-//--------------------------------------------------------------------------------------//
-//                                                                                      //
-//                            POSIX-specific helpers                                    //
-//                                                                                      //
-//--------------------------------------------------------------------------------------//
 
 inline bool not_found_error(int errval) noexcept
 {

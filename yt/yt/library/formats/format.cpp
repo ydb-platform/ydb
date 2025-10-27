@@ -2,6 +2,7 @@
 
 #include "arrow_parser.h"
 #include "arrow_writer.h"
+#include "blob_writer.h"
 #include "dsv_parser.h"
 #include "dsv_writer.h"
 #include "protobuf_parser.h"
@@ -357,6 +358,14 @@ ISchemalessFormatWriterPtr CreateStaticTableWriterForFormat(
                 enableContextSaving,
                 controlAttributesConfig,
                 keyColumnCount);
+        case EFormatType::Blob:
+            return CreateSchemalessWriterForBlob(
+                format.Attributes(),
+                nameTable,
+                std::move(output),
+                enableContextSaving,
+                controlAttributesConfig,
+                keyColumnCount);
         default:
             auto adapter = New<TSchemalessWriterAdapter>(
                 nameTable,
@@ -495,39 +504,6 @@ TYsonProducer CreateProducerForFormat(const TFormat& format, EDataType dataType,
             THROW_ERROR_EXCEPTION("Unsupported input format %Qlv",
                 format.GetType());
     }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-class TConcreteFactory
-    : public IFormatFactory
-{
-public:
-    TConcreteFactory(const TFormat& format, EDataType dataType)
-        : Format_(format)
-        , DataType_(dataType)
-    { }
-
-    std::unique_ptr<NYson::IFlushableYsonConsumer> CreateConsumer(IZeroCopyOutput* output) override
-    {
-        return CreateConsumerForFormat(Format_, DataType_, output);
-    }
-
-    NYson::TYsonProducer CreateProducer(IInputStream* input) override
-    {
-        return CreateProducerForFormat(Format_, DataType_, input);
-    }
-
-private:
-    TFormat Format_;
-    EDataType DataType_;
-};
-
-IFormatFactoryPtr CreateFactoryForFormat(
-    const TFormat& format,
-    EDataType dataType)
-{
-    return New<TConcreteFactory>(format, dataType);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

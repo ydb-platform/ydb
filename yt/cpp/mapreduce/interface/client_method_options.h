@@ -38,6 +38,7 @@ enum ENodeType : int
     NT_GROUP                /* "group" */,
     NT_PORTAL               /* "portal_entrance" */,
     NT_CHAOS_TABLE_REPLICA  /* "chaos_table_replica" */,
+    NT_TABLE_COLLOCATION    /* "table_collocation" */,
 };
 
 ///

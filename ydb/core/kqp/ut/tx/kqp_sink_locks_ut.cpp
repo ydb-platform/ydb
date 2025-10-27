@@ -353,6 +353,8 @@ Y_UNIT_TEST_SUITE(KqpSinkLocks) {
                         .String("Session2")
                     .AddMember("Amount")
                         .OptionalUint64(1)
+                    .AddMember("Comment")
+                        .OptionalString("None")
                     .EndStruct();
                 rowsBuilder.EndList();
 

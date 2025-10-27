@@ -136,6 +136,7 @@ private:
     const TCounterPtr SizeBlobsInFlight;
     const TCounterPtr ReadRequests;
     const TCounterPtr ReadsInQueue;
+    const TCounterPtr MaxSizeBytes;
 
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
 
@@ -174,15 +175,18 @@ public:
         , SizeBlobsInFlight(counters->GetCounter("SizeBlobsInFlight"))
         , ReadRequests(counters->GetCounter("ReadRequests", true))
         , ReadsInQueue(counters->GetCounter("ReadsInQueue"))
-    {}
+        , MaxSizeBytes(counters->GetCounter("MaxSizeBytes")) {
+    }
 
     void Bootstrap(const TActorContext& ctx) {
         auto& icb = AppData(ctx)->Icb;
-        icb->RegisterSharedControl(MaxCacheDataSize, "BlobCache.MaxCacheDataSize");
-        icb->RegisterSharedControl(MaxInFlightDataSize, "BlobCache.MaxInFlightDataSize");
+        TControlBoard::RegisterSharedControl(MaxCacheDataSize, icb->BlobCache.MaxCacheDataSize);
+        TControlBoard::RegisterSharedControl(MaxInFlightDataSize, icb->BlobCache.MaxInFlightDataSize);
 
         LOG_S_NOTICE("MaxCacheDataSize: " << (i64)MaxCacheDataSize
             << " InFlightDataSize: " << (i64)InFlightDataSize);
+
+        MaxSizeBytes->Set((i64)MaxCacheDataSize);
 
         Send(NMemory::MakeMemoryControllerId(), new NMemory::TEvConsumerRegister(NMemory::EMemoryConsumerKind::ColumnTablesBlobCache));
 
@@ -362,6 +366,8 @@ private:
         LOG_S_DEBUG("Updating max cache data size: " << newMaxCacheDataSize);
 
         MaxCacheDataSize = newMaxCacheDataSize;
+
+        MaxSizeBytes->Set((i64)MaxCacheDataSize);
     }
 
     void UpdateConsumption() {

@@ -96,7 +96,8 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     BridgeInfo = std::move(msg->BridgeInfo);
 
     if (StorageConfig->HasBlobStorageConfig()) {
-        if (const auto& bsConfig = StorageConfig->GetBlobStorageConfig(); bsConfig.HasServiceSet()) {
+        const auto& bsConfig = StorageConfig->GetBlobStorageConfig();
+        if (bsConfig.HasServiceSet()) {
             const NKikimrBlobStorage::TNodeWardenServiceSet *proposed = nullptr;
             if (const auto& proposedConfig = ev->Get()->ProposedConfig) {
                 Y_VERIFY_S(StorageConfig->GetGeneration() < proposedConfig->GetGeneration(),
@@ -109,6 +110,7 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
             }
             ApplyStorageConfig(bsConfig.GetServiceSet(), proposed);
         }
+        SyncRateQuoter->UpdateBytesPerSecond(bsConfig.GetBridgeSyncRateBytesPerSecond());
     }
 
     if (StorageConfig->HasStateStorageConfig() && StorageConfig->HasStateStorageBoardConfig() && StorageConfig->HasSchemeBoardConfig()) {
@@ -257,6 +259,9 @@ void TNodeWarden::ApplyStateStorageConfig(const NKikimrBlobStorage::TStorageConf
 
         for (const auto& ringGroup : info->RingGroups) {
             for (const auto& ring : ringGroup.Rings) {
+                if (ring.IsDisabled) {
+                    continue;
+                }
                 for (ui32 index = 0; index < ring.Replicas.size(); ++index) {
                     if (const TActorId& replicaId = ring.Replicas[index]; replicaId.NodeId() == LocalNodeId) {
                         if (!localActorIds.contains(replicaId) && !newActorIds.contains(replicaId)) {

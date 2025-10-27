@@ -124,7 +124,7 @@ def get_missed_data_for_upload(driver, full_table_path):
             WHEN String::Contains(all_data.test_name, 'sole chunk') OR String::Contains(all_data.test_name, 'chunk+chunk')  OR String::Contains(all_data.test_name, '] chunk') THEN TRUE
             ELSE FALSE
             END) = FALSE
-        and (all_data.branch = 'main' or all_data.branch like 'stable-%')
+        and (all_data.branch = 'main' or all_data.branch like 'stable-%' or all_data.branch like 'stream-nb-2%')
         and fast_data_missed.run_timestamp is NULL
     """
 

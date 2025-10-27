@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/storage_pools.h>
-#include <ydb/core/base/table_vector_index.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
@@ -28,15 +28,18 @@ struct TUserTable : public TThrRefBase {
     struct TUserFamily {
         using ECodec = NTable::NPage::ECodec;
         using ECache = NTable::NPage::ECache;
+        using ECacheMode = NTable::NPage::ECacheMode;
 
         TUserFamily(const NKikimrSchemeOp::TFamilyDescription& family)
             : ColumnCodec(family.GetColumnCodec())
             , ColumnCache(family.GetColumnCache())
+            , ColumnCacheMode(family.GetColumnCacheMode())
             , OuterThreshold(SaveGetThreshold(family.GetStorageConfig().GetDataThreshold()))
             , ExternalThreshold(SaveGetThreshold(family.GetStorageConfig().GetExternalThreshold()))
             , Storage(family.GetStorage())
             , Codec(ExtractDbCodec(family))
             , Cache(ExtractDbCache(family))
+            , CacheMode(ExtractDbCacheMode(family))
             , Room(new TStorageRoom(family.GetRoom()))
             , Name(family.GetName())
         {
@@ -50,6 +53,10 @@ struct TUserTable : public TThrRefBase {
             if (family.HasColumnCache()) {
                 ColumnCache = family.GetColumnCache();
                 Cache = ToDbCache(ColumnCache);
+            }
+            if (family.HasColumnCacheMode()) {
+                ColumnCacheMode = family.GetColumnCacheMode();
+                CacheMode = ToDbCacheMode(ColumnCacheMode);
             }
             if (family.GetStorageConfig().HasDataThreshold()) {
                 OuterThreshold = SaveGetThreshold(family.GetStorageConfig().GetDataThreshold());
@@ -77,6 +84,7 @@ struct TUserTable : public TThrRefBase {
 
         NKikimrSchemeOp::EColumnCodec ColumnCodec;
         NKikimrSchemeOp::EColumnCache ColumnCache;
+        NKikimrSchemeOp::EColumnCacheMode ColumnCacheMode;
         ui32 OuterThreshold;
         ui32 ExternalThreshold;
         NKikimrSchemeOp::EColumnStorage Storage;
@@ -84,6 +92,7 @@ struct TUserTable : public TThrRefBase {
 
         ECodec Codec;
         ECache Cache;
+        ECacheMode CacheMode;
         TStorageRoom::TPtr Room;
 
         ui32 MainChannel() const {
@@ -227,6 +236,24 @@ struct TUserTable : public TThrRefBase {
                     return ECache::Once;
                 case NKikimrSchemeOp::EColumnCache::ColumnCacheEver:
                     return ECache::Ever;
+                // keep no default
+            }
+            Y_ENSURE(false, "unexpected");
+        }
+
+        static ECacheMode ExtractDbCacheMode(const NKikimrSchemeOp::TFamilyDescription& family) {
+            if (family.HasColumnCacheMode()) {
+                return ToDbCacheMode(family.GetColumnCacheMode());
+            }
+            return ECacheMode::Regular;
+        }
+
+        static ECacheMode ToDbCacheMode(NKikimrSchemeOp::EColumnCacheMode cacheMode) {
+            switch (cacheMode) {
+                case NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeRegular:
+                    return ECacheMode::Regular;
+                case NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory:
+                    return ECacheMode::TryKeepInMemory;
                 // keep no default
             }
             Y_ENSURE(false, "unexpected");

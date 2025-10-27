@@ -177,10 +177,6 @@ bool TKikimrSettings::HasOptEnableOlapPushdown() const {
     return GetOptionalFlagValue(OptEnableOlapPushdown.Get()) != EOptionalFlag::Disabled;
 }
 
-bool TKikimrSettings::HasOptEnableOlapPushdownAggregate() const {
-    return GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) != EOptionalFlag::Disabled;
-}
-
 bool TKikimrSettings::HasOptEnableOlapProvideComputeSharding() const {
     return GetOptionalFlagValue(OptEnableOlapProvideComputeSharding.Get()) == EOptionalFlag::Enabled;
 }
@@ -229,5 +225,13 @@ bool TKikimrConfiguration::GetEnableOlapPushdownProjections() const {
 bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const {
     return ((GetOptionalFlagValue(OptEnableParallelUnionAllConnectionsForExtend.Get()) == EOptionalFlag::Enabled) ||
             EnableParallelUnionAllConnectionsForExtend);
+}
+
+bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
+    return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
+}
+
+bool TKikimrConfiguration::GetUseDqHashCombine() const {
+    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
 }
 }

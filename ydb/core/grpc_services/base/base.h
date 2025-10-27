@@ -259,6 +259,15 @@ struct TRpcServices {
     struct TEvForgetOperation : public TEventLocal<TEvForgetOperation, TRpcServices::EvForgetOperation> {};
 };
 
+namespace NRuntimeEvents {
+
+enum class EType {
+    COMMON,
+    BOOTSTRAP_CLUSTER,
+};
+
+} // NRuntimeEvents
+
 // Should be specialized for real responses
 template <class T>
 void FillYdbStatus(T& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status);
@@ -341,6 +350,7 @@ enum class TRateLimiterMode : ui8 {
     Ru = 2,
     RuOnProgress = 3,
     RuManual = 4,
+    RuTopic = 5,
 };
 
 #define RLSWITCH(mode) \
@@ -454,6 +464,8 @@ public:
     }
     virtual void SetAuditLogHook(TAuditLogHook&& hook) = 0;
     virtual void SetDiskQuotaExceeded(bool disk) = 0;
+
+    virtual TString GetRpcMethodName() const = 0;
 };
 
 // Request context
@@ -477,6 +489,8 @@ public:
 
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 
+    virtual TString GetRpcMethodName() const = 0;
+
 protected:
     virtual void FinishRequest() = 0;
 };
@@ -489,6 +503,10 @@ public:
     // Legacy, do not use for modern code
     virtual void SendResult(const google::protobuf::Message& result, Ydb::StatusIds::StatusCode status,
         const google::protobuf::RepeatedPtrField<TYdbIssueMessageType>& message) = 0;
+};
+
+// A marker class to distinguish requests that are sent inside the system (not initialized by the user)
+class IInternalRequestCtx {
 };
 
 class IRequestNoOpCtx : public IRequestCtx {
@@ -703,6 +721,10 @@ public:
         Y_ABORT("unimplemented for TRefreshTokenImpl");
     }
 
+    TString GetRpcMethodName() const override {
+        return {};
+    }
+
     // IRequestCtxBase
     //
     void AddAuditLogPart(const TStringBuf&, const TString&) override {
@@ -751,6 +773,18 @@ inline TString MakeAuthError(const TString& in, NYql::TIssueManager& issues) {
     issues.GetIssues().PrintTo(out, true /* one line */);
     return out.Str();
 }
+
+// Policy class that provides common access to method's request and response types.
+template <typename TReq, typename TResp, bool IsOperation>
+struct TYdbGrpcMethodAccessorTraits {
+    static void FillResponse(TResp& resp, const NYql::TIssues& issues, Ydb::CostInfo* costInfo, Ydb::StatusIds::StatusCode status) {
+        TCommonResponseFiller<TResp, IsOperation>::Fill(resp, issues, costInfo, status);
+    }
+
+    static const TMaybe<TString> GetYdbToken(const TReq&, const NYdbGrpc::IRequestContextBase* ctx) {
+        return ExtractYdbToken(ctx->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
+    }
+};
 
 template <ui32 TRpcId, typename TReq, typename TResp>
 class TGRpcRequestBiStreamWrapper
@@ -1004,6 +1038,10 @@ public:
         return Ctx_->WriteAndFinish(std::move(message), options, grpcStatus);
     }
 
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
+    }
+
 private:
     TIntrusivePtr<IStreamCtx> Ctx_;
     TIntrusiveConstPtr<NACLib::TUserToken> InternalToken_;
@@ -1089,6 +1127,18 @@ public:
     const TMaybe<TString> GetGrpcUserAgent() const {
         return GetPeerMetaValues(NYdbGrpc::GRPC_USER_AGENT_HEADER);
     }
+
+    virtual NRuntimeEvents::EType GetRuntimeEventType() {
+        return NRuntimeEvents::EType::COMMON;
+    }
+};
+
+template <NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON>
+class TEvProxyRuntimeEventWithType : public TEvProxyRuntimeEvent {
+public:
+    NRuntimeEvents::EType GetRuntimeEventType() override {
+        return RuntimeEventType;
+    }
 };
 
 template <ui32 TRpcId, typename TDerived>
@@ -1106,13 +1156,13 @@ public:
     }
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGRpcRequestWrapperImpl
     : public std::conditional_t<IsOperation,
         TGrpcResponseSenderImpl<TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>>,
         IRequestNoOpCtx>
     , public std::conditional_t<TRpcId == TRpcServices::EvGrpcRuntimeRequest,
-        TEvProxyRuntimeEvent,
+        TEvProxyRuntimeEventWithType<RuntimeEventType>,
         TEvProxyLegacyEvent<TRpcId, TDerived>>
 {
     friend class TProtoResponseHelper;
@@ -1134,7 +1184,7 @@ public:
     }
 
     const TMaybe<TString> GetYdbToken() const override {
-        return ExtractYdbToken(Ctx_->GetPeerMetaValues(NYdb::YDB_AUTH_TICKET_HEADER));
+        return TMethodAccessorTraits::GetYdbToken(*GetProtoRequest(), Ctx_.Get());
     }
 
     bool HasClientCapability(const TString& capability) const override {
@@ -1143,6 +1193,10 @@ public:
 
     const TMaybe<TString> GetDatabaseName() const override {
         return ExtractDatabaseName(Ctx_->GetPeerMetaValues(NYdb::YDB_DATABASE_HEADER));
+    }
+
+    TString GetRpcMethodName() const override {
+        return Ctx_->GetRpcMethodName();
     }
 
     void UpdateAuthState(NYdbGrpc::TAuthState::EAuthState state) override {
@@ -1228,7 +1282,7 @@ public:
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         TResponse* resp = CreateResponseMessage();
-        TCommonResponseFiller<TResponse, TDerived::IsOp>::Fill(*resp, IssueManager.GetIssues(), CostInfo, status);
+        TMethodAccessorTraits::FillResponse(*resp, IssueManager.GetIssues(), CostInfo, status);
         FinishRequest();
         Reply(resp, status);
         if (Ctx_->IsStreamCall()) {
@@ -1411,7 +1465,7 @@ public:
 private:
     void Reply(NProtoBuf::Message* resp, ui32 status) override {
         // End Of Request for non streaming requests
-        if (RequestFinished) {
+        if (RequestFinished || !Ctx_->IsStreamCall()) {
             AuditLogRequestEnd(Ydb::StatusIds::StatusCode(status));
         }
         if (RespHook) {
@@ -1466,12 +1520,12 @@ private:
     TMaybe<TString> TraceId;
 };
 
-template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived>
-class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived> {
+template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, typename TDerived, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+class TGRpcRequestValidationWrapperImpl : public TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, RuntimeEventType, TMethodAccessorTraits> {
 public:
 
     TGRpcRequestValidationWrapperImpl(NYdbGrpc::IRequestContextBase* ctx)
-        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived>(ctx)
+        : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TDerived, RuntimeEventType, TMethodAccessorTraits>(ctx)
     { }
 
     bool Validate(TString& error) override {
@@ -1496,13 +1550,13 @@ public:
 
 class IFacilityProvider;
 
-template <typename TReq, typename TResp, bool IsOperation>
+template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
 class TGrpcRequestCall
     : public std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>, RuntimeEventType, TMethodAccessorTraits>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>, RuntimeEventType, TMethodAccessorTraits>>
 {
     using TRequestIface = typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type;
 
@@ -1516,9 +1570,9 @@ public:
 
     using TBase = std::conditional_t<TProtoHasValidate<TReq>::Value,
         TGRpcRequestValidationWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>,
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>, RuntimeEventType, TMethodAccessorTraits>,
         TGRpcRequestWrapperImpl<
-            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation>>>;
+            TRpcServices::EvGrpcRuntimeRequest, TReq, TResp, IsOperation, TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>, RuntimeEventType, TMethodAccessorTraits>>;
 
     template <typename TCallback>
     TGrpcRequestCall(NYdbGrpc::IRequestContextBase* ctx, TCallback&& cb, TRequestAuxSettings auxSettings = {})
@@ -1573,11 +1627,30 @@ private:
     const TRequestAuxSettings AuxSettings;
 };
 
-template <typename TReq, typename TResp>
-using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true>;
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>>
+using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, RuntimeEventType, TMethodAccessorTraits>;
 
-template <typename TReq, typename TResp>
-using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false>;
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
+using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
+
+
+// Special case: calls without auth
+template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+class TGrpcRequestCallNoAuth : public TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits> {
+public:
+    using TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>::TGrpcRequestCall;
+
+    const NYdbGrpc::TAuthState& GetAuthState() const override {
+        static NYdbGrpc::TAuthState noAuthState(false);
+        return noAuthState;
+    }
+};
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>>
+using TGrpcRequestOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, true, RuntimeEventType, TMethodAccessorTraits>;
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
+using TGrpcRequestNoOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapper
@@ -1664,27 +1737,31 @@ private:
 
 class TEvRequestAuthAndCheckResult : public TEventLocal<TEvRequestAuthAndCheckResult, TRpcServices::EvRequestAuthAndCheckResult> {
 public:
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues, const TAuditLogParts& auditLogParts)
         : Status(status)
         , Issues(issues)
+        , AuditLogParts(auditLogParts)
     {}
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const NYql::TIssue& issue, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(issue);
     }
 
-    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error)
+    TEvRequestAuthAndCheckResult(Ydb::StatusIds::StatusCode status, const TString& error, const TAuditLogParts& auditLogParts)
         : Status(status)
+        , AuditLogParts(auditLogParts)
     {
         Issues.AddIssue(error);
     }
 
-    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken)
+    TEvRequestAuthAndCheckResult(const TString& database, const TMaybe<TString>& ydbToken, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, const TAuditLogParts& auditLogParts)
         : Database(database)
         , YdbToken(ydbToken)
         , UserToken(userToken)
+        , AuditLogParts(auditLogParts)
     {}
 
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
@@ -1692,17 +1769,20 @@ public:
     TString Database;
     TMaybe<TString> YdbToken;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TAuditLogParts AuditLogParts;
 };
 
 class TEvRequestAuthAndCheck
     : public IRequestProxyCtx
     , public TEventLocal<TEvRequestAuthAndCheck, TRpcServices::EvRequestAuthAndCheck> {
 public:
-    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender)
+    TEvRequestAuthAndCheck(const TString& database, const TMaybe<TString>& ydbToken, NActors::TActorId sender, TAuditMode auditMode, TString peerName = {})
         : Database(database)
         , YdbToken(ydbToken)
         , Sender(sender)
         , AuthState(true)
+        , AuditMode(auditMode)
+        , PeerName(std::move(peerName))
     {}
 
     // IRequestProxyCtx
@@ -1736,14 +1816,16 @@ public:
                 new TEvRequestAuthAndCheckResult(
                     Database,
                     YdbToken,
-                    UserToken
+                    UserToken,
+                    GetAuditLogParts()
                 )
             );
         } else {
             ctx.Send(Sender,
                 new TEvRequestAuthAndCheckResult(
                     status,
-                    IssueManager.GetIssues()
+                    IssueManager.GetIssues(),
+                    GetAuditLogParts()
                 )
             );
         }
@@ -1854,7 +1936,7 @@ public:
     }
 
     TString GetPeerName() const override {
-        return {};
+        return PeerName;
     }
 
     const TString& GetRequestName() const override {
@@ -1879,6 +1961,14 @@ public:
         return {};
     }
 
+    TAuditMode GetAuditMode() const override {
+        return AuditMode;
+    }
+
+    TString GetRpcMethodName() const override {
+        return {};
+    }
+
     TString Database;
     TMaybe<TString> YdbToken;
     NActors::TActorId Sender;
@@ -1890,6 +1980,8 @@ public:
     NYql::TIssueManager IssueManager;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TInstant deadline = TInstant::Now() + TDuration::Seconds(10);
+    TAuditMode AuditMode;
+    TString PeerName;
 
     inline static const TString EmptySerializedTokenMessage;
 };

@@ -39,6 +39,8 @@ enum class EExecutionUnitKind: ui32 {
     PrepareWriteTxInRS,
     PrepareDistributedEraseTxInRS,
     LoadAndWaitInRS,
+    LoadInRS,
+    BlockFailPoint,
     ExecuteDataTx,
     ExecuteKqpDataTx,
     ExecuteDistributedEraseTx,

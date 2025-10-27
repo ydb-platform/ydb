@@ -1,90 +1,27 @@
 LIBRARY()
 
 SRCS(
-    actor_persqueue_client_iface.h
-    blob.cpp
-    common_app.cpp
-    cluster_tracker.cpp
-    event_helpers.cpp
-    fetch_request_actor.cpp
-    header.cpp
-    heartbeat.cpp
-    key.cpp
-    metering_sink.cpp
-    list_all_topics_actor.cpp
-    mirrorer.cpp
-    mirrorer.h
-    ownerinfo.cpp
-    offload_actor.cpp
-    partition_blob_encoder.cpp
-    partition_compaction.cpp
-    partition_init.cpp
-    partition_monitoring.cpp
-    partition_read.cpp
-    partition_sourcemanager.cpp
-    partition_write.cpp
-    partition.cpp
-    percentile_counter.cpp
-    pq.cpp
-    pq_database.cpp
-    pq_impl_app.cpp
-    pq_impl_app_sendreadset.cpp
-    pq_impl.cpp
-    pq_l2_cache.cpp
-    pq_rl_helpers.cpp
-    quota_tracker.cpp
-    account_read_quoter.cpp
-    read_quoter.cpp
-    sourceid.cpp
-    subscriber.cpp
-    transaction.cpp
-    type_codecs_defs.cpp
-    user_info.cpp
-    utils.cpp
-    write_meta.cpp
-    write_quoter.cpp
-    microseconds_sliding_window.cpp
     dread_cache_service/caching_service.cpp
-    write_id.cpp
+    pq.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(sourceid_info.h)
-
 PEERDIR(
-    contrib/libs/fmt
-    ydb/library/actors/core
-    library/cpp/html/pcdata
-    library/cpp/json
-    ydb/core/backup/impl
-    ydb/core/base
-    ydb/core/engine/minikql
-    ydb/core/keyvalue
-    ydb/core/kqp/common
-    ydb/core/metering
-    ydb/core/persqueue/codecs
-    ydb/core/persqueue/config
-    ydb/core/persqueue/events
-    ydb/core/persqueue/partition_key_range
+    ydb/core/persqueue/public/cluster_tracker
+    ydb/core/persqueue/public/fetcher
+    ydb/core/persqueue/public/list_topics
     ydb/core/persqueue/pqrb
+    ydb/core/persqueue/pqtablet
     ydb/core/persqueue/writer
-    ydb/core/protos
-    ydb/library/logger
-    ydb/library/persqueue/counter_time_keeper
-    ydb/library/persqueue/topic_parser
-    ydb/library/protobuf_printer
-    ydb/public/lib/base
-    ydb/public/sdk/cpp/src/client/persqueue_public
-    #ydb/library/dbgtrace
 )
 
 END()
 
 RECURSE(
-    codecs
-    config
+    common
     events
-    partition_key_range
     pqrb
+    pqtablet
+    public
     writer
 )
 

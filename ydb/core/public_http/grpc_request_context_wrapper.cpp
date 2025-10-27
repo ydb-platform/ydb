@@ -82,4 +82,12 @@ namespace NKikimr::NPublicHttp {
 
     TString TGrpcRequestContextWrapper::GetEndpointId() const { return {}; }
 
+    TString TGrpcRequestContextWrapper::GetRpcMethodName() const {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (Request) {
+            return Request->GetDescriptor()->name();
+        }
+        return {};
+    }
+
 } // namespace NKikimr::NPublicHttp

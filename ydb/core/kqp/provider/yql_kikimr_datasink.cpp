@@ -8,6 +8,7 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/services/metadata/optimization/abstract.h>
 
 namespace NYql {
 namespace {
@@ -199,9 +200,8 @@ private:
     }
 
     TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "ModifyPermissions is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateBackupCollection(TKiCreateBackupCollection node, TExprContext& ctx) override {
@@ -241,27 +241,23 @@ private:
     }
 
     TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropUser(TKiDropUser node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropUser is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleUpsertObject(TKiUpsertObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "UpsertObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleCreateObject(TKiCreateObject node, TExprContext& ctx) override {
@@ -271,9 +267,9 @@ private:
     }
 
     TStatus HandleAlterObject(TKiAlterObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(node);
+        Y_UNUSED(ctx);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropObject(TKiDropObject node, TExprContext& ctx) override {
@@ -283,33 +279,43 @@ private:
     }
 
     TStatus HandleCreateGroup(TKiCreateGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "CreateGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleAlterGroup(TKiAlterGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "AlterGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleRenameGroup(TKiRenameGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "RenameGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandleDropGroup(TKiDropGroup node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "DropGroup is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     TStatus HandlePgDropObject(TPgDropObject node, TExprContext& ctx) override {
-        ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-                << "PgDropObject is not yet implemented for intent determination transformer"));
-        return TStatus::Error;
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleCreateSecret(TKiCreateSecret node, TExprContext& ctx) override {
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleAlterSecret(TKiAlterSecret node, TExprContext& ctx) override {
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
+    }
+
+    TStatus HandleDropSecret(TKiDropSecret node, TExprContext& ctx) override {
+        Y_UNUSED(ctx, node);
+        return TStatus::Ok;
     }
 
     static void HandleDropTable(TIntrusivePtr<TKikimrSessionContext>& ctx, const NCommon::TWriteTableSettings& settings,
@@ -474,6 +480,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Sequence:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Secret:
+                return TStatus::Ok;
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Invalid table key type."));
@@ -549,7 +557,6 @@ public:
         , LogicalOptProposalTransformer(CreateKiLogicalOptProposalTransformer(sessionCtx, types))
         , PhysicalOptProposalTransformer(CreateKiPhysicalOptProposalTransformer(sessionCtx))
         , CallableExecutionTransformer(CreateKiSinkCallableExecutionTransformer(gateway, sessionCtx, queryExecutor))
-        , PlanInfoTransformer(CreateKiSinkPlanInfoTransformer(queryExecutor))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -590,10 +597,6 @@ public:
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
         return *CallableExecutionTransformer;
-    }
-
-    IGraphTransformer& GetPlanInfoTransformer() override {
-        return *PlanInfoTransformer;
     }
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
@@ -714,6 +717,13 @@ public:
         if (node.IsCallable(TKiBackup::CallableName())
             || node.IsCallable(TKiBackupIncremental::CallableName())
             || node.IsCallable(TKiRestore::CallableName())
+        ) {
+            return true;
+        }
+
+        if (node.IsCallable(TKiCreateSecret::CallableName())
+            || node.IsCallable(TKiAlterSecret::CallableName())
+            || node.IsCallable(TKiDropSecret::CallableName())
         ) {
             return true;
         }
@@ -1007,6 +1017,7 @@ public:
                 .Repeat(TExprStep::LoadTablesMetadata)
                 .Repeat(TExprStep::RewriteIO);
 
+        YQL_ENSURE(ExternalSourceFactory);
         const auto& externalSource = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
         if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
             auto writeArgs = node->ChildrenList();
@@ -1459,9 +1470,23 @@ public:
             }
             case TKikimrKey::Type::Object:
             {
+                const auto& typeId = key.GetObjectType();
+                NMetadata::IClassBehaviour::TPtr cBehaviour(NMetadata::IClassBehaviour::TFactory::Construct(typeId));
+                YQL_ENSURE(cBehaviour, "Unsupported object type: \"" << typeId << "\"");
+
                 NCommon::TWriteObjectSettings settings = NCommon::ParseWriteObjectSettings(TExprList(node->Child(4)), ctx);
                 YQL_ENSURE(settings.Mode);
                 auto mode = settings.Mode.Cast();
+
+                TExprNode::TPtr ast;
+                if (const auto optimizationManager = cBehaviour->ConstructOptimizationManager()) {
+                    ast = optimizationManager->ExtractWorldFeatures(settings.Features, ctx);
+                    if (!ast) {
+                        return nullptr;
+                    }
+                } else {
+                    ast = ctx.NewWorld(node->Pos());
+                }
 
                 if (mode == "upsertObject") {
                     return Build<TKiUpsertObject>(ctx, node->Pos())
@@ -1477,7 +1502,7 @@ public:
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
-                        .TypeId().Build(key.GetObjectType())
+                        .TypeId().Build(typeId)
                         .Features(settings.Features)
                         .ReplaceIfExists<TCoAtom>()
                             .Value(mode == "createObjectOrReplace")
@@ -1485,16 +1510,21 @@ public:
                         .ExistingOk<TCoAtom>()
                             .Value(mode == "createObjectIfNotExists")
                             .Build()
+                        .Ast(ast)
                         .Done()
                         .Ptr();
-                } else if (mode == "alterObject") {
+                } else if (mode == "alterObject" || mode == "alterObjectIfExists") {
                     return Build<TKiAlterObject>(ctx, node->Pos())
                         .World(node->Child(0))
                         .DataSink(node->Child(1))
                         .ObjectId().Build(key.GetObjectId())
-                        .TypeId().Build(key.GetObjectType())
+                        .TypeId().Build(typeId)
                         .Features(settings.Features)
                         .ResetFeatures(settings.ResetFeatures)
+                        .MissingOk<TCoAtom>()
+                            .Value(mode == "alterObjectIfExists")
+                            .Build()
+                        .Ast(ast)
                         .Done()
                         .Ptr();
                 } else if (mode == "dropObject" || mode == "dropObjectIfExists") {
@@ -1787,6 +1817,40 @@ public:
                 }
                 break;
             }
+            case TKikimrKey::Type::Secret: {
+                TWriteSecretSettings settings = ParseSecretSettings(TExprList(node->Child(4)), ctx);
+                YQL_ENSURE(settings.Mode);
+                auto mode = settings.Mode.Cast();
+                if (mode == "create") {
+                    return Build<TKiCreateSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Value(settings.Value.Cast())
+                        .InheritPermissions(settings.InheritPermissions.IsValid() ? settings.InheritPermissions.Cast() : Build<TCoAtom>(ctx, node->Pos()).Value("0").Done())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "alter") {
+                    return Build<TKiAlterSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Value(settings.Value.Cast())
+                        .Done()
+                        .Ptr();
+                } else if (mode == "drop") {
+                    return Build<TKiDropSecret>(ctx, node->Pos())
+                        .World(node->Child(0))
+                        .DataSink(node->Child(1))
+                        .Secret().Build(key.GetSecretPath())
+                        .Done()
+                        .Ptr();
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Unknown operation type for secret: " << TString(mode)));
+                    return nullptr;
+                }
+                break;
+            }
         }
 
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), "Failed to rewrite IO."));
@@ -1819,7 +1883,6 @@ private:
     TAutoPtr<IGraphTransformer> LogicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> PhysicalOptProposalTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
-    TAutoPtr<IGraphTransformer> PlanInfoTransformer;
 };
 
 } // namespace
@@ -1886,6 +1949,33 @@ TWriteBackupCollectionSettings ParseWriteBackupCollectionSettings(TExprList node
     ret.BackupCollectionSettings = builtSettings;
 
     return ret;
+}
+
+TWriteSecretSettings ParseSecretSettings(NNodes::TExprList node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    TMaybeNode<TCoAtom> mode;
+    TMaybeNode<TCoAtom> value;
+    TMaybeNode<TCoAtom> inheritPermissions;
+
+    for (auto child : node) {
+        if (auto maybeTuple = child.Maybe<TCoNameValueTuple>()) {
+            auto tuple = maybeTuple.Cast();
+            auto name = tuple.Name().Value();
+            if (name == "mode") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                mode = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "value") {
+                // TODO(yurikiselev): support parsing from declare
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                value = tuple.Value().Cast<TCoAtom>();
+            } else if (name == "inherit_permissions") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoAtom>());
+                inheritPermissions = tuple.Value().Cast<TCoAtom>();
+            }
+        }
+    }
+
+    return TWriteSecretSettings(std::move(mode), std::move(value), std::move(inheritPermissions));
 }
 
 IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output,
@@ -2078,6 +2168,18 @@ IGraphTransformer::TStatus TKiSinkVisitorTransformer::DoTransform(TExprNode::TPt
 
     if (auto node = TMaybeNode<TKiRestore>(input)) {
         return HandleRestore(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiCreateSecret>(input)) {
+        return HandleCreateSecret(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiAlterSecret>(input)) {
+        return HandleAlterSecret(node.Cast(), ctx);
+    }
+
+    if (auto node = TMaybeNode<TKiDropSecret>(input)) {
+        return HandleDropSecret(node.Cast(), ctx);
     }
 
     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSink) Unsupported function: "

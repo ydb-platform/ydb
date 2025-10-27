@@ -4,6 +4,8 @@
 
 #include <ydb/library/aclib/aclib.h>
 
+using namespace NKikimrRun;
+
 namespace NFqRun {
 
 TExternalDatabase TExternalDatabase::Parse(const TString& optionValue, const TString& tokenVar) {

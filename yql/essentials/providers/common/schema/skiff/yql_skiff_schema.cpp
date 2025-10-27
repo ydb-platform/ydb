@@ -44,48 +44,48 @@ struct TSkiffTypeLoader {
         }
 
         switch (*slot) {
-        case NUdf::EDataSlot::Bool:
-            return NYT::TNode()("wire_type", "boolean");
-        case NUdf::EDataSlot::Int8:
-        case NUdf::EDataSlot::Int16:
-        case NUdf::EDataSlot::Int32:
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-        case NUdf::EDataSlot::Date32:
-        case NUdf::EDataSlot::Datetime64:
-        case NUdf::EDataSlot::Timestamp64:
-        case NUdf::EDataSlot::Interval64:
-            return NYT::TNode()("wire_type", "int64");
-        case NUdf::EDataSlot::Uint8:
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Date:
-        case NUdf::EDataSlot::Datetime:
-        case NUdf::EDataSlot::Timestamp:
-            return NYT::TNode()("wire_type", "uint64");
-        case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8:
-        case NUdf::EDataSlot::Json:
-        case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::DyNumber:
-        case NUdf::EDataSlot::JsonDocument:
-            return NYT::TNode()("wire_type", "string32");
-        case NUdf::EDataSlot::Yson:
-            return NYT::TNode()("wire_type", "yson32");
-        case NUdf::EDataSlot::Float:
-        case NUdf::EDataSlot::Double:
-            return NYT::TNode()("wire_type", "double");
-        case NUdf::EDataSlot::TzDate:
-        case NUdf::EDataSlot::TzDatetime:
-        case NUdf::EDataSlot::TzTimestamp:
-        case NUdf::EDataSlot::TzDate32:
-        case NUdf::EDataSlot::TzDatetime64:
-        case NUdf::EDataSlot::TzTimestamp64:
-            return NYT::TNode()("wire_type", "string32");
-        case NUdf::EDataSlot::Decimal:
-            ythrow yexception() << "Decimal type without parameters.";
-            break;
+            case NUdf::EDataSlot::Bool:
+                return NYT::TNode()("wire_type", "boolean");
+            case NUdf::EDataSlot::Int8:
+            case NUdf::EDataSlot::Int16:
+            case NUdf::EDataSlot::Int32:
+            case NUdf::EDataSlot::Int64:
+            case NUdf::EDataSlot::Interval:
+            case NUdf::EDataSlot::Date32:
+            case NUdf::EDataSlot::Datetime64:
+            case NUdf::EDataSlot::Timestamp64:
+            case NUdf::EDataSlot::Interval64:
+                return NYT::TNode()("wire_type", "int64");
+            case NUdf::EDataSlot::Uint8:
+            case NUdf::EDataSlot::Uint16:
+            case NUdf::EDataSlot::Uint32:
+            case NUdf::EDataSlot::Uint64:
+            case NUdf::EDataSlot::Date:
+            case NUdf::EDataSlot::Datetime:
+            case NUdf::EDataSlot::Timestamp:
+                return NYT::TNode()("wire_type", "uint64");
+            case NUdf::EDataSlot::String:
+            case NUdf::EDataSlot::Utf8:
+            case NUdf::EDataSlot::Json:
+            case NUdf::EDataSlot::Uuid:
+            case NUdf::EDataSlot::DyNumber:
+            case NUdf::EDataSlot::JsonDocument:
+                return NYT::TNode()("wire_type", "string32");
+            case NUdf::EDataSlot::Yson:
+                return NYT::TNode()("wire_type", "yson32");
+            case NUdf::EDataSlot::Float:
+            case NUdf::EDataSlot::Double:
+                return NYT::TNode()("wire_type", "double");
+            case NUdf::EDataSlot::TzDate:
+            case NUdf::EDataSlot::TzDatetime:
+            case NUdf::EDataSlot::TzTimestamp:
+            case NUdf::EDataSlot::TzDate32:
+            case NUdf::EDataSlot::TzDatetime64:
+            case NUdf::EDataSlot::TzTimestamp64:
+                return NYT::TNode()("wire_type", "string32");
+            case NUdf::EDataSlot::Decimal:
+                ythrow yexception() << "Decimal type without parameters.";
+                break;
         }
 
         ythrow yexception() << "Unsupported data type" << NUdf::GetDataTypeInfo(*slot).Name;
@@ -101,18 +101,15 @@ struct TSkiffTypeLoader {
             itemType = NYT::TNode()("wire_type", "boolean");
         } else if (pgType == "int2" || pgType == "int4" || pgType == "int8") {
             itemType = NYT::TNode()("wire_type", "int64");
-        } else  if (pgType == "float4" || pgType == "float8") {
+        } else if (pgType == "float4" || pgType == "float8") {
             itemType = NYT::TNode()("wire_type", "double");
         } else {
             itemType = NYT::TNode()("wire_type", "string32");
         }
 
-        return NYT::TNode()
-            ("wire_type", "variant8")
-            ("children", NYT::TNode()
-                .Add(NYT::TNode()("wire_type", "nothing"))
-                .Add(std::move(itemType))
-                );
+        return NYT::TNode()("wire_type", "variant8")("children", NYT::TNode()
+                                                                     .Add(NYT::TNode()("wire_type", "nothing"))
+                                                                     .Add(std::move(itemType)));
     }
 
     TMaybe<TType> LoadDataTypeParams(const TString& dataType, const TString& paramOne, const TString& /*paramTwo*/, ui32 /*level*/) {
@@ -143,6 +140,12 @@ struct TSkiffTypeLoader {
         return NYT::TNode()("wire_type", "string32");
     }
 
+    TMaybe<TType> LoadLinearType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: LinearType";
+    }
+    TMaybe<TType> LoadDynamicLinearType(TType /*itemType*/, ui32 /*level*/) {
+        ythrow yexception() << "Unsupported type: DynamicLinearType";
+    }
     TMaybe<TType> LoadResourceType(const TString& /*tag*/, ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Resource";
     }
@@ -158,25 +161,20 @@ struct TSkiffTypeLoader {
         }
         auto children = NYT::TNode::CreateList();
 
-        for (auto& item: members) {
+        for (auto& item : members) {
             NYT::TNode innerNode = item.second;
             innerNode["name"] = item.first;
             children.Add(std::move(innerNode));
         }
 
-        return NYT::TNode()
-            ("wire_type", "tuple")
-            ("children", std::move(children));
+        return NYT::TNode()("wire_type", "tuple")("children", std::move(children));
     }
     TMaybe<TType> LoadListType(TType itemType, ui32 /*level*/) {
         if (!(NativeYTTypesFlags & NTCF_COMPLEX)) {
             return NYT::TNode()("wire_type", "yson32");
         }
-        return NYT::TNode()
-            ("wire_type", "repeated_variant8")
-            ("children", NYT::TNode()
-                .Add(std::move(itemType))
-            );
+        return NYT::TNode()("wire_type", "repeated_variant8")("children", NYT::TNode()
+                                                                              .Add(std::move(itemType)));
     }
     TMaybe<TType> LoadStreamType(TType /*itemType*/, ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Stream";
@@ -185,12 +183,9 @@ struct TSkiffTypeLoader {
         if (!(NativeYTTypesFlags & NTCF_COMPLEX) && level > 1) {
             return NYT::TNode()("wire_type", "yson32");
         }
-        return NYT::TNode()
-            ("wire_type", "variant8")
-            ("children", NYT::TNode()
-                .Add(NYT::TNode()("wire_type", "nothing"))
-                .Add(std::move(itemType))
-            );
+        return NYT::TNode()("wire_type", "variant8")("children", NYT::TNode()
+                                                                     .Add(NYT::TNode()("wire_type", "nothing"))
+                                                                     .Add(std::move(itemType)));
     }
     TMaybe<TType> LoadTupleType(const TVector<TType>& elements, ui32 /*level*/) {
         if (!(NativeYTTypesFlags & NTCF_COMPLEX)) {
@@ -198,33 +193,23 @@ struct TSkiffTypeLoader {
         }
 
         auto children = NYT::TNode::CreateList();
-        for (auto& inner: elements) {
+        for (auto& inner : elements) {
             children.Add(inner);
         }
 
-        return NYT::TNode()
-            ("wire_type", "tuple")
-            ("children", std::move(children));
+        return NYT::TNode()("wire_type", "tuple")("children", std::move(children));
     }
     TMaybe<TType> LoadDictType(TType keyType, TType valType, ui32 /*level*/) {
         if (!(NativeYTTypesFlags & NTCF_COMPLEX)) {
             return NYT::TNode()("wire_type", "yson32");
         }
-        return NYT::TNode()
-            ("wire_type", "repeated_variant8")
-            ("children", NYT::TNode()
-                .Add(NYT::TNode()
-                    ("wire_type", "tuple")
-                    ("children", NYT::TNode()
-                        .Add(std::move(keyType))
-                        .Add(std::move(valType))
-                    )
-                )
-            );
+        return NYT::TNode()("wire_type", "repeated_variant8")("children", NYT::TNode()
+                                                                              .Add(NYT::TNode()("wire_type", "tuple")("children", NYT::TNode()
+                                                                                                                                      .Add(std::move(keyType))
+                                                                                                                                      .Add(std::move(valType)))));
     }
     TMaybe<TType> LoadCallableType(TType /*returnType*/, const TVector<TType>& /*argTypes*/, const TVector<TString>& /*argNames*/,
-        const TVector<ui64>& /*argFlags*/, size_t /*optionalCount*/, const TString& /*payload*/, ui32 /*level*/) {
-
+                                   const TVector<ui64>& /*argFlags*/, size_t /*optionalCount*/, const TString& /*payload*/, ui32 /*level*/) {
         ythrow yexception() << "Unsupported type: Callable";
     }
     TMaybe<TType> LoadVariantType(TType underlyingType, ui32 /*level*/) {

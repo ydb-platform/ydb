@@ -194,6 +194,14 @@ message TXorFilterSystemBlockMeta
     optional int32 key_prefix_length = 2;
 }
 
+message TMinHashDigestSystemBlockMeta
+{
+    extend TSystemBlockMeta
+    {
+        optional TMinHashDigestSystemBlockMeta min_hash_digest_block_meta = 102;
+    }
+}
+
 message TSystemBlockMeta
 {
     extensions 100 to 199;

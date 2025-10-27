@@ -126,6 +126,7 @@ class TJsonNodes : public TViewerPipeClient {
     TString DomainPath;
     std::vector<TString> FilterStoragePools;
     std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
+    std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -1095,6 +1096,11 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
+        if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
+            auto nodes = GetDatabaseNodes();
+            RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            NeedFilter = true;
+        }
 
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         {
@@ -1120,9 +1126,6 @@ public:
                 FilterDatabase = false;
             }
         }
-        if (FilterPath && FieldsNeeded(FieldsTablets)) {
-            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
-        }
         if (!FilterStoragePools.empty()) {
             StoragePoolsResponse = MakeCachedRequestBSControllerPools();
             GroupsResponse = MakeCachedRequestBSControllerGroups();
@@ -1132,9 +1135,13 @@ public:
             VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
-
-        if (With != EWith::Everything) {
-            PDisksResponse = MakeCachedRequestBSControllerPDisks();
+        if (With != EWith::Everything || (!FilterDatabase && Type == EType::Storage)) {
+            if (!PDisksResponse) {
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
+            }
+        }
+        if (FilterPath && FieldsNeeded(FieldsTablets)) {
+            PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -1280,6 +1287,20 @@ public:
             InvalidateNodes();
             AddEvent("Type Filter Applied");
         }
+        if (!RestrictedNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            TNodeView nodeView;
+            for (TNode* node : NodeView) {
+                if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
+                    nodeView.push_back(node);
+                }
+            }
+            NodeView.swap(nodeView);
+            FoundNodes = TotalNodes = NodeView.size();
+            InvalidateNodes();
+            RestrictedNodeIds.clear();
+            AddEvent("Restricted Filter Applied");
+        }
+
         // storage/nodes pre-filter, affects TotalNodes count
         if (Type != EType::Any) {
             return;
@@ -1352,7 +1373,8 @@ public:
                     (!FieldsRequired.test(+ENodeFields::HostName) || FieldsAvailable.test(+ENodeFields::HostName)) &&
                     (!FieldsRequired.test(+ENodeFields::NodeName) || FieldsAvailable.test(+ENodeFields::NodeName));
                 if (allFieldsPresent) {
-                    TVector<TString> filterWords = SplitString(Filter, " ");
+                    TVector<TString> filterWords;
+                    StringSplitter(Filter).SplitBySet(", ").SkipEmpty().Collect(&filterWords);
                     TNodeView nodeView;
                     for (TNode* node : NodeView) {
                         for (const TString& word : filterWords) {
@@ -1388,7 +1410,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty();
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
             FoundNodes = NodeView.size();
         }
     }

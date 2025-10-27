@@ -1,6 +1,7 @@
 #include "yql_execution.h"
 #include "yql_expr_optimize.h"
 #include "yql_opt_proposed_by_data.h"
+#include "yql_linear_checker.h"
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
@@ -262,10 +263,32 @@ public:
         case TExprNode::Atom:
         case TExprNode::Argument:
         case TExprNode::Arguments:
-        case TExprNode::Lambda:
             ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
             output->SetState(TExprNode::EState::Error);
             return TStatus::Error;
+        case TExprNode::Lambda:
+            if (output->GetTypeAnn()->GetKind() == ETypeAnnotationKind::World) {
+                YQL_ENSURE(output->ChildrenSize() == 2); // Don't support wide lambdas here
+                YQL_ENSURE(output->Head().ChildrenSize() == 1); // Expected lambda with single arg
+                auto body = output->TailPtr();
+                auto status = ExecuteNode(body, body, ctx, depth + 1);
+
+                if (status.Level == TStatus::Error) {
+                    output->SetState(TExprNode::EState::Error);
+                } else if (status.Level == TStatus::Ok) {
+                    output->SetState(TExprNode::EState::ExecutionComplete);
+                    OnNodeExecutionComplete(output, ctx);
+                    YQL_ENSURE(body->HasResult());
+                } else if (status.Level == TStatus::Repeat || status.Level == TStatus::Async) {
+                    output->SetState(TExprNode::EState::ExecutionPending);
+                    FreshPendingNodes_.push_back(output.Get());
+                }
+                return status;
+            } else {
+                ctx.AddError(TIssue(ctx.GetPosition(output->Pos()), TStringBuilder() << "Failed to execute node with type: " << output->Type()));
+                output->SetState(TExprNode::EState::Error);
+                return TStatus::Error;
+            }
 
         case TExprNode::List:
         case TExprNode::Callable:
@@ -416,6 +439,35 @@ public:
 
         if (node->Content() == SyncName) {
             return ExecuteList(node, ctx);
+        }
+
+        if (node->Content() == SeqName) {
+            auto requireStatus = RequireChild(*node, 0);
+            if (requireStatus.Level != TStatus::Ok) {
+                return requireStatus;
+            }
+            auto lastWorld = node->HeadPtr();
+            for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                requireStatus = RequireChild(*node, i);
+                if (requireStatus.Level != TStatus::Ok) {
+                    if (requireStatus.Level != TStatus::Error) {
+                        node->Child(i)->Head().Head().SetState(TExprNode::EState::ExecutionComplete);
+                        node->Child(i)->Head().Head().SetResult(TExprNode::GetResult(lastWorld));
+
+                        for (const auto& p: Types_.DataSources) {
+                            p->RegisterWorldArg(node->Child(i)->Head().HeadPtr(), lastWorld);
+                        }
+                        for (const auto& p: Types_.DataSinks) {
+                            p->RegisterWorldArg(node->Child(i)->Head().HeadPtr(), lastWorld);
+                        }
+                    }
+                    return requireStatus;
+                }
+                lastWorld = node->Child(i)->TailPtr();
+            }
+
+            node->SetResult(TExprNode::GetResult(lastWorld));
+            return TStatus::Ok;
         }
 
         if (node->Content() == LeftName) {
@@ -734,12 +786,20 @@ IGraphTransformer::TStatus ValidateCallable(const TExprNode::TPtr& node, TExprCo
         return ValidateList(node, ctx, types, visited);
     }
 
+    if (node->Content() == SeqName) {
+        IGraphTransformer::TStatus combinedStatus = ValidateExecution(node->HeadPtr(), ctx, types, visited);
+        for (size_t i = 1; i < node->ChildrenSize(); ++i)  {
+            combinedStatus = combinedStatus.Combine(ValidateExecution(node->Child(i)->TailPtr(), ctx, types, visited));
+        }
+        return combinedStatus;
+    }
+
     if (node->Content() == LeftName) {
-        return ValidateExecution(node->ChildPtr(0), ctx, types, visited);
+        return ValidateExecution(node->HeadPtr(), ctx, types, visited);
     }
 
     if (node->Content() == RightName) {
-        return ValidateExecution(node->ChildPtr(0), ctx, types, visited);
+        return ValidateExecution(node->HeadPtr(), ctx, types, visited);
     }
 
     IDataProvider* dataProvider = nullptr;
@@ -799,12 +859,17 @@ IGraphTransformer::TStatus ValidateExecution(const TExprNode::TPtr& node, TExprC
     TStatus status = TStatus::Ok;
     switch (node->Type()) {
     case TExprNode::Atom:
-    case TExprNode::Argument:
     case TExprNode::Arguments:
     case TExprNode::Lambda:
         ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute node with type: " << node->Type()));
         return TStatus::Error;
 
+    case TExprNode::Argument:
+        if (node->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to execute node with type: " << node->Type()));
+            return TStatus::Error;
+        }
+        break;
     case TExprNode::List:
         return ValidateList(node, ctx, types, visited);
 
@@ -924,6 +989,10 @@ TAutoPtr<IGraphTransformer> CreateCheckExecutionTransformer(const TTypeAnnotatio
                 bool collectCalcOverWindow = false;
                 return funcCheckExecution(noExecutionListForCalcOverWindow, collectCalcOverWindow, node);
             });
+        }
+
+        if (types.LangVer >= MakeLangVersion(2024, 4)) {
+            hasErrors = !ValidateLinearTypes(*input, ctx);
         }
 
         return hasErrors ? IGraphTransformer::TStatus::Error : IGraphTransformer::TStatus::Ok;

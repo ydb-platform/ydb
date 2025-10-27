@@ -43,6 +43,7 @@ SRCS(
     create_incremental_restore_src_unit.cpp
     create_table_unit.cpp
     create_volatile_snapshot_unit.cpp
+    block_fail_point_unit.cpp
     datashard.cpp
     datashard.h
     datashard__cancel_tx_proposal.cpp
@@ -167,6 +168,7 @@ SRCS(
     key_conflicts.h
     key_validator.cpp
     load_and_wait_in_rs_unit.cpp
+    load_in_rs_unit.cpp
     load_tx_details_unit.cpp
     load_write_details_unit.cpp
     make_scan_snapshot_unit.cpp
@@ -216,13 +218,14 @@ SRCS(
     wait_for_plan_unit.cpp
     wait_for_stream_clearance_unit.cpp
 
-    build_index/prefix_kmeans.cpp
+    build_index/fulltext.cpp
     build_index/kmeans_helper.cpp
     build_index/local_kmeans.cpp
-    build_index/sample_k.cpp
-    build_index/secondary_index.cpp
+    build_index/prefix_kmeans.cpp
     build_index/recompute_kmeans.cpp
     build_index/reshuffle_kmeans.cpp
+    build_index/sample_k.cpp
+    build_index/secondary_index.cpp
     build_index/unique_index.cpp
 )
 
@@ -313,7 +316,7 @@ RECURSE_FOR_TESTS(
     ut_change_exchange
     ut_column_stats
     ut_compaction
-    ut_vacuum
+    ut_disk_quotas
     ut_erase_rows
     ut_export
     ut_external_blobs
@@ -341,6 +344,7 @@ RECURSE_FOR_TESTS(
     ut_stats
     ut_trace
     ut_upload_rows
+    ut_vacuum
     ut_volatile
     ut_write
 )

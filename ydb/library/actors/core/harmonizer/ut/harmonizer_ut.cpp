@@ -126,8 +126,8 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         void Schedule(TMonotonic /*deadline*/, TAutoPtr<IEventHandle> /*ev*/, ISchedulerCookie* /*cookie*/, TWorkerId /*workerId*/) override {}
         void Schedule(TDuration /*delta*/, TAutoPtr<IEventHandle> /*ev*/, ISchedulerCookie* /*cookie*/, TWorkerId /*workerId*/) override {}
 
-        bool Send(TAutoPtr<IEventHandle>& /*ev*/) override { return true; }
-        bool SpecificSend(TAutoPtr<IEventHandle>& /*ev*/) override { return true; }
+        bool Send(std::unique_ptr<IEventHandle>& /*ev*/) override { return true; }
+        bool SpecificSend(std::unique_ptr<IEventHandle>& /*ev*/) override { return true; }
         void ScheduleActivation(TMailbox* /*activation*/) override {}
         void SpecificScheduleActivation(TMailbox* /*activation*/) override {}
         void ScheduleActivationEx(TMailbox* /*activation*/, ui64 /*revolvingCounter*/) override {}
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         harmonizer->Harmonize(currentTs);
 
         auto stats = harmonizer->GetPoolStats(0);
-        
+
         CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
         CHECK_IS_NEEDY(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPools[0]->ThreadCount, 5);
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         harmonizer->Harmonize(currentTs);
 
         auto stats = harmonizer->GetPoolStats(0);
-        
+
         CHECK_CHANGING_THREADS(stats, 1, 0, 0, 0, 0);
         CHECK_IS_NEEDY(stats);
         UNIT_ASSERT_VALUES_EQUAL(mockPools[0]->ThreadCount, 5);
@@ -414,13 +414,87 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
                     mockPools[0]->SetFullThreadCount(i);
                     mockPools[1]->SetFullThreadCount(ii);
                     mockPools[2]->SetFullThreadCount(iii);
-                    mockPools[0]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, std::min<i16>(i, mockPools[0]->ThreadCount));
-                    mockPools[1]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, std::min<i16>(ii, mockPools[1]->ThreadCount));
-                    mockPools[2]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, std::min(iii, mockPools[2]->ThreadCount));
+                    mockPools[0]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, i);
+                    mockPools[1]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, ii);
+                    mockPools[2]->IncreaseThreadCpuConsumption({60'000'000.0, 60'000'000.0}, 0, iii);
                     harmonizer->Harmonize(currentTs);
                     std::vector<TPoolHarmonizerStats> stats;
                     for (auto& pool : params) {
                         stats.emplace_back(harmonizer->GetPoolStats(pool.PoolId));
+                    }
+                    float currentThreadCount[3] = {
+                        Max(params[0].DefaultThreadCount, static_cast<float>(i)),
+                        Max(params[1].DefaultThreadCount, static_cast<float>(ii)),
+                        Max(params[2].DefaultThreadCount, static_cast<float>(iii)),
+                    };
+                    float parkedCpu[3] = {
+                        Max(0.0f, params[0].DefaultThreadCount - i),
+                        Max(0.0f, params[1].DefaultThreadCount - ii),
+                        Max(0.0f, params[2].DefaultThreadCount - iii),
+                    };
+                    float additionalThreads[3] = {
+                        Max(0.0f, static_cast<float>(i) - params[0].DefaultThreadCount),
+                        Max(0.0f, static_cast<float>(ii) - params[1].DefaultThreadCount),
+                        Max(0.0f, static_cast<float>(iii) - params[2].DefaultThreadCount),
+                    };
+                    float additionalElapsedThreads[3] = {
+                        Max(0.0f, static_cast<float>(i) - params[0].DefaultThreadCount),
+                        Max(0.0f, static_cast<float>(ii) - params[1].DefaultThreadCount),
+                        Max(0.0f, static_cast<float>(iii) - params[2].DefaultThreadCount),
+                    };
+                    float additionalThreadsFromLowerPriority[3] = {
+                        additionalThreads[1] + additionalThreads[2],
+                        additionalThreads[2],
+                        0.0f,
+                    };
+
+                    float additionalElapsedThreadsFromLowerPriority[3] = {
+                        additionalElapsedThreads[1] + additionalElapsedThreads[2],
+                        additionalElapsedThreads[2],
+                        0.0f,
+                    };
+
+                    float threadChange[3] = {0, 0, 0};
+                    float notConsumedBudget = localBudget;
+                    for (ui32 poolIdx = 0; poolIdx < params.size(); ++poolIdx) {
+                        if (parkedCpu[poolIdx] > 0.0f) {
+                            continue;
+                        }
+                        if (localBudget > 0.0f) {
+                            localBudget -= 1;
+                            threadChange[poolIdx] += 1;
+                            for (ui32 poolIdx2 = 0; poolIdx2 < poolIdx; ++poolIdx2) {
+                                additionalThreadsFromLowerPriority[poolIdx2] += 1;
+                            }
+                        } else if (additionalThreadsFromLowerPriority[poolIdx] > 0.0f) {
+                            for (ui32 poolIdx2 = 2; poolIdx2 > poolIdx; --poolIdx2) {
+                                if (additionalThreads[poolIdx2] > 0.0f) {
+                                    additionalThreads[poolIdx2] -= 1;
+                                    threadChange[poolIdx2] -= 1;
+                                    threadChange[poolIdx] += 1;
+                                    for (ui32 poolIdx3 = poolIdx; poolIdx3 < poolIdx2; ++poolIdx3) {
+                                        additionalThreadsFromLowerPriority[poolIdx3] -= 1;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    for (ui32 poolIdx = 0; poolIdx < params.size(); ++poolIdx) {
+                        float cur = currentThreadCount[poolIdx] + threadChange[poolIdx];
+                        UNIT_ASSERT_DOUBLES_EQUAL_C(cur, mockPools[poolIdx]->ThreadCount, 1e-6,
+                            "poolIdx: " << poolIdx << " cur: " << cur << " " <<
+                            "i: " << i << " ii: " << ii << " iii: " << iii << " localBudget: " << localBudget << " notConsumedBudget: " << notConsumedBudget << " " <<
+                            "aT[0]: " << additionalThreadsFromLowerPriority[0] << " aT[1]: " << additionalThreadsFromLowerPriority[1] << " aT[2]: " << additionalThreadsFromLowerPriority[2] << " " <<
+                            stats[poolIdx].ToString() + " " + TStringBuilder());
+                        float a = currentThreadCount[poolIdx] + additionalElapsedThreadsFromLowerPriority[poolIdx] + notConsumedBudget - parkedCpu[poolIdx];
+                        float potMax = Min(params[poolIdx].MaxThreadCount, Max(params[poolIdx].MinThreadCount, a));
+                        UNIT_ASSERT_DOUBLES_EQUAL_C(stats[poolIdx].PotentialMaxThreadCount, potMax, 1e-6,
+                            "poolIdx: " << poolIdx << " " <<
+                            "i: " << i << " ii: " << ii << " iii: " << iii << " localBudget: " << localBudget << " notConsumedBudget: " << notConsumedBudget << " " <<
+                            "aT[0]: " << additionalThreadsFromLowerPriority[0] << " aT[1]: " << additionalThreadsFromLowerPriority[1] << " aT[2]: " << additionalThreadsFromLowerPriority[2] << " " <<
+                            "p[0]: " << parkedCpu[0] << " p[1]: " << parkedCpu[1] << " p[2]: " << parkedCpu[2] << " " <<
+                            stats[poolIdx].ToString() + " " + TStringBuilder() << "a: " << a << " potMax: " << potMax);
                     }
                 }
             }
@@ -528,7 +602,7 @@ Y_UNIT_TEST_SUITE(HarmonizerTests) {
         TSharedExecutorPoolConfig sharedConfig;
         sharedConfig.Threads = 2;
         //std::unique_ptr<ISharedExecutorPool> sharedPool(new TMockSharedExecutorPool(sharedConfig, 2, pools));
-        
+
 
         for (auto& pool : mockPools) {
             harmonizer->AddPool(pool.get());

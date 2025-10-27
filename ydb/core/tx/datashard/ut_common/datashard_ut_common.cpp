@@ -1319,12 +1319,14 @@ ui64 AsyncCreateCopyTable(
         TActorId sender,
         const TString &root,
         const TString &name,
-        const TString &from)
+        const TString &from,
+        bool isBackup)
 {
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateTable, root);
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableCreateTable();
     desc.SetName(name);
     desc.SetCopyFromTable(from);
+    desc.SetIsBackup(isBackup);
 
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
@@ -2596,9 +2598,15 @@ namespace {
             PRINT_PRIMITIVE(Date);
             PRINT_PRIMITIVE(Datetime);
             PRINT_PRIMITIVE(Timestamp);
-            PRINT_PRIMITIVE(Date32);
-            PRINT_PRIMITIVE(Datetime64);
-            PRINT_PRIMITIVE(Timestamp64);
+            case NYdb::EPrimitiveType::Date32:
+                out << parser.GetDate32().time_since_epoch().count();
+                break;
+            case NYdb::EPrimitiveType::Datetime64:
+                out << parser.GetDatetime64().time_since_epoch().count();
+                break;
+            case NYdb::EPrimitiveType::Timestamp64:
+                out << parser.GetTimestamp64().time_since_epoch().count();
+                break;
             PRINT_PRIMITIVE(String);
             PRINT_PRIMITIVE(Utf8);
             PRINT_PRIMITIVE(DyNumber);
@@ -2825,6 +2833,40 @@ TString ReadTable(
     }
 
     return result;
+}
+
+ui64 AsyncCreateSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpCreateSubDomain, workingDir);
+    auto* m = request->Record.MutableTransaction()->MutableModifyScheme();
+    auto* op = m->MutableSubDomain();
+    op->SetName(name);
+    bool ok = google::protobuf::TextFormat::MergeFromString(schema, op);
+    UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncAlterSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterSubDomain, workingDir);
+    auto* m = request->Record.MutableTransaction()->MutableModifyScheme();
+    auto* op = m->MutableSubDomain();
+    op->SetName(name);
+    bool ok = google::protobuf::TextFormat::MergeFromString(schema, op);
+    UNIT_ASSERT_C(ok, "failed to parse schema: " << schema);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
 }
 
 }

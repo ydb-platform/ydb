@@ -42,6 +42,9 @@ void TRemoteDynamicStoreReaderConfig::Register(TRegistrar registrar)
         .Default(TDuration::Seconds(20));
     registrar.Parameter("server_write_timeout", &TThis::ServerWriteTimeout)
         .Default(TDuration::Seconds(20));
+    // Typical time for store flush is 15 minutes.
+    registrar.Parameter("request_timeout", &TThis::RequestTimeout)
+        .Default(TDuration::Minutes(20));
     registrar.Parameter("max_rows_per_server_read", &TThis::MaxRowsPerServerRead)
         .GreaterThan(0)
         .Default(1024);

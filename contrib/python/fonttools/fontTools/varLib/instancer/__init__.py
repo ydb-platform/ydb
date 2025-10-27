@@ -1,4 +1,4 @@
-""" Partially instantiate a variable font.
+"""Partially instantiate a variable font.
 
 The module exports an `instantiateVariableFont` function and CLI that allow to
 create full instances (i.e. static fonts) from variable fonts, as well as "partial"
@@ -36,7 +36,7 @@ If the input location specifies all the axes, the resulting instance is no longe
 'variable' (same as using fontools varLib.mutator):
 .. code-block:: pycon
 
-    >>>    
+    >>>
     >> instance = instancer.instantiateVariableFont(
     ...     varfont, {"wght": 700, "wdth": 67.5}
     ... )
@@ -56,8 +56,10 @@ From the console script, this is equivalent to passing `wght=drop` as input.
 
 This module is similar to fontTools.varLib.mutator, which it's intended to supersede.
 Note that, unlike varLib.mutator, when an axis is not mentioned in the input
-location, the varLib.instancer will keep the axis and the corresponding deltas,
-whereas mutator implicitly drops the axis at its default coordinate.
+location, by default the varLib.instancer will keep the axis and the corresponding
+deltas, whereas mutator implicitly drops the axis at its default coordinate.
+To obtain the same behavior as mutator, pass the `static=True` parameter or
+the `--static` CLI option.
 
 The module supports all the following "levels" of instancing, which can of
 course be combined:
@@ -72,7 +74,7 @@ L1
 L2
     dropping one or more axes while pinning them at non-default locations;
     .. code-block:: pycon
-    
+
         >>>
         >> font = instancer.instantiateVariableFont(varfont, {"wght": 700})
 
@@ -81,22 +83,18 @@ L3
     a new minimum or maximum, potentially -- though not necessarily -- dropping
     entire regions of variations that fall completely outside this new range.
     .. code-block:: pycon
-    
+
         >>>
         >> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300)})
 
 L4
     moving the default location of an axis, by specifying (min,defalt,max) values:
     .. code-block:: pycon
-    
+
         >>>
         >> font = instancer.instantiateVariableFont(varfont, {"wght": (100, 300, 700)})
 
-Currently only TrueType-flavored variable fonts (i.e. containing 'glyf' table)
-are supported, but support for CFF2 variable fonts will be added soon.
-
-The discussion and implementation of these features are tracked at
-https://github.com/fonttools/fonttools/issues/1537
+Both TrueType-flavored (glyf+gvar) variable and CFF2 variable fonts are supported.
 """
 
 from fontTools.misc.fixedTools import (
@@ -120,6 +118,7 @@ from fontTools.cffLib.specializer import (
     specializeCommands,
     generalizeCommands,
 )
+from fontTools.cffLib.CFF2ToCFF import convertCFF2ToCFF
 from fontTools.varLib import builder
 from fontTools.varLib.mvar import MVAR_ENTRIES
 from fontTools.varLib.merger import MutatorMerger
@@ -136,6 +135,7 @@ from enum import IntEnum
 import logging
 import os
 import re
+import io
 from typing import Dict, Iterable, Mapping, Optional, Sequence, Tuple, Union
 import warnings
 
@@ -433,7 +433,27 @@ class AxisLimits(_BaseAxisLimits):
 
         avarSegments = {}
         if usingAvar and "avar" in varfont:
-            avarSegments = varfont["avar"].segments
+            avar = varfont["avar"]
+            avarSegments = avar.segments
+
+            if getattr(avar, "majorVersion", 1) >= 2 and avar.table.VarStore:
+                pinnedAxes = set(self.pinnedLocation())
+                if not pinnedAxes.issuperset(avarSegments):
+                    raise NotImplementedError(
+                        "Partial-instancing avar2 table is not supported"
+                    )
+
+                # TODO: Merge this with the main codepath.
+
+                # Full instancing of avar2 font. Use avar table to normalize location and return.
+                location = self.pinnedLocation()
+                location = {
+                    tag: normalize(value, axes[tag], avarSegments.get(tag, None))
+                    for tag, value in location.items()
+                }
+                return NormalizedAxisLimits(
+                    **avar.renormalizeLocation(location, varfont, dropZeroes=False)
+                )
 
         normalizedLimits = {}
 
@@ -643,7 +663,11 @@ def instantiateCFF2(
     # the Private dicts.
     #
     # Then prune unused things and possibly drop the VarStore if it's empty.
-    # In which case, downgrade to CFF table if requested.
+    #
+    # If the downgrade parameter is True, no actual downgrading is done, but
+    # the function returns True if the VarStore was empty after instantiation,
+    # and hence a downgrade to CFF is possible. In all other cases it returns
+    # False.
 
     log.info("Instantiating CFF2 table")
 
@@ -882,9 +906,9 @@ def instantiateCFF2(
             del private.vstore
 
         if downgrade:
-            from fontTools.cffLib.CFF2ToCFF import convertCFF2ToCFF
+            return True
 
-            convertCFF2ToCFF(varfont)
+    return False
 
 
 def _instantiateGvarGlyph(
@@ -1116,7 +1140,8 @@ def _instantiateVHVAR(varfont, axisLimits, tableFields, *, round=round):
                     varIdx = advMapping.mapping[glyphName]
                 else:
                     varIdx = varfont.getGlyphID(glyphName)
-                metrics[glyphName] = (advanceWidth + round(defaultDeltas[varIdx]), sb)
+                delta = round(defaultDeltas[varIdx])
+                metrics[glyphName] = (max(0, advanceWidth + delta), sb)
 
             if (
                 tableTag == "VVAR"
@@ -1377,12 +1402,55 @@ def _isValidAvarSegmentMap(axisTag, segmentMap):
     return True
 
 
+def downgradeCFF2ToCFF(varfont):
+    # Save these properties
+    recalcTimestamp = varfont.recalcTimestamp
+    recalcBBoxes = varfont.recalcBBoxes
+
+    # Disable them
+    varfont.recalcTimestamp = False
+    varfont.recalcBBoxes = False
+
+    # Save to memory, reload, downgrade and save again, reload.
+    # We do this dance because the convertCFF2ToCFF changes glyph
+    # names, so following save would fail if any other table was
+    # loaded and referencing glyph names.
+    #
+    # The second save+load is unfortunate but also necessary.
+
+    stream = io.BytesIO()
+    log.info("Saving CFF2 font to memory for downgrade")
+    varfont.save(stream)
+    stream.seek(0)
+    varfont = TTFont(stream, recalcTimestamp=False, recalcBBoxes=False)
+
+    convertCFF2ToCFF(varfont)
+
+    stream = io.BytesIO()
+    log.info("Saving downgraded CFF font to memory")
+    varfont.save(stream)
+    stream.seek(0)
+    varfont = TTFont(stream, recalcTimestamp=False, recalcBBoxes=False)
+
+    # Uncomment, to see test all tables can be loaded. This fails without
+    # the extra save+load above.
+    """
+    for tag in varfont.keys():
+        print("Loading", tag)
+        varfont[tag]
+    """
+
+    # Restore them
+    varfont.recalcTimestamp = recalcTimestamp
+    varfont.recalcBBoxes = recalcBBoxes
+
+    return varfont
+
+
 def instantiateAvar(varfont, axisLimits):
     # 'axisLimits' dict must contain user-space (non-normalized) coordinates.
 
     avar = varfont["avar"]
-    if getattr(avar, "majorVersion", 1) >= 2 and avar.table.VarStore:
-        raise NotImplementedError("avar table with VarStore is not supported")
 
     segments = avar.segments
 
@@ -1392,6 +1460,9 @@ def instantiateAvar(varfont, axisLimits):
         log.info("Dropping avar table")
         del varfont["avar"]
         return
+
+    if getattr(avar, "majorVersion", 1) >= 2 and avar.table.VarStore:
+        raise NotImplementedError("avar table with VarStore is not supported")
 
     log.info("Instantiating avar table")
     for axis in pinnedAxes:
@@ -1594,6 +1665,7 @@ def instantiateVariableFont(
     updateFontNames=False,
     *,
     downgradeCFF2=False,
+    static=False,
 ):
     """Instantiate variable font, either fully or partially.
 
@@ -1637,11 +1709,22 @@ def instantiateVariableFont(
             software that does not support CFF2. Defaults to False. Note that this
             operation also removes overlaps within glyph shapes, as CFF does not support
             overlaps but CFF2 does.
+        static (bool): if True, generate a full instance (static font) instead of a partial
+            instance (variable font).
     """
     # 'overlap' used to be bool and is now enum; for backward compat keep accepting bool
     overlap = OverlapMode(int(overlap))
 
     sanityCheckVariableTables(varfont)
+
+    if static:
+        unspecified = []
+        for axis in varfont["fvar"].axes:
+            if axis.axisTag not in axisLimits:
+                axisLimits[axis.axisTag] = None
+                unspecified.append(axis.axisTag)
+        if unspecified:
+            log.info("Pinning unspecified axes to default: %s", unspecified)
 
     axisLimits = AxisLimits(axisLimits).limitAxesAndPopulateDefaults(varfont)
 
@@ -1665,7 +1748,9 @@ def instantiateVariableFont(
         instantiateVARC(varfont, normalizedLimits)
 
     if "CFF2" in varfont:
-        instantiateCFF2(varfont, normalizedLimits, downgrade=downgradeCFF2)
+        downgradeCFF2 = instantiateCFF2(
+            varfont, normalizedLimits, downgrade=downgradeCFF2
+        )
 
     if "gvar" in varfont:
         instantiateGvar(varfont, normalizedLimits, optimize=optimize)
@@ -1719,6 +1804,12 @@ def instantiateVariableFont(
         # Set Regular/Italic/Bold/Bold Italic bits as appropriate, after the
         # name table has been updated.
         setRibbiBits(varfont)
+
+    if downgradeCFF2:
+        origVarfont = varfont
+        varfont = downgradeCFF2ToCFF(varfont)
+        if inplace:
+            origVarfont.__dict__ = varfont.__dict__.copy()
 
     return varfont
 
@@ -1827,6 +1918,12 @@ def parseArgs(args):
         help="Output instance TTF file (default: INPUT-instance.ttf).",
     )
     parser.add_argument(
+        "--static",
+        dest="static",
+        action="store_true",
+        help="Make a static font: pin unspecified axes to their default location.",
+    )
+    parser.add_argument(
         "--no-optimize",
         dest="optimize",
         action="store_false",
@@ -1923,13 +2020,13 @@ def main(args=None):
         recalcBBoxes=options.recalc_bounds,
     )
 
-    isFullInstance = {
+    isFullInstance = options.static or {
         axisTag
         for axisTag, limit in axisLimits.items()
         if limit is None or limit[0] == limit[2]
     }.issuperset(axis.axisTag for axis in varfont["fvar"].axes)
 
-    instantiateVariableFont(
+    varfont = instantiateVariableFont(
         varfont,
         axisLimits,
         inplace=True,
@@ -1937,6 +2034,7 @@ def main(args=None):
         overlap=options.overlap,
         updateFontNames=options.update_name_table,
         downgradeCFF2=options.downgrade_cff2,
+        static=options.static,
     )
 
     suffix = "-instance" if isFullInstance else "-partial"

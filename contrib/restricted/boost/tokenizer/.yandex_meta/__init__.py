@@ -9,7 +9,7 @@ def post_install(self):
 boost_tokenizer = NixSourceProject(
     nixattr="boost_tokenizer",
     arcdir=boost.make_arcdir("tokenizer"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

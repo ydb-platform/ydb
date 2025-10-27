@@ -79,6 +79,22 @@
         span.test_mute {
             color: blue;
         }
+        
+        span.test_fail_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
+        }
+        
+        span.test_error_sanitizer {
+            color: #ff4500;  /* Dark orange to distinguish from regular red */
+            background-color: #fff5ee;  /* Light orange background */
+            padding: 2px 4px;
+            border-radius: 3px;
+            border-left: 3px solid #ff4500;
+        }
         .svg_passed {
             fill: green;
         }
@@ -93,6 +109,27 @@
     
         .svg_mute {
             fill: blue;
+        }
+
+        .issue-button {
+            display: inline-block;
+            background-color: #f6f8fa;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            color: #0969da;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 500;
+            text-decoration: none;
+            margin-left: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .issue-button:hover {
+            background-color: #f3f4f6;
+            border-color: #d0d7de;
+            text-decoration: none;
         }
 
         .svg-icon {
@@ -417,31 +454,8 @@
     }
 
     function copyTestNameToClipboard(text) {
-        const full_name = text.trim();
-        let pieces 
-        if (full_name.includes('.py.'))
-        {
-            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(full_name);
-        } else
-        {
-            pieces = /(.+)\/([^$]+)$/.exec(full_name);
-        }
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-
-        const namePieces = testName.split('.');
-
-        if (namePieces.length === 2) {
-            testName = namePieces[0] + '::' + namePieces[1];
-        } else {
-            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
-        }
-
-        const cmdArg = `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+        const cmdArg = getTestRunCommand(text);
+        if (!cmdArg) return;
 
         console.log(cmdArg);
 
@@ -456,16 +470,10 @@
         );
     }
     function copyTestNameForMuteToClipboard(text) {
-        const full_name = text.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
-
-        if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
-        }
-        let [path, testName] = [pieces[1], pieces[2]];
-
-
+        const parsed = parseTestName(text);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
         const cmdArg = `${path} ${testName}`;
 
         console.log(cmdArg);
@@ -481,30 +489,252 @@
         );
     }
 
-    function createIssue(test,owner,success_count, fail_count) {
-        const full_name = test.trim();
-        const pieces = /(.+)\/([^$]+)$/.exec(full_name);
+    // Configuration constants
+    const MAX_URL_LENGTH = 8000; // GitHub URL limit is 8201, stay under 8000 to be safe
+    const GITHUB_ISSUE_BASE_URL = "https://github.com/ydb-platform/ydb/issues/new"; // Base URL for GitHub issues
+
+    // Utility functions
+    function buildGitHubIssueUrl(title, body, labels) {
+        return GITHUB_ISSUE_BASE_URL + "?title=" + title + "&body=" + body + "&labels=" + labels + "&type=Bug";
+    }
+
+    // Show tooltip stub to avoid runtime errors (visual feedback provided by icon swap)
+    function showCopiedTooltip() {}
+
+    // Safe percent-encoded truncation helpers
+    function isDecodable(s) {
+        try { decodeURIComponent(s); return true; } catch (e) { return false; }
+    }
+
+    function safeTruncateEncoded(encoded, maxLen) {
+        if (encoded.length <= maxLen) return encoded;
+        let cut = encoded.slice(0, maxLen);
+        // Remove incomplete % sequence at the tail
+        cut = cut.replace(/%(?:[0-9A-Fa-f]{0,2})$/, '');
+        while (cut && !isDecodable(cut)) {
+            if (/%[0-9A-Fa-f]{2}$/.test(cut)) cut = cut.slice(0, -3);
+            else cut = cut.slice(0, -1);
+        }
+        return cut;
+    }
+
+    function parseTestName(full_name) {
+        const trimmed = full_name.trim();
+        let pieces;
+        
+        if (trimmed.includes('.py.')) {
+            pieces = /(.+)\/(.*py.*[^\/]+)$/.exec(trimmed);
+        } else {
+            pieces = /(.+)\/([^$]+)$/.exec(trimmed);
+        }
 
         if (!pieces) {
-            console.error("Unable to split path/test name from %o", full_name);
-            return;
+            console.error("Unable to split path/test name from %o", trimmed);
+            return null;
         }
-        let [path, testName] = [pieces[1], pieces[2]];
         
-        if (success_count + fail_count != 0){
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0A%20Success%20rate%20**"+(success_count/(success_count+fail_count)*100)+"%25**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
-            window.open(url, '_blank');
+        return [pieces[1], pieces[2]];
+    }
+
+    function formatTestCommand(path, testName) {
+        const namePieces = testName.split('.');
+
+        if (namePieces.length === 2) {
+            testName = namePieces[0] + '::' + namePieces[1];
+        } else {
+            testName = namePieces[0] + '.' + namePieces[1] + '::' + namePieces.slice(2).join('::');
         }
-        else {
-            let url = "https://github.com/ydb-platform/ydb/issues/new?title=Mute "+ encodeURIComponent(path)+"/"+ encodeURIComponent(testName) + "&body=" + encodeURIComponent(path)+"/"+ encodeURIComponent(testName) +"%0A%0A**Add%20line%20to%20[muted_ya.txt](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/muted_ya.txt):**%0A%60" + encodeURIComponent(path)+" "+ encodeURIComponent(testName)+"%60%0A%0A%20Owner:%20[TEAM:@ydb-platform/"+owner+"](https://github.com/orgs/ydb-platform/teams/"+owner+")%0A%0A**Read%20more%20in%20[mute_rules.md](https://github.com/ydb-platform/ydb/blob/{{branch}}/.github/config/mute_rules.md)**%20%20%0A%0A**Summary%20history:**%0APass:"+success_count+"%20Fail:"+fail_count+"%20%0A%0A**Test%20run%20history:**%20[link](https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name=" +path+ "/"+ testName+ ")%0A%0AMore%20info%20in%20[dashboard](https://datalens.yandex/4un3zdm0zcnyr)&labels=mute"
-            window.open(url, '_blank');
+
+        return `./ya make -ttt {{ buid_preset_params }} -F '${testName}' ${path}`;
+    }
+
+    function getTestRunCommand(test) {
+        const parsed = parseTestName(test);
+        if (!parsed) return "";
+        
+        const [path, testName] = parsed;
+        return formatTestCommand(path, testName);
+    }
+
+    function getOwnerAreaLabel(owner) {
+        const ownerMapping = {{ owner_area_mapping | tojson }};
+        return ownerMapping[owner] || "";
+    }
+
+    function buildLabels(issueType, buildPreset, ownerAreaLabel) {
+        let labels = [];
+        
+        if (issueType === 'mute') {
+            labels.push('mute');
+        } else {
+            labels.push('bug');
+            
+            if (issueType === 'sanitizer') {
+                labels.push('sanitizer');
+                
+                if (buildPreset.includes("asan")) {
+                    labels.push("asan");
+                } else if (buildPreset.includes("msan")) {
+                    labels.push("msan");
+                } else if (buildPreset.includes("tsan")) {
+                    labels.push("tsan");
+                }
+            }
         }
-         
+        
+        if (ownerAreaLabel) {
+            labels.push(ownerAreaLabel);
+        }
+        
+        return labels.join(',');
+    }
+
+    function buildIssueBody(issueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText) {
+        let body = encodeURIComponent(path) + "/" + encodeURIComponent(testName) + "%0A%0A";
+        
+        // Add type-specific header
+        if (issueType === 'sanitizer') {
+            // No header for sanitizer issues as requested
+        } else if (issueType === 'mute') {
+            body += "**Test mute request**%0A%0A";
+        } else {
+            body += "**Test Failure**%0A%0A";
+        }
+        
+        // Build information
+        body += "**Build Information:**%0A";
+        if (commitSha && commitSha !== "") {
+            body += "- Version: " + encodeURIComponent(commitSha) + "%0A";
+        }
+        body += "- Build Preset: " + encodeURIComponent(buildPreset) + "%0A";
+        body += "- Branch: " + encodeURIComponent(branch) + "%0A%0A";
+        
+        // Run command
+        body += "**Run Command:**%0A```%0A" + encodeURIComponent(testRunCommand) + "%0A```%0A%0A";
+        
+        // Owner
+        body += "**Owner:** [TEAM:@ydb-platform/" + owner + "](https://github.com/orgs/ydb-platform/teams/" + owner + ")%0A%0A";
+        
+        // Summary history (only for non-sanitizer issues)
+        if (issueType !== 'sanitizer') {
+            if (success_count + fail_count != 0) {
+                body += "**Summary history:**%0A Success rate **" + (success_count/(success_count+fail_count)*100) + "%25**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            } else {
+                body += "**Summary history:**%0APass:" + success_count + " Fail:" + fail_count + "%0A%0A";
+            }
+        }
+        
+        // Always include test run history link
+        body += "**Test run history:** [link](https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "%26full_name=" + encodeURIComponent(path + "/" + testName) + "%26build_type=" + encodeURIComponent(buildPreset) + ")%0A%0A";
+        
+        // Always include report link
+        body += "More info in [dashboard](https://datalens.yandex/4un3zdm0zcnyr)%0A%0A";
+        
+        return body;
+    }
+
+    function buildBodyWithLengthLimit(baseBody, logUrls, errorText, title, labels, maxUrlLength) {
+        let body = baseBody;
+        
+        // Add logs first
+        if (logUrls && Object.keys(logUrls).length > 0) {
+            let logsSection = "**Logs:**%0A";
+            for (const [logName, logUrl] of Object.entries(logUrls)) {
+                logsSection += "- [" + encodeURIComponent(logName) + "](" + encodeURIComponent(logUrl) + ")%0A";
+            }
+            logsSection += "%0A";
+            body += logsSection;
+        }
+        
+        // Try to add error text, checking actual URL length
+        if (errorText && errorText.trim() !== "") {
+            const errorPrefix = "**Error Summary:**%0A```%0A";
+            const errorSuffix = "%0A```%0A%0A";
+            const truncationMsg = "%0A<TRUNCATED>";
+            
+            const fullErrorText = errorText.trim();
+            const encodedFullError = encodeURIComponent(fullErrorText);
+
+            // Compute minimal overhead URL length (without error content)
+            const minimalSection = errorPrefix + errorSuffix;
+            const minimalUrl = buildGitHubIssueUrl(title, body + minimalSection, labels);
+            if (minimalUrl.length > maxUrlLength) {
+                // Can't include error section at all
+            } else {
+                const allowedDelta = maxUrlLength - minimalUrl.length;
+                if (encodedFullError.length <= allowedDelta) {
+                    body += errorPrefix + encodedFullError + errorSuffix;
+                } else {
+                    const allowedForEncoded = allowedDelta - truncationMsg.length;
+                    if (allowedForEncoded > 0) {
+                        const truncatedEncoded = safeTruncateEncoded(encodedFullError, allowedForEncoded);
+                        if (truncatedEncoded) {
+                            body += errorPrefix + truncatedEncoded + truncationMsg + errorSuffix;
+                        }
+                    }
+                }
+            }
+        }
+        
+        return body;
+    }
+
+    function createIssueGeneric(issueType, test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        const parsed = parseTestName(test);
+        if (!parsed) return;
+        
+        const [path, testName] = parsed;
+        
+        // Get build preset and other contextual information
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        const commitSha = "{{ commit_sha }}";
+        const testRunCommand = getTestRunCommand(test);
+        const ownerAreaLabel = getOwnerAreaLabel(owner);
+        
+        // Determine issue type based on parameters
+        let actualIssueType = issueType;
+        if (is_sanitizer && issueType === 'bug') {
+            actualIssueType = 'sanitizer';
+        }
+        
+        // Create title based on issue type
+        let title;
+        if (actualIssueType === 'sanitizer') {
+            title = "Sanitizer error in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else if (actualIssueType === 'mute') {
+            title = "Mute test " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        } else {
+            title = "Test failure in " + encodeURIComponent(path) + "/" + encodeURIComponent(testName);
+        }
+        
+        // Build body
+        const body = buildIssueBody(actualIssueType, path, testName, buildPreset, branch, commitSha, testRunCommand, owner, success_count, fail_count, logUrls, errorText);
+        
+        // Build labels
+        const labels = buildLabels(actualIssueType, buildPreset, ownerAreaLabel);
+        
+        // Build body with exact length limit checking
+        const finalBody = buildBodyWithLengthLimit(body, logUrls, errorText, title, labels, MAX_URL_LENGTH);
+        
+        // Create final URL and open
+        const finalUrl = buildGitHubIssueUrl(title, finalBody, labels);
+        window.open(finalUrl, '_blank');
+    }
+
+    function createIssue(test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls = {}) {
+        createIssueGeneric('bug', test, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
+    }
+
+    function createMuteIssue(test, owner, success_count, fail_count, errorText = '', logUrls = {}) {
+        createIssueGeneric('mute', test, owner, success_count, fail_count, false, errorText, logUrls);
     }
 
     function openHistory(test) {
         const full_name = test.trim();
-        let url = "https://datalens.yandex/34xnbsom67hcq?branch={{branch}}&full_name="+full_name
+        const buildPreset = "{{ build_preset }}";
+        const branch = "{{ branch }}";
+        let url = "https://datalens.yandex/34xnbsom67hcq?branch=" + encodeURIComponent(branch) + "&full_name=" + encodeURIComponent(full_name) + "&build_type=" + encodeURIComponent(buildPreset);
         window.open(url, '_blank');
     }
 
@@ -684,16 +914,75 @@
         createIssueButton.forEach(button => {
             button.addEventListener('click', function(event) {
                 event.preventDefault();
-                const success_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_passed').length
-                const fail_count = findParentBySelector(event.target,'tr').querySelectorAll('.svg_failure').length + findParentBySelector(event.target,'tr').querySelectorAll('.svg_mute').length
+                const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Check if this is a sanitizer issue by looking for the SANITIZER badge
+                const is_sanitizer = testRow.querySelector('.test_name span[style*="background-color: #ff4500"]') !== null;
+                
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
 
-                createIssue(
-                    findParentBySelector(event.target,'tr').querySelector('.test_name').querySelector('span').innerText,
-                    findParentBySelector(event.target,'tr').querySelector('.test_owner').innerText,
-                    success_count,fail_count
-                );
+                createIssue(testName, owner, success_count, fail_count, is_sanitizer, errorText, logUrls);
             });
         });
+        
+        const createMuteIssueButton = document.querySelectorAll(".create_mute_issue");
+        createMuteIssueButton.forEach(button => {
+            button.addEventListener('click', function(event) {
+                event.preventDefault();
+                const testRow = findParentBySelector(event.target,'tr');
+                const success_count = testRow.querySelectorAll('.svg_passed').length;
+                const fail_count = testRow.querySelectorAll('.svg_failure').length + testRow.querySelectorAll('.svg_mute').length;
+                const testName = testRow.querySelector('.test_name').querySelector('span').innerText;
+                const owner = testRow.querySelector('.test_owner').innerText;
+                
+                // Get error text from the test description if available
+                let errorText = '';
+                const errorButton = testRow.querySelector('.error-button');
+                if (errorButton && errorButton.nextElementSibling) {
+                    const errorContent = errorButton.nextElementSibling.querySelector('pre code');
+                    if (errorContent) {
+                        errorText = errorContent.textContent;
+                    }
+                }
+                
+                // Extract log URLs from the test row
+                let logUrls = {};
+                const logCells = testRow.querySelectorAll('td:last-child a');
+                logCells.forEach(link => {
+                    const logName = link.textContent.trim();
+                    const logUrl = link.href;
+                    if (logName && logUrl) {
+                        logUrls[logName] = logUrl;
+                    }
+                });
+
+                createMuteIssue(testName, owner, success_count, fail_count, errorText, logUrls);
+            });
+        });
+
 
         const headers = document.querySelectorAll(".collapsible-header");
         headers.forEach(header => {
@@ -761,7 +1050,13 @@
         <button id="collapse-all">Collapse All</button>
     </div>
 {% for status in status_order %}
-<h1 id="{{ status.name}}" class="collapsible-header">{{ status.name }} ({{ tests[status] | length }})</h1>
+{% set sanitizer_count = tests[status] | selectattr('is_sanitizer_issue') | list | length %}
+<h1 id="{{ status.name}}" class="collapsible-header">
+    {{ status.name }} ({{ tests[status] | length }})
+    {% if sanitizer_count > 0 %}
+        <span style="color: #ff4500; font-weight: bold;">- {{ sanitizer_count }} SANITIZER ISSUE{{ 's' if sanitizer_count != 1 else '' }}</span>
+    {% endif %}
+</h1>
 <table class="collapsible-content active" border="1">
     <thead>
     <tr>
@@ -792,6 +1087,12 @@
         {% endif %}
             <span>{{ t.full_name }}</span>
             {% if status.is_error %}
+                <button class="issue-button create_issue" title="Create issue">+ ISSUE</button>
+            {% endif %}
+            {% if t.is_sanitizer_issue %}
+                <span style="background-color: #ff4500; color: white; padding: 2px 6px; border-radius: 12px; font-size: 11px; margin-left: 8px; font-weight: bold;">SANITIZER</span>
+            {% endif %}
+            {% if status.is_error %}
             <div class="button-group">
                 <button class="button" title="Show options">
                     <svg  class="more"  xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" stroke="none" aria-hidden="true" viewBox="0 0 448 512">
@@ -811,7 +1112,7 @@
                         </div>
                         <span class="button-text">Copy run command</span>
                     </button>
-                    {% if status.name == "FAIL" %} 
+                    {% if status.is_error %} 
                     <button class="button mute" title="Copy mute string to clipboard" >
                         <div class="icon-container"> 
                             <svg  class="mute_svg"  xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left" stroke="none" viewBox="2 0 30 17">
@@ -827,7 +1128,7 @@
                         </div>
                         <span class="button-text">Copy mute string</span>
                     </button>
-                    <button class="button create_issue" title="Create issue">
+                    <button class="button create_mute_issue" title="Create mute issue">
                         <div class="icon-container"> 
                             <svg class="issue_svg" xmlns="http://www.w3.org/2000/svg" width="32" height="14" position="left"  stroke="none" viewBox="2 0 30 17">
                                 <!-- First icon: plus -->
@@ -842,6 +1143,7 @@
                         </div>
                         <span class="button-text">Create mute issue</span>
                     </button>
+
                      {% endif %}
                     <button class="button open_history" title="Show history">
                         <div class="icon-container"> 

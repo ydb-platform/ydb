@@ -3,6 +3,14 @@
 #include <util/generic/string.h>
 #include <util/stream/str.h>
 
+namespace NSQLTranslationV1 {
+    struct TLexers;
+}
+
+namespace NSQLTranslation {
+    struct TTranslationSettings;
+}
+
 namespace NYql {
     class TIssues;
 }
@@ -12,12 +20,19 @@ namespace NYdb::NDump {
 struct TViewQuerySplit {
     TString ContextRecreation;
     TString Select;
+
+    TViewQuerySplit() = default;
+    TViewQuerySplit(const TVector<TString>& statements);
 };
 
-TViewQuerySplit SplitViewQuery(TStringInput query);
+bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues& issues);
+bool SplitViewQuery(
+    const TString& query, const NSQLTranslationV1::TLexers& lexers, const NSQLTranslation::TTranslationSettings& translationSettings,
+    TViewQuerySplit& split, NYql::TIssues& issues
+);
 
 TString BuildCreateViewQuery(
-    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& database, const TString& backupRoot,
     NYql::TIssues& issues
 );
 

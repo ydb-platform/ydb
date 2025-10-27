@@ -76,14 +76,14 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
                 ->DetectFileParameters(path, diskSizeBytes, isBlockDevice);
         }
     }
-    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize &&
+    if (enableSmallDiskOptimization && diskSizeBytes > 0 && diskSizeBytes < NPDisk::SmallDiskSizeBoundary &&
         userAccessibleChunkSizeBytes > NPDisk::SmallDiskMaximumChunkSize) {
         throw NPDisk::TPDiskFormatBigChunkException() << "diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<
             " bool(sectorMap)# " << bool(sectorMap) <<
             " sectorMap->DeviceSize# " << (sectorMap ? sectorMap->DeviceSize : 0);
     }
-    Y_VERIFY_S((enableSmallDiskOptimization && diskSizeBytes < NPDisk::FullSizeDiskMinimumSize) || (
+    Y_VERIFY_S((enableSmallDiskOptimization && diskSizeBytes < NPDisk::SmallDiskSizeBoundary) || (
             diskSizeBytes > 0 && diskSizeBytes / userAccessibleChunkSizeBytes > 200),
             " diskSizeBytes# " << diskSizeBytes <<
             " userAccessibleChunkSizeBytes# " << userAccessibleChunkSizeBytes <<

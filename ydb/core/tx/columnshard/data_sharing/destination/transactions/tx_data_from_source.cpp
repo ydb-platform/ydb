@@ -47,7 +47,7 @@ void TTxDataFromSource::DoComplete(const TActorContext& /*ctx*/) {
 }
 
 TTxDataFromSource::TTxDataFromSource(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& session, THashMap<TInternalPathId, NEvents::TPathIdData>&& portionsByPathId, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const TTabletId sourceTabletId)
-    : TBase(self)
+    : TBase(self, "data_from_source")
     , Session(session)
     , PortionsByPathId(std::move(portionsByPathId))
     , SchemeHistory(std::move(schemas))

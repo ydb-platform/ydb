@@ -103,6 +103,9 @@ struct TQueueStaticExportConfig
     //! commit_ordering=%false queues, since commit timestamp monotonicty within a tablet is not guaranteed for them.
     bool UseUpperBoundForTableNames;
 
+    // COMPAT(akozhikhov)
+    bool EnableExportFromQueueWithHunks;
+
     REGISTER_YSON_STRUCT(TQueueStaticExportConfig);
 
     static void Register(TRegistrar registrar);

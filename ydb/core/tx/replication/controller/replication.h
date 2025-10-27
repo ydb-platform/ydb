@@ -141,7 +141,6 @@ public:
     void SetConfig(NKikimrReplication::TReplicationConfig&& config);
     void ResetCredentials(const TActorContext& ctx);
     const NKikimrReplication::TReplicationConfig& GetConfig() const;
-    const TString& GetDatabase() const;
     void SetState(EState state, TString issue = {});
     EState GetState() const;
     EState GetDesiredState() const;
@@ -155,8 +154,11 @@ public:
     void UpdateSecret(const TString& secretValue);
     ui64 GetExpectedSecretResolverCookie() const;
 
-    void SetTenant(const TString& value);
-    const TString& GetTenant() const;
+    void UpdateResourceId(const TString& value);
+
+    void SetDatabase(const TString& value);
+    const TString& GetDatabase() const;
+    void ResolveDatabase(const TActorContext& ctx);
 
     bool CheckAlterDone() const;
 

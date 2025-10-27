@@ -116,6 +116,10 @@ namespace NLs {
     void IsResourcePool(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsBackupCollection(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void IsSysView(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsSecret(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsStreamingQuery(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void IsDirectory(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    void CheckPathType(const NKikimrScheme::TEvDescribeSchemeResult& record, const NKikimrSchemeOp::EPathType pathType);
     TCheckFunc CheckColumns(const TString& name, const TSet<TString>& columns, const TSet<TString>& droppedColumns, const TSet<TString> keyColumns, bool strictCount = false);
     TCheckFunc CheckColumnType(const ui64 columnIndex, const TString& columnTypename);
     void CheckBoundaries(const NKikimrScheme::TEvDescribeSchemeResult& record);
@@ -136,6 +140,8 @@ namespace NLs {
     TCheckFunc MaxPartitionsCountEqual(ui32 count);
     void HasMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
     void NoMaxPartitionsCount(const NKikimrScheme::TEvDescribeSchemeResult& record);
+    TCheckFunc MinTopicPartitionsCountEqual(ui32 count);
+    TCheckFunc MaxTopicPartitionsCountEqual(ui32 count);
     TCheckFunc PartitioningByLoadStatus(bool status);
     TCheckFunc ColumnFamiliesCount(ui32 size);
     TCheckFunc ColumnFamiliesHas(ui32 familyId);
@@ -173,6 +179,8 @@ namespace NLs {
                                      ui32 levels
                                   );
 
+    TCheckFunc SpecializedIndexDescription(const TString& proto);
+
     TCheckFunc SequenceName(const TString& name);
     TCheckFunc SequenceIncrement(i64 increment);
     TCheckFunc SequenceMaxValue(i64 maxValue);
@@ -191,6 +199,7 @@ namespace NLs {
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
     TCheckFunc ConsumerExist(const TString& name);
+    TCheckFunc ConsumersSize(ui64 size);
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);

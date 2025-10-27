@@ -14,6 +14,10 @@
 
 namespace NYql::NFmr {
 
+struct TFmrUserJobOptions {
+    bool WriteStatsToFile;
+};
+
 class TFmrUserJob: public TYqlUserJobBase {
 public:
     TFmrUserJob()
@@ -40,6 +44,10 @@ public:
 
     void SetYtJobService(IYtJobService::TPtr jobService) {
         YtJobService_ = jobService;
+    } // not for serialization, set when FmrJob is launched in the same process.
+
+    void SetYtJobServiceType(const TString& ytJobServiceType) {
+        YtJobServiceType_ = ytJobServiceType;
     }
 
     void SetTableDataService(const TString& tableDataServiceDiscoveryFilePath) {
@@ -49,7 +57,7 @@ public:
     void Save(IOutputStream& s) const override;
     void Load(IInputStream& s) override;
 
-    TStatistics DoFmrJob();
+    TStatistics DoFmrJob(const TFmrUserJobOptions& options);
 
 protected:
     TIntrusivePtr<TMkqlWriterImpl> MakeMkqlJobWriter() override;
@@ -63,21 +71,22 @@ private:
 
     void InitializeFmrUserJob();
 
-    TStatistics GetStatistics();
+    TStatistics GetStatistics(const TFmrUserJobOptions& options);
 
     // Serializable part (don't forget to add new members to Save/Load)
     TTaskTableInputRef InputTables_;
     std::vector<TFmrTableOutputRef> OutputTables_;
     std::unordered_map<TFmrTableId, TClusterConnection> ClusterConnections_;
     TString TableDataServiceDiscoveryFilePath_;
+    TString YtJobServiceType_; // file or native
     // End of serializable part
 
     TFmrRawTableQueue::TPtr UnionInputTablesQueue_; // Queue which represents union of all input streams
     TFmrRawTableQueueReader::TPtr QueueReader_;
     TVector<TFmrTableDataServiceWriter::TPtr> TableDataServiceWriters_;
     ITableDataService::TPtr TableDataService_;
-    IYtJobService::TPtr YtJobService_ = MakeYtJobSerivce();
-    THolder<IThreadPool> ThreadPool_ = CreateThreadPool(3);
+    IYtJobService::TPtr YtJobService_;
+    THolder<IThreadPool> ThreadPool_ = CreateThreadPool(3, 100, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     std::shared_ptr<std::atomic<bool>> CancelFlag_ = std::make_shared<std::atomic<bool>>(false);
     // TODO - pass settings for various classes here.
 };

@@ -30,7 +30,7 @@ std::unique_ptr<TPortionInfoConstructor> TWrittenPortionInfo::BuildConstructor(c
 }
 
 void TWrittenPortionInfo::FillDefaultColumn(NAssembling::TColumnAssemblingInfo& column, const std::optional<TSnapshot>& defaultSnapshot) const {
-    TSnapshot defaultSnapshotLocal = TSnapshot::Zero();
+    TSnapshot defaultSnapshotLocal = TSnapshot::Max();
     if (CommitSnapshot) {
         defaultSnapshotLocal = *CommitSnapshot;
     } else if (defaultSnapshot) {

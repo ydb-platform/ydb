@@ -1,8 +1,10 @@
 #pragma once
+
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 #include <ydb/core/protos/kqp.pb.h>
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <ydb/core/kqp/common/result_set_format/kqp_result_set_format_settings.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/grpc_services/base/iface.h>
 #include <ydb/core/grpc_services/cancelation/cancelation_event.h>
 #include <ydb/core/grpc_services/cancelation/cancelation.h>
@@ -45,10 +47,22 @@ struct TQueryRequestSettings {
         return *this;
     }
 
+    TQueryRequestSettings& SetSchemaInclusionMode(const ::Ydb::Query::SchemaInclusionMode& mode) {
+        SchemaInclusionMode = mode;
+        return *this;
+    }
+
+    TQueryRequestSettings& SetResultSetFormat(const ::Ydb::ResultSet::Format& format) {
+        ResultSetFormat = format;
+        return *this;
+    }
+
     ui64 OutputChunkMaxSize = 0;
     bool KeepSession = false;
     bool UseCancelAfter = true;
     ::Ydb::Query::Syntax Syntax = Ydb::Query::Syntax::SYNTAX_UNSPECIFIED;
+    ::Ydb::Query::SchemaInclusionMode SchemaInclusionMode = Ydb::Query::SchemaInclusionMode::SCHEMA_INCLUSION_MODE_UNSPECIFIED;
+    ::Ydb::ResultSet::Format ResultSetFormat = Ydb::ResultSet::FORMAT_UNSPECIFIED;
     bool SupportsStreamTrailingResult = false;
 };
 
@@ -68,7 +82,8 @@ public:
         const ::Ydb::Table::QueryCachePolicy* queryCachePolicy,
         const ::Ydb::Operations::OperationParams* operationParams,
         const TQueryRequestSettings& querySettings = TQueryRequestSettings(),
-        const TString& poolId = "");
+        const TString& poolId = "",
+        std::optional<NFormats::TArrowFormatSettings> arrowFormatSettings = std::nullopt);
 
     TEvQueryRequest() {
         Record.MutableRequest()->SetUsePublicResponseDataFormat(true);
@@ -364,6 +379,22 @@ public:
         DatabaseId = databaseId;
     }
 
+    ::Ydb::Query::SchemaInclusionMode GetSchemaInclusionMode() const {
+        return RequestCtx ? QuerySettings.SchemaInclusionMode : Record.GetRequest().GetSchemaInclusionMode();
+    }
+
+    ::Ydb::ResultSet::Format GetResultSetFormat() const {
+        return RequestCtx ? QuerySettings.ResultSetFormat : Record.GetRequest().GetResultSetFormat();
+    }
+
+    bool HasArrowFormatSettings() const {
+        return ArrowFormatSettings.has_value();
+    }
+
+    std::optional<NFormats::TArrowFormatSettings> GetArrowFormatSettings() const {
+        return ArrowFormatSettings;
+    }
+
     bool GetSaveQueryPhysicalGraph() const {
         return SaveQueryPhysicalGraph;
     }
@@ -378,6 +409,22 @@ public:
 
     void SetQueryPhysicalGraph(NKikimrKqp::TQueryPhysicalGraph queryPhysicalGraph) {
         QueryPhysicalGraph = std::make_shared<const NKikimrKqp::TQueryPhysicalGraph>(std::move(queryPhysicalGraph));
+    }
+
+    void SetGeneration(i64 generation) {
+        Generation = generation;
+    }
+
+    i64 GetGeneration() const {
+        return Generation;
+    }
+
+    void SetDisableDefaultTimeout(bool disableDefaultTimeout) {
+        DisableDefaultTimeout = disableDefaultTimeout;
+    }
+
+    bool GetDisableDefaultTimeout() const {
+        return DisableDefaultTimeout;
     }
 
     mutable NKikimrKqp::TEvQueryRequest Record;
@@ -410,8 +457,11 @@ private:
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     TDuration ProgressStatsPeriod;
     std::optional<NResourcePool::TPoolSettings> PoolConfig;
+    std::optional<NFormats::TArrowFormatSettings> ArrowFormatSettings;
     bool SaveQueryPhysicalGraph = false;  // Used only in execute script queries
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+    i64 Generation = 0;
+    bool DisableDefaultTimeout = false;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

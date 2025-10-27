@@ -20,9 +20,11 @@ public:
     void AddOrUpdatePool(const TString& databaseId, const TString& poolId, const NHdrf::TStaticAttributes& attrs);
 
     NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
-    void RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId);
+    void RemoveQuery(const NHdrf::NDynamic::TQueryPtr& query);
 
-    void UpdateFairShare();
+    // We want to allow FairShare to be over Limit.
+    // If you need to change this behaviour change variable's default value
+    void UpdateFairShare(bool allowFairShareOverlimit = true);
 
 private:
     TRWMutex Mutex;
@@ -89,9 +91,7 @@ struct TEvAddQuery : public TEventLocal<TEvAddQuery, TEvents::EvAddQuery> {
 };
 
 struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuery> {
-    TString DatabaseId;
-    TString PoolId;
-    NHdrf::TQueryId QueryId;
+    NHdrf::NDynamic::TQueryPtr Query;
 };
 
 struct TEvQueryResponse : public TEventLocal<TEvQueryResponse, TEvents::EvQueryResponse> {

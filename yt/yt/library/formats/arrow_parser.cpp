@@ -1,4 +1,5 @@
 #include "arrow_parser.h"
+#include "arrow_metadata_constants.h"
 
 #include <yt/yt/client/formats/parser.h>
 
@@ -20,17 +21,16 @@
 
 #include <util/stream/buffer.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/type_fwd.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/type_fwd.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/cast.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/compute/cast.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/api.h>
-#include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/io/memory.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/api.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/ipc/api.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/util/decimal.h>
+#include <contrib/libs/apache/arrow_next/cpp/src/arrow/util/decimal.h>
 
 namespace NYT::NFormats {
 
@@ -46,11 +46,13 @@ namespace {
 static constexpr i64 SecondsToMicroCoefficient = 1'000'000;
 static constexpr i64 MilliToMicroCoefficient = 1'000;
 static constexpr i64 MicroToNanoCoefficient = 1'000;
+
 static constexpr i64 SecondsToMilliCoefficient = 1'000;
+static constexpr i64 SecondsToNanoCoefficient = 1'000'000'000;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void ThrowOnError(const arrow::Status& status)
+void ThrowOnError(const arrow20::Status& status)
 {
     if (!status.ok()) {
         THROW_ERROR_EXCEPTION("Arrow error [%v]: %Qv", status.CodeAsString(), status.message());
@@ -61,9 +63,9 @@ void ThrowOnError(const arrow::Status& status)
 
 void CheckArrowType(
     auto ytTypeOrMetatype,
-    const std::initializer_list<arrow::Type::type>& allowedArrowTypes,
+    const std::initializer_list<arrow20::Type::type>& allowedArrowTypes,
     const std::string& arrowTypeName,
-    arrow::Type::type arrowType)
+    arrow20::Type::type arrowType)
 {
     if (std::find(allowedArrowTypes.begin(), allowedArrowTypes.end(), arrowType) == allowedArrowTypes.end()) {
         THROW_ERROR_EXCEPTION("Unexpected arrow type %Qv for YT metatype %Qlv",
@@ -75,19 +77,19 @@ void CheckArrowType(
 void CheckTzArrowType(
     ESimpleLogicalValueType columnType,
     const std::string& arrowTypeName,
-    const std::shared_ptr<arrow::DataType>& arrowDataType)
+    const std::shared_ptr<arrow20::DataType>& arrowDataType)
 {
     CheckArrowType(
         columnType,
         {
-            arrow::Type::BINARY,
-            arrow::Type::STRUCT,
-            arrow::Type::DICTIONARY
+            arrow20::Type::BINARY,
+            arrow20::Type::STRUCT,
+            arrow20::Type::DICTIONARY
         },
         arrowTypeName,
         arrowDataType->id());
 
-    if (arrowDataType->id() != arrow::Type::STRUCT) {
+    if (arrowDataType->id() != arrow20::Type::STRUCT) {
         return;
     }
 
@@ -97,7 +99,7 @@ void CheckTzArrowType(
 
     auto timestampType = arrowDataType->field(0)->type();
     auto tzIndexType = arrowDataType->field(1)->type();
-    if (tzIndexType->id() != arrow::Type::UINT16 && tzIndexType->id() != arrow::Type::BINARY) {
+    if (tzIndexType->id() != arrow20::Type::UINT16 && tzIndexType->id() != arrow20::Type::BINARY) {
         THROW_ERROR_EXCEPTION("The second field in the struct is expected to be a uint16 or binary");
     }
 
@@ -106,7 +108,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT16
+                    arrow20::Type::UINT16
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -115,7 +117,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT32
+                    arrow20::Type::UINT32
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -124,7 +126,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT64
+                    arrow20::Type::UINT64
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -133,7 +135,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT32
+                    arrow20::Type::INT32
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -142,7 +144,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT64
+                    arrow20::Type::INT64
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -151,7 +153,7 @@ void CheckTzArrowType(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT64
+                    arrow20::Type::INT64
                 },
                 arrowTypeName,
                 timestampType->id());
@@ -164,7 +166,7 @@ void CheckTzArrowType(
 void CheckArrowTypeMatch(
     const ESimpleLogicalValueType& columnType,
     const std::string& arrowTypeName,
-    const std::shared_ptr<arrow::DataType>& arrowDataType)
+    const std::shared_ptr<arrow20::DataType>& arrowDataType)
 {
     auto arrowTypeId = arrowDataType->id();
     switch (columnType) {
@@ -172,7 +174,7 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
+                    arrow20::Type::INT8,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -182,8 +184,8 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
-                    arrow::Type::INT16,
+                    arrow20::Type::INT8,
+                    arrow20::Type::INT16,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -192,11 +194,11 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
-                    arrow::Type::INT16,
-                    arrow::Type::INT32,
-                    arrow::Type::DATE32,
-                    arrow::Type::TIME32,
+                    arrow20::Type::INT8,
+                    arrow20::Type::INT16,
+                    arrow20::Type::INT32,
+                    arrow20::Type::DATE32,
+                    arrow20::Type::TIME32,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -206,15 +208,15 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
-                    arrow::Type::INT16,
-                    arrow::Type::INT32,
-                    arrow::Type::INT64,
-                    arrow::Type::DATE32,
-                    arrow::Type::DATE64,
-                    arrow::Type::TIMESTAMP,
-                    arrow::Type::TIME32,
-                    arrow::Type::TIME64,
+                    arrow20::Type::INT8,
+                    arrow20::Type::INT16,
+                    arrow20::Type::INT32,
+                    arrow20::Type::INT64,
+                    arrow20::Type::DATE32,
+                    arrow20::Type::DATE64,
+                    arrow20::Type::TIMESTAMP,
+                    arrow20::Type::TIME32,
+                    arrow20::Type::TIME64,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -224,10 +226,10 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
-                    arrow::Type::INT16,
-                    arrow::Type::INT32,
-                    arrow::Type::INT64,
+                    arrow20::Type::INT8,
+                    arrow20::Type::INT16,
+                    arrow20::Type::INT32,
+                    arrow20::Type::INT64,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -237,7 +239,7 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT8,
+                    arrow20::Type::UINT8,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -247,8 +249,8 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT8,
-                    arrow::Type::UINT16,
+                    arrow20::Type::UINT8,
+                    arrow20::Type::UINT16,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -258,9 +260,9 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT8,
-                    arrow::Type::UINT16,
-                    arrow::Type::UINT32,
+                    arrow20::Type::UINT8,
+                    arrow20::Type::UINT16,
+                    arrow20::Type::UINT32,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -270,10 +272,10 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT8,
-                    arrow::Type::UINT16,
-                    arrow::Type::UINT32,
-                    arrow::Type::UINT64,
+                    arrow20::Type::UINT8,
+                    arrow20::Type::UINT16,
+                    arrow20::Type::UINT32,
+                    arrow20::Type::UINT64,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -283,8 +285,8 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT32,
-                    arrow::Type::DATE32,
+                    arrow20::Type::UINT32,
+                    arrow20::Type::DATE32,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -294,9 +296,10 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT32,
-                    arrow::Type::UINT64,
-                    arrow::Type::DATE64,
+                    arrow20::Type::UINT32,
+                    arrow20::Type::UINT64,
+                    arrow20::Type::DATE64,
+                    arrow20::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -306,8 +309,8 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::UINT64,
-                    arrow::Type::TIMESTAMP,
+                    arrow20::Type::UINT64,
+                    arrow20::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -329,8 +332,8 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT32,
-                    arrow::Type::DATE32,
+                    arrow20::Type::INT32,
+                    arrow20::Type::DATE32,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -340,9 +343,10 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT32,
-                    arrow::Type::INT64,
-                    arrow::Type::DATE64,
+                    arrow20::Type::INT32,
+                    arrow20::Type::INT64,
+                    arrow20::Type::DATE64,
+                    arrow20::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -352,9 +356,9 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT32,
-                    arrow::Type::INT64,
-                    arrow::Type::TIMESTAMP,
+                    arrow20::Type::INT32,
+                    arrow20::Type::INT64,
+                    arrow20::Type::TIMESTAMP,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -364,13 +368,13 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::STRING,
-                    arrow::Type::BINARY,
-                    arrow::Type::LARGE_STRING,
-                    arrow::Type::LARGE_BINARY,
-                    arrow::Type::FIXED_SIZE_BINARY,
-                    arrow::Type::DECIMAL128,
-                    arrow::Type::DECIMAL256,
+                    arrow20::Type::STRING,
+                    arrow20::Type::BINARY,
+                    arrow20::Type::LARGE_STRING,
+                    arrow20::Type::LARGE_BINARY,
+                    arrow20::Type::FIXED_SIZE_BINARY,
+                    arrow20::Type::DECIMAL128,
+                    arrow20::Type::DECIMAL256,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -381,10 +385,10 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::STRING,
-                    arrow::Type::LARGE_STRING,
-                    arrow::Type::BINARY,
-                    arrow::Type::LARGE_BINARY,
+                    arrow20::Type::STRING,
+                    arrow20::Type::LARGE_STRING,
+                    arrow20::Type::BINARY,
+                    arrow20::Type::LARGE_BINARY,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -395,9 +399,9 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::HALF_FLOAT,
-                    arrow::Type::FLOAT,
-                    arrow::Type::DOUBLE,
+                    arrow20::Type::HALF_FLOAT,
+                    arrow20::Type::FLOAT,
+                    arrow20::Type::DOUBLE,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -406,7 +410,7 @@ void CheckArrowTypeMatch(
         case ESimpleLogicalValueType::Boolean:
             CheckArrowType(
                 columnType,
-                {arrow::Type::BOOL},
+                {arrow20::Type::BOOL},
                 arrowTypeName,
                 arrowTypeId);
             break;
@@ -415,34 +419,34 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::INT8,
-                    arrow::Type::INT16,
-                    arrow::Type::INT32,
-                    arrow::Type::INT64,
-                    arrow::Type::DATE32,
-                    arrow::Type::DATE64,
-                    arrow::Type::TIMESTAMP,
-                    arrow::Type::TIME32,
-                    arrow::Type::TIME64,
+                    arrow20::Type::INT8,
+                    arrow20::Type::INT16,
+                    arrow20::Type::INT32,
+                    arrow20::Type::INT64,
+                    arrow20::Type::DATE32,
+                    arrow20::Type::DATE64,
+                    arrow20::Type::TIMESTAMP,
+                    arrow20::Type::TIME32,
+                    arrow20::Type::TIME64,
 
-                    arrow::Type::UINT8,
-                    arrow::Type::UINT16,
-                    arrow::Type::UINT32,
-                    arrow::Type::UINT64,
+                    arrow20::Type::UINT8,
+                    arrow20::Type::UINT16,
+                    arrow20::Type::UINT32,
+                    arrow20::Type::UINT64,
 
-                    arrow::Type::HALF_FLOAT,
-                    arrow::Type::FLOAT,
-                    arrow::Type::DOUBLE,
+                    arrow20::Type::HALF_FLOAT,
+                    arrow20::Type::FLOAT,
+                    arrow20::Type::DOUBLE,
 
-                    arrow::Type::STRING,
-                    arrow::Type::BINARY,
-                    arrow::Type::LARGE_STRING,
-                    arrow::Type::LARGE_BINARY,
-                    arrow::Type::FIXED_SIZE_BINARY,
+                    arrow20::Type::STRING,
+                    arrow20::Type::BINARY,
+                    arrow20::Type::LARGE_STRING,
+                    arrow20::Type::LARGE_BINARY,
+                    arrow20::Type::FIXED_SIZE_BINARY,
 
-                    arrow::Type::BOOL,
+                    arrow20::Type::BOOL,
 
-                    arrow::Type::NA,
+                    arrow20::Type::NA,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -453,7 +457,7 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::NA,
+                    arrow20::Type::NA,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -463,11 +467,11 @@ void CheckArrowTypeMatch(
             CheckArrowType(
                 columnType,
                 {
-                    arrow::Type::STRING,
-                    arrow::Type::BINARY,
-                    arrow::Type::LARGE_STRING,
-                    arrow::Type::LARGE_BINARY,
-                    arrow::Type::FIXED_SIZE_BINARY,
+                    arrow20::Type::STRING,
+                    arrow20::Type::BINARY,
+                    arrow20::Type::LARGE_STRING,
+                    arrow20::Type::LARGE_BINARY,
+                    arrow20::Type::FIXED_SIZE_BINARY,
                 },
                 arrowTypeName,
                 arrowTypeId);
@@ -481,7 +485,7 @@ void CheckArrowTypeMatch(
 
 void CheckArrowTypeMatch(
     const ESimpleLogicalValueType& columnType,
-    const std::shared_ptr<arrow::Array>& column)
+    const std::shared_ptr<arrow20::Array>& column)
 {
     CheckArrowTypeMatch(columnType, column->type()->name(), column->type());
 }
@@ -524,7 +528,7 @@ i64 CheckAndTransformDate(i64 arrowValue, i64 minAllowedDate, i64 maxAllowedDate
     return arrowValue;
 }
 
-i64 CheckAndTransformDatetime(i64 arrowValue, i64 minAllowedDate, i64 maxAllowedDate)
+i64 CheckAndTransformDateToDatetime(i64 arrowValue, i64 minAllowedDate, i64 maxAllowedDate)
 {
     auto minarrowValue = SignedSaturationArithmeticMultiply(minAllowedDate, SecondsToMilliCoefficient);
     auto maxarrowValue = SignedSaturationArithmeticMultiply(maxAllowedDate, SecondsToMilliCoefficient);
@@ -539,32 +543,77 @@ i64 CheckAndTransformDatetime(i64 arrowValue, i64 minAllowedDate, i64 maxAllowed
     return arrowValue / SecondsToMilliCoefficient;
 }
 
-i64 CheckAndTransformTimestamp(i64 arrowValue, arrow::TimeUnit::type timeUnit, i64 minAllowedTimestamp, i64 maxAllowedTimestamp)
+i64 CheckAndTransformDatetime(i64 arrowValue, arrow20::TimeUnit::type timeUnit, i64 minAllowedDate, i64 maxAllowedDate)
+{
+    i64 resultValue;
+    i64 minArrowAllowedDatetime;
+    i64 maxArrowAllowedDatetime;
+
+    switch (timeUnit) {
+        case arrow20::TimeUnit::type::SECOND:
+            resultValue = arrowValue;
+            minArrowAllowedDatetime = minAllowedDate;
+            maxArrowAllowedDatetime = maxAllowedDate;
+            break;
+
+        case arrow20::TimeUnit::type::MILLI:
+            resultValue = arrowValue / SecondsToMilliCoefficient;
+            minArrowAllowedDatetime = SignedSaturationArithmeticMultiply(minAllowedDate, SecondsToMilliCoefficient);
+            maxArrowAllowedDatetime = SignedSaturationArithmeticMultiply(maxAllowedDate, SecondsToMilliCoefficient);
+            break;
+
+        case arrow20::TimeUnit::type::MICRO:
+            resultValue = arrowValue / SecondsToMicroCoefficient;
+            minArrowAllowedDatetime = SignedSaturationArithmeticMultiply(minAllowedDate, SecondsToMicroCoefficient);
+            maxArrowAllowedDatetime = SignedSaturationArithmeticMultiply(maxAllowedDate, SecondsToMicroCoefficient);
+            break;
+
+        case arrow20::TimeUnit::type::NANO:
+            resultValue = arrowValue / SecondsToNanoCoefficient;
+            minArrowAllowedDatetime = SignedSaturationArithmeticMultiply(minAllowedDate, SecondsToNanoCoefficient);
+            maxArrowAllowedDatetime = SignedSaturationArithmeticMultiply(maxAllowedDate, SecondsToNanoCoefficient);
+            break;
+        default:
+            THROW_ERROR_EXCEPTION("Unexpected arrow time unit %Qv", static_cast<int>(timeUnit));
+    }
+
+    if (resultValue < minArrowAllowedDatetime || resultValue > maxArrowAllowedDatetime) {
+        THROW_ERROR_EXCEPTION(
+            "Arrow timestamp value %v is incompatible with the YT datetime type, value should be in range [%v, %v]",
+            arrowValue,
+            minArrowAllowedDatetime,
+            maxArrowAllowedDatetime);
+    }
+
+    return resultValue;
+}
+
+i64 CheckAndTransformTimestamp(i64 arrowValue, arrow20::TimeUnit::type timeUnit, i64 minAllowedTimestamp, i64 maxAllowedTimestamp)
 {
     i64 resultValue;
     i64 minArrowAllowedTimestamp;
     i64 maxArrowAllowedTimestamp;
 
     switch (timeUnit) {
-        case arrow::TimeUnit::type::NANO:
+        case arrow20::TimeUnit::type::NANO:
             resultValue = arrowValue / MicroToNanoCoefficient;
             minArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(minAllowedTimestamp, MicroToNanoCoefficient);
             maxArrowAllowedTimestamp = SignedSaturationArithmeticMultiply(maxAllowedTimestamp, MicroToNanoCoefficient);
             break;
 
-        case arrow::TimeUnit::type::SECOND:
+        case arrow20::TimeUnit::type::SECOND:
             resultValue = SignedSaturationArithmeticMultiply(arrowValue, SecondsToMicroCoefficient);
             minArrowAllowedTimestamp = minAllowedTimestamp / SecondsToMicroCoefficient;
-            maxArrowAllowedTimestamp = maxAllowedTimestamp /SecondsToMicroCoefficient;
+            maxArrowAllowedTimestamp = maxAllowedTimestamp / SecondsToMicroCoefficient;
             break;
 
-        case arrow::TimeUnit::type::MILLI:
+        case arrow20::TimeUnit::type::MILLI:
             resultValue = SignedSaturationArithmeticMultiply(arrowValue, MilliToMicroCoefficient);
             minArrowAllowedTimestamp = minAllowedTimestamp / MilliToMicroCoefficient;
-            maxArrowAllowedTimestamp = maxAllowedTimestamp /MilliToMicroCoefficient;
+            maxArrowAllowedTimestamp = maxAllowedTimestamp / MilliToMicroCoefficient;
             break;
 
-        case arrow::TimeUnit::type::MICRO:
+        case arrow20::TimeUnit::type::MICRO:
             resultValue = arrowValue;
             minArrowAllowedTimestamp = minAllowedTimestamp;
             maxArrowAllowedTimestamp = maxAllowedTimestamp;
@@ -587,177 +636,213 @@ i64 CheckAndTransformTimestamp(i64 arrowValue, arrow::TimeUnit::type timeUnit, i
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::optional<std::string> GetYtTypeFromMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    auto columnMetadata = schemaField->metadata();
+    if (!columnMetadata) {
+        return std::nullopt;
+    }
+    auto valueResult = columnMetadata->Get(YtTypeMetadataKey);
+    if (valueResult.ok()) {
+        return *valueResult;
+    }
+    return std::nullopt;
+}
+
+bool HasEmptyStructTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueEmptyStruct;
+}
+
+bool HasNestedOptionalTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueNestedOptional;
+}
+
+bool HasYsonTypeInMetadata(const std::shared_ptr<arrow20::Field>& schemaField)
+{
+    return GetYtTypeFromMetadata(schemaField) == YtTypeMetadataValueYson;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TArraySimpleVisitor
-    : public arrow::TypeVisitor
+    : public arrow20::TypeVisitor
 {
 public:
     TArraySimpleVisitor(
         std::optional<ESimpleLogicalValueType> columnType,
         int columnId,
-        std::shared_ptr<arrow::Array> array,
+        std::shared_ptr<arrow20::Array> array,
+        std::shared_ptr<arrow20::Field> schemaField,
         std::shared_ptr<TChunkedOutputStream> bufferForStringLikeValues,
         TUnversionedRowValues* rowValues)
         : ColumnType_(columnType)
         , ColumnId_(columnId)
         , Array_(std::move(array))
+        , SchemaField_(std::move(schemaField))
         , BufferForStringLikeValues_(std::move(bufferForStringLikeValues))
         , RowValues_(rowValues)
     { }
 
     // Signed int types.
-    arrow::Status Visit(const arrow::Int8Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Int8Type& /*type*/) override
     {
-        return ParseInt64<arrow::Int8Array>();
+        return ParseInt64<arrow20::Int8Array>();
     }
 
-    arrow::Status Visit(const arrow::Int16Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Int16Type& /*type*/) override
     {
-        return ParseInt64<arrow::Int16Array>();
+        return ParseInt64<arrow20::Int16Array>();
     }
 
-    arrow::Status Visit(const arrow::Int32Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Int32Type& /*type*/) override
     {
-        return ParseInt64<arrow::Int32Array>();
+        return ParseInt64<arrow20::Int32Array>();
     }
 
-    arrow::Status Visit(const arrow::Int64Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Int64Type& /*type*/) override
     {
-        return ParseInt64<arrow::Int64Array>();
+        return ParseInt64<arrow20::Int64Array>();
     }
 
-    arrow::Status Visit(const arrow::Time32Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Time32Type& /*type*/) override
     {
-        return ParseInt64<arrow::Time32Array>();
+        return ParseInt64<arrow20::Time32Array>();
     }
 
-    arrow::Status Visit(const arrow::Time64Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Time64Type& /*type*/) override
     {
-        return ParseInt64<arrow::Time64Array>();
+        return ParseInt64<arrow20::Time64Array>();
     }
 
-    arrow::Status Visit(const arrow::Date32Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Date32Type& /*type*/) override
     {
         if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Date32) {
-            return ParseDate32<arrow::Date32Array>();
+            return ParseDate32<arrow20::Date32Array>();
         } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Date) {
-            return ParseDate<arrow::Date32Array>();
+            return ParseDate<arrow20::Date32Array>();
         } else {
-            return ParseInt64<arrow::Date32Array>();
+            return ParseInt64<arrow20::Date32Array>();
         }
     }
 
-    arrow::Status Visit(const arrow::Date64Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::Date64Type& /*type*/) override
     {
         if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime64) {
-            return ParseDate64<arrow::Date64Array>();
+            return ParseDate64ToDatetime64<arrow20::Date64Array>();
         } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime) {
-            return ParseDatetime<arrow::Date64Array>();
+            return ParseDate64ToDatetime<arrow20::Date64Array>();
         } else {
-            return ParseInt64<arrow::Date64Array>();
+            return ParseInt64<arrow20::Date64Array>();
         }
     }
 
-    arrow::Status Visit(const arrow::TimestampType& type) override
+    arrow20::Status Visit(const arrow20::TimestampType& type) override
     {
         if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Timestamp64) {
-            return ParseTimestamp64<arrow::TimestampArray>(type.unit());
+            return ParseTimestamp64<arrow20::TimestampArray>(type.unit());
         } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Timestamp) {
-            return ParseTimestamp<arrow::TimestampArray>(type.unit());
+            return ParseTimestamp<arrow20::TimestampArray>(type.unit());
+        } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime) {
+            return ParseDatetime<arrow20::TimestampArray>(type.unit());
+        } else if (ColumnType_ && *ColumnType_ == ESimpleLogicalValueType::Datetime64) {
+            return ParseDatetime64<arrow20::TimestampArray>(type.unit());
         } else {
-            return ParseInt64<arrow::TimestampArray>();
+            return ParseInt64<arrow20::TimestampArray>();
         }
     }
 
     // Unsigned int types.
-    arrow::Status Visit(const arrow::UInt8Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::UInt8Type& /*type*/) override
     {
-        return ParseUInt64<arrow::UInt8Array>();
+        return ParseUInt64<arrow20::UInt8Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt16Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::UInt16Type& /*type*/) override
     {
-        return ParseUInt64<arrow::UInt16Array>();
+        return ParseUInt64<arrow20::UInt16Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt32Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::UInt32Type& /*type*/) override
     {
-        return ParseUInt64<arrow::UInt32Array>();
+        return ParseUInt64<arrow20::UInt32Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt64Type& /*type*/) override
+    arrow20::Status Visit(const arrow20::UInt64Type& /*type*/) override
     {
-        return ParseUInt64<arrow::UInt64Array>();
+        return ParseUInt64<arrow20::UInt64Array>();
     }
 
     // Float types.
-    arrow::Status Visit(const arrow::HalfFloatType& /*type*/) override
+    arrow20::Status Visit(const arrow20::HalfFloatType& /*type*/) override
     {
-        return ParseDouble<arrow::HalfFloatArray>();
+        return ParseDouble<arrow20::HalfFloatArray>();
     }
 
-    arrow::Status Visit(const arrow::FloatType& /*type*/) override
+    arrow20::Status Visit(const arrow20::FloatType& /*type*/) override
     {
-        return ParseDouble<arrow::FloatArray>();
+        return ParseDouble<arrow20::FloatArray>();
     }
 
-    arrow::Status Visit(const arrow::DoubleType& /*type*/) override
+    arrow20::Status Visit(const arrow20::DoubleType& /*type*/) override
     {
-        return ParseDouble<arrow::DoubleArray>();
+        return ParseDouble<arrow20::DoubleArray>();
     }
 
     // String types.
-    arrow::Status Visit(const arrow::StringType& /*type*/) override
+    arrow20::Status Visit(const arrow20::StringType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow::StringArray>();
+        return ParseStringLikeArray<arrow20::StringArray>();
     }
 
-    arrow::Status Visit(const arrow::BinaryType& /*type*/) override
+    arrow20::Status Visit(const arrow20::BinaryType& /*type*/) override
     {
-        return ParseStringLikeArray<arrow::BinaryArray>();
+        return ParseStringLikeArray<arrow20::BinaryArray>();
     }
 
     // Boolean type.
-    arrow::Status Visit(const arrow::BooleanType& /*type*/) override
+    arrow20::Status Visit(const arrow20::BooleanType& /*type*/) override
     {
         return ParseBoolean();
     }
 
     // Null type.
-    arrow::Status Visit(const arrow::NullType& /*type*/) override
+    arrow20::Status Visit(const arrow20::NullType& /*type*/) override
     {
         return ParseNull();
     }
 
-    arrow::Status Visit(const arrow::Decimal128Type& type) override
+    arrow20::Status Visit(const arrow20::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal128Array>([&] (TStringBuf value, i64 columnId) {
+        return ParseStringLikeArray<arrow20::Decimal128Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue128>(value, columnId, type.precision());
         });
     }
 
-    arrow::Status Visit(const arrow::Decimal256Type& type) override
+    arrow20::Status Visit(const arrow20::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal256Array>([&] (TStringBuf value, i64 columnId) {
+        return ParseStringLikeArray<arrow20::Decimal256Array>([&] (TStringBuf value, i64 columnId) {
             return MakeDecimalBinaryValue<TDecimal::TValue256>(value, columnId, type.precision());
         });
     }
 
-    arrow::Status Visit(const arrow::StructType& /*type*/) override
+    arrow20::Status Visit(const arrow20::StructType& /*type*/) override
     {
         if (ColumnType_) {
             switch (*ColumnType_) {
                 case ESimpleLogicalValueType::TzDate:
-                    return ParseTzDate<arrow::UInt16Array>();
+                    return ParseTzDate<arrow20::UInt16Array>();
                 case ESimpleLogicalValueType::TzDatetime:
-                    return ParseTzDate<arrow::UInt32Array>();
+                    return ParseTzDate<arrow20::UInt32Array>();
                 case ESimpleLogicalValueType::TzTimestamp:
-                    return ParseTzDate<arrow::UInt64Array>();
+                    return ParseTzDate<arrow20::UInt64Array>();
                 case ESimpleLogicalValueType::TzDate32:
-                    return ParseTzDate<arrow::Int32Array>();
+                    return ParseTzDate<arrow20::Int32Array>();
                 case ESimpleLogicalValueType::TzDatetime64:
-                    return ParseTzDate<arrow::Int64Array>();
+                    return ParseTzDate<arrow20::Int64Array>();
                 case ESimpleLogicalValueType::TzTimestamp64:
-                    return ParseTzDate<arrow::Int64Array>();
+                    return ParseTzDate<arrow20::Int64Array>();
                 default:
                     YT_ABORT();
             }
@@ -769,12 +854,13 @@ private:
     const std::optional<ESimpleLogicalValueType> ColumnType_;
     const i64 ColumnId_;
 
-    std::shared_ptr<arrow::Array> Array_;
+    std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     std::shared_ptr<TChunkedOutputStream> BufferForStringLikeValues_;
     TUnversionedRowValues* RowValues_;
 
     template <typename ArrayType>
-    arrow::Status ParseDate()
+    arrow20::Status ParseDate()
     {
         auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedUint64Value(
@@ -782,43 +868,67 @@ private:
                 columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDate32()
+    arrow20::Status ParseDate32()
     {
         auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedInt64Value(CheckAndTransformDate(value, Date32LowerBound, Date32UpperBound), columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDatetime()
+    arrow20::Status ParseDate64ToDatetime()
     {
         auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedUint64Value(
-                static_cast<ui64>(CheckAndTransformDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound)),
+                static_cast<ui64>(CheckAndTransformDateToDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound)),
                 columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDate64()
+    arrow20::Status ParseDate64ToDatetime64()
     {
         auto makeUnversionedValue = [] (i64 value, i64 columnId) {
-            return MakeUnversionedInt64Value(CheckAndTransformDatetime(value, Datetime64LowerBound, DatetimeUpperBound), columnId);
+            return MakeUnversionedInt64Value(CheckAndTransformDateToDatetime(value, Datetime64LowerBound, DatetimeUpperBound), columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseTimestamp(arrow::TimeUnit::type timeUnit)
+    arrow20::Status ParseDatetime(arrow20::TimeUnit::type timeUnit)
+    {
+        auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
+            return MakeUnversionedUint64Value(
+                static_cast<ui64>(CheckAndTransformDatetime(value, timeUnit, /*minAllowedDate*/ 0, DatetimeUpperBound)),
+                columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow20::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseDatetime64(arrow20::TimeUnit::type timeUnit)
+    {
+        auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
+            return MakeUnversionedInt64Value(
+                CheckAndTransformDatetime(value, timeUnit, Datetime64LowerBound, DatetimeUpperBound),
+                columnId);
+        };
+        ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
+        return arrow20::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseTimestamp(arrow20::TimeUnit::type timeUnit)
     {
         auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
             return MakeUnversionedUint64Value(
@@ -826,47 +936,47 @@ private:
                 columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseTimestamp64(arrow::TimeUnit::type timeUnit)
+    arrow20::Status ParseTimestamp64(arrow20::TimeUnit::type timeUnit)
     {
         auto makeUnversionedValue = [timeUnit] (i64 value, i64 columnId) {
             return MakeUnversionedInt64Value(CheckAndTransformTimestamp(value, timeUnit, Timestamp64LowerBound, Timestamp64UpperBound), columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseInt64()
+    arrow20::Status ParseInt64()
     {
         auto makeUnversionedValue = [] (i64 value, i64 columnId) {
             return MakeUnversionedInt64Value(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseUInt64()
+    arrow20::Status ParseUInt64()
     {
         auto makeUnversionedValue = [] (ui64 value, i64 columnId) {
             return MakeUnversionedUint64Value(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDouble()
+    arrow20::Status ParseDouble()
     {
         auto makeUnversionedValue = [] (double value, i64 columnId) {
             return MakeUnversionedDoubleValue(value, columnId);
         };
         ParseSimpleNumeric<ArrayType, decltype(makeUnversionedValue)>(makeUnversionedValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType, typename FuncType>
@@ -884,7 +994,7 @@ private:
     }
 
     template <typename ArrayType>
-    arrow::Status ParseStringLikeArray(auto makeUnversionedValueFunc)
+    arrow20::Status ParseStringLikeArray(auto makeUnversionedValueFunc)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
@@ -904,17 +1014,17 @@ private:
                 (*RowValues_)[rowIndex] = makeUnversionedValueFunc(value, ColumnId_);
             }
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseStringLikeArray()
+    arrow20::Status ParseStringLikeArray()
     {
         // Note that MakeUnversionedValue actually has third argument in its signature,
         // which leads to a "too few arguments" in the point of its invocation if we try to pass
         // it directly to ParseStringLikeArray.
         return ParseStringLikeArray<ArrayType>([this] (TStringBuf value, i64 columnId) {
-            if (ColumnType_  && *ColumnType_ == ESimpleLogicalValueType::Any) {
+            if (HasYsonTypeInMetadata(SchemaField_)) {
                 return MakeUnversionedAnyValue(value, columnId);
             } else {
                 return MakeUnversionedStringValue(value, columnId);
@@ -922,9 +1032,9 @@ private:
         });
     }
 
-    arrow::Status ParseBoolean()
+    arrow20::Status ParseBoolean()
     {
-        auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::BooleanArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
@@ -933,23 +1043,23 @@ private:
                 (*RowValues_)[rowIndex] = MakeUnversionedBooleanValue(array->Value(rowIndex), ColumnId_);
             }
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseNull()
+    arrow20::Status ParseNull()
     {
-        auto array = std::static_pointer_cast<arrow::NullArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::NullArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename TInnerArray>
-    arrow::Status ParseTzDate()
+    arrow20::Status ParseTzDate()
     {
-        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
         for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
@@ -959,12 +1069,12 @@ private:
                 auto timestamp = timestampArray->Value(rowIndex);
 
                 std::string_view tzName;
-                if (array->field(1)->type_id() == arrow::Type::BINARY) {
-                    auto tzNameArray = std::static_pointer_cast<arrow::BinaryArray>(array->field(1));
+                if (array->field(1)->type_id() == arrow20::Type::BINARY) {
+                    auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
                     auto tzValue = tzNameArray->Value(rowIndex);
                     tzName = std::string_view(tzValue.data(), tzValue.size());
                 } else {
-                    auto tzIndexArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+                    auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
                     tzName = GetTzName(tzIndexArray->Value(rowIndex));
                 }
                 int tzStringSize = tzName.size() + sizeof(timestamp);
@@ -977,7 +1087,7 @@ private:
                 BufferForStringLikeValues_->Advance(tzStringSize);
             }
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <class TUnderlyingValueType>
@@ -994,26 +1104,28 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 class TArrayCompositeVisitor
-    : public arrow::TypeVisitor
+    : public arrow20::TypeVisitor
 {
 public:
     TArrayCompositeVisitor(
         TLogicalTypePtr ytType,
-        const std::shared_ptr<arrow::Array>& array,
+        const std::shared_ptr<arrow20::Array>& array,
+        const std::shared_ptr<arrow20::Field>& schemaField,
         NYson::TCheckedInDebugYsonTokenWriter* writer,
         int rowIndex)
         : YTType_(DenullifyLogicalType(ytType))
         , RowIndex_(rowIndex)
         , Array_(array)
+        , SchemaField_(schemaField)
         , Writer_(writer)
     {
         YT_VERIFY(writer != nullptr);
     }
 
     // Dictionary types.
-    arrow::Status Visit(const arrow::DictionaryType& /*type*/) override
+    arrow20::Status Visit(const arrow20::DictionaryType& /*type*/) override
     {
-        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(Array_);
+        auto dictionaryArrayColumn = std::static_pointer_cast<arrow20::DictionaryArray>(Array_);
         auto dictionary = dictionaryArrayColumn->dictionary();
 
         if (dictionaryArrayColumn->IsNull(RowIndex_)) {
@@ -1022,170 +1134,175 @@ public:
             TArrayCompositeVisitor visitor(
                 YTType_,
                 dictionary,
+                SchemaField_,
                 Writer_,
                 dictionaryArrayColumn->GetValueIndex(RowIndex_));
             ThrowOnError(dictionary->type()->Accept(&visitor));
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     // Signed integer types.
-    arrow::Status Visit(const arrow::Int8Type& type) override
+    arrow20::Status Visit(const arrow20::Int8Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Int8Array>();
+        return ParseInt64<arrow20::Int8Array>();
     }
 
-    arrow::Status Visit(const arrow::Int16Type& type) override
+    arrow20::Status Visit(const arrow20::Int16Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Int16Array>();
+        return ParseInt64<arrow20::Int16Array>();
     }
 
-    arrow::Status Visit(const arrow::Int32Type& type) override
+    arrow20::Status Visit(const arrow20::Int32Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Int32Array>();
+        return ParseInt64<arrow20::Int32Array>();
     }
 
-    arrow::Status Visit(const arrow::Int64Type& type) override
+    arrow20::Status Visit(const arrow20::Int64Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Int64Array>();
+        return ParseInt64<arrow20::Int64Array>();
     }
 
     // Date types.
-    arrow::Status Visit(const arrow::Time32Type& type) override
+    arrow20::Status Visit(const arrow20::Time32Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Time32Array>();
+        return ParseInt64<arrow20::Time32Array>();
     }
 
-    arrow::Status Visit(const arrow::Time64Type& type) override
+    arrow20::Status Visit(const arrow20::Time64Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseInt64<arrow::Time64Array>();
+        return ParseInt64<arrow20::Time64Array>();
     }
 
-    arrow::Status Visit(const arrow::Date32Type& type) override
+    arrow20::Status Visit(const arrow20::Date32Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date32) {
-            return ParseDate32<arrow::Date32Array>();
+            return ParseDate32<arrow20::Date32Array>();
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Date) {
-            return ParseDate<arrow::Date32Array>();
+            return ParseDate<arrow20::Date32Array>();
         } else {
-            return ParseInt64<arrow::Date32Array>();
+            return ParseInt64<arrow20::Date32Array>();
         }
     }
 
-    arrow::Status Visit(const arrow::Date64Type& type) override
+    arrow20::Status Visit(const arrow20::Date64Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement()== ESimpleLogicalValueType::Datetime64) {
-            return ParseDate64<arrow::Date64Array>();
+            return ParseDate64ToDatetime64<arrow20::Date64Array>();
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Datetime) {
-            return ParseDatetime<arrow::Date64Array>();
+            return ParseDate64ToDatetime<arrow20::Date64Array>();
         } else {
-            return ParseInt64<arrow::Date64Array>();
+            return ParseInt64<arrow20::Date64Array>();
         }
     }
 
-    arrow::Status Visit(const arrow::TimestampType& type) override
+    arrow20::Status Visit(const arrow20::TimestampType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp64) {
-            return ParseTimestamp64<arrow::TimestampArray>(type.unit());
+            return ParseTimestamp64<arrow20::TimestampArray>(type.unit());
         } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Timestamp) {
-            return ParseTimestamp<arrow::TimestampArray>(type.unit());
+            return ParseTimestamp<arrow20::TimestampArray>(type.unit());
+        } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Datetime) {
+            return ParseDatetime<arrow20::TimestampArray>(type.unit());
+        } else if (YTType_->AsSimpleTypeRef().GetElement() == ESimpleLogicalValueType::Datetime64) {
+            return ParseDatetime64<arrow20::TimestampArray>(type.unit());
         } else {
-            return ParseInt64<arrow::TimestampArray>();
+            return ParseInt64<arrow20::TimestampArray>();
         }
     }
 
     // Unsigned integer types.
-    arrow::Status Visit(const arrow::UInt8Type& type) override
+    arrow20::Status Visit(const arrow20::UInt8Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseUInt64<arrow::UInt8Array>();
+        return ParseUInt64<arrow20::UInt8Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt16Type& type) override
+    arrow20::Status Visit(const arrow20::UInt16Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseUInt64<arrow::UInt16Array>();
+        return ParseUInt64<arrow20::UInt16Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt32Type& type) override
+    arrow20::Status Visit(const arrow20::UInt32Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseUInt64<arrow::UInt32Array>();
+        return ParseUInt64<arrow20::UInt32Array>();
     }
 
-    arrow::Status Visit(const arrow::UInt64Type& type) override
+    arrow20::Status Visit(const arrow20::UInt64Type& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseUInt64<arrow::UInt64Array>();
+        return ParseUInt64<arrow20::UInt64Array>();
     }
 
     // Float types.
-    arrow::Status Visit(const arrow::HalfFloatType& type) override
+    arrow20::Status Visit(const arrow20::HalfFloatType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseDouble<arrow::HalfFloatArray>();
+        return ParseDouble<arrow20::HalfFloatArray>();
     }
 
-    arrow::Status Visit(const arrow::FloatType& type) override
+    arrow20::Status Visit(const arrow20::FloatType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseDouble<arrow::FloatArray>();
+        return ParseDouble<arrow20::FloatArray>();
     }
 
-    arrow::Status Visit(const arrow::DoubleType& type) override
+    arrow20::Status Visit(const arrow20::DoubleType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseDouble<arrow::DoubleArray>();
+        return ParseDouble<arrow20::DoubleArray>();
     }
 
     // Binary types.
-    arrow::Status Visit(const arrow::StringType& type) override
+    arrow20::Status Visit(const arrow20::StringType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow::StringArray>();
+        return ParseStringLikeArray<arrow20::StringArray>();
     }
 
-    arrow::Status Visit(const arrow::BinaryType& type) override
+    arrow20::Status Visit(const arrow20::BinaryType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
-        return ParseStringLikeArray<arrow::BinaryArray>();
+        return ParseStringLikeArray<arrow20::BinaryArray>();
     }
 
     // Boolean types.
-    arrow::Status Visit(const arrow::BooleanType& type) override
+    arrow20::Status Visit(const arrow20::BooleanType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseBoolean();
     }
 
     // Null types.
-    arrow::Status Visit(const arrow::NullType& type) override
+    arrow20::Status Visit(const arrow20::NullType& type) override
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), type.type_name(), Array_->type());
         return ParseNull();
     }
 
     // Complex types.
-    arrow::Status Visit(const arrow::ListType& /*type*/) override
+    arrow20::Status Visit(const arrow20::ListType& /*type*/) override
     {
         return ParseList();
     }
 
-    arrow::Status Visit(const arrow::MapType& /*type*/) override
+    arrow20::Status Visit(const arrow20::MapType& /*type*/) override
     {
         return ParseMap();
     }
 
-    arrow::Status Visit(const arrow::StructType& /*type*/) override
+    arrow20::Status Visit(const arrow20::StructType& /*type*/) override
     {
         if (IsTzType(YTType_)) {
             return ParseTzType();
@@ -1194,16 +1311,16 @@ public:
         }
     }
 
-    arrow::Status Visit(const arrow::Decimal128Type& type) override
+    arrow20::Status Visit(const arrow20::Decimal128Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal128Array>([&] (TStringBuf value) {
+        return ParseStringLikeArray<arrow20::Decimal128Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue128>(value, type.precision());
         });
     }
 
-    arrow::Status Visit(const arrow::Decimal256Type& type) override
+    arrow20::Status Visit(const arrow20::Decimal256Type& type) override
     {
-        return ParseStringLikeArray<arrow::Decimal256Array>([&] (TStringBuf value) {
+        return ParseStringLikeArray<arrow20::Decimal256Array>([&] (TStringBuf value) {
             WriteDecimalBinary<TDecimal::TValue256>(value, type.precision());
         });
     }
@@ -1212,37 +1329,38 @@ private:
     const TLogicalTypePtr YTType_;
     const int RowIndex_;
 
-    std::shared_ptr<arrow::Array> Array_;
+    std::shared_ptr<arrow20::Array> Array_;
+    std::shared_ptr<arrow20::Field> SchemaField_;
     NYson::TCheckedInDebugYsonTokenWriter* Writer_ = nullptr;
 
     template <typename ArrayType>
-    arrow::Status ParseInt64()
+    arrow20::Status ParseInt64()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryInt64(value);
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseUInt64()
+    arrow20::Status ParseUInt64()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, ui64 value) {
             writer->WriteBinaryUint64(value);
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDouble()
+    arrow20::Status ParseDouble()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, double value) {
             writer->WriteBinaryDouble(value);
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType, typename FuncType>
@@ -1257,7 +1375,7 @@ private:
     }
 
     template <typename ArrayType>
-    arrow::Status ParseStringLikeArray()
+    arrow20::Status ParseStringLikeArray()
     {
         return ParseStringLikeArray<ArrayType>([&] (TStringBuf value) {
             Writer_->WriteBinaryString(value);
@@ -1265,7 +1383,7 @@ private:
     }
 
     template <typename ArrayType>
-    arrow::Status ParseStringLikeArray(auto writeStringValue)
+    arrow20::Status ParseStringLikeArray(auto writeStringValue)
     {
         auto array = std::static_pointer_cast<ArrayType>(Array_);
         if (array->IsNull(RowIndex_)) {
@@ -1274,138 +1392,158 @@ private:
             auto element = array->GetView(RowIndex_);
             writeStringValue(TStringBuf(element.data(), element.size()));
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseBoolean()
+    arrow20::Status ParseBoolean()
     {
-        auto array = std::static_pointer_cast<arrow::BooleanArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::BooleanArray>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBinaryBoolean(array->Value(RowIndex_));
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseNull()
+    arrow20::Status ParseNull()
     {
         Writer_->WriteEntity();
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDate()
+    arrow20::Status ParseDate()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryUint64(CheckAndTransformDate(value, /*minAllowedDate*/ 0, DateUpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDate32()
+    arrow20::Status ParseDate32()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryInt64(CheckAndTransformDate(value, Date32LowerBound, Date32UpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDatetime()
+    arrow20::Status ParseDate64ToDatetime()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
-            writer->WriteBinaryUint64(CheckAndTransformDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound));
+            writer->WriteBinaryUint64(CheckAndTransformDateToDatetime(value, /*minAllowedDate*/ 0, DatetimeUpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseDate64()
+    arrow20::Status ParseDate64ToDatetime64()
     {
         auto writeNumericValue = [] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
-            writer->WriteBinaryInt64(CheckAndTransformDatetime(value, Datetime64LowerBound, Datetime64UpperBound));
+            writer->WriteBinaryInt64(CheckAndTransformDateToDatetime(value, Datetime64LowerBound, Datetime64UpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseTimestamp(arrow::TimeUnit::type timeUnit)
+    arrow20::Status ParseDatetime(arrow20::TimeUnit::type timeUnit)
+    {
+        auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryUint64(CheckAndTransformDatetime(value, timeUnit, /*minAllowedDate*/ 0, DatetimeUpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow20::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseDatetime64(arrow20::TimeUnit::type timeUnit)
+    {
+        auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
+            writer->WriteBinaryInt64(CheckAndTransformDatetime(value, timeUnit, Datetime64LowerBound, Datetime64UpperBound));
+        };
+        ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
+        return arrow20::Status::OK();
+    }
+
+    template <typename ArrayType>
+    arrow20::Status ParseTimestamp(arrow20::TimeUnit::type timeUnit)
     {
         auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryUint64(CheckAndTransformTimestamp(value, timeUnit, /*minAllowedTimestamp*/ 0, TimestampUpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     template <typename ArrayType>
-    arrow::Status ParseTimestamp64(arrow::TimeUnit::type timeUnit)
+    arrow20::Status ParseTimestamp64(arrow20::TimeUnit::type timeUnit)
     {
         auto writeNumericValue = [timeUnit] (NYson::TCheckedInDebugYsonTokenWriter* writer, i64 value) {
             writer->WriteBinaryInt64(CheckAndTransformTimestamp(value, timeUnit, Timestamp64LowerBound, Timestamp64UpperBound));
         };
         ParseComplexNumeric<ArrayType, decltype(writeNumericValue)>(writeNumericValue);
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseTzType()
+    arrow20::Status ParseTzType()
     {
         CheckArrowTypeMatch(YTType_->AsSimpleTypeRef().GetElement(), Array_->type()->name(), Array_->type());
         switch (YTType_->AsSimpleTypeRef().GetElement()) {
             case ESimpleLogicalValueType::TzDate:
-                return ParseTzTypeImpl<arrow::UInt16Array>();
+                return ParseTzTypeImpl<arrow20::UInt16Array>();
             case ESimpleLogicalValueType::TzDatetime:
-                return ParseTzTypeImpl<arrow::UInt32Array>();
+                return ParseTzTypeImpl<arrow20::UInt32Array>();
             case ESimpleLogicalValueType::TzTimestamp:
-                return ParseTzTypeImpl<arrow::UInt64Array>();
+                return ParseTzTypeImpl<arrow20::UInt64Array>();
             case ESimpleLogicalValueType::TzDate32:
-                return ParseTzTypeImpl<arrow::Int32Array>();
+                return ParseTzTypeImpl<arrow20::Int32Array>();
             case ESimpleLogicalValueType::TzDatetime64:
-                return ParseTzTypeImpl<arrow::Int64Array>();
+                return ParseTzTypeImpl<arrow20::Int64Array>();
             case ESimpleLogicalValueType::TzTimestamp64:
-                return ParseTzTypeImpl<arrow::Int64Array>();
+                return ParseTzTypeImpl<arrow20::Int64Array>();
             default:
                 YT_ABORT();
         }
     }
 
     template <typename TInnerArray>
-    arrow::Status ParseTzTypeImpl()
+    arrow20::Status ParseTzTypeImpl()
     {
-        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             auto timestamp = timestampArray->Value(RowIndex_);
             std::string_view tzName;
-            if (array->field(1)->type_id() == arrow::Type::BINARY) {
-                auto tzNameArray = std::static_pointer_cast<arrow::BinaryArray>(array->field(1));
+            if (array->field(1)->type_id() == arrow20::Type::BINARY) {
+                auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
                 auto tzValue = tzNameArray->Value(RowIndex_);
                 tzName = std::string_view(tzValue.data(), tzValue.size());
             } else {
-                auto tzIndexArray = std::static_pointer_cast<arrow::UInt16Array>(array->field(1));
+                auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
                 tzName = GetTzName(tzIndexArray->Value(RowIndex_));
             }
 
             Writer_->WriteBinaryString(MakeTzString(timestamp, tzName));
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseList()
+    arrow20::Status ParseList()
     {
         if (YTType_->GetMetatype() != ELogicalMetatype::List) {
             THROW_ERROR_EXCEPTION("Unexpected arrow type \"list\" for YT metatype %Qlv",
                 YTType_->GetMetatype());
         }
-        auto array = std::static_pointer_cast<arrow::ListArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::ListArray>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
@@ -1413,7 +1551,7 @@ private:
 
             auto listValue = array->value_slice(RowIndex_);
             for (int offset = 0; offset < listValue->length(); ++offset) {
-                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, Writer_, offset);
+                TArrayCompositeVisitor visitor(YTType_->AsListTypeRef().GetElement(), listValue, array->type()->field(0), Writer_, offset);
                 try {
                     ThrowOnError(listValue->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1426,16 +1564,16 @@ private:
 
             Writer_->WriteEndList();
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseMap()
+    arrow20::Status ParseMap()
     {
         if (YTType_->GetMetatype() != ELogicalMetatype::Dict) {
             THROW_ERROR_EXCEPTION("Unexpected arrow type \"map\" for YT metatype %Qlv",
                 YTType_->GetMetatype());
         }
-        auto array = std::static_pointer_cast<arrow::MapArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::MapArray>(Array_);
         auto allKeys = array->keys();
         auto allValues = array->items();
 
@@ -1448,12 +1586,15 @@ private:
             auto keyList = allKeys->Slice(offset, length);
             auto valueList = allValues->Slice(offset, length);
 
+            // Map is represented as list of pairs.
+            auto pairType = array->type()->field(0)->type();
+
             Writer_->WriteBeginList();
 
             for (int offset = 0; offset < keyList->length(); ++offset) {
                 Writer_->WriteBeginList();
 
-                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, Writer_, offset);
+                TArrayCompositeVisitor keyVisitor(YTType_->AsDictTypeRef().GetKey(), keyList, pairType->field(0), Writer_, offset);
                 try {
                     ThrowOnError(keyList->type()->Accept(&keyVisitor));
                 } catch (const std::exception& ex) {
@@ -1464,7 +1605,7 @@ private:
 
                 Writer_->WriteItemSeparator();
 
-                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, Writer_, offset);
+                TArrayCompositeVisitor valueVisitor(YTType_->AsDictTypeRef().GetValue(), valueList, pairType->field(1), Writer_, offset);
                 try {
                     ThrowOnError(valueList->type()->Accept(&valueVisitor));
                 } catch (const std::exception& ex) {
@@ -1481,32 +1622,44 @@ private:
 
             Writer_->WriteEndList();
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status ParseStruct()
+    void ParseStructForStruct()
     {
-        if (YTType_->GetMetatype() != ELogicalMetatype::Struct) {
-            THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
-                YTType_->GetMetatype());
-        }
-        auto array = std::static_pointer_cast<arrow::StructArray>(Array_);
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             Writer_->WriteBeginList();
-            auto structFields = YTType_->AsStructTypeRef().GetFields();
-            if (std::ssize(structFields) != array->num_fields()) {
-                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
-                    << TErrorAttribute("arrow_field_count", array->num_fields())
-                    << TErrorAttribute("yt_field_count", std::ssize(structFields));
+
+            const auto& structFields = YTType_->AsStructTypeRef().GetFields();
+
+            if (structFields.empty()) {
+                if (!HasEmptyStructTypeInMetadata(SchemaField_)) {
+                    THROW_ERROR_EXCEPTION(
+                        "YT \"struct\" type has no fields, but no metadata found with the key \'%v\' and the value \'%v\'",
+                        YtTypeMetadataKey,
+                        YtTypeMetadataValueEmptyStruct);
+                }
+                if (array->num_fields() != 1 && array->field(0)->type()->Equals(arrow20::null())) {
+                    THROW_ERROR_EXCEPTION("YT \"struct\" type has no fields, but Arrow \"struct\" type does not have a single dummy null field");
+                }
+            } else {
+                if (std::ssize(structFields) != array->num_fields()) {
+                    THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type does not match the number of fields in the YT \"struct\" type")
+                        << TErrorAttribute("arrow_field_count", array->num_fields())
+                        << TErrorAttribute("yt_field_count", std::ssize(structFields));
+                }
             }
+
+            const auto& structType = std::static_pointer_cast<arrow20::StructType>(array->type());
             for (const auto& field : structFields) {
                 auto arrowField = array->GetFieldByName(field.Name);
                 if (!arrowField) {
                     THROW_ERROR_EXCEPTION("Field %Qv is not found in arrow type \"struct\"", field.Name);
                 }
-                TArrayCompositeVisitor visitor(field.Type, arrowField, Writer_, RowIndex_);
+                TArrayCompositeVisitor visitor(field.Type, arrowField, structType->GetFieldByName(field.Name), Writer_, RowIndex_);
                 try {
                     ThrowOnError(arrowField->type()->Accept(&visitor));
                 } catch (const std::exception& ex) {
@@ -1519,7 +1672,54 @@ private:
 
             Writer_->WriteEndList();
         }
-        return arrow::Status::OK();
+    }
+
+    void ParseStructForOptional()
+    {
+        auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
+        if (array->IsNull(RowIndex_)) {
+            Writer_->WriteEntity();
+        } else {
+            Writer_->WriteBeginList();
+            if (!HasNestedOptionalTypeInMetadata(SchemaField_)) {
+                THROW_ERROR_EXCEPTION(
+                    "The element of YT \"optional\" type is nullable, but no metadata found with the key \'%v\' and the value \'%v\'",
+                    YtTypeMetadataKey,
+                    YtTypeMetadataValueNestedOptional);
+            }
+            if (array->num_fields() != 1) {
+                THROW_ERROR_EXCEPTION("The number of fields in the Arrow \"struct\" type is not equal to 1 for the YT \"optional\" type")
+                    << TErrorAttribute("arrow_field_count", array->num_fields());
+            }
+
+            auto arrowField = array->field(0);
+            TArrayCompositeVisitor visitor(YTType_->GetElement(), arrowField, array->type()->field(0), Writer_, RowIndex_);
+            try {
+                ThrowOnError(arrowField->type()->Accept(&visitor));
+            } catch (const std::exception& ex) {
+                THROW_ERROR_EXCEPTION("Failed to parse arrow struct field for the YT \"optional\" type")
+                    << ex;
+            }
+
+            Writer_->WriteItemSeparator();
+            Writer_->WriteEndList();
+        }
+    }
+
+    arrow20::Status ParseStruct()
+    {
+        switch (YTType_->GetMetatype()) {
+            case ELogicalMetatype::Struct:
+                ParseStructForStruct();
+                break;
+            case ELogicalMetatype::Optional:
+                ParseStructForOptional();
+                break;
+            default:
+                THROW_ERROR_EXCEPTION("Unexpected arrow type \"struct\" for YT metatype %Qlv",
+                    YTType_->GetMetatype());
+        }
+        return arrow20::Status::OK();
     }
 
     template <class TUnderlyingType>
@@ -1537,19 +1737,21 @@ private:
 void PrepareArrayForSimpleLogicalType(
     ESimpleLogicalValueType columnType,
     const std::shared_ptr<TChunkedOutputStream>&  bufferForStringLikeValues,
-    const std::shared_ptr<arrow::Array>& column,
+    const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
     CheckArrowTypeMatch(columnType, column);
-    TArraySimpleVisitor visitor(columnType, columnId, column, bufferForStringLikeValues, &rowValues);
+    TArraySimpleVisitor visitor(columnType, columnId, column, schemaField, bufferForStringLikeValues, &rowValues);
     ThrowOnError(column->type()->Accept(&visitor));
 }
 
 void PrepareArrayForComplexType(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
-    const std::shared_ptr<arrow::Array>& column,
+    const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
@@ -1558,8 +1760,8 @@ void PrepareArrayForComplexType(
             CheckArrowType(
                 metatype,
                 {
-                    arrow::Type::LIST,
-                    arrow::Type::BINARY
+                    arrow20::Type::LIST,
+                    arrow20::Type::BINARY
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1569,8 +1771,8 @@ void PrepareArrayForComplexType(
             CheckArrowType(
                 metatype,
                 {
-                    arrow::Type::MAP,
-                    arrow::Type::BINARY
+                    arrow20::Type::MAP,
+                    arrow20::Type::BINARY
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1580,8 +1782,8 @@ void PrepareArrayForComplexType(
             CheckArrowType(
                 metatype,
                 {
-                    arrow::Type::STRUCT,
-                    arrow::Type::BINARY
+                    arrow20::Type::STRUCT,
+                    arrow20::Type::BINARY
                 },
                 column->type()->name(),
                 column->type_id());
@@ -1591,39 +1793,57 @@ void PrepareArrayForComplexType(
             CheckArrowType(
                 metatype,
                 {
-                    arrow::Type::DECIMAL128,
-                    arrow::Type::DECIMAL256
+                    arrow20::Type::DECIMAL128,
+                    arrow20::Type::DECIMAL256
                 },
                 column->type()->name(),
                 column->type_id());
             break;
 
         case ELogicalMetatype::Optional:
+            CheckArrowType(
+                metatype,
+                {
+                    arrow20::Type::STRUCT,
+                    arrow20::Type::BINARY
+                },
+                column->type()->name(),
+                column->type_id());
+            break;
+
         case ELogicalMetatype::Tuple:
         case ELogicalMetatype::VariantTuple:
         case ELogicalMetatype::VariantStruct:
-            CheckArrowType(metatype, {arrow::Type::BINARY}, column->type()->name(), column->type_id());
+            CheckArrowType(metatype, {arrow20::Type::BINARY}, column->type()->name(), column->type_id());
             break;
 
         default:
             THROW_ERROR_EXCEPTION("Unexpected arrow type in complex type %Qv", column->type()->name());
     }
 
-    if (column->type()->id() == arrow::Type::BINARY ||
-        column->type()->id() == arrow::Type::DECIMAL128 ||
-        column->type()->id() == arrow::Type::DECIMAL256)
+    if (column->type()->id() == arrow20::Type::BINARY ||
+        column->type()->id() == arrow20::Type::DECIMAL128 ||
+        column->type()->id() == arrow20::Type::DECIMAL256)
     {
         TUnversionedRowValues stringValues(rowValues.size());
-        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, bufferForStringLikeValues, &stringValues);
+        TArraySimpleVisitor visitor(/*columnType*/ std::nullopt, columnId, column, schemaField, bufferForStringLikeValues, &stringValues);
         ThrowOnError(column->type()->Accept(&visitor));
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (column->IsNull(offset)) {
                 rowValues[offset] = MakeUnversionedNullValue(columnId);
-            } else if (column->type()->id() == arrow::Type::DECIMAL128 || column->type()->id() == arrow::Type::DECIMAL256) {
+            } else if (column->type()->id() == arrow20::Type::DECIMAL128 || column->type()->id() == arrow20::Type::DECIMAL256) {
                 rowValues[offset] = MakeUnversionedStringValue(stringValues[offset].AsStringBuf(), columnId);
             } else {
-                // TODO(max): is it even correct? Binary is not necessarily a correct YSON...
                 rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                if (HasYsonTypeInMetadata(schemaField)) {
+                    rowValues[offset] = MakeUnversionedCompositeValue(stringValues[offset].AsStringBuf(), columnId);
+                } else {
+                    THROW_ERROR_EXCEPTION(
+                        "Unexpected arrow type in complex type %Qv, there was no metadata found with the key \'%v\' and the value \'%v\'",
+                        column->type()->name(),
+                        YtTypeMetadataKey,
+                        YtTypeMetadataValueYson);
+                }
             }
         }
     } else {
@@ -1635,7 +1855,7 @@ void PrepareArrayForComplexType(
                 TBufferOutput out(valueBuffer);
                 NYson::TCheckedInDebugYsonTokenWriter writer(&out);
 
-                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, &writer, rowIndex);
+                TArrayCompositeVisitor visitor(denullifiedLogicalType, column, schemaField, &writer, rowIndex);
 
                 ThrowOnError(column->type()->Accept(&visitor));
 
@@ -1659,15 +1879,16 @@ void PrepareArrayForComplexType(
 void PrepareArray(
     const TLogicalTypePtr& denullifiedLogicalType,
     const std::shared_ptr<TChunkedOutputStream>& bufferForStringLikeValues,
-    const std::shared_ptr<arrow::Array>& column,
+    const std::shared_ptr<arrow20::Array>& column,
+    const std::shared_ptr<arrow20::Field>& schemaField,
     TUnversionedRowValues& rowValues,
     int columnId)
 {
-    if (column->type()->id() == arrow::Type::DICTIONARY) {
-        auto dictionaryArrayColumn = std::static_pointer_cast<arrow::DictionaryArray>(column);
+    if (column->type()->id() == arrow20::Type::DICTIONARY) {
+        auto dictionaryArrayColumn = std::static_pointer_cast<arrow20::DictionaryArray>(column);
         auto dictionary = dictionaryArrayColumn->dictionary();
         TUnversionedRowValues dictionaryValues(dictionary->length());
-        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, dictionaryValues, columnId);
+        PrepareArray(denullifiedLogicalType, bufferForStringLikeValues, dictionary, schemaField, dictionaryValues, columnId);
 
         for (int offset = 0; offset < std::ssize(rowValues); ++offset) {
             if (dictionaryArrayColumn->IsNull(offset)) {
@@ -1685,6 +1906,7 @@ void PrepareArray(
                     denullifiedLogicalType->AsSimpleTypeRef().GetElement(),
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 
@@ -1702,6 +1924,7 @@ void PrepareArray(
                     denullifiedLogicalType,
                     bufferForStringLikeValues,
                     column,
+                    schemaField,
                     rowValues,
                     columnId);
 
@@ -1724,20 +1947,20 @@ enum class EListenerState
 };
 
 class TListener
-    : public arrow::ipc::Listener
+    : public arrow20::ipc::Listener
 {
 public:
     explicit TListener(IValueConsumer* valueConsumer)
         : Consumer_(valueConsumer)
     { }
 
-    arrow::Status OnEOS() override
+    arrow20::Status OnEOS() override
     {
         CurrentState_ = EListenerState::EOS;
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
-    arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override
+    arrow20::Status OnRecordBatchDecoded(std::shared_ptr<arrow20::RecordBatch> batch) override
     {
         CurrentState_ = EListenerState::RecordBatch;
 
@@ -1765,10 +1988,13 @@ public:
                 : OptionalLogicalType(SimpleLogicalType(ESimpleLogicalValueType::Any));
             auto denullifiedColumnType = DenullifyLogicalType(columnType);
             try {
+                const auto& column = batch->column(columnIndex);
+                ThrowOnError(column->ValidateFull());
                 PrepareArray(
                     denullifiedColumnType,
                     bufferForStringLikeValues,
-                    batch->column(columnIndex),
+                    column,
+                    batch->schema()->field(columnIndex),
                     rowsValues[columnIndex],
                     columnId);
             } catch (const std::exception& ex) {
@@ -1784,7 +2010,7 @@ public:
             }
             Consumer_->OnEndRow();
         }
-        return arrow::Status::OK();
+        return arrow20::Status::OK();
     }
 
     void Reset()
@@ -1803,9 +2029,9 @@ private:
     EListenerState CurrentState_ = EListenerState::InProgress;
 };
 
-std::shared_ptr<arrow::Buffer> MakeBuffer(const char* data, i64 size)
+std::shared_ptr<arrow20::Buffer> MakeBuffer(const char* data, i64 size)
 {
-    arrow::BufferBuilder bufferBuilder;
+    arrow20::BufferBuilder bufferBuilder;
     ThrowOnError(bufferBuilder.Reserve(size));
     ThrowOnError(bufferBuilder.Append(reinterpret_cast<const uint8_t*>(data), size));
     auto bufferResult = bufferBuilder.Finish();
@@ -1821,7 +2047,7 @@ class TArrowParser
 public:
     TArrowParser(IValueConsumer* valueConsumer)
         : Listener_(std::make_shared<TListener>(valueConsumer))
-        , Decoder_(std::make_shared<arrow::ipc::StreamDecoder>(Listener_))
+        , Decoder_(std::make_shared<arrow20::ipc::StreamDecoder>(Listener_))
     { }
 
     void Read(TStringBuf data) override
@@ -1841,7 +2067,7 @@ public:
                     break;
 
                 case EListenerState::EOS:
-                    Decoder_ = std::make_shared<arrow::ipc::StreamDecoder>(Listener_);
+                    Decoder_ = std::make_shared<arrow20::ipc::StreamDecoder>(Listener_);
                     Listener_->Reset();
                     break;
 
@@ -1868,7 +2094,7 @@ public:
 private:
     const std::shared_ptr<TListener> Listener_;
 
-    std::shared_ptr<arrow::ipc::StreamDecoder> Decoder_;
+    std::shared_ptr<arrow20::ipc::StreamDecoder> Decoder_;
     EListenerState LastState_ = EListenerState::Empty;
 };
 

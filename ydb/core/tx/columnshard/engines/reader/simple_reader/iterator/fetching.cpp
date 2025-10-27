@@ -93,8 +93,8 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
-    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
-    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
+    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -221,6 +221,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
+            source->MutableStageResult().ExtractPageForResult();
             continue;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_id", source->GetSourceId());
@@ -245,6 +246,8 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         if (source->GetContext()->IsAborted()) {
             return;
         }
+        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
+                                                         "source", source->GetRecordsCount());
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }

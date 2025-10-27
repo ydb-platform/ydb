@@ -72,6 +72,30 @@ SELECT
   ) AS ab;
 ```
 
+## ReplaceMember {#replacemember}
+
+Changing the field in the structure, including changing its type. If it is necessary to change several fields, it is preferable to use [RemoveMembers](#removemembers) and [ExpandStruct](#expandstruct).
+
+If the entered field does not exist, an error is returned.
+
+Arguments:
+
+1. struct - the original structure;
+2. key - the name of the field;
+3. new_value - a new value of the field.
+
+#### Examples
+
+```yql
+$struct = <|a:1, b:2|>;
+SELECT
+  ReplaceMember(
+    $struct,
+    "b",
+    "foo"
+  ) AS ab; -- ("a": 1, "b": "foo")
+```
+
 ## RemoveMember {#removemember}
 
 Removing a field from the structure.

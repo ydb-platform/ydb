@@ -19,6 +19,7 @@ PEERDIR(
     ydb/core/testlib
     ydb/library/actors/core
     ydb/library/actors/testlib
+    ydb/library/grpc/server/actors
     ydb/library/services
     ydb/library/yql/providers/s3/actors
     ydb/public/api/protos

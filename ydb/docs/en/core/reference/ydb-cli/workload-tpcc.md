@@ -6,6 +6,8 @@ TPC-C is an industry-standard [On-Line Transaction Processing (OLTP)](https://en
 
 As a result, the benchmark generates a workload of concurrent distributed transactions with varying types and complexities.
 
+In TPC-C, the warehouse is the basic scale unit: the more warehouses you configure, the larger the dataset and the higher the transaction volume. Each warehouse holds roughly 100 MiB of data. The maximum number of warehouses a {{ ydb-short-name }} cluster can sustain depends on hardware capacity, configuration, and inter-node network latency. As a rule of thumb, allocating about 50 warehouses per compute CPU core is a good starting point.
+
 Here is a quick start snippet:
 
 ```bash
@@ -73,7 +75,7 @@ See the command description:
 | Name                         | Description                                                    | Default value |
 |------------------------------|----------------------------------------------------------------|---------------|
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
-| `--threads`                  | A number of threads loading the TPC-C data to the database.    | 10            |
+| `--threads`                  | A number of threads loading the TPC-C data to the database.    | auto          |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |
 
 The optimal number of loading threads depends on your YDB cluster’s size and configuration. As a rule of thumb, for clusters with several hundred CPU cores, starting with around 50 loading threads is reasonable. For larger clusters, you can scale this number further.
@@ -102,9 +104,9 @@ See the command description:
 | Name                         | Description                                                    | Default value |
 |------------------------------|----------------------------------------------------------------|---------------|
 | `--warehouses` or `-w`       | A number of TPC-C warehouses.                                  | 10            |
-| `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | 30m           |
+| `--warmup`                   | Warmup time. Example: 10s, 5m, 1h.                             | auto          |
 | `--time` or `-t`             | Execution time. Example: 10s, 5m, 1h.                          | 2h            |
-| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | 100           |
+| `--max-sessions` or `-m`     | A soft limit on the number of DB sessions.                     | auto          |
 | `--threads`                  | A number of threads executing queries                          | auto          |
 | `--format` or `-f`           | Output format: 'Pretty', 'Json'                                | Pretty        |
 | `--no-tui`                   | Disable TUI, which is enabled by default in interactive mode.  |               |

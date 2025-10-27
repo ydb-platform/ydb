@@ -160,7 +160,7 @@ class TPolymorphicYsonStruct
 public:
     using TImplementsYsonStructField = void;
 
-    TPolymorphicYsonStruct() = default;
+    TPolymorphicYsonStruct();
 
     explicit TPolymorphicYsonStruct(TKey key);
     TPolymorphicYsonStruct(TKey key, TIntrusivePtr<TBase> ptr) noexcept;

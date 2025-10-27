@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: multidict
-Version: 6.6.3
+Version: 6.6.4
 Summary: multidict implementation
 Home-page: https://github.com/aio-libs/multidict
 Author: Andrew Svetlov

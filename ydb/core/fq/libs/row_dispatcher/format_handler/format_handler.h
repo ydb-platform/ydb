@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/fq/libs/row_dispatcher/common/row_dispatcher_settings.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/filters/filters_set.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/json_parser.h>
 
@@ -15,8 +17,10 @@ public:
     using TPtr = TIntrusivePtr<IClientDataConsumer>;
 
 public:
+    virtual bool IsStarted() const = 0;
     virtual const TVector<TSchemaColumn>& GetColumns() const = 0;
-    virtual const TString& GetWhereFilter() const = 0;
+    virtual const TString& GetWatermarkExpr() const = 0;
+    virtual const TString& GetFilterExpr() const = 0;
     virtual TPurecalcCompileSettings GetPurecalcSettings() const = 0;
     virtual NActors::TActorId GetClientId() const = 0;
     virtual std::optional<ui64> GetNextMessageOffset() const = 0;
@@ -24,8 +28,14 @@ public:
     virtual void OnClientError(TStatus status) = 0;
 
     virtual void StartClientSession() = 0;
-    virtual void AddDataToClient(ui64 offset, ui64 rowSize) = 0;
+    virtual void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) = 0;
     virtual void UpdateClientOffset(ui64 offset) = 0;
+};
+
+struct TDataBatch {
+    TRope SerializedData;
+    TVector<ui64> Offsets;
+    TMaybe<TInstant> Watermark;
 };
 
 class ITopicFormatHandler : public TNonCopyable {
@@ -47,8 +57,7 @@ public:
 public:
     virtual void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) = 0;
 
-    // vector of (messages batch, [offsets])
-    virtual TQueue<std::pair<TRope, TVector<ui64>>> ExtractClientData(NActors::TActorId clientId) = 0;
+    virtual TQueue<TDataBatch> ExtractClientData(NActors::TActorId clientId) = 0;
 
     virtual TStatus AddClient(IClientDataConsumer::TPtr client) = 0;
     virtual void RemoveClient(NActors::TActorId clientId) = 0;
@@ -63,12 +72,13 @@ protected:
 
 // Static properties for all format handlers
 struct TFormatHandlerConfig {
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TJsonParserConfig JsonParserConfig;
     TTopicFiltersConfig FiltersConfig;
 };
 
 ITopicFormatHandler::TPtr CreateTopicFormatHandler(const NActors::TActorContext& owner, const TFormatHandlerConfig& config, const ITopicFormatHandler::TSettings& settings, const TCountersDesc& counters);
-TFormatHandlerConfig CreateFormatHandlerConfig(const NConfig::TRowDispatcherConfig& rowDispatcherConfig, NActors::TActorId compileServiceId);
+TFormatHandlerConfig CreateFormatHandlerConfig(const TRowDispatcherSettings& rowDispatcherConfig, const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, NActors::TActorId compileServiceId);
 
 namespace NTests {
 

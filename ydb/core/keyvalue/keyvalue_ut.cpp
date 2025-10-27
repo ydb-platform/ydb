@@ -647,9 +647,19 @@ void CmdSetExecutorFastLogPolicy(bool isAllowed, TTestContext &tc) {
 // NEW SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+template <typename T>
+struct NotEq {
+    T Value;
+
+    bool Check(const T &value) const {
+        return Value != value;
+    }
+};
+
 struct TKeyValuePair {
     TString Key;
     TString Value;
+    std::variant<std::monostate, ui64, NotEq<ui64>> CreationUnixTime = std::monostate();
 };
 
 template <typename TRequestEvent>
@@ -698,7 +708,7 @@ void SendWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 locked
 {
     NKikimrKeyValue::ExecuteTransactionRequest et;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = et.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -720,7 +730,7 @@ void ExecuteWrite(TTestContext &tc, const TDeque<TKeyValuePair> &pairs, ui64 loc
 {
     TDesiredPair<TEvKeyValue::TEvExecuteTransaction> dp;
 
-    for (auto &[key, value] : pairs) {
+    for (auto &[key, value, creationUnixTime] : pairs) {
         NKikimrKeyValue::ExecuteTransactionRequest::Command *cmd = dp.Request.add_commands();
         NKikimrKeyValue::ExecuteTransactionRequest::Command::Write *write = cmd->mutable_write();
 
@@ -990,6 +1000,12 @@ void ExecuteReadRange(TTestContext &tc,
                     << " msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.key(), expectedPairs[idx].Key, "msg# " << dp.Response.msg());
             UNIT_ASSERT_VALUES_EQUAL_C(pair.value(), expectedPairs[idx].Value, "msg# " << dp.Response.msg());
+
+            if (std::holds_alternative<ui64>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_EQUAL_C(pair.creation_unix_time(), std::get<ui64>(expectedPairs[idx].CreationUnixTime), "msg# " << dp.Response.msg());
+            } else if (std::holds_alternative<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime)) {
+                UNIT_ASSERT_VALUES_UNEQUAL_C(pair.creation_unix_time(), std::get<NotEq<ui64>>(expectedPairs[idx].CreationUnixTime).Value, "msg# " << dp.Response.msg());
+            }
         }
     }
 }
@@ -2818,6 +2834,35 @@ Y_UNIT_TEST(TestWriteAndRenameWithCreationUnixTime)
             tc);
 }
 
+
+
+Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
+{
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    bool activeZone = false;
+    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, [](TTestActorRuntime &runtime){
+        runtime.UpdateCurrentTime(TInstant::Zero() + TDuration::Seconds(1000));
+    }, activeZone);
+
+    ExecuteWrite(tc, {{"key-1", "value"}}, 0, 1, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+
+    ExecuteReadRange(tc,
+        {"key-1"}, EBorderKind::Include,
+        "key-1", EBorderKind::Include,
+        {{"key-1", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+
+    ExecuteRename(tc, {{"key-1", "key-2"}}, 0);
+
+    ExecuteReadRange(tc,
+        {"key-2"}, EBorderKind::Include,
+        "key-2", EBorderKind::Include,
+        {{"key-2", "value", NotEq<ui64>{0}}},
+        0, true, 65000);
+}
+
+
 Y_UNIT_TEST(TestReadRequestInFlightLimit)
 {
     TTestContext tc;
@@ -2827,7 +2872,7 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
 
     auto &icb = tc.Runtime->GetAppData().Icb;
     TControlWrapper readRequestInFlightLimit(5, 1, 4096);
-    icb->RegisterSharedControl(readRequestInFlightLimit, "KeyValueVolumeControls.ReadRequestsInFlightLimit");
+    TControlBoard::RegisterSharedControl(readRequestInFlightLimit, icb->KeyValueVolumeControls.ReadRequestsInFlightLimit);
     readRequestInFlightLimit = 5;
 
     ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();

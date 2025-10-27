@@ -24,7 +24,7 @@ namespace NTable {
             Result,
         };
 
-        using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
+        using TPageCollection = NTabletFlatExecutor::TPrivatePageCache::TPageCollection;
 
         struct TFetch : TMoveOnly {
             TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
@@ -36,8 +36,8 @@ namespace NTable {
         };
 
         struct TLoaderEnv : public IPages {
-            TLoaderEnv(TIntrusivePtr<TCache> cache)
-                : Cache(std::move(cache))
+            TLoaderEnv(TIntrusivePtr<TPageCollection> pageCollection)
+                : PageCollection(std::move(pageCollection))
             {
             }
 
@@ -65,7 +65,7 @@ namespace NTable {
                 auto savedPage = SavedPages.find(pageId);
                 
                 if (savedPage == SavedPages.end()) {
-                    if (auto cachedPage = Cache->FindPage(pageId); cachedPage) {
+                    if (auto cachedPage = PageCollection->FindPage(pageId); cachedPage) {
                         if (auto sharedPageRef = cachedPage->SharedBody; sharedPageRef && sharedPageRef.Use()) {
                             // Save page in case it's evicted on the next iteration
                             AddSavedPage(pageId, std::move(sharedPageRef));
@@ -93,7 +93,7 @@ namespace NTable {
                     TVector<TPageId> pages(NeedPages.begin(), NeedPages.end());
                     std::sort(pages.begin(), pages.end());
                     return {
-                        .PageCollection = Cache->PageCollection,
+                        .PageCollection = PageCollection->PageCollection,
                         .Pages = std::move(pages)
                     };
                 } else {
@@ -103,7 +103,7 @@ namespace NTable {
 
             void Save(NSharedCache::TEvResult::TLoaded&& loaded)
             {
-                auto pageType = Cache->GetPageType(loaded.PageId);
+                auto pageType = PageCollection->GetPageType(loaded.PageId);
 
                 auto needed = NeedPages.erase(loaded.PageId);
                 Y_ENSURE(needed, "Got uknown " << pageType << " page " << loaded.PageId);
@@ -111,9 +111,9 @@ namespace NTable {
                 bool sticky = NeedIn(pageType) || pageType == EPage::FlatIndex;
                 AddSavedPage(loaded.PageId, loaded.Page);
                 if (sticky) {
-                    Cache->AddStickyPage(loaded.PageId, std::move(loaded.Page));
+                    PageCollection->AddStickyPage(loaded.PageId, std::move(loaded.Page));
                 } else {
-                    Cache->AddPage(loaded.PageId, std::move(loaded.Page));
+                    PageCollection->AddPage(loaded.PageId, std::move(loaded.Page));
                 }
             }
 
@@ -125,7 +125,7 @@ namespace NTable {
             }
 
             const TPart* Part = nullptr;
-            TIntrusivePtr<TCache> Cache;
+            TIntrusivePtr<TPageCollection> PageCollection;
             THashMap<TPageId, TSharedData> SavedPages;
             TVector<NSharedCache::TSharedPageRef> SavedPagesRefs;
             THashSet<TPageId> NeedPages;
@@ -151,7 +151,7 @@ namespace NTable {
 
         }
 
-        TLoader(TVector<TIntrusivePtr<TCache>>, TString legacy, TString opaque,
+        TLoader(TVector<TIntrusivePtr<TPageCollection>> pageCollections, TString legacy, TString opaque,
                 TVector<TString> deltas = { },
                 TEpoch epoch = NTable::TEpoch::Max());
         ~TLoader();
@@ -217,9 +217,9 @@ namespace NTable {
         static TEpoch GrabEpoch(const TPartComponents &pc)
         {
             Y_ENSURE(pc.PageCollectionComponents, "PartComponents should have at least one pageCollectionComponent");
-            Y_ENSURE(pc.PageCollectionComponents[0].Packet, "PartComponents should have a parsed meta pageCollectionComponent");
+            Y_ENSURE(pc.PageCollectionComponents[0].PageCollection, "PartComponents should have a parsed meta pageCollectionComponent");
 
-            const auto &meta = pc.PageCollectionComponents[0].Packet->Meta;
+            const auto &meta = pc.PageCollectionComponents[0].PageCollection->Meta;
 
             for (ui32 page = meta.TotalPages(); page--;) {
                 if (meta.GetPageType(page) == ui32(EPage::Schem2)
@@ -272,7 +272,7 @@ namespace NTable {
         TFetch StagePreloadData();
 
     private:
-        TVector<TIntrusivePtr<TCache>> Packs;
+        TVector<TIntrusivePtr<TPageCollection>> PageCollections;
         const TString Legacy;
         const TString Opaque;
         const TVector<TString> Deltas;

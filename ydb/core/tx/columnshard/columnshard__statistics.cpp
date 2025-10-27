@@ -205,7 +205,7 @@ public:
                     }
                     AFL_VERIFY(indexMeta->GetColumnIds().size() == 1);
                     indexIdToColumnId.emplace(indexMeta->GetIndexId(), columnId);
-                    if (!indexMeta->IsInplaceData()) {
+                    if (!indexMeta->IsInplaceData(portionInfo->GetPortionInfo().GetTierNameDef(NOlap::NBlobOperations::TGlobal::DefaultStorageId))) {
                         portionInfo->FillBlobRangesByStorage(rangesByColumn, portionSchema->GetIndexInfo(), { indexMeta->GetIndexId() });
                     } else {
                         const std::vector<TString> data = portionInfo->GetIndexInplaceDataOptional(indexMeta->GetIndexId());
@@ -314,7 +314,7 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         StoragesManager, resultAccumulator, 1000, columnTagsRequested, versionedIndex, DataAccessorsManager.GetObjectPtrVerified());
 
     for (const auto& [_, portionInfo] : spg->GetPortions()) {
-        if (!portionInfo->IsVisible(GetMaxReadVersion(), true)) {
+        if (!portionInfo->IsVisible(GetMaxReadVersion())) {
             continue;
         }
         portionsPack.AddTask(portionInfo);

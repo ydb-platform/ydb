@@ -11,11 +11,12 @@ size_t VaryingHash(size_t src) {
 
         TPid()
             : Value(GetEnv("YQL_MUTATE_HASHCODE") ? IntHash(GetPID()) : 0)
-        {}
+        {
+        }
     };
 
     return Singleton<TPid>()->Value ^ src;
 }
 #endif
 
-}
+} // namespace NYql

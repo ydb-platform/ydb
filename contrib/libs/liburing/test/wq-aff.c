@@ -162,9 +162,16 @@ static int test_invalid_cpu(void)
 int main(int argc, char *argv[])
 {
 	int ret;
+	int nr_cpus;
 
 	if (argc > 1)
 		return T_EXIT_SKIP;
+
+	nr_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	if (nr_cpus < 2) {
+		fprintf(stderr, "Requires at least 2 CPUs, found %d\n", nr_cpus);
+		return T_EXIT_SKIP;
+	}
 
 	ret = test_invalid_cpu();
 	if (ret == T_EXIT_SKIP) {

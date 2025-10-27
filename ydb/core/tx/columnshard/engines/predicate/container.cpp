@@ -1,4 +1,5 @@
 #include "container.h"
+#include <ydb/library/formats/arrow/replace_key.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 #include <ydb/library/actors/core/log.h>
 
@@ -10,14 +11,9 @@ std::partial_ordering TPredicateContainer::ComparePredicatesSamePrefix(const NOl
     Y_ABORT_UNLESS(r.Batch->num_columns());
     Y_ABORT_UNLESS(l.Batch->num_rows() == r.Batch->num_rows());
     Y_ABORT_UNLESS(l.Batch->num_rows() == 1);
-    std::vector<std::shared_ptr<arrow::Array>> lColumns;
-    std::vector<std::shared_ptr<arrow::Array>> rColumns;
-    for (ui32 i = 0; i < std::min(l.Batch->columns().size(), r.Batch->columns().size()); ++i) {
-        Y_ABORT_UNLESS(l.Batch->column_name(i) == r.Batch->column_name(i));
-        lColumns.emplace_back(l.Batch->column(i));
-        rColumns.emplace_back(r.Batch->column(i));
-    }
-    return NArrow::ColumnsCompare(lColumns, 0, rColumns, 0);
+    const auto commonPrefixLength = std::min(l.Batch->columns().size(), r.Batch->columns().size());
+    using NKikimr::NArrow::TRawReplaceKey;
+    return TRawReplaceKey{&l.Batch->columns(), 0}.ComparePart<false>(TRawReplaceKey{&r.Batch->columns(), 0}, commonPrefixLength);
 }
 
 TString TPredicateContainer::DebugString() const {
@@ -107,8 +103,10 @@ bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) const {
             return ext.IsForwardInterval();
         } else if (Object->Batch->num_columns() == ext.Object->Batch->num_columns()) {
             return IsInclude() && ext.IsInclude();
+        } else if (Object->Batch->num_columns() < ext.Object->Batch->num_columns()) {
+            return IsInclude();
         } else {
-            return true;
+            return ext.IsInclude();
         }
     } else {
         return true;

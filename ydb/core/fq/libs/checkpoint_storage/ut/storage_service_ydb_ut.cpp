@@ -51,15 +51,13 @@ TRuntimePtr PrepareTestActorRuntime(const char* tablePrefix, bool enableGc = fal
     checkpointConfig.SetToken("");
     checkpointConfig.SetTablePrefix(tablePrefix);
 
-    NConfig::TCommonConfig commonConfig;
-    commonConfig.SetIdsPrefix("id");
-
     auto& gcConfig = *config.MutableCheckpointGarbageConfig();
     gcConfig.SetEnabled(enableGc);
 
+    auto driverConfig = NYdb::TDriverConfig();
+    NYdb::TDriver driver(driverConfig);
     auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
-    auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-    auto storageService = NewCheckpointStorageService(config, commonConfig, credFactory, yqSharedResources, MakeIntrusive<::NMonitoring::TDynamicCounters>());
+    auto storageService = NewCheckpointStorageService(config, "id", credFactory, std::move(driver), MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
     runtime->AddLocalService(
         NYql::NDq::MakeCheckpointStorageID(),

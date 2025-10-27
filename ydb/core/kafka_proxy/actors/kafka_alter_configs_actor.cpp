@@ -2,12 +2,11 @@
 
 #include "control_plane_common.h"
 
+#include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
-
+#include <ydb/core/persqueue/public/constants.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 
-#include <ydb/core/kafka_proxy/kafka_constants.h>
-#include <ydb/core/persqueue/user_info.h>
 
 
 namespace NKafka {
@@ -57,15 +56,13 @@ public:
     ~TAlterConfigsActor() = default;
 
     void ModifyPersqueueConfig(
-            NKikimr::TAppData* appData,
-            NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
-            const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
-            const NKikimrSchemeOp::TDirEntry& selfInfo
+        NKikimr::TAppData* appData,
+        NKikimrSchemeOp::TPersQueueGroupDescription& groupConfig,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
+        const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
         Y_UNUSED(selfInfo);
         const auto& pqConfig = appData->PQConfig;
-
-
         auto partitionConfig = groupConfig.MutablePQTabletConfig()->MutablePartitionConfig();
 
         if (RetentionMs.has_value()) {
@@ -97,7 +94,6 @@ public:
                 pqConfig);
         }
     }
-
 private:
     std::optional<ui64> RetentionMs;
     std::optional<ui64> RetentionBytes;
@@ -191,6 +187,7 @@ void TKafkaAlterConfigsActor::Bootstrap(const NActors::TActorContext& ctx) {
         Reply(ctx);
     }
 };
+
 
 void TKafkaAlterConfigsActor::Handle(const TEvKafka::TEvTopicModificationResponse::TPtr& ev, const TActorContext& ctx) {
     auto eventPtr = ev->Release();

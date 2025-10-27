@@ -518,11 +518,16 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
                 .Callable("Visit")
                     .Arg(0, "item")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
-                        const bool inserted = newInput.size() > origReduceInputs;
                         for (size_t i = 0; i < newInput.size(); ++i) {
                             TString paramName = TStringBuilder() << "alt" << i;
                             TString remappedName = TStringBuilder() << "remapped" << i;
                             if (i != fusedMap->InputIndex) {
+                                size_t origInputIndex = i;
+                                if (i > fusedMap->InputIndex) {
+                                    size_t delta = newInput.size() - origReduceInputs;
+                                    YQL_ENSURE(i >= delta);
+                                    origInputIndex = i - delta;
+                                }
                                 parent
                                     .Atom(2 * i + 1, i)
                                     .Lambda(2 * i + 2)
@@ -533,7 +538,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FuseReduceWithTrivialMa
                                                     parent
                                                         .Callable(0, "Variant")
                                                             .Arg(0, paramName)
-                                                            .Atom(1, (i > fusedMap->InputIndex && inserted) ? i - 1 : i)
+                                                            .Atom(1, origInputIndex)
                                                             .Add(2, origVariantType)
                                                         .Seal();
                                                 } else {

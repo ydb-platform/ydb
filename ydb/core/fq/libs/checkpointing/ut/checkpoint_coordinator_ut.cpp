@@ -1,18 +1,20 @@
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
+#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/core/fq/libs/graph_params/proto/graph_params.pb.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/core/testlib/basics/helpers.h>
-
-#include <library/cpp/testing/unittest/registar.h>
-#include <library/cpp/testing/unittest/gtest.h>
 #include <ydb/library/actors/core/executor_pool_basic.h>
 #include <ydb/library/actors/core/scheduler_basic.h>
-
-#include <google/protobuf/util/message_differencer.h>
-
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_checkpoints.h>
 #include <ydb/library/yql/providers/dq/api/protos/dqs.pb.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
+#include <google/protobuf/util/message_differencer.h>
+
+#include <library/cpp/testing/unittest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
+
+namespace NFq {
 
 namespace {
 
@@ -328,9 +330,7 @@ struct TTestBootstrap : public TTestActorRuntime {
     }
 
 };
-} // namespace
-
-namespace NFq {
+} // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TCheckpointCoordinatorTests) {
 

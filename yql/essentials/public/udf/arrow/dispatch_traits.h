@@ -69,13 +69,14 @@ std::unique_ptr<typename TTraits::TResult> MakeTzDateArrowTraitsImpl(bool isOpti
     }
 }
 
-template<typename TTraits>
+template <typename TTraits>
 concept CanInstantiateArrowTraitsForDecimal = requires {
     typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
 };
 
 template <typename TTraits, typename... TArgs>
 std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder, TArgs&&... args) {
+    type = SkipTaggedType(typeInfoHelper, type);
     const TType* unpacked = type;
     TOptionalTypeInspector typeOpt(typeInfoHelper, type);
     bool isOptional = false;
@@ -121,15 +122,15 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         }
 
         return reader;
-    } else {
-        type = unpacked;
     }
+
+    type = unpacked;
 
     TStructTypeInspector typeStruct(typeInfoHelper, type);
     if (typeStruct) {
         TVector<std::unique_ptr<typename TTraits::TResult>> members;
         for (ui32 i = 0; i < typeStruct.GetMembersCount(); i++) {
-            members.emplace_back(DispatchByArrowTraits<TTraits>(typeInfoHelper, typeStruct.GetMemberType(i), pgBuilder, std::forward<TArgs>(args)...));
+            members.emplace_back(DispatchByArrowTraits<TTraits>(typeInfoHelper, SkipTaggedType(typeInfoHelper, typeStruct.GetMemberType(i)), pgBuilder, std::forward<TArgs>(args)...));
         }
         // XXX: Use Tuple block reader for Struct.
         return MakeTupleArrowTraitsImpl<TTraits>(isOptional, std::move(members), type, std::forward<TArgs>(args)...);
@@ -139,7 +140,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
     if (typeTuple) {
         TVector<std::unique_ptr<typename TTraits::TResult>> children;
         for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
-            children.emplace_back(DispatchByArrowTraits<TTraits>(typeInfoHelper, typeTuple.GetElementType(i), pgBuilder, std::forward<TArgs>(args)...));
+            children.emplace_back(DispatchByArrowTraits<TTraits>(typeInfoHelper, SkipTaggedType(typeInfoHelper, typeTuple.GetElementType(i)), pgBuilder, std::forward<TArgs>(args)...));
         }
 
         return MakeTupleArrowTraitsImpl<TTraits>(isOptional, std::move(children), type, std::forward<TArgs>(args)...);
@@ -149,67 +150,67 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
     if (typeData) {
         auto typeId = typeData.GetTypeId();
         switch (GetDataSlot(typeId)) {
-        case NUdf::EDataSlot::Int8:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, i8>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Bool:
-        case NUdf::EDataSlot::Uint8:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, ui8>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Int16:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, i16>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Date:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, ui16>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Int32:
-        case NUdf::EDataSlot::Date32:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, i32>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Datetime:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, ui32>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-        case NUdf::EDataSlot::Interval64:
-        case NUdf::EDataSlot::Datetime64:
-        case NUdf::EDataSlot::Timestamp64:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, i64>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Timestamp:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, ui64>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Float:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, float>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Double:
-            return MakeFixedSizeArrowTraitsImpl<TTraits, double>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::String:
-            return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Yson:
-            return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::JsonDocument:
-            return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Utf8:
-            return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Json:
-            return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzDate:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzDate>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzDatetime:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzDatetime>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzTimestamp:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzDate32:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzDate32>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzDatetime64:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzDatetime64>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::TzTimestamp64:
-            return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp64>(isOptional, type, std::forward<TArgs>(args)...);
-        case NUdf::EDataSlot::Decimal: {
-            if constexpr (CanInstantiateArrowTraitsForDecimal<TTraits>) {
-                return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NDecimal::TInt128>(isOptional, type, std::forward<TArgs>(args)...);
-            } else {
-                Y_ENSURE(false, "Unsupported data slot");
+            case NUdf::EDataSlot::Int8:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, i8>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Bool:
+            case NUdf::EDataSlot::Uint8:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, ui8>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Int16:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, i16>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Uint16:
+            case NUdf::EDataSlot::Date:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, ui16>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Int32:
+            case NUdf::EDataSlot::Date32:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, i32>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Uint32:
+            case NUdf::EDataSlot::Datetime:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, ui32>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Int64:
+            case NUdf::EDataSlot::Interval:
+            case NUdf::EDataSlot::Interval64:
+            case NUdf::EDataSlot::Datetime64:
+            case NUdf::EDataSlot::Timestamp64:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, i64>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Uint64:
+            case NUdf::EDataSlot::Timestamp:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, ui64>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Float:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, float>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Double:
+                return MakeFixedSizeArrowTraitsImpl<TTraits, double>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::String:
+                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Yson:
+                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::JsonDocument:
+                return MakeStringArrowTraitsImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Utf8:
+                return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Json:
+                return MakeStringArrowTraitsImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzDate:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzDate>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzDatetime:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzDatetime>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzTimestamp:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzDate32:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzDate32>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzDatetime64:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzDatetime64>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::TzTimestamp64:
+                return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp64>(isOptional, type, std::forward<TArgs>(args)...);
+            case NUdf::EDataSlot::Decimal: {
+                if constexpr (CanInstantiateArrowTraitsForDecimal<TTraits>) {
+                    return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NDecimal::TInt128>(isOptional, type, std::forward<TArgs>(args)...);
+                } else {
+                    Y_ENSURE(false, "Unsupported data slot");
+                }
             }
-        }
-        case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::DyNumber:
-            Y_ENSURE(false, "Unsupported data slot");
+            case NUdf::EDataSlot::Uuid:
+            case NUdf::EDataSlot::DyNumber:
+                Y_ENSURE(false, "Unsupported data slot");
         }
     }
 
@@ -234,15 +235,24 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
 
     if (IsSingularType(typeInfoHelper, type)) {
         Y_ENSURE(!isOptional, "Optional data types are not supported directly for singular type. Please use TExternalOptional wrapper.");
+        bool isNull = typeInfoHelper.GetTypeKind(type) == ETypeKind::Null;
         if constexpr (TTraits::PassType) {
-            return TTraits::MakeSingular(type, std::forward<TArgs>(args)...);
+            if (isNull) {
+                return TTraits::template MakeSingular<true>(type, std::forward<TArgs>(args)...);
+            } else {
+                return TTraits::template MakeSingular<false>(type, std::forward<TArgs>(args)...);
+            }
         } else {
-            return TTraits::MakeSingular(std::forward<TArgs>(args)...);
+            if (isNull) {
+                return TTraits::template MakeSingular<true>(std::forward<TArgs>(args)...);
+            } else {
+                return TTraits::template MakeSingular<false>(std::forward<TArgs>(args)...);
+            }
         }
     }
 
     Y_ENSURE(false, "Unsupported type");
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

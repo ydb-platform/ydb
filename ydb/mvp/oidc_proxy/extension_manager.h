@@ -11,7 +11,7 @@ struct TExtensionManager {
     TDuration Timeout;
 
 public:
-    TExtensionManager(const TActorId sender,
+    TExtensionManager(const NActors::TActorId sender,
                       const TOpenIdConnectSettings& settings,
                       const TCrackedPage& protectedPage,
                       const TString authHeader);

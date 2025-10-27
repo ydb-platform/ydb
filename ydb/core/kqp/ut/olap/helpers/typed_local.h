@@ -73,6 +73,9 @@ public:
                 NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable(
                     "pk_int", numRows * pkKff));
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>(fieldName, fillPolicy));
+            builders.emplace_back(
+                NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable(
+                    "ts", numRows * pkKff));
             NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
             std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
             SendDataViaActorSystem(TablePath, batch, Ydb::StatusIds::SUCCESS);
@@ -128,6 +131,7 @@ public:
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
         builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
         builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<TFiller>>("field", fillPolicy));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
         NArrow::NConstruction::TRecordBatchConstructor batchBuilder(builders);
         std::shared_ptr<arrow::RecordBatch> batch = batchBuilder.BuildBatch(numRows);
         TBase::SendDataViaActorSystem(TablePath, batch);
@@ -143,6 +147,7 @@ public:
 
         std::vector<NArrow::NConstruction::IArrayBuilder::TPtr> builders;
         builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::Int64Type>>::BuildNotNullable("pk_int", numRows * pkKff));
+        builders.emplace_back(NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TIntSeqFiller<arrow::TimestampType>>::BuildNotNullable("ts", numRows * pkKff));
         for (ui32 i = 0; i < repCount; i++) {
             TString repStr = ToString(i);
             builders.emplace_back(std::make_shared<NArrow::NConstruction::TSimpleArrayConstructor<NArrow::NConstruction::TPoolFiller<NKikimr::NArrow::NConstruction::TStringType>>>("field_utf" + repStr, utfPool, i));

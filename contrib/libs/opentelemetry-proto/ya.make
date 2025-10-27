@@ -6,9 +6,9 @@ LICENSE(Apache-2.0)
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(1.7.0)
+VERSION(1.8.0)
 
-ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.7.0.tar.gz)
+ORIGINAL_SOURCE(https://github.com/open-telemetry/opentelemetry-proto/archive/v1.8.0.tar.gz)
 
 PY_NAMESPACE(.)
 
@@ -31,7 +31,5 @@ SRCS(
     opentelemetry/proto/resource/v1/resource.proto
     opentelemetry/proto/trace/v1/trace.proto
 )
-
-EXCLUDE_TAGS(GO_PROTO)
 
 END()

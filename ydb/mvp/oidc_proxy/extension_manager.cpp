@@ -5,18 +5,19 @@
 
 namespace NMVP::NOIDC {
 
+using namespace NActors;
+
 TExtensionManager::TExtensionManager(const TActorId sender,
                                      const TOpenIdConnectSettings& settings,
                                      const TCrackedPage& protectedPage,
                                      const TString authHeader)
-    : Settings(settings)
+    : ExtensionCtx(MakeIntrusive<TExtensionContext>())
+    , Settings(settings)
     , AuthHeader(std::move(authHeader))
+    , Timeout(settings.DefaultRequestTimeout)
 {
-    ExtensionCtx = MakeIntrusive<TExtensionContext>();
-    ExtensionCtx->Params = MakeHolder<TProxiedResponseParams>();
-    ExtensionCtx->Params->ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
+    ExtensionCtx->Params.ProtectedPage = MakeHolder<TCrackedPage>(protectedPage);
     ExtensionCtx->Sender = sender;
-    Timeout = settings.DefaultRequestTimeout;
 }
 
 void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
@@ -24,24 +25,25 @@ void TExtensionManager::SetExtensionTimeout(TDuration timeout) {
 }
 
 void TExtensionManager::SetRequest(NHttp::THttpIncomingRequestPtr request) {
-    ExtensionCtx->Params->Request = std::move(request);
+    ExtensionCtx->Params.Request = std::move(request);
 }
 
 void TExtensionManager::SetOverrideResponse(NHttp::TEvHttpProxy::TEvHttpIncomingResponse::TPtr event) {
-    ExtensionCtx->Params->HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
-    ExtensionCtx->Params->ResponseError = event->Get()->GetError();
+    auto& params = ExtensionCtx->Params;
+    params.HeadersOverride = MakeHolder<NHttp::THeadersBuilder>();
+    params.ResponseError = event->Get()->GetError();
 
-    if (!event->Get()->Response)
+    auto response = std::move(event->Get()->Response);
+    if (!response)
         return;
 
-    auto& response = event->Get()->Response;
-    ExtensionCtx->Params->StatusOverride = response->Status;
+    params.StatusOverride = response->Status;
     auto headers = NHttp::THeaders(response->Headers);
     for (const auto& header : headers.Headers) {
-        ExtensionCtx->Params->HeadersOverride->Set(header.first, header.second);
+        params.HeadersOverride->Set(header.first, header.second);
     }
-    ExtensionCtx->Params->MessageOverride = response->Message;
-    ExtensionCtx->Params->BodyOverride = response->Body;
+    params.MessageOverride = response->Message;
+    params.BodyOverride = response->Body;
 }
 
 void TExtensionManager::AddExtensionWhoami() {

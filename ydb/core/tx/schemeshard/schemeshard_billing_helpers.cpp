@@ -44,14 +44,6 @@ TMeteringStats& operator -= (TMeteringStats& value, const TMeteringStats& other)
     return value;
 }
 
-void TMeteringStatsHelper::TryFixOldFormat(TMeteringStats& value) {
-    // old format: assign upload to read
-    if (value.GetReadRows() == 0 && value.GetUploadRows() != 0) {
-        value.SetReadRows(value.GetUploadRows());
-        value.SetReadBytes(value.GetUploadBytes());
-    }
-}
-
 TMeteringStats TMeteringStatsHelper::ZeroValue() {
     // this method the only purpose is to beautifully print zero stats instead of empty protobuf or with missing fields
     TMeteringStats value;
@@ -110,7 +102,9 @@ ui64 TRUCalculator::Calculate(const TMeteringStats& stats, TString& explain) {
         << ", BulkUpsert: " << bulkUpsert
         << ", CPU: " << cpu;
 
-    return Max(readTable + bulkUpsert, cpu);
+    // CPU usage is intentionally excluded to simplify the documentation
+    // as I/O operations are typically much more resource-intensive than CPU processing
+    return readTable + bulkUpsert;
 }
 
 }

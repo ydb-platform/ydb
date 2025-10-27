@@ -771,6 +771,7 @@ private:
             << " ], StatRequestsCount[ " << request.StatRequests.size() << " ]");
 
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = ev->Get()->Database;
         navigate->Cookie = requestId;
         for (const auto& req : request.StatRequests) {
             AddNavigateEntry(navigate->ResultSet, req.PathId, true);
@@ -934,9 +935,10 @@ private:
     }
 
     void Handle(TEvStatistics::TEvPropagateStatistics::TPtr& ev) {
-        SA_LOG_D("EvPropagateStatistics, node id = " << SelfId().NodeId());
+        SA_LOG_D("EvPropagateStatistics, node id: " << SelfId().NodeId()
+            << " cookie: " << ev->Cookie);
 
-        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse);
+        Send(ev->Sender, new TEvStatistics::TEvPropagateStatisticsResponse, 0, ev->Cookie);
 
         IsStatisticsDisabledInSA = false;
 
@@ -1465,14 +1467,6 @@ private:
                 HTML(str) {
                     FORM_CLASS("form-horizontal") {
                         DIV_CLASS("form-group") {
-                            LABEL_CLASS_FOR("col-sm-2 control-label", "database") {
-                                str << "Database";
-                            }
-                            DIV_CLASS("col-sm-8") {
-                                str << "<input type='text' id='database' name='database' class='form-control' placeholder='/full/database/path'>";
-                            }
-                        }
-                        DIV_CLASS("form-group") {
                             LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
                                 str << "Path";
                             }
@@ -1504,6 +1498,25 @@ private:
                     }
                 }
             });
+            AddPanel(str, "Probe base statistics", [](IOutputStream& str) {
+                HTML(str) {
+                    FORM_CLASS("form-horizontal") {
+                        DIV_CLASS("form-group") {
+                            LABEL_CLASS_FOR("col-sm-2 control-label", "path") {
+                                str << "Path";
+                            }
+                            DIV_CLASS("col-sm-8") {
+                                str << "<input type='text' id='path' name='path' class='form-control' placeholder='/full/path'>";
+                            }
+
+                            str << "<input type=\"hidden\" name=\"action\" value=\"probe_base_stats\"/>";
+                            DIV_CLASS("col-sm-2") {
+                                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Probe\"/>";
+                            }
+                        }
+                    }
+                }
+            });
 
             PrintStatServiceState(str);
         }
@@ -1518,7 +1531,11 @@ private:
 
         const auto* msg = ev->CastAsLocal<NMon::TEvHttpInfoRes>();
         if (msg != nullptr) {
-            ReplyToMonitoring(msg->Answer);
+            if (msg->ContentType == NMon::IEvHttpInfoRes::Html) {
+                ReplyToMonitoring(msg->Answer);
+            } else {
+                Send(MonitoringActorId, ev->Release());
+            }
         }
     }
 
@@ -1540,18 +1557,13 @@ private:
     }
 
     void Handle(NMon::TEvHttpInfo::TPtr& ev) {
-        if (!EnableColumnStatistics) {
-            Send(ev->Sender, new NMon::TEvHttpInfoRes("Column statistics is disabled"));
-            return;
-        }
-
         HttpRequestActorId = TActorId();
         MonitoringActorId = ev->Sender;
 
         const auto& request = ev->Get()->Request;
         const auto& params = request.GetParams();
 
-        auto getRequestParam = [&params](const TString& name){
+        auto getRequestParam = [&params](const TStringBuf name) {
             auto it = params.find(name);
             return it != params.end() ? it->second : TString();
         };
@@ -1569,10 +1581,22 @@ private:
         }
 
         if (action == "analyze") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::ANALYZE, {
                 { THttpRequest::EParamType::PATH, path }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
         } else if (action == "status") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             const auto operationId = getRequestParam("operation");
             if (operationId.empty()) {
                 ReplyToMonitoring("'OperationId' parameter is required");
@@ -1582,8 +1606,15 @@ private:
             HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::STATUS, {
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::OPERATION_ID, operationId }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
         } else if (action == "probe") {
+            if (!EnableColumnStatistics) {
+                ReplyToMonitoring("Column statistics is disabled");
+                return;
+            }
+
             const auto column = getRequestParam("column");
             if (column.empty()) {
                 ReplyToMonitoring("'ColumnName' parameter is required");
@@ -1596,18 +1627,36 @@ private:
                 return;
             }
 
-            const auto database = getRequestParam("database");
-            if (database.empty()) {
-                ReplyToMonitoring("'Database' parameter is required");
-                return;
-            }
-
-            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::COUNT_MIN_SKETCH_PROBE, {
-                { THttpRequest::EParamType::DATABASE, database },
+            HttpRequestActorId = Register(new THttpRequest(THttpRequest::ERequestType::PROBE_COUNT_MIN_SKETCH, {
                 { THttpRequest::EParamType::PATH, path },
                 { THttpRequest::EParamType::COLUMN_NAME, column },
                 { THttpRequest::EParamType::CELL_VALUE, cell }
-            }, SelfId()));
+                },
+                THttpRequest::EResponseContentType::HTML,
+                SelfId()));
+        } else if (action == "probe_base_stats") {
+            if (!EnableStatistics) {
+                ReplyToMonitoring("Base statistics is disabled");
+                return;
+            }
+
+            auto respContentType = THttpRequest::EResponseContentType::HTML;
+            if (params.Has("json")) {
+                ui32 json = 0;
+                if (!TryFromString(params.Get("json"), json)) {
+                    return ReplyToMonitoring("Failed to parse json parameter -- must be an integer");
+                }
+                if (json) {
+                    respContentType = THttpRequest::EResponseContentType::JSON;
+                }
+            }
+
+            HttpRequestActorId = Register(new THttpRequest(
+                THttpRequest::ERequestType::PROBE_BASE_STATS, {
+                    { THttpRequest::EParamType::PATH, path },
+                },
+                respContentType,
+                SelfId()));
         } else {
             ReplyToMonitoring("Wrong 'action' parameter value");
         }

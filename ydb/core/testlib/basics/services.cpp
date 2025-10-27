@@ -43,15 +43,12 @@ static constexpr TDuration DISK_DISPATCH_TIMEOUT = NSan::PlainOrUnderSanitizer(T
 
 namespace NKikimr {
 
-namespace NPDisk {
-    extern const ui64 YdbDefaultPDiskSequence = 0x7e5700007e570000;
-}
-
     void SetupIcb(TTestActorRuntime& runtime, ui32 nodeIndex, const NKikimrConfig::TImmediateControlsConfig& config,
-            const TIntrusivePtr<NKikimr::TControlBoard>& icb)
+            const TIntrusivePtr<NKikimr::TControlBoard>& icb,
+            const TIntrusivePtr<NKikimr::TDynamicControlBoard>& dcb)
     {
         runtime.AddLocalService(MakeIcbId(runtime.GetNodeId(nodeIndex)),
-            TActorSetupCmd(CreateImmediateControlActor(icb, runtime.GetDynamicCounters(nodeIndex)),
+            TActorSetupCmd(CreateImmediateControlActor(icb, dcb, runtime.GetDynamicCounters(nodeIndex)),
                     TMailboxType::ReadAsFilled, 0),
             nodeIndex);
 
@@ -189,7 +186,7 @@ namespace NPDisk {
     {
         runtime.AddLocalService(NBlobCache::MakeBlobCacheServiceId(),
             TActorSetupCmd(
-                NBlobCache::CreateBlobCache(20<<20, runtime.GetDynamicCounters(nodeIndex)),
+                NBlobCache::CreateBlobCache(std::nullopt, runtime.GetDynamicCounters(nodeIndex)->GetSubgroup("type", "BLOB_CACHE")),
                 TMailboxType::ReadAsFilled,
                 0),
             nodeIndex);
@@ -458,6 +455,10 @@ namespace NPDisk {
             app.Icb.emplace_back(new TControlBoard);
         }
 
+        while (app.Dcb.size() < runtime.GetNodeCount()) {
+            app.Dcb.emplace_back(new TDynamicControlBoard());
+        }
+
         NSharedCache::TSharedCacheConfig defaultSharedCacheConfig;
         defaultSharedCacheConfig.SetMemoryLimit(32_MB);
 
@@ -467,7 +468,7 @@ namespace NPDisk {
             if (const auto it = app.Keys.find(nodeIndex); it != app.Keys.end()) {
                 keyConfig = it->second;
             }
-            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex]);
+            SetupIcb(runtime, nodeIndex, app.ImmediateControlsConfig, app.Icb[nodeIndex], app.Dcb[nodeIndex]);
             for (const auto& dsProxy : dsProxies) {
                 runtime.AddLocalService(
                     MakeBlobStorageProxyID(dsProxy->GetGroupId()),

@@ -1,0 +1,1395 @@
+# File format ($ symbol means the beginning of a line):
+#
+# $ # this message
+# $ # =======================
+# $     # comments (all commentaries should starts with some number of spaces and # symbol)
+# $ IGNORE_FILES {file1.ext1} {file2.ext2} - (optional) ignore listed files when generating license macro and credits
+# $ RENAME {original license id} TO {new license id} # user comments - (optional) use {new license id} instead {original license id} in ya.make files
+# $ # user comments
+# $
+# ${action} {license id} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/1/ya.make ./ya/make/2/ya.make
+# ${all_file_action} filename
+# $ # user commentaries (many lines)
+# $ generated description - files with this license, license text... (some number of lines that starts with some number of spaces, do not modify)
+# ${action} {license spdx} {license text hash}
+# $BELONGS ./ya/make/file/relative/path/3/ya.make
+# ${all_file_action} filename
+# $    #    user commentaries
+# $ generated description
+# $ ...
+#
+# You can modify action, all_file_action and add commentaries
+# Available actions:
+# keep - keep license in contrib and use in credits
+# skip - skip license
+# remove - remove all files with this license
+# rename - save license text/links into licenses texts file, but not store SPDX into LINCENSE macro. You should store correct license id into devtools.license.spdx.txt file
+#
+# {all file action} records will be generated when license text contains filename that exists on filesystem (in contrib directory)
+# We suppose that that files can contain some license info
+# Available all file actions:
+# FILE_IGNORE - ignore file (do nothing)
+# FILE_INCLUDE - include all file data into licenses text file
+# =======================
+
+KEEP     MIT                  001ca03e64d54ef98bae8ee0d59fbe7b
+BELONGS ya.make
+    License text:
+        The MIT License (MIT)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/fiat/LICENSE [1:1]
+
+KEEP     OpenSSL AND BSD-3-Clause AND GPL-1.0-or-later AND GPL-2.0-only 02c01601bd015a99e19a4c2957056dde
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [16:20]
+        gen/bcm/sha256-armv8-linux.S [16:20]
+        gen/bcm/sha256-armv8-win.S [16:20]
+        gen/bcm/sha512-armv8-apple.S [16:20]
+        gen/bcm/sha512-armv8-linux.S [16:20]
+        gen/bcm/sha512-armv8-win.S [16:20]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [16:20]
+        gen/bcm/sha256-armv8-linux.S [16:20]
+        gen/bcm/sha256-armv8-win.S [16:20]
+        gen/bcm/sha512-armv8-apple.S [16:20]
+        gen/bcm/sha512-armv8-linux.S [16:20]
+        gen/bcm/sha512-armv8-win.S [16:20]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [16:20]
+        gen/bcm/sha256-armv8-linux.S [16:20]
+        gen/bcm/sha256-armv8-win.S [16:20]
+        gen/bcm/sha512-armv8-apple.S [16:20]
+        gen/bcm/sha512-armv8-linux.S [16:20]
+        gen/bcm/sha512-armv8-win.S [16:20]
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [16:20]
+        gen/bcm/sha256-armv8-linux.S [16:20]
+        gen/bcm/sha256-armv8-win.S [16:20]
+        gen/bcm/sha512-armv8-apple.S [16:20]
+        gen/bcm/sha512-armv8-linux.S [16:20]
+        gen/bcm/sha512-armv8-win.S [16:20]
+
+KEEP     LicenseRef-scancode-openssl 04624442d7eea96390c64343b5cb2fcb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/dh_extra/dh_asn1.c [7:54]
+        crypto/dh_extra/params.c [4:51]
+        crypto/dsa/dsa_asn1.c [6:53]
+        crypto/ecdh_extra/ecdh_extra.c [18:65]
+        crypto/evp/p_dsa_asn1.c [7:54]
+        crypto/evp/p_ec.c [7:54]
+        crypto/evp/p_rsa.c [7:54]
+        crypto/evp/print.c [4:51]
+        crypto/fipsmodule/digestsign/digestsign.c [7:54]
+        crypto/fipsmodule/ecdh/ecdh.c [18:65]
+        crypto/fipsmodule/rsa/padding.c [7:54]
+        crypto/pem/pem_x509.c [8:55]
+        crypto/pem/pem_xaux.c [8:55]
+        crypto/pkcs8/internal.h [7:54]
+        crypto/pkcs8/p5_pbev2.c [7:54]
+        crypto/pkcs8/pkcs8.c [7:54]
+        crypto/pkcs8/pkcs8_x509.c [7:54]
+        crypto/rsa_extra/rsa_asn1.c [7:54]
+        crypto/x509/ext_dat.h [8:55]
+        crypto/x509/rsa_pss.c [7:54]
+        crypto/x509/v3_akey.c [8:55]
+        crypto/x509/v3_akeya.c [8:55]
+        crypto/x509/v3_alt.c [8:55]
+        crypto/x509/v3_bcons.c [8:55]
+        crypto/x509/v3_bitst.c [8:55]
+        crypto/x509/v3_conf.c [8:55]
+        crypto/x509/v3_crld.c [8:55]
+        crypto/x509/v3_enum.c [8:55]
+        crypto/x509/v3_extku.c [8:55]
+        crypto/x509/v3_genn.c [8:55]
+        crypto/x509/v3_int.c [8:55]
+        crypto/x509/v3_ncons.c [8:55]
+        crypto/x509/v3_pcons.c [8:55]
+        crypto/x509/v3_pmaps.c [8:55]
+        crypto/x509/v3_prn.c [8:55]
+        crypto/x509/v3_purp.c [8:55]
+        crypto/x509/v3_skey.c [8:55]
+        crypto/x509/x509_trs.c [8:55]
+        crypto/x509/x509_vpm.c [8:55]
+        crypto/x509/x509cset.c [8:55]
+        crypto/x509/x509spki.c [8:55]
+        crypto/x509/x_algor.c [8:55]
+        crypto/x509/x_x509a.c [8:55]
+        include/openssl/ecdh.h [18:65]
+        include/openssl/pkcs8.h [7:54]
+        include/openssl/x509v3_errors.h [6:53]
+
+KEEP     ISC                  04a371f922f15ecff5c3ba9c0effe3ab
+BELONGS ya.make
+    License text:
+        ISC license used for completely new code in BoringSSL:
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [144:144]
+
+KEEP     LicenseRef-scancode-openssl 04f2402e8190f24e1bdef59b7f20d5f0
+BELONGS decrepit/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/fipsmodule/aes/aes.c [4:46]
+        crypto/fipsmodule/aes/key_wrap.c [4:46]
+        crypto/fipsmodule/aes/mode_wrappers.c [4:46]
+        crypto/fipsmodule/cipher/e_aes.c [4:46]
+        crypto/fipsmodule/cipher/e_aesccm.c [4:46]
+        crypto/fipsmodule/modes/cbc.c [4:46]
+        crypto/fipsmodule/modes/cfb.c [4:46]
+        crypto/fipsmodule/modes/ctr.c [4:46]
+        crypto/fipsmodule/modes/gcm.c [4:46]
+        crypto/fipsmodule/modes/internal.h [4:46]
+        crypto/fipsmodule/modes/ofb.c [4:46]
+        decrepit/xts/xts.c [4:46]
+        include/openssl/aes.h [4:46]
+
+KEEP     LicenseRef-scancode-openssl 082488cd7537a407850c89c3b0fdf701
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/fipsmodule/bn/internal.h [60:107]
+        crypto/fipsmodule/ec/ec.c [5:52]
+        crypto/fipsmodule/ec/ec_key.c [5:52]
+        crypto/fipsmodule/ec/ec_montgomery.c [5:52]
+        crypto/fipsmodule/ec/internal.h [5:52]
+        crypto/fipsmodule/ec/oct.c [5:52]
+        crypto/fipsmodule/ec/simple.c [5:52]
+        crypto/fipsmodule/ec/wnaf.c [5:52]
+        crypto/fipsmodule/rsa/blinding.c [4:51]
+        decrepit/ssl/ssl_decrepit.c [60:107]
+        include/openssl/bn.h [60:107]
+        include/openssl/ec.h [5:52]
+        include/openssl/ec_key.h [5:52]
+        include/openssl/ssl.h [60:107]
+        include/openssl/ssl3.h [60:107]
+        include/openssl/tls1.h [60:107]
+        ssl/d1_both.cc [8:55]
+        ssl/d1_pkt.cc [6:53]
+        ssl/d1_srtp.cc [60:107]
+        ssl/dtls_record.cc [6:53]
+        ssl/handshake_client.cc [60:107]
+        ssl/handshake_server.cc [60:107]
+        ssl/internal.h [60:107]
+        ssl/s3_lib.cc [60:107]
+        ssl/ssl_cert.cc [60:107]
+        ssl/ssl_cipher.cc [60:107]
+        ssl/ssl_file.cc [60:107]
+        ssl/ssl_lib.cc [60:107]
+        ssl/ssl_session.cc [60:107]
+        ssl/ssl_transcript.cc [60:107]
+        ssl/ssl_x509.cc [60:107]
+        ssl/t1_enc.cc [60:107]
+
+KEEP     LicenseRef-scancode-openssl-nokia-psk-contribution 09b864705ebdc1fd0e21088d0ed41487
+BELONGS ssl/ya.make ya.make
+FILE_INCLUDE LICENSE found in files: include/openssl/ssl.h at line 136, include/openssl/tls1.h at line 144, ssl/handshake_client.cc at line 144, ssl/internal.h at line 136, ssl/ssl_stat.cc at line 78
+FILE_INCLUDE third_party/fiat/LICENSE found in files: include/openssl/ssl.h at line 136, include/openssl/tls1.h at line 144, ssl/handshake_client.cc at line 144, ssl/internal.h at line 136, ssl/ssl_stat.cc at line 78
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl-nokia-psk-contribution
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl-nokia-psk-contribution.LICENSE
+    Files with this license:
+        include/openssl/ssl.h [118:139]
+        include/openssl/tls1.h [126:147]
+        ssl/handshake_client.cc [126:147]
+        ssl/internal.h [118:139]
+        ssl/ssl_stat.cc [60:81]
+
+KEEP     LicenseRef-scancode-openssl-nokia-psk-contribution 0ce0296f42d11ebdb78ae7ef1779b185
+BELONGS ya.make
+    License text:
+         * The ECC Code is licensed pursuant to the OpenSSL open source
+         * license provided below.
+         *
+         * The ECDH software is originally written by Douglas Stebila of
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl-nokia-psk-contribution
+        Score           : 7.55
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl-nokia-psk-contribution.LICENSE
+    Files with this license:
+        crypto/ecdh_extra/ecdh_extra.c [8:11]
+        crypto/fipsmodule/ecdh/ecdh.c [8:11]
+
+KEEP     LicenseRef-scancode-ssleay-windows 16a764f304f1e8ff8f73b22ffd92b272
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        crypto/conf/conf_def.h [4:55]
+
+KEEP     OpenSSL AND BSD-3-Clause AND GPL-1.0-or-later 1adfb84ae7e27ca94fca4b131d0d9c19
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        gen/bcm/sha256-armv4-linux.S [17:21]
+        gen/bcm/sha512-armv4-linux.S [17:21]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        gen/bcm/sha256-armv4-linux.S [17:21]
+        gen/bcm/sha512-armv4-linux.S [17:21]
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        gen/bcm/sha256-armv4-linux.S [17:21]
+        gen/bcm/sha512-armv4-linux.S [17:21]
+
+KEEP     LicenseRef-scancode-generic-cla 202c55093e2c797e9ded17a2f9c796d7
+BELONGS ya.make
+    License text:
+        [Google Individual Contributor License Agreement](https://cla.developers.google.com/about/google-individual)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 22.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [5:5]
+
+KEEP     OpenSSL              2faeb70aa2f6d428f0311b95c6c4c7c5
+BELONGS ssl/ya.make ya.make
+FILE_INCLUDE LICENSE found in files: crypto/evp/p_dh.c at line 6, crypto/evp/p_dh_asn1.c at line 6, crypto/evp/scrypt.c at line 6, crypto/fipsmodule/bn/rsaz_exp.c at line 7, crypto/fipsmodule/bn/rsaz_exp.h at line 7, crypto/fipsmodule/ec/p256-nistz-table.h at line 7, crypto/fipsmodule/ec/p256-nistz.c at line 7, crypto/fipsmodule/ec/p256-nistz.h at line 7, crypto/rsa_extra/rsa_print.c at line 6, crypto/x509/v3_ocsp.c at line 6, ssl/bio_ssl.cc at line 6
+FILE_INCLUDE third_party/fiat/LICENSE found in files: crypto/evp/p_dh.c at line 6, crypto/evp/p_dh_asn1.c at line 6, crypto/evp/scrypt.c at line 6, crypto/fipsmodule/bn/rsaz_exp.c at line 7, crypto/fipsmodule/bn/rsaz_exp.h at line 7, crypto/fipsmodule/ec/p256-nistz-table.h at line 7, crypto/fipsmodule/ec/p256-nistz.c at line 7, crypto/fipsmodule/ec/p256-nistz.h at line 7, crypto/rsa_extra/rsa_print.c at line 6, crypto/x509/v3_ocsp.c at line 6, ssl/bio_ssl.cc at line 6
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/evp/p_dh.c [4:7]
+        crypto/evp/p_dh_asn1.c [4:7]
+        crypto/evp/scrypt.c [4:7]
+        crypto/fipsmodule/bn/rsaz_exp.c [5:8]
+        crypto/fipsmodule/bn/rsaz_exp.h [5:8]
+        crypto/fipsmodule/ec/p256-nistz-table.h [5:8]
+        crypto/fipsmodule/ec/p256-nistz.c [5:8]
+        crypto/fipsmodule/ec/p256-nistz.h [5:8]
+        crypto/rsa_extra/rsa_print.c [4:7]
+        crypto/x509/v3_ocsp.c [4:7]
+        ssl/bio_ssl.cc [4:7]
+
+KEEP     LicenseRef-scancode-proprietary-license 3185fc34c4175cd9f05768d140d532c6
+BELONGS ya.make
+    License text:
+        // |X509_STORE|'s verification parameters may not be modified concurrently with
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-proprietary-license
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/proprietary-license.LICENSE
+    Files with this license:
+        include/openssl/x509.h [2871:2871]
+
+KEEP     GPL-1.0-or-later     34bece3589a649d2b660de14cf344298
+BELONGS ya.make
+    License text:
+        @ of Linaro. Permission to use under GPL terms is granted.
+    Scancode info:
+        Original SPDX id: GPL-1.0-or-later
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [22:22]
+
+KEEP     OpenSSL              3b7fed22d1d1fda745747381daea44eb
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: gen/bcm/bsaes-armv7-linux.S at line 11, gen/bcm/sha256-armv4-linux.S at line 11, gen/bcm/sha512-armv4-linux.S at line 11
+FILE_INCLUDE third_party/fiat/LICENSE found in files: gen/bcm/bsaes-armv7-linux.S at line 11, gen/bcm/sha256-armv4-linux.S at line 11, gen/bcm/sha512-armv4-linux.S at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [9:12]
+        gen/bcm/sha256-armv4-linux.S [9:12]
+        gen/bcm/sha512-armv4-linux.S [9:12]
+
+KEEP     LicenseRef-scancode-openssl 48c14be5ad5e236b44a135575ad7b791
+BELONGS ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/ecdsa_extra/ecdsa_asn1.c [4:51]
+        crypto/fipsmodule/ecdsa/ecdsa.c [4:51]
+        include/openssl/ecdsa.h [4:51]
+        ssl/d1_lib.cc [8:55]
+        ssl/dtls_method.cc [8:55]
+
+KEEP     LicenseRef-scancode-openssl 499c6c3434d3540caae2f4f4fbf862af
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        include/openssl/asn1t.h [7:54]
+
+KEEP     LicenseRef-scancode-openssl 4b455f2230a96f2b6549e63104a101d2
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/fipsmodule/cmac/cmac.c [4:46]
+        crypto/fipsmodule/digest/md32_common.h [4:46]
+
+KEEP     ISC                  4c03ea08c1255ceb8a696f8d44ffd5ca
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [148:158]
+        crypto/asn1/posix_time.c [3:13]
+        crypto/bio/socket_helper.c [3:13]
+        crypto/blake2/blake2.c [3:13]
+        crypto/bn_extra/bn_asn1.c [3:13]
+        crypto/bytestring/asn1_compat.c [3:13]
+        crypto/bytestring/ber.c [3:13]
+        crypto/bytestring/cbb.c [3:13]
+        crypto/bytestring/cbs.c [3:13]
+        crypto/bytestring/internal.h [3:13]
+        crypto/bytestring/unicode.c [3:13]
+        crypto/chacha/chacha.c [3:13]
+        crypto/chacha/internal.h [3:13]
+        crypto/cipher_extra/e_aesctrhmac.c [3:13]
+        crypto/cipher_extra/e_aesgcmsiv.c [3:13]
+        crypto/cipher_extra/e_chacha20poly1305.c [3:13]
+        crypto/cipher_extra/e_tls.c [3:13]
+        crypto/conf/internal.h [3:13]
+        crypto/cpu_aarch64_apple.c [3:13]
+        crypto/cpu_aarch64_fuchsia.c [3:13]
+        crypto/cpu_aarch64_linux.c [3:13]
+        crypto/cpu_aarch64_openbsd.c [3:13]
+        crypto/cpu_aarch64_sysreg.c [3:13]
+        crypto/cpu_aarch64_win.c [4:14]
+        crypto/cpu_arm_freebsd.c [3:13]
+        crypto/cpu_arm_linux.c [3:13]
+        crypto/cpu_arm_linux.h [3:13]
+        crypto/crypto.c [3:13]
+        crypto/curve25519/asm/x25519-asm-arm.S [3:13]
+        crypto/curve25519/curve25519.c [3:13]
+        crypto/curve25519/curve25519_64_adx.c [3:13]
+        crypto/curve25519/curve25519_tables.h [3:13]
+        crypto/curve25519/internal.h [3:13]
+        crypto/curve25519/spake25519.c [3:13]
+        crypto/dsa/internal.h [3:13]
+        crypto/ec_extra/ec_derive.c [3:13]
+        crypto/ec_extra/hash_to_curve.c [3:13]
+        crypto/ec_extra/internal.h [3:13]
+        crypto/engine/engine.c [3:13]
+        crypto/err/internal.h [3:13]
+        crypto/evp/p_ed25519.c [3:13]
+        crypto/evp/p_ed25519_asn1.c [3:13]
+        crypto/evp/p_hkdf.c [3:13]
+        crypto/evp/p_x25519.c [3:13]
+        crypto/evp/p_x25519_asn1.c [3:13]
+        crypto/fipsmodule/aes/aes_nohw.c [3:13]
+        crypto/fipsmodule/aes/internal.h [3:13]
+        crypto/fipsmodule/bcm.c [3:13]
+        crypto/fipsmodule/bn/div_extra.c [3:13]
+        crypto/fipsmodule/bn/gcd_extra.c [3:13]
+        crypto/fipsmodule/bn/montgomery_inv.c [3:13]
+        crypto/fipsmodule/cipher/aead.c [3:13]
+        crypto/fipsmodule/delocate.h [3:13]
+        crypto/fipsmodule/dh/internal.h [3:13]
+        crypto/fipsmodule/ec/builtin_curves.h [3:13]
+        crypto/fipsmodule/ec/felem.c [3:13]
+        crypto/fipsmodule/ec/p224-64.c [3:13]
+        crypto/fipsmodule/ec/p256.c [3:13]
+        crypto/fipsmodule/ec/p256_table.h [3:13]
+        crypto/fipsmodule/ec/scalar.c [3:13]
+        crypto/fipsmodule/ec/simple_mul.c [3:13]
+        crypto/fipsmodule/ec/util.c [3:13]
+        crypto/fipsmodule/ecdsa/internal.h [3:13]
+        crypto/fipsmodule/fips_shared_support.c [3:13]
+        crypto/fipsmodule/hkdf/hkdf.c [3:13]
+        crypto/fipsmodule/md5/internal.h [3:13]
+        crypto/fipsmodule/modes/gcm_nohw.c [3:13]
+        crypto/fipsmodule/modes/polyval.c [3:13]
+        crypto/fipsmodule/rand/ctrdrbg.c [3:13]
+        crypto/fipsmodule/rand/fork_detect.c [3:13]
+        crypto/fipsmodule/rand/fork_detect.h [3:13]
+        crypto/fipsmodule/rand/getrandom_fillin.h [3:13]
+        crypto/fipsmodule/rand/internal.h [3:13]
+        crypto/fipsmodule/rand/rand.c [3:13]
+        crypto/fipsmodule/rand/urandom.c [3:13]
+        crypto/fipsmodule/self_check/fips.c [3:13]
+        crypto/fipsmodule/self_check/self_check.c [3:13]
+        crypto/fipsmodule/service_indicator/internal.h [3:13]
+        crypto/fipsmodule/service_indicator/service_indicator.c [3:13]
+        crypto/fipsmodule/sha/internal.h [3:13]
+        crypto/fipsmodule/tls/internal.h [3:13]
+        crypto/hpke/hpke.c [3:13]
+        crypto/hrss/hrss.c [3:13]
+        crypto/hrss/internal.h [3:13]
+        crypto/keccak/internal.h [3:13]
+        crypto/keccak/keccak.c [3:13]
+        crypto/kyber/internal.h [3:13]
+        crypto/kyber/kyber.c [3:13]
+        crypto/pkcs7/internal.h [3:13]
+        crypto/pkcs7/pkcs7.c [3:13]
+        crypto/pkcs7/pkcs7_x509.c [3:13]
+        crypto/poly1305/internal.h [3:13]
+        crypto/poly1305/poly1305.c [3:13]
+        crypto/poly1305/poly1305_arm.c [3:13]
+        crypto/poly1305/poly1305_vec.c [3:13]
+        crypto/pool/internal.h [3:13]
+        crypto/pool/pool.c [3:13]
+        crypto/rand_extra/deterministic.c [3:13]
+        crypto/rand_extra/forkunsafe.c [3:13]
+        crypto/rand_extra/getentropy.c [3:13]
+        crypto/rand_extra/ios.c [3:13]
+        crypto/rand_extra/passive.c [3:13]
+        crypto/rand_extra/rand_extra.c [3:13]
+        crypto/rand_extra/windows.c [3:13]
+        crypto/refcount.c [3:13]
+        crypto/siphash/siphash.c [3:13]
+        crypto/spx/address.c [3:13]
+        crypto/spx/address.h [3:13]
+        crypto/spx/fors.c [3:13]
+        crypto/spx/fors.h [3:13]
+        crypto/spx/merkle.c [3:13]
+        crypto/spx/merkle.h [3:13]
+        crypto/spx/params.h [3:13]
+        crypto/spx/spx.c [3:13]
+        crypto/spx/spx_util.c [3:13]
+        crypto/spx/spx_util.h [3:13]
+        crypto/spx/thash.c [3:13]
+        crypto/spx/thash.h [3:13]
+        crypto/spx/wots.c [3:13]
+        crypto/spx/wots.h [3:13]
+        crypto/thread_none.c [3:13]
+        crypto/thread_pthread.c [3:13]
+        crypto/thread_win.c [3:13]
+        crypto/trust_token/internal.h [3:13]
+        crypto/trust_token/pmbtoken.c [3:13]
+        crypto/trust_token/trust_token.c [3:13]
+        crypto/trust_token/voprf.c [3:13]
+        crypto/x509/policy.c [3:13]
+        decrepit/evp/dss1.c [3:13]
+        decrepit/evp/evp_do_all.c [3:13]
+        decrepit/obj/obj_decrepit.c [3:13]
+        decrepit/x509/x509_decrepit.c [3:13]
+        gen/crypto/err_data.c [3:13]
+        include/openssl/aead.h [3:13]
+        include/openssl/asm_base.h [3:13]
+        include/openssl/asn1_mac.h [3:13]
+        include/openssl/blake2.h [3:13]
+        include/openssl/buffer.h [3:13]
+        include/openssl/bytestring.h [3:13]
+        include/openssl/chacha.h [3:13]
+        include/openssl/cmac.h [3:13]
+        include/openssl/cpu.h [3:13]
+        include/openssl/crypto.h [3:13]
+        include/openssl/ctrdrbg.h [3:13]
+        include/openssl/curve25519.h [3:13]
+        include/openssl/dtls1.h [3:13]
+        include/openssl/e_os2.h [3:13]
+        include/openssl/engine.h [3:13]
+        include/openssl/experimental/kyber.h [3:13]
+        include/openssl/experimental/spx.h [3:13]
+        include/openssl/hkdf.h [3:13]
+        include/openssl/hpke.h [3:13]
+        include/openssl/hrss.h [3:13]
+        include/openssl/is_boringssl.h [3:13]
+        include/openssl/kdf.h [3:13]
+        include/openssl/obj_mac.h [3:13]
+        include/openssl/objects.h [3:13]
+        include/openssl/opensslconf.h [3:13]
+        include/openssl/opensslv.h [3:13]
+        include/openssl/ossl_typ.h [3:13]
+        include/openssl/pkcs12.h [3:13]
+        include/openssl/pkcs7.h [3:13]
+        include/openssl/poly1305.h [3:13]
+        include/openssl/pool.h [3:13]
+        include/openssl/posix_time.h [3:13]
+        include/openssl/rand.h [3:13]
+        include/openssl/safestack.h [3:13]
+        include/openssl/service_indicator.h [3:13]
+        include/openssl/siphash.h [3:13]
+        include/openssl/span.h [3:13]
+        include/openssl/srtp.h [3:13]
+        include/openssl/target.h [3:13]
+        include/openssl/time.h [3:13]
+        include/openssl/trust_token.h [3:13]
+        include/openssl/x509_vfy.h [3:13]
+        include/openssl/x509v3.h [3:13]
+        ssl/encrypted_client_hello.cc [3:13]
+        ssl/handoff.cc [3:13]
+        ssl/ssl_aead_ctx.cc [3:13]
+        ssl/ssl_buffer.cc [3:13]
+        ssl/ssl_credential.cc [3:13]
+        ssl/ssl_key_share.cc [3:13]
+        ssl/ssl_versions.cc [3:13]
+        ssl/tls13_both.cc [3:13]
+        ssl/tls13_client.cc [3:13]
+        ssl/tls13_enc.cc [3:13]
+        ssl/tls13_server.cc [3:13]
+
+KEEP     LicenseRef-scancode-ssleay-windows 4ca8c319a20b60a42deffb35af36cc7c
+BELONGS decrepit/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        decrepit/cast/cast.c [4:55]
+
+KEEP     MIT                  54575e81a786e9aa7d98337ec2e1ebb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [166:182]
+        third_party/fiat/LICENSE [6:22]
+
+KEEP     LicenseRef-scancode-unknown-license-reference 57b328cd6b61b5de37a1da28ef68e630
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/README.md at line 6
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/README.md at line 6
+    License text:
+        the MIT license. (See LICENSE file.)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        third_party/fiat/README.md [6:6]
+
+KEEP     OpenSSL              5a8efb2134d4c035ec85857a4c9078c7
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 96.55
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/fipsmodule/bn/asm/x86_64-gcc.c [3:7]
+
+KEEP     LicenseRef-scancode-openssl 6660572f656df693aef8767c236d782f
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/bio/pair.c [4:51]
+        crypto/cipher_extra/tls_cbc.c [4:51]
+        crypto/err/err.c [60:107]
+        crypto/ex_data.c [60:107]
+        crypto/fipsmodule/bn/exponentiation.c [60:107]
+        crypto/fipsmodule/bn/gcd.c [60:107]
+        crypto/fipsmodule/bn/jacobi.c [4:51]
+        crypto/fipsmodule/bn/montgomery.c [60:107]
+        crypto/fipsmodule/bn/prime.c [60:107]
+        crypto/fipsmodule/bn/random.c [60:107]
+        crypto/fipsmodule/tls/kdf.c [4:51]
+        crypto/internal.h [60:107]
+        crypto/pem/pem_all.c [60:107]
+        decrepit/dh/dh_decrepit.c [4:51]
+        decrepit/dsa/dsa_decrepit.c [4:51]
+        include/openssl/arm_arch.h [4:51]
+        include/openssl/base.h [4:51]
+        include/openssl/err.h [60:107]
+        include/openssl/ex_data.h [60:107]
+        ssl/extensions.cc [60:107]
+        ssl/handshake.cc [60:107]
+        ssl/s3_both.cc [60:107]
+        ssl/s3_pkt.cc [60:107]
+        ssl/tls_record.cc [60:107]
+
+KEEP     LicenseRef-scancode-openssl 673fcd61836257d754f082dc82b3be66
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/fipsmodule/bn/ctx.c [5:52]
+        crypto/fipsmodule/bn/sqrt.c [6:53]
+
+KEEP     LicenseRef-scancode-openssl 68056149a36e6c9d5a8724b6280f4e54
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/ec_extra/ec_asn1.c [5:52]
+        crypto/evp/p_ec_asn1.c [7:54]
+        crypto/evp/p_rsa_asn1.c [7:54]
+        crypto/evp/pbkdf.c [7:54]
+
+KEEP     OpenSSL              70fcaf6fb99dc3d433c5cba120d039d1
+BELONGS ssl/ya.make ya.make
+    License text:
+         * The Contribution is licensed pursuant to the OpenSSL open source
+         * license provided above.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/fipsmodule/ec/ec.c [61:62]
+        crypto/fipsmodule/ec/ec_key.c [61:62]
+        crypto/fipsmodule/ec/ec_montgomery.c [61:62]
+        crypto/fipsmodule/ec/internal.h [61:62]
+        crypto/fipsmodule/ec/oct.c [61:62]
+        crypto/fipsmodule/ec/simple.c [61:62]
+        crypto/fipsmodule/ec/wnaf.c [61:62]
+        include/openssl/ec.h [61:62]
+        include/openssl/ec_key.h [61:62]
+        include/openssl/tls1.h [116:117]
+        ssl/handshake_client.cc [116:117]
+        ssl/handshake_server.cc [116:117]
+        ssl/s3_lib.cc [116:117]
+
+KEEP     OpenSSL AND BSD-3-Clause 72b938cc7ddf766451f6ca96a8a645a7
+BELONGS ya.make
+    License text:
+        @ project. The module is, however, dual licensed under OpenSSL and
+        @ CRYPTOGAMS licenses depending on where you obtain it. For further
+        @ details see http://www.openssl.org/~appro/cryptogams/.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [17:19]
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        gen/bcm/bsaes-armv7-linux.S [17:19]
+
+KEEP     LicenseRef-scancode-ssleay-windows 74b20a28f9e3f31b75d01166d61dcb88
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        crypto/dsa/dsa.c [4:55]
+        crypto/err/err.c [4:55]
+        crypto/ex_data.c [4:55]
+        crypto/fipsmodule/bn/exponentiation.c [4:55]
+        crypto/fipsmodule/bn/gcd.c [4:55]
+        crypto/fipsmodule/bn/internal.h [4:55]
+        crypto/fipsmodule/bn/montgomery.c [4:55]
+        crypto/fipsmodule/bn/prime.c [4:55]
+        crypto/fipsmodule/bn/random.c [4:55]
+        crypto/internal.h [4:55]
+        crypto/pem/pem_all.c [4:55]
+        crypto/pem/pem_info.c [4:55]
+        decrepit/ssl/ssl_decrepit.c [4:55]
+        include/openssl/asn1.h [4:55]
+        include/openssl/bn.h [4:55]
+        include/openssl/dsa.h [4:55]
+        include/openssl/err.h [4:55]
+        include/openssl/ex_data.h [4:55]
+        include/openssl/ssl.h [4:55]
+        include/openssl/ssl3.h [4:55]
+        include/openssl/tls1.h [4:55]
+        include/openssl/x509.h [4:55]
+        ssl/d1_srtp.cc [4:55]
+        ssl/extensions.cc [4:55]
+        ssl/handshake.cc [4:55]
+        ssl/handshake_client.cc [4:55]
+        ssl/handshake_server.cc [4:55]
+        ssl/internal.h [4:55]
+        ssl/s3_both.cc [4:55]
+        ssl/s3_lib.cc [4:55]
+        ssl/s3_pkt.cc [4:55]
+        ssl/ssl_asn1.cc [4:55]
+        ssl/ssl_cert.cc [4:55]
+        ssl/ssl_cipher.cc [4:55]
+        ssl/ssl_file.cc [4:55]
+        ssl/ssl_lib.cc [4:55]
+        ssl/ssl_session.cc [4:55]
+        ssl/ssl_stat.cc [4:55]
+        ssl/ssl_transcript.cc [4:55]
+        ssl/ssl_x509.cc [4:55]
+        ssl/t1_enc.cc [4:55]
+        ssl/tls_record.cc [4:55]
+
+KEEP     Public-Domain        7da24566e9c595724fa5d90bf7346d85
+BELONGS ya.make
+    License text:
+         * SUPERCOP 20141124 (http://bench.cr.yp.to/supercop.html). That code is public
+         * domain licensed but the standard ISC license is included above to keep
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 16.00
+        Match type      : TEXT
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/curve25519/asm/x25519-asm-arm.S [16:17]
+
+KEEP     OpenSSL              7e5b7e78f70f2f04c0533a2737411eb1
+BELONGS ya.make
+    License text:
+         * Rights for redistribution and usage in source and binary forms are
+         * granted according to the OpenSSL license. Warranty of any kind is
+         * disclaimed.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        crypto/fipsmodule/bn/asm/x86_64-gcc.c [6:8]
+
+KEEP     LicenseRef-scancode-openssl-nokia-psk-contribution 7e8638290d5f6fedc8dd743354132919
+BELONGS ssl/ya.make
+FILE_INCLUDE LICENSE found in files: ssl/handshake_server.cc at line 144, ssl/s3_lib.cc at line 144, ssl/ssl_asn1.cc at line 78, ssl/ssl_cipher.cc at line 136, ssl/ssl_lib.cc at line 136, ssl/ssl_session.cc at line 131, ssl/ssl_transcript.cc at line 131, ssl/ssl_x509.cc at line 136, ssl/t1_enc.cc at line 131
+FILE_INCLUDE third_party/fiat/LICENSE found in files: ssl/handshake_server.cc at line 144, ssl/s3_lib.cc at line 144, ssl/ssl_asn1.cc at line 78, ssl/ssl_cipher.cc at line 136, ssl/ssl_lib.cc at line 136, ssl/ssl_session.cc at line 131, ssl/ssl_transcript.cc at line 131, ssl/ssl_x509.cc at line 136, ssl/t1_enc.cc at line 131
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl-nokia-psk-contribution
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl-nokia-psk-contribution.LICENSE
+    Files with this license:
+        ssl/handshake_server.cc [126:147]
+        ssl/s3_lib.cc [126:147]
+        ssl/ssl_asn1.cc [60:81]
+        ssl/ssl_cipher.cc [118:139]
+        ssl/ssl_lib.cc [118:139]
+        ssl/ssl_session.cc [113:134]
+        ssl/ssl_transcript.cc [113:134]
+        ssl/ssl_x509.cc [118:139]
+        ssl/t1_enc.cc [113:134]
+
+KEEP     BSD-3-Clause         81f1634e09063200aeea05033ac4ac7c
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: BSD-3-Clause
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
+    Files with this license:
+        LICENSE [194:218]
+        LICENSE [228:252]
+
+KEEP     MIT                  83fe8cb017686efbb07b686afe906268
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/README.md at line 6
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/README.md at line 6
+    License text:
+        library of arithmetic-implementation templates. These files are included under
+        the MIT license. (See LICENSE file.)
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/fiat/README.md [5:6]
+
+KEEP     Public-Domain        8f8b35e0882ff4913937ab5f61313bd4
+BELONGS ya.make
+    License text:
+        // This implementation was taken from the public domain, neon2 version in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_arm.c [15:15]
+
+KEEP     MIT                  9638e94775d834f8bbe0fd7595cd01ab
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/METADATA at line 12
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/METADATA at line 12
+    License text:
+          local_modifications: "Files renamed to .h for BoringSSL integration. LICENSE file is LICENSE-MIT from upstream."
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/fiat/METADATA [12:12]
+
+KEEP     LicenseRef-scancode-ssleay-windows 9b0a01988225dbddb96d438ec04e3ee9
+BELONGS decrepit/ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        decrepit/des/cfb64ede.c [4:55]
+
+KEEP     LicenseRef-scancode-openssl a6036b2c5f72ed1c1a39d4ed9500a3fb
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-openssl
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/openssl.LICENSE
+    Files with this license:
+        crypto/asn1/internal.h [8:55]
+        crypto/x509/internal.h [8:55]
+        crypto/x509/v3_cpols.c [8:55]
+        crypto/x509/v3_ia5.c [8:55]
+        crypto/x509/v3_info.c [8:55]
+        crypto/x509/v3_lib.c [8:55]
+        crypto/x509/v3_utl.c [8:55]
+
+KEEP     OpenSSL              a7016078ab897ba5a355a0c84cd2a561
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: gen/bcm/sha256-armv8-apple.S at line 11, gen/bcm/sha256-armv8-linux.S at line 11, gen/bcm/sha256-armv8-win.S at line 11, gen/bcm/sha512-armv8-apple.S at line 11, gen/bcm/sha512-armv8-linux.S at line 11, gen/bcm/sha512-armv8-win.S at line 11
+FILE_INCLUDE third_party/fiat/LICENSE found in files: gen/bcm/sha256-armv8-apple.S at line 11, gen/bcm/sha256-armv8-linux.S at line 11, gen/bcm/sha256-armv8-win.S at line 11, gen/bcm/sha512-armv8-apple.S at line 11, gen/bcm/sha512-armv8-linux.S at line 11, gen/bcm/sha512-armv8-win.S at line 11
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        gen/bcm/sha256-armv8-apple.S [9:12]
+        gen/bcm/sha256-armv8-linux.S [9:12]
+        gen/bcm/sha256-armv8-win.S [9:12]
+        gen/bcm/sha512-armv8-apple.S [9:12]
+        gen/bcm/sha512-armv8-linux.S [9:12]
+        gen/bcm/sha512-armv8-win.S [9:12]
+
+KEEP     OpenSSL              a9274018b1826da876001134366f4d6c
+BELONGS ya.make
+    License text:
+         * The ECC Code is licensed pursuant to the OpenSSL open source
+         * license provided below.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        include/openssl/ecdh.h [8:9]
+
+KEEP     LicenseRef-scancode-generic-cla af49df574096c1b6ab30c50438f3f7f7
+BELONGS ya.make
+    License text:
+        [Software Grant and Corporate Contributor License Agreement](https://cla.developers.google.com/about/google-corporate).
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-generic-cla
+        Score           : 16.00
+        Match type      : NOTICE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/generic-cla.LICENSE
+    Files with this license:
+        CONTRIBUTING.md [52:52]
+
+KEEP     MIT                  b19afe6b24b261cb94771cfcfbf7bf85
+BELONGS ya.make
+    License text:
+        Files in third_party/ have their own licenses, as described therein. The MIT
+        license, for third_party/fiat, which, unlike other third_party directories, is
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [8:9]
+
+KEEP     OpenSSL              bd9682c6069cb12673d7baffe0788622
+BELONGS ya.make
+    License text:
+          OpenSSL License
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [26:26]
+
+KEEP     Public-Domain        bed14e30b41cf62cb682e5353696d248
+BELONGS ya.make
+    License text:
+        // (Public Domain)
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/asn1/posix_time.c [85:85]
+        crypto/asn1/posix_time.c [112:112]
+
+KEEP     Public-Domain        c07251d8d970afc5f43e4b497bcb6d4d
+BELONGS ya.make
+    License text:
+        // (https://github.com/floodyberry/poly1305-donna) and released as public
+        // domain.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305.c [16:17]
+
+KEEP     LicenseRef-scancode-ssleay-windows c379435626a48eb1a57d46eb56e4db31
+BELONGS decrepit/ya.make ssl/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-ssleay-windows
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/ssleay-windows.LICENSE, https://www.openssl.org/source/license.html
+    Files with this license:
+        crypto/asn1/a_bitstr.c [4:55]
+        crypto/asn1/a_bool.c [4:55]
+        crypto/asn1/a_d2i_fp.c [4:55]
+        crypto/asn1/a_dup.c [4:55]
+        crypto/asn1/a_gentm.c [4:55]
+        crypto/asn1/a_i2d_fp.c [4:55]
+        crypto/asn1/a_int.c [4:55]
+        crypto/asn1/a_mbstr.c [4:55]
+        crypto/asn1/a_object.c [4:55]
+        crypto/asn1/a_octet.c [4:55]
+        crypto/asn1/a_strex.c [4:55]
+        crypto/asn1/a_strnid.c [4:55]
+        crypto/asn1/a_time.c [4:55]
+        crypto/asn1/a_type.c [4:55]
+        crypto/asn1/a_utctm.c [4:55]
+        crypto/asn1/asn1_lib.c [4:55]
+        crypto/asn1/asn1_par.c [4:55]
+        crypto/asn1/asn_pack.c [4:55]
+        crypto/asn1/f_int.c [4:55]
+        crypto/asn1/f_string.c [4:55]
+        crypto/asn1/tasn_dec.c [4:55]
+        crypto/asn1/tasn_enc.c [4:55]
+        crypto/asn1/tasn_fre.c [4:55]
+        crypto/asn1/tasn_new.c [4:55]
+        crypto/asn1/tasn_typ.c [4:55]
+        crypto/asn1/tasn_utl.c [4:55]
+        crypto/base64/base64.c [4:55]
+        crypto/bio/bio.c [4:55]
+        crypto/bio/bio_mem.c [4:55]
+        crypto/bio/connect.c [4:55]
+        crypto/bio/errno.c [4:55]
+        crypto/bio/fd.c [4:55]
+        crypto/bio/file.c [4:55]
+        crypto/bio/hexdump.c [4:55]
+        crypto/bio/internal.h [4:55]
+        crypto/bio/printf.c [4:55]
+        crypto/bio/socket.c [4:55]
+        crypto/bn_extra/convert.c [4:55]
+        crypto/buf/buf.c [4:55]
+        crypto/cipher_extra/cipher_extra.c [4:55]
+        crypto/cipher_extra/derive_key.c [4:55]
+        crypto/cipher_extra/e_des.c [4:55]
+        crypto/cipher_extra/e_null.c [4:55]
+        crypto/cipher_extra/e_rc2.c [4:55]
+        crypto/cipher_extra/e_rc4.c [4:55]
+        crypto/cipher_extra/internal.h [4:55]
+        crypto/conf/conf.c [4:55]
+        crypto/cpu_intel.c [4:55]
+        crypto/des/des.c [4:55]
+        crypto/des/internal.h [4:55]
+        crypto/digest_extra/digest_extra.c [4:55]
+        crypto/evp/evp.c [4:55]
+        crypto/evp/evp_asn1.c [4:55]
+        crypto/evp/evp_ctx.c [4:55]
+        crypto/evp/internal.h [4:55]
+        crypto/evp/sign.c [4:55]
+        crypto/fipsmodule/bn/add.c [4:55]
+        crypto/fipsmodule/bn/bn.c [4:55]
+        crypto/fipsmodule/bn/bytes.c [4:55]
+        crypto/fipsmodule/bn/cmp.c [4:55]
+        crypto/fipsmodule/bn/div.c [4:55]
+        crypto/fipsmodule/bn/generic.c [4:55]
+        crypto/fipsmodule/bn/mul.c [4:55]
+        crypto/fipsmodule/bn/shift.c [4:55]
+        crypto/fipsmodule/cipher/cipher.c [4:55]
+        crypto/fipsmodule/cipher/internal.h [4:55]
+        crypto/fipsmodule/dh/check.c [4:55]
+        crypto/fipsmodule/dh/dh.c [4:55]
+        crypto/fipsmodule/digest/digest.c [4:55]
+        crypto/fipsmodule/digest/digests.c [4:55]
+        crypto/fipsmodule/digest/internal.h [4:55]
+        crypto/fipsmodule/hmac/hmac.c [4:55]
+        crypto/fipsmodule/md4/md4.c [4:55]
+        crypto/fipsmodule/md5/md5.c [4:55]
+        crypto/fipsmodule/rsa/blinding.c [56:107]
+        crypto/fipsmodule/rsa/internal.h [4:55]
+        crypto/fipsmodule/rsa/rsa.c [4:55]
+        crypto/fipsmodule/rsa/rsa_impl.c [4:55]
+        crypto/fipsmodule/sha/sha1.c [4:55]
+        crypto/fipsmodule/sha/sha256.c [4:55]
+        crypto/fipsmodule/sha/sha512.c [4:55]
+        crypto/lhash/internal.h [4:55]
+        crypto/lhash/lhash.c [4:55]
+        crypto/mem.c [4:55]
+        crypto/obj/obj.c [4:55]
+        crypto/obj/obj_dat.h [4:55]
+        crypto/obj/obj_xref.c [4:55]
+        crypto/pem/pem_lib.c [4:55]
+        crypto/pem/pem_oth.c [4:55]
+        crypto/pem/pem_pk8.c [4:55]
+        crypto/pem/pem_pkey.c [4:55]
+        crypto/rc4/rc4.c [4:55]
+        crypto/rsa_extra/internal.h [4:55]
+        crypto/rsa_extra/rsa_crypt.c [4:55]
+        crypto/stack/stack.c [4:55]
+        crypto/thread.c [4:55]
+        crypto/x509/a_digest.c [4:55]
+        crypto/x509/a_sign.c [4:55]
+        crypto/x509/a_verify.c [4:55]
+        crypto/x509/algorithm.c [4:55]
+        crypto/x509/asn1_gen.c [4:55]
+        crypto/x509/by_dir.c [4:55]
+        crypto/x509/by_file.c [4:55]
+        crypto/x509/i2d_pr.c [4:55]
+        crypto/x509/name_print.c [4:55]
+        crypto/x509/t_crl.c [4:55]
+        crypto/x509/t_req.c [4:55]
+        crypto/x509/t_x509.c [4:55]
+        crypto/x509/t_x509a.c [4:55]
+        crypto/x509/x509.c [4:55]
+        crypto/x509/x509_att.c [4:55]
+        crypto/x509/x509_cmp.c [4:55]
+        crypto/x509/x509_d2.c [4:55]
+        crypto/x509/x509_def.c [4:55]
+        crypto/x509/x509_ext.c [4:55]
+        crypto/x509/x509_lu.c [4:55]
+        crypto/x509/x509_obj.c [4:55]
+        crypto/x509/x509_req.c [4:55]
+        crypto/x509/x509_set.c [4:55]
+        crypto/x509/x509_txt.c [4:55]
+        crypto/x509/x509_v3.c [4:55]
+        crypto/x509/x509_vfy.c [4:55]
+        crypto/x509/x509name.c [4:55]
+        crypto/x509/x509rset.c [4:55]
+        crypto/x509/x_all.c [4:55]
+        crypto/x509/x_attrib.c [4:55]
+        crypto/x509/x_crl.c [4:55]
+        crypto/x509/x_exten.c [4:55]
+        crypto/x509/x_name.c [4:55]
+        crypto/x509/x_pubkey.c [4:55]
+        crypto/x509/x_req.c [4:55]
+        crypto/x509/x_sig.c [4:55]
+        crypto/x509/x_spki.c [4:55]
+        crypto/x509/x_val.c [4:55]
+        crypto/x509/x_x509.c [4:55]
+        decrepit/bio/base64_bio.c [4:55]
+        decrepit/blowfish/blowfish.c [4:55]
+        decrepit/cast/cast_tables.c [4:55]
+        decrepit/cast/internal.h [4:55]
+        decrepit/macros.h [4:55]
+        decrepit/rc4/rc4_decrepit.c [4:55]
+        decrepit/ripemd/ripemd.c [4:55]
+        decrepit/rsa/rsa_decrepit.c [4:55]
+        include/openssl/base64.h [4:55]
+        include/openssl/bio.h [4:55]
+        include/openssl/blowfish.h [4:55]
+        include/openssl/buf.h [4:55]
+        include/openssl/cast.h [4:55]
+        include/openssl/cipher.h [4:55]
+        include/openssl/conf.h [4:55]
+        include/openssl/des.h [4:55]
+        include/openssl/dh.h [4:55]
+        include/openssl/digest.h [4:55]
+        include/openssl/evp.h [4:55]
+        include/openssl/evp_errors.h [4:55]
+        include/openssl/hmac.h [4:55]
+        include/openssl/lhash.h [4:55]
+        include/openssl/md4.h [4:55]
+        include/openssl/md5.h [4:55]
+        include/openssl/mem.h [4:55]
+        include/openssl/nid.h [4:55]
+        include/openssl/obj.h [4:55]
+        include/openssl/pem.h [4:55]
+        include/openssl/rc4.h [4:55]
+        include/openssl/ripemd.h [4:55]
+        include/openssl/rsa.h [4:55]
+        include/openssl/sha.h [4:55]
+        include/openssl/stack.h [4:55]
+        include/openssl/thread.h [4:55]
+        include/openssl/type_check.h [4:55]
+        ssl/d1_both.cc [61:112]
+        ssl/d1_pkt.cc [59:110]
+        ssl/dtls_record.cc [59:110]
+        ssl/ssl_privkey.cc [4:55]
+        ssl/tls_method.cc [4:55]
+
+KEEP     GPL-2.0-only AND LicenseRef-scancode-free-unknown c6cff14503952365c416e19f08a8fb8f
+BELONGS ya.make
+    License text:
+         * The Contribution is licensed pursuant to the Eric Young open source
+         * license provided above.
+    Scancode info:
+        Original SPDX id: GPL-2.0-only
+        Score           : 19.35
+        Match type      : NOTICE
+        Links           : http://www.gnu.org/licenses/gpl-2.0.html, http://www.gnu.org/licenses/gpl-2.0.txt, https://spdx.org/licenses/GPL-2.0-only
+    Files with this license:
+        crypto/fipsmodule/bn/internal.h [116:117]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-free-unknown
+        Score           : 50.00
+        Match type      : REFERENCE
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
+    Files with this license:
+        crypto/fipsmodule/bn/internal.h [116:117]
+        include/openssl/bn.h [116:117]
+
+KEEP     ISC                  cbc8e325f0c46f022d60ef78184f3519
+BELONGS decrepit/ya.make ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        crypto/hrss/asm/poly_rq_mul.S [3:13]
+        decrepit/cfb/cfb.c [3:13]
+        include/boringssl_prefix_symbols.h [3:13]
+        include/boringssl_prefix_symbols_asm.h [3:13]
+
+KEEP     MIT                  cdd4acd8ca4222a3be774efe0c187c0c
+BELONGS ya.make
+    License text:
+        The code in third_party/fiat carries the MIT license:
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        LICENSE [161:161]
+
+KEEP     ISC                  d55e41e4885385845131e65ecbe9ab46
+BELONGS ya.make
+    License text:
+        licensing. Files that are completely new have a Google copyright and an ISC
+        license. This license is reproduced at the bottom of this file.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        LICENSE [2:3]
+
+KEEP     ISC                  d7200df039426f8be53fc5732a26a729
+BELONGS ya.make
+    License text:
+         * domain licensed but the standard ISC license is included above to keep
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 99.00
+        Match type      : REFERENCE
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        crypto/curve25519/asm/x25519-asm-arm.S [17:17]
+
+KEEP     Public-Domain        d9295d5ccad1629fc8818715feebbd6f
+BELONGS ya.make
+    License text:
+        \# This implementation was taken from the public domain, neon2 version in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_arm_asm.S [5:5]
+
+KEEP     ISC                  e1be1d165abb09e92f239880b9df4804
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: ISC
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://fedoraproject.org/wiki/Licensing:MIT#Old_Style_with_legal_disclaimer_2, https://spdx.org/licenses/ISC, https://www.isc.org/software/license
+    Files with this license:
+        include/boringssl_prefix_symbols_nasm.inc [3:13]
+
+KEEP     OpenSSL              e2700b16dc1bbc0f16314f14ec600eb0
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [12:16]
+
+KEEP     OpenSSL              e2f427a890a2f7c4efc62ee98336bc6a
+BELONGS ya.make
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: OpenSSL
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://www.openssl.org/source/license.html, https://spdx.org/licenses/OpenSSL
+    Files with this license:
+        LICENSE [32:140]
+
+KEEP     MIT                  ed6cfc2d3d921d080f8b00099df85eec
+BELONGS ya.make
+FILE_INCLUDE LICENSE found in files: third_party/fiat/README.chromium at line 6
+FILE_INCLUDE third_party/fiat/LICENSE found in files: third_party/fiat/README.chromium at line 6
+    License text:
+        License: MIT
+        License File: LICENSE
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TAG
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        third_party/fiat/README.chromium [5:6]
+
+KEEP     Public-Domain        f34c423ba9f884c509d71da283c260b1
+BELONGS ya.make
+    License text:
+        // public domain. Other parts have been replaced to call into code generated by
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/curve25519/curve25519.c [17:17]
+
+KEEP     Public-Domain        f47bcc398d958fff3e59c60458ba80db
+BELONGS ya.make
+    License text:
+        // Adapted from the public domain, estream code by D. Bernstein.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 81.43
+        Match type      : NOTICE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/chacha/chacha.c [15:15]
+
+KEEP     Public-Domain        fb6dda5aef570b42b80d2894bb70f1c4
+BELONGS ya.make
+    License text:
+        // (https://github.com/floodyberry/poly1305-donna) and released as public
+        // domain. It implements SIMD vectorization based on the algorithm described in
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-public-domain
+        Score           : 70.00
+        Match type      : REFERENCE
+        Links           : http://www.linfo.org/publicdomain.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/public-domain.LICENSE
+    Files with this license:
+        crypto/poly1305/poly1305_vec.c [16:17]

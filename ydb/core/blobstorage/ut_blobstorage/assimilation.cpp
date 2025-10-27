@@ -1,4 +1,6 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
+#include <ydb/core/blobstorage/vdisk/ingress/blobstorage_ingress.h>
+#include <ydb/core/util/lz4_data_generator.h>
 
 void RunAssimilationTest(bool reverse) {
     TEnvironmentSetup env{{
@@ -206,11 +208,140 @@ void RunAssimilationTest(bool reverse) {
     UNIT_ASSERT(aBlobs.empty());
 }
 
+void RunVDiskIterationTest(bool reverse) {
+    TEnvironmentSetup env{{
+        .NodeCount = 8,
+        .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+    }};
+    auto& runtime = env.Runtime;
+    runtime->SetLogPriority(NKikimrServices::BS_PROXY_ASSIMILATE, NLog::PRI_DEBUG);
+
+    env.CreateBoxAndPool(1, 1);
+    env.Sim(TDuration::Seconds(30));
+    auto groups = env.GetGroups();
+    UNIT_ASSERT_VALUES_EQUAL(groups.size(), 1);
+    const TIntrusivePtr<TBlobStorageGroupInfo> info = env.GetGroupInfo(groups.front());
+
+    auto edge = runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
+    const TVDiskID vdiskId = info->GetVDiskId(0);
+    auto putQueueId = env.CreateQueueActor(vdiskId, NKikimrBlobStorage::PutTabletLog, 0, 1);
+    auto getQueueId = env.CreateQueueActor(vdiskId, NKikimrBlobStorage::GetFastRead, 0, 1);
+
+    THashMap<TLogoBlobID, ui64> blobs;
+    ui64 tabletId = 1;
+    ui32 gen = 1;
+    ui32 step = 1;
+
+    TString data = FastGenDataForLZ4(32);
+
+    for (size_t iter = 0; iter < 10000; ++iter) {
+        ui32 action = RandomNumber(100u);
+        if (action < 95) {
+            ui32 partId = 1 + RandomNumber(6u);
+            TLogoBlobID id;
+            if (RandomNumber(4u) || blobs.empty()) {
+                for (;;) {
+                    id = TLogoBlobID(tabletId, gen, step++, 0, 128, 0);
+                    if (info->GetIdxInSubgroup(vdiskId, id.Hash()) >= 6) {
+                        // this VDisk is a handoff for blob
+                        break;
+                    }
+                }
+            } else {
+                std::vector<TLogoBlobID> ids;
+                std::ranges::copy(blobs | std::views::keys, std::back_inserter(ids));
+                id = ids[RandomNumber(ids.size())];
+            }
+            Cerr << "putting " << id << " partId# " << partId << Endl;
+            runtime->Send(new IEventHandle(putQueueId, edge, new TEvBlobStorage::TEvVPut(TLogoBlobID(id, partId),
+                TRope(data), vdiskId, false, nullptr, TInstant::Max(), NKikimrBlobStorage::TabletLog, false)),
+                edge.NodeId());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge, false);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Record.GetStatus(), NKikimrProto::OK);
+            blobs[id] |= TIngress::CreateIngressWithLocal(&info->GetTopology(), vdiskId, TLogoBlobID(id, partId))->Raw();
+        } else {
+            Cerr << "compacting" << Endl;
+            const TActorId actorId = info->GetDynamicInfo().ServiceIdForOrderNumber.front();
+            auto ev = std::make_unique<IEventHandle>(actorId, edge, TEvCompactVDisk::Create(EHullDbType::LogoBlobs));
+            ev->Rewrite(TEvBlobStorage::EvForwardToSkeleton, actorId);
+            env.Runtime->Send(ev.release(), edge.NodeId());
+            env.WaitForEdgeActorEvent<TEvCompactVDiskResult>(edge, false);
+        }
+
+        std::optional<TLogoBlobID> from;
+        THashMap<TLogoBlobID, ui64> m = blobs;
+
+        for (;;) {
+            Cerr << "starting assimilation from# " << (from ? from->ToString() : "<none>") << Endl;
+            runtime->Send(new IEventHandle(getQueueId, edge, new TEvBlobStorage::TEvVAssimilate(vdiskId, std::nullopt,
+                std::nullopt, from, true, reverse)), edge.NodeId());
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVAssimilateResult>(edge, false);
+            if (!res->Get()->Record.BlobsSize()) {
+                break;
+            }
+
+            ui64 raw[3] = {0, 0, 0};
+            size_t n = res->Get()->Record.BlobsSize();
+            for (const auto& item : res->Get()->Record.GetBlobs()) {
+                if (item.HasRawX1()) {
+                    raw[0] = item.GetRawX1();
+                } else if (item.HasDiffX1()) {
+                    if (reverse) {
+                        raw[0] -= item.GetDiffX1();
+                    } else {
+                        raw[0] += item.GetDiffX1();
+                    }
+                }
+
+                if (item.HasRawX2()) {
+                    raw[1] = item.GetRawX2();
+                } else if (item.HasDiffX2()) {
+                    if (reverse) {
+                        raw[1] -= item.GetDiffX2();
+                    } else {
+                        raw[1] += item.GetDiffX2();
+                    }
+                }
+
+                if (item.HasRawX3()) {
+                    raw[2] = item.GetRawX3();
+                } else if (item.HasDiffX3()) {
+                    if (reverse) {
+                        raw[2] -= item.GetDiffX3();
+                    } else {
+                        raw[2] += item.GetDiffX3();
+                    }
+                }
+
+                TLogoBlobID id(raw);
+
+                UNIT_ASSERT(m.contains(id));
+                UNIT_ASSERT_VALUES_EQUAL(m[id], item.GetIngress());
+                m.erase(id);
+
+                if (RandomNumber(n) == 0) {
+                    from = id;
+                    break;
+                }
+
+                --n;
+            }
+        }
+        UNIT_ASSERT(m.empty());
+    }
+}
+
 Y_UNIT_TEST_SUITE(VDiskAssimilation) {
     Y_UNIT_TEST(Test) {
         RunAssimilationTest(false);
     }
     Y_UNIT_TEST(TestReverse) {
         RunAssimilationTest(true);
+    }
+    Y_UNIT_TEST(Iteration) {
+        RunVDiskIterationTest(false);
+    }
+    Y_UNIT_TEST(IterationReverse) {
+        RunVDiskIterationTest(true);
     }
 }

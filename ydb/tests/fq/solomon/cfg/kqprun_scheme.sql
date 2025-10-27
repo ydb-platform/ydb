@@ -1,6 +1,7 @@
 CREATE EXTERNAL DATA SOURCE local_solomon WITH (
-    SOURCE_TYPE="Solomon",
-    LOCATION="${SOLOMON_ENDPOINT}",
-    AUTH_METHOD="NONE",
-    USE_TLS="false"
+    SOURCE_TYPE = "Solomon",
+    LOCATION = "${SOLOMON_HTTP_ENDPOINT}",
+    GRPC_LOCATION = "${SOLOMON_GRPC_ENDPOINT}",
+    AUTH_METHOD = "NONE",
+    USE_TLS = "false"
 );

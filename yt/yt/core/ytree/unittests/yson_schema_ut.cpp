@@ -38,6 +38,8 @@ struct TTestSubStruct
 
 using TTestSubStructPtr = TIntrusivePtr<TTestSubStruct>;
 
+////////////////////////////////////////////////////////////////////////////////
+
 struct TTestSubStructLite
     : public TYsonStructLite
 {
@@ -49,6 +51,53 @@ struct TTestSubStructLite
     {
         registrar.Parameter("my_int", &TThis::MyInt)
             .Default();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+class TRefCountedEntity final
+{ };
+
+using TRefCountedEntityPtr = TIntrusivePtr<TRefCountedEntity>;
+
+void Serialize(const TRefCountedEntityPtr& /*entity*/, NYson::IYsonConsumer* /*consumer*/)
+{ }
+
+void Deserialize(const TRefCountedEntity& /*entity*/, NYTree::INodePtr /*node*/)
+{ }
+
+void Deserialize(const TRefCountedEntity& /*entity*/, TYsonPullParserCursor* /*pullParser*/)
+{ }
+
+struct TTestStructWithRequiredParameters
+    : public virtual TYsonStruct
+{
+    TRefCountedEntityPtr MyPtr;
+    TTestSubStructPtr Sub;
+    REGISTER_YSON_STRUCT(TTestStructWithRequiredParameters);
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_ptr", &TThis::MyPtr);
+        registrar.Parameter("sub", &TThis::Sub);
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TTestSubStructWithPtrAndString
+    : public virtual TYsonStruct
+{
+    TRefCountedEntityPtr MyPtr;
+    TString MyStr;
+
+    REGISTER_YSON_STRUCT(TTestSubStructWithPtrAndString);
+
+    static void Register(TRegistrar registrar)
+    {
+        registrar.Parameter("my_ptr", &TThis::MyPtr);
+        registrar.Parameter("my_str", &TThis::MyStr)
+            .Default("Default");
     }
 };
 
@@ -105,6 +154,10 @@ struct TTestYsonStruct
             .Default();
         registrar.Parameter("my_enum", &TThis::MyEnum)
             .Default(ETestEnum::Value1);
+
+        registrar.Preprocessor([] (TThis* ysonStruct) {
+            ysonStruct->Sub->MyUint = 8;
+        });
     }
 };
 
@@ -229,14 +282,18 @@ struct TTestStructWithArray
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected)
+IMapNodePtr GetSchema(const TYsonStructPtr& ysonStruct, const TYsonStructWriteSchemaOptions& options = {})
 {
-    auto* factory = GetEphemeralNodeFactory();
-    auto builder = CreateBuilderFromFactory(factory);
+    auto builder = CreateBuilderFromFactory(GetEphemeralNodeFactory());
     builder->BeginTree();
-    ysonStruct->WriteSchema(builder.get());
-    auto actualNode = builder->EndTree();
-    auto expectedNode = ConvertToNode(TYsonStringBuf(expected), factory);
+    ysonStruct->WriteSchema(builder.get(), options);
+    return builder->EndTree()->AsMap();
+}
+
+void CheckSchema(const TYsonStructPtr& ysonStruct, TStringBuf expected, const TYsonStructWriteSchemaOptions& options = {})
+{
+    auto actualNode = GetSchema(ysonStruct, options);
+    auto expectedNode = ConvertToNode(TYsonStringBuf(expected), GetEphemeralNodeFactory());
     EXPECT_TRUE(AreNodesEqual(expectedNode, actualNode))
         << "Expected: " << ConvertToYsonString(expectedNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n"
         << "Actual: " << ConvertToYsonString(actualNode, EYsonFormat::Text, 4).AsStringBuf() << "\n\n";
@@ -250,27 +307,27 @@ TEST(TYsonStructSchemaTest, TestYsonStruct)
         New<TTestYsonStruct>(),
         R"({type_name="struct";
             members=[
-                {name="my_enum";type={type_name="enum";enum_name="ETestEnum";values=["value0";"value1";]}};
-                {name="my_char";type="int8";};
-                {name="my_ushort";type="uint16";};
-                {name="my_std_string";type="string";required=%true;};
-                {name="nullable_int";type={type_name="optional";item="int64";}};
-                {
-                    name="sub_list";
-                    type={type_name="list";item={type_name="struct";members=[{name="my_int";type="int32";}]}}
-                };
-                {name="my_byte";type="int8";};
                 {name="my_string";type="string";required=%true;};
-                {name="int_map";type={type_name="dict";key="string";value="int32";}};
+                {name="my_std_string";type="string";required=%true;};
                 {
                     name="sub";
                     type={type_name="optional";item={type_name="struct";members=[{name="my_uint";type="uint32";}]}};
                 };
-                {name="my_uint";type="uint32";};
-                {name="my_ubyte";type="uint8";};
-                {name="my_bool";type="bool";};
-                {name="my_short";type="int16";};
+                {
+                    name="sub_list";
+                    type={type_name="list";item={type_name="struct";members=[{name="my_int";type="int32";}]}}
+                };
+                {name="int_map";type={type_name="dict";key="string";value="int32";}};
                 {name="my_string_list";type={type_name="list";item="string";}};
+                {name="nullable_int";type={type_name="optional";item="int64";}};
+                {name="my_uint";type="uint32";};
+                {name="my_bool";type="bool";};
+                {name="my_char";type="int8";};
+                {name="my_byte";type="int8";};
+                {name="my_ubyte";type="uint8";};
+                {name="my_short";type="int16";};
+                {name="my_ushort";type="uint16";};
+                {name="my_enum";type={type_name="tagged";tag="enum/ETestEnum";item="string";enum=["value0";"value1";]}};
             ];})");
 }
 
@@ -378,19 +435,19 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithTuples)
         R"({type_name="struct";
             members=[
                 {
-                    name="pair";
-                    required=%true;
-                    type={
-                        type_name="tuple";
-                        elements=[{"type"="string"};{"type"="string"};];
-                    };
-                };
-                {
                     name="tuple";
                     required=%true;
                     type={
                         type_name="tuple";
                         elements=[{"type"="string"};{"type"="uint64"};{"type"="double"};];
+                    };
+                };
+                {
+                    name="pair";
+                    required=%true;
+                    type={
+                        type_name="tuple";
+                        elements=[{"type"="string"};{"type"="string"};];
                     };
                 };
             ]})");
@@ -411,6 +468,156 @@ TEST(TYsonStructSchemaTest, TestYsonStructWithArray)
                     };
                 };
             ]})");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+IMapNodePtr GetMember(IListNodePtr members, TStringBuf name)
+{
+    for (auto child : members->GetChildren()) {
+        if (child->AsMap()->template GetChildValueOrThrow<TString>("name") == name) {
+            return child->AsMap();
+        }
+    }
+    return nullptr;
+}
+
+INodePtr GetDefault(IMapNodePtr member, TStringBuf name)
+{
+    return GetMember(member->GetChildValueOrThrow<IListNodePtr>("members"), name)
+        ->FindChild("default_value");
+}
+
+bool SourceLocationContains(IMapNodePtr member, TStringBuf substring)
+{
+    return member->template GetChildValueOrThrow<TString>("source_location_file_name").Contains(substring);
+}
+
+bool CppTypeNameContains(IMapNodePtr member, TStringBuf substring)
+{
+    return member->template GetChildValueOrThrow<TString>("cpp_type_name").Contains(substring);
+}
+
+IMapNodePtr UnwrapMember(IMapNodePtr member)
+{
+    return member
+        ->template GetChildValueOrThrow<IMapNodePtr>("type")
+        ->template GetChildValueOrThrow<IMapNodePtr>("item");
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructSchemaTest, TestDefaultValues)
+{
+    {
+        auto schema = GetSchema(New<TTestYsonStruct>(), {.AddDefaultValues = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+
+        EXPECT_EQ(GetDefault(schema, "my_enum")->GetValue<TString>(), "value1") << description;
+        EXPECT_FALSE(GetDefault(schema, "my_std_string")) << description;
+        EXPECT_FALSE(GetDefault(schema, "nullable_int")) << description;
+        EXPECT_EQ(GetDefault(schema, "my_string_list")->GetType(), ENodeType::List) << description;
+
+        EXPECT_EQ(GetDefault(UnwrapMember(GetMember(schema->FindChild("members")->AsList(), "sub")), "my_uint")->GetValue<ui64>(), 0u) << description;
+        EXPECT_EQ(GetDefault(schema, "sub")->AsMap()->template GetChildValueOrThrow<ui64>("my_uint"), 8u) << description;
+    }
+
+    {
+        auto schema = GetSchema(New<TTestStructWithProtobuf>(), {.AddDefaultValues = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+        auto members = schema->FindChild("members")->AsList();
+
+        EXPECT_EQ(GetDefault(UnwrapMember(GetMember(members, "my_message")), "string_field")->GetValue<TString>(), "string_field_default") << description;
+    }
+}
+
+TEST(TYsonStructSchemaTest, TestDefaultValuesWithRequiredParameter)
+{
+    auto schema = GetSchema(New<TTestStructWithRequiredParameters>(), {.AddDefaultValues = true});
+    auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+    EXPECT_FALSE(GetDefault(schema, "my_ptr")) << description;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructSchemaTest, TestSourceLocation)
+{
+    {
+        auto schema = GetSchema(New<TTestYsonStruct>(), {.AddSourceLocation = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+        auto members = schema->FindChild("members")->AsList();
+
+        EXPECT_TRUE(SourceLocationContains(schema, "yson_schema_ut.cpp")) << description;
+
+        auto subMember = GetMember(members, "sub")
+            ->template GetChildValueOrThrow<IMapNodePtr>("type")
+            ->template GetChildValueOrThrow<IMapNodePtr>("item");
+        EXPECT_TRUE(SourceLocationContains(subMember, "yson_schema_ut.cpp")) << description;
+    }
+
+    {
+        auto schema = GetSchema(New<TTestStructWithProtobuf>(), {.AddSourceLocation = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+        auto members = schema->FindChild("members")->AsList();
+
+        auto subMember = GetMember(members, "my_message")
+            ->template GetChildValueOrThrow<IMapNodePtr>("type")
+            ->template GetChildValueOrThrow<IMapNodePtr>("item");
+        EXPECT_TRUE(SourceLocationContains(subMember, "test.proto")) << description;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TEST(TYsonStructSchemaTest, CppTypeName)
+{
+    {
+        auto schema = GetSchema(New<TTestYsonStruct>(), {.AddCppTypeNames = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+        auto members = schema->FindChild("members")->AsList();
+
+        EXPECT_TRUE(CppTypeNameContains(schema, "TTestYsonStruct")) << description;
+
+        // Cpp type name is duplicated when struct field is not trivial.
+        // Upper level is required for trivial types. Lower level is required for nested arrays/maps/etc.
+        EXPECT_TRUE(CppTypeNameContains(GetMember(members, "my_enum"), "ETestEnum")) << description;
+        EXPECT_TRUE(
+            CppTypeNameContains(
+                GetMember(members, "my_enum")->template GetChildValueOrThrow<IMapNodePtr>("type"),
+                "ETestEnum")) << description;
+
+        EXPECT_TRUE(
+            GetMember(members, "my_enum")
+                ->template GetChildValueOrThrow<TString>("containing_struct_cpp_type_name")
+                .Contains("TTestYsonStruct")) << description;
+
+        EXPECT_TRUE(
+            CppTypeNameContains(
+                GetMember(members, "nullable_int")->template GetChildValueOrThrow<IMapNodePtr>("type"),
+                "optional")) << description;
+
+        EXPECT_TRUE(
+            CppTypeNameContains(
+                GetMember(members, "sub_list")->template GetChildValueOrThrow<IMapNodePtr>("type"),
+                "vector")) << description;
+
+        EXPECT_TRUE(
+            CppTypeNameContains(
+                GetMember(members, "sub")->template GetChildValueOrThrow<IMapNodePtr>("type"),
+                "TIntrusivePtr")) << description;
+
+    }
+
+    {
+        auto schema = GetSchema(New<TTestStructWithProtobuf>(), {.AddCppTypeNames = true});
+        auto description = Format("Schema: %v", ConvertToYsonString(schema, EYsonFormat::Pretty));
+        auto members = schema->FindChild("members")->AsList();
+
+        auto subMember = GetMember(members, "my_message")
+            ->template GetChildValueOrThrow<IMapNodePtr>("type")
+            ->template GetChildValueOrThrow<IMapNodePtr>("item");
+        EXPECT_TRUE(CppTypeNameContains(subMember, "TTestMessage")) << description;
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

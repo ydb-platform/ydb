@@ -172,6 +172,8 @@ bool EnsureEquatableKey(TPositionHandle position, const TTypeAnnotationNode* key
 bool EnsureHashableKey(TPositionHandle position, const TTypeAnnotationNode* keyType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(const TExprNode& node, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
 bool EnsureDataOrOptionalOfData(TPositionHandle position, const TTypeAnnotationNode* type, bool& isOptional, const TDataExprType*& dataType, TExprContext& ctx);
+bool EnsureLinearType(const TExprNode& node, TExprContext& ctx);
+bool EnsureDynamicLinearType(const TExprNode& node, TExprContext& ctx);
 bool EnsurePersistable(const TExprNode& node, TExprContext& ctx);
 bool EnsurePersistableType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 bool EnsureComputable(const TExprNode& node, TExprContext& ctx);
@@ -249,22 +251,50 @@ using TConvertFlags = TEnumBitSet<EFlags, DisableTruncation, Last>;
 
 using NConvertFlags::TConvertFlags;
 
+//FIXME remove deprecated functions
+//#define DEPRECATED [[deprecated]]
+#define DEPRECATED
+
+DEPRECATED
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+DEPRECATED
 IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
     TExprContext& ctx, TConvertFlags flags = {}, bool useTypeDiff = false);
+IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType,
+    TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+DEPRECATED
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
     TConvertFlags flags = {});
+IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& expectedType, TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
+DEPRECATED
 IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
     const TTypeAnnotationNode& expectedType, TExprContext& ctx, TConvertFlags flags = {});
+IGraphTransformer::TStatus TrySilentConvertTo(TExprNode::TPtr& node, const TTypeAnnotationNode& sourceType,
+    const TTypeAnnotationNode& expectedType, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, TConvertFlags flags = {});
 TMaybe<EDataSlot> GetSuperType(EDataSlot dataSlot1, EDataSlot dataSlot2, bool warn = false, TExprContext* ctx = nullptr, TPositionHandle* pos = nullptr);
+DEPRECATED
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, TExprNode::TPtr& node2, TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx, const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+DEPRECATED
 IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
     TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx,
     const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+IGraphTransformer::TStatus SilentInferCommonType(TExprNode::TPtr& node1, const TTypeAnnotationNode& type1,
+    TExprNode::TPtr& node2, const TTypeAnnotationNode& type2, TExprContext& ctx, const TTypeAnnotationContext& typeCtx,
+    const TTypeAnnotationNode*& commonType, TConvertFlags flags = {});
+DEPRECATED
 IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
     bool useTypeDiff = false);
+IGraphTransformer::TStatus ConvertChildrenToType(const TExprNode::TPtr& input,const TTypeAnnotationNode* targetType, TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx);
+
+#undef DEPRECATED
 
 bool IsSqlInCollectionItemsNullable(const NNodes::TCoSqlIn& node);
 
@@ -341,6 +371,7 @@ bool EnsureScalarType(const TExprNode& node, TExprContext& ctx);
 bool EnsureScalarType(TPositionHandle position, const TTypeAnnotationNode& type, TExprContext& ctx);
 const TTypeAnnotationNode* GetBlockItemType(const TTypeAnnotationNode& type, bool& isScalar);
 const TTypeAnnotationNode* UnpackOptionalBlockItemType(const TTypeAnnotationNode& type, TExprContext& ctx, bool convertToScalar);
+const TTypeAnnotationNode* GetLinearItemType(const TTypeAnnotationNode& type, bool& isDynamic);
 
 const TTypeAnnotationNode* AggApplySerializedStateType(const TExprNode::TPtr& input, TExprContext& ctx);
 bool GetSumResultType(const TPositionHandle& pos, const TTypeAnnotationNode& inputType, const TTypeAnnotationNode*& retType, TExprContext& ctx);

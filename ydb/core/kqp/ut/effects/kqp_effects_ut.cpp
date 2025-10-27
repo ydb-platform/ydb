@@ -729,6 +729,478 @@ Y_UNIT_TEST_SUITE(KqpEffects) {
         )", TTxControl::Tx(*tx1)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(upsertResult2.GetStatus(), EStatus::ABORTED, upsertResult2.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST_QUAD(RandomWithIndex, UseSecondaryIndex, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    rowKey Uint64 NOT NULL,
+                    v1 Uint64 NOT NULL,
+                    v2 Uint64 NOT NULL,
+                    %s
+                    PRIMARY KEY (rowKey)
+                );
+            )", (UseSecondaryIndex ? "INDEX idx_2 GLOBAL ON (v2)," : ""));
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/GlobalKeyToRows` (
+                    globalKey Uint64 NOT NULL,
+                    rowKey Uint64 NOT NULL,
+                    PRIMARY KEY (globalKey, rowKey)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $globalKey = 1;
+                $addRows = SELECT 1 AS v1, 2 AS v2;
+
+                $rowKeys = SELECT rowKey FROM `/Root/GlobalKeyToRows` WHERE globalKey = $globalKey;
+
+                $existingRows = SELECT rowKey, v1, v2 FROM `/Root/Rows` WHERE rowKey IN $rowKeys;
+
+                $rowUpdates = SELECT
+                    r.rowKey ?? CAST(RandomNumber(r.rowKey) AS Uint64) AS rowKey,
+                    l.v1 AS v1,
+                    l.v2 AS v2
+                FROM $addRows AS l
+                LEFT JOIN $existingRows AS r
+                USING (v1, v2);
+
+                REPLACE INTO `/Root/Rows`
+                SELECT rowKey, v1, v2 FROM $rowUpdates;
+
+                REPLACE INTO `/Root/GlobalKeyToRows`
+                SELECT $globalKey AS globalKey, rowKey FROM $rowUpdates;
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT COUNT(*) FROM `/Root/Rows`;
+                SELECT COUNT(*) FROM `/Root/GlobalKeyToRows`;
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[1u]])");
+            CompareYson(FormatResultSetYson(result.GetResultSet(1)), R"([[1u]])");
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                $rowKeys = SELECT rowKey FROM `/Root/GlobalKeyToRows` WHERE globalKey = 1;
+                SELECT COUNT(*) FROM `/Root/Rows` WHERE rowKey IN $rowKeys;
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[1u]])");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DeleteWithJoinAndIndex, UseSecondaryIndex, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    rowKey Uint64 NOT NULL,
+                    v1 Uint64 NOT NULL,
+                    v2 Uint64 NOT NULL,
+                    %s
+                    PRIMARY KEY (rowKey)
+                );
+            )", (UseSecondaryIndex ? "INDEX idx_2 GLOBAL ON (v2)," : ""));
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/GlobalKeyToRows` (
+                    globalKey Uint64 NOT NULL,
+                    rowKey Uint64 NOT NULL,
+                    PRIMARY KEY (globalKey, rowKey)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $globalKey = 1;
+                
+                INSERT INTO `/Root/Rows` (rowKey, v1, v2) VALUES
+                    (1u, 1u, 1u),
+                    (2u, 2u, 2u),
+                    (3u, 3u, 3u);
+
+                INSERT INTO `/Root/GlobalKeyToRows` (globalKey, rowKey) VALUES
+                    ($globalKey, 1u),
+                    ($globalKey, 2u),
+                    ($globalKey + 1, 3u);
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                $globalKey = 1;
+                
+                $toDelete = SELECT 
+                    r.rowKey AS rowKey
+                FROM `/Root/GlobalKeyToRows` AS l
+                INNER JOIN `/Root/Rows` AS r ON l.rowKey = r.rowKey
+                WHERE l.globalKey = $globalKey;
+
+                DELETE FROM `/Root/Rows`
+                ON SELECT rowKey FROM $toDelete;
+
+                DELETE FROM `/Root/GlobalKeyToRows`
+                ON SELECT $globalKey AS globalKey, rowKey FROM $toDelete;
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT COUNT(*) FROM `/Root/Rows`;
+                SELECT COUNT(*) FROM `/Root/GlobalKeyToRows`;
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            // Wrong uncommitted changes TODO: fix it
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[1u]])");
+            CompareYson(FormatResultSetYson(result.GetResultSet(1)), R"([[1u]])");
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DeleteWithIndex, UseSecondaryIndex, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    rowKey Uint64 NOT NULL,
+                    v1 Uint64 NOT NULL,
+                    v2 Uint64 NOT NULL,
+                    %s
+                    PRIMARY KEY (rowKey)
+                );
+            )", (UseSecondaryIndex ? "INDEX idx_2 GLOBAL ON (v2)," : ""));
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                CREATE TABLE `/Root/GlobalKeyToRows` (
+                    globalKey Uint64 NOT NULL,
+                    rowKey Uint64 NOT NULL,
+                    PRIMARY KEY (globalKey, rowKey)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                $globalKey = 1;
+                
+                INSERT INTO `/Root/Rows` (rowKey, v1, v2) VALUES
+                    (1u, 1u, 1u),
+                    (2u, 2u, 2u),
+                    (3u, 3u, 3u);
+
+                INSERT INTO `/Root/GlobalKeyToRows` (globalKey, rowKey) VALUES
+                    ($globalKey, 1u),
+                    ($globalKey, 2u),
+                    ($globalKey, 3u);
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                $globalKey = 1;
+                
+                $toDelete = SELECT 
+                    Unwrap(rowKey * 2u) AS rowKey
+                FROM `/Root/Rows`;
+
+                SELECT COUNT(*) FROM $toDelete;
+
+                DELETE FROM `/Root/Rows`
+                ON SELECT Unwrap(rowKey / 2u) AS rowKey FROM $toDelete;
+
+                DELETE FROM `/Root/GlobalKeyToRows`
+                ON SELECT $globalKey AS globalKey, Unwrap(rowKey / 2u) AS rowKey FROM $toDelete;
+
+                SELECT COUNT(*) FROM $toDelete;
+
+                UPSERT INTO `/Root/Rows` (rowKey, v1, v2) VALUES
+                    (5u, 1u, 1u);
+
+                UPSERT INTO `/Root/GlobalKeyToRows` (globalKey, rowKey) VALUES
+                    ($globalKey, 5u);
+
+                SELECT COUNT(*) FROM $toDelete;
+
+                DELETE FROM `/Root/Rows`
+                ON SELECT Unwrap(rowKey / 2u) AS rowKey FROM $toDelete;
+
+                DELETE FROM `/Root/GlobalKeyToRows`
+                ON SELECT $globalKey AS globalKey, Unwrap(rowKey / 2u) AS rowKey FROM $toDelete;
+
+                SELECT COUNT(*) FROM $toDelete;
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), R"([[3u]])");
+            CompareYson(FormatResultSetYson(result.GetResultSet(1)), R"([[3u]])");
+            // Wrong uncommitted changes TODO: fix it
+            CompareYson(FormatResultSetYson(result.GetResultSet(2)), UseSecondaryIndex ? R"([[0u]])" : R"([[3u]])");
+            CompareYson(FormatResultSetYson(result.GetResultSet(3)), UseSecondaryIndex ? R"([[1u]])" : R"([[3u]])");
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(R"(
+                SELECT COUNT(*) FROM `/Root/Rows`;
+                SELECT COUNT(*) FROM `/Root/GlobalKeyToRows`;
+            )", NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            // Wrong uncommitted changes TODO: fix it
+            CompareYson(FormatResultSetYson(result.GetResultSet(0)), UseSecondaryIndex ? R"([[0u]])" : R"([[1u]])");
+            CompareYson(FormatResultSetYson(result.GetResultSet(1)), UseSecondaryIndex ? R"([[0u]])" : R"([[1u]])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(EffectWithSelect, UseSink) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        auto kikimr = DefaultKikimrRunner({}, appConfig);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto client = kikimr.GetQueryClient();
+
+       {
+            const TString query = Sprintf(R"(
+                CREATE TABLE `/Root/Rows` (
+                    k1 Uint64,
+                    k2 Uint64,
+                    v1 Uint64,
+                    v2 Uint64,
+                    PRIMARY KEY (k1, k2)
+                );
+            )");
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const TString query = R"(
+                INSERT INTO `/Root/Rows` (k1, k2, v1, v2) VALUES
+                    (1u, 1u, 1u, 1u),
+                    (1u, 2u, 2u, 2u),
+                    (1u, 3u, 3u, 3u);
+            )";
+            auto result = session.ExecuteDataQuery(query, NYdb::NTable::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                UPSERT INTO `/Root/Rows`
+                SELECT $k AS k1, k2, v1, v2 FROM $new_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                DECLARE $rows AS List<
+                    Struct<
+                        k2: Uint64,
+                        v1: Uint64,
+                        v2: Uint64
+                    >
+                >;
+
+                $k2_by_k1 = (
+                    SELECT k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                $new_rows = (
+                    SELECT * FROM AS_TABLE($rows)
+                    WHERE k2 NOT IN COMPACT $k2_by_k1
+                );
+
+                SELECT COUNT(*) FROM $new_rows;
+
+                SELECT * FROM $new_rows LIMIT 1000;
+
+                $other_transformation = (
+                    SELECT $k * 10 AS k1, k2, v1 + v2 AS v1, v1 * v2 AS v2 FROM $new_rows
+                );
+
+                UPSERT INTO `/Root/Rows`
+                SELECT * FROM $other_transformation;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+
+        {
+            const TString query = R"(
+                --!syntax_v1
+
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+
+                DECLARE $k AS Uint64;
+
+                $deleted_rows = (
+                    SELECT k1, k2 FROM `/Root/Rows`
+                    WHERE k1 = $k
+                );
+
+                SELECT COUNT(*) FROM $deleted_rows;
+
+                DELETE FROM `/Root/Rows` ON
+                SELECT * FROM $deleted_rows;
+            )";
+
+            {
+                auto result = session.ExplainDataQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+
+            {
+                auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                    .ExecMode(NYdb::NQuery::EExecMode::Explain);
+                auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), settings).GetValueSync();
+                UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+
+
+                NJson::TJsonValue plan;
+                NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &plan, true);
+                UNIT_ASSERT_C(plan["tables"].GetArray().size() == 1, plan["tables"].GetArray().size());
+                UNIT_ASSERT_C(plan["tables"][0]["reads"].GetArray().size() == 1, plan["tables"][0]["reads"].GetArray().size());
+            }
+        }
+    }
 }
 
 } // namespace NKqp

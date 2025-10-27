@@ -50,7 +50,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
     if (record.GetSchemaVersion() && tableInfo.GetTableSchemaVersion() &&
         record.GetSchemaVersion() != tableInfo.GetTableSchemaVersion())
     {
-        SetError(NKikimrTxDataShard::TError::SCHEME_ERROR, TStringBuilder()
+        SetError(NKikimrTxDataShard::TError::SCHEME_CHANGED, TStringBuilder()
             << "Schema version mismatch"
             << ": requested " << record.GetSchemaVersion()
             << ", expected " << tableInfo.GetTableSchemaVersion()
@@ -284,6 +284,7 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
             groupProvider.GetCurrentChangeGroup(),
             /* ordered */ false,
             /* arbiter */ false,
+            /* disable expectations */ false,
             txc);
         // Note: transaction is already committed, no additional waiting needed
     }

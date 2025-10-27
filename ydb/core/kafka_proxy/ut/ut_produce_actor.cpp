@@ -65,6 +65,7 @@ namespace {
                 Ctx->Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
                 TContext::TPtr kafkaContext = std::make_shared<TContext>(KafkaConfig);
                 kafkaContext->DatabasePath = "/Root/PQ";
+                kafkaContext->ResourceDatabasePath = "/Root/PQ";
                 kafkaContext->ConnectionId = Ctx->Edge;
                 ActorId = Ctx->Runtime->Register(CreateKafkaProduceActor(kafkaContext));
                 auto dummySchemeCacheId = Ctx->Runtime->Register(new TDummySchemeCacheActor(Ctx->TabletId));
@@ -138,10 +139,10 @@ namespace {
             ui32 poisonPillCounter = 0;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
                 Cout << input->ToString() << Endl;
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     writeRequestReceiver = input->Recipient;
                     writeRequestsCounter++;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     if (poisonPillCounter == 0) { // only first poison pill goes to writer
                         poisonPillReceiver = input->Recipient;
                         poisonPillCounter++;
@@ -194,7 +195,7 @@ namespace {
             int poisonPillCounter = 0;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
                 Cout << input->ToString() << Endl;
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     if (writeRequestsCounter == 0) {
                         firstWriteRequestReceiver = input->Recipient;
                         AssertCorrectOptsInPartitionWriter(firstWriteRequestReceiver, {producerId, producerEpoch}, TransactionalId);
@@ -208,7 +209,7 @@ namespace {
                         Ctx->Runtime->Send(new IEventHandle(firstWriteRequestReceiver, input->Sender, CreateMissingSupPartitionErrorResponse(event->Record.GetPartitionRequest().GetCookie()).Release()));
                         return TTestActorRuntimeBase::EEventAction::DROP;
                     }
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     if (poisonPillCounter == 0) { // only first poison pill goes to writer
                         poisonPillReceiver = input->Recipient;
                         poisonPillCounter++;
@@ -218,7 +219,7 @@ namespace {
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
             };
             Ctx->Runtime->SetObserverFunc(observer);
-            
+
             SendProduce(TransactionalId, producerId, producerEpoch);
 
             TDispatchOptions options;
@@ -238,10 +239,10 @@ namespace {
             ui32 writeRequestsCounter = 0;
             ui32 poisonPillCounter = 0;
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     writeRequestReceiver = input->Recipient;
                     writeRequestsCounter++;
-                } else if (auto* event = input->CastAsLocal<TEvents::TEvPoison>()) {
+                } else if (input->CastAsLocal<TEvents::TEvPoison>()) {
                     poisonPillCounter++;
                 }
 
@@ -281,7 +282,7 @@ namespace {
 
         Y_UNIT_TEST(OnWriteExpiredAndWakeUp_ShouldReturnREQUEST_TIMED_OUT) {
             auto observer = [&](TAutoPtr<IEventHandle>& input) {
-                if (auto* event = input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
+                if (input->CastAsLocal<TEvPartitionWriter::TEvWriteRequest>()) {
                     return TTestActorRuntimeBase::EEventAction::DROP;
                 }
 

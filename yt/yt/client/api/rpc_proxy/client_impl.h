@@ -26,6 +26,7 @@ public:
     const NTabletClient::ITableMountCachePtr& GetTableMountCache() override;
     const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() override;
     const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() override;
+    const TClientOptions& GetOptions() override;
 
     // Transactions.
     NApi::ITransactionPtr AttachTransaction(
@@ -205,7 +206,7 @@ public:
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
-    TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+    TFuture<TGetCurrentUserResult> GetCurrentUser(
         const TGetCurrentUserOptions& options) override;
 
     TFuture<void> AddMember(
@@ -302,8 +303,9 @@ public:
         NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobStderrOptions& options) override;
 
-    TFuture<std::vector<TJobTraceEvent>> GetJobTrace(
+    TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr> GetJobTrace(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const NApi::TGetJobTraceOptions& options) override;
 
     TFuture<TSharedRef> GetJobFailContext(
@@ -527,6 +529,9 @@ public:
 
     TFuture<TGetQueryTrackerInfoResult> GetQueryTrackerInfo(
         const TGetQueryTrackerInfoOptions& options = {}) override;
+
+    TFuture<TGetQueryDeclaredParametersInfoResult> GetQueryDeclaredParametersInfo(
+        const TGetQueryDeclaredParametersInfoOptions& options = {}) override;
 
     // Authentication
 

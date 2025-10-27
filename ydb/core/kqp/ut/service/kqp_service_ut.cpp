@@ -1,8 +1,13 @@
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/common/shutdown/state.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/common/shutdown/controller.h>
+#include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/base/counters.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
+#include <ydb/core/tx/datashard/datashard_failpoints.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -66,94 +71,63 @@ Y_UNIT_TEST_SUITE(KqpService) {
         driver.Stop(true);
     }
 
-    Y_UNIT_TEST(CloseSessionsWithLoad) {
-        auto kikimr = std::make_shared<TKikimrRunner>();
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
-        kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
+    Y_UNIT_TEST(CloseSessionAbortQueryExecution) {
+        TKikimrSettings settings;
+        settings.SetUseRealThreads(false);
+        auto kikimr = TKikimrRunner(settings);
 
-        auto db = kikimr->GetTableClient();
+        auto runtime = kikimr.GetTestServer().GetRuntime();
 
-        const ui32 SessionsCount = 50;
-        const TDuration WaitDuration = TDuration::Seconds(1);
+        runtime->SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
+        runtime->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
 
-        TVector<TSession> sessions;
-        for (ui32 i = 0; i < SessionsCount; ++i) {
-            auto sessionResult = db.CreateSession().GetValueSync();
-            UNIT_ASSERT_C(sessionResult.IsSuccess(), sessionResult.GetIssues().ToString());
+        auto db = kikimr.GetQueryClient();
 
-            sessions.push_back(sessionResult.GetSession());
+        {
+            auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+            auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+            kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
         }
 
-        NPar::LocalExecutor().RunAdditionalThreads(SessionsCount + 1);
-        NPar::LocalExecutor().ExecRange([&kikimr, sessions, WaitDuration](int id) mutable {
-            if (id == (i32)sessions.size()) {
-                Sleep(WaitDuration);
-                Cerr << "start sessions close....." << Endl;
-                for (ui32 i = 0; i < sessions.size(); ++i) {
-                    sessions[i].Close();
-                }
-
-                Cerr << "finished sessions close....." << Endl;
-                auto counters = GetServiceCounters(kikimr->GetTestServer().GetRuntime()->GetAppData(0).Counters,  "ydb");
-
-                ui64 pendingCompilations = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingCompilations = counters->GetNamedCounter("name", "table.query.compilation.active_count", false)->Val();
-                    Cerr << "still compiling... " << pendingCompilations << Endl;
-                } while (pendingCompilations != 0);
-
-                ui64 pendingSessions = 0;
-                do {
-                    Sleep(WaitDuration);
-                    pendingSessions = counters->GetNamedCounter("name", "table.session.active_count", false)->Val();
-                    Cerr << "still active sessions ... " << pendingSessions << Endl;
-                } while (pendingSessions != 0);
-
-                Sleep(TDuration::Seconds(5));
-
-                return;
+        ui32 stateEvents = 0;
+        auto grab = [&stateEvents](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NYql::NDq::TEvDqCompute::TEvState::EventType) {
+                ++stateEvents;
             }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
 
-            auto session = sessions[id];
-            std::optional<TTransaction> tx;
+        runtime->SetObserverFunc(grab);
+        Y_DEFER {
+            runtime->SetObserverFunc(TTestActorRuntime::DefaultObserverFunc);
+        };
 
-            while (true) {
-                if (tx) {
-                    auto result = tx->Commit().GetValueSync();
-                    if (!result.IsSuccess()) {
-                        return;
-                    }
+        NDataShard::gSkipReadIteratorResultFailPoint.Enable(-1);
+        Y_DEFER {
+            NDataShard::gSkipReadIteratorResultFailPoint.Disable();
+        };
 
-                    tx = {};
-                    continue;
-                }
+        auto session = kikimr.RunCall([&] { return db.GetSession().ExtractValueSync().GetSession(); } );
 
-                auto query = Sprintf(R"(
-                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
-                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
-                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
-                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
-                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
-                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
+        auto future = kikimr.RunInThreadPool([&] { return session.ExecuteQuery("select * from `/Root/LargeTable`", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync(); });
 
-                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
-                        (%2$dul, "New");
-                )", RandomNumber<ui32>(), RandomNumber<ui32>());
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&stateEvents](IEventHandle&) {
+            return stateEvents > 0;
+        });
+        runtime->DispatchEvents(opts);
 
-                auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx()).GetValueSync();
-                if (!result.IsSuccess()) {
-                    Sleep(TDuration::Seconds(5));
-                    Cerr << "received non-success status for session " << id << Endl;
-                    return;
-                }
+        Cerr << "OK! Passed the test. Compute Actors are started" << Endl;
 
-                tx = result.GetTransaction();
-            }
-        }, 0, SessionsCount + 1, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
-        WaitForZeroReadIterators(kikimr->GetTestServer(), "/Root/EightShard");
+        auto close = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+        close->Record.MutableRequest()->SetSessionId(TString(session.GetId()));
+        auto sender = kikimr.GetTestServer().GetRuntime()->AllocateEdgeActor();
+        runtime->Send(new IEventHandle(MakeKqpProxyID(kikimr.GetTestServer().GetRuntime()->GetNodeId(0)), sender, close.release()));
+
+        auto result = kikimr.GetTestServer().GetRuntime()->WaitFuture(future);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::CANCELLED, result.GetIssues().ToString());
     }
 
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
@@ -568,6 +542,46 @@ struct TDictCase {
                 }
             }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
         }
+    }
+
+     Y_UNIT_TEST(TwoNodeOneShuttingDown) {
+        TKikimrRunner kikimr(TKikimrSettings().SetNodeCount(2)
+                                        .SetUseRealThreads(false));
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        ui32 const nodeId = runtime.GetNodeId(0);
+
+        auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
+        auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
+        kikimr.RunCall([&]() {CreateLargeTable(kikimr, 100, 2, 2, 10, 2);});
+
+        ui32 nodeShuttingDownCount = 0;
+        auto grab = [&nodeShuttingDownCount](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == TEvKqpNode::TEvStartKqpTasksResponse::EventType) {
+                auto msg = ev->Get<TEvKqpNode::TEvStartKqpTasksResponse>()->Record;
+                if (msg.NotStartedTasksSize() > 0 && msg.GetNotStartedTasks()[0].GetReason() == NKikimrKqp::TEvStartKqpTasksResponse::NODE_SHUTTING_DOWN) {
+                    ++nodeShuttingDownCount;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime.SetObserverFunc(grab);
+        auto shutdownState = new TKqpShutdownState();
+        runtime.Send(new IEventHandle(NKqp::MakeKqpNodeServiceID(nodeId), {}, new TEvKqp::TEvInitiateShutdownRequest(shutdownState)));
+
+        auto query = R"(SELECT COUNT(*) FROM `/Root/LargeTable` WHERE SUBSTRING(DataText, 50, 5) = "22222";)";
+        auto resultFuture = kikimr.RunInThreadPool([&]{
+            return db.StreamExecuteScanQuery(query).GetValueSync();});
+
+        TDispatchOptions opts;
+        opts.FinalEvents.emplace_back([&nodeShuttingDownCount](IEventHandle&) {
+            return nodeShuttingDownCount > 0;
+        });
+        runtime.DispatchEvents(opts);
+
+        auto result = runtime.WaitFuture(resultFuture);
+        UNIT_ASSERT_VALUES_EQUAL_C(nodeShuttingDownCount, 1, "Expected to be 1 since one node is shutting down");
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
     }
 }
 

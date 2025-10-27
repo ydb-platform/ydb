@@ -14,11 +14,18 @@
 /ydb/core/mon_alloc @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/statistics @ydb-platform/datashard
+/ydb/tests/datashard @ydb-platform/datashard
+/ydb/tests/stress/oltp_workload @ydb-platform/datashard
+/ydb/tests/datashard/vector_index/large @ydb-platform/datashard
 
 #Column Tables Development Team @zverevgeny TEAM:@ydb-platform/cs
 /ydb/core/tx/columnshard @ydb-platform/cs
 /ydb/tests/olap @ydb-platform/cs
+/ydb/tests/stress/olap_workload  @ydb-platform/cs
 /ydb/core/kqp/ut/olap @ydb-platform/cs
+/ydb/tests/stress/olap_workload @ydb-platform/cs
+/ydb/tests/functional/tpc @ydb-platform/cs
+/ydb/tests/compatibility/olap @ydb-platform/cs
 
 #Distributed System Infrastructure Team @ijon TEAM:@ydb-platform/system-infra
 /ydb/core/mind/hive @ydb-platform/system-infra
@@ -30,7 +37,6 @@
 /ydb/core/tx/scheme_board @ydb-platform/system-infra
 /ydb/core/tx/scheme_cache @ydb-platform/system-infra
 /ydb/core/audit @ydb-platform/system-infra
-/ydb/core/security @ydb-platform/system-infra
 /ydb/core/health_check @ydb-platform/system-infra
 /ydb/library/aclib @ydb-platform/system-infra
 /ydb/mvp/oidc_proxy @ydb-platform/system-infra
@@ -40,6 +46,10 @@
 /ydb/tests/functional/tenants @ydb-platform/system-infra
 /ydb/services/ydb/table_split_ut @ydb-platform/system-infra
 
+#Security Team @azevaykin TEAM:@ydb-platform/security
+/ydb/core/security @ydb-platform/security
+/ydb/core/tx/tx_proxy/ut_schemereq @ydb-platform/security
+
 #YDB Query Execution Team @gridnevvvit TEAM:@ydb-platform/qp
 /ydb/core/kqp @ydb-platform/qp
 #YDB Query Optimizer Team @pavelvelikhov TEAM:@ydb-platform/qp
@@ -47,6 +57,7 @@
 /ydb/tests/functional/suite_tests @ydb-platform/qp
 /ydb/tests/functional/clickbench @ydb-platform/qp
 /ydb/tests/functional/postgresql @ydb-platform/qp
+/ydb/tests/functional/kqp @ydb-platform/qp
 
 #YDB Application Team @asmyasnikov TEAM:@ydb-platform/appteam
 /ydb/public/sdk @ydb-platform/appteam
@@ -78,6 +89,8 @@
 /ydb/core/blob_depot @ydb-platform/blobstorage
 /ydb/core/erasure @ydb-platform/blobstorage
 /ydb/tests/functional/config @ydb-platform/blobstorage
+/ydb/services/keyvalue/ut @ydb-platform/blobstorage
+/ydb/tests/functional/bridge @ydb-platform/blobstorage
 
 #Core Functionality Team @CyberROFL TEAM:@ydb-platform/core
 /ydb/core/config/ut @ydb-platform/core
@@ -85,6 +98,7 @@
 /ydb/tests/functional/cms @ydb-platform/core
 /ydb/core/quoter @ydb-platform/core
 /ydb/library/yaml_config/ut_transform @ydb-platform/core
+/ydb/services/ydb/backup_ut @ydb-platform/core
 
 #Data Delivery Systems Team / LogBroker @alexnick88 TEAM:@ydb-platform/topics
 /ydb/tests/functional/sqs @ydb-platform/Topics
@@ -97,11 +111,16 @@
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/tx/schemeshard/ut_pq_reboots @ydb-platform/Topics
 /ydb/core/transfer @ydb-platform/Topics
+/ydb/tests/stress/kafka @ydb-platform/Topics
+/ydb/public/sdk/cpp/src/client/topic/ @ydb-platform/Topics
+/ydb/public/sdk/cpp/tests/integration/topic @ydb-platform/Topics
+/ydb/public/sdk/cpp/src/client/federated_topic/ @ydb-platform/Topics
 
 #YDB Analytics TEAM:???
 
 #Federative query @uzhastik TEAM:@ydb-platform/fq
 /ydb/tests/fq @ydb-platform/fq
+/ydb/tests/solomon @ydb-platform/fq
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/services/fq/ @ydb-platform/fq
 /ydb/library/yql/providers/common/http_gateway @ydb-platform/fq

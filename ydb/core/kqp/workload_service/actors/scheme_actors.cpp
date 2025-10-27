@@ -67,7 +67,7 @@ public:
 
         NACLib::TDiffACL diffAcl;
         for (const TString& usedSid : AppData()->AdministrationAllowedSIDs) {
-            diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericFull, usedSid);
+            diffAcl.AddAccess(NACLib::EAccessType::Allow, NACLib::EAccessRights::GenericUse, usedSid);
         }
 
         auto useAccess = NACLib::EAccessRights::SelectRow | NACLib::EAccessRights::DescribeSchema;

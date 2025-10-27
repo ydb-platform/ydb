@@ -9,6 +9,7 @@ message TClusterState {
         NOT_SYNCHRONIZED_1 = 1; // not synchonized with primary, can't be promoted, doesn't take part in any quorum
         NOT_SYNCHRONIZED_2 = 2; // not synchonized with primary, can't be promoted, takes part in all quorums
         SYNCHRONIZED = 3; // fully synchronized with primary, may be promoted
+        SUSPENDED = 4; // gracefully taken down; treat like disconnected for data quorum; config quorum allowed; connections allowed
     }
     repeated EPileState PerPileState = 1; // a state for every realm, including primary
     uint32 PrimaryPile = 2; // the current primary (must be SYNCHRONIZED)
@@ -26,9 +27,27 @@ message TClusterStateDetails {
 
     message TPileSyncState {
         uint32 BridgePileId = 1;
-        repeated string PermanentErrorReasons = 2; // a set of detected permanent errors for this pile
-        repeated uint32 UnsyncedGroupIds = 3; // a set of unsynced groups for this pile
-        bool UnsyncedBSC = 4; // true if BSC is not synced with this configuration yet
+        uint64 BecameUnsyncedGeneration = 2; // when did it become unsynced?
+        bool UnsyncedBSC = 3; // true if BSC-managed part is not synced with this configuration yet
     }
     repeated TPileSyncState PileSyncState = 2; // per-pile sync state for current generation
+}
+
+message TGroupState {
+    enum EStage {
+        BLOCKS = 0;
+        WRITE_KEEP = 1;
+        WRITE_KEEP_BARRIER_DONOTKEEP = 2;
+        WRITE_KEEP_BARRIER_DONOTKEEP_DATA = 3;
+        SYNCED = 4;
+    }
+
+    message TPile {
+        uint32 GroupId = 1;
+        uint32 GroupGeneration = 2; // for race-checking in syncer and proxy proxy
+        EStage Stage = 3; // synchronization stage
+        uint64 BecameUnsyncedGeneration = 4; // cluster state generation from TPileSyncState.BecameUnsyncedGeneration
+    }
+
+    repeated TPile Pile = 1; // for every pile, synced or unsynced
 }

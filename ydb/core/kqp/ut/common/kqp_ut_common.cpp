@@ -1,24 +1,55 @@
 #include "kqp_ut_common.h"
 
 #include <ydb/core/base/backtrace.h>
-#include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+#include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <yql/essentials/core/yql_data_provider.h>
-#include <yql/essentials/utils/backtrace/backtrace.h>
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/public/udf/udf_helpers.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <library/cpp/testing/common/env.h>
 
 namespace NKikimr {
 namespace NKqp {
+
+namespace {
+
+void TerminateHandler() {
+    Cerr << "======= terminate() call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    if (const auto& backtrace = TBackTrace::FromCurrentException(); backtrace.size() > 0) {
+        Cerr << "======== exception call stack =========" << Endl;
+        backtrace.PrintTo(Cerr);
+    }
+    Cerr << "=======================================" << Endl;
+
+    if (std::current_exception()) {
+        Cerr << "Uncaught exception: " << CurrentExceptionMessage() << Endl;
+    } else {
+        Cerr << "Terminate for unknown reason (no current exception)" << Endl;
+    }
+
+    abort();
+}
+
+void BackTraceSignalHandler(int signal) {
+    Cerr << "======= Signal " << signal << " call stack ========" << Endl;
+    FormatBackTrace(&Cerr);
+    Cerr << "===============================================" << Endl;
+
+    abort();
+}
+
+} // anonymous namespace
 
 using namespace NYdb::NTable;
 
@@ -99,8 +130,21 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings() {
     return {setting};
 }
 
+TTestLogSettings& TTestLogSettings::AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority) {
+    if (!Freeze) {
+        LogPriorities.emplace(service, priority);
+    }
+
+    return *this;
+}
+
 TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     EnableYDBBacktraceFormat();
+
+    std::set_terminate(&TerminateHandler);
+    for (auto sig : {SIGFPE, SIGILL, SIGSEGV}) {
+        signal(sig, &BackTraceSignalHandler);
+    }
 
     auto mbusPort = PortManager.GetPort();
     auto grpcPort = PortManager.GetPort();
@@ -129,6 +173,16 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+    if (settings.EnableStorageProxy) {
+        NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
+
+        auto& checkpoints = *appConfig.MutableQueryServiceConfig()->MutableStreamingQueries()->MutableExternalStorage()->MutableDatabaseConnection();
+        checkpoints.SetEndpoint(GetEnv("YDB_ENDPOINT"));
+        checkpoints.SetDatabase(GetEnv("YDB_DATABASE"));
+    }
+    if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
+        appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
+    }
     ServerSettings->SetAppConfig(appConfig);
     ServerSettings->SetFeatureFlags(settings.FeatureFlags);
     ServerSettings->SetNodeCount(settings.NodeCount);
@@ -155,11 +209,18 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
         ServerSettings->SetEnableMockOnSingleNode(false);
     }
 
-    if (settings.LogStream)
+    if (settings.LogStream) {
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
+    }
 
-    if (settings.FederatedQuerySetupFactory) {
+    if (settings.InitFederatedQuerySetupFactory) {
+        ServerSettings->SetInitializeFederatedQuerySetupFactory(true);
+    } else if (settings.FederatedQuerySetupFactory) {
         ServerSettings->SetFederatedQuerySetupFactory(settings.FederatedQuerySetupFactory);
+    }
+
+    if (settings.DescribeSchemaSecretsServiceFactory) {
+        ServerSettings->SetDescribeSchemaSecretsServiceFactory(settings.DescribeSchemaSecretsServiceFactory);
     }
 
     Server.Reset(MakeHolder<Tests::TServer>(*ServerSettings));
@@ -596,18 +657,22 @@ static TMaybe<NActors::NLog::EPriority> ParseLogLevel(const TString& level) {
     }
 }
 
-void TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
+bool TKikimrRunner::SetupLogLevelFromTestParam(NKikimrServices::EServiceKikimr service) {
     if (const TString paramForService = GetTestParam(TStringBuilder() << "KQP_LOG_" << NKikimrServices::EServiceKikimr_Name(service))) {
         if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(paramForService)) {
             Server->GetRuntime()->SetLogPriority(service, *level);
-            return;
+            return true;
         }
     }
+
     if (const TString commonParam = GetTestParam("KQP_LOG")) {
         if (const TMaybe<NActors::NLog::EPriority> level = ParseLogLevel(commonParam)) {
             Server->GetRuntime()->SetLogPriority(service, *level);
+            return true;
         }
     }
+
+    return false;
 }
 
 void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
@@ -617,50 +682,43 @@ void TKikimrRunner::Initialize(const TKikimrSettings& settings) {
     // For example:
     // --test-param KQP_LOG=TRACE
     // --test-param KQP_LOG_FLAT_TX_SCHEMESHARD=debug
-    SetupLogLevelFromTestParam(NKikimrServices::FLAT_TX_SCHEMESHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_YQL);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_DATASHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COORDINATOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPUTE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_TASKS_RUNNER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_EXECUTER);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY_SCHEME_CACHE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::SCHEME_BOARD_REPLICA);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SESSION);
-    SetupLogLevelFromTestParam(NKikimrServices::TABLET_EXECUTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_SLOW_LOG);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_PROXY);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_ACTOR);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_COMPILE_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_GATEWAY);
-    SetupLogLevelFromTestParam(NKikimrServices::RPC_REQUEST);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_RESOURCE_MANAGER);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_NODE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_BLOBS_STORAGE);
-    SetupLogLevelFromTestParam(NKikimrServices::KQP_WORKLOAD_SERVICE);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD);
-    SetupLogLevelFromTestParam(NKikimrServices::TX_COLUMNSHARD_SCAN);
-    SetupLogLevelFromTestParam(NKikimrServices::LOCAL_PGWIRE);
-    SetupLogLevelFromTestParam(NKikimrServices::SSA_GRAPH_EXECUTION);
+    auto descriptor = NKikimrServices::EServiceKikimr_descriptor();
+    for (i32 i = 0; i < descriptor->value_count(); ++i) {
+        const auto service = static_cast<NKikimrServices::EServiceKikimr>(descriptor->value(i)->number());
+        if (SetupLogLevelFromTestParam(service)) {
+            continue;
+        }
 
+        if (const auto& logSettings = settings.LogSettings) {
+            if (const auto it = logSettings->LogPriorities.find(service); it != logSettings->LogPriorities.end()) {
+                Server->GetRuntime()->SetLogPriority(service, it->second);
+            } else {
+                Server->GetRuntime()->SetLogPriority(service, settings.LogSettings->DefaultLogPriority);
+            }
+        }
+    }
 
     RunCall([this, domain = settings.DomainRoot]{
         this->Client->InitRootScheme(domain);
         return true;
     });
 
-    if (settings.AuthToken) {
-        this->Client->GrantConnect(settings.AuthToken);
-    }
-
+    // Create sample tables in anonymous mode
     if (settings.WithSampleTables) {
         RunCall([this] {
             this->CreateSampleTables();
             return true;
         });
+    }
+
+    // Initial user becomes cluster admin.
+    if (settings.AuthToken) {
+        // Cluster admin does not require the explicit EAccessRights::ConnectDatabase right,
+        // but does require explicit EAccessRights::GenericFull rights.
+        // The order is important here, because grants from anonymous user are possible
+        // only while AdministrationAllowedSIDs is empty (which means that anyone is an admin).
+        this->Client->TestGrant("/", settings.DomainRoot, settings.AuthToken, NACLib::EAccessRights::GenericFull);
+        Server->GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back(settings.AuthToken);
     }
 }
 

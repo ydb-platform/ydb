@@ -1,0 +1,23 @@
+Input data size: 12000000
+Generated data size: 12000000
+{
+    "Type" = [
+        "StructType";
+        [
+            [
+                "count";
+                [
+                    "DataType";
+                    "Uint64"
+                ]
+            ]
+        ]
+    ];
+    "Data" = [
+        [
+            "1000000"
+        ]
+    ]
+}
+Dry run of test sql...
+Run benchmark...

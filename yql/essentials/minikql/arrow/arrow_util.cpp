@@ -5,27 +5,14 @@
 #include <arrow/chunked_array.h>
 
 #include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_type_helper.h>
 
 #include <util/system/yassert.h>
 
 namespace NKikimr::NMiniKQL {
 
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType) {
-    bool nested;
-    if (itemType->IsPg()) {
-        nested = false;
-    } else {
-        bool isOptional;
-        auto unpacked = UnpackOptional(itemType, isOptional);
-        MKQL_ENSURE(isOptional, "Expected optional");
-        if (unpacked->IsOptional() || unpacked->IsVariant() || unpacked->IsPg()) {
-            nested = true;
-        } else {
-            nested = false;
-        }
-    }
-
-    if (nested) {
+    if (NeedWrapWithExternalOptional(itemType)) {
         MKQL_ENSURE(data.child_data.size() == 1, "Expected struct with one element");
         return data.child_data[0];
     } else {
@@ -36,9 +23,16 @@ std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* it
     }
 }
 
+std::shared_ptr<arrow::Scalar> UnwrapScalar(std::shared_ptr<arrow::Scalar> scalar, TType* itemType) {
+    if (NeedWrapWithExternalOptional(itemType)) {
+        return dynamic_cast<arrow::StructScalar&>(*scalar).value.at(0);
+    }
+    return scalar;
+}
+
 std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
     static constexpr ui8 data alignas(ArrowAlignment)[1]{};
     return std::make_shared<arrow::Buffer>(data, 0);
 }
 
-}
+} // namespace NKikimr::NMiniKQL

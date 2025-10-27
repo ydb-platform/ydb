@@ -68,6 +68,7 @@ message Entry {
         RESOURCE_POOL = 21;
         TRANSFER = 23;
         SYS_VIEW = 24;
+        STREAMING_QUERY = 25;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)

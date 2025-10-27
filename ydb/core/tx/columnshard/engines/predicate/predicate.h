@@ -72,7 +72,8 @@ public:
     }
 
     static std::pair<TPredicate, TPredicate> DeserializePredicatesRange(
-        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns);
+        const TSerializedTableRange& range, const std::vector<std::pair<TString, NScheme::TTypeInfo>>& columns, 
+        const std::shared_ptr<arrow::Schema>& schema);
 
     constexpr TPredicate() noexcept = default;
 

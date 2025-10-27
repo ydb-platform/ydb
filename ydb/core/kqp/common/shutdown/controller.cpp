@@ -1,12 +1,13 @@
 #include "controller.h"
 #include "events.h"
 
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
 namespace NKikimr::NKqp {
 
-TKqpShutdownController::TKqpShutdownController(NActors::TActorId kqpProxyActorId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool enableGraceful)
-    : KqpProxyActorId_(kqpProxyActorId)
+TKqpShutdownController::TKqpShutdownController(ui32 nodeId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool enableGraceful)
+    : NodeId_(nodeId)
     , EnableGraceful(enableGraceful)
     , TableServiceConfig(tableServiceConfig) {
     ShutdownState_.Reset(new TKqpShutdownState());
@@ -20,7 +21,10 @@ void TKqpShutdownController::Stop() {
     if (!EnableGraceful)
         return;
 
-    ActorSystem_->Send(new NActors::IEventHandle(KqpProxyActorId_, {}, new NPrivateEvents::TEvInitiateShutdownRequest(ShutdownState_)));
+    for (auto& actorId : {NKqp::MakeKqpProxyID(NodeId_), NKqp::MakeKqpNodeServiceID(NodeId_)}) {
+        ActorSystem_->Send(new NActors::IEventHandle(actorId, {}, new NPrivateEvents::TEvInitiateShutdownRequest(ShutdownState_)));
+    }
+
     auto timeout = TDuration::MilliSeconds(TableServiceConfig.GetShutdownSettings().GetShutdownTimeoutMs());
     auto startedAt = TInstant::Now();
     auto spent = (TInstant::Now() - startedAt).SecondsFloat();

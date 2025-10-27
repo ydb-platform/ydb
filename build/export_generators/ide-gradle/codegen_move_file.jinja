@@ -1,9 +1,11 @@
+{%- set move_files = current_target.target_commands|selectattr("macro", "eq", "move_file") -%}
 {%- if move_files|length -%}
+{%-     set current_target_object_indexes = current_target_object_indexes + move_files|map(attribute='_object_index') -%}
 {%-     for move in move_files -%}
 {%-         set src = move.args[0] -%}
 {%-         set dst = move.args[1] %}
 
-val {{ varprefix }}{{ move['_object_index'] }} = tasks.register("{{ varprefix }}{{ move['_object_index'] }}") {
+val {{ varprefix }}{{ move['_object_index'] }} = tasks.register<Copy>("{{ varprefix }}{{ move['_object_index'] }}") {
     doLast {
         file({{ PatchRoots(src, move['flags']|select("eq", "src_is_depend")|length) }}).renameTo(file({{ PatchRoots(dst) }}))
     }

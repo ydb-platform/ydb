@@ -1,13 +1,17 @@
 # -*- coding: utf-8 -*-
 import copy
+import logging
 import os
 import pytest
 import time
 import yatest
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.fixtures import ydb_database_ctx
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+logger = logging.getLogger(__name__)
 
 
 def string_version_to_tuple(s):
@@ -17,7 +21,7 @@ def string_version_to_tuple(s):
     for idx, elem in enumerate(version_components):
         if idx == 0:
             # skipping 'stable' in stable-25-1-1 version
-            if elem == 'stable':
+            if elem in ['stable', 'prestable']:
                 continue
             elif elem == 'current':
                 result.append(float('+inf'))
@@ -90,14 +94,24 @@ class RestartToAnotherVersionFixture:
         self.all_binary_paths = request.param
         self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
-    def setup_cluster(self, **kwargs):
+    def create_driver(self):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint=self.endpoint,
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
+    def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
         extra_feature_flags = copy.copy(extra_feature_flags)
         extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
@@ -106,14 +120,16 @@ class RestartToAnotherVersionFixture:
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
 
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
-        yield
+        if tenant_db is not None:
+            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                self.database_path = db_path
+                self.driver = self.create_driver()
+                yield
+        else:
+            self.database_path = "/Root"
+            self.driver = self.create_driver()
+            yield
+
         self.cluster.stop()
 
     def change_cluster_version(self):
@@ -121,13 +137,7 @@ class RestartToAnotherVersionFixture:
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
         self.config.set_binary_paths([new_binary_paths])
         self.cluster.update_configurator_and_restart(self.config)
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
+        self.driver = self.create_driver()
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
@@ -154,10 +164,27 @@ class MixedClusterFixture:
         self.all_binary_paths = request.param
         self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
-    def setup_cluster(self, **kwargs):
+    def create_driver(self):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint=self.endpoint
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
+    def setup_cluster(self, tenant_db=None, **kwargs):
+        all_versions_numbered = all(
+            # +inf == current will be float, all other versions are int
+            isinstance(item, int)
+            for tpl in self.versions
+            for item in tpl
+        )
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
+            suppress_version_check=not all_versions_numbered,
             **kwargs,
         )
 
@@ -165,14 +192,16 @@ class MixedClusterFixture:
         self.cluster.start()
         self.endpoint = "grpc://%s:%s" % ('localhost', self.cluster.nodes[1].port)
 
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                database='/Root',
-                endpoint=self.endpoint
-            )
-        )
-        self.driver.wait(timeout=60)
-        yield
+        if tenant_db is not None:
+            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                self.database_path = db_path
+                self.driver = self.create_driver()
+                yield
+        else:
+            self.database_path = "/Root"
+            self.driver = self.create_driver()
+            yield
+
         self.cluster.stop()
 
 
@@ -194,15 +223,19 @@ class RollingUpgradeAndDowngradeFixture:
         self.all_binary_paths = request.param
         self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
+    def create_driver(self):
+        driver = ydb.Driver(
+            ydb.DriverConfig(
+                database=self.database_path,
+                endpoint=self.endpoints[0]
+            )
+        )
+        driver.wait(timeout=60)
+        return driver
+
     def _wait_for_readiness(self):
         if self.recreate_driver:
-            self.driver = ydb.Driver(
-                ydb.DriverConfig(
-                    database='/Root',
-                    endpoint=self.endpoints[0]
-                )
-            )
-            self.driver.wait(timeout=60)
+            self.driver = self.create_driver()
 
         query = """
             CREATE TABLE `test_readiness` (
@@ -228,7 +261,7 @@ class RollingUpgradeAndDowngradeFixture:
         with ydb.QuerySessionPool(self.driver) as session_pool:
             session_pool.execute_with_retries(query)
 
-    def setup_cluster(self, **kwargs):
+    def setup_cluster(self, tenant_db=None, **kwargs):
         extra_feature_flags = kwargs.pop("extra_feature_flags", {})
         extra_feature_flags = copy.copy(extra_feature_flags)
         extra_feature_flags["suppress_compatibility_check"] = True
@@ -236,9 +269,9 @@ class RollingUpgradeAndDowngradeFixture:
         # By default draining is not enabled to faster tests
         extra_feature_flags["enable_drain_on_shutdown"] = True
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[0]],
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
@@ -251,20 +284,26 @@ class RollingUpgradeAndDowngradeFixture:
 
         self.endpoint = self.endpoints[0]
 
-        self.driver = ydb.Driver(
-            ydb.DriverConfig(
-                self.endpoints[0],
-                database='/Root'
-            )
-        )
-        self.driver.wait(timeout=60)
-        yield
+        if tenant_db is not None:
+            with ydb_database_ctx(self.cluster, f"/Root/{tenant_db}", node_count=3) as db_path:
+                self.database_path = db_path
+                self.driver = self.create_driver()
+                yield
+        else:
+            self.database_path = "/Root"
+            self.driver = self.create_driver()
+            yield
+
         self.cluster.stop()
 
     def roll(self):
+        all_nodes = [(id, n, "node") for id, n in self.cluster.nodes.items()] + \
+            [(id, n, "slot") for id, n in self.cluster.slots.items()]
+
         # from old to new
         yield
-        for node_id, node in self.cluster.nodes.items():
+        for node_id, node, role in all_nodes:
+            logger.info(f"upgrading {role} {node_id}")
             node.stop()
             node.binary_path = self.all_binary_paths[1]
             node.start()
@@ -272,7 +311,8 @@ class RollingUpgradeAndDowngradeFixture:
             yield
 
         # from new to old
-        for node_id, node in self.cluster.nodes.items():
+        for node_id, node, role in all_nodes:
+            logger.info(f"downgrading {role} {node_id}")
             node.stop()
             node.binary_path = self.all_binary_paths[0]
             node.start()

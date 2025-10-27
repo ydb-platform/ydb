@@ -82,8 +82,7 @@
                                                             }
                                                         ],
                                                         "Name": "Aggregate",
-                                                        "Phase": "Intermediate",
-                                                        "Pushdown": "True"
+                                                        "Phase": "Intermediate"
                                                     },
                                                     {
                                                         "Inputs": [],
@@ -100,24 +99,10 @@
                                                         "SsaProgram": {
                                                             "Command": [
                                                                 {
-                                                                    "GroupBy": {
-                                                                        "Aggregates": [
-                                                                            {
-                                                                                "Column": {
-                                                                                    "Id": 106
-                                                                                },
-                                                                                "Function": {
-                                                                                    "Id": 2
-                                                                                }
-                                                                            }
-                                                                        ]
-                                                                    }
-                                                                },
-                                                                {
                                                                     "Projection": {
                                                                         "Columns": [
                                                                             {
-                                                                                "Id": 106
+                                                                                "Id": 7
                                                                             }
                                                                         ]
                                                                     }

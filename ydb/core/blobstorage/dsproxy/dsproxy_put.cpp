@@ -42,6 +42,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
     TErasureSplitContext ErasureSplitContext = TErasureSplitContext::Init(MaxBytesToSplitAtOnce);
     TBatchedVec<TStackVec<TRope, TypicalPartsInBlob>> PartSets;
 
+    using TDeadlineMask = std::bitset<MaxBatchedPutRequests>;
+    std::map<TInstant, TDeadlineMask> PutDeadlineMasks;
+    TDeadlineMask DeadlineMask; 
+
     TStackVec<ui64, TypicalDisksInGroup> WaitingVDiskResponseCount;
     ui64 WaitingVDiskCount = 0;
 
@@ -548,7 +552,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic,
+                put = new TEvBlobStorage::TEvPut(item.BlobId, std::move(item.Buffer), item.Deadline, HandleClass, Tactic,
                     item.IssueKeepFlag, item.IgnoreBlock),
                 0 /*flags*/,
                 item.Cookie,
@@ -589,9 +593,13 @@ public:
         if (params.Common.Event->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
-        ReportBytes(PutImpl.Blobs[0].Buffer.capacity() + sizeof(*this));
 
-        RequestBytes = params.Common.Event->Buffer.size();
+        RequestBytes = 0;
+        for (auto &item: PutImpl.Blobs) {
+            ReportBytes(item.Buffer.capacity());
+            RequestBytes += item.BufferSize;
+        }
+        ReportBytes(sizeof(*this));
         RequestHandleClass = HandleClassToHandleClass(HandleClass);
         MaxSaneRequests = Info->Type.TotalPartCount() * (1ull + Info->Type.Handoff()) * 2;
     }
@@ -645,7 +653,11 @@ public:
             << " Tactic# " << TEvBlobStorage::TEvPut::TacticName(Tactic)
             << " RestartCounter# " << RestartCounter);
 
+        TInstant now = TActivationContext::Now();
+
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
+            TInstant deadline = std::min(now + DsMaximumPutTimeout, PutImpl.Blobs[blobIdx].Deadline);
+            PutDeadlineMasks[deadline].set(blobIdx);
             LWTRACK(DSProxyPutBootstrapStart, PutImpl.Blobs[blobIdx].Orbit);
         }
 
@@ -666,7 +678,8 @@ public:
             getTotalSize()
         );
 
-        Become(&TBlobStorageGroupPutRequest::StateWait, TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
+        Become(&TBlobStorageGroupPutRequest::StateWait);
+        ScheduleNextWakeup(TInstant::Zero());
 
         PartSets.resize(PutImpl.Blobs.size());
         for (auto& partSet : PartSets) {
@@ -717,15 +730,27 @@ public:
             << " BlobIDs# " << BlobIdSequenceToString()
             << " Not answered in "
             << (TActivationContext::Monotonic() - RequestStartTime) << " seconds");
+
         const TInstant now = TActivationContext::Now();
+        while (!PutDeadlineMasks.empty()) {
+            auto [deadline, mask] = *PutDeadlineMasks.begin();
+            if (deadline <= now) {
+                DeadlineMask |= mask;
+                PutDeadlineMasks.erase(PutDeadlineMasks.begin());
+            } else {
+                break;
+            }
+        }
+
         TPutImpl::TPutResultVec putResults;
         for (size_t blobIdx = 0; blobIdx < PutImpl.Blobs.size(); ++blobIdx) {
-            if (!PutImpl.Blobs[blobIdx].Replied && now > PutImpl.Blobs[blobIdx].Deadline) {
+            if (!PutImpl.Blobs[blobIdx].Replied && DeadlineMask[blobIdx]) {
                 PutImpl.PrepareOneReply(NKikimrProto::DEADLINE, blobIdx, LogCtx, "Deadline timer hit", putResults);
             }
         }
-        ReplyAndDieWithLastResponse(putResults);
-        Schedule(TDuration::MilliSeconds(DsPutWakeupMs), new TKikimrEvents::TEvWakeup);
+        if (!ReplyAndDieWithLastResponse(putResults)) {
+            ScheduleNextWakeup(now);
+        }
     }
 
     void UpdatePengingVDiskResponseCount(const TDeque<TPutImpl::TPutEvent>& putEvents) {
@@ -790,6 +815,23 @@ public:
             << " ExpiredVDiskSet# " << ExpiredVDiskSet.ToString()
             << " IncarnationRecords# " << dumpIncarnationRecords()
             << " State# " << PutImpl.DumpFullState());
+    }
+
+    void ScheduleNextWakeup(TInstant lastWakeup) {
+        TInstant now = TActivationContext::Now();
+        TInstant deadline = lastWakeup + DsMinimumDelayBetweenPutWakeups;
+
+        // find first deadline after now
+        for (auto it = PutDeadlineMasks.begin(); it != PutDeadlineMasks.end(); ++it) {
+            deadline = std::max(deadline, it->first);
+            if (it->first > now) {
+                break;
+            }
+        }
+
+        if (deadline != TInstant::Max()) {
+            Schedule(deadline, new TKikimrEvents::TEvWakeup);
+        }
     }
 
     STATEFN(StateWait) {

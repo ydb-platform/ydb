@@ -1,0 +1,26 @@
+--- regex/include/boost/regex/v5/match_results.hpp	(index)
++++ regex/include/boost/regex/v5/match_results.hpp	(working tree)
+@@ -222,7 +222,7 @@ public:
+    {
+       return (*this)[sub].str();
+    }
+-   private:
++private:
+    const_reference get_at(int sub) const
+    {
+       if(m_is_singular && m_subs.empty())
+@@ -239,8 +239,12 @@ public:
+       return m_null;
+    }
+ public:
+-   template <class Integer>
+-   typename std::enable_if<std::is_integral<Integer>::value, const_reference>::type operator[](Integer sub) const
++   template <class Index>
++   typename std::enable_if<
++   	 std::is_integral<Index>::value || std::is_enum<Index>::value,
++	 const_reference
++   >::type
++   operator[](Index sub) const
+    {
+       return get_at(static_cast<int>(sub));
+    }

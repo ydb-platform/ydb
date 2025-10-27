@@ -72,14 +72,15 @@
                                                                 "Node Type": "Aggregate-TableFullScan",
                                                                 "Operators": [
                                                                     {
+                                                                        "Aggregation": "{SUM(1)}",
+                                                                        "GroupBy": "[item.SearchPhrase,item.UserID]",
                                                                         "Inputs": [
                                                                             {
                                                                                 "InternalOperatorId": 1
                                                                             }
                                                                         ],
                                                                         "Name": "Aggregate",
-                                                                        "Phase": "Intermediate",
-                                                                        "Pushdown": "True"
+                                                                        "Phase": "Intermediate"
                                                                     },
                                                                     {
                                                                         "Inputs": [],
@@ -97,28 +98,6 @@
                                                                         "SsaProgram": {
                                                                             "Command": [
                                                                                 {
-                                                                                    "GroupBy": {
-                                                                                        "Aggregates": [
-                                                                                            {
-                                                                                                "Column": {
-                                                                                                    "Id": 106
-                                                                                                },
-                                                                                                "Function": {
-                                                                                                    "Id": 2
-                                                                                                }
-                                                                                            }
-                                                                                        ],
-                                                                                        "KeyColumns": [
-                                                                                            {
-                                                                                                "Id": 40
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 10
-                                                                                            }
-                                                                                        ]
-                                                                                    }
-                                                                                },
-                                                                                {
                                                                                     "Projection": {
                                                                                         "Columns": [
                                                                                             {
@@ -126,9 +105,6 @@
                                                                                             },
                                                                                             {
                                                                                                 "Id": 10
-                                                                                            },
-                                                                                            {
-                                                                                                "Id": 106
                                                                                             }
                                                                                         ]
                                                                                     }

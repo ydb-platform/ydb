@@ -11,6 +11,21 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScript;
 class IDataSource;
 
+struct TPortionStateAtScanStart {
+    bool Committed;
+    /*
+    Conflicting portions are written portions (not compacted) which are:
+    - uncommitted portions of concurrent transactions (concurrent to the given scan)
+    - committed portions that have the commit snapshot greater than the request snapshot
+    */
+    bool Conflicting;
+    TSnapshot MaxRecordSnapshot;
+
+    bool IsMyUncommitted() const {
+        return !Committed && !Conflicting;
+    }
+};
+
 class TSpecialReadContext {
 private:
     YDB_READONLY_DEF(std::shared_ptr<TReadContext>, CommonContext);
@@ -53,6 +68,8 @@ public:
     const TReadMetadata::TConstPtr& GetReadMetadata() const {
         return ReadMetadata;
     }
+
+    TPortionStateAtScanStart GetPortionStateAtScanStart(const TPortionInfo& portionInfo) const;
 
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {

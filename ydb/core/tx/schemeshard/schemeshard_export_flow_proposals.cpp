@@ -1,6 +1,7 @@
 #include "schemeshard_export_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"
+#include "schemeshard_xxport__helpers.h"
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
@@ -18,12 +19,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MkDirPropose(
     TTxId txId,
     const TExportInfo& exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
     auto& record = propose->Record;
-
-    if (exportInfo.UserSID) {
-        record.SetOwner(*exportInfo.UserSID);
-    }
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpMkDir);
@@ -43,12 +40,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CopyTablesPropose(
     TTxId txId,
     const TExportInfo& exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
     auto& record = propose->Record;
-
-    if (exportInfo.UserSID) {
-        record.SetOwner(*exportInfo.UserSID);
-    }
 
     auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables);
@@ -163,9 +156,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
 
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpBackup);
     modifyScheme.SetInternal(true);
 
@@ -273,9 +267,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     const TExportInfo& exportInfo,
     ui32 itemIdx
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
     modifyScheme.SetInternal(true);
 
@@ -293,9 +288,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropPropose(
     TTxId txId,
     const TExportInfo& exportInfo
 ) {
-    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(txId), ss->TabletID());
+    auto propose = MakeModifySchemeTransaction(ss, txId, exportInfo);
+    auto& record = propose->Record;
 
-    auto& modifyScheme = *propose->Record.AddTransaction();
+    auto& modifyScheme = *record.AddTransaction();
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpRmDir);
     modifyScheme.SetInternal(true);
 

@@ -19,7 +19,8 @@ void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NK
         {EPathTypeTable, &TestSimpleCreateTable},
         {EPathTypeView, &TestCreateView},
         {EPathTypeCdcStream, &TestCreateCdcStream},
-        {EPathTypePersQueueGroup, &TestCreatePQGroup}
+        {EPathTypePersQueueGroup, &TestCreatePQGroup},
+        {EPathTypeTableIndex, &TestCreateIndexedTable},
     };
 
     auto it = functions.find(pathType);

@@ -14,6 +14,7 @@ class TExtensionWhoamiWorker : public NActors::TActorBootstrapped<TExtensionWhoa
 
     const TOpenIdConnectSettings Settings;
     TIntrusivePtr<TExtensionContext> Context;
+    NYdbGrpc::IQueueClientContextPtr RequestContext;
 
     std::optional<TEvPrivate::TEvGetProfileResponse::TPtr> IamResponse;
     std::optional<TEvPrivate::TEvErrorResponse::TPtr> IamError;
@@ -29,6 +30,7 @@ public:
     void Handle(TEvPrivate::TEvExtensionRequest::TPtr event);
     void Handle(TEvPrivate::TEvGetProfileResponse::TPtr event);
     void Handle(TEvPrivate::TEvErrorResponse::TPtr event);
+    void PassAway() override;
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
@@ -48,7 +50,7 @@ private:
 
 class TExtensionWhoami : public IExtension {
 private:
-    TActorId WhoamiHandlerId;
+    NActors::TActorId WhoamiHandlerId;
 
 public:
     TExtensionWhoami(const TOpenIdConnectSettings& settings, const TString& authHeader, const TDuration timeout);

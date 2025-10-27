@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
@@ -260,6 +260,10 @@ TAsyncImportFromS3Response TImportClient::ImportFromS3(const TImportFromS3Settin
 
     if (settings.NoACL_) {
         settingsProto.set_no_acl(settings.NoACL_.value());
+    }
+
+    if (settings.SkipChecksumValidation_) {
+        settingsProto.set_skip_checksum_validation(settings.SkipChecksumValidation_.value());
     }
 
     if (settings.SourcePrefix_) {

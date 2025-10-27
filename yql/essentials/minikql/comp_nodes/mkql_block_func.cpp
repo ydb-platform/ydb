@@ -59,5 +59,5 @@ IComputationNode* WrapBlockFunc(TCallable& callable, const TComputationNodeFacto
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

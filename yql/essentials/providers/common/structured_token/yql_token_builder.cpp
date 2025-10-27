@@ -2,7 +2,6 @@
 
 namespace NYql {
 TStructuredTokenBuilder::TStructuredTokenBuilder() {
-
 }
 
 TStructuredTokenBuilder::TStructuredTokenBuilder(const TStructuredToken& data)
@@ -92,7 +91,7 @@ bool TStructuredTokenParser::HasServiceAccountIdAuth() const {
     return Data_.HasField("sa_id");
 }
 
-bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const  {
+bool TStructuredTokenParser::GetServiceAccountIdAuth(TString& accountId, TString& accountIdSignature) const {
     TString accountIdSignatureReference;
     return GetServiceAccountIdAuth(accountId, accountIdSignature, accountIdSignatureReference);
 }
@@ -181,6 +180,19 @@ TString ComposeStructuredTokenJsonForServiceAccountWithSecret(const TString& ser
     return result.ToJson();
 }
 
+TString ComposeStructuredTokenJsonForBasicAuth(const TString& login, const TString& password) {
+    TStructuredTokenBuilder result;
+
+    // password is optional
+    if (login) {
+        result.SetBasicAuth(login, password);
+        return result.ToJson();
+    }
+
+    result.SetNoAuth();
+    return result.ToJson();
+}
+
 TString ComposeStructuredTokenJsonForBasicAuthWithSecret(const TString& login, const TString& passwordSecretName, const TString& password) {
     TStructuredTokenBuilder result;
 
@@ -205,4 +217,4 @@ TString ComposeStructuredTokenJsonForTokenAuthWithSecret(const TString& tokenSec
     return result.ToJson();
 }
 
-}
+} // namespace NYql

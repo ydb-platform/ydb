@@ -14,16 +14,20 @@ private:
     static inline TAtomicCounter Counter = 0;
     const ui64 TaskId = Counter.Inc();
     const NActors::TActorId SourceId;
+    const NActors::TActorId RecipientId;
     const std::optional<ui32> GranuleShardingVersionId;
     const TUnifiedPathId PathId;
     const ui64 Cookie;
+    const NOlap::TSnapshot MvccSnapshot;
     const ui64 LockId;
+    const ui32 LockNodeId;
     const NEvWrite::EModificationType ModificationType;
     const EOperationBehaviour Behaviour;
     const TMonotonic Created = TMonotonic::Now();
     const std::optional<TDuration> Timeout;
     const ui64 TxId;
     const bool IsBulk;
+    const std::optional<ui64> OverloadSubscribeSeqNo;
 
 public:
     bool operator<(const TWriteTask& item) const {
@@ -34,21 +38,25 @@ public:
         return Timeout ? (Created + *Timeout <= now) : false;
     }
 
-    TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId,
-        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const ui64 lockId,
-        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk)
+    TWriteTask(const std::shared_ptr<TArrowData>& arrowData, const NOlap::ISnapshotSchema::TPtr& schema, const NActors::TActorId sourceId, const NActors::TActorId recipientId,
+        const std::optional<ui32>& granuleShardingVersionId, const TUnifiedPathId pathId, const ui64 cookie, const NOlap::TSnapshot& mvccSnapshot, const ui64 lockId, const ui64 lockNodeId,
+        const NEvWrite::EModificationType modificationType, const EOperationBehaviour behaviour, const std::optional<TDuration> timeout, const ui64 txId, const bool isBulk, const std::optional<ui64>& overloadSubscribeSeqNo)
         : ArrowData(arrowData)
         , Schema(schema)
         , SourceId(sourceId)
+        , RecipientId(recipientId)
         , GranuleShardingVersionId(granuleShardingVersionId)
         , PathId(pathId)
         , Cookie(cookie)
+        , MvccSnapshot(mvccSnapshot)
         , LockId(lockId)
+        , LockNodeId(lockNodeId)
         , ModificationType(modificationType)
         , Behaviour(behaviour)
         , Timeout(timeout)
         , TxId(txId)
         , IsBulk(isBulk)
+        , OverloadSubscribeSeqNo(overloadSubscribeSeqNo)
     {
     }
 
@@ -61,7 +69,7 @@ public:
     }
 
     bool Execute(TColumnShard* owner, const TActorContext& ctx) const;
-    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx) const;
+    void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx, const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
 };
 
 class TWriteTasksQueue {

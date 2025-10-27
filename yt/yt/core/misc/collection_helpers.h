@@ -34,12 +34,12 @@ std::vector<typename T::value_type> GetItems(
     size_t sizeLimit = std::numeric_limits<size_t>::max());
 
 template <size_t N, class T>
-std::vector<typename std::tuple_element<N, typename T::value_type>::type> GetIths(
+std::vector<std::tuple_element_t<N, typename T::value_type>> GetIths(
     const T& collection,
     size_t sizeLimit = std::numeric_limits<size_t>::max());
 
 template <class T>
-bool ShrinkHashTable(T&& collection);
+bool ShrinkHashTable(T& collection);
 
 template <class TSource, class TTarget>
 void MergeFrom(TTarget* target, const TSource& source);
@@ -48,7 +48,7 @@ template <class TMap, class TKeySet>
 [[nodiscard]] TKeySet DropAndReturnMissingKeys(TMap&& map, const TKeySet& set);
 
 template <class TMap, class TKeySet>
-void DropMissingKeys(TMap&& map, TKeySet&& set);
+void DropMissingKeys(TMap&& map, const TKeySet& set);
 
 /*!
  * This function is supposed to replace a frequent pattern
@@ -69,9 +69,6 @@ auto GetIteratorOrCrash(TMap&& map, const TKey& key);
  * with
  *    use GetOrCrash(map, key);
  */
-template <class TMap, class TKey>
-const auto& GetOrCrash(const TMap& map, const TKey& key);
-
 template <class TMap, class TKey>
 auto& GetOrCrash(TMap&& map, const TKey& key);
 
@@ -103,6 +100,15 @@ template <class TContainer, class... TArgs>
 auto EmplaceOrCrash(TContainer&& container, TArgs&&... args);
 
 /*!
+ * This function is supposed to replace a frequent pattern
+ *    YT_VERIFY(map.try_emplace(key, value).second);
+ * with
+ *    TryEmplaceOrCrash(map, key, value);
+ */
+template <class TContainer, class... TArgs>
+auto TryEmplaceOrCrash(TContainer&& container, TArgs&&... args);
+
+/*!
  * This function emplaces default value at the given key.
  */
 template <class TMap, class TKey>
@@ -113,10 +119,10 @@ auto EmplaceDefault(TMap&& map, TKey&& key);
  * for those cases when exception should not be thrown.
  */
 template <class T, class... TVariantArgs>
-T& GetOrCrash(std::variant<TVariantArgs...>& variant);
+T& GetOrCrash(std::variant<TVariantArgs...>& variant Y_LIFETIME_BOUND);
 
 template <class T, class... TVariantArgs>
-const T& GetOrCrash(const std::variant<TVariantArgs...>& variant);
+const T& GetOrCrash(const std::variant<TVariantArgs...>& variant Y_LIFETIME_BOUND);
 
 /*!
  * Returns the copy of the value in #map if #key is present
@@ -127,6 +133,15 @@ typename TMap::mapped_type GetOrDefault(
     const TMap& map,
     const TKey& key,
     const typename TMap::mapped_type& defaultValue = {})
+    requires (!TIsDefaultMap<TMap>::Value);
+
+//! Same as #GetOrDefault, but returns a const reference instead of a copied value.
+// TODO(eshcherbin): Should we remove #GetOrDefault in favour of #GetOrDefaultReference?
+template <class TMap, class TKey>
+const typename TMap::mapped_type& GetOrDefaultReference(
+    const TMap& map,
+    const TKey& key,
+    const typename TMap::mapped_type& defaultValue Y_LIFETIME_BOUND = {})
     requires (!TIsDefaultMap<TMap>::Value);
 
 template <class TMap, class TKey, class TCtor>
@@ -155,21 +170,19 @@ template <class T>
 void EnsureVectorIndex(std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
 
 //! If vector size is not enough for vector[index] to exist, resize vector to index + 1.
-//! After that perform assignment vector[index] = value. Const reference version.
-template <class T>
-void AssignVectorAt(std::vector<T>& vector, ssize_t index, const T& value, const T& defaultValue = T());
-
-//! If vector size is not enough for vector[index] to exist, resize vector to index + 1.
-//! After that perform assignment vector[index] = std::move(value). Rvalue reference version.
-template <class T>
-void AssignVectorAt(std::vector<T>& vector, ssize_t index, T&& value, const T& defaultValue = T());
+//! After that perform assignment vector[index] = std::forward<TValue>(value).
+template <class T, class TValue>
+void AssignVectorAt(std::vector<T>& vector, ssize_t index, TValue&& value, const T& defaultValue = T());
 
 //! If vector size is not enough for vector[index] to exist, return defaultValue, otherwise return vector[index].
 template <class T>
-const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue = T());
+const T& VectorAtOr(const std::vector<T>& vector, ssize_t index, const T& defaultValue Y_LIFETIME_BOUND = T());
 
 template <class T>
 i64 GetVectorMemoryUsage(const std::vector<T>& vector);
+
+template <class TRange, class T>
+bool Contains(TRange&& range, const T& value);
 
 ////////////////////////////////////////////////////////////////////////////////
 

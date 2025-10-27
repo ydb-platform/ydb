@@ -1,16 +1,15 @@
 Metadata-Version: 2.4
 Name: pip
-Version: 25.1.1
+Version: 25.2
 Summary: The PyPA recommended tool for installing Python packages.
 Author-email: The pip developers <distutils-sig@python.org>
-License: MIT
+License-Expression: MIT
 Project-URL: Homepage, https://pip.pypa.io/
 Project-URL: Documentation, https://pip.pypa.io
 Project-URL: Source, https://github.com/pypa/pip
 Project-URL: Changelog, https://pip.pypa.io/en/stable/news/
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
-Classifier: License :: OSI Approved :: MIT License
 Classifier: Topic :: Software Development :: Build Tools
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
@@ -20,12 +19,35 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Programming Language :: Python :: Implementation :: CPython
 Classifier: Programming Language :: Python :: Implementation :: PyPy
 Requires-Python: >=3.9
 Description-Content-Type: text/x-rst
-License-File: LICENSE.txt
 License-File: AUTHORS.txt
+License-File: LICENSE.txt
+License-File: src/pip/_vendor/msgpack/COPYING
+License-File: src/pip/_vendor/cachecontrol/LICENSE.txt
+License-File: src/pip/_vendor/certifi/LICENSE
+License-File: src/pip/_vendor/dependency_groups/LICENSE.txt
+License-File: src/pip/_vendor/distlib/LICENSE.txt
+License-File: src/pip/_vendor/distro/LICENSE
+License-File: src/pip/_vendor/idna/LICENSE.md
+License-File: src/pip/_vendor/packaging/LICENSE
+License-File: src/pip/_vendor/packaging/LICENSE.APACHE
+License-File: src/pip/_vendor/packaging/LICENSE.BSD
+License-File: src/pip/_vendor/pkg_resources/LICENSE
+License-File: src/pip/_vendor/platformdirs/LICENSE
+License-File: src/pip/_vendor/pygments/LICENSE
+License-File: src/pip/_vendor/pyproject_hooks/LICENSE
+License-File: src/pip/_vendor/requests/LICENSE
+License-File: src/pip/_vendor/resolvelib/LICENSE
+License-File: src/pip/_vendor/rich/LICENSE
+License-File: src/pip/_vendor/tomli/LICENSE
+License-File: src/pip/_vendor/tomli/LICENSE-HEADER
+License-File: src/pip/_vendor/tomli_w/LICENSE
+License-File: src/pip/_vendor/truststore/LICENSE
+License-File: src/pip/_vendor/urllib3/LICENSE.txt
 Dynamic: license-file
 
 pip - The Python Package Installer

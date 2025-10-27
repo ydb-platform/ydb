@@ -333,7 +333,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
         { // 2. UPSERT VALUES
             for (ui32 key = 0; key < 100; key++) {
-                TString embedding = "00\x03";
+                TString embedding = "00\x02";
                 embedding[0] = 'a' + key % 26;
                 embedding[1] = 'A' + (key * 17) % 26;
 
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors", 100} // full scan
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW PRIMARY KEY
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors", 100}
@@ -443,7 +443,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
@@ -454,7 +454,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 6},
@@ -466,7 +466,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx/indexImplLevelTable", 10},
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6}, // about levels * clusters = 3 * 2 = 6
@@ -490,7 +490,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             // SELECT Key, Value --- same stats
             checkSelect(Q_(R"(
                 SELECT Key, Value FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 6},
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 pragma ydb.KMeansTreeSearchTopSize = "2";
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_covered
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_covered/indexImplLevelTable", 10},
@@ -514,7 +514,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             checkSelect(Q_(R"(
                 SELECT Key FROM `/Root/Vectors` VIEW vector_idx_prefixed
                     WHERE Prefix = 7
-                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x03")
+                    ORDER BY Knn::CosineDistance(Embedding, "pQ\x02")
                     LIMIT 10;
             )"), {
                 {"/Root/Vectors/vector_idx_prefixed/indexImplPrefixTable", 1},
@@ -1119,6 +1119,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1137,6 +1144,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1157,7 +1171,6 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases_size(), 1);
                 size_t phase = stats.query_phases_size() - 1;
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 0);
-                // TODO: reads???
             } else {
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
@@ -1181,6 +1194,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1202,6 +1222,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
                 if (stats.query_phases(phase).table_access_size() > 0) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access_size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).reads().rows(), 0);
                 }
             }
         }
@@ -1224,9 +1245,15 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).updates().bytes(), 20);
             if (!isSink) {
-                // TODO: reads???
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().rows(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).reads().bytes(), 8);
+            } else {
+                for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                    for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                    }
+                }
             }
         }
 
@@ -1247,6 +1274,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().bytes(), 0);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
 
         {
@@ -1266,6 +1300,13 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             size_t phase = stats.query_phases_size() - 1;
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().rows(), 1);
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(0).deletes().bytes(), 0);
+
+            for (int phase = 0; phase < stats.query_phases_size(); ++phase) {
+                for (int access = 0; access < stats.query_phases(phase).table_access_size(); ++access) {
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().rows(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(phase).table_access(access).reads().bytes(), 0);
+                }
+            }
         }
     }
 

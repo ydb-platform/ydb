@@ -28,6 +28,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
+        CreatingReadSessionInProgress = true;
         LOG_D("Handshake"
             << ": worker# " << Worker);
 
@@ -37,8 +38,13 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
         ReadSession = ev->Get()->Result;
+        CreatingReadSessionInProgress = false;
         LOG_D("Create read session"
             << ": session# " << ReadSession);
+
+        if (StoppingInProgress) {
+            return PassAway();
+        }
 
         Y_ABORT_UNLESS(Worker);
         Send(Worker, new TEvWorker::TEvHandshake());
@@ -120,6 +126,7 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
         switch (ev->Get()->Result.GetStatus()) {
         case NYdb::EStatus::SCHEME_ERROR:
+        case NYdb::EStatus::BAD_REQUEST:
             return Leave(TEvWorker::TEvGone::SCHEME_ERROR, ev->Get()->Result.GetIssues().ToOneLineString());
         default:
             return Leave(TEvWorker::TEvGone::UNAVAILABLE, ev->Get()->Result.GetIssues().ToOneLineString());
@@ -135,6 +142,11 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void PassAway() override {
+        if (CreatingReadSessionInProgress) {
+            StoppingInProgress = true;
+            return;
+        }
+
         if (const auto& actorId = std::exchange(ReadSession, {})) {
             Send(actorId, new TEvents::TEvPoison());
         }
@@ -181,6 +193,9 @@ private:
     TActorId ReadSession;
     TString ReadSessionId;
     ui64 CommittedOffset = 0;
+
+    bool CreatingReadSessionInProgress = false;
+    bool StoppingInProgress = false;
 
 }; // TRemoteTopicReader
 

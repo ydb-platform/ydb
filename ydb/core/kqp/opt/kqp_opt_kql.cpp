@@ -572,54 +572,15 @@ TExprBase BuildDeleteTable(const TKiDeleteTable& del, const TKikimrTableDescript
 TExprBase BuildDeleteTableWithIndex(const TKiDeleteTable& del, const TKikimrTableDescription& tableData,
     bool withSystemColumns, TExprContext& ctx)
 {
+    TKqpDeleteRowsIndexSettings settings;
+    settings.SkipLookup = true;
     auto rowsToDelete = BuildRowsToDelete(tableData, withSystemColumns, del.Filter(), del.IsBatch(), del.Pos(), ctx);
-
-    auto indexes = BuildSecondaryIndexVector(tableData, del.Pos(), ctx, nullptr,
-        [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
-            return BuildTableMeta(meta, pos, ctx);
-        });
-    YQL_ENSURE(indexes);
-
-    const auto& pk = tableData.Metadata->KeyColumnNames;
-
-    auto tableDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
+    return Build<TKqlDeleteRowsIndex>(ctx, del.Pos())
         .Table(BuildTableMeta(tableData, del.Pos(), ctx))
-        .Input(ProjectColumns(rowsToDelete, pk, ctx))
-        .ReturningColumns<TCoAtomList>().Build()
-        .IsBatch(del.IsBatch())
-        .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
+        .Input(rowsToDelete)
+        .ReturningColumns(del.ReturningColumns())
+        .Settings(settings.BuildNode(ctx, del.Pos()))
         .Done();
-
-    TVector<TExprBase> effects;
-    effects.push_back(tableDelete);
-
-    for (const auto& [indexMeta, indexDesc] : indexes) {
-        THashSet<TStringBuf> indexTableColumns;
-
-        THashSet<TString> keyColumns;
-        for (const auto& column : indexDesc->KeyColumns) {
-            YQL_ENSURE(keyColumns.emplace(column).second);
-            indexTableColumns.emplace(column);
-        }
-
-        for (const auto& column : pk) {
-            if (keyColumns.insert(column).second) {
-                indexTableColumns.emplace(column);
-            }
-        }
-
-        auto indexDelete = Build<TKqlDeleteRows>(ctx, del.Pos())
-            .Table(indexMeta)
-            .Input(ProjectColumns(rowsToDelete, indexTableColumns, ctx))
-            .ReturningColumns<TCoAtomList>().Build()
-            .IsBatch(del.IsBatch())
-            .Settings(IsConditionalDeleteSetting(ctx, del.Pos()))
-            .Done();
-
-        effects.push_back(indexDelete);
-    }
-
-    return Build<TExprList>(ctx, del.Pos()).Add(effects).Done();
 }
 
 TExprBase BuildRowsToUpdate(const TKikimrTableDescription& tableData, bool withSystemColumns, const TCoLambda& filter,
@@ -739,15 +700,16 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
             return BuildTableMeta(meta, pos, ctx);
         });
 
-    auto is_uniq = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
-        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique;
+    auto idxNeedsKqpEffect = [](std::pair<TExprNode::TPtr, const TIndexDescription*>& x) {
+        return x.second->Type == TIndexDescription::EType::GlobalSyncUnique ||
+            x.second->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree;
     };
 
-    const bool hasUniqIndex = std::find_if(indexes.begin(), indexes.end(), is_uniq) != indexes.end();
+    const bool needsKqpEffect = std::find_if(indexes.begin(), indexes.end(), idxNeedsKqpEffect) != indexes.end();
 
-    // For uniq index rewrite UPDATE in to UPDATE ON
-    if (hasUniqIndex) {
-        auto effect = Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
+    // For unique or vector index rewrite UPDATE to UPDATE ON
+    if (needsKqpEffect) {
+        return Build<TKqlUpdateRowsIndex>(ctx, update.Pos())
             .Table(BuildTableMeta(tableData, update.Pos(), ctx))
             .Input<TKqpWriteConstraint>()
                 .Input(updatedRows)
@@ -759,9 +721,6 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
                 .Build()
             .Settings(IsConditionalUpdateSetting(ctx, update.Pos()))
             .Done();
-
-        effects.emplace_back(effect);
-        return Build<TExprList>(ctx, update.Pos()).Add(effects).Done();
     }
 
     const auto& pk = tableData.Metadata->KeyColumnNames;

@@ -31,10 +31,10 @@ using namespace NApi;
 
 void TGetCurrentUserCommand::DoExecute(ICommandContextPtr context)
 {
-    auto userInfo = WaitFor(context->GetClient()->GetCurrentUser())
+    auto result = WaitFor(context->GetClient()->GetCurrentUser())
         .ValueOrThrow();
 
-    context->ProduceOutputValue(ConvertToYsonString(userInfo));
+    context->ProduceOutputValue(ConvertToYsonString(result));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -87,6 +87,7 @@ void TGetVersionCommand::DoExecute(ICommandContextPtr context)
 
 // These features are guaranteed to be deployed before or with this code.
 constexpr auto StaticFeatures = std::to_array<std::pair<TStringBuf, bool>>({
+    {"structured_web_json", true},
     {"user_tokens_metadata", true},
 });
 
@@ -164,6 +165,26 @@ void TCheckPermissionCommand::DoExecute(ICommandContextPtr context)
                         fluent
                             .Item().BeginMap()
                                 .Do([&] (auto fluent) { produceResult(fluent, result); })
+                            .EndMap();
+                    });
+            })
+            .DoIf(response.RowLevelAcl.has_value(), [&] (auto fluent) {
+                fluent
+                    .Item("row_level_acl")
+                    .DoListFor(*response.RowLevelAcl, [&] (auto fluent, const auto& rowLevelAce) {
+                        fluent
+                            .Item().BeginMap()
+                                .Item(TSerializableAccessControlEntry::RowAccessPredicateKey).Value(rowLevelAce.RowAccessPredicate)
+                                // NB(coteeq): The DoIf will try to hide the whole inapplicable_row_access_predicate_mode
+                                // mechanism from too curious users.
+                                // EInapplicableRowAccessPredicateMode::Ignore is not a good choice in the common case
+                                // from security perspective, but it may be necessary to be able to have
+                                // tables with completely different schemas in one directory.
+                                .DoIf(rowLevelAce.InapplicableRowAccessPredicateMode != EInapplicableRowAccessPredicateMode::Fail, [&] (auto fluent) {
+                                    fluent
+                                        .Item(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey)
+                                        .Value(rowLevelAce.InapplicableRowAccessPredicateMode);
+                                })
                             .EndMap();
                     });
             })

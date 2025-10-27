@@ -40,7 +40,7 @@ TInternalPathId GetInitialMaxInternalPathId(const ui64 tabletId) {
 
 std::optional<NColumnShard::TSchemeShardLocalPathId> TTablesManager::ResolveSchemeShardLocalPathIdOptional(
     const TInternalPathId internalPathId) const {
-    if (!HasTable(internalPathId)) {
+    if (!HasTable(internalPathId, true)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("method", "resolve_ss_path_id")("internal", internalPathId)("result", "not_found");
         return std::nullopt;
     }

@@ -43,6 +43,18 @@ class TpchSuiteBase(LoadSuiteBase):
             return
         self.run_workload_test(self._get_path(), query_num)
 
+    @staticmethod
+    def get_tables() -> list[str]:
+        return [
+            'customer',
+            'nation',
+            'orders',
+            'part',
+            'partsupp',
+            'region',
+            'supplier',
+        ]
+
 
 class TestTpch1(TpchSuiteBase):
     tables_size: dict[str, int] = {

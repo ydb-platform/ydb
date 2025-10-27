@@ -21,6 +21,11 @@ RUN_PROGRAM(
 )
 
 RUN_PROGRAM(
+    yql/essentials/tools/yql_highlight --language="yql" --generate="monarch" --mode="ansi"
+    STDOUT YQL.ansi.monarch.json
+)
+
+RUN_PROGRAM(
     yql/essentials/tools/yql_highlight --language="yqls" --generate="monarch"
     STDOUT YQLs.monarch.json
 )

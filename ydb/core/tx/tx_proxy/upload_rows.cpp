@@ -11,16 +11,17 @@ public:
     TUploadRowsInternal(
         TActorId sender,
         const TString& table,
-        std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-        std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+        std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+        std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>>&& rows,
         EUploadRowsMode mode,
         bool writeToPrivateTable,
         bool writeToIndexImplTable,
-        ui64 cookie)
-        : Sender(sender)
+        ui64 cookie,
+        TBackoff backoff)
+        : TUploadRowsBase(std::move(rows))
+        , Sender(sender)
         , Table(table)
         , ColumnTypes(types)
-        , Rows(rows)
         , Cookie(cookie)
     {
         AllowWriteToPrivateTable = writeToPrivateTable;
@@ -37,6 +38,8 @@ public:
                 UpsertIfExists = true;
                 break;
         }
+
+        Backoff = backoff;
     }
 
 private:
@@ -46,10 +49,6 @@ private:
 
     const TString& GetTable() override {
         return Table;
-    }
-
-    const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
-        return *Rows;
     }
 
     bool CheckAccess(TString&) override {
@@ -89,8 +88,7 @@ private:
 private:
     const TActorId Sender;
     const TString Table;
-    const std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
-    const std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> Rows;
+    const std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> ColumnTypes;
     const ui64 Cookie;
 
     NYql::TIssues Issues;
@@ -98,21 +96,23 @@ private:
 
 IActor* CreateUploadRowsInternal(const TActorId& sender,
     const TString& table,
-    std::shared_ptr<TVector<std::pair<TString, Ydb::Type>>> types,
-    std::shared_ptr<TVector<std::pair<TSerializedCellVec, TString>>> rows,
+    std::shared_ptr<const TVector<std::pair<TString, Ydb::Type>>> types,
+    std::shared_ptr<const TVector<std::pair<TSerializedCellVec, TString>>> rows,
     EUploadRowsMode mode,
     bool writeToPrivateTable,
     bool writeToIndexImplTable,
-    ui64 cookie)
+    ui64 cookie,
+    TBackoff backoff)
 {
     return new TUploadRowsInternal(sender,
         table,
         types,
-        rows,
+        std::move(rows),
         mode,
         writeToPrivateTable,
         writeToIndexImplTable,
-        cookie);
+        cookie,
+        backoff);
 }
 
 } // namespace NTxProxy

@@ -5,7 +5,7 @@
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
@@ -46,6 +46,14 @@ public:
         consumerProto.set_name(TStringType{settings.ConsumerName_});
         if (settings.SetImportant_)
             consumerProto.set_set_important(*settings.SetImportant_);
+        if (settings.SetAvailabilityPeriod_) {
+            if (settings.SetAvailabilityPeriod_ != TDuration::Zero()) {
+                consumerProto.mutable_set_availability_period()->set_seconds(settings.SetAvailabilityPeriod_->Seconds());
+                consumerProto.mutable_set_availability_period()->set_nanos((settings.SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
+            } else {
+                consumerProto.mutable_reset_availability_period();
+            }
+        }
         if (settings.SetReadFrom_)
             consumerProto.mutable_set_read_from()->set_seconds(settings.SetReadFrom_->Seconds());
 
@@ -140,6 +148,12 @@ public:
         for (const auto& consumer : settings.AlterConsumers_) {
             Ydb::Topic::AlterConsumer& consumerProto = *request.add_alter_consumers();
             ConvertAlterConsumerToProto(consumer, consumerProto);
+        }
+
+        if (auto level = std::get_if<EMetricsLevel>(&settings.MetricsLevel_)) {
+            request.set_set_metrics_level(*level);
+        } else if (auto reset = std::get_if<bool>(&settings.MetricsLevel_); *reset) {
+            request.mutable_reset_metrics_level();
         }
 
         return request;

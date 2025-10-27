@@ -491,7 +491,7 @@ public:
             const ui64 bulkWriteBlockSize = 65536;
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::OK, seekTimeUs, readSpeedBps, writeSpeedBps,
                 readBlockSize, writeBlockSize, bulkWriteBlockSize, Impl.ChunkSize, Impl.AppendBlockSize, ownerId,
-                owner->OwnerRound, owner->Weight, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, TString());
+                owner->OwnerRound, 0u, GetStatusFlags(), std::move(ownedChunks), NPDisk::DEVICE_TYPE_NVME, false, TString());
             res->StartingPoints = owner->StartingPoints;
         } else {
             res = std::make_unique<NPDisk::TEvYardInitResult>(NKikimrProto::INVALID_ROUND, "invalid owner round");
@@ -768,28 +768,41 @@ public:
 
             const auto chunkIt = owner->ChunkData.find(msg->ChunkIdx);
             if (chunkIt == owner->ChunkData.end()) {
-                res->Data.AddGap(0, size); // no data at all
+                res->Data.AddGap(offset, offset + size); // no data at all
+                memset(data.GetDataMut(), '~', size);
             } else {
                 TImpl::TChunkData& chunk = chunkIt->second;
                 const ui64 chunkOffset = (ui64)msg->ChunkIdx * Impl.ChunkSize;
-                if (Impl.Corrupted & TIntervalSet<ui64>(chunkOffset + offset, chunkOffset + offset + size)) {
+                const bool hasCorruptedParts = static_cast<bool>(Impl.Corrupted & TIntervalSet<ui64>(chunkOffset + offset,
+                    chunkOffset + offset + size));
+                if (hasCorruptedParts && RandomNumber(2u)) {
                     res->Status = NKikimrProto::CORRUPTED;
                 } else {
-                    char *begin = data.GetDataMut(), *ptr = begin;
+                    size_t offsetInBuffer = 0;
+                    ui32 blockIdx = offset / Impl.AppendBlockSize;
+                    ui32 offsetInBlock = offset % Impl.AppendBlockSize;
                     while (size) {
-                        const ui32 blockIdx = offset / Impl.AppendBlockSize;
-                        const ui32 offsetInBlock = offset % Impl.AppendBlockSize;
                         const ui32 num = Min(size, Impl.AppendBlockSize - offsetInBlock);
+
                         const auto it = chunk.Blocks.find(blockIdx);
-                        if (it == chunk.Blocks.end()) {
-                            const ui32 base = ptr - begin;
-                            res->Data.AddGap(base, base + num);
+
+                        const bool corrupted = hasCorruptedParts && (Impl.Corrupted & TIntervalSet<ui64>(
+                            chunkOffset + blockIdx * Impl.AppendBlockSize,
+                            chunkOffset + (blockIdx + 1) * Impl.AppendBlockSize));
+
+                        if (it == chunk.Blocks.end() || corrupted) {
+                            res->Data.AddGap(offset, offset + num);
+                            memset(data.GetDataMut() + offsetInBuffer, '~', num);
                         } else {
-                            memcpy(ptr, it->second->data() + offsetInBlock, num);
+                            memcpy(data.GetDataMut() + offsetInBuffer, it->second->data() + offsetInBlock, num);
                         }
-                        ptr += num;
+
                         offset += num;
+                        offsetInBuffer += num;
                         size -= num;
+
+                        ++blockIdx;
+                        offsetInBlock = 0;
                     }
                 }
             }
@@ -1052,17 +1065,23 @@ public:
         Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::ERROR, std::nullopt), 0, ev->Cookie);
     }
 
+    std::optional<ui64> GetPDiskGuid() const {
+        return Impl.PDiskGuid
+            ? std::make_optional(Impl.PDiskGuid)
+            : std::nullopt;
+    }
+
     void Handle(NPDisk::TEvReadMetadata::TPtr& ev) {
         if (Impl.Metadata) {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(TRcBuf(*Impl.Metadata), GetPDiskGuid()), 0, ev->Cookie);
         } else {
-            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, Impl.PDiskGuid), 0, ev->Cookie);
+            Send(ev->Sender, new NPDisk::TEvReadMetadataResult(NPDisk::EPDiskMetadataOutcome::NO_METADATA, GetPDiskGuid()), 0, ev->Cookie);
         }
     }
 
     void Handle(NPDisk::TEvWriteMetadata::TPtr& ev) {
         Impl.Metadata.emplace(std::move(ev->Get()->Metadata));
-        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, Impl.PDiskGuid), 0, ev->Cookie);
+        Send(ev->Sender, new NPDisk::TEvWriteMetadataResult(NPDisk::EPDiskMetadataOutcome::OK, GetPDiskGuid()), 0, ev->Cookie);
     }
 
     void Handle(TEvMoveDrive::TPtr& ev) {
@@ -1109,6 +1128,8 @@ public:
         cFunc(EvBecomeError, HandleMoveToErrorState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 
     STRICT_STFUNC(StateError,
@@ -1134,6 +1155,8 @@ public:
         cFunc(EvBecomeNormal, HandleMoveToNormalState);
 
         cFunc(TEvBlobStorage::EvMarkDirty, Ignore);
+
+        cFunc(TEvents::TSystem::Poison, PassAway);
     )
 };
 

@@ -24,7 +24,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/sequenceshard/sequenceshard.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
-#include <ydb/core/persqueue/pq_l2_service.h>
+#include <ydb/core/persqueue/pqtablet/cache/pq_l2_service.h>
 #include <ydb/core/util/console.h>
 
 #include <google/protobuf/text_format.h>
@@ -668,16 +668,12 @@ namespace NKikimr {
         return storagePoolKinds;
     }
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_SplitMergePartCountLimit", val, prev);
-        return prev;
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val) {
+        TControlBoard::SetValue(val, runtime->GetAppData().Icb->SchemeShardControls.SplitMergePartCountLimit);
     }
 
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
-        TAtomic prev;
-        runtime->GetAppData().Icb->SetValue("SchemeShard_AllowServerlessStorageBilling", isAllow, prev);
-        return prev;
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow) {
+        TControlBoard::SetValue(isAllow, runtime->GetAppData().Icb->SchemeShardControls.AllowServerlessStorageBilling);
     }
 
     void SetupChannelProfiles(TAppPrepare &app, ui32 nchannels) {
@@ -1096,6 +1092,121 @@ namespace NKikimr {
         runtime.GrabEdgeEvent<TEvents::TEvWakeup>(handle);
     }
 
+    /**
+     * A special actor, which starts a tablet follower and restarts it, if needed.
+     */
+    class TFollowerLauncher : public TActorBootstrapped<TFollowerLauncher> {
+    private:
+        ui64 TabletId;
+        ui32 FollowerId;
+        TActorId FollowerActorId;
+
+    public:
+        TFollowerLauncher(ui64 tabletId, ui32 follewerId)
+            : TabletId(tabletId)
+            , FollowerId(follewerId)
+        {
+        }
+
+        void Bootstrap(const TActorContext& ctx) {
+            CreateFollower();
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Created follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            Become(&TThis::StateWork);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvTablet::TEvTabletDead, Handle);
+                HFunc(TEvents::TEvPoison, Handle);
+            }
+        }
+
+        void Handle(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) {
+            if (ev->Sender != FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Received EvTabletDead for tabletId " << ev->Get()->TabletID
+                        << ", but from an unknown actor ID, ignored: " << FollowerActorId
+                );
+
+                return;
+            }
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Received EvTabletDead from follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+
+            // The follower has died, start a new one
+            FollowerActorId = {};
+            CreateFollower();
+
+            LOG_INFO_S(
+                ctx,
+                NKikimrServices::HIVE,
+                "[Follower launcher " << SelfId()
+                    << "] Restarted follower ID " << FollowerId
+                    << " for tabletId " << TabletId
+                    << ": " << FollowerActorId
+            );
+        }
+
+        void Handle(TEvents::TEvPoison::TPtr& /* ev */, const TActorContext& ctx) {
+            if (FollowerActorId) {
+                LOG_INFO_S(
+                    ctx,
+                    NKikimrServices::HIVE,
+                    "[Follower launcher " << SelfId()
+                        << "] Destroying follower ID " << FollowerId
+                        << " for tabletId " << TabletId
+                        << ": " << FollowerActorId
+                );
+
+                ctx.Send(FollowerActorId, new TEvents::TEvPoisonPill());
+                FollowerActorId = {};
+            };
+
+            Die(ctx);
+        }
+
+    private:
+        void CreateFollower() {
+            FollowerActorId = Register(
+                CreateTabletFollower(
+                    SelfId(),
+                    CreateTestTabletInfo(
+                        TabletId,
+                        TTabletTypes::DataShard,
+                        DataGroupErasure
+                    ),
+                    new TTabletSetupInfo(
+                        &CreateDataShard,
+                        TMailboxType::Simple,
+                        0,
+                        TMailboxType::Simple,
+                        0
+                    ),
+                    FollowerId
+                )
+            );
+        }
+    };
+
     class TFakeHive : public TActor<TFakeHive>, public NTabletFlatExecutor::TTabletExecutedFlat {
     public:
         static std::function<IActor* (const TActorId &, TTabletStorageInfo*)> DefaultGetTabletCreationFunc(ui32 type) {
@@ -1244,6 +1355,34 @@ namespace NKikimr {
                     State->TabletIdToOwner[tabletId] = key;
 
                     LOG_INFO_S(ctx, NKikimrServices::HIVE, logPrefix << "boot OK, tablet id " << tabletId);
+
+                    // After a successful creation of a data shard, need to create
+                    // the given number of followers (if requested)
+                    //
+                    // NOTE: Only the simplest PartitionConfig -> FollowerCount option
+                    //       is supported here. More complex options (for example,
+                    //       FollowerCountPerDataCenter and FollowerGroups options)
+                    //       are completely ignored.
+                    if (type == TTabletTypes::DataShard) {
+                        const ui32 followerCount = ev->Get()->Record.GetFollowerCount();
+
+                        if (followerCount) {
+                            LOG_INFO_S(
+                                ctx,
+                                NKikimrServices::HIVE,
+                                logPrefix << "DataShard created successfully (tabletId: " << tabletId
+                                    << "), creating " << followerCount << " followers"
+                            );
+
+                            for (ui32 i = 0; i < followerCount; ++i) {
+                                const ui32 followerId = i + 1;
+
+                                it->second.FollowerLaunchers[followerId] = ctx.Register(
+                                    new TFollowerLauncher(tabletId, followerId)
+                                );
+                            }
+                        }
+                    }
                 } else {
                     LOG_ERROR_S(ctx, NKikimrServices::HIVE, logPrefix << "boot failed, status " << status);
                 }
@@ -1344,6 +1483,17 @@ namespace NKikimr {
 
             TFakeHiveTabletInfo& tabletInfo = it->second;
             ctx.Send(ctx.SelfID, new TEvFakeHive::TEvNotifyTabletDeleted(tabletInfo.TabletId));
+
+            // Destroy all follower actors, if any
+            for (const auto& [followerId, launcherActorId] : it->second.FollowerLaunchers) {
+                Cerr << "FAKEHIVE " << TabletID()
+                    << " Destroying launcher for the followerId " << followerId
+                    << " for tabletId " << it->second.TabletId
+                    << ": " << launcherActorId
+                    << Endl;
+
+                ctx.Send(launcherActorId, new TEvents::TEvPoison());
+            }
 
             // Kill the tablet and don't restart it
             TActorId bootstrapperActorId = tabletInfo.BootstrapperActorId;

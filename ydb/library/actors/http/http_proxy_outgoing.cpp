@@ -99,6 +99,7 @@ public:
                 Send(RequestOwner, dataChunk.release());
             } else {
                 ALOG_DEBUG(HttpLog, GetSocketName() << "-> (" << GetResponseDebugText() << ")");
+                ALOG_TRACE(HttpLog, GetSocketName() << "Response:\n" << Response->GetObfuscatedData());
                 Send(RequestOwner, new TEvHttpProxy::TEvHttpIncomingResponse(Request, Response));
                 RequestOwner = TActorId();
             }
@@ -156,18 +157,8 @@ protected:
         TSocketImpl::Create(Address->SockAddr()->sa_family);
         TSocketImpl::SetNonBlock();
         TSocketImpl::SetTimeout(ConnectionTimeout);
-        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting...");
-        int res = TSocketImpl::Connect(Address);
         RegisterPoller();
-        switch (-res) {
-        case 0:
-            return OnConnect();
-        case EINPROGRESS:
-        case EAGAIN:
-            return TBase::Become(&TOutgoingConnectionActor::StateConnecting);
-        default:
-            return ReplyErrorAndPassAway(strerror(-res));
-        }
+        TBase::Become(&TOutgoingConnectionActor::StateConnecting);
     }
 
     void InitiateRequest(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
@@ -330,6 +321,7 @@ protected:
         ALOG_DEBUG(HttpLog, GetSocketName() << "outgoing connection opened");
         TBase::Become(&TOutgoingConnectionActor::StateConnected);
         ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
+        ALOG_TRACE(HttpLog, GetSocketName() << "Request:\n" << Request->GetObfuscatedData());
         Send(SelfId(), new NActors::TEvPollerReady(nullptr, true, true));
     }
 
@@ -378,12 +370,19 @@ protected:
 
     void HandleConnecting(NActors::TEvPollerRegisterResult::TPtr& ev) {
         PollerToken = std::move(ev->Get()->PollerToken);
+        PollerToken->Request(true, true);
         LastActivity = NActors::TActivationContext::Now();
-        int res = TSocketImpl::GetError();
-        if (res == 0) {
-            OnConnect();
-        } else {
-            FailConnection(TStringBuilder() << strerror(res));
+        ALOG_DEBUG(HttpLog, GetSocketName() << "connecting...");
+        int res = TSocketImpl::Connect(Address);
+        switch (-res) {
+        case 0:
+            return OnConnect();
+        case EINPROGRESS:
+        case EAGAIN:
+            // waiting for poller
+            return;
+        default:
+            return ReplyErrorAndPassAway(strerror(-res));
         }
     }
 
@@ -397,6 +396,7 @@ protected:
         Schedule(ConnectionTimeout, new NActors::TEvents::TEvWakeup());
         LastActivity = NActors::TActivationContext::Now();
         ALOG_DEBUG(HttpLog, GetSocketName() << "<- (" << GetRequestDebugText() << ")");
+        ALOG_TRACE(HttpLog, GetSocketName() << "Request:\n" << Request->GetObfuscatedData());
         FlushOutput();
         PullInput();
     }
@@ -413,13 +413,6 @@ protected:
                 CheckClose();
             }
         }
-    }
-
-    void HandleConnected(NActors::TEvPollerRegisterResult::TPtr& ev) {
-        PollerToken = std::move(ev->Get()->PollerToken);
-        LastActivity = NActors::TActivationContext::Now();
-        PullInput();
-        FlushOutput();
     }
 
     void HandleFailed(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event) {
@@ -461,7 +454,6 @@ protected:
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvPollerReady, HandleConnected);
             cFunc(NActors::TEvents::TEvWakeup::EventType, HandleTimeout);
-            hFunc(NActors::TEvPollerRegisterResult, HandleConnected);
             hFunc(TEvHttpProxy::TEvHttpOutgoingRequest, HandleConnected);
             cFunc(NActors::TEvents::TEvPoison::EventType, PassAway);
         }

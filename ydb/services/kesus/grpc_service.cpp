@@ -150,9 +150,10 @@ private:
             PingPeriod = MinPingPeriod;
         }
 
+        const TString database = RequestEvent->GetDatabaseName().GetOrElse("");
         KesusPath = StartRequest->Record.session_start().path();
 
-        auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(KesusPath);
+        auto resolve = MakeHolder<TEvKesusProxy::TEvResolveKesusProxy>(database, KesusPath);
         if (!Send(MakeKesusProxyServiceId(), resolve.Release())) {
             RequestEvent->Finish(Ydb::StatusIds::UNSUPPORTED, grpc::Status(grpc::StatusCode::UNIMPLEMENTED,
                 "Coordination service not implemented on this server"));
@@ -653,7 +654,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
             }, \
             &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
-            "Coordination/" #NAME,             \
+            #NAME,  \
             logger, \
             getCounterBlock("coordination", #NAME))->Run(); \
     }
@@ -665,6 +666,10 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 #undef ADD_REQUEST
 
+#define GET_LIMITER_BY_PATH(ICB_PATH)\
+    getLimiter(#ICB_PATH, icb.ICB_PATH, DEFAULT_MAX_SESSIONS_INFLIGHT)
+
+    auto& icb = *ActorSystem_->AppData<TAppData>()->Icb;
     for (auto* cq : CQS) {
         TGRpcSessionActor::TGRpcRequest::Start(
             this,
@@ -676,10 +681,12 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
             },
             *ActorSystem_,
-            "Coordination/Session",
+            "Session",
             getCounterBlock("coordination", "Session", true),
-            getLimiter("CoordinationService", "Session", DEFAULT_MAX_SESSIONS_INFLIGHT));
+            GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight));
     }
+#undef GET_LIMITER_BY_PATH
+
 }
 
 } // namespace NKesus

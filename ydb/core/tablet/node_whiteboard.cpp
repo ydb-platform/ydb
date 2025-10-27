@@ -16,6 +16,7 @@
 #include <ydb/core/util/tuples.h>
 
 #include <util/string/split.h>
+#include <util/system/getpid.h>
 #include <contrib/libs/protobuf/src/google/protobuf/util/message_differencer.h>
 
 using namespace NActors;
@@ -65,6 +66,7 @@ public:
         }
 
         SystemStateInfo.SetStartTime(ctx.Now().MilliSeconds());
+        SystemStateInfo.SetPID(GetPID());
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvUpdateRuntimeStats());
 
         auto utils = NKikimr::GetServiceCounters(NKikimr::AppData()->Counters, "utils");
@@ -96,7 +98,6 @@ protected:
 
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
-    float MaxNetworkUtilization = 0.0;
     ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
@@ -615,8 +616,6 @@ protected:
                 MaxClockSkewPeerId = ev->Get()->Record.GetPeerNodeId();
             }
         }
-        // TODO: need better way to calculate network utilization
-        MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
         SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
@@ -1209,10 +1208,6 @@ protected:
             MaxClockSkewWithPeerUs = 0;
         }
 
-        {
-            SystemStateInfo.SetNetworkUtilization(MaxNetworkUtilization);
-            MaxNetworkUtilization = 0;
-        }
         {
             SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD_SECONDS);
             SumNetworkWriteThroughput = 0;

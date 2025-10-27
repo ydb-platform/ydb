@@ -30,9 +30,18 @@ NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase 
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSorted(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     NYql::TTypeAnnotationContext& typeCtx, bool ruleEnabled);
 
+NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStagesKeepSortedFSM(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
+    NYql::TTypeAnnotationContext& typeCtx, bool ruleEnabled);
+
 NYql::NNodes::TExprBase KqpBuildStreamIdxLookupJoinStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx);
 
 NYql::NNodes::TExprBase KqpRemoveRedundantSortOverReadTable(
+    NYql::NNodes::TExprBase node,
+    NYql::TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx
+);
+
+NYql::NNodes::TExprBase KqpRemoveRedundantSortOverReadTableFSM(
     NYql::NNodes::TExprBase node,
     NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx,
@@ -40,6 +49,10 @@ NYql::NNodes::TExprBase KqpRemoveRedundantSortOverReadTable(
 );
 
 NYql::NNodes::TExprBase KqpBuildTopStageRemoveSort(NYql::NNodes::TExprBase node,  NYql::TExprContext& ctx,
+    NYql::IOptimizationContext& optCtx, NYql::TTypeAnnotationContext& typeCtx, const NYql::TParentsMap& parentsMap,
+    bool allowStageMultiUsage, bool ruleEnabled);
+
+NYql::NNodes::TExprBase KqpBuildTopStageRemoveSortFSM(NYql::NNodes::TExprBase node,  NYql::TExprContext& ctx,
     NYql::IOptimizationContext& optCtx, NYql::TTypeAnnotationContext& typeCtx, const NYql::TParentsMap& parentsMap,
     bool allowStageMultiUsage, bool ruleEnabled);
 

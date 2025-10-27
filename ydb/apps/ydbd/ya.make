@@ -47,7 +47,6 @@ PEERDIR(
     yql/essentials/sql/pg
     ydb/library/yql/udfs/common/clickhouse/client
     yql/essentials/udfs/common/compress_base
-    ydb/library/yql/udfs/common/datetime
     yql/essentials/udfs/common/datetime2
     yql/essentials/udfs/common/digest
     yql/essentials/udfs/common/histogram

@@ -109,10 +109,20 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
 
     result << "WITH (" << Endl;
     switch (Params.GetStoreType()) {
-    case TWorkloadBaseParams::EStoreType::ExternalS3:
-        result << "    DATA_SOURCE = \""+ Params.GetFullTableName(nullptr) + "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
-            << "/" << (single ? TFsPath(Params.GetPath()).GetName() : (tableName + "/")) << "\"" << Endl;
+    case TWorkloadBaseParams::EStoreType::ExternalS3: {
+        TString s3Prefix;
+        if (single) {
+            const auto splitPath = StringSplitter(Params.GetPath()).Split('/').SkipEmpty().ToList<TString>();
+            if (!splitPath.empty()) {
+                s3Prefix = splitPath.back();
+            }
+        } else {
+            s3Prefix = tableName + "/";
+        }
+        result << "    DATA_SOURCE = \"" << Params.GetFullTableName(nullptr) << "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
+            << "/" << s3Prefix << "\"" << Endl;
         break;
+    }
     case TWorkloadBaseParams::EStoreType::Column:
         result << "    STORE = COLUMN," << Endl;
         result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << partitioning << Endl;

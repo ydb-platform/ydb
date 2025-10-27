@@ -20,7 +20,6 @@ struct TQueryReplayConfig {
     TVector<TString> UdfFiles;
     TString QueryFile;
     NActors::NLog::EPriority YqlLogLevel = NActors::NLog::EPriority::PRI_ERROR;
-    bool EnableAntlr4Parser = false;
     bool EnableOltpSinkSideBySinkCompare = false;
 
     void ParseConfig(int argc, const char** argv);
@@ -131,5 +130,5 @@ struct TQueryReplayEvents {
 THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJson::TJsonValue& data);
 
 NActors::IActor* CreateQueryCompiler(TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> moduleResolverState,
-    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway, bool enableAntlr4Parser,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway,
     bool enableOltpSink);

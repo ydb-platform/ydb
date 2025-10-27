@@ -86,7 +86,7 @@ public:
         : TBasicTxInfo(txKind, txId) {
     }
 
-    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep, 
+    TFullTxInfo(const NKikimrTxColumnShard::ETransactionKind& txKind, const ui64 txId, const TActorId& source, const ui64 minAllowedPlanStep,
         const ui64 cookie, const std::optional<TMessageSeqNo>& seqNo)
         : TBasicTxInfo(txKind, txId)
         , MinStep(minAllowedPlanStep)
@@ -347,6 +347,10 @@ public:
         }
 
         void SendReply(TColumnShard& owner, const TActorContext& ctx) {
+            // It means that we had already processed this event
+            if (Status == EStatus::ReplySent) {
+                return DoSendReply(owner, ctx);
+            }
             AFL_VERIFY(!!ProposeStartInfo);
             if (ProposeStartInfo->IsFail()) {
                 SwitchStateVerified(EStatus::Failed, EStatus::ReplySent);
@@ -369,17 +373,20 @@ public:
         }
         void StartProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
             AFL_VERIFY(!IsFail());
-            SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeStartedOnComplete);
             AFL_VERIFY(IsAsync());
             return DoStartProposeOnComplete(owner, ctx);
         }
         void FinishProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) {
             AFL_VERIFY(!IsFail());
-            SwitchStateVerified(EStatus::ProposeStartedOnComplete, EStatus::ProposeFinishedOnExecute);
+            SwitchStateVerified(EStatus::ProposeStartedOnExecute, EStatus::ProposeFinishedOnExecute);
             AFL_VERIFY(IsAsync() || StartedAsync);
             return DoFinishProposeOnExecute(owner, txc);
         }
         void FinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) {
+            // It means that we had already processed this event
+            if (Status == EStatus::ReplySent) {
+                return;
+            }
             if (IsFail()) {
                 AFL_VERIFY(Status == EStatus::Failed);
             } else if (IsAsync() || StartedAsync) {

@@ -39,6 +39,29 @@ bool ValidateColumnSettings(TExprNode& columnsSettings, TExprContext& ctx, TVect
     return true;
 }
 
+bool ValidateColumnWithTypesSettings(TExprNode& columnsSettings, TExprContext& ctx, TVector<std::pair<TString, const TTypeAnnotationNode*>>& columns) {
+    if (!EnsureTupleMinSize(columnsSettings, 1U, ctx)) {
+        return false;
+    }
+
+    for (const auto& child : columnsSettings.Children()) {
+        if (!EnsureTupleMinSize(*child, 2U, ctx)) {
+            return false;
+        }
+
+        if (!EnsureAtom(child->Head(), ctx)) {
+            return false;
+        }
+
+        if (EnsureTypeRewrite(child->ChildRef(1), ctx) != IGraphTransformer::TStatus::Ok) {
+            return false;
+        }
+
+        columns.emplace_back(child->Content(), child->Child(1U)->GetTypeAnn());
+    }
+    return true;
+}
+
 bool ValidateColumnPairSettings(TExprNode& columnsSettings, TExprContext& ctx, TVector<TString>& columns) {
     if (!EnsureTupleMinSize(columnsSettings, 1, ctx)) {
         return false;
@@ -367,6 +390,16 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
 
             break;
         }
+        case EYtSettingType::Columns: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+            TVector<std::pair<TString, const TTypeAnnotationNode*>> columns;
+            if (!ValidateColumnWithTypesSettings(setting->Tail(), ctx, columns)) {
+                return false;
+            }
+            break;
+        }
         case EYtSettingType::StatColumns: {
             if (!EnsureTupleSize(*setting, 2, ctx)) {
                 return false;
@@ -393,6 +426,18 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                         << "Unsupported system column " << col.Quote()));
                     return false;
                 }
+            }
+            break;
+        }
+        case NYql::EYtSettingType::ExtraColumns: {
+            if (!EnsureTupleSize(*setting, 2, ctx)) {
+                return false;
+            }
+
+            if (!setting->Tail().IsCallable("AsStruct")) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting->Tail().Pos()), TStringBuilder()
+                    << "Expecting AsStruct as extraColumns value"));
+                return false;
             }
             break;
         }
@@ -445,6 +490,7 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
         case EYtSettingType::BlockInputApplied:
         case EYtSettingType::BlockOutputApplied:
         case EYtSettingType::Small:
+        case EYtSettingType::Pruned:
             if (!EnsureTupleSize(*setting, 1, ctx)) {
                 return false;
             }
@@ -945,6 +991,12 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
                     << "Expected YtQLFilter node, got: " << qlFilter->Content()));
             }
             break;
+        }
+        case EYtSettingType::Actions:
+        case EYtSettingType::PrimaryKey: {
+            ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()
+                << "Feature '" << nameNode->Content() << "' isn't supported."));
+            return false;
         }
         case EYtSettingType::LAST: {
             YQL_ENSURE(false, "Unexpected EYtSettingType");

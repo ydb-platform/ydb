@@ -132,24 +132,31 @@ public:
                 if (!EnsureAtom(*c, ctx)) {
                     return nullptr;
                 }
-                auto index = itemSchema->FindItem(c->Content());
+
+                const auto columnName = c->Content();
+                const auto index = itemSchema->FindItem(columnName);
                 if (!index) {
                     ctx.AddError(TIssue(ctx.GetPosition(topic->Pos()), TStringBuilder()
-                        << "Unable to find column: " << c->Content()));
+                        << "Unable to find column: " << columnName));
                     return nullptr;
                 }
-                columnOrder.AddColumn(TString(c->Content()));
+
+                columnOrder.AddColumn(TString(columnName));
                 items.push_back(itemSchema->GetItems()[*index]);
-                addedFields.emplace(c->Content());
-            }
-        }
-
-        for (auto c : itemSchema->GetItems()) {
-            if (addedFields.contains(TString(c->GetName()))) {
-                continue;
+                addedFields.emplace(columnName);
             }
 
-            items.push_back(c);
+            for (auto c : itemSchema->GetItems()) {
+                const TString columnName(c->GetName());
+                if (addedFields.contains(columnName)) {
+                    continue;
+                }
+
+                columnOrder.AddColumn(columnName);
+                items.push_back(c);
+            }
+        } else {
+            items = itemSchema->GetItems();
         }
 
         return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items));
@@ -219,7 +226,7 @@ public:
             if (!watermark->GetTypeAnn()) {
                 return TStatus::Repeat;
             }
-            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, false)) {
+            if (!EnsureSpecificDataType(*watermark, EDataSlot::Timestamp, ctx, true)) {
                 return TStatus::Error;
             }
 
@@ -237,6 +244,11 @@ public:
             world->GetTypeAnn(),
             schema
         }));
+
+        if (!columns) {
+            return TStatus::Ok;
+        }
+
         return State_->Types->SetColumnOrder(*input, columnOrder, ctx);
     }
 

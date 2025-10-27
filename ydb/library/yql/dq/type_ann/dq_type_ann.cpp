@@ -999,21 +999,10 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
-        if (!EnsureTupleTypeSize(replicateInput->Pos(), inputItemType, 2, ctx)) {
+        if (!EnsureTupleType(replicateInput->Pos(), *inputItemType, ctx)) {
             return TStatus::Error;
         }
 
-        auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-        bool isOptional = false;
-        const TStructExprType* structType = nullptr;
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[0], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!EnsureStructOrOptionalStructType(replicateInput->Pos(), *inputTupleType->GetItems()[1], isOptional, structType, ctx)) {
-            return TStatus::Error;
-        }
     } else if (!EnsureStructType(replicateInput->Pos(), *inputItemType, ctx)) {
         return TStatus::Error;
     }
@@ -1278,20 +1267,104 @@ TStatus AnnotateDqHashCombine(const TExprNode::TPtr& input, TExprContext& ctx) {
         return TStatus::Error;
     }
 
-    if (!input->Child(5)->GetTypeAnn()) {
+    auto& inputStream = input->ChildRef(TDqPhyHashCombine::idx_Input);
+    if (!EnsureStreamType(*inputStream, ctx)) {
         return TStatus::Error;
     }
-
-    const auto* outputTypeAnn = input->Child(5)->GetTypeAnn();
-    if (!outputTypeAnn) {
+    auto streamType = inputStream->GetTypeAnn()->Cast<TStreamExprType>();
+    auto multiType = streamType->GetItemType();
+    if (!EnsureMultiType(inputStream->Pos(), *multiType, ctx)) {
         return TStatus::Error;
     }
-    if (outputTypeAnn->GetKind() != ETypeAnnotationKind::Multi) {
-        TTypeAnnotationNode::TListType wrapper {outputTypeAnn};
-        outputTypeAnn = ctx.MakeType<TMultiExprType>(wrapper);
-    }
-    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(outputTypeAnn));
+    auto itemTypes = multiType->Cast<TMultiExprType>()->GetItems();
 
+    // key extractor lambda
+    auto& keyExtractor = input->ChildRef(TDqPhyHashCombine::idx_KeyExtractor);
+    auto status = ConvertToLambda(keyExtractor, ctx, itemTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(keyExtractor, itemTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!keyExtractor->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    TTypeAnnotationNode::TListType keyTypes;
+    for (ui32 i = 1; i < keyExtractor->ChildrenSize(); ++i) {
+        auto childType = keyExtractor->Child(i)->GetTypeAnn();
+        keyTypes.emplace_back(childType);
+        if (!EnsureHashableKey(keyExtractor->Child(i)->Pos(), childType, ctx)) {
+            return TStatus::Error;
+        }
+        if (!EnsureEquatableKey(keyExtractor->Child(i)->Pos(), childType, ctx)) {
+            return TStatus::Error;
+        }
+    }
+
+    // state init lambda
+    auto& initHandler = input->ChildRef(TDqPhyHashCombine::idx_InitHandler);
+    TTypeAnnotationNode::TListType initArgTypes = keyTypes;
+    initArgTypes.insert(initArgTypes.end(), itemTypes.begin(), itemTypes.end());
+    status = ConvertToLambda(initHandler, ctx, initArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(initHandler, initArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!initHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+    TTypeAnnotationNode::TListType stateTypes;
+    for (ui32 i = 1; i < initHandler->ChildrenSize(); ++i) {
+        auto childType = initHandler->Child(i)->GetTypeAnn();
+        stateTypes.emplace_back(childType);
+        if (!EnsureComputableType(initHandler->Child(i)->Pos(), *childType, ctx)) {
+            return TStatus::Error;
+        }
+    }
+
+    // state update lambda
+    auto& updateHandler = input->ChildRef(TDqPhyHashCombine::idx_UpdateHandler);
+    TTypeAnnotationNode::TListType updateArgTypes = keyTypes;
+    updateArgTypes.insert(updateArgTypes.end(), itemTypes.begin(), itemTypes.end());
+    updateArgTypes.insert(updateArgTypes.end(), stateTypes.begin(), stateTypes.end());
+    status = ConvertToLambda(updateHandler, ctx, updateArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(updateHandler, updateArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!updateHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    // finalize output lambda
+    auto& finishHandler = input->ChildRef(TDqPhyHashCombine::idx_FinishHandler);
+    TTypeAnnotationNode::TListType finishArgTypes = keyTypes;
+    finishArgTypes.insert(finishArgTypes.end(), stateTypes.begin(), stateTypes.end());
+    status = ConvertToLambda(finishHandler, ctx, finishArgTypes.size());
+    if (status.Level != TStatus::Ok) {
+        return status;
+    }
+    if (!UpdateLambdaAllArgumentsTypes(finishHandler, finishArgTypes, ctx)) {
+        return TStatus::Error;
+    }
+    if (!finishHandler->GetTypeAnn()) {
+        return TStatus::Repeat;
+    }
+
+    // Derive the output type from the finishHandler
+    TTypeAnnotationNode::TListType finishOutputTypes;
+    for (ui32 i = 1; i < finishHandler->ChildrenSize(); ++i) {
+        finishOutputTypes.emplace_back(finishHandler->Child(i)->GetTypeAnn());
+    }
+    auto finishOutputType = ctx.MakeType<TMultiExprType>(finishOutputTypes);
+
+    input->SetTypeAnn(ctx.MakeType<TStreamExprType>(finishOutputType));
     return TStatus::Ok;
 }
 

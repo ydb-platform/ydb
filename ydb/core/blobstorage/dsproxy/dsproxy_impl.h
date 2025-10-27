@@ -2,6 +2,7 @@
 
 #include "defs.h"
 #include "dsproxy.h"
+#include "dsproxy_test_helpers.h"
 
 #include <ydb/core/blobstorage/base/utility.h>
 
@@ -38,8 +39,9 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     struct TBatchedQueue {
         TBatchedVec<TEventPtr> Queue;
         ui64 Bytes = 0;
-        ui64 RequestCount = 0;
     };
+
+    using TBatchedPutQueue = TBatchedQueue<TEvBlobStorage::TEvPut::TPtr>;
 
     struct TPutBatchedBucket {
         NKikimrBlobStorage::EPutHandleClass HandleClass;
@@ -95,9 +97,10 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     static constexpr ui64 PutTacticCount = TEvBlobStorage::TEvPut::TacticCount;
     static_assert(PutTacticCount <= 10);
 
-    TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> BatchedPuts[PutHandleClassCount][PutTacticCount];
+    TBatchedPutQueue BatchedPuts[PutHandleClassCount][PutTacticCount];
     static constexpr ui64 PutBatchecBucketCount = PutHandleClassCount * PutTacticCount;
     TStackVec<TPutBatchedBucket, PutBatchecBucketCount> PutBatchedBucketQueue;
+    THashSet<TLogoBlobID> BatchedPutIds;
 
     TEvStopBatchingGetRequests::TPtr StopGetBatchingEvent;
     ui64 BatchedGetRequestCount = 0;
@@ -187,6 +190,15 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     void WakeupUnconfigured(TEvConfigureQueryTimeout::TPtr ev);
 
+    enum class EUnconfiguredStateReason : ui8 {
+        UnknownGroup = 0,
+        GenerationChanged,
+    };
+    static TString UnconfiguredStateReasonStr(EUnconfiguredStateReason reason);
+
+    EUnconfiguredStateReason UnconfiguredStateReason;
+    TMonotonic UnconfiguredStateTs = TMonotonic::Zero();
+
    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Establishing Sessions state
 
@@ -195,6 +207,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void SwitchToWorkWhenGoodToGo();
     void WakeupEstablishingSessions(TEvEstablishingSessionTimeout::TPtr ev);
     void Handle(TEvProxyQueueState::TPtr& ev);
+
+    TMonotonic EstablishingSessionsStateTs = TMonotonic::Zero();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Put to init queue
@@ -215,10 +229,15 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
                 << " UnconfiguredBufferSize# " << UnconfiguredBufferSize << " > " << UnconfiguredBufferSizeLimit
                 << ", dropping the queue (" << (ui64)InitQueue.size() << ")" << " Marker# DSP08");
             if (CurrentStateFunc() == &TThis::StateUnconfigured) {
-                ErrorDescription = "Too many requests while waiting for configuration (DSPE2).";
+                ErrorDescription = TStringBuilder() << "Too many requests while waiting for configuration (DSPE2)."
+                        << " GroupId# " << GroupId
+                        << " UnconfiguredStateTs# " << UnconfiguredStateTs
+                        << " UnconfiguredStateReason " << UnconfiguredStateReasonStr(UnconfiguredStateReason);
                 SetStateUnconfiguredTimeout();
             } else if (CurrentStateFunc() == &TThis::StateEstablishingSessions) {
-                ErrorDescription = "Too many requests while establishing sessions (DSPE5).";
+                ErrorDescription = TStringBuilder() << "Too many requests while establishing sessions (DSPE5)."
+                        << " GroupId# " << GroupId
+                        << " EstablishingSessionsStateTs# " << EstablishingSessionsStateTs;
                 SetStateEstablishingSessionsTimeout();
             }
         }
@@ -254,8 +273,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         }
     }
 
-    void ProcessBatchedPutRequests(TBatchedQueue<TEvBlobStorage::TEvPut::TPtr> &batchedPuts,
-            NKikimrBlobStorage::EPutHandleClass handleClass, TEvBlobStorage::TEvPut::ETactic tactic);
+    void ProcessBatchedPutRequests(TBatchedPutQueue &batchedPuts, NKikimrBlobStorage::EPutHandleClass handleClass,
+        TEvBlobStorage::TEvPut::ETactic tactic);
     void Handle(TEvStopBatchingPutRequests::TPtr& ev);
     void Handle(TEvStopBatchingGetRequests::TPtr& ev);
 
@@ -276,6 +295,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
     void Handle(TEvGetQueuesInfo::TPtr ev);
+    void Handle(TEvExplicitMultiPut::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Error state
@@ -370,6 +390,7 @@ public:
         fFunc(Ev5min, Handle5min);
         cFunc(EvCheckDeadlines, CheckDeadlines);
         hFunc(TEvGetQueuesInfo, Handle);
+        hFunc(TEvExplicitMultiPut, Handle);
     )
 
 #define HANDLE_EVENTS(HANDLER) \

@@ -3,6 +3,9 @@
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/lib/ydb_cli/common/retry_func.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+
+#include <re2/re2.h>
 
 namespace NYdb::NDump {
 
@@ -36,6 +39,17 @@ TStatus DescribeExternalDataSource(TTableClient& client, const TString& path, Yd
     return status;
 }
 
+TStatus DescribeSystemView(TTableClient& client, const TString& path, Ydb::Table::DescribeSystemViewResult& out) {
+    auto status = client.RetryOperationSync([&](NTable::TSession session) {
+        auto result = session.DescribeSystemView(path).ExtractValueSync();
+        if (result.IsSuccess()) {
+            out = TProtoAccessor::GetProto(result.GetSystemViewDescription());
+        }
+        return result;
+    });
+    return status;
+}
+
 TStatus DescribeReplication(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TReplicationDescription>& out) {
     out.Clear();
 
@@ -44,6 +58,71 @@ TStatus DescribeReplication(NReplication::TReplicationClient& client, const TStr
     });
     if (status.IsSuccess()) {
         out = status.GetReplicationDescription();
+    }
+    return status;
+}
+
+TStatus DescribeTransfer(NReplication::TReplicationClient& client, const TString& path, TMaybe<NReplication::TTransferDescription>& out) {
+    out.Clear();
+
+    auto status = NConsoleClient::RetryFunction([&]() {
+        return client.DescribeTransfer(path).ExtractValueSync();
+    });
+    if (status.IsSuccess()) {
+        out = status.GetTransferDescription();
+    }
+    return status;
+}
+
+namespace {
+
+    bool RemoveCreateViewPattern(std::string& input) {
+        // Pattern explanation:
+        // - ".*?" matches any characters (non-greedy)
+        static const RE2 pattern("CREATE VIEW `.*?` .*?AS\n");
+        return RE2::Replace(&input, pattern, "");
+    }
+
+}
+
+TStatus DescribeViewQuery(const NYdb::TDriver& driver, const TString& path, TString& out) {
+    out.clear();
+    NQuery::TQueryClient client(driver);
+    auto status = client.RetryQuerySync([&](NQuery::TSession session) {
+        auto result = session.ExecuteQuery(std::format(
+                "SHOW CREATE VIEW `{}`",
+                path.c_str()
+            ), NQuery::TTxControl::NoTx()
+        ).ExtractValueSync();
+
+        if (result.IsSuccess()) {
+            if (result.GetResultSets().empty()) {
+                return result;
+            }
+            auto parser = result.GetResultSetParser(0);
+            if (parser.ColumnsCount() == 0 || !parser.TryNextRow()) {
+                return result;
+            }
+            auto query = parser.ColumnParser(0).GetOptionalUtf8();
+            if (!query || !RemoveCreateViewPattern(*query)) {
+                return result;
+            }
+            out = *query;
+        }
+        return result;
+    });
+    if (status.GetStatus() == EStatus::GENERIC_ERROR) {
+        // If the server does not support `SHOW CREATE` statements, retry using the deprecated view description API.
+
+        NView::TViewClient client(driver);
+        auto result = NConsoleClient::RetryFunction([&]() {
+            return client.DescribeView(path).ExtractValueSync();
+        });
+
+        if (result.IsSuccess()) {
+            out = result.GetViewDescription().GetQueryText();
+        }
+        return result;
     }
     return status;
 }

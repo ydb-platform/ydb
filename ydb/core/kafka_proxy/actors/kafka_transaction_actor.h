@@ -8,7 +8,7 @@
 #include <ydb/core/kafka_proxy/kqp_helper.h>
 
 namespace NKafka {
-    /* 
+    /*
     This class is responsible for one kafka transaction.
 
     It accumulates transaction state (partitions in tx, offsets) and on commit submits transaction to KQP
@@ -16,10 +16,10 @@ namespace NKafka {
     class TTransactionActor : public NActors::TActor<TTransactionActor> {
 
         using TBase = NActors::TActor<TTransactionActor>;
-        
+
         public:
             struct TPartitionCommit {
-                i32 Partition; 
+                i32 Partition;
                 i64 Offset;
                 TString ConsumerName;
                 i64 ConsumerGeneration;
@@ -27,7 +27,7 @@ namespace NKafka {
 
             enum EKafkaTxnKqpRequests : ui8 {
                 NO_REQUEST = 0,
-                
+
                 // This request selects up-to-date producer and consumers states from relevant tables
                 // After this request a check will happen, that no transaction details has expired.
                 SELECT,
@@ -38,18 +38,19 @@ namespace NKafka {
             };
 
             // we need to exlplicitly specify kqpActorId and txnCoordinatorActorId for unit tests
-            TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs) : 
+            TTransactionActor(const TString& transactionalId, const TProducerInstanceId& producerInstanceId, const TString& databasePath, ui64 txnTimeoutMs, const TString& resourceDatabasePath) :
                 TBase(&TTransactionActor::StateFunc),
                 TransactionalId(transactionalId),
                 ProducerInstanceId(producerInstanceId),
                 DatabasePath(databasePath),
+                ResourceDatabasePath(resourceDatabasePath),
                 TxnTimeoutMs(txnTimeoutMs),
                 CreatedAt(TAppData::TimeProvider->Now()) {};
 
             TStringBuilder LogPrefix() const {
                 return TStringBuilder() << "KafkaTransactionActor{TransactionalId=" << TransactionalId << "; ProducerId=" << ProducerInstanceId.Id << "; ProducerEpoch=" << ProducerInstanceId.Epoch << "}: ";
             }
-        
+
         private:
             STFUNC(StateFunc) {
                 try {
@@ -79,7 +80,7 @@ namespace NKafka {
             // KQP events
             void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx);
             void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
-            
+
             // Poison pill
             void Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx);
 
@@ -121,6 +122,7 @@ namespace NKafka {
 
             // helper fields
             const TString DatabasePath;
+            const TString ResourceDatabasePath;
             // This field need to preserve request details between several requests to KQP
             // In case something goes off road, we can always send error back to client
             TAutoPtr<TEventHandle<TEvKafka::TEvEndTxnRequest>> EndTxnRequestPtr;

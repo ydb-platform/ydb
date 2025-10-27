@@ -25,7 +25,6 @@ tcmalloc/internal/ya.make
 {% block ya_make %}
 SUBSCRIBER(
     g:cpp-contrib
-    ayles
 )
 
 SRCS(
@@ -36,7 +35,7 @@ SRCS(
 INCLUDE(common.inc)
 
 CFLAGS(
-    -DTCMALLOC_256K_PAGES
+    -DTCMALLOC_INTERNAL_256K_PAGES
 )
 {% endblock %}
 

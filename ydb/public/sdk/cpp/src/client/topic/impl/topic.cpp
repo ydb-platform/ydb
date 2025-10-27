@@ -3,13 +3,17 @@
 #include <ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.h>
 #include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/scheme_helpers/helpers.h>
 
 #include <util/random/random.h>
 #include <util/string/cast.h>
 #include <util/string/subst.h>
 
 namespace NYdb::inline Dev::NTopic {
+
+static TDuration ConvertPositiveDuration(const google::protobuf::Duration& duration) {
+    return TDuration::Seconds(Max<i64>(duration.seconds(), 0)) + TDuration::MicroSeconds(Max<i32>(duration.nanos(), 0) / 1000);
+}
 
 TDescribeTopicResult::TDescribeTopicResult(TStatus&& status, Ydb::Topic::DescribeTopicResult&& result)
     : TStatus(std::move(status))
@@ -50,6 +54,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
     , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
     , TopicStats_(Proto_.topic_stats())
+    , MetricsLevel_(Proto_.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(Proto_.metrics_level())) : std::optional<EMetricsLevel>())
 {
     Owner_ = Proto_.self().owner();
     CreationTimestamp_ = NScheme::TVirtualTimestamp(Proto_.self().created_at());
@@ -88,6 +93,7 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
@@ -104,6 +110,10 @@ const std::string& TConsumer::GetConsumerName() const {
 
 bool TConsumer::GetImportant() const {
     return Important_;
+}
+
+TDuration TConsumer::GetAvailabilityPeriod() const {
+    return AvailabilityPeriod_;
 }
 
 const TInstant& TConsumer::GetReadFrom() const {
@@ -184,6 +194,9 @@ void TTopicDescription::SerializeTo(Ydb::Topic::CreateTopicRequest& request) con
     *request.mutable_attributes() = Proto_.attributes();
     *request.mutable_consumers() = Proto_.consumers();
     request.set_metering_mode(Proto_.metering_mode());
+    if (Proto_.has_metrics_level()) {
+        request.set_metrics_level(Proto_.metrics_level());
+    }
 }
 
 const Ydb::Topic::DescribeTopicResult& TTopicDescription::GetProto() const {
@@ -208,6 +221,10 @@ const NScheme::TVirtualTimestamp& TTopicDescription::GetCreationTimestamp() cons
 
 const TTopicStats& TTopicDescription::GetTopicStats() const {
     return TopicStats_;
+}
+
+std::optional<EMetricsLevel> TTopicDescription::GetMetricsLevel() const {
+    return MetricsLevel_;
 }
 
 const std::vector<NScheme::TPermissions>& TTopicDescription::GetPermissions() const {
@@ -282,7 +299,7 @@ uint32_t TAutoPartitioningSettings::GetDownUtilizationPercent() const {
 TTopicStats::TTopicStats(const Ydb::Topic::DescribeTopicResult::TopicStats& topicStats)
     : StoreSizeBytes_(topicStats.store_size_bytes())
     , MinLastWriteTime_(TInstant::Seconds(topicStats.min_last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(topicStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(topicStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(topicStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(topicStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(topicStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(topicStats.bytes_written().per_day())
@@ -319,7 +336,7 @@ TPartitionStats::TPartitionStats(const Ydb::Topic::PartitionStats& partitionStat
     , EndOffset_(partitionStats.partition_offsets().end())
     , StoreSizeBytes_(partitionStats.store_size_bytes())
     , LastWriteTime_(TInstant::Seconds(partitionStats.last_write_time().seconds()))
-    , MaxWriteTimeLag_(TDuration::Seconds(partitionStats.max_write_time_lag().seconds()) + TDuration::MicroSeconds(partitionStats.max_write_time_lag().nanos() / 1000))
+    , MaxWriteTimeLag_(ConvertPositiveDuration(partitionStats.max_write_time_lag()))
     , BytesWrittenPerMinute_(partitionStats.bytes_written().per_minute())
     , BytesWrittenPerHour_(partitionStats.bytes_written().per_hour())
     , BytesWrittenPerDay_(partitionStats.bytes_written().per_day())
@@ -620,6 +637,7 @@ template <typename TSettings>
 TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
     , Important_(proto.important())
+    , AvailabilityPeriod_(ConvertPositiveDuration(proto.availability_period()))
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
@@ -631,6 +649,12 @@ template <typename TSettings>
 void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) const {
     proto.set_name(ConsumerName_);
     proto.set_important(Important_);
+    if (AvailabilityPeriod_ != TDuration::Zero()) {
+        proto.mutable_availability_period()->set_seconds(AvailabilityPeriod_.Seconds());
+        proto.mutable_availability_period()->set_nanos((AvailabilityPeriod_.MicroSeconds() % 1'000'000) * 1'000);
+    } else {
+        proto.clear_availability_period();
+    }
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
@@ -648,6 +672,7 @@ TCreateTopicSettings::TCreateTopicSettings(const Ydb::Topic::CreateTopicRequest&
     , PartitionWriteSpeedBytesPerSecond_(proto.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(proto.partition_write_burst_bytes())
     , Attributes_(DeserializeAttributes(proto.attributes()))
+    , MetricsLevel_(proto.has_metrics_level() ? std::optional(static_cast<EMetricsLevel>(proto.metrics_level())) : std::nullopt)
 {
     Consumers_ = DeserializeConsumers(*this, proto.consumers());
 }
@@ -662,6 +687,9 @@ void TCreateTopicSettings::SerializeTo(Ydb::Topic::CreateTopicRequest& request) 
     request.set_partition_write_burst_bytes(PartitionWriteBurstBytes_);
     *request.mutable_consumers() = SerializeConsumers(Consumers_);
     *request.mutable_attributes() = SerializeAttributes(Attributes_);
+    if (MetricsLevel_) {
+        request.set_metrics_level(*MetricsLevel_);
+    }
 }
 
 } // namespace NYdb::NTopic

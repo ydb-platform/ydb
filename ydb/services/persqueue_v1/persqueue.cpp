@@ -51,7 +51,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQWriteRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
                     },
-                    *ActorSystem_, "PersQueueService/CreateWriteSession", getCounterBlock("persistent_queue", "WriteSession", true), nullptr
+                    *ActorSystem_, "StreamingWrite", getCounterBlock("persistent_queue", "WriteSession", true), nullptr
                 );
     }
 
@@ -71,7 +71,7 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem_->Send(GRpcRequestProxyId_, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context, TRequestAuxSettings{.AuditMode = TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml)}));
                     },
-                    *ActorSystem_, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true), nullptr
+                    *ActorSystem_, "MigrationStreamingRead", getCounterBlock("persistent_queue", "MigrationReadSession", true), nullptr
                 );
     }
 
@@ -84,11 +84,11 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ACTION; \
         }, &Ydb::PersQueue::V1::SVC::AsyncService::Request ## NAME, \
-        "PersQueueService/"#NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
+        #NAME, logger, getCounterBlock("persistent_queue", #NAME))->Run();
 
     ADD_REQUEST(GetReadSessionsInfo, PersQueueService, ReadInfoRequest, ReadInfoResponse, {
-            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvPQReadInfoRequest(ctx));
-        })
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQReadInfoRequest(ctx, &DoPQReadInfoRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::NonModifying()}));
+    })
 
     ADD_REQUEST(DropTopic, PersQueueService, DropTopicRequest, DropTopicResponse, {
         ActorSystem_->Send(GRpcRequestProxyId_, new TEvPQDropTopicRequest(ctx, &DoPQDropTopicRequest, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl)}));
@@ -117,8 +117,6 @@ void TGRpcPersQueueService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     })
 
 #undef ADD_REQUEST
-
-
 }
 
 void TGRpcPersQueueService::StopService() noexcept {

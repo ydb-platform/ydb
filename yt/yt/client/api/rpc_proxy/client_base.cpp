@@ -88,7 +88,7 @@ void EnrichTracingForLookupRequest(NTracing::TTraceContext::TTagList& tagList, T
         tagList.emplace_back("yt.table_path", path);
         std::string columnsTag = columns.empty()
             ? "universal"
-            : SanitizeTracingTag(ConvertToYsonString(columns).ToString());
+            : SanitizeTracingTag(ConvertToYsonString(columns, EYsonFormat::Text).ToString());
         tagList.emplace_back("yt.column_filter", std::move(columnsTag));
     }
 }
@@ -182,6 +182,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
     req->set_sticky(sticky);
     req->set_ping(options.Ping);
     req->set_ping_ancestors(options.PingAncestors);
+    YT_OPTIONAL_SET_PROTO(req, pinger_address, options.PingerAddress);
     req->set_atomicity(static_cast<NProto::EAtomicity>(options.Atomicity));
     req->set_durability(static_cast<NProto::EDurability>(options.Durability));
     if (options.Attributes) {
@@ -223,6 +224,7 @@ TFuture<ITransactionPtr> TClientBase::StartTransaction(
                 options.Durability,
                 timeout,
                 options.PingAncestors,
+                options.PingerAddress,
                 pingPeriod,
                 std::move(stickyParameters),
                 rsp->sequence_number_source_id(),
@@ -565,6 +567,10 @@ TFuture<NCypressClient::TNodeId> TClientBase::LinkNode(
     req->set_ignore_existing(options.IgnoreExisting);
     req->set_lock_existing(options.LockExisting);
 
+    if (options.Attributes) {
+        ToProto(req->mutable_attributes(), *options.Attributes);
+    }
+
     ToProto(req->mutable_transactional_options(), options);
     ToProto(req->mutable_prerequisite_options(), options);
     ToProto(req->mutable_mutating_options(), options);
@@ -752,9 +758,11 @@ TFuture<ITableReaderPtr> TClientBase::CreateTableReader(
 
     req->set_unordered(options.Unordered);
     req->set_omit_inaccessible_columns(options.OmitInaccessibleColumns);
+    req->set_omit_inaccessible_rows(options.OmitInaccessibleRows);
     req->set_enable_table_index(options.EnableTableIndex);
     req->set_enable_row_index(options.EnableRowIndex);
     req->set_enable_range_index(options.EnableRangeIndex);
+    req->set_enable_any_unpacking(options.EnableAnyUnpacking);
     if (options.Config) {
         req->set_config(ToProto(ConvertToYsonString(*options.Config)));
     }
@@ -827,6 +835,18 @@ TFuture<TDistributedWriteSessionWithCookies> TClientBase::StartDistributedWriteS
         }));
 }
 
+TFuture<void> TClientBase::PingDistributedWriteSession(
+    TSignedDistributedWriteSessionPtr session,
+    const TDistributedWriteSessionPingOptions& options)
+{
+    auto proxy = CreateApiServiceProxy();
+
+    auto req = proxy.PingDistributedWriteSession();
+
+    FillRequest(req.Get(), session, options);
+    return req->Invoke().AsVoid();
+}
+
 TFuture<void> TClientBase::FinishDistributedWriteSession(
     const TDistributedWriteSessionWithResults& sessionWithResults,
     const TDistributedWriteSessionFinishOptions& options)
@@ -876,6 +896,8 @@ TFuture<TUnversionedLookupRowsResult> TClientBase::LookupRows(
     ToProto(req->mutable_tablet_read_options(), options);
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
 
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
+
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TUnversionedRow>(
             rsp->rowset_descriptor(),
@@ -922,6 +944,7 @@ TFuture<TVersionedLookupRowsResult> TClientBase::VersionedLookupRows(
         THROW_ERROR_EXCEPTION("Versioned lookup does not support versioned read mode %Qlv",
             options.VersionedReadOptions.ReadMode);
     }
+    YT_OPTIONAL_TO_PROTO(req, execution_pool, options.ExecutionPool);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspVersionedLookupRowsPtr& rsp) {
         auto rowset = DeserializeRowset<TVersionedRow>(
@@ -959,6 +982,7 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
         protoSubrequest->set_keep_missing_rows(subrequestOptions.KeepMissingRows);
         protoSubrequest->set_enable_partial_result(subrequestOptions.EnablePartialResult);
         YT_OPTIONAL_SET_PROTO(protoSubrequest, use_lookup_cache, subrequestOptions.UseLookupCache);
+        YT_OPTIONAL_TO_PROTO(protoSubrequest, execution_pool, subrequestOptions.ExecutionPool);
 
         auto rowset = SerializeRowset(
             subrequest.NameTable,
@@ -980,12 +1004,17 @@ TFuture<std::vector<TUnversionedLookupRowsResult>> TClientBase::MultiLookupRows(
             if (columnFiltersTagLength <= MaxTracingTagLength) {
                 std::string columnsTag = subrequest.Options.ColumnFilter.IsUniversal()
                     ? "universal"
-                    : SanitizeTracingTag(NYson::ConvertToYsonString(protoSubrequest.columns()).ToString());
+                    : SanitizeTracingTag(
+                        NYson::ConvertToYsonString(protoSubrequest.columns(), EYsonFormat::Text).ToString());
                 columnFiltersTagLength += columnFilterTags.emplace_back(std::move(columnsTag)).size();
             }
         }
-        req->TracingTags().emplace_back("yt.table_paths", SanitizeTracingTag(NYson::ConvertToYsonString(paths).ToString()));
-        req->TracingTags().emplace_back("yt.column_filters", SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags).ToString()));
+        req->TracingTags().emplace_back(
+            "yt.table_paths",
+            SanitizeTracingTag(NYson::ConvertToYsonString(paths, EYsonFormat::Text).ToString()));
+        req->TracingTags().emplace_back(
+            "yt.column_filters",
+            SanitizeTracingTag(NYson::ConvertToYsonString(columnFilterTags, EYsonFormat::Text).ToString()));
     }
 
     req->set_replica_consistency(static_cast<NProto::EReplicaConsistency>(options.ReplicaConsistency));
@@ -1082,6 +1111,7 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     req->set_verbose_logging(options.VerboseLogging);
     req->set_new_range_inference(options.NewRangeInference);
     YT_OPTIONAL_SET_PROTO(req, execution_backend, options.ExecutionBackend);
+    YT_OPTIONAL_SET_PROTO(req, optimization_level, options.OptimizationLevel);
     req->set_enable_code_cache(options.EnableCodeCache);
     req->set_memory_limit_per_node(options.MemoryLimitPerNode);
     ToProto(req->mutable_suppressable_access_tracking_options(), options);
@@ -1091,8 +1121,9 @@ TFuture<TSelectRowsResult> TClientBase::SelectRows(
     ToProto(req->mutable_versioned_read_options(), options.VersionedReadOptions);
     YT_OPTIONAL_SET_PROTO(req, use_lookup_cache, options.UseLookupCache);
     req->set_expression_builder_version(options.ExpressionBuilderVersion);
-    req->set_use_order_by_in_join_subqueries(options.UseOrderByInJoinSubqueries);
-    req->set_statistics_aggregation(ToProto(options.StatisticsAggregation));
+    YT_OPTIONAL_SET_PROTO(req, use_order_by_in_join_subqueries, options.UseOrderByInJoinSubqueries);
+    YT_OPTIONAL_SET_PROTO(req, statistics_aggregation, options.StatisticsAggregation);
+    req->set_read_from(ToProto(options.ReadFrom));
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspSelectRowsPtr& rsp) {
         TSelectRowsResult result;

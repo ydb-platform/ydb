@@ -13,7 +13,7 @@ Y_CPU_BENCHMARK(Argon2d_2048_REF, iface) {
     }
 }
 
-#if !defined(_arm64_)
+#if defined(_x86_64_)
 Y_CPU_BENCHMARK(Argon2d_2048_SSE2, iface) {
     NArgonish::TArgon2Factory factory;
     auto argon2 = factory.Create(NArgonish::EInstructionSet::SSE2, NArgonish::EArgon2Type::Argon2d, 1, 2048, 1);

@@ -22,6 +22,8 @@ enum class EYtWriteMode: ui32 {
     Append          /* "append" */,
     Drop            /* "drop" */,
     Flush           /* "flush" */,
+    Create          /* "create" */,
+    Alter           /* "alter" */,
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////
@@ -71,6 +73,8 @@ enum class EYtSettingType: ui64 {
     StatColumns              /* "statcolumns" */,
     SysColumns               /* "syscolumns" */,
     IgnoreTypeV3             /* "ignore_type_v3" "ignoretypev3" */,
+    ExtraColumns             /* "extraColumns" */,
+    Pruned                   /* "pruned" */,
     // Table content
     MemUsage                 /* "memUsage" */,
     ItemsCount               /* "itemsCount" */,
@@ -125,6 +129,10 @@ enum class EYtSettingType: ui64 {
     MutationId               /* "mutationid", "mutation_id" */,
     ColumnGroups             /* "column_groups", "columngroups" */,
     SecurityTags             /* "security_tags", "securitytags" */,
+    // Create, Alter
+    Columns                  /* "columns"*/,
+    Actions                  /* "actions"*/,
+    PrimaryKey               /* "primarykey"*/,
 
     LAST
 };

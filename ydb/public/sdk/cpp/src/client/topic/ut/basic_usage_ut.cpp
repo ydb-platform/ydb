@@ -28,7 +28,7 @@ static const bool EnableDirectRead = !std::string{std::getenv("PQ_EXPERIMENTAL_D
 
 namespace NYdb::inline Dev::NTopic::NTests {
 
-void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, TIntrusivePtr<TManagedExecutor> decompressor) {
+void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSessionSettings writeSettings, const std::string& message, std::uint32_t count, TTopicSdkTestSetup& setup, std::shared_ptr<TManagedExecutor> decompressor) {
     auto client = setup.MakeClient();
     auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
 
@@ -101,13 +101,19 @@ void WriteAndReadToEndWithRestarts(TReadSessionSettings readSettings, TWriteSess
 }
 
 Y_UNIT_TEST_SUITE(BasicUsage) {
+    Y_UNIT_TEST(CreateTopicWithCustomName) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+        const TString name = "test-topic-" + ToString(TInstant::Now().Seconds());
+        setup.CreateTopic(name, TEST_CONSUMER, 1);
+    }
+
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         if (EnableDirectRead) {
             // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.
             return;
         }
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        auto compressor = new TSyncExecutor();
+        auto compressor = std::make_shared<TSyncExecutor>();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
         TReadSessionSettings readSettings;
@@ -137,7 +143,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
     Y_UNIT_TEST(ReadWithRestarts) {
         TTopicSdkTestSetup setup(TEST_CASE_NAME);
-        auto compressor = new TSyncExecutor();
+        auto compressor = std::make_shared<TSyncExecutor>();
         auto decompressor = CreateThreadPoolManagedExecutor(1);
 
         TReadSessionSettings readSettings;
@@ -170,7 +176,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         writeSettings.Path(setup.GetTopicPath()).MessageGroupId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Path(setup.GetTopicPath()).ProducerId(TEST_MESSAGE_GROUP_ID);
         writeSettings.Codec(ECodec::RAW);
-        IExecutor::TPtr executor = new TSyncExecutor();
+        IExecutor::TPtr executor = std::make_shared<TSyncExecutor>();
         writeSettings.CompressionExecutor(executor);
 
         std::uint64_t count = 100u;

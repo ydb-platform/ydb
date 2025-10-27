@@ -149,4 +149,4 @@ void PrintTo(const TNamedValue& value, std::ostream* os)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NYT
+} // namespace NYT::NNamedValue

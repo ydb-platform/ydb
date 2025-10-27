@@ -9,7 +9,7 @@ def post_install(self):
 boost_spirit = NixSourceProject(
     nixattr="boost_spirit",
     arcdir=boost.make_arcdir("spirit"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

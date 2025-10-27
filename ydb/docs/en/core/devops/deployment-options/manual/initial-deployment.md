@@ -77,6 +77,27 @@ To ensure that {{ ydb-short-name }} can access block disks, add the user that wi
 sudo usermod -aG disk ydb
 ```
 
+## Configure File Descriptor Limits {#file-descriptors}
+
+For proper operation of {{ ydb-short-name }}, especially when using [spilling](../../../concepts/spilling.md) in multi-node clusters, it is recommended to increase the limit of simultaneously open file descriptors.
+
+To change the file descriptor limit, add the following lines to the `/etc/security/limits.conf` file:
+
+```bash
+ydb soft nofile 10000
+ydb hard nofile 10000
+```
+
+Where `ydb` is the username under which `ydbd` runs.
+
+After changing the file, you need to reboot the system or log in again to apply the new limits.
+
+{% note info %}
+
+For more information about spilling configuration and its relationship with file descriptors, see the [Spilling Configuration](../../../reference/configuration/table_service_config.md#file-system-requirements) section.
+
+{% endnote %}
+
 ## Install {{ ydb-short-name }} Software on Each Server {#install-binaries}
 
 1. Download and unpack an archive with the `ydbd` executable and the libraries required for {{ ydb-short-name }} to run:
@@ -554,7 +575,7 @@ In the command examples listed above, `<node.ydb.tech>` is the FQDN of the serve
 
    ```bash
    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
-      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
+      yql -s 'CREATE TABLE `testdir/test_column_table` (id Uint64 NOT NULL, title Utf8, PRIMARY KEY (id)) WITH (STORE = COLUMN);'
    ```
 
 {% endlist %}

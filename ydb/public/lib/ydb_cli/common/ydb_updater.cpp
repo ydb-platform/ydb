@@ -86,7 +86,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     const TString downloadUrl = TStringBuilder() << StorageUrl << '/' << LatestVersion << '/' << osVersion
         << '/' << osArch << '/' << binaryName;
     Cout << "Downloading binary from url " << downloadUrl << Endl;
-    TShellCommand curlCmd(TStringBuilder() << "curl --max-time 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
+    TShellCommand curlCmd(TStringBuilder() << "curl --connect-timeout 60 " << downloadUrl << " -o " << tmpPathToBinary.GetPath());
     curlCmd.Run().Wait();
     if (curlCmd.GetExitCode() != 0) {
         Cerr << "Failed to download from url \"" << downloadUrl << "\". " << curlCmd.GetError() << Endl;
@@ -207,7 +207,8 @@ bool TYdbUpdater::GetLatestVersion() {
         SetConfigValue("last_check", TInstant::Now().Seconds());
         return true;
     }
-    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl;
+    Cerr << "(!) Couldn't get latest version from url \"" << versionUrl << "\". " << curlCmd.GetError() << Endl
+        << "You can disable further version checks with 'ydb version --disable-checks' command." << Endl;
     return false;
 }
 

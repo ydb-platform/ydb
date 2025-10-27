@@ -22,17 +22,21 @@ bool TPeriodicYielderGuard::NeedYield() const
 
 bool TPeriodicYielderGuard::TryYield() const
 {
-    if (NeedYield()) {
-        Yield();
-        return true;
+    if (!NeedYield()) {
+        return false;
     }
 
-    return false;
+    if (IsContextSwitchForbidden()) {
+        return false;
+    }
+
+    Yield();
+    return true;
 }
 
 TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period)
 {
-    return {period};
+    return TPeriodicYielderGuard(period);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

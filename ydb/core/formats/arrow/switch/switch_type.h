@@ -25,7 +25,7 @@ template <typename TFunc>
 [[nodiscard]] bool SwitchYqlTypeToArrowType(const NScheme::TTypeInfo& typeInfo, TFunc&& callback) {
     switch (typeInfo.GetTypeId()) {
         case NScheme::NTypeIds::Bool:
-            return callback(TTypeWrapper<arrow::BooleanType>());
+            return callback(TTypeWrapper<arrow::UInt8Type>());
         case NScheme::NTypeIds::Int8:
             return callback(TTypeWrapper<arrow::Int8Type>());
         case NScheme::NTypeIds::Uint8:
@@ -64,7 +64,8 @@ template <typename TFunc>
         case NScheme::NTypeIds::Interval:
             return callback(TTypeWrapper<arrow::DurationType>());
         case NScheme::NTypeIds::Decimal:
-            return callback(TTypeWrapper<arrow::Decimal128Type>());
+        case NScheme::NTypeIds::Uuid:
+            return callback(TTypeWrapper<arrow::FixedSizeBinaryType>());
 
         case NScheme::NTypeIds::Datetime64:
         case NScheme::NTypeIds::Timestamp64:

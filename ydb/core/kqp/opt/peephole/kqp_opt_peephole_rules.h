@@ -13,5 +13,6 @@ namespace NKikimr::NKqp::NOpt {
 
 NYql::NNodes::TExprBase KqpBuildWideReadTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 NYql::NNodes::TExprBase KqpRewriteWriteConstraint(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx);
+NYql::NNodes::TExprBase KqpEliminateWideMapForLargeOlapTable(const NYql::NNodes::TExprBase& node, NYql::TExprContext& ctx, NYql::TTypeAnnotationContext& typesCtx);
 
 } // namespace NKikimr::NKqp::NOpt

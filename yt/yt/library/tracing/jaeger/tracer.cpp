@@ -39,8 +39,8 @@ using namespace NAuth;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-constinit const auto Logger = JaegerLogger;
-static constexpr auto& Profiler = TracingProfiler;
+static constinit const auto Logger = JaegerLogger;
+static constinit const auto Profiler = TracingProfiler;
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -59,7 +59,7 @@ def post_install(self):
 
     posix_srcs = []
     for src in sorted(m.SRCS):
-        if "/posix/" in src:
+        if ("/posix/" in src) or ("/linux" in src):
             m.SRCS.remove(src)
             posix_srcs.append(src)
 

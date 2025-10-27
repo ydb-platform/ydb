@@ -1,6 +1,7 @@
 #pragma once
 #include "defs.h"
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
@@ -137,7 +138,7 @@ struct TPDiskConfig : public TThrRefBase {
     bool UseSpdkNvmeDriver;
 
     // Next 2 are either user-defined or inferred from drive size
-    ui64 ExpectedSlotCount = 0;
+    ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
@@ -145,7 +146,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    TControlWrapper MaxCommonLogChunks = 200;
+    i64 MaxCommonLogChunks = 200ll;
+    i64 CommonStaticLogChunks = 70ll;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor

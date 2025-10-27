@@ -17,8 +17,8 @@ namespace {
      * All other callables will not be evaluated
      */
     THashSet<TString> ConstantFoldingWhiteList = {
-        "Concat", "Just", "Optional", "SafeCast", "AsList",
-        "+", "-", "*", "/", "%"};
+        "Concat", "Just", "Optional", "SafeCast", "AsList", "Size",
+        "+", "-", "*", "/", "%", ">", "<", ">=", "<=", "=="};
 
     THashSet<TString> PgConstantFoldingWhiteList = {
         "PgResolvedOp", "PgResolvedCall", "PgCast", "PgConst", "PgArray", "PgType"};

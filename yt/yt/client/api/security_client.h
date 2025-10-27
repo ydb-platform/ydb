@@ -2,6 +2,7 @@
 
 #include "client_common.h"
 
+#include <yt/yt/client/security_client/acl.h>
 #include <yt/yt/client/security_client/public.h>
 
 namespace NYT::NApi {
@@ -48,6 +49,7 @@ struct TCheckPermissionResponse
     : public TCheckPermissionResult
 {
     std::optional<std::vector<TCheckPermissionResult>> Columns;
+    std::optional<std::vector<NSecurityClient::TRowLevelAccessControlEntry>> RowLevelAcl;
 };
 
 struct TCheckPermissionByAclOptions
@@ -56,6 +58,7 @@ struct TCheckPermissionByAclOptions
     , public TPrerequisiteOptions
 {
     bool IgnoreMissingSubjects = false;
+    bool IgnorePendingRemovalSubjects = false;
 };
 
 struct TCheckPermissionByAclResult
@@ -66,6 +69,7 @@ struct TCheckPermissionByAclResult
     NSecurityClient::TSubjectId SubjectId;
     std::optional<std::string> SubjectName;
     std::vector<std::string> MissingSubjects;
+    std::vector<std::string> PendingRemovalSubjects;
 };
 
 struct TSetUserPasswordOptions
@@ -120,15 +124,11 @@ struct TGetCurrentUserOptions
 { };
 
 struct TGetCurrentUserResult
-    : public NYTree::TYsonStruct
 {
     std::string User;
-
-    REGISTER_YSON_STRUCT(TGetCurrentUserResult);
-    static void Register(TRegistrar registrar);
 };
 
-DEFINE_REFCOUNTED_TYPE(TGetCurrentUserResult);
+void Serialize(const TGetCurrentUserResult& result, NYson::IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -137,7 +137,7 @@ struct ISecurityClient
     virtual ~ISecurityClient() = default;
 
     //! Return information about current user.
-    virtual TFuture<TGetCurrentUserResultPtr> GetCurrentUser(
+    virtual TFuture<TGetCurrentUserResult> GetCurrentUser(
         const TGetCurrentUserOptions& options = {}) = 0;
 
     virtual TFuture<void> AddMember(

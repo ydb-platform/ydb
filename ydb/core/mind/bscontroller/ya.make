@@ -5,8 +5,10 @@ SRCS(
     bsc.h
     bsc_audit.h
     bsc_audit.cpp
+    bridge.cpp
     cluster_balancing.cpp
     cmds_box.cpp
+    cmds_bridge.cpp
     cmds_drive_status.cpp
     cmds_host_config.cpp
     cmds_storage_pool.cpp

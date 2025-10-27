@@ -74,6 +74,7 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequestBytesThrottledCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NoReply));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(FlakyCall));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DelayedCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RequireCoolFeature));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(StreamingEcho)
             .SetStreamingEnabled(true)
@@ -90,6 +91,7 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetTraceBaggage));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(CustomMetadata));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(GetChannelFailureError));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(ManuallyCanceledByServer));
         // NB: NotRegisteredCall is not registered intentionally
 
         DeclareServerFeature(ETestFeature::Great);
@@ -347,6 +349,12 @@ public:
         }
     }
 
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DelayedCall)
+    {
+        context->SetRequestInfo();
+        context->Reply();
+    }
+
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RequireCoolFeature)
     {
         context->SetRequestInfo();
@@ -385,6 +393,12 @@ public:
             YT_VERIFY(IsChannelFailureError(channelFailureError));
             context->Reply(channelFailureError);
         }
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, ManuallyCanceledByServer)
+    {
+        context->SetRequestInfo();
+        context->Cancel();
     }
 
     TFuture<void> GetServerStreamsAborted() const override

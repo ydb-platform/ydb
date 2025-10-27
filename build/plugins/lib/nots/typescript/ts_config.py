@@ -1,9 +1,11 @@
 import copy
 import os
+from pathlib import Path
 
 from .ts_errors import TsError, TsValidationError
 from .ts_glob import ts_glob, TsGlobConfig
 from ..package_manager.base import utils
+
 
 DEFAULT_TS_CONFIG_FILE = "tsconfig.json"
 
@@ -37,21 +39,24 @@ class CompilerOptionsFields:
         rootDir,
     }
 
+    paths = 'paths'
+
 
 class TsConfig(object):
     @classmethod
-    def load(cls, path):
+    def load(cls, path, source_dir: str = None):
         """
         :param path: tsconfig.json path
+        :param source_dir: directory with the project (ya.make file)
         :type path: str
         :rtype: TsConfig
         """
-        tsconfig = cls(path)
+        tsconfig = cls(path, source_dir)
         tsconfig.read()
 
         return tsconfig
 
-    def __init__(self, path):
+    def __init__(self, path, source_dir: str = None):
         import rapidjson
 
         self.rj = rapidjson
@@ -59,6 +64,7 @@ class TsConfig(object):
         if not os.path.isabs(path):
             raise TypeError("Absolute path required, given: {}".format(path))
 
+        self.source_dir = source_dir
         self.path = path
         self.data = {}
 
@@ -84,8 +90,15 @@ class TsConfig(object):
         # 'data' from the file in 'extends'
         base_data = copy.deepcopy(base_tsconfig.data)
 
-        def relative_path(p):
+        def relative_path(p: str) -> str:
             return os.path.normpath(os.path.join(rel_path, p))
+
+        def relative_path_aliases(paths: dict[str, list[str]]) -> dict[str, list[str]]:
+            result: dict[str, list[str]] = {}
+            for alias, imports in paths.items():
+                result[alias] = [os.path.join(".", relative_path(p)) for p in imports]
+
+            return result
 
         for root_field, root_value in base_data.items():
             # extends
@@ -101,10 +114,14 @@ class TsConfig(object):
             # compilerOptions
             elif root_field == RootFields.compilerOptions:
                 for option, option_value in root_value.items():
-                    is_path_field = option in CompilerOptionsFields.PATH_FIELDS
-
                     if not self.has_compiler_option(option):
-                        new_value = relative_path(option_value) if is_path_field else option_value
+                        new_value = option_value
+
+                        if option == CompilerOptionsFields.paths:
+                            new_value = relative_path_aliases(option_value)
+                        elif option in CompilerOptionsFields.PATH_FIELDS:
+                            new_value = relative_path(option_value)
+
                         self.set_compiler_option(option, new_value)
 
             # other fields (just copy if it has not existed)
@@ -146,7 +163,7 @@ class TsConfig(object):
             base_config_path = os.path.join(base_config_path, DEFAULT_TS_CONFIG_FILE)
 
         # processing the base file recursively
-        base_config = TsConfig.load(base_config_path)
+        base_config = TsConfig.load(base_config_path, self.source_dir)
         paths = [base_config_path] + base_config.inline_extend(dep_paths)
         self.merge(rel_path, base_config)
 
@@ -217,10 +234,16 @@ class TsConfig(object):
         declaration_dir = opts.get(CompilerOptionsFields.declarationDir)
         out_dir = opts.get(CompilerOptionsFields.outDir)
         root_dir = opts.get(CompilerOptionsFields.rootDir)
-        config_dir = os.path.dirname(self.path)
 
         def is_mod_subdir(p):
-            return not os.path.isabs(p) and os.path.normpath(os.path.join(config_dir, p)).startswith(config_dir)
+            if os.path.isabs(p):
+                return False
+
+            try:
+                self.rel_to_module_path(p)
+                return True
+            except ValueError:
+                return False
 
         if root_dir is None:
             errors.append("'rootDir' option is required")
@@ -282,8 +305,32 @@ class TsConfig(object):
 
         return ts_glob(ts_glob_config, all_files)
 
-    def get_out_dirs(self):
-        # type: () -> set[str]
+    def get_out_dirs(self) -> set[str]:
+
         output_dirs = [self.compiler_option("outDir"), self.compiler_option("declarationDir")]
 
-        return {d for d in output_dirs if d is not None}
+        return {str(self.rel_to_module_path(d)) for d in output_dirs if d is not None}
+
+    def get_config_dir(self) -> Path:
+        return Path(os.path.normpath(self.path)).parent
+
+    def get_module_dir(self) -> Path | None:
+        if self.source_dir is not None:
+            return Path(self.source_dir)
+
+        path = self.get_config_dir()
+
+        for parent in path.parents:
+            if parent.joinpath("package.json").exists() and parent.joinpath("ya.make").exists():
+                return parent
+
+        return None
+
+    def rel_to_module_path(self, p) -> Path:
+        path = self.get_config_dir().joinpath(p).resolve()
+
+        module_dir = self.get_module_dir()
+        if module_dir is None:
+            raise Exception("Can't find the module directory (with ya.make and package.json files)")
+
+        return path.relative_to(module_dir)

@@ -22,6 +22,20 @@
 
 namespace NKikimr::NKqp::NOpt {
 
+std::unordered_set<std::string_view> GetNonDeterministicFunctions() {
+    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
+        "RandomNumber",
+        "Random",
+        "RandomUuid",
+        "Now",
+        "CurrentUtcDate",
+        "CurrentUtcDatetime",
+        "CurrentUtcTimestamp"
+    };
+
+    return nonDeterministicFunctions;
+}
+
 namespace {
 
 using namespace NYql;
@@ -33,16 +47,6 @@ using TStatus = IGraphTransformer::TStatus;
 TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& ctx,
     THashMap<TString, TKqpParamBinding>* paramBindings)
 {
-    static const std::unordered_set<std::string_view> nonDeterministicFunctions = {
-        "RandomNumber",
-        "Random",
-        "RandomUuid",
-        "Now",
-        "CurrentUtcDate",
-        "CurrentUtcDatetime",
-        "CurrentUtcTimestamp"
-    };
-
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
 
@@ -50,7 +54,7 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
     auto status = OptimizeExpr(input, output, [paramBindings](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (auto maybeCallable = TMaybeNode<TCallable>(node)) {
             auto callable = maybeCallable.Cast();
-            if (nonDeterministicFunctions.contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
+            if (GetNonDeterministicFunctions().contains(callable.CallableName()) && callable.Ref().ChildrenSize() == 0) {
                 const auto paramName = TStringBuilder() << ParamNamePrefix
                     << NNaming::CamelToSnakeCase(TString(callable.CallableName()));
 
@@ -102,6 +106,7 @@ public:
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
+        AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
 #undef HNDL
     }
 
@@ -139,6 +144,12 @@ protected:
     TMaybeNode<TExprBase> RewritePureJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = DqPeepholeRewritePureJoin(node, ctx);
         DumpAppliedRule("RewritePureJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> EliminateWideMapForLargeOlapTable(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpEliminateWideMapForLargeOlapTable(node, ctx, *GetTypes());
+        DumpAppliedRule("EliminateWideMapForLargeOlapTable", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 
@@ -197,7 +208,7 @@ public:
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
-        if (config->UseDqHashCombine.Get().GetOrElse(false)) {
+        if (config->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
         }
 #undef HNDL
@@ -299,7 +310,6 @@ bool IsCompatibleWithBlocks(TPositionHandle pos, const TStructExprType& type, TE
 bool CanPropagateWideBlockThroughChannel(
     const TDqOutput& output,
     const THashMap<ui64, TKqpProgram>& programs,
-    const TDqStageSettings& stageSettings,
     TExprContext& ctx,
     TTypeAnnotationContext& typesCtx)
 {
@@ -310,6 +320,8 @@ bool CanPropagateWideBlockThroughChannel(
         // stage has multiple outputs
         return false;
     }
+
+    auto stageSettings = TDqStageSettings::Parse(output.Stage());
 
     if (!stageSettings.WideChannels) {
         return false;
@@ -361,14 +373,29 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
 
             YQL_ENSURE(stage.Inputs().Size() == stage.Program().Args().Size());
 
+            // Workaround to mitigate https://github.com/ydb-platform/ydb/issues/20440
+            //      do not mix scalar and block HashShuffle HashV1 connections,
+            //      if we find any scalar connection then don't propagate blocks through other connections.
+            ui32 scalarHashShuffleCount = 0;
+            for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
+                auto connection = stage.Inputs().Item(i).Maybe<TDqCnHashShuffle>();
+                if (connection) {
+                    auto hashFuncType = config->DefaultHashShuffleFuncType;
+                    if (connection.Cast().HashFunc().IsValid()) {
+                        hashFuncType = FromString<NDq::EHashShuffleFuncType>(connection.Cast().HashFunc().Cast().StringValue());
+                    }
+                    scalarHashShuffleCount += (hashFuncType == NDq::EHashShuffleFuncType::HashV1);
+                }
+            }
+
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); connection &&
-                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, TDqStageSettings::Parse(stage), ctx, typesCtx))
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
+                    CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())
                         .Callable("WideFromBlocks")

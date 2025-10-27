@@ -1,10 +1,10 @@
 #include "kqp_script_executions.h"
-#include "kqp_script_execution_retries.h"
 #include "kqp_script_executions_impl.h"
 
 #include <ydb/core/base/backtrace.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
+#include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_retries.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/util/proto_duration.h>
@@ -14,10 +14,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
+#include <fmt/format.h>
+
 namespace NKikimr::NKqp {
 
 using namespace Tests;
 using namespace NSchemeShard;
+using namespace fmt::literals;
 
 namespace  {
 
@@ -68,8 +71,8 @@ const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
 struct TScriptExecutionsYdbSetup {
-    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false) {
-        Init(enableScriptExecutionBackgroundChecks);
+    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false, bool secureScriptExecutions = false) {
+        Init(enableScriptExecutionBackgroundChecks, secureScriptExecutions);
     }
 
     static void BackTraceSignalHandler(int signal) {
@@ -82,7 +85,7 @@ struct TScriptExecutionsYdbSetup {
         abort();
     }
 
-    void Init(bool enableScriptExecutionBackgroundChecks) {
+    void Init(bool enableScriptExecutionBackgroundChecks, bool secureScriptExecutions) {
         EnableYDBBacktraceFormat();
         for (auto sig : {SIGILL, SIGSEGV}) {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
@@ -93,6 +96,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort);
         ServerSettings->SetEnableScriptExecutionOperations(true);
         ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
+        ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
@@ -108,12 +112,19 @@ struct TScriptExecutionsYdbSetup {
         NYdb::TDriverConfig driverCfg;
         driverCfg
             .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
-            .SetDatabase(Tests::TestDomainName);
+            .SetDatabase(Tests::TestDomainName)
+            .SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
         TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
+
+        const auto result = TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+                GRANT ALL ON `/dc-1` TO `{user}`;
+            )", "user"_a = BUILTIN_ACL_ROOT
+        )).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
@@ -314,7 +325,8 @@ struct TScriptExecutionsYdbSetup {
             edgeActor,
             new TEvGetScriptExecutionOperation(
                 TestDatabase,
-                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId))
+                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId)),
+                BUILTIN_ACL_ROOT
             )
         );
 
@@ -326,7 +338,7 @@ struct TScriptExecutionsYdbSetup {
 
     TEvFetchScriptResultsResponse::TPtr FetchScriptResults(const TString& executionId, i32 resultSetId) {
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, resultSetId, 0, 0, 0, TInstant::Max()));
+        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, BUILTIN_ACL_ROOT, resultSetId, 0, 0, 0, TInstant::Max()));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "FetchScriptResults response is empty");
@@ -629,6 +641,24 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
     }
+
+    Y_UNIT_TEST(TestSecureScriptExecutions) {
+        TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
+        ydb.CreateQueryInDb();
+
+        for (const auto& table : {"script_executions", "script_execution_leases", "result_sets"}) {
+            const TString sql = fmt::format(R"(
+                SELECT
+                    COUNT(*)
+                FROM `.metadata/{table}`
+            )", "table"_a = table);
+
+            const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot find table");
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
@@ -648,20 +678,24 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
             mapping.MutableBackoffPolicy()->SetRetryRateLimit(84);
         }
 
-        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, ui64 expectedRateLimit) {
+        const auto checkStatus = [&](Ydb::StatusIds::StatusCode status, std::optional<ui64> expectedRateLimit) {
             const auto policy = TRetryPolicyItem::FromProto(status, retryState);
-            UNIT_ASSERT_VALUES_EQUAL(policy.RetryCount, expectedRateLimit);
+            if (expectedRateLimit) {
+                UNIT_ASSERT_VALUES_EQUAL(policy->RetryCount, *expectedRateLimit);
+            } else {
+                UNIT_ASSERT(!policy);
+            }
         };
 
         checkStatus(Ydb::StatusIds::SCHEME_ERROR, 42);
         checkStatus(Ydb::StatusIds::UNAVAILABLE, 84);
         checkStatus(Ydb::StatusIds::INTERNAL_ERROR, 84);
-        checkStatus(Ydb::StatusIds::BAD_REQUEST, 0);
+        checkStatus(Ydb::StatusIds::BAD_REQUEST, std::nullopt);
     }
 
     Y_UNIT_TEST(TestRetryLimiter) {
         constexpr ui64 RETRY_COUNT = 10;
-        const TInstant now = TInstant::Now();
+        TInstant now = TInstant::Now();
 
         TRetryLimiter limiter;
         limiter.Assign(RETRY_COUNT, now, 0.0);
@@ -675,13 +709,13 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
         {   // Retry rate limit
             TRetryPolicyItem policy(RETRY_COUNT, 0, RETRY_PERIOD, BACKOFF_DURATION);
 
-            for (ui64 i = 0; i <= 2 * RETRY_COUNT; ++i) {
-                Sleep(RETRY_PERIOD / (2 * RETRY_COUNT));
-                if (i < 2 * RETRY_COUNT) {
-                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
-                    UNIT_ASSERT_DOUBLES_EQUAL(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1);
+            for (ui64 i = 0; i < 2 * RETRY_COUNT; ++i) {
+                now += RETRY_PERIOD / (2 * RETRY_COUNT);
+                if (i + 1 < 2 * RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": " << limiter.RetryRate << ", error=" << limiter.LastError);
+                    UNIT_ASSERT_DOUBLES_EQUAL_C(limiter.Backoff.SecondsFloat(), (1.0 + 0.5 * static_cast<double>(i + 1)) * BACKOFF_DURATION.SecondsFloat(), 0.1, i << ": " << limiter.RetryRate);
                 } else {
-                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryRate);
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryRate);
                     UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "failure rate " << limiter.RetryRate << " exceeds limit of "  << RETRY_COUNT);
                 }
             }
@@ -690,11 +724,11 @@ Y_UNIT_TEST_SUITE(TestScriptExecutionsUtils) {
         {   // Retry count limit
             TRetryPolicyItem policy(8 * RETRY_COUNT, 4 * RETRY_COUNT, RETRY_PERIOD, BACKOFF_DURATION);
 
-            for (ui64 i = 0; i <= RETRY_COUNT; ++i) {
-                if (i < RETRY_COUNT) {
-                    UNIT_ASSERT_C(limiter.UpdateOnRetry(TInstant::Now(), policy), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
+            for (ui64 i = 0; i <= RETRY_COUNT + 1; ++i) {
+                if (i <= RETRY_COUNT) {
+                    UNIT_ASSERT_C(limiter.UpdateOnRetry(now, policy, now), i << ": rate=" << limiter.RetryRate << ", count=" << limiter.RetryCount << ", error=" << limiter.LastError);
                 } else {
-                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(TInstant::Now(), policy), limiter.RetryCount);
+                    UNIT_ASSERT_C(!limiter.UpdateOnRetry(now, policy, now), limiter.RetryCount);
                     UNIT_ASSERT_STRING_CONTAINS(limiter.LastError, TStringBuilder() << "retry count reached limit of " << 4 * RETRY_COUNT);
                 }
             }

@@ -1877,7 +1877,7 @@ md_traverse(MultiDictObject *md, visitproc visit, void *arg)
 static inline int
 md_clear(MultiDictObject *md)
 {
-    if (md->used == 0) {
+    if (md->keys == NULL || md->keys == &empty_htkeys) {
         return 0;
     }
     md->version = NEXT_VERSION(md->state);

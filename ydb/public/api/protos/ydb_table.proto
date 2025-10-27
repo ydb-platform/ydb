@@ -79,19 +79,19 @@ message VectorIndexSettings {
         VECTOR_TYPE_BIT = 4;
     }
 
-    Metric metric = 1;
+    optional Metric metric = 1;
 
-    VectorType vector_type = 2;
+    optional VectorType vector_type = 2;
 
-    uint32 vector_dimension = 3;
+    optional uint32 vector_dimension = 3;
 }
 
 message KMeansTreeSettings {
     VectorIndexSettings settings = 1;
-    // average count of clusters on each level of tree, 0 -- means auto
-    uint32 clusters = 2;
-    // average count of levels in the tree, 0 -- means auto
-    uint32 levels = 3;
+
+    optional uint32 clusters = 2;
+    
+    optional uint32 levels = 3;
 }
 
 message GlobalIndex {
@@ -113,7 +113,149 @@ message GlobalVectorKMeansTreeIndex {
     KMeansTreeSettings vector_settings = 3;
 }
 
-// Represent secondary index
+message FulltextIndexSettings {
+    // Specifies the layout strategy for storing and updating the full-text index
+    enum Layout {
+        LAYOUT_UNSPECIFIED = 0;
+
+        // Uses a single flat inverted index table (indexImplTable)
+        // Example source table:
+        //     ┌────┬────────────────────────────┐
+        //     │ id │ text                       │
+        //     ├────┼────────────────────────────┤
+        //     │ 1  │ "The quick brown fox"      │
+        //     │ 2  │ "The quick blue hare"      │
+        //     └────┴────────────────────────────┘
+        // Example inverted index table (indexImplTable):
+        //     ┌──────────────┬────┐
+        //     │ __ydb_token  │ id │
+        //     ├──────────────┼────┤
+        //     │ "blue"       │ 2  │
+        //     │ "brown"      │ 1  │
+        //     │ "fox"        │ 1  │
+        //     │ "hare"       │ 2  │
+        //     │ "quick"      │ 1  │
+        //     │ "quick"      │ 2  │
+        //     │ "The"        │ 1  │
+        //     │ "The"        │ 2  │
+        //     └──────────────┴────┘
+        // Supports a single column only
+        FLAT = 1;
+    }
+
+    // Specifies how text is tokenized during indexing
+    enum Tokenizer {
+        TOKENIZER_UNSPECIFIED = 0;
+
+        // Splits text only by whitespace
+        // Does not split on punctuation
+        // Example:
+        //   Text: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo-bar", "baz_lorem", "ipsum"]
+        WHITESPACE = 1;
+
+        // Applies general language-aware tokenization
+        // Splits text on whitespace and punctuation
+        // Example:
+        //   Text: "foo-bar baz_lorem ipsum"
+        //   Tokens: ["foo", "bar", "baz", "lorem", "ipsum"]
+        STANDARD = 2;
+
+        // Treats the entire input as a single token
+        // No splitting is performed
+        // Example:
+        //   Text: "Hello World!"
+        //   Tokens: ["Hello World!"]
+        KEYWORD = 3;
+    }
+
+    // Represents text analyzers settings
+    message Analyzers {
+        // See Tokenizer enum
+        optional Tokenizer tokenizer = 1;
+    
+        // Language used for language-sensitive operations like stopword filtering
+        // Example: language = "english"
+        // By default is not specified and no language-specific logic is applied
+        optional string language = 2;
+    
+        // Whether to convert tokens to lowercase
+        // Example:
+        //   Token: "Quick"
+        //   Output: "quick"
+        optional bool use_filter_lowercase = 100;
+    
+        // Whether to remove common stopwords like "the", "a", "is"
+        // Example: language = "english"
+        //   Tokens: ["the", "quick", "brown"]
+        //   Output: ["quick", "brown"]
+        optional bool use_filter_stopwords = 110;
+    
+        // Whether to apply character n-gram indexing to each token
+        // Must be used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "ear", "arc", "rch", "sear", "earc", "arch"]
+        optional bool use_filter_ngram = 120;
+    
+        // Whether to apply edge n-gram indexing (prefix-based) to each token
+        // Used with filter_ngram_min_length and filter_ngram_max_length
+        // Example: filter_ngram_min_length = 3, filter_ngram_max_length = 4
+        //   Token: "search"
+        //   Output: ["sea", "sear"]
+        optional bool use_filter_edge_ngram = 121;
+    
+        // Minimum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 3
+        optional int32 filter_ngram_min_length = 122 [(Ydb.value) = ">= 0"];
+    
+        // Maximum length of n-grams to generate (inclusive)
+        // Must be used with use_filter_ngram or use_filter_edge_ngram
+        // Default value is 4
+        optional int32 filter_ngram_max_length = 123 [(Ydb.value) = ">= 0"];
+    
+        // Whether to filter tokens by their length
+        // Must be used with filter_length_min or filter_length_max
+        // Example: filter_length_min = 4, filter_length_max = 6
+        //   Tokens: ["foo", "fooba", "foobar", "foobarbaz"]
+        //   Output: ["fooba", "foobar"]
+        optional bool use_filter_length = 130;
+    
+        // Minimum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        optional int32 filter_length_min = 131 [(Ydb.value) = ">= 0"];
+    
+        // Maximum token length to keep (inclusive)
+        // Must be used with use_filter_length
+        optional int32 filter_length_max = 132 [(Ydb.value) = ">= 0"];
+    }
+
+    // Represents text analyzers settings for a specific column
+    message ColumnAnalyzers {
+        // Name of the column to be indexed
+        optional string column = 1;
+
+        // Analyzer settings specific to this column
+        Analyzers analyzers = 2;
+    }
+
+    // See Layout enum
+    optional Layout layout = 1;
+
+    // List of columns and their fulltext settings
+    // Currently, this list should contain a single entry with specified analyzers
+    // Later, some columns may not use analyzers and will be indexed as-is
+    // This list must always match TableIndex.index_columns
+    repeated ColumnAnalyzers columns = 2;
+}
+
+message GlobalFulltextIndex {
+    GlobalIndexSettings settings = 1;
+    FulltextIndexSettings fulltext_settings = 2;
+}
+
+// Represent table index
 message TableIndex {
     // Name of index
     string name = 1;
@@ -125,12 +267,13 @@ message TableIndex {
        GlobalAsyncIndex global_async_index = 4;
        GlobalUniqueIndex global_unique_index = 6;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 7;
+       GlobalFulltextIndex global_fulltext_index = 8;
     }
     // list of columns content to be copied in to index table
     repeated string data_columns = 5;
 }
 
-// Represent secondary index with index state
+// Represent table index with index state
 message TableIndexDescription {
     enum Status {
         STATUS_UNSPECIFIED = 0;
@@ -149,6 +292,7 @@ message TableIndexDescription {
        GlobalAsyncIndex global_async_index = 5;
        GlobalUniqueIndex global_unique_index = 8;
        GlobalVectorKMeansTreeIndex global_vector_kmeans_tree_index = 9;
+       GlobalFulltextIndex global_fulltext_index = 10;
     }
     Status status = 4;
     // list of columns content to be copied in to index table
@@ -301,6 +445,12 @@ message ColumnFamilyPolicy {
         COMPRESSED = 2;
     }
 
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
+    }
+
     // Name of the column family, the name "default" must be used for the
     // primary column family that contains as least primary key columns
     string name = 1;
@@ -315,6 +465,9 @@ message ColumnFamilyPolicy {
 
     // Optionally specify whether data should be compressed
     Compression compression = 5;
+
+    // When IN_MEMORY tries to keep the colums of the family in memory (default is REGULAR)
+    CacheMode cache_mode = 6;
 }
 
 message CompactionPolicy {
@@ -539,6 +692,10 @@ message StorageSettings {
     // * Table cannot be copied or backed up when this is enabled
     // * This feature cannot be disabled once enabled for a table
     Ydb.FeatureFlag.Status store_external_blobs = 5;
+
+    // This works when store_external_blobs is enabled
+    // and specifies the number of data channels to store "external blobs"
+    optional uint32 external_data_channels_count = 6;
 }
 
 message ColumnFamily {
@@ -547,6 +704,12 @@ message ColumnFamily {
         COMPRESSION_NONE = 1;
         COMPRESSION_LZ4 = 2;
         COMPRESSION_ZSTD = 3;
+    }
+
+    enum CacheMode {
+        CACHE_MODE_UNSPECIFIED = 0;
+        CACHE_MODE_REGULAR = 1;
+        CACHE_MODE_IN_MEMORY = 2;
     }
 
     // Name of the column family
@@ -566,6 +729,8 @@ message ColumnFamily {
     // For ZSTD compression level must be in range [-131072:22]
     // For other compression types compression level must be empty
     optional int32 compression_level = 5;
+
+    CacheMode cache_mode = 6;
 }
 
 message PartitioningSettings {
@@ -627,7 +792,7 @@ message CreateTableRequest {
     // Table profile
     TableProfile profile = 5;
     Ydb.Operations.OperationParams operation_params = 6;
-    // List of secondary indexes
+    // List of table indexes
     repeated TableIndex indexes = 7;
     // Table rows time to live settings
     TtlSettings ttl_settings = 8;
@@ -705,9 +870,9 @@ message AlterTableRequest {
         TtlSettings set_ttl_settings = 7;
         google.protobuf.Empty drop_ttl_settings = 8;
     }
-    // Add secondary indexes
+    // Add table indexes
     repeated TableIndex add_indexes = 9;
-    // Remove secondary indexes
+    // Remove table indexes
     repeated string drop_indexes = 10;
     // Change table storage settings
     StorageSettings alter_storage_settings = 11;

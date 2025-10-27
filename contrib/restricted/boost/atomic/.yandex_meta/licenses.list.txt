@@ -31,7 +31,7 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 ====================COPYRIGHT====================
  * (C) Copyright 2013 Tim Blechmann
- * (C) Copyright 2013, 2020 Andrey Semashev
+ * (C) Copyright 2013, 2020-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -51,13 +51,13 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 ====================COPYRIGHT====================
  * Copyright (c) 2009 Helge Bahmann
  * Copyright (c) 2012 Tim Blechmann
- * Copyright (c) 2013 - 2020 Andrey Semashev
+ * Copyright (c) 2013-2018, 2020-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
  * Copyright (c) 2009 Helge Bahmann
  * Copyright (c) 2012 Tim Blechmann
- * Copyright (c) 2013-2018, 2020-2021 Andrey Semashev
+ * Copyright (c) 2013-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -94,13 +94,19 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 ====================COPYRIGHT====================
  * Copyright (c) 2011 Helge Bahmann
  * Copyright (c) 2013 Tim Blechmann
- * Copyright (c) 2014, 2020 Andrey Semashev
+ * Copyright (c) 2014, 2020-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
  * Copyright (c) 2011 Helge Bahmann
  * Copyright (c) 2013 Tim Blechmann
- * Copyright (c) 2014-2020 Andrey Semashev
+ * Copyright (c) 2014, 2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2011 Helge Bahmann
+ * Copyright (c) 2013 Tim Blechmann
+ * Copyright (c) 2014-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -109,8 +115,13 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
+ * Copyright (c) 2011 Helge Bahmann
+ * Copyright (c) 2013-2014, 2020-2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
  * Copyright (c) 2012 Hartmut Kaiser
- * Copyright (c) 2014-2018, 2020-2021 Andrey Semashev
+ * Copyright (c) 2014-2018, 2020-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -118,11 +129,11 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2015 Andrey Semashev
+ * Copyright (c) 2014, 2020 Andrey Semashev
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2017 - 2018 Andrey Semashev
+ * Copyright (c) 2015-2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -130,11 +141,23 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2018, 2021 Andrey Semashev
+ * Copyright (c) 2017-2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018 Andrey Semashev
 
 
 ====================COPYRIGHT====================
  * Copyright (c) 2018-2023 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2018-2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2020 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -150,12 +173,16 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 
 ====================COPYRIGHT====================
- * Copyright (c) 2023 Andrey Semashev
+ * Copyright (c) 2021-2025 Andrey Semashev
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2008, 2009 Peter Dimov
-//  Copyright (c) 2018 Andrey Semashev
+//  Copyright (c) 2018, 2025 Andrey Semashev
 
 
 ====================COPYRIGHT====================
@@ -165,4 +192,4 @@ Distributed under the [Boost Software License, Version 1.0](https://www.boost.or
 
 ====================COPYRIGHT====================
 //  Copyright (c) 2011 Helge Bahmann
-//  Copyright (c) 2020 Andrey Semashev
+//  Copyright (c) 2020-2025 Andrey Semashev

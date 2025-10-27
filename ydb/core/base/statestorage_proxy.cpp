@@ -653,7 +653,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui64 SourceCookie = 0;
     THashSet<TActorId> Replies;
     ui32 RingGroupPassAwayCounter;
-    bool WaitAllReplies;
 
     ui64 TabletID;
     ui64 Cookie;
@@ -665,6 +664,8 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
     ui64 LockedFor;
     TMap<TActorId, TActorId> Followers;
 
+    bool Replied = false;
+
     TEvStateStorage::TSignature Signature;
 
 
@@ -672,12 +673,10 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         TEvStateStorage::TEvLookup *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        WaitAllReplies = msg->ProxyOptions.SigWaitMode != msg->ProxyOptions.SigNone;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
-            if ((!WaitAllReplies && ringGroup.WriteOnly) || ringGroup.State == ERingGroupState::DISCONNECTED
-                || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
+            if (ringGroup.State == ERingGroupState::DISCONNECTED || ringGroup.State == ERingGroupState::NOT_SYNCHRONIZED) {
                 continue;
             }
             auto actorId = RegisterWithSameMailbox(new TStateStorageProxyRequest(Info, ringGroupIndex));
@@ -692,7 +691,6 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         T *msg = ev->Get();
         Source = ev->Sender;
         SourceCookie = ev->Cookie;
-        WaitAllReplies = true;
         BLOG_D("RingGroupProxyRequest::HandleInit ev: " << msg->ToString());
         for (ui32 ringGroupIndex = 0; ringGroupIndex < Info->RingGroups.size(); ++ringGroupIndex) {
             const auto &ringGroup = Info->RingGroups[ringGroupIndex];
@@ -724,24 +722,34 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Signature.Merge(msg->Signature);
     }
 
-    void Reply(NKikimrProto::EReplyStatus status) {
-        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
-        BLOG_D("RingGroupProxyRequest::Reply ev: " << msg->ToString());
-        Send(Source, msg, 0, SourceCookie);
+    bool ShouldReply() {
+        for(ui32 i : xrange(Info->RingGroups.size())) {
+            auto& rg = Info->RingGroups[i];
+            if (!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    bool ShouldReply() {
-        bool reply = !WaitAllReplies;
-        if(!reply) {
-            for(ui32 i : xrange(Info->RingGroups.size())) {
-                auto& rg = Info->RingGroups[i];
-                if(!rg.WriteOnly && RingGroupActorsByIndex.contains(i) && !Replies.contains(RingGroupActorsByIndex[i])) {
-                    return reply;
-                }
-            }
-            return true;
+    void Reply(NKikimrProto::EReplyStatus status) {
+        auto* msg = new TEvStateStorage::TEvInfo(status, TabletID, Cookie, CurrentLeader, CurrentLeaderTablet, CurrentGeneration, CurrentStep, Locked, LockedFor, Signature, Followers);
+        BLOG_D("RingGroupProxyRequest::Reply TEvInfo ev: " << msg->ToString());
+        Send(Source, msg, 0, SourceCookie);
+        Replied = true;
+    }
+
+    void MaybeReply(NKikimrProto::EReplyStatus status) {
+        if (!ShouldReply()) {
+            return;
         }
-        return reply;
+        if (Replied) {
+            auto* msg = new TEvStateStorage::TEvUpdateSignature(TabletID, Signature);
+            BLOG_D("RingGroupProxyRequest::Reply TEvUpdateSignature ev: " << msg->ToString());
+            Send(Source, msg, 0, SourceCookie);
+        } else {
+            Reply(status);
+        }
     }
 
     void HandleResult(TEvStateStorage::TEvInfo::TPtr &ev) {
@@ -749,15 +757,13 @@ class TStateStorageRingGroupProxyRequest : public TActorBootstrapped<TStateStora
         Replies.insert(ev->Sender);
         ProcessEvInfo(RingGroupActors[ev->Sender], msg);
         BLOG_D("RingGroupProxyRequest::HandleTEvInfo ev: " << msg->ToString());
-        if (ShouldReply()) {
-            Reply(msg->Status);
-        }
+        MaybeReply(msg->Status);
     }
 
     void HandleResult(TEvStateStorage::TEvUpdateSignature::TPtr &ev) {
         TEvStateStorage::TEvUpdateSignature *msg = ev->Get();
         Signature.Merge(msg->Signature);
-        Send(Source, new TEvStateStorage::TEvUpdateSignature(msg->TabletID, Signature), 0, SourceCookie);
+        MaybeReply(NKikimrProto::OK);
     }
 
     void HandleConfigVersion(TEvStateStorage::TEvConfigVersionInfo::TPtr &ev) {
@@ -788,6 +794,12 @@ public:
     TStateStorageRingGroupProxyRequest(TIntrusivePtr<TStateStorageInfo> info)
         : Info(info)
         , RingGroupPassAwayCounter(0)
+        , TabletID(0)
+        , Cookie(0)
+        , CurrentGeneration(0)
+        , CurrentStep(0)
+        , Locked(false)
+        , LockedFor(0)
     {
     }
 
@@ -1058,6 +1070,10 @@ class TStateStorageProxy : public TActor<TStateStorageProxy> {
         Send(ev->Sender, new TEvStateStorage::TEvListStateStorageResult(Info), 0, ev->Cookie);
     }
 
+    void Handle(TEvStateStorage::TEvListBoard::TPtr &ev) {
+        Send(ev->Sender, new TEvStateStorage::TEvListBoardResult(BoardInfo), 0, ev->Cookie);
+    }
+
     void Handle(TEvStateStorage::TEvUpdateGroupConfig::TPtr &ev) {
         auto *msg = ev->Get();
         Info = msg->GroupConfig;
@@ -1130,6 +1146,7 @@ public:
             hFunc(TEvStateStorage::TEvListStateStorage, Handle);
             hFunc(TEvStateStorage::TEvUpdateGroupConfig, Handle);
             hFunc(TEvStateStorage::TEvRingGroupPassAway, Handle);
+            hFunc(TEvStateStorage::TEvListBoard, Handle);
             fFunc(TEvents::TSystem::Unsubscribe, HandleUnsubscribe);
         default:
             if (Info->RingGroups.size() > 1)

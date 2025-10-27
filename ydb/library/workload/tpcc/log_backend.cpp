@@ -66,10 +66,10 @@ void TLogBackendWithCapture::GetLogLines(const TLogProcessor& processor) {
     }
 }
 
-void TLogBackendWithCapture::ProcessNewLines(bool logTaken) {
+void TLogBackendWithCapture::ProcessNewLines(bool lockTaken) {
     std::vector<std::pair<ELogPriority, std::string>> newLines;
     newLines.reserve(MaxLines * 2);
-    if (logTaken) {
+    if (lockTaken) {
         newLines.swap(CapturedLines);
     } else {
         TGuard guard(CapturingMutex);

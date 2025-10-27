@@ -5,6 +5,6 @@
 
 namespace NYql::NFastCheck {
 
-    THashSet<TString> TranslationFlags();
+THashSet<TString> TranslationFlags();
 
 } // namespace NYql::NFastCheck

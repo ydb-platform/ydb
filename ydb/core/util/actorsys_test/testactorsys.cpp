@@ -90,7 +90,7 @@ public:
         Context->Schedule(delta, ev, cookie, NodeId);
     }
 
-    bool Send(TAutoPtr<IEventHandle>& ev) override {
+    bool Send(std::unique_ptr<IEventHandle>& ev) override {
         if (TlsActivationContext) {
             const TActorContext& ctx = TActivationContext::AsActorContext();
             IActor* sender = Context->GetActor(ctx.SelfID);
@@ -99,10 +99,10 @@ public:
                 ev = nullptr;
             }
         }
-        return Context->Send(ev, NodeId);
+        return Context->Send(std::move(ev), NodeId);
     }
 
-    bool SpecificSend(TAutoPtr<IEventHandle>& ev) override {
+    bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override {
         return Send(ev);
     }
 
@@ -247,20 +247,16 @@ void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32
 
 void TTestActorSystem::SetupStateStorage(ui32 nodeId, ui32 stateStorageNodeId) {
     if (const auto& domain = GetDomainsInfo()->Domain) {
-        ui32 numReplicas = 5;
 
         auto process = [&](auto&& generateId, auto&& createReplica) {
-            auto info = MakeIntrusive<TStateStorageInfo>();
-            info->RingGroups.resize(1);
-            auto& ringGroup = info->RingGroups.front();
-            ringGroup.NToSelect = numReplicas;
-            ringGroup.Rings.resize(numReplicas);
-            for (ui32 i = 0; i < numReplicas; ++i) {
-                ringGroup.Rings[i].Replicas.push_back(generateId(stateStorageNodeId, i));
-            }
+            auto info = StateStorageInfoGenerator(generateId, stateStorageNodeId);
             if (nodeId == stateStorageNodeId) {
-                for (ui32 i = 0; i < numReplicas; ++i) {
-                    RegisterService(generateId(stateStorageNodeId, i), Register(createReplica(info.Get(), i), nodeId));
+                for (auto& rg : info->RingGroups) {
+                    for (auto& ring : rg.Rings) {
+                        for (ui32 i = 0; i < ring.Replicas.size(); ++i) {
+                            RegisterService(ring.Replicas[i], Register(createReplica(info.Get(), i), nodeId));
+                        }
+                    }
                 }
             }
             return info;

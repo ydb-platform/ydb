@@ -635,6 +635,7 @@ public:
     std::optional<std::string> GetTabletCommitLog1() const;
     std::optional<std::string> GetExternal() const;
     std::optional<bool> GetStoreExternalBlobs() const;
+    std::optional<std::uint32_t> GetExternalDataChannelsCount() const;
 
 private:
     class TImpl;
@@ -651,6 +652,7 @@ public:
     const std::string& GetName() const;
     std::optional<std::string> GetData() const;
     std::optional<EColumnFamilyCompression> GetCompression() const;
+    std::optional<EColumnFamilyCacheMode> GetCacheMode() const;
     std::optional<bool> GetKeepInMemory() const;
 
 private:
@@ -790,6 +792,7 @@ public:
     TStorageSettingsBuilder& SetTabletCommitLog1(const std::string& media);
     TStorageSettingsBuilder& SetExternal(const std::string& media);
     TStorageSettingsBuilder& SetStoreExternalBlobs(bool enabled);
+    TStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count);
 
     TStorageSettings Build() const;
 
@@ -827,6 +830,7 @@ public:
 
     TColumnFamilyBuilder& SetData(const std::string& media);
     TColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression);
+    TColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode);
     TColumnFamilyBuilder& SetKeepInMemory(bool enabled);
 
     TColumnFamilyDescription Build() const;
@@ -864,6 +868,11 @@ public:
         return *this;
     }
 
+    TTableStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
+        return *this;
+    }
+
     TTableBuilder& EndStorageSettings();
 
 private:
@@ -885,6 +894,11 @@ public:
 
     TTableColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TTableColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+        Builder_.SetCacheMode(cacheMode);
         return *this;
     }
 
@@ -1483,6 +1497,11 @@ public:
         return *this;
     }
 
+    TAlterStorageSettingsBuilder& SetExternalDataChannelsCount(uint32_t count) {
+        Builder_.SetExternalDataChannelsCount(count);
+        return *this;
+    }
+
     TAlterTableSettings& EndAlterStorageSettings();
 
 private:
@@ -1504,6 +1523,11 @@ public:
 
     TAlterColumnFamilyBuilder& SetCompression(EColumnFamilyCompression compression) {
         Builder_.SetCompression(compression);
+        return *this;
+    }
+
+    TAlterColumnFamilyBuilder& SetCacheMode(EColumnFamilyCacheMode cacheMode) {
+        Builder_.SetCacheMode(cacheMode);
         return *this;
     }
 

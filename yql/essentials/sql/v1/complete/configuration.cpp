@@ -4,59 +4,61 @@
 
 namespace NSQLComplete {
 
-    TConfiguration MakeConfiguration(THashSet<TString> allowedStmts) {
-        allowedStmts.emplace("sql_stmt");
+TConfiguration MakeConfiguration(THashSet<TString> allowedStmts) {
+    allowedStmts.emplace("sql_stmt");
 
-        TConfiguration config;
-        for (const std::string& name : GetSqlGrammar().GetAllRules()) {
-            if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
-                config.IgnoredRules_.emplace(name);
-            }
+    TConfiguration config;
+    for (const std::string& name : GetSqlGrammar().GetAllRules()) {
+        if (name.ends_with("_stmt") && !allowedStmts.contains(name)) {
+            config.IgnoredRules_.emplace(name);
         }
-        return config;
     }
+    return config;
+}
 
-    TConfiguration MakeYDBConfiguration() {
-        TConfiguration config;
-        config.IgnoredRules_ = {
-            "use_stmt",
-            "import_stmt",
-            "export_stmt",
-        };
-        return config;
-    }
+TConfiguration MakeYDBConfiguration() {
+    TConfiguration config;
+    config.IgnoredRules_ = {
+        "use_stmt",
+        "import_stmt",
+        "export_stmt",
+    };
+    return config;
+}
 
-    TConfiguration MakeYQLConfiguration() {
-        auto config = MakeConfiguration(/* allowedStmts = */ {
-            "lambda_stmt",
-            "pragma_stmt",
-            "select_stmt",
-            "named_nodes_stmt",
-            "drop_table_stmt",
-            "use_stmt",
-            "into_table_stmt",
-            "commit_stmt",
-            "declare_stmt",
-            "import_stmt",
-            "export_stmt",
-            "do_stmt",
-            "define_action_or_subquery_stmt",
-            "if_stmt",
-            "for_stmt",
-            "values_stmt",
-        });
+TConfiguration MakeYQLConfiguration() {
+    auto config = MakeConfiguration(/* allowedStmts = */ {
+        "lambda_stmt",
+        "declare_stmt",
+        "import_stmt",
+        "export_stmt",
+        "do_stmt",
+        "pragma_stmt",
+        "select_stmt",
+        "select_unparenthesized_stmt",
+        "into_table_stmt",
+        "values_stmt",
+        "drop_table_stmt",
+        "define_action_or_subquery_stmt",
+        "if_stmt",
+        "for_stmt",
+        "use_stmt",
+        "subselect_stmt",
+        "named_nodes_stmt",
+        "commit_stmt",
+    });
 
-        config.DisabledPreviousByToken_ = {};
+    config.DisabledPreviousByToken_ = {};
 
-        config.ForcedPreviousByToken_ = {
-            {"PARALLEL", {}},
-            {"TABLESTORE", {}},
-            {"FOR", {"EVALUATE"}},
-            {"IF", {"EVALUATE"}},
-            {"EXTERNAL", {"USING"}},
-        };
+    config.ForcedPreviousByToken_ = {
+        {"PARALLEL", {}},
+        {"TABLESTORE", {}},
+        {"FOR", {"EVALUATE"}},
+        {"IF", {"EVALUATE"}},
+        {"EXTERNAL", {"USING"}},
+    };
 
-        return config;
-    }
+    return config;
+}
 
 } // namespace NSQLComplete

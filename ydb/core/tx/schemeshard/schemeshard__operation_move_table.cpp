@@ -150,6 +150,7 @@ public:
             auto move = tx.MutableMoveTable();
             move->SetSrcPathId(srcPath->PathId.LocalPathId);
             move->SetDstPathId(dstPath->PathId.LocalPathId);
+            move->SetDstPath(TPath::Init(dstPath->PathId, context.SS).PathString());
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&txBody);
         } else {
             Y_ABORT();
@@ -346,7 +347,13 @@ public:
     TWaitRenamedPathPublication(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvDataShard::TEvProposeTransactionResult::EventType,
+            TEvColumnShard::TEvProposeTransactionResult::EventType,
+            TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
+        });
     }
 
     template<typename TEvent>
@@ -434,7 +441,13 @@ public:
     TDeleteTableBarrier(TOperationId id)
         : OperationId(id)
     {
-        IgnoreMessages(DebugHint(), {TEvHive::TEvCreateTabletReply::EventType, TEvDataShard::TEvProposeTransactionResult::EventType, TEvPrivate::TEvOperationPlan::EventType});
+        IgnoreMessages(DebugHint(), {
+            TEvHive::TEvCreateTabletReply::EventType,
+            TEvDataShard::TEvProposeTransactionResult::EventType,
+            TEvColumnShard::TEvProposeTransactionResult::EventType,
+            TEvPrivate::TEvOperationPlan::EventType,
+            TEvPrivate::TEvCompletePublication::EventType,
+        });
     }
 
     template<typename TEvent>

@@ -165,7 +165,7 @@ In ASNI SQL compatibility mode, double quotes are used for IDs, and the only esc
 SELECT 'string with '' quote'; -- result: string with ' quote
 ```
 
-Based on string literals, [simple literals](builtins/basic#data-type-literals) can be obtained.
+Based on string literals, [simple literals](../builtins/basic.md#data-type-literals) can be obtained.
 
 ### Multi-line string literals {#multiline-string-literals}
 

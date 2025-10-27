@@ -138,14 +138,12 @@ struct TDelayedRestoreCall {
     TFsPath FsPath;
     std::variant<TSimplePath, TTwoComponentPath> DbPath;
     TRestoreSettings Settings;
-    bool IsAlreadyExisting;
 
     TDelayedRestoreCall(
         NScheme::ESchemeEntryType type,
         TFsPath fsPath,
         TString dbPath,
-        TRestoreSettings settings,
-        bool isAlreadyExisting
+        TRestoreSettings settings
     );
 
     TDelayedRestoreCall(
@@ -153,8 +151,7 @@ struct TDelayedRestoreCall {
         TFsPath fsPath,
         TString dbRestoreRoot,
         TString dbPathRelativeToRestoreRoot,
-        TRestoreSettings settings,
-        bool isAlreadyExisting
+        TRestoreSettings settings
     );
 
     int GetOrder() const;
@@ -194,23 +191,26 @@ struct TFsBackupEntry {
 } // NPrivate
 
 class TRestoreClient {
-    TRestoreResult RestoreFolder(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& oldEntries);
-    TRestoreResult RestoreEmptyDir(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreTopic(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreReplication(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreFolder(const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult RestoreDir(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreView(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult RestoreTopic(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreReplication(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult RestoreTransfer(const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult RestoreCoordinationNode(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
     TRestoreResult RestoreDependentResources(const TFsPath& fsPath, const TString& dbPath);
     TRestoreResult RestoreRateLimiter(const TFsPath& fsPath, const TString& coordinationNodePath, const TString& resourcePath);
-    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
-    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestoreExternalDataSource(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreExternalTable(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
+    TRestoreResult RestoreSysView(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings);
 
+    TRestoreResult CheckExistenceAndType(const TString& dbPath, NScheme::ESchemeEntryType expectedType) const;
     TRestoreResult CheckSchema(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreData(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, const NTable::TTableDescription& desc, ui32 partitionCount);
     TRestoreResult RestoreIndexes(const TString& dbPath, const NTable::TTableDescription& desc);
     TRestoreResult RestoreChangefeeds(const TFsPath& path, const TString& dbPath);
-    TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting);
+    TRestoreResult RestorePermissions(const TFsPath& fsPath, const TString& dbPath, const TRestoreSettings& settings, bool isAlreadyExisting, bool isSystemObject);
     TRestoreResult RestoreConsumers(const TString& topicPath, const std::vector<NTopic::TConsumer>& consumers);
 
     TRestoreResult FindClusterRootPath();
@@ -235,10 +235,10 @@ class TRestoreClient {
 
     TRestoreResult CheckSecretExistence(const TString& secretName);
     TRestoreResult Drop(NScheme::ESchemeEntryType type, const TString& path, const TRestoreSettings& settings);
-    TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool isAlreadyExisting, bool delay);
-    TRestoreResult DropAndRestore(const TFsPath& fsPath, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
-    TRestoreResult DropAndRestoreExternals(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
-    TRestoreResult DropAndRestoreTablesAndDependents(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TString& dbRestoreRoot, const TRestoreSettings& settings, const THashMap<TString, NScheme::ESchemeEntryType>& existingEntries);
+    TRestoreResult Restore(NScheme::ESchemeEntryType type, const TFsPath& fsPath, const TString& dbRestoreRoot, const TString& dbPathRelativeToRestoreRoot, const TRestoreSettings& settings, bool delay);
+    TRestoreResult DropAndRestore(const TFsPath& fsPath, const TString& dbRestoreRoot, const TRestoreSettings& settings);
+    TRestoreResult DropAndRestoreExternals(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings);
+    TRestoreResult DropAndRestoreTablesAndDependents(const TVector<NPrivate::TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TVector<size_t>& transfers, const TString& dbRestoreRoot, const TRestoreSettings& settings);
 
 public:
     explicit TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog>& log);
@@ -263,6 +263,7 @@ private:
     TDriverConfig DriverConfig;
     TString ClusterRootPath;
     NPrivate::TDelayedRestoreManager DelayedRestoreManager;
+    THashMap<TString, NScheme::ESchemeEntryType> ExistingEntries;
 
     friend class NPrivate::TDelayedRestoreManager;
 }; // TRestoreClient

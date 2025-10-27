@@ -3,6 +3,7 @@ RECURSE(
     audit
     autoconfig
     backup
+    backup_collection
     benchmarks_init
     blobstorage
     bridge
@@ -25,12 +26,15 @@ RECURSE(
     scheme_tests
     script_execution
     sdk/cpp/sdk_credprovider
+    secrets
     security
     serializable
     serverless
     sqs
+    statistics
     suite_tests
     tpc
+    tpcc
     tenants
     ttl
     wardens

@@ -15,6 +15,11 @@ namespace NKikimr::NSharedCache {
     using EPriority = NTabletFlatExecutor::NBlockIO::EPriority;
     using TPageId = NTable::NPage::TPageId;
 
+    enum class EWakeupTag {
+        DoGCScheduled = 1,
+        DoGCManual = 2
+    };
+
     enum EEv {
         EvBegin = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR),
 
@@ -32,6 +37,15 @@ namespace NKikimr::NSharedCache {
         /* +1024 range is reserved for scan events */
     };
 
+    enum class ERequestTypeCookie : ui64 {
+        Undefined = 0,
+        Transaction = 1,
+        StickyPages,
+        PendingInit,
+        BootLogic,
+        TryKeepInMemPages,
+    };
+
     static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_FLAT_EXECUTOR), "");
 
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
@@ -45,11 +59,13 @@ namespace NKikimr::NSharedCache {
         {}
     };
 
-    struct TEvTouch : public TEventLocal<TEvTouch, EvTouch> {
-        THashMap<TLogoBlobID, THashSet<TPageId>> Touched;
+    // notifies Shared Cache about Private Cache owned shared bodies
+    // so it can send back dropped pages
+    struct TEvSync : public TEventLocal<TEvSync, EvTouch> {
+        THashMap<TLogoBlobID, THashSet<TPageId>> Pages;
 
-        TEvTouch(THashMap<TLogoBlobID, THashSet<TPageId>> &&touched)
-            : Touched(std::move(touched))
+        TEvSync(THashMap<TLogoBlobID, THashSet<TPageId>> &&pages)
+            : Pages(std::move(pages))
         {}
     };
 

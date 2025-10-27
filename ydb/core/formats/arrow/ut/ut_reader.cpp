@@ -244,7 +244,7 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         auto merger =
             std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(),
-                TDataRow::MakeDataSchema(), isReverse, vColumns, std::nullopt);
+                TDataRow::MakeDataSchema(), isReverse, vColumns, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
@@ -308,7 +308,7 @@ Y_UNIT_TEST_SUITE(SortableBatchPosition) {
 
         auto merger =
             std::make_shared<NArrow::NMerger::TMergePartialStream>(TDataRow::MakeSortingSchema(),
-                TDataRow::MakeDataSchema(), isReverse, vColumns, std::nullopt);
+                TDataRow::MakeDataSchema(), isReverse, vColumns, std::nullopt, std::nullopt);
 
         merger->AddSource(batch1, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));
         merger->AddSource(batch2, nullptr, NArrow::NMerger::TIterationOrder(isReverse, 0));

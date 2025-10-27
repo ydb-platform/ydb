@@ -10,7 +10,7 @@
 `ydb.database.create` | `CREATE` | Право создавать новые базы данных в кластере
 `ydb.database.drop` | `DROP` | Право удалять базы данных в кластере
 Элементарные права на объекты базы данных
-`ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения сообщения из топиков
+`ydb.granular.select_row` | `SELECT ROW` | Право читать строки из таблицы (select), читать сообщения из топиков
 `ydb.granular.update_row` | `UPDATE ROW` | Право обновлять строки в таблице (insert, update, upsert, replace), писать сообщения в топики
 `ydb.granular.erase_row` | `ERASE ROW` | Право удалять строки из таблицы (delete)
 `ydb.granular.create_directory` | `CREATE DIRECTORY` | Право создавать и удалять директории, в том числе существующие и вложенные

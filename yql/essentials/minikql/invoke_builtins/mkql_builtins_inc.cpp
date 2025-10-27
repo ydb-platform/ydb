@@ -1,23 +1,25 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
 
+#include <yql/essentials/minikql/mkql_safe_arithmetic_ops.h>
+
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-template<typename TInput, typename TOutput>
-struct TIncrement : public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>> {
+template <typename TInput, typename TOutput>
+struct TIncrement: public TSimpleArithmeticUnary<TInput, TOutput, TIncrement<TInput, TOutput>> {
     static TOutput Do(TInput val)
     {
-        return ++val;
+        return SafeInc(val);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Gen(Value* arg, const TCodegenContext&, BasicBlock*& block)
     {
-        return std::is_integral<TOutput>() ?
-            BinaryOperator::CreateAdd(arg, ConstantInt::get(arg->getType(), 1), "inc", block):
-            BinaryOperator::CreateFAdd(arg, ConstantFP::get(arg->getType(), 1.0), "inc", block);
+        return std::is_integral<TOutput>()
+                   ? BinaryOperator::CreateAdd(arg, ConstantInt::get(arg->getType(), 1), "inc", block)
+                   : BinaryOperator::CreateFAdd(arg, ConstantFP::get(arg->getType(), 1.0), "inc", block);
     }
 #endif
 };
@@ -31,8 +33,9 @@ struct TDecimalInc {
 
         const auto& bounds = GetBounds<Precision, false, true>();
 
-        if (v > bounds.first && v < bounds.second)
-            return NUdf::TUnboxedValuePod(++v);
+        if (v > bounds.first && v < bounds.second) {
+            return NUdf::TUnboxedValuePod(SafeInc(v));
+        }
 
         return NUdf::TUnboxedValuePod(IsNan(v) ? Nan() : (v > 0 ? +Inf() : -Inf()));
     }
@@ -62,7 +65,7 @@ struct TDecimalInc {
     static_assert(Precision <= NYql::NDecimal::MaxPrecision, "Too large precision!");
 };
 
-}
+} // namespace
 
 void RegisterIncrement(IBuiltinFunctionRegistry& registry) {
     RegisterUnaryNumericFunctionOpt<TIncrement, TUnaryArgsOpt>(registry, "Increment");

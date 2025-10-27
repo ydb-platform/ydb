@@ -9,7 +9,7 @@ def post_install(self):
 boost_type_index = NixSourceProject(
     nixattr="boost_type_index",
     arcdir=boost.make_arcdir("type_index"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

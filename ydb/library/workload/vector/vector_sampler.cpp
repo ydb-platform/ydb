@@ -20,7 +20,7 @@ TVectorSampler::TVectorSampler(const TVectorWorkloadParams& params)
 ui64 TVectorSampler::SelectOneId(bool min) {
     std::string query = std::format(R"_(--!syntax_v1
         SELECT Unwrap(CAST({1} AS uint64)) AS id FROM {0} ORDER BY {1} {2} LIMIT 1;
-    )_", Params.TableName.c_str(), Params.KeyColumn.c_str(), min ? "" : "DESC");
+    )_", Params.TableName.c_str(), Params.KeyColumns[0].c_str(), min ? "" : "DESC");
 
     // Execute the query
     std::optional<NYdb::TResultSet> rangeResultSet;
@@ -90,8 +90,15 @@ void TVectorSampler::SelectPredefinedVectors() {
 }
 
 void TVectorSampler::SampleExistingVectors() {
-    Y_ABORT_UNLESS(Params.KeyIsInt, "Sampling source data is only supported with integer key column, "
-        "but key column '%s' is not of an integer type.", Params.KeyColumn.c_str());
+    TStringBuilder keyColumns;
+    for (size_t i = 0; i < Params.KeyColumns.size(); i++) {
+        if (i > 0) {
+            keyColumns << "', '";
+        }
+        keyColumns << Params.KeyColumns[i];
+    }
+    Y_ABORT_UNLESS(Params.KeyIsInt, "Sampling source data is only supported with a single integer key column, "
+        "but key column(s) '%s' are not of an integer type.", TString(keyColumns).c_str());
 
     Cout << "Sampling " << Params.Targets << " vectors from dataset..." << Endl;
 
@@ -135,13 +142,13 @@ void TVectorSampler::SampleExistingVectors() {
                 SELECT Unwrap(CAST({0} as uint64)) as id, Unwrap({1}) as embedding, Unwrap({2}) as prefix_value
                 FROM {3}
                 WHERE {0} = {4};
-            )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
+            )_", Params.KeyColumns[0].c_str(), Params.EmbeddingColumn.c_str(), Params.PrefixColumn->c_str(), Params.TableName.c_str(), randomId);
         } else {
             vectorQuery = std::format(R"_(--!syntax_v1
                 SELECT Unwrap(CAST({0} as uint64)) as id, Unwrap({1}) as embedding
                 FROM {2}
                 WHERE {0} = {3};
-            )_", Params.KeyColumn.c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);
+            )_", Params.KeyColumns[0].c_str(), Params.EmbeddingColumn.c_str(), Params.TableName.c_str(), randomId);
         }
 
         std::optional<NYdb::TResultSet> vectorResultSet;

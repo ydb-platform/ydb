@@ -8,6 +8,7 @@
 #include <util/generic/set.h>
 
 #include <ydb/core/kqp/compute_actor/kqp_pure_compute_actor.h>
+#include <ydb/core/fq/libs/checkpointing/events/events.h>
 
 using namespace NActors;
 
@@ -108,6 +109,7 @@ TKqpPlanner::TKqpPlanner(TKqpPlanner::TArgs&& args)
     , BufferPageAllocSize(args.BufferPageAllocSize)
     , VerboseMemoryLimitException(args.VerboseMemoryLimitException)
     , Query(args.Query)
+    , CheckpointCoordinatorId(args.CheckpointCoordinator)
 {
     Y_UNUSED(MkqlMemoryLimit);
     if (GUCSettings) {
@@ -201,6 +203,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
+    request.SetSupportShuttingDown(true);
     const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
     if (lockTxId) {
         request.SetLockTxId(*lockTxId);
@@ -218,8 +221,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     for (ui64 taskId : requestData.TaskIds) {
         const auto& task = TasksGraph.GetTask(taskId);
-        NYql::NDqProto::TDqTask* serializedTask = ArenaSerializeTaskToProto(
-            TasksGraph, task, /* serializeAsyncIoSettings = */ true);
+        auto* serializedTask = TasksGraph.ArenaSerializeTaskToProto(task, true);
         if (ArrayBufferMinFillPercentage) {
             serializedTask->SetArrayBufferMinFillPercentage(*ArrayBufferMinFillPercentage);
         }
@@ -260,6 +262,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
 
     if (UserRequestContext->PoolConfig.has_value()) {
         request.SetMemoryPoolPercent(UserRequestContext->PoolConfig->QueryMemoryLimitPercentPerNode);
+        request.SetPoolMaxCpuShare(UserRequestContext->PoolConfig->TotalCpuLimitPercentPerNode / 100.0);
     }
 
     if (UserToken) {
@@ -462,7 +465,7 @@ const IKqpGateway::TKqpSnapshot& TKqpPlanner::GetSnapshot() const {
 // instead we just give ptr to proto message and after that we swap/copy it
 TString TKqpPlanner::ExecuteDataComputeTask(ui64 taskId, ui32 computeTasksSize) {
     auto& task = TasksGraph.GetTask(taskId);
-    NYql::NDqProto::TDqTask* taskDesc = ArenaSerializeTaskToProto(TasksGraph, task, true);
+    auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(task, true);
     NYql::NDq::TComputeRuntimeSettings settings;
     if (!TxInfo) {
         double memoryPoolPercent = 100;
@@ -546,13 +549,14 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
                 break;
         }
     }
+    nComputeTasks = ComputeTasks.size();
 
     LOG_D("Total tasks: " << nScanTasks + nComputeTasks << ", readonly: true"  // TODO ???
         << ", " << nScanTasks << " scan tasks on " << TasksPerNode.size() << " nodes"
         << ", localComputeTasks: " << TasksGraph.GetMeta().LocalComputeTasks
+        << ", MayRunTasksLocally " << TasksGraph.GetMeta().MayRunTasksLocally
         << ", snapshot: {" << GetSnapshot().TxId << ", " << GetSnapshot().Step << "}");
 
-    nComputeTasks = ComputeTasks.size();
 
     // explicit requirement to execute task on the same node because it has dependencies
     // on datashard tx.
@@ -565,6 +569,8 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
         }
         ComputeTasks.clear();
     }
+
+    PrepareCheckpoints();
 
     if (nComputeTasks == 0 && TasksPerNode.size() == 1 && (AsyncIoFactory != nullptr) && TasksGraph.GetMeta().SinglePartitionOptAllowed) {
         // query affects a single key or shard, so it might be more effective
@@ -620,11 +626,35 @@ std::unique_ptr<IEventHandle> TKqpPlanner::PlanExecution() {
                 return std::make_unique<IEventHandle>(ExecuterId, ExecuterId, ev.release());
             }
         }
-
     }
 
-
     return nullptr;
+}
+
+void TKqpPlanner::PrepareCheckpoints() {
+    if (!CheckpointCoordinatorId) {
+        return;
+    }
+    TasksGraph.BuildCheckpointingAndWatermarksMode(true, false);
+
+    bool hasStreamingIngress = false;
+    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    for (const auto& dqTask : TasksGraph.GetTasks()) {
+        auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
+        auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
+        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
+        bool isIngress = TasksGraph.IsIngress(dqTask);
+        if (enabledCheckpoints && isIngress) {
+            hasStreamingIngress = true;
+            break;
+        }
+    }
+    LOG_D("PrepareCheckpoints: has streaming ingress: " << hasStreamingIngress);
+    if (!hasStreamingIngress) {
+        CheckpointCoordinatorId = TActorId{};
+        return;
+    }
+    TasksGraph.GetMeta().CreateSuspended = hasStreamingIngress;
 }
 
 TString TKqpPlanner::GetEstimationsInfo() const {
@@ -656,6 +686,9 @@ bool TKqpPlanner::AcknowledgeCA(ui64 taskId, TActorId computeActor, const NYql::
             it->second.Set(state->GetStats());
         }
 
+        if (PendingComputeTasks.empty() && CheckpointCoordinatorId) {
+            SendReadyStateToCheckpointCoordinator();
+        }
         return true;
     }
 
@@ -779,7 +812,7 @@ void TKqpPlanner::PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui6
         auto& record = channelsInfoEv->Record;
 
         for (auto& channelId : channelIds) {
-            FillChannelDesc(TasksGraph, *record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
+            TasksGraph.FillChannelDesc(*record.AddUpdate(), TasksGraph.GetChannel(channelId), TasksGraph.GetMeta().ChannelTransportVersion, false);
         }
 
         LOG_T("Sending channels info to compute actor: " << computeActorId << ", channels: " << channelIds.size());
@@ -830,6 +863,32 @@ void TKqpPlanner::CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& ta
             }
         }
     }
+}
+
+void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
+    if (CheckpointsReadyStateSent) {
+        return;
+    }
+
+    auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
+    for (const auto& dqTask : TasksGraph.GetTasks()) {
+        auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
+        auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
+        bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;
+        bool isIngress = TasksGraph.IsIngress(dqTask);
+        auto task = NFq::TEvCheckpointCoordinator::TEvReadyState::TTask{
+            dqTask.Id,
+            enabledCheckpoints,
+            isIngress,
+            TasksGraph.IsEgressTask(dqTask),
+            NYql::NDq::HasState(settings),
+            dqTask.ComputeActorId
+        };
+        event->Tasks.emplace_back(std::move(task));
+    }
+    LOG_I("Sending TEvReadyState to checkpoint coordinator (" << CheckpointCoordinatorId << ")");
+    TlsActivationContext->Send(std::make_unique<NActors::IEventHandle>(CheckpointCoordinatorId, ExecuterId, event.release()));
+    CheckpointsReadyStateSent = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

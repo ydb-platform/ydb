@@ -1,4 +1,38 @@
-{%- include "[generator]/common_dir.jinja" -%}
+pluginManagement {
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
+    repositories {
+        maven {
+            name = "bucket"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/gradle")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
+    repositories {
+        maven {
+            name = "bucket"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+    }
+}
+
+{%  include "[generator]/common_dir.jinja" -%}
 rootProject.name = "{{ project_name }}"
 {%  for subdir in subdirs -%}
 {%-     set arcadia_subdir = arcadia_root + "/" + subdir -%}

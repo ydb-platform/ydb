@@ -32,6 +32,8 @@ class TWriterStarvingRWSpinLock
     : public TSpinLockBase
 {
 public:
+    static constexpr bool Traced = true;
+
     using TSpinLockBase::TSpinLockBase;
 
     //! Acquires the reader lock.
@@ -43,9 +45,21 @@ public:
      *  leave lock forever stuck for the child process.
      */
     void AcquireReader() noexcept;
+    //! Acquires the reader lock.
+    /*!
+     *  A more expensive version of #AcquireReader (includes at least
+     *  one atomic load and CAS; also may spin even if just readers are present).
+     *  In contrast to #AcquireReader, this method can be used in the presence of forks.
+     *  Note that fork-friendliness alone does not provide fork-safety: additional
+     *  actions must be performed to release the lock after a fork.
+     */
+    void AcquireReaderForkFriendly() noexcept;
     //! Tries acquiring the reader lock; see #AcquireReader.
     //! Returns |true| on success.
     bool TryAcquireReader() noexcept;
+    //! Tries acquiring the reader lock (and does this in a fork-friendly manner); see #AcquireReaderForkFriendly.
+    //! returns |true| on success.
+    bool TryAcquireReaderForkFriendly() noexcept;
     //! Releases the reader lock.
     /*!
      *  Cheap (just one atomic decrement).
@@ -100,10 +114,9 @@ private:
     bool TryAndTryAcquireWriter() noexcept;
 
     void AcquireReaderSlow() noexcept;
+    void AcquireReaderForkFriendlySlow() noexcept;
     void AcquireWriterSlow() noexcept;
 };
-
-REGISTER_TRACKED_SPIN_LOCK_CLASS(TWriterStarvingRWSpinLock)
 
 ////////////////////////////////////////////////////////////////////////////////
 

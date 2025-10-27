@@ -4,7 +4,7 @@
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <util/string/join.h>
@@ -43,7 +43,14 @@ void TKafkaProduceActor::LogEvent(IEventHandle& ev) {
 }
 
 void TKafkaProduceActor::SendMetrics(const TString& topicName, size_t delta, const TString& name, const TActorContext& ctx) {
-    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topicName);
+    TString topic = "unknown";
+
+    auto it = Topics.find(topicName);
+    if (it != Topics.end() && it->second.Status != ETopicStatus::NOT_FOUND) {
+        topic = it->first;
+    }
+
+    auto topicWithoutDb = GetTopicNameWithoutDb(Context->DatabasePath, topic);
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, TStringBuilder() << "api.kafka.produce." << name, "")));
     ctx.Send(MakeKafkaMetricsServiceID(), new TEvKafka::TEvUpdateCounter(delta, BuildLabels(Context, "", topicWithoutDb, "api.kafka.produce.total_messages", "")));
 }
@@ -306,7 +313,6 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
             res->set_key("__key");
             res->set_value(static_cast<const char*>(record.Key->data()), record.Key->size());
         }
-
         if (record.Value) {
             proto.SetData(static_cast<const void*>(record.Value->data()), record.Value->size());
         }
@@ -316,7 +322,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
         Y_ABORT_UNLESS(res);
 
         auto w = partitionRequest->AddCmdWrite();
-        w->SetSourceId(sourceId);
+        w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
         bool enableKafkaDeduplication = batch->ProducerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
@@ -451,7 +457,7 @@ void TKafkaProduceActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr reque
             TransactionalWriters.erase(txnIt);
         }
     }
-    
+
     auto& partitionResult = cookieInfo.Request->Results[cookieInfo.Position];
     partitionResult.ErrorCode = EKafkaErrors::NONE_ERROR;
     partitionResult.Value = request;
@@ -545,9 +551,9 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
                         }
                     } else {
-                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" 
-                            << static_cast<int>(Convert(msg->GetError().Code)) 
-                            << ", ErrorMessage=" << msg->GetError().Reason 
+                        KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode="
+                            << static_cast<int>(Convert(msg->GetError().Code))
+                            << ", ErrorMessage=" << msg->GetError().Reason
                             << ", Error from writer=" << static_cast<int>(msg->Record.GetErrorCode())
                             << ", #02");
                         SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "failed_messages", ctx);
@@ -643,7 +649,6 @@ void TKafkaProduceActor::RecreatePartitionWriterAndRetry(ui64 cookie, const TAct
                 }
             }
         }
-
         cookieInfo.Request->WaitResultCookies.erase(cookie);
         cookieInfo.Request->WaitAcceptingCookies.erase(cookie);
         Cookies.erase(it);

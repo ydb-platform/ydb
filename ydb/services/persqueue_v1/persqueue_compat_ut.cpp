@@ -33,26 +33,26 @@ public:
         Server->EnableLogs({ NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_METACACHE });
 
 
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, true, false);
-        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--account--topic1", 1, true);
-
+        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--account--topic1", 1, true, false, std::nullopt, {"user", "test-consumer"});
+        Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--account--topic1", 1, true, true, std::nullopt, {"user", "test-consumer"});
         Server->WaitInit("account/topic1");
+
         Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
         Server->AnnoyingClient->MkDir("/Root/LbCommunal", "account");
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account/topic2", 1, true, true, {}, {}, "account"
+                "/Root/LbCommunal/account/topic2", 1, true, true, {}, {"user", "test-consumer"}, "account"
         );
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account/topic2-mirrored-from-dc2", 1, true, false, {}, {}, "account"
+                "/Root/LbCommunal/account/topic2-mirrored-from-dc2", 1, true, false, {}, {"user", "test-consumer"}, "account"
         );
 
         Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
         Server->AnnoyingClient->MkDir("/Root/LbCommunal", "account2");
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account2/topic3", 1, true, true, {}, {}, "account2"
+                "/Root/LbCommunal/account2/topic3", 1, true, true, {}, {"test-consumer"}, "account2"
         );
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account2/topic3-mirrored-from-dc2", 1, true, false, {}, {}, "account2"
+                "/Root/LbCommunal/account2/topic3-mirrored-from-dc2", 1, true, false, {}, {"test-consumer"}, "account2"
         );
 
 
@@ -119,15 +119,15 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             Y_ABORT_UNLESS(ev.has_value());
             auto* lockEvent = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev);
             if (!lockEvent) {
-                if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
                     Cerr << "Got destroy event";
-                } else if (auto* otherEv = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*ev)) {
+                } else if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*ev)) {
                     Cerr << "Got part closed event\n";
                 } else if (auto* otherEv = std::get_if<NYdb::NPersQueue::TSessionClosedEvent>(&*ev)) {
                     Cerr << "Got session closed event" << otherEv->DebugString() << Endl;
                 }
             }
-            UNIT_ASSERT(lockEvent);
+            UNIT_ASSERT_C(lockEvent, JoinRange(", ", paths.begin(), paths.end()));
             Cerr << "Got lock event: " << lockEvent->DebugString() << Endl;
             const auto& path = lockEvent->GetPartitionStream()->GetTopicPath();
             const auto& cluster = lockEvent->GetPartitionStream()->GetCluster();

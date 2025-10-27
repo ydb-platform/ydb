@@ -399,9 +399,7 @@ public:
 
             if (checks) {
                 if (parent.Base()->IsTableIndex()) {
-                    checks
-                        .IsInsideTableIndexPath() //copy imp index table as index index table, not a separate one
-                        .NotChildren(); //imp table doesn't have indexes
+                    checks.IsInsideTableIndexPath(); //copy imp index table as index index table, not a separate one
                 } else {
                     checks.IsCommonSensePath();
                 }
@@ -528,8 +526,10 @@ public:
         // incr backup config is not copied
         schema.ClearIncrementalBackupConfig();
 
+        const bool isServerless = context.SS->IsServerlessDomain(TPath::Init(context.SS->RootPathId(), context.SS));
+
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
-        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), errStr)
+        if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, srcTableInfo->PartitionConfig(), schema.GetPartitionConfig(), AppData(), isServerless, errStr)
             || !TPartitionConfigMerger::VerifyCreateParams(compilationPartitionConfig, AppData(), IsShadowDataAllowed(), errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
@@ -544,7 +544,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
-            };
+        };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
         if (!alterData.Get()) {
@@ -775,24 +775,7 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
     }
 
-    THashSet<TString> sequences;
-    for (auto& child: srcPath.Base()->GetChildren()) {
-        auto name = child.first;
-        auto pathId = child.second;
-
-        TPath childPath = srcPath.Child(name);
-        if (!childPath.IsSequence() || childPath.IsDeleted()) {
-            continue;
-        }
-
-        Y_ABORT_UNLESS(childPath.Base()->PathId == pathId);
-
-        TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-        const auto& sequenceDesc = sequenceInfo->Description;
-        const auto& sequenceName = sequenceDesc.GetName();
-
-        sequences.emplace(sequenceName);
-    }
+    THashSet<TString> sequences = GetLocalSequences(context, srcPath);
 
     TPath workDir = TPath::Resolve(tx.GetWorkingDir(), context.SS);
     TPath dstPath = workDir.Child(copying.GetName());
@@ -815,7 +798,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, sequences));
     }
 
-    TVector<NKikimrSchemeOp::TSequenceDescription> sequenceDescriptions;
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
         auto pathId = child.second;
@@ -826,9 +808,6 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
         }
 
         if (childPath.IsSequence()) {
-            TSequenceInfo::TPtr sequenceInfo = context.SS->Sequences.at(pathId);
-            const auto& sequenceDesc = sequenceInfo->Description;
-            sequenceDescriptions.push_back(sequenceDesc);
             continue;
         }
 
@@ -852,12 +831,24 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             for (const auto& dataColumn: indexInfo->IndexDataColumns) {
                 *operation->MutableDataColumnNames()->Add() = dataColumn;
             }
-            if (indexInfo->Type == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree) {
-                *operation->MutableVectorIndexKmeansTreeDescription() =
-                    std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
-            } else if (!std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription)) {
-                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
-                                     TStringBuilder{} << "Copy table doesn't support table with index type " << indexInfo->Type)};
+
+            switch (indexInfo->Type) {
+                case NKikimrSchemeOp::EIndexTypeGlobal:
+                case NKikimrSchemeOp::EIndexTypeGlobalAsync:
+                case NKikimrSchemeOp::EIndexTypeGlobalUnique:
+                    // no specialized index description
+                    Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
+                    *operation->MutableVectorIndexKmeansTreeDescription() =
+                        std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltext:
+                    *operation->MutableFulltextIndexDescription() =
+                        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
+                    break;
+                default:
+                    return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter, InvalidIndexType(indexInfo->Type))};
             }
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
@@ -878,22 +869,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             operation->SetOmitFollowers(copying.GetOmitFollowers());
             operation->SetIsBackup(copying.GetIsBackup());
 
-            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema));
+            result.push_back(CreateCopyTable(NextPartId(nextId, result), schema, GetLocalSequences(context, implTable)));
+            AddCopySequences(nextId, tx, context, result, implTable, JoinPath({dstPath.PathString(), name, implTableName}));
         }
     }
 
-    for (auto&& sequenceDescription : sequenceDescriptions) {
-        auto scheme = TransactionTemplate(
-            tx.GetWorkingDir() + "/" + copying.GetName(),
-            NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence);
-        scheme.SetFailOnExist(tx.GetFailOnExist());
-
-        auto* copySequence = scheme.MutableCopySequence();
-        copySequence->SetCopyFrom(copying.GetCopyFromTable() + "/" + sequenceDescription.GetName());
-        *scheme.MutableSequence() = std::move(sequenceDescription);
-
-        result.push_back(CreateCopySequence(NextPartId(nextId, result), scheme));
-    }
+    AddCopySequences(nextId, tx, context, result, srcPath, dstPath.PathString());
     return result;
 }
 

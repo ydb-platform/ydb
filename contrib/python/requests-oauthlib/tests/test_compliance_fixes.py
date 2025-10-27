@@ -115,7 +115,7 @@ class MailChimpComplianceFixTest(TestCase):
             authorization_response="https://i.b/?code=hello",
         )
         # Times should be close
-        approx_expires_at = time.time() + 3600
+        approx_expires_at = round(time.time()) + 3600
         actual_expires_at = token.pop("expires_at")
         self.assertAlmostEqual(actual_expires_at, approx_expires_at, places=2)
 
@@ -289,7 +289,7 @@ class PlentymarketsComplianceFixTest(TestCase):
             authorization_response="https://i.b/?code=hello",
         )
 
-        approx_expires_at = time.time() + 86400
+        approx_expires_at = round(time.time()) + 86400
         actual_expires_at = token.pop("expires_at")
         self.assertAlmostEqual(actual_expires_at, approx_expires_at, places=2)
 

@@ -3,7 +3,7 @@ from enum import Enum as PyEnum
 from typing import Type, Union, Sequence
 
 from sqlalchemy.types import Integer, Float, Numeric, Boolean as SqlaBoolean, \
-    UserDefinedType, String as SqlaString, DateTime as SqlaDateTime, Date as SqlaDate
+    UserDefinedType, String as SqlaString, DateTime as SqlaDateTime, Date as SqlaDate, Interval
 from sqlalchemy.exc import ArgumentError
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import ChSqlaType
@@ -78,6 +78,7 @@ class Bool(ChSqlaType, SqlaBoolean):
         SqlaBoolean.__init__(self)
 
 
+# pylint: disable=too-many-ancestors
 class Boolean(Bool):
     pass
 
@@ -270,6 +271,71 @@ class DateTime64(ChSqlaType, SqlaDateTime):
             raise ArgumentError(f'Invalid precision value {prec} for ClickHouse DateTime64')
         ChSqlaType.__init__(self, type_def)
         SqlaDateTime.__init__(self)
+
+
+# pylint: disable=too-many-ancestors
+class Time(ChSqlaType, Interval):
+    """
+    Represents the ClickHouse Time type, which corresponds to a timedelta.
+
+    Represents time durations in the range -999:59:59 to 999:59:59 with
+    second precision. Maps to Python timedelta objects.
+    """
+
+    def __init__(self, type_def: TypeDef = EMPTY_TYPE_DEF):
+        ChSqlaType.__init__(self, type_def)
+        Interval.__init__(self)
+
+    def process_bind_param(self, value, dialect):
+        return value
+
+    def process_result_value(self, value, dialect):
+        return value
+
+    def process_literal_param(self, value, dialect):
+        return None
+
+
+# pylint: disable=too-many-ancestors
+class Time64(ChSqlaType, Interval):
+    """
+    Represents the ClickHouse Time64 type with configurable precision.
+
+    Represents time durations in the range -999:59:59.999999999 to
+    999:59:59.999999999 configurable precision. Maps to Python timedelta objects.
+    If no precision is defined it default to 3.
+    """
+
+    def __init__(self, precision: int = None, type_def: TypeDef = None):
+        """
+        Time64 constructor with precision if not constructed with TypeDef.
+        :param precision: 3 (ms), 6 (us), or 9 (ns) for sub-second precision.
+        :param type_def: TypeDef from parse_name function.
+        """
+        if not type_def:
+            if precision is None:
+                precision = 3
+
+            if precision not in (3, 6, 9):
+                raise ArgumentError(
+                    f"Invalid precision value {precision} for ClickHouse Time64. Must be 3, 6, or 9."
+                )
+            type_def = TypeDef(values=(precision,))
+        else:
+            precision = type_def.values[0] if len(type_def.values) > 0 else 3
+
+        ChSqlaType.__init__(self, type_def)
+
+        Interval.__init__(self, second_precision=precision)
+
+    def process_bind_param(self, value, dialect):
+        return value
+
+    def process_result_value(self, value, dialect):
+        return value
+
+    def process_literal_param(self, value, dialect):
+        return None
 
 
 class Nullable:

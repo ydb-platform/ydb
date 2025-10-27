@@ -214,11 +214,11 @@ public:
 private:
     TMaybe<NYdb::TResultSet> RunYqlDataQuery(TString query);
 
-    void InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableExtendedQueueUrl);
+    void InitKikimr(bool yandexCloudMode, bool enableMetering);
 
     void InitAccessServiceService();
 
-    void InitHttpServer(bool yandexCloudMode, bool enableExtendedQueueUrl);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -255,13 +255,7 @@ class THttpProxyTestMockWithMetering : public THttpProxyTestMock {
     }
 };
 
-class THttpProxyTestMockForSQSExtQueueUrl : public THttpProxyTestMock {
-    void SetUp(NUnitTest::TTestContext&) override {
-        InitAll(false, false, true);
-    }
-};
-
-class THttpProxyTestMockForCloudExtQueueUrl : public THttpProxyTestMock {
+class THttpProxyTestMockForSQSTopic : public THttpProxyTestMock {
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(true, false, true);
     }

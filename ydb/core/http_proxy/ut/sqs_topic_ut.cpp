@@ -19,7 +19,7 @@ using namespace NKikimr::Tests;
 using namespace NActors;
 
 
-using TFixture = THttpProxyTestMockForCloudExtQueueUrl;
+using TFixture = THttpProxyTestMockForSQSTopic;
 
 
 static TString GetPathFromQueueUrlMap(const NJson::TJsonMap& json) {

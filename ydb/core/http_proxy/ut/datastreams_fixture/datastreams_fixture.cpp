@@ -17,12 +17,12 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
     InitAll();
 }
 
-void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool extendedQueueUrl) {
+void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
     InitKikimr(yandexCloudMode, enableMetering);
     InitAccessServiceService();
-    InitHttpServer(yandexCloudMode, extendedQueueUrl);
+    InitHttpServer(yandexCloudMode, enableSqsTopic);
 }
 
 TString THttpProxyTestMock::FormAuthorizationStr(const TString& region) {

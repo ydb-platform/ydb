@@ -8,7 +8,7 @@ from collections import Counter
 from ydb_wrapper import YDBWrapper
 
 
-def create_tables(ydb_wrapper, table_path, script_name):
+def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
     
     create_sql = f"""
@@ -24,10 +24,10 @@ def create_tables(ydb_wrapper, table_path, script_name):
             WITH (STORE = COLUMN)
         """
     
-    ydb_wrapper.create_table(table_path, create_sql, script_name)
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
+def bulk_upsert(ydb_wrapper, table_path, rows):
     print(f"> bulk upsert: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
@@ -37,14 +37,14 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
         .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
         .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types, script_name)
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
 
-def main():    
+def main():
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
@@ -85,7 +85,7 @@ def main():
     """
     
     # Execute query using ydb_wrapper
-    results = ydb_wrapper.execute_scan_query(query_get_owners, script_name)
+    results = ydb_wrapper.execute_scan_query(query_get_owners)
 
     print(f'testowners data captured, {len(results)} rows')
     test_list = []
@@ -99,9 +99,9 @@ def main():
         })
     
     print('upserting testowners')
-    create_tables(ydb_wrapper, table_path, script_name)
+    create_tables(ydb_wrapper, table_path)
     full_path = posixpath.join(ydb_wrapper.database_path, table_path)
-    bulk_upsert(ydb_wrapper, full_path, test_list, script_name)
+    bulk_upsert(ydb_wrapper, full_path, test_list)
 
     print('testowners updated')
 

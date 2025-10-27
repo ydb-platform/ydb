@@ -11,10 +11,10 @@ from ydb_wrapper import YDBWrapper
 dir = os.path.dirname(__file__)
 repo_path = os.path.abspath(f"{dir}/../../../")
 
-def get_data_from_query_with_metadata(ydb_wrapper, query, script_name):
+def get_data_from_query_with_metadata(ydb_wrapper, query):
     """Get data from query using ydb_wrapper and extract column metadata"""
     # Use the new method that returns both data and column metadata in one call
-    results, column_types = ydb_wrapper.execute_scan_query_with_metadata(query, script_name)
+    results, column_types = ydb_wrapper.execute_scan_query_with_metadata(query)
     return results, column_types
 
 def ydb_type_to_str(ydb_type, store_type = 'ROW'):
@@ -44,7 +44,7 @@ def ydb_type_to_str(ydb_type, store_type = 'ROW'):
         name = 'Uint8'
     return result_type, name
 
-def create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key, script_name):
+def create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key):
     """Create table using ydb_wrapper based on the structure of the provided column types."""
     if not column_types:
         raise ValueError("No column types to create table from.")
@@ -79,15 +79,15 @@ def create_table(ydb_wrapper, table_path, column_types, store_type, partition_ke
     """
 
     print(f"Creating table with query: {create_table_sql}")
-    ydb_wrapper.create_table(table_path, create_table_sql, script_name)
-def create_table_if_not_exists(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key, script_name):
+    ydb_wrapper.create_table(table_path, create_table_sql)
+def create_table_if_not_exists(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key):
     """Create table if it does not already exist, using ydb_wrapper."""
     # For now, we'll always try to create the table
     # In a more sophisticated implementation, we could check if table exists first
     print(f"Creating table '{table_path}'...")
-    create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key, script_name)
+    create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key)
 
-def bulk_upsert(ydb_wrapper, table_path, rows, column_types, store_type, script_name):
+def bulk_upsert(ydb_wrapper, table_path, rows, column_types, store_type):
     print(f"> Bulk upsert into: {table_path}")
 
     column_types_map = ydb.BulkUpsertColumns()
@@ -95,7 +95,7 @@ def bulk_upsert(ydb_wrapper, table_path, rows, column_types, store_type, script_
         column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, store_type.upper())
         column_types_map.add_column(column_name, column_type_obj)
 
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types_map, script_name)
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types_map)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YDB Table Manager")
@@ -112,15 +112,15 @@ def parse_args():
 def main():
     args = parse_args()
 
+    table_path = args.table_path
+    batch_size = 1000
+    script_name = os.path.basename(__file__)
+
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
-
-        table_path = args.table_path
-        batch_size = 1000
-        script_name = os.path.basename(__file__)
 
         # Read SQL query from file
         sql_query_path = os.path.join(repo_path, args.query_path)
@@ -129,7 +129,7 @@ def main():
             sql_query = file.read()
 
         # Run query to get sample data and column types
-        results, column_types = get_data_from_query_with_metadata(ydb_wrapper, sql_query, script_name)
+        results, column_types = get_data_from_query_with_metadata(ydb_wrapper, sql_query)
         if not results:
             print("No data to create table from.")
             return
@@ -138,14 +138,14 @@ def main():
         full_table_path = f"{ydb_wrapper.database_path}/{table_path}"
         create_table_if_not_exists(
             ydb_wrapper, full_table_path, column_types, args.store_type,
-            args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key, script_name
+            args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key
         )
 
         print(f'Preparing to upsert: {len(results)} rows')
         
         for start in range(0, len(results), batch_size):
             batch_rows = results[start:start + batch_size]
-            bulk_upsert(ydb_wrapper, full_table_path, batch_rows, column_types, args.store_type, script_name)
+            bulk_upsert(ydb_wrapper, full_table_path, batch_rows, column_types, args.store_type)
         
         print('Data uploaded')
 

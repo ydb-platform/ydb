@@ -12,10 +12,10 @@ from ydb_wrapper import YDBWrapper
 
 
 def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, branch):
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return {}
@@ -89,7 +89,7 @@ def get_test_history(test_names_array, last_n_runs_of_test_amount, build_type, b
         run_timestamp;
 
 """
-            query_result = ydb_wrapper.execute_scan_query(history_query, script_name)
+            query_result = ydb_wrapper.execute_scan_query(history_query)
 
             for row in query_result:
                 if not row["full_name"].decode("utf-8") in results:

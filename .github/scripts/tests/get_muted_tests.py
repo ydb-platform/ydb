@@ -26,10 +26,10 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return []
@@ -94,7 +94,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         print(tests_query)
         
         print(f'⏱️  Starting query execution...')
-        results = ydb_wrapper.execute_scan_query(tests_query, script_name)
+        results = ydb_wrapper.execute_scan_query(tests_query)
         
         print(f'✅ Query completed successfully')
         print(f'📊 Total results: {len(results)} tests')
@@ -102,7 +102,7 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
         return results
 
 
-def create_tables(ydb_wrapper, table_path, script_name):
+def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
     create_sql = f"""
@@ -121,10 +121,10 @@ def create_tables(ydb_wrapper, table_path, script_name):
             WITH (STORE = COLUMN)
         """
     
-    ydb_wrapper.create_table(table_path, create_sql, script_name)
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
+def bulk_upsert(ydb_wrapper, table_path, rows):
     print(f'📤 Starting bulk upsert to: {table_path}')
     print(f'   - Rows to upsert: {len(rows)}')
     
@@ -143,7 +143,7 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
     print(f'🔧 Column types configured')
     print(f'⏱️  Executing bulk upsert...')
     
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types, script_name)
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
     
     print(f'✅ Bulk upsert completed successfully')
     print(f'📊 Successfully upserted {len(rows)} rows')
@@ -158,10 +158,10 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return
@@ -170,13 +170,13 @@ def upload_muted_tests(tests):
         print(f'📋 Target table: {table_path}')
 
         print(f'🏗️  Creating table if not exists...')
-        create_tables(ydb_wrapper, table_path, script_name)
+        create_tables(ydb_wrapper, table_path)
         
         full_path = f"{ydb_wrapper.database_path}/{table_path}"
         print(f'📤 Starting bulk upsert to: {full_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        bulk_upsert(ydb_wrapper, full_path, tests, script_name)
+        bulk_upsert(ydb_wrapper, full_path, tests)
         
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')
@@ -201,14 +201,6 @@ def mute_applier(args):
 
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
-
-    # Initialize YDB wrapper
-    ydb_wrapper = YDBWrapper()
-    script_name = os.path.basename(__file__)
-    
-    # Check credentials
-    if not ydb_wrapper.check_credentials():
-        return 1
 
     # all muted
     print(f'📋 Loading mute rules from: {muted_ya_path}')

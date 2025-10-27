@@ -136,7 +136,8 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
     
     try:
         # Initialize YDB wrapper with context manager for automatic cleanup
-        with YDBWrapper() as ydb_wrapper:
+        script_name = os.path.basename(__file__)
+        with YDBWrapper(script_name=script_name) as ydb_wrapper:
             script_name = os.path.basename(__file__)
             
             # Check credentials
@@ -146,7 +147,7 @@ def execute_query(branch='main', build_type='relwithdebinfo', days_window=1):
             logging.info("Successfully connected to YDB")
             
             logging.info("Starting to fetch results...")
-            results = ydb_wrapper.execute_scan_query(query_string, script_name)
+            results = ydb_wrapper.execute_scan_query(query_string)
             
             logging.info(f"Query completed successfully. Total rows returned: {len(results)}")
             return results
@@ -830,10 +831,10 @@ def create_mute_issues(all_tests, file_path, close_issues=True):
 
 
 def mute_worker(args):
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

@@ -24,9 +24,10 @@ def main():
     print(f'   🔧 Build type: {build_type}')
     print(f'   🌿 Branch: {branch}')
     
+    script_name = os.path.basename(__file__)
+    
     # Инициализируем YDB обертку с контекстным менеджером для автоматического закрытия
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
       
         # Получаем последнюю дату из истории
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
@@ -36,7 +37,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(last_date_query, script_name)
+            results = ydb_wrapper.execute_scan_query(last_date_query)
             
             default_start_date = datetime.date(2024, 9, 1)
             
@@ -73,7 +74,7 @@ def main():
                 WITH (STORE = COLUMN)
         """
             
-            ydb_wrapper.create_table(table_path, create_table_sql, script_name)
+            ydb_wrapper.create_table(table_path, create_table_sql)
             
             # Обрабатываем каждую дату
             today = datetime.date.today()
@@ -156,7 +157,7 @@ def main():
                 )
             """
                 
-                results = ydb_wrapper.execute_scan_query(query_get_history, script_name)
+                results = ydb_wrapper.execute_scan_query(query_get_history)
                 print(f'📈 History data captured, {len(results)} rows')
                 
                 # Подготавливаем данные для upsert
@@ -205,7 +206,7 @@ def main():
                 )
                 
                 full_path = f"{ydb_wrapper.database_path}/{table_path}"
-                ydb_wrapper.bulk_upsert(full_path, prepared_for_update_rows, column_types, script_name)
+                ydb_wrapper.bulk_upsert(full_path, prepared_for_update_rows, column_types)
 
             print('✅ History updated successfully')
 

@@ -42,7 +42,7 @@ def get_last_update_time(ydb_wrapper: YDBWrapper, table_path: str) -> Optional[d
     """Get the latest updated_at timestamp from existing records"""
     try:
         query = f"SELECT MAX(updated_at) as max_updated_at FROM `{table_path}`"
-        results = ydb_wrapper.execute_scan_query(query, os.path.basename(__file__))
+        results = ydb_wrapper.execute_scan_query(query)
         
         if results and results[0]['max_updated_at']:
             # Convert timestamp to datetime
@@ -581,7 +581,7 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
         )
     """
     
-    ydb_wrapper.create_table(table_path, create_sql, os.path.basename(__file__))
+    ydb_wrapper.create_table(table_path, create_sql)
     
     elapsed = time.time() - start_time
     print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
@@ -644,7 +644,7 @@ def bulk_upsert_issues(ydb_wrapper: YDBWrapper, table_path: str, issues: List[Di
         .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     )
     
-    ydb_wrapper.bulk_upsert(table_path, issues, column_types, os.path.basename(__file__))
+    ydb_wrapper.bulk_upsert(table_path, issues, column_types)
     
     elapsed = time.time() - start_time
     print(f"BI-optimized bulk upsert completed (took {elapsed:.2f}s)")
@@ -654,9 +654,10 @@ def main():
     print("Starting GitHub issues export to YDB")
     script_start_time = time.time()
     
+    script_name = os.path.basename(__file__)
+    
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
-        script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         
         # Check credentials
         if not ydb_wrapper.check_credentials():

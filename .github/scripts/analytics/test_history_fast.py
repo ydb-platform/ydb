@@ -5,7 +5,7 @@ import os
 from ydb_wrapper import YDBWrapper
 
 
-def create_test_history_fast_table(ydb_wrapper, table_path, script_name):
+def create_test_history_fast_table(ydb_wrapper, table_path):
     print(f"> Creating table: '{table_path}'")
     create_sql = f"""
         CREATE TABLE `{table_path}` (
@@ -32,10 +32,10 @@ def create_test_history_fast_table(ydb_wrapper, table_path, script_name):
         TTL = Interval("P7D") ON run_timestamp
         )
     """
-    ydb_wrapper.create_table(table_path, create_sql, script_name)
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
+def bulk_upsert(ydb_wrapper, table_path, rows):
     print(f"> Bulk upsert into: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
@@ -55,10 +55,10 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
         .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
         .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types, script_name)
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
 
-def get_missed_data_for_upload(ydb_wrapper, script_name):
+def get_missed_data_for_upload(ydb_wrapper):
     query = f"""
        SELECT 
         build_type, 
@@ -96,13 +96,14 @@ def get_missed_data_for_upload(ydb_wrapper, script_name):
     """
 
     print(f'missed data capturing')
-    results = ydb_wrapper.execute_scan_query(query, script_name)
+    results = ydb_wrapper.execute_scan_query(query)
     return results
 
 
 def main():
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
+    script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         script_name = os.path.basename(__file__)
         
         # Check credentials
@@ -114,17 +115,17 @@ def main():
         batch_size = 1000
 
         # Create table if it doesn't exist
-        create_test_history_fast_table(ydb_wrapper, full_table_path, script_name)
+        create_test_history_fast_table(ydb_wrapper, full_table_path)
         
         # Get missed data for upload
-        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper, script_name)
+        prepared_for_upload_rows = get_missed_data_for_upload(ydb_wrapper)
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
             for start in range(0, len(prepared_for_upload_rows), batch_size):
                 batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
                 print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
-                bulk_upsert(ydb_wrapper, full_table_path, batch_rows_for_upload, script_name)
+                bulk_upsert(ydb_wrapper, full_table_path, batch_rows_for_upload)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

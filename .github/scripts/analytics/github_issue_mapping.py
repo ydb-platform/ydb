@@ -18,7 +18,7 @@ from github_issue_utils import create_test_issue_mapping
 
 
 
-def get_github_issues_data(ydb_wrapper, script_name):
+def get_github_issues_data(ydb_wrapper):
     """Get GitHub issues data from the github_data/issues table"""
     query = """
     SELECT 
@@ -37,7 +37,7 @@ def get_github_issues_data(ydb_wrapper, script_name):
     print("Fetching GitHub issues data...")
     
     try:
-        results = ydb_wrapper.execute_scan_query(query, script_name)
+        results = ydb_wrapper.execute_scan_query(query)
         print(f'Fetched {len(results)} GitHub issues')
         return results
     except Exception as e:
@@ -46,7 +46,7 @@ def get_github_issues_data(ydb_wrapper, script_name):
         return []
 
 
-def create_test_issue_mapping_table(ydb_wrapper, table_path, script_name):
+def create_test_issue_mapping_table(ydb_wrapper, table_path):
     """Create the test-to-issue mapping table"""
     print(f"Creating test-to-issue mapping table: {table_path}")
     
@@ -68,7 +68,7 @@ def create_test_issue_mapping_table(ydb_wrapper, table_path, script_name):
     """
 
     print(f"Creating table with query: {create_table_sql}")
-    ydb_wrapper.create_table(table_path, create_table_sql, script_name)
+    ydb_wrapper.create_table(table_path, create_table_sql)
 
 
 def convert_mapping_to_table_data(test_to_issue_mapping):
@@ -96,7 +96,7 @@ def convert_mapping_to_table_data(test_to_issue_mapping):
     return table_data
 
 
-def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data, script_name):
+def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data):
     """Bulk upsert mapping data into the table"""
     print(f"Bulk upserting {len(mapping_data)} test-to-issue mappings to {table_path}")
     
@@ -109,7 +109,7 @@ def bulk_upsert_mapping_data(ydb_wrapper, table_path, mapping_data, script_name)
     column_types.add_column('github_issue_state', ydb.PrimitiveType.Utf8)
     column_types.add_column('github_issue_created_at', ydb.OptionalType(ydb.PrimitiveType.Timestamp))
     
-    ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types, script_name)
+    ydb_wrapper.bulk_upsert(table_path, mapping_data, column_types)
     print(f"Bulk upsert completed")
 
 
@@ -120,7 +120,8 @@ def main():
     script_name = os.path.basename(__file__)
     
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
+    script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1
@@ -130,7 +131,7 @@ def main():
         
         try:
             # Get GitHub issues data
-            issues_data = get_github_issues_data(ydb_wrapper, script_name)
+            issues_data = get_github_issues_data(ydb_wrapper)
             
             if not issues_data:
                 print("No GitHub issues data found")
@@ -146,11 +147,11 @@ def main():
             print(f"Converted to {len(mapping_data)} table records")
             
             # Create mapping table
-            create_test_issue_mapping_table(ydb_wrapper, full_table_path, script_name)
+            create_test_issue_mapping_table(ydb_wrapper, full_table_path)
             
             # Bulk upsert mapping data
             if mapping_data:
-                bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data, script_name)
+                bulk_upsert_mapping_data(ydb_wrapper, full_table_path, mapping_data)
             else:
                 print("No mapping data to insert")
         

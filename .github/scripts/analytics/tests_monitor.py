@@ -11,7 +11,7 @@ from multiprocessing import Pool, cpu_count
 from ydb_wrapper import YDBWrapper
 
 
-def create_tables(ydb_wrapper, table_path, script_name):
+def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
     create_sql = f"""
@@ -51,10 +51,10 @@ def create_tables(ydb_wrapper, table_path, script_name):
             WITH (STORE = COLUMN)
         """
     
-    ydb_wrapper.create_table(table_path, create_sql, script_name)
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
+def bulk_upsert(ydb_wrapper, table_path, rows):
     print(f"> bulk upsert: {table_path}")
     column_types = (
         ydb.BulkUpsertColumns()
@@ -88,7 +88,7 @@ def bulk_upsert(ydb_wrapper, table_path, rows, script_name):
         .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
         .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
     )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types, script_name)
+    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
 
 
 def process_test_group(name, group, last_day_data, default_start_date):
@@ -296,7 +296,8 @@ def main():
     concurrent_mode = args.concurrent_mode
 
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper() as ydb_wrapper:
+    script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
         script_name = os.path.basename(__file__)
         
         # Check credentials
@@ -318,7 +319,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_day, script_name)
+            results = ydb_wrapper.execute_scan_query(query_last_exist_day)
             last_exist_day = results[0]['last_exist_day'] if results else None
         except Exception as e:
             print(f"Error during fetching last existing day: {e}")
@@ -339,7 +340,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(query_branch_creation, script_name)
+            results = ydb_wrapper.execute_scan_query(query_branch_creation)
             branch_creation_date = None
             
             if results and results[0]['earliest_run']:
@@ -393,7 +394,7 @@ def main():
         """
         
         try:
-            results = ydb_wrapper.execute_scan_query(query_last_exist_data, script_name)
+            results = ydb_wrapper.execute_scan_query(query_last_exist_data)
             last_exist_data = []
 
             for row in results:
@@ -505,7 +506,7 @@ def main():
                     AND hist.date_window = owners_t.date;
             """
             # Execute query using ydb_wrapper
-            results = ydb_wrapper.execute_scan_query(query_get_history, script_name)
+            results = ydb_wrapper.execute_scan_query(query_get_history)
 
             # Check if new data was found
             if results:
@@ -708,7 +709,7 @@ def main():
         start_upsert_time = time.time()
 
         # Create table and bulk upsert using ydb_wrapper
-        create_tables(ydb_wrapper, table_path, script_name)
+        create_tables(ydb_wrapper, table_path)
         full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
         def chunk_data(data, chunk_size):
@@ -723,7 +724,7 @@ def main():
         for i, chunk in enumerate(chunk_data(prepared_for_update_rows, chunk_size), start=1):
             start_time = time.time()
             print(f"Uploading chunk {i}/{total_chunks}")
-            bulk_upsert(ydb_wrapper, full_path, chunk, script_name)
+            bulk_upsert(ydb_wrapper, full_path, chunk)
             end_time = time.time()
             print(f'upsert for: {end_time - start_time} ')
 

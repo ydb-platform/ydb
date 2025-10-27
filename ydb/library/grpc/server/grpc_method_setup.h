@@ -30,7 +30,10 @@
         &Service_,                                                                                        \
         cq,                                                                                               \
         [this, proxyId = grpcProxyId](::NYdbGrpc::IRequestContextBase* reqCtx) {                          \
-            ::NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer());                \
+            ::NKikimr::NGRpcService::ReportGrpcReqToMon(                                                  \
+                *ActorSystem_,                                                                            \
+                reqCtx->GetPeer(),                                                                        \
+                GetSdkBuildInfoIfNeeded(reqCtx));                                                         \
             ActorSystem_->Send(proxyId, new operationCallClass<                                           \
                 inputType,                                                                                \
                 outputType,                                                                               \

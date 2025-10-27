@@ -26,6 +26,7 @@ static TString CreateHostWithPort(const TEndpointInfo& info) {
 static TString Exec(const TString& cmd) {
     std::array<char, 256> buffer;
     TString result;
+    Cerr << "Executing command: " << cmd << Endl;
     std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(cmd.data(), "r"), pclose);
     if (!pipe) {
         throw std::runtime_error("Unable to create pipe with process: " + cmd);

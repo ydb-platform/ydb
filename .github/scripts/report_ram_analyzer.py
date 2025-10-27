@@ -203,8 +203,8 @@ if __name__ == "__main__":
     parser.add_argument('--thread-id', type=int,
                         help='Telegram thread ID for group messages')
     parser.add_argument('--memory-threshold', type=float,
-                        help='Threshold for used memory in percent. Default = 10',
-                        default=10)
+                        help='Threshold for used memory in percent. Default = 90',
+                        default=90)
     args = parser.parse_args()
 
     report_file = args.report_file
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     max_used_ram = create_simple_interactive_plot(all, output_file)
 
     max_agent_ram = get_total_runner_memory_in_gb()
-    max_agent_ram_with_threshold = max_agent_ram * (1 - args.memory_threshold / 100)
+    max_agent_ram_with_threshold = max_agent_ram * (args.memory_threshold / 100)
     if max_used_ram > max_agent_ram_with_threshold:
         print(f"Max used RAM {max_used_ram} is greater than max agent RAM {max_agent_ram}")
 
@@ -226,7 +226,8 @@ if __name__ == "__main__":
         dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'
 
         message = f"""🚨 *Possible OOM*
-During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM *{round(max_agent_ram_with_threshold, 1)}GB ({max_agent_ram}GB total)*
+During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM *{round(max_agent_ram_with_threshold, 1)}GB*
+{max_agent_ram}GB total
 Threshold is {args.memory_threshold}%
 
 [Ram usage graph]({args.output_file_url})

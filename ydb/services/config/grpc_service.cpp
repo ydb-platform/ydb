@@ -27,8 +27,8 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     using namespace Ydb::Config;
 
-    #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditModeFlags) \
-        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditModeFlags)
+    #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
@@ -36,8 +36,18 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     #undef SETUP_BS_METHOD
 
 
-    #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, methodCallback, rlMode, requestType, auditModeFlags) \
-        SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, config, auditModeFlags, BOOTSTRAP_CLUSTER, TGrpcRequestOperationCall, GRpcRequestProxyId_)
+    #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+        SETUP_RUNTIME_EVENT_METHOD(methodName, \
+            YDB_API_DEFAULT_REQUEST_TYPE(methodName), \
+            YDB_API_DEFAULT_RESPONSE_TYPE(methodName), \
+            methodCallback, \
+            rlMode, \
+            requestType, \
+            YDB_API_DEFAULT_COUNTER_BLOCK(config, methodName), \
+            auditMode, \
+            BOOTSTRAP_CLUSTER, \
+            TGrpcRequestOperationCall, \
+            GRpcRequestProxyId_)
 
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

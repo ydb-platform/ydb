@@ -17,9 +17,10 @@
 // Implies using namespace for request/response types
 #define YDB_API_DEFAULT_REQUEST_TYPE(methodName) Y_CAT(methodName, Request)
 #define YDB_API_DEFAULT_RESPONSE_TYPE(methodName) Y_CAT(methodName, Response)
+#define YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName) getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterName, auditMode, runtimeEventType, operationCallClass, grpcProxyId) \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId) \
     MakeIntrusive<::NKikimr::NGRpcService::TGRpcRequest<                                                  \
         inputType,                                                                                        \
         outputType,                                                                                       \
@@ -43,7 +44,7 @@
         &TGrpcAsyncService::Y_CAT(Request, methodName),                                                   \
         Y_STRINGIZE(methodName),                                                                          \
         logger,                                                                                           \
-        getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                \
+        counterBlock                                                                                      \
     )->Run()
 
 
@@ -55,7 +56,7 @@
         methodCallback, \
         rlMode, \
         requestType, \
-        counterName, \
+        YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName), \
         auditMode, \
         COMMON, \
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall, \

@@ -436,14 +436,16 @@ bool SelectRows(NYT::IClientPtr client,
     sqlBuilder << " FROM [";
     sqlBuilder << NYT::AddPathPrefix(table, NYT::TConfig::Get()->Prefix);
     sqlBuilder << "]";
+
+    ui64 effectiveLimit = endRecordInTable;
     if (exec.GetRowsLimit()) {
-        ui64 effectiveLimit = endRecordInTable;
         if (!effectiveLimit) {
             effectiveLimit = startRecordInTable + *exec.GetRowsLimit() + 1;
         } else {
             effectiveLimit = Min(effectiveLimit, *exec.GetRowsLimit() + 1);
         }
-
+    }
+    if (effectiveLimit) {
         sqlBuilder << " LIMIT " << effectiveLimit;
     }
 

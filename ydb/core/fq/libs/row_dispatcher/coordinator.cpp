@@ -178,7 +178,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
         TTopicMetrics Metrics;
     };
 
-    NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig Config;
+    TRowDispatcherSettings::TCoordinatorSettings Config;
     TActorId LocalRowDispatcherId;
     const TString LogPrefix;
     const TString Tenant;
@@ -194,7 +194,7 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 public:
     TActorCoordinator(
         NActors::TActorId localRowDispatcherId,
-        const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+        const TRowDispatcherSettings::TCoordinatorSettings& config,
         const TString& tenant,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         NActors::TActorId nodesManagerId);
@@ -245,7 +245,7 @@ private:
 
 TActorCoordinator::TActorCoordinator(
     NActors::TActorId localRowDispatcherId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     NActors::TActorId nodesManagerId)
@@ -577,13 +577,13 @@ void TActorCoordinator::Handle(NFq::TEvNodesManager::TEvGetNodesResponse::TPtr& 
     UpdatePendingReadActors();
 }
 
-} // namespace
+} // anonymous namespace
 
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
-    const NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& config,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const TString& tenant,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     NActors::TActorId nodesManagerId)

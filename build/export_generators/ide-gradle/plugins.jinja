@@ -43,8 +43,20 @@ plugins {
 {%- if jdk_version %}
 
 java {
+{%-     if jdk11_compatibility_mode and proto_template %}
+    toolchain {
+        languageVersion = JavaLanguageVersion.of("11")
+    }
+{%-     else %}
     toolchain {
         languageVersion = JavaLanguageVersion.of("{{ jdk_version }}")
     }
+{%-     endif %}
+}
+
+{#- Can be removed after Gradle 9. See https://github.com/gradle/gradle/issues/16791 #}
+
+tasks.withType<JavaExec>().configureEach {
+    javaLauncher.set(javaToolchains.launcherFor(java.toolchain))
 }
 {%  endif -%}

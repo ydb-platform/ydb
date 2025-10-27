@@ -178,7 +178,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseRowsPerMatch(TPosition pos, const TRule_
                 return NYql::NMatchRecognize::ERowsPerMatch::AllRows;
             }
             case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }();
     return BuildQuotedAtom(pos, "RowsPerMatch_" + ToString(result));
@@ -239,7 +239,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
                 return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::To, std::move(var)};
             }
             case TRule_row_pattern_skip_to::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }();
     if (!result) {
@@ -327,7 +327,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 return BuildPattern(pos, std::move(result));
             }
             case TRule_row_pattern_primary::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }();
     if (!primary) {
@@ -377,7 +377,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 return std::tuple{quantity, quantity, true, output, false};
             }
             case TRule_row_pattern_quantifier::ALT_NOT_SET:
-                Y_ABORT("You should change implementation according to grammar changes");
+                Y_UNREACHABLE();
         }
     }();
     return BuildPatternFactor(pos, std::move(primary), std::move(quantifier));

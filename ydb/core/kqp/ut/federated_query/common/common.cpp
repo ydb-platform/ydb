@@ -20,8 +20,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         return result;
     }
 
-    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver) {
-        NYdb::NOperation::TOperationClient client(ydbDriver);
+    NYdb::NQuery::TScriptExecutionOperation WaitScriptExecutionOperation(const NYdb::TOperation::TOperationId& operationId, const NYdb::TDriver& ydbDriver, const TString& userSID) {
+        NYdb::TCommonClientSettings settings;
+
+        if (userSID) {
+            settings.AuthToken(userSID);
+        }
+
+        NYdb::NOperation::TOperationClient client(ydbDriver, settings);
         while (1) {
             auto op = client.Get<NYdb::NQuery::TScriptExecutionOperation>(operationId).GetValueSync();
 
@@ -78,6 +84,18 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         featureFlags.SetEnableScriptExecutionOperations(true);
         featureFlags.SetEnableExternalSourceSchemaInference(true);
         featureFlags.SetEnableMoveColumnTable(true);
+
+        if (appConfig && appConfig->HasFeatureFlags()) {
+            const auto& appFlags = appConfig->GetFeatureFlags();
+            if (appFlags.GetEnableColumnshardBool()) {
+                featureFlags.SetEnableColumnshardBool(true);
+            }
+
+            if (appFlags.GetEnableColumnStore()) {
+                featureFlags.SetEnableColumnStore(true);
+            }
+        }
+
         if (!appConfig) {
             appConfig.emplace();
             appConfig->MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
@@ -109,7 +127,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             NYql::NDq::CreateReadActorFactoryConfig(s3Config),
             nullptr,
             NYql::TPqGatewayConfig{},
-            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver, NYql::TPqGatewayConfig{}),
+            options.PqGateway ? options.PqGateway : NKqp::MakePqGateway(driver),
             nullptr,
             driver);
 

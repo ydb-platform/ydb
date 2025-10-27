@@ -507,8 +507,9 @@ public:
     /// @note YT doesn't store all job traces.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_trace)
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) = 0;
 
     ///
@@ -549,6 +550,13 @@ public:
         const TYPath& path,
         const TVector<int>& tabletIndexes,
         const TGetTabletInfosOptions& options = TGetTabletInfosOptions()) = 0;
+
+    ///
+    /// @brief Get cluster configuration stored in Cypress by profile name (e.g. "default").
+    ///
+    /// Cluster configs location is defined in |TConfig::ConfigRemotePatchPath|.
+    ///
+    virtual const TNode::TMapType& GetDynamicConfiguration(const TString& configProfile);
 
     ///
     /// @brief Suspend operation.

@@ -4,8 +4,6 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -27,8 +25,6 @@ using namespace NSQLTranslation;
 using namespace NSQLTranslationV1;
 
 TLexers Lexers = {
-    .Antlr3 = MakeAntlr3LexerFactory(),
-    .Antlr3Ansi = MakeAntlr3AnsiLexerFactory(),
     .Antlr4 = MakeAntlr4LexerFactory(),
     .Antlr4Ansi = MakeAntlr4AnsiLexerFactory(),
     .Antlr4Pure = MakeAntlr4PureLexerFactory(),
@@ -217,21 +213,6 @@ TVector<TString> InvalidQueries() {
     };
 }
 
-Y_UNIT_TEST(ErrorRecoveryAntlr3) {
-    TVector<TVector<TString>> actual = {
-        /* 0: */ {"EOF"},
-        /* 1: */ {"SELECT", "WS", "EOF"},
-        /* 2: */ {"EOF"},
-        /* 3: */ {"WS", "SELECT", "WS", "ASTERISK", "WS", "ID_PLAIN (FR)", "EOF"},
-        /* 4: */ {"ID_PLAIN (ELECT)", "WS", "ASTERISK", "WS", "WS", "FROM", "EOF"},
-        /* 5: */ {"SELECT", "WS", "ID_PLAIN (rom)", "EOF"},
-        /* 6: */ {"EOF"},
-        /* 7: */ {"ID_PLAIN (lect)", "EOF"},
-        /* 8: */ {"SELECT", "WS", "EOF"},
-    };
-    TestInvalidTokensSkipped(/* antlr4 = */ false, actual);
-}
-
 Y_UNIT_TEST(ErrorRecoveryAntlr4) {
     TVector<TVector<TString>> actual = {
         /* 0: */ {"EOF"},
@@ -264,21 +245,6 @@ Y_UNIT_TEST(IssuesCollected) {
         UNIT_ASSERT(!issues4p.empty());
         UNIT_ASSERT(!issuesR.empty());
     }
-}
-
-Y_UNIT_TEST(IssueMessagesAntlr3) {
-    auto lexer3 = MakeLexer(Lexers, /* ansi = */ false, /* antlr4 = */ false);
-
-    auto actual = GetIssueMessages(lexer3, "\xF0\x9F\x98\x8A SELECT * FR");
-
-    TVector<TString> expected = {
-        "<main>:1:0: Error: Unexpected character '\xF0\x9F\x98\x8A' (Unicode character <128522>) : cannot match to any predicted input...",
-        "<main>:1:1: Error: Unexpected character : cannot match to any predicted input...",
-        "<main>:1:2: Error: Unexpected character : cannot match to any predicted input...",
-        "<main>:1:3: Error: Unexpected character : cannot match to any predicted input...",
-    };
-
-    UNIT_ASSERT_VALUES_EQUAL(actual, expected);
 }
 
 Y_UNIT_TEST(IssueMessagesAntlr4) {

@@ -98,6 +98,8 @@ NYql::NNodes::TKqpCnStreamLookup BuildStreamLookupOverPrecompute(const NYql::TKi
     NYql::NNodes::TExprBase input,
     const NYql::NNodes::TKqpTable& kqpTableNode, const NYql::TPositionHandle& pos, NYql::TExprContext& ctx, const TVector<TString>& extraColumnsToRead = {});
 
+NYql::NNodes::TDqStageBase ReadTableToStage(const NYql::NNodes::TExprBase& expr, NYql::TExprContext& ctx);
+
 NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDescription& table,
     const NYql::NNodes::TKqpTable& tableNode,
     const TString& indexName,
@@ -106,8 +108,7 @@ NYql::NNodes::TExprBase BuildVectorIndexPostingRows(const NYql::TKikimrTableDesc
     bool withData,
     NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table,
-    const NYql::TIndexDescription* indexDesc);
+TVector<TStringBuf> BuildVectorIndexPostingColumns(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc);
 
 NYql::NNodes::TExprBase BuildVectorIndexPrefixRows(const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
     bool withData, const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
@@ -117,5 +118,9 @@ std::pair<NYql::NNodes::TExprBase, NYql::NNodes::TExprBase> BuildVectorIndexPref
     const NYql::TKikimrTableDescription& table, const NYql::TKikimrTableDescription& prefixTable,
     const NYql::TIndexDescription* indexDesc, const NYql::NNodes::TExprBase& inputRows,
     TVector<TStringBuf>& indexTableColumns, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+
+NYql::NNodes::TExprBase BuildFulltextIndexRows(const NYql::TKikimrTableDescription& table, const NYql::TIndexDescription* indexDesc,
+    const NYql::NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
+    NYql::TPositionHandle pos, NYql::TExprContext& ctx);
 
 } // NKikimr::NKqp::NOpt

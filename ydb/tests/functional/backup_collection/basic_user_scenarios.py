@@ -7,6 +7,7 @@ import yatest
 import pytest
 import tempfile
 import re
+import uuid
 from typing import List
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -576,6 +577,95 @@ class BaseTestBackupInFiles(object):
             "last_total": last_total,
             "last_success": last_success,
         }
+
+    def _rearrange_table(self, from_name: str, to_name: str):
+        full_from = f"/Root/{from_name}"
+        full_to = f"/Root/{to_name}"
+
+        def run_cli(args):
+            cmd = [
+                backup_bin(),
+                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
+                "--database", self.root_dir,
+            ] + args
+            return yatest.common.execute(cmd, check_exit_code=False)
+
+        def to_rel(p):
+            if p.startswith(self.root_dir + "/"):
+                return p[len(self.root_dir) + 1 :]
+            if p == self.root_dir:
+                return ""
+            return p.lstrip("/")
+
+        src_rel = to_rel(full_from)
+        dst_rel = to_rel(full_to)
+
+        parent = os.path.dirname(dst_rel)
+        parent_full = os.path.join(self.root_dir, parent) if parent else None
+        if parent and parent_full:
+            self.driver.scheme_client.list_directory(parent_full)
+
+            mkdir_res = run_cli(["scheme", "mkdir", parent])
+            if mkdir_res.exit_code != 0:
+                logger.debug("scheme mkdir parent returned code=%s stdout=%s stderr=%s",
+                             mkdir_res.exit_code,
+                             getattr(mkdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                             getattr(mkdir_res, "std_err", b"").decode("utf-8", "ignore"))
+
+        # perform tools copy via CLI to the requested destination
+        item_arg = f"destination={dst_rel},source={src_rel}"
+        res = run_cli(["tools", "copy", "--item", item_arg])
+        if res.exit_code != 0:
+            out = (res.std_out or b"").decode("utf-8", "ignore")
+            err = (res.std_err or b"").decode("utf-8", "ignore")
+            raise AssertionError(f"tools copy failed: from={full_from} to={full_to} code={res.exit_code} STDOUT: {out} STDERR: {err}")
+
+        tmp_dir_rel = f"tmp_rearr_{int(time.time())}"
+        tmp_full = os.path.join(self.root_dir, tmp_dir_rel)
+        tmp_created = False
+        try:
+            # create temporary directory
+            try:
+                self.driver.scheme_client.list_directory(tmp_full)
+                tmp_created = False
+            except Exception:
+                res_mk = run_cli(["scheme", "mkdir", tmp_dir_rel])
+                if res_mk.exit_code != 0:
+                    logger.debug("tmp dir mkdir returned code=%s stdout=%s stderr=%s",
+                                 res_mk.exit_code,
+                                 getattr(res_mk, "std_out", b"").decode("utf-8", "ignore"),
+                                 getattr(res_mk, "std_err", b"").decode("utf-8", "ignore"))
+                else:
+                    tmp_created = True
+
+            # copy to temporary dir (basename of destination)
+            basename = os.path.basename(dst_rel) or to_rel(full_from)
+            item_tmp = f"destination={tmp_dir_rel}/{basename},source={src_rel}"
+            res_tmp = run_cli(["tools", "copy", "--item", item_tmp])
+            if res_tmp.exit_code != 0:
+                logger.warning("tools copy to tmp dir failed: code=%s stdout=%s stderr=%s",
+                               res_tmp.exit_code,
+                               getattr(res_tmp, "std_out", b"").decode("utf-8", "ignore"),
+                               getattr(res_tmp, "std_err", b"").decode("utf-8", "ignore"))
+            else:
+                # list temporary dir contents via scheme_client for visibility
+                try:
+                    desc = self.driver.scheme_client.list_directory(tmp_full)
+                    names = [c.name for c in desc.children if not is_system_object(c)]
+                    logger.info("Temporary directory %s contents: %s", tmp_full, names)
+                except Exception as e:
+                    logger.info("Failed to list tmp dir %s: %s", tmp_full, e)
+
+        finally:
+            # remove temporary directory if we created it here
+            if tmp_created:
+                rmdir_res = run_cli(["scheme", "rmdir", "-rf", tmp_dir_rel])
+                if rmdir_res.exit_code != 0:
+                    logger.warning("Failed to rmdir tmp dir %s: code=%s stdout=%s stderr=%s",
+                                   tmp_dir_rel,
+                                   rmdir_res.exit_code,
+                                   getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
+                                   getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
 
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):

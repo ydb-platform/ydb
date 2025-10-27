@@ -1589,7 +1589,17 @@ bool TColumnNode::DoInit(TContext& ctx, ISource* src) {
             // TODO: consider replacing Member -> SqlPlainColumn
             callable = Reliable_ && !UseSource_ ? "Member" : "SqlColumn";
         }
-        Node_ = Y(callable, "row", ColumnExpr_ ? Y("EvaluateAtom", ColumnExpr_) : BuildQuotedAtom(Pos_, *GetColumnName()));
+
+        TNodePtr ref = ColumnExpr_
+                           ? Y("EvaluateAtom", ColumnExpr_)
+                           : BuildQuotedAtom(Pos_, *GetColumnName());
+
+        if (IsYqlRef_) {
+            Node_ = Y("YqlColumnRef", ref);
+        } else {
+            Node_ = Y(callable, "row", ref);
+        }
+
         if (UseSource_) {
             YQL_ENSURE(Source_);
             Node_ = L(Node_, BuildQuotedAtom(Pos_, Source_));
@@ -1610,6 +1620,10 @@ void TColumnNode::ResetAsReliable() {
 
 void TColumnNode::SetAsNotReliable() {
     Reliable_ = false;
+}
+
+void TColumnNode::SetAsYqlRef() {
+    IsYqlRef_ = true;
 }
 
 void TColumnNode::SetUseSource() {
@@ -1693,6 +1707,14 @@ TNodePtr BuildColumnOrType(TPosition pos, const TString& column) {
     TString source = "";
     bool maybeType = true;
     return new TColumnNode(pos, column, source, maybeType);
+}
+
+TNodePtr BuildYqlColumnRef(TPosition pos) {
+    TString source = "";
+    bool maybeType = true;
+    auto* node = new TColumnNode(pos, /* column = */ "", source, maybeType);
+    node->SetAsYqlRef();
+    return node;
 }
 
 ITableKeys::ITableKeys(TPosition pos)
@@ -3135,7 +3157,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                 if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
                                                           NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
                 {
-                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.03";
+                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.04";
                     return false;
                 }
                 Layers_ = arg;

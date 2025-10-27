@@ -5,8 +5,6 @@
 namespace NSQLTranslationV1 {
 
 struct TLexers {
-    NSQLTranslation::TLexerFactoryPtr Antlr3;
-    NSQLTranslation::TLexerFactoryPtr Antlr3Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4;
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4Pure;

@@ -337,8 +337,8 @@ def create_debug_string(test, success_rate=None, period_days=None, date_window=N
     debug_string += f", p-{test.get('pass_count')}, f-{test.get('fail_count')},m-{test.get('mute_count')}, s-{test.get('skip_count')}, runs-{runs}, mute state: {mute_state}, test state {state}"
     return debug_string
 
-def is_flaky_test(test, aggregated_data):
-    """Проверяет, является ли тест flaky за указанный период"""
+def is_mute_candidate(test, aggregated_data):
+    """Проверяет, является ли тест кандидатом на mute за указанный период"""
     # Ищем наш тест в агрегированных данных
     test_data = None
     for agg_test in aggregated_data:
@@ -360,7 +360,13 @@ def is_flaky_test(test, aggregated_data):
         return False
     
     total_runs = test_data['pass_count'] + test_data['fail_count']
-    return (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
+    result = (test_data['fail_count'] >= 3 and total_runs > 10) or (test_data['fail_count'] >= 2 and total_runs <= 10)
+    
+    # Добавляем детальное логирование для диагностики
+    if not test_data.get('is_muted', False):  # Логируем только для незамьюченных тестов
+        logging.debug(f"MUTE_CHECK: {test.get('full_name')} - runs:{total_runs}, fails:{test_data['fail_count']}, state:{test_data.get('state')}, muted:{test_data.get('is_muted')}, result:{result}")
+    
+    return result
 
 def is_unmute_candidate(test, aggregated_data):
     """Проверяет, является ли тест кандидатом на размьют за указанный период"""
@@ -496,11 +502,11 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
 
     try:
         # 1. Кандидаты на mute
-        def is_mute_candidate(test):
-            return is_flaky_test(test, aggregated_for_mute)
+        def is_mute_candidate_wrapper(test):
+            return is_mute_candidate(test, aggregated_for_mute)
         
         to_mute, to_mute_debug = create_file_set(
-            aggregated_for_mute, is_mute_candidate, use_wildcards=True, resolution='to_mute'
+            aggregated_for_mute, is_mute_candidate_wrapper, use_wildcards=True, resolution='to_mute'
         )
         write_file_set(os.path.join(output_path, 'to_mute.txt'), to_mute, to_mute_debug)
         
@@ -554,7 +560,7 @@ def apply_and_add_mutes(all_data, output_path, mute_check, aggregated_for_mute, 
         
         # 4. muted_ya (все замьюченные сейчас)
         all_muted_ya, all_muted_ya_debug = create_file_set(
-            aggregated_for_mute, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
+            all_data, lambda test: mute_check(test.get('suite_folder'), test.get('test_name')) if mute_check else True, use_wildcards=True, resolution='muted_ya'
         )
         write_file_set(os.path.join(output_path, 'muted_ya.txt'), all_muted_ya, all_muted_ya_debug)
         to_mute_set = set(to_mute)
@@ -861,8 +867,12 @@ def mute_worker(args):
     logging.info(f"Starting mute worker with mode: {args.mode}")
     logging.info(f"Branch: {args.branch}")
     
+    # Используем переданный файл или дефолтный
+    input_muted_ya_path = getattr(args, 'muted_ya_file', muted_ya_path)
+    logging.info(f"Using muted_ya file: {input_muted_ya_path}")
+    
     mute_check = YaMuteCheck()
-    mute_check.load(muted_ya_path)
+    mute_check.load(input_muted_ya_path)
     logging.info(f"Loaded muted_ya.txt with {len(mute_check.regexps)} test patterns")
 
     logging.info("Executing single query for 7 days window...")
@@ -902,6 +912,7 @@ if __name__ == "__main__":
     update_muted_ya_parser = subparsers.add_parser('update_muted_ya', help='create new muted_ya')
     update_muted_ya_parser.add_argument('--output_folder', default=repo_path, required=False, help='Output folder.')
     update_muted_ya_parser.add_argument('--branch', default='main', help='Branch to get history')
+    update_muted_ya_parser.add_argument('--muted_ya_file', default=muted_ya_path, help='Path to input muted_ya.txt file')
 
     create_issues_parser = subparsers.add_parser(
         'create_issues',

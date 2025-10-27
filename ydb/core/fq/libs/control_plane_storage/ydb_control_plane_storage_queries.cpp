@@ -783,7 +783,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
     success.Apply([=](const auto& future) {
             TDuration delta = TInstant::Now() - startTime;
-            LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, future.GetValue());
+            LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, future.GetValue());
         });
 }
 

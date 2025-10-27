@@ -1094,6 +1094,7 @@ message TReqBuildSnapshot
     optional NYT.NProto.TGuid cell_id = 1;
     optional bool set_read_only = 2 [default = false];
     optional bool wait_for_snapshot_completion = 3 [default = true];
+    optional bool enable_automaton_read_only_barrier = 4 [default = true];
 }
 
 message TRspBuildSnapshot
@@ -2238,6 +2239,8 @@ message TReqPartitionTables
 
     optional bool enable_cookies = 10;
 
+    optional bool omit_inaccessible_rows = 13;
+
     optional TTransactionalOptions transactional_options = 100;
 
     reserved 11, 12;
@@ -2665,27 +2668,6 @@ message TRspGetJobStderr
 
 ////////////////////////////////////////////////////////////////////////////////
 
-message TReqGetJobTrace
-{
-    oneof operation_id_or_alias {
-        NYT.NProto.TGuid operation_id = 1;
-        string operation_alias = 2;
-    }
-    optional NYT.NProto.TGuid job_id = 3;
-    optional NYT.NProto.TGuid trace_id = 4;
-    optional int64 from_event_index = 5;
-    optional int64 to_event_index = 6;
-    optional int64 from_time = 7;
-    optional int64 to_time = 8;
-}
-
-message TRspGetJobTrace
-{
-    repeated TJobTraceEvent events = 1;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 message TReqGetJobFailContext
 {
     oneof operation_id_or_alias {
@@ -2911,6 +2893,24 @@ message TWriteTableMeta
 }
 
 message TRspWriteTable
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqGetJobTrace
+{
+    oneof operation_id_or_alias {
+        NYT.NProto.TGuid operation_id = 1;
+        string operation_alias = 2;
+    }
+    required NYT.NProto.TGuid job_id = 3;
+    optional NYT.NProto.TGuid trace_id = 4;
+    optional int64 from_time = 5;
+    optional int64 to_time = 6;
+}
+
+message TRspGetJobTrace
 {
 }
 

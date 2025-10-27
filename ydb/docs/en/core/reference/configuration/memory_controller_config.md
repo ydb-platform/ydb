@@ -12,7 +12,7 @@ config:
 ---
 sankey-beta
 
-Activity Components,"KQP", 20
+Activity Components,"QP", 20
 Activity Components,Compaction, 10
 
 Cache Components,Shared cache, 40
@@ -30,7 +30,7 @@ Examples of components managed by the memory controller:
 
 - [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
 - [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
-- [KQP](../../concepts/glossary.md#kqp): stores intermediate query results.
+- [Query Processor](../../concepts/glossary.md#kqp): stores intermediate query results.
 - [Compaction](../../concepts/glossary.md#compaction): The process of organizing and cleaning up data, which is performed automatically (in the background) to optimize storage space.
 - Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
 
@@ -104,7 +104,7 @@ memory_controller_config:
 
 The activity components include:
 
-- KQP
+- Query Processor
 - Compaction
 
 The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied. When query execution approaches memory limits, {{ ydb-short-name }} activates [spilling](../../concepts/spilling.md) to temporarily save intermediate data to disk, preventing memory limit violations.
@@ -113,7 +113,7 @@ As a result, while the combined individual limits of the activity components mig
 
 There are some other activity components that currently do not have individual memory limits.
 
-Example of the `memory_controller_config` section with a specified KQP limit:
+Example of the `memory_controller_config` section with a specified QP limit:
 
 ```yaml
 memory_controller_config:
@@ -144,5 +144,5 @@ $Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\
 | `shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
 | `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
 | `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
-| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | KQP memory limit. |
+| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | QP memory limit. |
 | `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |

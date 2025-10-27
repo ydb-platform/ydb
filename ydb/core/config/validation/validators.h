@@ -38,12 +38,16 @@ EValidationResult ValidateStaticGroup(
     const NKikimrConfig::TAppConfig& proposed,
     std::vector<TString>& msg);
 
+EValidationResult ValidateStateStorageConfig(
+    const NKikimrConfig::TAppConfig& proposed,
+    std::vector<TString>& msg);
+
 EValidationResult ValidateAuthConfig(
     const NKikimrProto::TAuthConfig& authConfig,
     std::vector<TString>& msg);
 
 EValidationResult ValidateColumnShardConfig(
-    const NKikimrConfig::TColumnShardConfig& columnShardConfig, 
+    const NKikimrConfig::TColumnShardConfig& columnShardConfig,
     std::vector<TString>& msg);
 
 EValidationResult ValidateDatabaseConfig(
@@ -53,5 +57,7 @@ EValidationResult ValidateDatabaseConfig(
 EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
+
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig);
 
 } // namespace NKikimr::NConfig

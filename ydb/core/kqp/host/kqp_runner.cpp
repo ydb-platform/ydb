@@ -320,7 +320,7 @@ private:
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .AddCommonOptimization()
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
-            .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, ActorSystem), "ColumnStatisticsRequester")
+            .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem), "ColumnStatisticsRequester")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
@@ -341,6 +341,12 @@ private:
             .Build(false));
 
         auto kqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
+            .AddServiceTransformers()
+            .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
+            .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
+            .Build(false);
+
+        auto rboKqpTypeAnnTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()
             .Add(Log("RBOTypeAnnotator"), "LogRBOTypeAnnotator")
             .AddTypeAnnotationTransformer(CreateKqpTypeAnnotationTransformer(Cluster, sessionCtx->TablesPtr(), *typesCtx, Config))
@@ -367,7 +373,7 @@ private:
             //.AddCommonOptimization()
 
             .Add(CreateKqpPgRewriteTransformer(OptimizeCtx, *typesCtx), "RewritePgSelect")
-            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, Config, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer), "NewRBOTransformer")
+            .Add(CreateKqpNewRBOTransformer(OptimizeCtx, *typesCtx, rboKqpTypeAnnTransformer, kqpTypeAnnTransformer, newRBOPhysicalPeepholeTransformer), "NewRBOTransformer")
             .Add(CreateKqpRBOCleanupTransformer(*typesCtx), "RBOCleanupTransformer")
 
             //.Add(CreatePhysicalDataProposalsInspector(*typesCtx), "ProvidersPhysicalOptimize")

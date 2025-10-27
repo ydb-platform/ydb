@@ -13,6 +13,7 @@
 #include "viewer_describe_replication.h"
 #include "viewer_describe_topic.h"
 #include "viewer_describe_transfer.h"
+#include "viewer_commit_offset.h"
 #include "viewer_feature_flags.h"
 #include "viewer_topic_data.h"
 #include "viewer_graph.h"
@@ -181,6 +182,10 @@ void InitViewerDescribeConsumerJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/describe_consumer", new TJsonHandler<TJsonDescribeConsumer>(TJsonDescribeConsumer::GetSwagger()));
 }
 
+void InitViewerCommitOffsetJsonHandler(TJsonHandlers& jsonHandlers) {
+    jsonHandlers.AddHandler("/viewer/commit_offset", new TJsonHandler<TJsonCommitOffset>(TJsonCommitOffset::GetSwagger()));
+}
+
 void InitViewerHotkeysJsonHandler(TJsonHandlers& jsonHandlers) {
     jsonHandlers.AddHandler("/viewer/hotkeys", new TJsonHandler<TJsonHotkeys>(TJsonHotkeys::GetSwagger()));
 }
@@ -228,7 +233,7 @@ void InitViewerStorageUsageJsonHandler(TJsonHandlers &handlers) {
 }
 
 void InitViewerClusterJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 7);
+    handlers.AddHandler("/viewer/cluster", new TJsonHandler<TJsonCluster>(TJsonCluster::GetSwagger()), 8);
 }
 
 void InitViewerLabeledCountersJsonHandler(TJsonHandlers &handlers) {
@@ -329,6 +334,7 @@ void InitViewerJsonHandlers(TJsonHandlers& jsonHandlers) {
     InitViewerDescribeTopicJsonHandler(jsonHandlers);
     InitViewerDescribeTransferJsonHandler(jsonHandlers);
     InitViewerDescribeConsumerJsonHandler(jsonHandlers);
+    InitViewerCommitOffsetJsonHandler(jsonHandlers);
     InitViewerHotkeysJsonHandler(jsonHandlers);
     InitViewerHiveInfoJsonHandler(jsonHandlers);
     InitViewerBSGroupInfoJsonHandler(jsonHandlers);

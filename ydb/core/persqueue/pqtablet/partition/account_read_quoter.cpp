@@ -34,7 +34,7 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     const TTabletCountersBase& counters,
     const TDuration& doNotQuoteAfterErrorPeriod
 )
-        : TBaseActor(tabletId, tabletActor, NKikimrServices::PQ_RATE_LIMITER)
+        : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_RATE_LIMITER)
         , KesusPath(params.KesusPath)
         , ResourcePath(params.ResourcePath)
         , TopicConverter(topicConverter)
@@ -102,7 +102,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
             TThis::Send(MakeQuoterServiceID(),
                 new TEvQuota::TEvRequest(
                     TEvQuota::EResourceOperator::And,
-                    { TEvQuota::TResourceLeaf(KesusPath, ResourcePath, ConsumedBytesInCredit) },
+                    { TEvQuota::TResourceLeaf(KesusPath, KesusPath, ResourcePath, ConsumedBytesInCredit) },
                     TDuration::Max()),
                 0,
                 ++CurrentQuotaRequestCookie

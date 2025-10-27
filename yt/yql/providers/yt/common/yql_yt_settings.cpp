@@ -508,6 +508,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseDefaultArrowAllocatorInJobs);
     REGISTER_SETTING(*this, UseNativeYtDefaultColumnOrder);
+    REGISTER_SETTING(*this, EarlyPartitionPruning);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -602,6 +603,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
+    REGISTER_SETTING(*this, ValidatePool);
+    REGISTER_SETTING(*this, ValidateClusters);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

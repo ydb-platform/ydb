@@ -4,11 +4,13 @@
 #include "distconf.h"
 
 #include <google/protobuf/util/message_differencer.h>
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/blobstorage/common/immediate_control_defaults.h>
 #include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_request_reporting.h>
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_data.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
@@ -42,6 +44,8 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , HullCompMaxInFlightReads(20, 1, 1000)
     , HullCompFullCompPeriodSec(0, 0, 7 * 24 * 60 * 60)
     , HullCompThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
+    , GarbageThresholdToRunFullCompactionPerMille(0, 0, 300)
+    , DefragThrottlerBytesRate(0, 0, 10'000'000'000) // 10 GB/s
     , ThrottlingDryRun(1, 0, 1)
     , ThrottlingMinLevel0SstCount(100, 1, 100000)
     , ThrottlingMaxLevel0SstCount(250, 1, 100000)
@@ -54,8 +58,9 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMinLogChunkCount(100, 1, 100000)
     , ThrottlingMaxLogChunkCount(130, 1, 100000)
     , MaxInProgressSyncCount(0, 0, 1000)
-    , MaxCommonLogChunksHDD(200, 1, 1'000'000)
-    , MaxCommonLogChunksSSD(200, 1, 1'000'000)
+    , MaxCommonLogChunksHDD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
+    , MaxCommonLogChunksSSD(NPDisk::MaxCommonLogChunks, 1, 1'000'000)
+    , CommonStaticLogChunks(NPDisk::CommonStaticLogChunks, 1, 1'000'000)
     , CostMetricsParametersByMedia({
         TCostMetricsParameters{200},
         TCostMetricsParameters{50},
@@ -387,6 +392,8 @@ void TNodeWarden::Bootstrap() {
         TControlBoard::RegisterSharedControl(HullCompMaxInFlightReads, icb->VDiskControls.HullCompMaxInFlightReads);
         TControlBoard::RegisterSharedControl(HullCompFullCompPeriodSec, icb->VDiskControls.HullCompFullCompPeriodSec);
         TControlBoard::RegisterSharedControl(HullCompThrottlerBytesRate, icb->VDiskControls.HullCompThrottlerBytesRate);
+        TControlBoard::RegisterSharedControl(GarbageThresholdToRunFullCompactionPerMille, icb->VDiskControls.GarbageThresholdToRunFullCompactionPerMille);
+        TControlBoard::RegisterSharedControl(DefragThrottlerBytesRate, icb->VDiskControls.DefragThrottlerBytesRate);
 
         TControlBoard::RegisterSharedControl(ThrottlingDryRun, icb->VDiskControls.ThrottlingDryRun);
         TControlBoard::RegisterSharedControl(ThrottlingMinLevel0SstCount, icb->VDiskControls.ThrottlingMinLevel0SstCount);
@@ -404,6 +411,7 @@ void TNodeWarden::Bootstrap() {
 
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksHDD, icb->PDiskControls.MaxCommonLogChunksHDD);
         TControlBoard::RegisterSharedControl(MaxCommonLogChunksSSD, icb->PDiskControls.MaxCommonLogChunksSSD);
+        TControlBoard::RegisterSharedControl(CommonStaticLogChunks, icb->PDiskControls.CommonStaticLogChunks);
 
         TControlBoard::RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
                 icb->VDiskControls.BurstThresholdNsHDD);
@@ -699,9 +707,14 @@ void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVe
         return;
     }
 
+    auto escape = [&](auto& value) { return value ? std::make_optional('"' + EscapeC(*value) + '"') : std::nullopt; };
+
     STLOG(PRI_DEBUG, BS_NODE, NW63, "persisting new configurations",
-        (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
-        (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
+        (MainYaml, escape(mainYaml)),
+        (MainYamlVersion, mainYamlVersion),
+        (StorageYaml, escape(storageYaml)),
+        (StorageYamlVersion, storageYamlVersion),
+        (YamlConfig, YamlConfig));
 
     const bool updateMain = mainYaml && (!YamlConfig || !YamlConfig->HasMainConfigVersion() ||
         YamlConfig->GetMainConfigVersion() < mainYamlVersion);
@@ -1643,7 +1656,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 
             auto updateConfig = [&](bool needMerge, auto *to, const auto& from, const char *entity) {
                 if (needMerge) {
-                    *errorReason = VerifyConfigCompatibility(entity, from, *to);
+                    *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(entity, from, *to);
                     if (!errorReason->empty()) {
                         return false;
                     }
@@ -1672,7 +1685,7 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
 #define UPDATE_EXPLICIT_CONFIG(NAME) \
         if (domains.HasExplicit##NAME##Config()) { \
             if (config->Has##NAME##Config()) { \
-                *errorReason = VerifyConfigCompatibility(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
+                *errorReason = NKikimr::NConfig::ValidateStateStorageConfig(#NAME, config->Get##NAME##Config(), domains.GetExplicit##NAME##Config()); \
                 if (!errorReason->empty()) { \
                     return false; \
                 } \
@@ -1686,102 +1699,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
     }
 
     return true;
-}
-
-TString NKikimr::VerifyConfigCompatibility(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig) {
-    STLOG(PRI_DEBUG, BS_NODE, NW102, "VerifyConfigCompatibility", (oldSSConfig, oldSSConfig), (newSSConfig, newSSConfig));
-
-    if ((oldSSConfig.HasRing() || oldSSConfig.RingGroupsSize() == 1) && (newSSConfig.HasRing() || newSSConfig.RingGroupsSize() == 1)) {
-        auto toInfo = BuildStateStorageInfo(newSSConfig);
-        auto fromInfo = BuildStateStorageInfo(oldSSConfig);
-        if (toInfo->RingGroups != fromInfo->RingGroups) {
-            return TStringBuilder() << name << " NToSelect/rings differs"
-                << " from# " << SingleLineProto(oldSSConfig)
-                << " to# " << SingleLineProto(newSSConfig);
-        }
-        return "";
-    }
-    if (newSSConfig.RingGroupsSize() < 1) {
-        return TStringBuilder() << "New " << name << " configuration RingGroups is not filled in";
-    }
-    if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
-        return TStringBuilder() << "New " << name << " configuration first RingGroup is writeOnly";
-    }
-    for (auto& rg : newSSConfig.GetRingGroups()) {
-        if (rg.RingSize() && rg.NodeSize()) {
-            return TStringBuilder() << name << " Ring and Node are defined, use the one of them";
-        }
-        const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
-        if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
-            return TStringBuilder() << name << " invalid ring group selection";
-        }
-        for (auto &ring : rg.GetRing()) {
-            if (ring.RingSize() > 0) {
-                return TStringBuilder() << name << " too deep nested ring declaration";
-            }
-            if (ring.HasRingGroupActorIdOffset()) {
-                return TStringBuilder() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
-            }
-            if (ring.NodeSize() < 1) {
-                return TStringBuilder() << name << " empty ring";
-            }
-        }
-    }
-    try {
-        TIntrusivePtr<TStateStorageInfo> newSSInfo;
-        TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-        newSSInfo = BuildStateStorageInfo(newSSConfig);
-        oldSSInfo = BuildStateStorageInfo(oldSSConfig);
-        THashSet<TActorId> replicas;
-        for (auto& ringGroup : newSSInfo->RingGroups) {
-            for (auto& ring : ringGroup.Rings) {
-                for (auto& node : ring.Replicas) {
-                    if (!replicas.insert(node).second) {
-                        return TStringBuilder() << name << " replicas ActorId intersection, specify"
-                            " RingGroupActorIdOffset if you run multiple replicas on one node";
-                    }
-                }
-            }
-        }
-
-        Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-
-        for (auto& newGroup : newSSInfo->RingGroups) {
-            if (newGroup.WriteOnly) {
-                continue;
-            }
-            bool found = false;
-            for (auto& rg : oldSSInfo->RingGroups) {
-                if (newGroup.SameConfiguration(rg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return TStringBuilder() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
-                    << " new: " << newSSInfo->ToString();
-            }
-        }
-        for (auto& oldGroup : oldSSInfo->RingGroups) {
-            if (oldGroup.WriteOnly) {
-                continue;
-            }
-            bool found = false;
-            for (auto& rg : newSSInfo->RingGroups) {
-                if (oldGroup.SameConfiguration(rg)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return TStringBuilder() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
-                    << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
-            }
-        }
-    } catch (const std::exception& e) {
-        return TStringBuilder() << "Can not build " << name << " info from config. " << e.what();
-    }
-    return "";
 }
 
 bool NKikimr::ObtainStaticKey(TEncryptionKey *key) {

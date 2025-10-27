@@ -62,6 +62,7 @@ SRCS(
     viewer_capabilities.h
     viewer_check_access.h
     viewer_cluster.h
+    viewer_commit_offset.h
     viewer_compute.h
     viewer_config.h
     viewer_content.h

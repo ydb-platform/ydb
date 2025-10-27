@@ -78,7 +78,7 @@ public:
         , AuthState_(server->NeedAuth())
     {
         Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, Name_);
+        GRPC_LOG_DEBUG(Logger_, "[%p] created request Name# %s", this, GetRpcMethodName().c_str());
     }
 
     TGRpcRequestImpl(TService* server,
@@ -106,7 +106,7 @@ public:
         , StreamAdaptor_(CreateStreamAdaptor())
     {
         Y_ABORT_UNLESS(Request_);
-        GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, Name_);
+        GRPC_LOG_DEBUG(Logger_, "[%p] created streaming request Name# %s", this, GetRpcMethodName().c_str());
     }
 
     TAsyncFinishResult GetFinishFuture() override {
@@ -229,11 +229,11 @@ public:
     }
 
     void FinishStreamingOk() override {
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (enqueued)", this, Name_,
+        GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (enqueued)", this, GetRpcMethodName().c_str(),
                   this->Context.peer().c_str());
         auto cb = [this]() {
             StateFunc_ = &TThis::SetFinishDone;
-            GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (pushed to grpc)", this, Name_,
+            GRPC_LOG_DEBUG(Logger_, "[%p] finished streaming Name# %s peer# %s (pushed to grpc)", this, GetRpcMethodName().c_str(),
                       this->Context.peer().c_str());
 
             OnBeforeCall();
@@ -288,7 +288,7 @@ private:
 
         auto sz = (size_t)resp->ByteSize();
         if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s", this, Name_,
+            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s", this, GetRpcMethodName().c_str(),
                 makeResponseString().data(), this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
@@ -299,14 +299,14 @@ private:
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
         } else {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# %s peer# %s (enqueued)",
-                this, Name_, makeResponseString().data(), this->Context.peer().c_str());
+                this, GetRpcMethodName().c_str(), makeResponseString().data(), this->Context.peer().c_str());
 
             // because of std::function cannot hold move-only captured object
             // we allocate shared object on heap to avoid message copy
             auto uResp = MakeIntrusive<TUniversalResponse<TOut>>(resp);
             auto cb = [this, uResp = std::move(uResp), sz, status]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s peer# %s (pushed to grpc)",
-                    this, Name_, this->Context.peer().c_str());
+                    this, GetRpcMethodName().c_str(), this->Context.peer().c_str());
                 StateFunc_ = &TThis::NextReply;
                 ResponseSize += sz;
                 ResponseStatus = status;
@@ -320,7 +320,7 @@ private:
     void WriteByteDataOk(grpc::ByteBuffer* resp, ui32 status, EStreamCtrl ctrl) {
         auto sz = resp->Length();
         if (Writer_) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, Name_,
+            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s", this, GetRpcMethodName().c_str(),
                 this->Context.peer().c_str());
             StateFunc_ = &TThis::SetFinishDone;
             ResponseSize = sz;
@@ -329,7 +329,7 @@ private:
             Finished_ = true;
             Writer_->Finish(TUniversalResponseRef<TOut>(resp), grpc::Status::OK, GetGRpcTag());
         } else {
-            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (enqueued)", this, Name_,
+            GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (enqueued)", this, GetRpcMethodName().c_str(),
                 this->Context.peer().c_str());
 
             // because of std::function cannot hold move-only captured object
@@ -338,7 +338,7 @@ private:
             const bool finish = ctrl == EStreamCtrl::FINISH;
             auto cb = [this, uResp = std::move(uResp), sz, status, finish]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s data# byteString peer# %s (pushed to grpc)",
-                    this, Name_, this->Context.peer().c_str());
+                    this, GetRpcMethodName().c_str(), this->Context.peer().c_str());
 
                 StateFunc_ = finish ? &TThis::SetFinishDone : &TThis::NextReply;
 
@@ -367,7 +367,7 @@ private:
 
         if (Writer_) {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)", this,
-                Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
+                GetRpcMethodName().c_str(), msg.c_str(), this->Context.peer().c_str(), (int)code);
             StateFunc_ = &TThis::SetFinishError;
             TOut resp;
             OnBeforeCall();
@@ -375,10 +375,10 @@ private:
             Writer_->Finish(TUniversalResponseRef<TOut>(&resp), grpc::Status(code, msg, details), GetGRpcTag());
         } else {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                    " (enqueued)", this, Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
+                                    " (enqueued)", this, GetRpcMethodName().c_str(), msg.c_str(), this->Context.peer().c_str(), (int)code);
             auto cb = [this, code, msg, details]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
-                                        " (pushed to grpc)", this, Name_, msg.c_str(),
+                                        " (pushed to grpc)", this, GetRpcMethodName().c_str(), msg.c_str(),
                                this->Context.peer().c_str(), (int)code);
                 StateFunc_ = &TThis::SetFinishError;
                 OnBeforeCall();
@@ -403,7 +403,7 @@ private:
             }
             return resp;
         };
-        GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, Name_,
+        GRPC_LOG_DEBUG(Logger_, "[%p] received request Name# %s ok# %s data# %s peer# %s", this, GetRpcMethodName().c_str(),
             ok ? "true" : "false", makeRequestString().data(), this->Context.peer().c_str());
 
         if (this->Context.c_call() == nullptr) {
@@ -413,7 +413,7 @@ private:
         } else if (!(RequestRegistered_ = Server_->RegisterRequestCtx(this))) {
             // Request cannot be registered due to shutdown
             // It's unsafe to continue, so drop this request without processing
-            GRPC_LOG_DEBUG(Logger_, "[%p] dropping request Name# %s due to shutdown", this, Name_);
+            GRPC_LOG_DEBUG(Logger_, "[%p] dropping request Name# %s due to shutdown", this, GetRpcMethodName().c_str());
             this->Context.TryCancel();
             return false;
         }
@@ -444,7 +444,7 @@ private:
                 TString db{maybeDatabase ? maybeDatabase[0] : TStringBuf{}};
                 Counters_->CountRequestsWithoutToken();
                 GRPC_LOG_DEBUG(Logger_, "[%p] received request without user token "
-                    "Name# %s data# %s peer# %s database# %s", this, Name_,
+                    "Name# %s data# %s peer# %s database# %s", this, GetRpcMethodName().c_str(),
                     makeRequestString().data(), this->Context.peer().c_str(), db.c_str());
             }
 
@@ -462,7 +462,7 @@ private:
         OnAfterCall();
 
         auto logCb = [this, ok](int left) {
-            GRPC_LOG_DEBUG(Logger_, "[%p] ready for next reply Name# %s ok# %s peer# %s left# %d", this, Name_,
+            GRPC_LOG_DEBUG(Logger_, "[%p] ready for next reply Name# %s ok# %s peer# %s left# %d", this, GetRpcMethodName().c_str(),
                 ok ? "true" : "false", this->Context.peer().c_str(), left);
         };
 
@@ -488,7 +488,7 @@ private:
     bool SetFinishDone(bool ok) {
         OnAfterCall();
 
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request Name# %s ok# %s peer# %s", this, Name_,
+        GRPC_LOG_DEBUG(Logger_, "[%p] finished request Name# %s ok# %s peer# %s", this, GetRpcMethodName().c_str(),
             ok ? "true" : "false", this->Context.peer().c_str());
         //PrintBackTrace();
         DecRequest();
@@ -500,7 +500,7 @@ private:
     bool SetFinishError(bool ok) {
         OnAfterCall();
 
-        GRPC_LOG_DEBUG(Logger_, "[%p] finished request with error Name# %s ok# %s peer# %s", this, Name_,
+        GRPC_LOG_DEBUG(Logger_, "[%p] finished request with error Name# %s ok# %s peer# %s", this, GetRpcMethodName().c_str(),
             ok ? "true" : "false", this->Context.peer().c_str());
         if (!SkipUpdateCountersOnError) {
             DecRequest();

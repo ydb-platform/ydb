@@ -124,6 +124,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             ActorSystem->Send(GRpcRequestProxyId, new TGrpcRequestNoOperationCall<                           \
                 NKikimrClient::In,                                                                           \
                 NKikimrClient::Out,                                                                          \
+                NRuntimeEvents::EType::COMMON,                                                               \
                 NLegacyGrpcService::TLegacyGrpcMethodAccessorTraits<NKikimrClient::In, NKikimrClient::Out>>( \
                     reqCtx, createActorCb,                                                                   \
                     TRequestAuxSettings {                                                                    \
@@ -133,7 +134,7 @@ void TGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     }));                                                                                     \
         },                                                                                                   \
         &NKikimrClient::TGRpcServer::AsyncService::Y_CAT(Request, methodName),                               \
-        "Legacy/" Y_STRINGIZE(methodName),                                                                   \
+        Y_STRINGIZE(methodName),                                                                             \
         logger,                                                                                              \
         getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))                                   \
     )->Run()                                                                                                 \

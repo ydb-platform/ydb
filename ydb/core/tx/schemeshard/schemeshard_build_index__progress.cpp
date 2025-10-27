@@ -36,7 +36,7 @@ static std::tuple<NTableIndex::NKMeans::TClusterId, NTableIndex::NKMeans::TClust
     if (!buildInfo.KMeans.NeedsAnotherLevel() || count <= 1 || shards <= 1) {
         return {1, 1, 1};
     }
-    for (; 2 * shards <= parts; parts = (parts + 1) / 2) {
+    for (; 2 * shards <= parts || parts > 32768; parts = (parts + 1) / 2) {
         step *= 2;
     }
     return {count, parts, step};
@@ -2675,6 +2675,23 @@ public:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
         case TIndexBuildInfo::EState::AlterSequence:
+        {
+            Y_ENSURE(txId == buildInfo.ApplyTxId);
+
+            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
+                // Otherwise we won't cancel the index build correctly
+                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+            }
+            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+            break;
+        }
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {

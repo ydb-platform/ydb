@@ -216,6 +216,10 @@ public:
         Issues().PrintWithProgramTo(out, Filename_, SourceCode_);
     }
 
+    inline TAstNode* AstRoot() {
+        return AstRoot_;
+    }
+
     inline const TAstNode* AstRoot() const {
         return AstRoot_;
     }
@@ -349,6 +353,10 @@ public:
 
     TString GetSourceCode() const;
 
+    void SetEnableLineage() {
+        EnableLineage_ = true;
+    }
+
 private:
     TProgram(
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -479,6 +487,7 @@ private:
     TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
+    bool EnableLineage_ = false;
 };
 
 void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});

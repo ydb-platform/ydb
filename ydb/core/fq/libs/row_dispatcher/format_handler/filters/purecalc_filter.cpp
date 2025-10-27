@@ -432,12 +432,16 @@ private:
     static constexpr std::string_view LogPrefix = "GenerateSql: ";
 
     const auto& settings = consumer-> GetPurecalcSettings();
-    const auto& filterExpr = consumer->GetFilterExpr();
+    auto filterExpr = TStringBuf(consumer->GetFilterExpr());
     const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
     if (!filterExpr && !watermarkExpr) {
         LOG_ROW_DISPATCHER_TRACE("No sql was generated");
         return {};
+    }
+
+    if (filterExpr.starts_with("WHERE "sv)) { // workaround for YQ-4827
+        filterExpr = filterExpr.substr("WHERE "sv.size());
     }
 
     using namespace fmt::literals;

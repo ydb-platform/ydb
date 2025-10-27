@@ -175,9 +175,10 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
     }
 
     const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
-    if (!nextIdleCheckAt || *nextIdleCheckAt <= systemTime) {
+    if (!nextIdleCheckAt) {
         return;
     }
+    Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
 
     if (InflyIdlenessChecks.empty() || *InflyIdlenessChecks.cbegin() > *nextIdleCheckAt) {
         InflyIdlenessChecks.insert(*nextIdleCheckAt);

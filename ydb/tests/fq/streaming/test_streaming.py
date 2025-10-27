@@ -64,7 +64,6 @@ class TestStreamingInYdb(TestYdsBase):
             assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     def test_read_topic(self, kikimr):
         sourceName = "test_read_topic" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, create_output=False)
@@ -83,7 +82,6 @@ class TestStreamingInYdb(TestYdsBase):
         result_sets = future.result()
         assert result_sets[0].rows[0]['time'] == b'lunch time'
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     def test_read_topic_shared_reading_limit(self, kikimr):
         sourceName = "test_read_topic_shared_reading_limit" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, create_output=False, partitions_count=10)
@@ -106,7 +104,6 @@ class TestStreamingInYdb(TestYdsBase):
         assert result_sets1[0].rows[0]['time'] == b'lunch time'
         assert result_sets2[0].rows[0]['time'] == b'lunch time'
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     def test_restart_query(self, kikimr):
         sourceName = "test_restart_query" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)
@@ -147,7 +144,6 @@ class TestStreamingInYdb(TestYdsBase):
 
         kikimr.YdbClient.query(f"DROP STREAMING QUERY `{name}`;")
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     def test_read_topic_shared_reading_insert_to_topic(self, kikimr):
         sourceName = "source3_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)
@@ -195,7 +191,6 @@ class TestStreamingInYdb(TestYdsBase):
         kikimr.YdbClient.query(sql.format(query_name="query1"))
         kikimr.YdbClient.query(sql.format(query_name="query2"))
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
     def test_read_topic_shared_reading_restart_nodes(self, kikimr):
         sourceName = "source_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=10)
@@ -241,7 +236,7 @@ class TestStreamingInYdb(TestYdsBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, query_id)
 
-    @pytest.mark.parametrize("kikimr", [{"local_checkpoints": False}, {"local_checkpoints": True}], indirect=True, ids=["sdk_checkpoints", "local_checkpoints"])
+    # @pytest.mark.skip("This test is not ready yet")
     def test_read_topic_restore_state(self, kikimr):
         sourceName = "source4_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=1)

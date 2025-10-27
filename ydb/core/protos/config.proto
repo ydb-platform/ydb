@@ -2741,6 +2741,10 @@ message TSystemTabletBackupConfig {
     }
 }
 
+message TSystemTabletConfig {
+    optional uint64 MaxTxInFly = 1 [default = 10000];
+}
+
 message TAppConfig {
     option (NMarkers.Root) = true;
     optional TActorSystemConfig ActorSystemConfig = 1;
@@ -2848,6 +2852,7 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+    optional TSystemTabletConfig SystemTabletConfig = 116;
 }
 
 message TYdbVersion {

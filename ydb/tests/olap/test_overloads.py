@@ -110,7 +110,7 @@ class TestLogScenario(object):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
             extra_feature_flags={"enable_olap_reject_probability": True},
-            memory_controller_config={"max_tx_in_fly": 0},
+            system_tablet_config={"max_tx_in_fly": 0},
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

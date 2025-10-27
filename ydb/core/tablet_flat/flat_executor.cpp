@@ -133,7 +133,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
-    , MaxTxInFly(AppData()->MemoryControllerConfig.GetMaxTxInFly())
+    , MaxTxInFly(AppData()->SystemTabletConfig.GetMaxTxInFly())
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())

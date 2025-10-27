@@ -19,7 +19,7 @@ CREATE TABLE dimension_scd_changes (
     attribute1 Utf8,  -- Атрибут данных
     attribute2 Utf8,  -- Атрибут данных
     change_time Timestamp NOT NULL, -- Момент изменения данных
-    operation Utf8 -- Тип изменений данных
+    operation Utf8, -- Тип изменений данных
     PRIMARY KEY (change_time, id)
 )
 ```
@@ -82,17 +82,17 @@ WITH(
 
 ```sql
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', cast('2025-08-22T17:00:00Z' as DateTime), 'CREATE');
+VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', unwrap(cast('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1002', 'John Doe', 'New York', cast('2025-08-22T17:00:00Z' as DateTime), 'CREATE');
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', unwrap(cast('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1001', 'John Doe', 'San Francisco', cast('2025-08-22T19:00:00Z' as DateTime), 'UPDATE');
+VALUES ('CUSTOMER_1001', 'John Doe', 'San Francisco', unwrap(cast('2025-08-22T19:00:00Z' as Timestamp)), 'UPDATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1002', 'John Doe', 'New York', cast('2025-08-22T21:00:00Z' as DateTime), 'DELETE');
-  ```
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', unwrap(cast('2025-08-22T21:00:00Z' as Timestamp)), 'DELETE');
+```
 
 
 ## Запрос для размещения изменений в формате SCD2

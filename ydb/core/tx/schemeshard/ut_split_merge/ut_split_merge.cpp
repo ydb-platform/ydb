@@ -1063,7 +1063,7 @@ struct TLoadAndSplitSimulator {
                 {
                     const auto msg = ev->Get<TEvDataShard::TEvSplitAck>();
 
-                    const auto now = TInstant::Now();
+                    const auto now = TestRuntime->GetCurrentTime();
                     const auto elapsed = now - LastSplitAckTime;
                     LastSplitAckTime = now;
 
@@ -1138,7 +1138,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
      *                                     to the corresponding induced CPU load (as percent)
      * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
      * @param[in] sendDuplicateTableStats Determines if/when to send duplicate EvGetTableStatsResult messages
-     * @param[in] maxTestDuration The maximum duration of the test
+     * @param[in] expectTableToBeSplitted If true, expect the table to be splitted
      */
     void SplitByLoad(
         TTestActorRuntime& runtime,
@@ -1146,7 +1146,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
         const std::map<ui32, ui32>& targetCpuLoadByFolowerId,
         bool shouldSendReadRequests = false,
         ESendDuplicateTableStatsStrategy sendDuplicateTableStats = ESendDuplicateTableStatsStrategy::None,
-        const TDuration& maxTestDuration = TDuration::Max()
+        bool expectTableToBeSplitted = true
     ) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
@@ -1165,19 +1165,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             runtime
         );
 
-        runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
-            simulator.ChangeEvent(event);
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        {
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = [&simulator]() {
-                auto now = TInstant::Now();
-                // Cerr << "TEST SplitByLoad, CustomFinalCondition, SplitAckCount " << simulator.SplitAckCount << ", " << (now - simulator.LastSplitAckTime) << " since last split" << Endl;
-                return simulator.SplitAckCount > 0 && (now - simulator.LastSplitAckTime) > TDuration::Seconds(3);
-            };
-            runtime.DispatchEvents(opts, maxTestDuration);
+        auto observerHolder = runtime.AddObserver(
+            [&simulator](IEventHandle::TPtr& event) {
+                simulator.ChangeEvent(event);
+            }
+        );
+
+        if (expectTableToBeSplitted) {
+            runtime.WaitFor(
+                "the table to be slitted",
+                [&simulator, &runtime]() -> bool {
+                    auto now = runtime.GetCurrentTime();
+                    return (simulator.SplitAckCount > 0) && ((now - simulator.LastSplitAckTime) > TDuration::Seconds(15));
+                },
+                TDuration::Seconds(60)
+            );
+        } else {
+            runtime.WaitFor(
+                "the confirmation that the table is not splitting",
+                [&simulator]() -> bool {
+                    return (simulator.PeriodicTableStatsCount > 10) && (simulator.KeyAccessSampleReqCount == 0);
+                },
+                TDuration::Seconds(60)
+            );
         }
+
         Cerr << "TEST SplitByLoad, splitted " << simulator.SplitAckCount << " times"
             << ", datashard count " << simulator.DatashardsKeyRanges.size()
             << Endl;
@@ -1204,18 +1216,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             runtime
         );
 
-        runtime.SetObserverFunc([&simulator](TAutoPtr<IEventHandle>& event) {
-            simulator.ChangeEvent(event);
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        {
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = [&simulator]() {
-                // Cerr << "TEST SplitByLoad, PeriodicTableStats " << simulator.PeriodicTableStatsCount << ", KeyAccessSampleReq " << simulator.KeyAccessSampleReqCount << Endl;
-                return simulator.PeriodicTableStatsCount > 10 && simulator.KeyAccessSampleReqCount == 0;
-            };
-            runtime.DispatchEvents(opts, TDuration::Seconds(60));
-        }
+        auto observerHolder = runtime.AddObserver(
+            [&simulator](IEventHandle::TPtr& event) {
+                simulator.ChangeEvent(event);
+            }
+        );
+
+        runtime.WaitFor(
+            "the confirmation that the table is not splitting",
+            [&simulator]() -> bool {
+                return (simulator.PeriodicTableStatsCount > 10) && (simulator.KeyAccessSampleReqCount == 0);
+            },
+            TDuration::Seconds(60)
+        );
+
         Cerr << "TEST NoSplitByLoad, splitted " << simulator.SplitAckCount << " times"
             << ", datashard count " << simulator.DatashardsKeyRanges.size()
             << Endl;
@@ -1539,7 +1553,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitByLoad) {
             true /* shouldSendReadRequests */,
             ESendDuplicateTableStatsStrategy::None,
             /// @todo Remove the time limit once splitting by the replica load is implemented
-            TDuration::Seconds(30) // Only 15 seconds real time
+            false /* expectTableToBeSplitted */
         );
 
         auto tableInfo = DescribePrivatePath(runtime, "/MyRoot/Table", true, true);
@@ -1569,7 +1583,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
      *                                    to the corresponding induced CPU load (as percent),
      *                                    which will be used for merging the table
      * @param[in] shouldSendReadRequests If true, send EvRead requests to all followers
-     * @param[in] maxTestDuration The maximum duration of the test
+     * @param[in] expectTableToBeMerged If true, expect the table to be merged
      */
     void MergeByLoad(
         TTestActorRuntime& runtime,
@@ -1578,8 +1592,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         ui32 finalPartitionCount,
         const std::map<ui32, ui32>& splitCpuLoadByFolowerId,
         const std::map<ui32, ui32>& mergeCpuLoadByFolowerId,
-        bool shouldSendReadRequests = false,
-        const TDuration& maxTestDuration = TDuration::Max()
+        bool shouldSendReadRequests,
+        bool expectTableToBeMerged
     ) {
         auto tableInfo = DescribePrivatePath(runtime, tablePath, true, true);
         Cerr << "TEST table initial state:" << Endl << tableInfo.DebugString() << Endl;
@@ -1600,23 +1614,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
             runtime
         );
 
-        const auto prevObserverFunc = runtime.SetObserverFunc(
-            [&simulatorSplit](TAutoPtr<IEventHandle>& event) {
+        auto observerHolderSplit = runtime.AddObserver(
+            [&simulatorSplit](IEventHandle::TPtr& event) {
                 simulatorSplit.ChangeEvent(event);
-                return TTestActorRuntime::EEventAction::PROCESS;
             }
         );
 
         // Wait for the table to be fully splitted
-        {
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = [&simulatorSplit]() {
-                auto now = TInstant::Now();
+        runtime.WaitFor(
+            "the table to be slitted",
+            [&simulatorSplit, &runtime]() -> bool {
+                auto now = runtime.GetCurrentTime();
                 return (simulatorSplit.SplitAckCount > 0)
-                    && ((now - simulatorSplit.LastSplitAckTime) > TDuration::Seconds(3));
-            };
-            runtime.DispatchEvents(opts, maxTestDuration);
-        }
+                    && ((now - simulatorSplit.LastSplitAckTime) > TDuration::Seconds(15));
+            }
+        );
 
         Cerr << "TEST MergeByLoad, splitted " << simulatorSplit.SplitAckCount << " times"
             << ", datashard count " << simulatorSplit.DatashardsKeyRanges.size()
@@ -1641,11 +1653,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         // The simulator for the merge should use the final shards from splitting
         simulatorMerge.DatashardsKeyRanges = simulatorSplit.DatashardsKeyRanges;
 
-        runtime.SetObserverFunc(prevObserverFunc);
-        runtime.SetObserverFunc(
-            [&simulatorMerge](TAutoPtr<IEventHandle> &event) {
+        observerHolderSplit.Remove();
+
+        auto observerHolderMerge = runtime.AddObserver(
+            [&simulatorMerge](IEventHandle::TPtr& event) {
                 simulatorMerge.ChangeEvent(event);
-                return TTestActorRuntime::EEventAction::PROCESS;
             }
         );
 
@@ -1659,16 +1671,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         //       there is enough gap between the high and the medium CPU loads
         //       for all shards.
         Cerr << "TEST waiting for the CPU load data to settle..." << Endl;
-
-        {
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = []() -> bool {
-                return false;
-            };
-
-            runtime.DispatchEvents(opts, TDuration::Seconds(10));
-        }
-
+        runtime.SimulateSleep(TDuration::Seconds(10));
         Cerr << "TEST finished waiting for the CPU load data to settle..." << Endl;
 
         // Before forcing the table to be merged, reduce the thresholds
@@ -1684,14 +1687,24 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
         );
 
         // Wait for the table to be fully merged back
-        {
-            TDispatchOptions opts;
-            opts.CustomFinalCondition = [&simulatorMerge]() {
-                auto now = TInstant::Now();
-                return (simulatorMerge.SplitAckCount > 0)
-                    && ((now - simulatorMerge.LastSplitAckTime) > TDuration::Seconds(3));
-            };
-            runtime.DispatchEvents(opts, maxTestDuration);
+        if (expectTableToBeMerged) {
+            runtime.WaitFor(
+                "the table to be merged",
+                [&simulatorMerge, &runtime]() -> bool {
+                    auto now = runtime.GetCurrentTime();
+                    return (simulatorMerge.SplitAckCount > 0)
+                        && ((now - simulatorMerge.LastSplitAckTime) > TDuration::Seconds(15));
+                }
+            );
+        } else {
+            runtime.WaitFor(
+                "the confirmation that the table is not merging",
+                [&simulatorMerge]() -> bool {
+                    return (simulatorMerge.PeriodicTableStatsCount > 50)
+                        && (simulatorMerge.SplitAckCount == 0);
+                },
+                TDuration::Seconds(60)
+            );
         }
 
         Cerr << "TEST MergeByLoad, merged " << simulatorMerge.SplitAckCount << " times"
@@ -1761,7 +1774,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
                 {2, 0},
                 {3, 0},
             },
-            true /* shouldSendReadRequests */
+            true /* shouldSendReadRequests */,
+            true /* expectTableToBeMerged */
         );
     }
 
@@ -1826,7 +1840,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
                 {3, 0},
             },
             true /* shouldSendReadRequests */,
-            TDuration::Seconds(30) // Only 15 seconds real time
+            false /* expectTableToBeMerged */
         );
     }
 
@@ -1898,7 +1912,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMergeByLoad) {
                 {2, 60},
                 {3, 60},
             },
-            true /* shouldSendReadRequests */
+            true /* shouldSendReadRequests */,
+            true /* expectTableToBeMerged */
         );
     }
 }

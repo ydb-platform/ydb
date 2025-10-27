@@ -1861,6 +1861,29 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString output = FormatResultSetYson(result.GetResultSet(0));
             CompareYson(output, results[i]);
         }
+
+        std::vector<TString> notPushedQueries = {
+            R"(
+                PRAGMA Kikimr.OptEnableOlapPushdownProjections = "true";
+
+                SELECT jsonDoc, JSON_VALUE(jsonDoc, "$.\"a.b.c\"")
+                FROM `/Root/foo`
+                where b == 1;
+            )"
+        };
+
+        for (ui32 i = 0; i < notPushedQueries.size(); ++i) {
+            const auto query = notPushedQueries[i];
+            auto result =
+                session2
+                    .ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+            auto ast = *result.GetStats()->GetAst();
+            UNIT_ASSERT_C(ast.find("KqpOlapProjections") == std::string::npos, TStringBuilder() << "Projections pushed down. Query: " << query);
+            UNIT_ASSERT_C(ast.find("KqpOlapProjection") == std::string::npos, TStringBuilder() << "Projection pushed down. Query: " << query);
+        }
     }
 
     // Unit tests for datetime pushdowns in query service

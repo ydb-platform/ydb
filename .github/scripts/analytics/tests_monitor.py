@@ -260,10 +260,7 @@ def main():
 
     # Initialize YDB wrapper with context manager for automatic cleanup
     script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
-        script_name = os.path.basename(__file__)
-        
-        # Check credentials
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
         

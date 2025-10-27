@@ -2383,10 +2383,10 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 
 }
 
-static void AppendToSet(const TVector<TString>& p, THashSet<TString>& q)
+static void AppendToSet(const TVector<TString>& p, THashMap<TString, size_t>& q)
 {
     for (const auto& s : p) {
-        q.insert(s);
+        ++q[s];
     }
 }
 
@@ -2419,9 +2419,14 @@ void TPartition::DeleteAffectedSourceIdsAndConsumers()
     UserActionAndTxPendingWrite.clear();
 }
 
-static void DeleteFromSet(const TVector<TString>& p, THashSet<TString>& q)
+static void DeleteFromSet(const TVector<TString>& p, THashMap<TString, size_t>& q)
 {
     for (const auto& s : p) {
+        auto i = q.find(s);
+        Y_ABORT_UNLESS(i != q.end());
+        if (--i->second) {
+            continue;
+        }
         q.erase(s);
     }
 }

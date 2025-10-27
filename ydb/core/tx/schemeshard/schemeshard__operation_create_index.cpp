@@ -140,11 +140,12 @@ public:
                 .NotDeleted()
                 .NotUnderDeleting()
                 .IsCommonSensePath()
-                .IsTable()
-                .NotBackupTable();
+                .IsTable();
 
             if (!internal) {
-                checks.NotAsyncReplicaTable();
+                checks
+                    .NotBackupTable()
+                    .NotAsyncReplicaTable();
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {

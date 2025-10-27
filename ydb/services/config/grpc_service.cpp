@@ -30,8 +30,8 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
         SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
 
-    SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, Rps, CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, Rps, CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
+    SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, RLMODE(Rps), CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BS_METHOD(FetchConfig, DoFetchConfig, RLMODE(Rps), CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
 
     #undef SETUP_BS_METHOD
 
@@ -49,7 +49,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             TGrpcRequestOperationCall, \
             GRpcRequestProxyId_)
 
-    SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, RLMODE(Rps), CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
     #undef SETUP_BS_METHOD_WITH_TYPE
 }

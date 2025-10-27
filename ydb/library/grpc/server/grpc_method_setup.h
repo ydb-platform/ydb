@@ -36,7 +36,7 @@
                 outputType,                                                                               \
                 ::NKikimr::NGRpcService::NRuntimeEvents::EType::runtimeEventType>(reqCtx, methodCallback, \
                     ::NKikimr::NGRpcService::TRequestAuxSettings {                                        \
-                        .RlMode = ::NKikimr::NGRpcService::TRateLimiterMode::rlMode,                      \
+                        .RlMode = rlMode,                                                                 \
                         .AuditMode = auditMode,                                                           \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,              \
                     }));                                                                                  \
@@ -47,8 +47,8 @@
         counterBlock                                                                                      \
     )->Run()
 
-
 // Common macro for gRPC methods setup
+// Use RLSWITCH or RLMODE macro for rlMode
 #define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode) \
     SETUP_RUNTIME_EVENT_METHOD(methodName, \
         YDB_API_DEFAULT_REQUEST_TYPE(methodName), \

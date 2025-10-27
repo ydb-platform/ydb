@@ -719,6 +719,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(compilationTimeout.MilliSeconds());
 
         TKikimrSettings serverSettings(appConfig);
+        serverSettings.SetWithSampleTables(false);
         serverSettings.SetKqpSettings(settings);
 
         return TKikimrRunner(serverSettings);

@@ -57,7 +57,7 @@ To set up {{ ydb-short-name }} cluster monitoring using [Prometheus](https://pro
             container: ydb-static
           targets:
           - "ydb-s1.example.com:8765"
-          - "ydb-s2.example.com:8765"
+   - "ydb-s2.example.com:8765"
           - "ydb-s3.example.com:8765"
         ```
 

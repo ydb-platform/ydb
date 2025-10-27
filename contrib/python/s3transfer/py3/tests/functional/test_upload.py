@@ -92,7 +92,7 @@ class BaseUploadTest(BaseGeneralInterfaceTest):
                 data=params['Body'],
             )
             self.client.meta.events.emit(
-                'request-created.s3.%s' % model.name,
+                f'request-created.s3.{model.name}',
                 request=request,
                 operation_name=model.name,
             )
@@ -398,7 +398,7 @@ class TestMultipartUpload(BaseUploadTest):
                 # If ChecksumAlgorithm is present stub the response checksums
                 if 'ChecksumAlgorithm' in extra_expected_params:
                     name = extra_expected_params['ChecksumAlgorithm']
-                    checksum_member = 'Checksum%s' % name.upper()
+                    checksum_member = f'Checksum{name.upper()}'
                     response = upload_part_response['service_response']
                     response[checksum_member] = 'sum%s==' % (i + 1)
 

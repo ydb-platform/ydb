@@ -2385,16 +2385,6 @@ void TPartition::ContinueProcessTxsAndUserActs(const TActorContext&)
 
 }
 
-void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
-{
-    AppendTxWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
-    AppendWriteAffectedSourceIds(affectedSourceIdsAndConsumers);
-    AppendTxReadAffectedConsumers(affectedSourceIdsAndConsumers);
-    AppendReadAffectedConsumers(affectedSourceIdsAndConsumers);
-
-    WriteKeysSizeEstimate += affectedSourceIdsAndConsumers.WriteKeysSize;
-}
-
 static void AppendToSet(const TVector<TString>& p, THashSet<TString>& q)
 {
     for (const auto& s : p) {
@@ -2402,24 +2392,51 @@ static void AppendToSet(const TVector<TString>& p, THashSet<TString>& q)
     }
 }
 
-void TPartition::AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+void TPartition::AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
 {
     AppendToSet(affectedSourceIdsAndConsumers.TxWriteSourcesIds, TxAffectedSourcesIds);
-}
-
-void TPartition::AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
-{
     AppendToSet(affectedSourceIdsAndConsumers.WriteSourcesIds, WriteAffectedSourcesIds);
-}
-
-void TPartition::AppendTxReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
-{
     AppendToSet(affectedSourceIdsAndConsumers.TxReadConsumers, TxAffectedConsumers);
+    AppendToSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
+
+    WriteKeysSizeEstimate += affectedSourceIdsAndConsumers.WriteKeysSize;
 }
 
-void TPartition::AppendReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+void TPartition::DeleteAffectedSourceIdsAndConsumers()
 {
-    AppendToSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
+    if (UserActionAndTxPendingWrite.empty()) {
+        return;
+    }
+
+    for (const auto& e : UserActionAndTxPendingWrite) {
+        DeleteAffectedSourceIdsAndConsumers(e.AffectedSourceIdsAndConsumers);
+    }
+
+    Y_ABORT_UNLESS(UserActionAndTxPendingCommit.empty());
+    Y_ABORT_UNLESS(TxAffectedSourcesIds.empty());
+    Y_ABORT_UNLESS(WriteAffectedSourcesIds.empty());
+    Y_ABORT_UNLESS(TxAffectedConsumers.empty());
+    Y_ABORT_UNLESS(SetOffsetAffectedConsumers.empty());
+
+    UserActionAndTxPendingWrite.clear();
+}
+
+static void DeleteFromSet(const TVector<TString>& p, THashSet<TString>& q)
+{
+    for (const auto& s : p) {
+        q.erase(s);
+    }
+}
+
+void TPartition::DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers)
+{
+    DeleteFromSet(affectedSourceIdsAndConsumers.TxWriteSourcesIds, TxAffectedSourcesIds);
+    DeleteFromSet(affectedSourceIdsAndConsumers.WriteSourcesIds, WriteAffectedSourcesIds);
+    DeleteFromSet(affectedSourceIdsAndConsumers.TxReadConsumers, TxAffectedConsumers);
+    DeleteFromSet(affectedSourceIdsAndConsumers.ReadConsumers, SetOffsetAffectedConsumers);
+
+    Y_ABORT_UNLESS(WriteKeysSizeEstimate >= affectedSourceIdsAndConsumers.WriteKeysSize);
+    WriteKeysSizeEstimate -= affectedSourceIdsAndConsumers.WriteKeysSize;
 }
 
 void TPartition::MoveUserActOrTxToCommitState() {
@@ -2439,9 +2456,11 @@ void TPartition::ProcessCommitQueue() {
     while (!UserActionAndTxPendingCommit.empty()) {
         auto& front = UserActionAndTxPendingCommit.front();
         auto state = ECommitState::Committed;
+
         if (auto* tx = get_if<TSimpleSharedPtr<TTransaction>>(&front.Event)) {
             state = tx->Get()->State;
         }
+
         switch (state) {
             case ECommitState::Pending:
                 return;
@@ -2450,8 +2469,11 @@ void TPartition::ProcessCommitQueue() {
             case ECommitState::Committed:
                 break;
         }
-        auto event = std::move(front.Event);
+
+        UserActionAndTxPendingWrite.push_back(std::move(front));
         UserActionAndTxPendingCommit.pop_front();
+
+        auto& event = UserActionAndTxPendingWrite.back().Event;
         auto visitor = [this, request = PersistRequest.Get()](auto& event) {
             return this->ExecUserActionOrTransaction(event, request);
         };
@@ -3131,6 +3153,7 @@ void TPartition::ExecChangePartitionConfig() {
 
 void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) {
     FirstEvent = true;
+    DeleteAffectedSourceIdsAndConsumers();
     TxAffectedConsumers.clear();
     TxAffectedSourcesIds.clear();
     WriteAffectedSourcesIds.clear();

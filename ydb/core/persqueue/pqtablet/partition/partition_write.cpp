@@ -535,10 +535,6 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     TxSourceIdForPostPersist.clear();
     TxInflightMaxSeqNoPerSourceId.clear();
 
-    TxAffectedSourcesIds.clear();
-    WriteAffectedSourcesIds.clear();
-    TxAffectedConsumers.clear();
-    SetOffsetAffectedConsumers.clear();
     if (UserActionAndTransactionEvents.empty()) {
         WriteInfosToTx.clear();
     }

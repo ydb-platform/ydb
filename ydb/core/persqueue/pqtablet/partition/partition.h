@@ -814,10 +814,9 @@ private:
     };
 
     void AppendAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
-    void AppendTxWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
-    void AppendWriteAffectedSourceIds(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
-    void AppendTxReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
-    void AppendReadAffectedConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+
+    void DeleteAffectedSourceIdsAndConsumers();
+    void DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
@@ -901,6 +900,7 @@ private:
 
     std::deque<TUserActionAndTransactionEvent> UserActionAndTransactionEvents;
     std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingCommit;
+    std::deque<TUserActionAndTransactionEvent> UserActionAndTxPendingWrite;
     TVector<THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfosApplied;
 
     THashMap<ui64, TSimpleSharedPtr<TTransaction>> TransactionsInflight;

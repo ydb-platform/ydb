@@ -200,17 +200,9 @@ private:
         } else {
             auto selectors = batch.Selectors;
             auto& labels = listLabelsResult.Labels;
-            auto maxSizeLabelIt = std::max_element(
-                labels.begin(),
-                labels.end(),
-                [](NSo::TLabelValues a, NSo::TLabelValues b) {
-                    if (a.Truncated && !b.Truncated) {
-                        return true;
-                    }
-                    if (!a.Truncated && b.Truncated) {
-                        return false;
-                    }
-                    return a.Values.size() < b.Values.size();
+            auto maxSizeLabelIt = std::max_element(labels.begin(), labels.end(),
+                [](const NSo::TLabelValues& a, const NSo::TLabelValues& b) {
+                    return std::make_pair(a.Truncated, a.Values.size()) < std::make_pair(b.Truncated, b.Values.size());
                 }
             );
 
@@ -226,7 +218,11 @@ private:
 
             auto& label = *maxSizeLabelIt;
 
-            ui64 metricsPerLabelValue = listLabelsResult.TotalCount / label.Values.size();
+            if (label.Values.empty()) {
+                return;
+            }
+
+            ui64 metricsPerLabelValue = std::max<ui64>(1, listLabelsResult.TotalCount / label.Values.size());
             ui64 batchSize = std::max<ui64>(1, MaxListingPageSize * 0.75 / metricsPerLabelValue);
 
             for (ui64 i = 0; i * batchSize < label.Values.size(); i++) {
@@ -314,12 +310,12 @@ private:
 
     bool TryFetch() {
         if (CurrentInflight >= MaxApiInflight) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, too much inflight requests");
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch can't start fetching, have " << CurrentInflight << " inflight requests, current max: " << MaxApiInflight);
             return false;
         }
 
         if (PendingLabelRequests.empty() && PendingListingRequests.empty()) {
-            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch dont have anything to fetch yet, current inflight: " << CurrentInflight);
+            LOG_D("TDqSolomonMetricsQueueActor", "TryFetch doesn't have anything to fetch yet, current inflight: " << CurrentInflight);
 
             if (!CurrentInflight) {
                 Become(&TDqSolomonMetricsQueueActor::NoMoreMetricsState);

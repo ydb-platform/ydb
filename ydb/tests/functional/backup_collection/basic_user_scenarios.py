@@ -667,23 +667,6 @@ class BaseTestBackupInFiles(object):
                                    getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
                                    getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
 
-
-class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
-    def _execute_yql(self, script, verbose=False):
-        cmd = [backup_bin()]
-        if verbose:
-            cmd.append("--verbose")
-        cmd += [
-            "--endpoint",
-            f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-            "--database",
-            self.root_dir,
-            "yql",
-            "--script",
-            script,
-        ]
-        return yatest.common.execute(cmd, check_exit_code=False)
-
     def _setup_test_collections(self):
         collection_src = f"coll_src_{int(time.time())}"
         t1 = "orders"
@@ -694,6 +677,23 @@ class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
             create_table_with_data(session, t2)
 
         return collection_src, t1, t2
+
+
+class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
+    def _modify_and_backup(self, collection_src):
+        with self.session_scope() as session:
+            create_table_with_data(session, "extra_table_1")
+            session.transaction().execute(
+                'PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (11, 111, "added1");',
+                commit_tx=True,
+            )
+
+        time.sleep(1.1)
+        backup_res2 = self._execute_yql(f"BACKUP `{collection_src}`;")
+        if backup_res2.exit_code != 0:
+            out = (backup_res2.std_out or b"").decode('utf-8', 'ignore')
+            err = (backup_res2.std_err or b"").decode('utf-8', 'ignore')
+            raise AssertionError(f"BACKUP (2) failed: code={backup_res2.exit_code} STDOUT: {out} STDERR: {err}")
 
     def _create_initial_backup(self, collection_src, t1, t2):
         full_t1 = f"/Root/{t1}"
@@ -729,55 +729,6 @@ class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
 
         self.wait_for_collection_has_snapshot(collection_src, timeout_s=30)
         self.assert_collection_contains_tables(collection_src, [full_t1, full_t2])
-
-    def _capture_snapshot(self, table):
-        with self.session_scope() as session:
-            return sdk_select_table_rows(session, table)
-
-    def _modify_and_backup(self, collection_src):
-        with self.session_scope() as session:
-            create_table_with_data(session, "extra_table_1")
-            session.transaction().execute(
-                'PRAGMA TablePathPrefix("/Root"); UPSERT INTO orders (id, number, txt) VALUES (11, 111, "added1");',
-                commit_tx=True,
-            )
-
-        time.sleep(1.1)
-        backup_res2 = self._execute_yql(f"BACKUP `{collection_src}`;")
-        if backup_res2.exit_code != 0:
-            out = (backup_res2.std_out or b"").decode('utf-8', 'ignore')
-            err = (backup_res2.std_err or b"").decode('utf-8', 'ignore')
-            raise AssertionError(f"BACKUP (2) failed: code={backup_res2.exit_code} STDOUT: {out} STDERR: {err}")
-
-    def _export_backups(self, collection_src):
-        export_dir = output_path(self.test_name, collection_src)
-        if os.path.exists(export_dir):
-            shutil.rmtree(export_dir)
-        os.makedirs(export_dir, exist_ok=True)
-
-        dump_cmd = [
-            backup_bin(),
-            "--verbose",
-            "--endpoint",
-            "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-            "--database",
-            self.root_dir,
-            "tools",
-            "dump",
-            "--path",
-            f"/Root/.backups/collections/{collection_src}",
-            "--output",
-            export_dir,
-        ]
-        dump_res = yatest.common.execute(dump_cmd, check_exit_code=False)
-        if dump_res.exit_code != 0:
-            raise AssertionError(f"tools dump failed: {dump_res.std_err}")
-
-        exported_items = sorted([name for name in os.listdir(export_dir)
-                                 if os.path.isdir(os.path.join(export_dir, name))])
-        assert len(exported_items) >= 2, f"Expected at least 2 exported backups, got: {exported_items}"
-
-        return export_dir, exported_items
 
     def _verify_restore(self, export_info, snapshot1, snapshot2):
         export_dir, exported_items = export_info
@@ -885,7 +836,7 @@ class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
         self._verify_restore(export_info, snapshot1, snapshot2)
 
 
-class TestFullCycleLocalBackupRestoreWIncr(TestFullCycleLocalBackupRestore):
+class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
     def _modify_data_add_and_remove(self, add_rows: List[tuple] = None, remove_ids: List[int] = None):
         add_rows = add_rows or []
         remove_ids = remove_ids or []

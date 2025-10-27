@@ -20,7 +20,7 @@ void THttpProxyTestMock::SetUp(NUnitTest::TTestContext&) {
 void THttpProxyTestMock::InitAll(bool yandexCloudMode, bool enableMetering, bool extendedQueueUrl) {
     AccessServicePort = PortManager.GetPort(8443);
     AccessServiceEndpoint = "127.0.0.1:" + ToString(AccessServicePort);
-    InitKikimr(yandexCloudMode, enableMetering, extendedQueueUrl);
+    InitKikimr(yandexCloudMode, enableMetering);
     InitAccessServiceService();
     InitHttpServer(yandexCloudMode, extendedQueueUrl);
 }
@@ -341,7 +341,7 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
     return resultSet;
 }
 
-void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, bool enableSqsTopic) {
+void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering) {
     AuthFactory = std::make_shared<NKikimr::NHttpProxy::TIamAuthFactory>();
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
@@ -354,7 +354,6 @@ void THttpProxyTestMock::InitKikimr(bool yandexCloudMode, bool enableMetering, b
     appConfig.MutableSqsConfig()->SetEnableSqs(true);
     appConfig.MutableSqsConfig()->SetYandexCloudMode(yandexCloudMode);
     appConfig.MutableSqsConfig()->SetEnableDeadLetterQueues(true);
-    appConfig.MutableSqsConfig()->SetSqsTopicEnabled(enableSqsTopic);
 
     if (enableMetering) {
         auto& sqsConfig = *appConfig.MutableSqsConfig();

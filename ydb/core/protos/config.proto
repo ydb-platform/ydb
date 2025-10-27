@@ -1077,7 +1077,6 @@ message TSqsConfig {
     optional TYdbAuthConfig AuthConfig = 67;
     optional uint64 StartLocalLeaderInflightMax = 71 [default = 500];
     optional TCloudEventsConfig CloudEventsConfig = 73;
-    optional bool SqsTopicEnabled = 74 [default = false];
 }
 
 message TConfigsDispatcherConfig {

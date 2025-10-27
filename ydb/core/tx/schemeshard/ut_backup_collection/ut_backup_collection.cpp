@@ -85,10 +85,10 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         auto transaction = modifyTx->Record.AddTransaction();
         transaction->SetWorkingDir(workingDir);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackupBackupCollection);
-        
+
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableBackupBackupCollection());
         UNIT_ASSERT(parseOk);
-        
+
         AsyncSend(runtime, TTestTxConfig::SchemeShard, modifyTx.release(), 0);
     }
 
@@ -99,14 +99,14 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
     void AsyncBackupIncrementalBackupCollection(TTestBasicRuntime& runtime, ui64 txId, const TString& workingDir, const TString& request) {
         TActorId sender = runtime.AllocateEdgeActor();
-        
+
         auto request2 = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
         auto transaction = request2->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection);
         transaction->SetWorkingDir(workingDir);
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(request, transaction->MutableBackupIncrementalBackupCollection());
         UNIT_ASSERT(parseOk);
-        
+
         AsyncSend(runtime, TTestTxConfig::SchemeShard, request2.Release(), 0, sender);
     }
 
@@ -589,8 +589,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             AsyncBackupBackupCollection(runtime, ++txId, "/MyRoot",
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"" DEFAULT_NAME_1 "\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"" DEFAULT_NAME_1 "\"",
                 {NKikimrScheme::StatusPreconditionFailed});
             env.TestWaitNotification(runtime, txId);
 
@@ -616,8 +616,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"NonExistentCollection\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"NonExistentCollection\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
 
@@ -801,7 +801,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
                 "Name: \"NonExistentCollection\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
@@ -860,7 +860,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 if (i > 0) {
                     runtime.AdvanceCurrentTime(TDuration::Seconds(1));
                 }
-                
+
                 TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
                     R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
                 env.TestWaitNotification(runtime, txId);
@@ -886,18 +886,18 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-                "Name: \"\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+                "Name: \"\"",
                 {NKikimrScheme::StatusInvalidParameter});
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/NonExistent/path", 
-                "Name: \"test\"", 
+            TestDropBackupCollection(runtime, ++txId, "/NonExistent/path",
+                "Name: \"test\"",
                 {NKikimrScheme::StatusPathDoesNotExist});
             env.TestWaitNotification(runtime, txId);
 
-            TestDropBackupCollection(runtime, ++txId, "/MyRoot", 
-                "Name: \"test\"", 
+            TestDropBackupCollection(runtime, ++txId, "/MyRoot",
+                "Name: \"test\"",
                 {NKikimrScheme::StatusSchemeError});
             env.TestWaitNotification(runtime, txId);
         }
@@ -910,15 +910,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             SetupLogging(runtime);
             PrepareDirs(runtime, env, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection1"));
             env.TestWaitNotification(runtime, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection2"));
             env.TestWaitNotification(runtime, txId);
 
-            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
                 DefaultCollectionSettingsWithName("Collection3"));
             env.TestWaitNotification(runtime, txId);
 
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-    
+
     Y_UNIT_TEST(DropCollectionVerifyLocalDatabaseCleanup) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
@@ -959,7 +959,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             }
             Cluster: {}
         )";
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             localDbCollectionSettings);
         env.TestWaitNotification(runtime, txId);
 
@@ -973,17 +973,17 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
             R"(Name: ".backups/collections/LocalDbTestCollection")");
-        env.TestWaitNotification(runtime, txId);        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        env.TestWaitNotification(runtime, txId);        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"LocalDbTestCollection\"");
         env.TestWaitNotification(runtime, txId);
 
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/LocalDbTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/LocalDbTestCollection"),
                           {NLs::PathNotExist});
 
         ui64 schemeshardTabletId = TTestTxConfig::SchemeShard;
-        
+
         bool backupCollectionTableClean = true;
         try {
             auto result = LocalMiniKQL(runtime, schemeshardTabletId, R"(
@@ -996,7 +996,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 backupCollectionTableClean = false;
@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             backupCollectionTableClean = false;
             Cerr << "ERROR: Failed to query BackupCollection table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(backupCollectionTableClean, "BackupCollection table not properly cleaned up");
 
         bool incrementalRestoreOperationsClean = true;
@@ -1021,7 +1021,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreOperationsClean = false;
@@ -1031,7 +1031,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreOperationsClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreOperations table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreOperationsClean, "IncrementalRestoreOperations table not properly cleaned up");
 
         bool incrementalRestoreStateClean = true;
@@ -1046,7 +1046,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreStateClean = false;
@@ -1056,7 +1056,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreStateClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreState table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreStateClean, "IncrementalRestoreState table not properly cleaned up");
 
         bool incrementalRestoreShardProgressClean = true;
@@ -1071,7 +1071,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     ))
                 )
             )");
-            
+
             auto& value = result.GetValue();
             if (value.GetStruct(0).GetOptional().HasOptional()) {
                 incrementalRestoreShardProgressClean = false;
@@ -1081,7 +1081,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             incrementalRestoreShardProgressClean = false;
             Cerr << "ERROR: Failed to query IncrementalRestoreShardProgress table" << Endl;
         }
-        
+
         UNIT_ASSERT_C(incrementalRestoreShardProgressClean, "IncrementalRestoreShardProgress table not properly cleaned up");
 
         Cerr << "SUCCESS: All LocalDB tables properly cleaned up after DROP BACKUP COLLECTION" << Endl;
@@ -1097,7 +1097,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             }
             Cluster: {}
         )";
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             recreateCollectionSettings);
         env.TestWaitNotification(runtime, txId);
     }
@@ -1139,22 +1139,22 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         ui64 backupTxId = txId;
 
         // This shows that active operation protection IS implemented
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-            "Name: \"ActiveOpTestCollection\"", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"ActiveOpTestCollection\"",
             {NKikimrScheme::StatusPreconditionFailed}); // CORRECT: System properly rejects this
         env.TestWaitNotification(runtime, txId);
 
         env.TestWaitNotification(runtime, backupTxId);
 
         // VERIFICATION: Collection should still exist since drop was properly rejected
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"),
             {NLs::PathExist});
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"ActiveOpTestCollection\"");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"), 
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/ActiveOpTestCollection"),
             {NLs::PathNotExist});
 
     }
@@ -1179,7 +1179,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             IncrementalBackupConfig: {}
         )";
 
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", 
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/",
             collectionSettingsWithIncremental);
         env.TestWaitNotification(runtime, txId);
 
@@ -1202,11 +1202,11 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TestTable"),
                           {NLs::PathExist, NLs::IsTable});
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathExist, NLs::IsBackupCollection});
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1263,7 +1263,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto describeResult = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> cdcStreamNames;
-        
+
         // Check table description for CDC streams (this is where they are actually stored)
         if (describeResult.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeResult.GetPathDescription().GetTable();
@@ -1278,18 +1278,18 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
+
         UNIT_ASSERT_C(!cdcStreamNames.empty(), "Expected to find CDC streams with '_continuousBackupImpl' suffix after incremental backup");
-        
+
         for (const auto& streamName : cdcStreamNames) {
-            UNIT_ASSERT_C(streamName.size() >= 15 + TString("_continuousBackupImpl").size(), 
+            UNIT_ASSERT_C(streamName.size() >= 15 + TString("_continuousBackupImpl").size(),
                 "CDC stream name should have timestamp prefix: " + streamName);
-            
+
             TString prefix = streamName.substr(0, streamName.size() - TString("_continuousBackupImpl").size());
             UNIT_ASSERT_C(prefix.EndsWith("Z"), "CDC stream timestamp should end with 'Z': " + prefix);
         }
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1298,7 +1298,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         auto describeAfter = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> remainingCdcStreams;
-        
+
         // Check table description for remaining CDC streams
         if (describeAfter.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeAfter.GetPathDescription().GetTable();
@@ -1313,12 +1313,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
-        UNIT_ASSERT_C(remainingCdcStreams.empty(), 
+
+        UNIT_ASSERT_C(remainingCdcStreams.empty(),
             "Incremental backup CDC streams with '_continuousBackupImpl' suffix should be cleaned up after dropping backup collection");
         // During incremental backup, CDC streams are created under the source table
         // They should be properly cleaned up when the backup collection is dropped
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                           {NLs::PathExist, NLs::IsTable});
 
@@ -1328,13 +1328,13 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/" DEFAULT_NAME_1),
                           {NLs::PathNotExist});
-        
+
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1"),
                           {NLs::PathExist, NLs::IsTable});
 
         auto describeAfterReboot = DescribePath(runtime, "/MyRoot/Table1", true, true);
         TVector<TString> cdcStreamsAfterReboot;
-        
+
         if (describeAfterReboot.GetPathDescription().HasTable()) {
             const auto& tableDesc = describeAfterReboot.GetPathDescription().GetTable();
             if (tableDesc.CdcStreamsSize() > 0) {
@@ -1348,8 +1348,8 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                 }
             }
         }
-        
-        UNIT_ASSERT_C(cdcStreamsAfterReboot.empty(), 
+
+        UNIT_ASSERT_C(cdcStreamsAfterReboot.empty(),
             "Incremental backup CDC streams with '_continuousBackupImpl' suffix should remain cleaned up after restart");
 
         // The implementation properly handles CDC stream cleanup during backup collection drop
@@ -1382,7 +1382,7 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
         env.TestWaitNotification(runtime, txId);
 
@@ -1420,12 +1420,12 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Start first drop operation asynchronously
-        AsyncDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
+        AsyncDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
             "Name: \"" DEFAULT_NAME_1 "\"");
 
         // Immediately try second drop operation (should fail)
-        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", 
-            "Name: \"" DEFAULT_NAME_1 "\"", 
+        TestDropBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections",
+            "Name: \"" DEFAULT_NAME_1 "\"",
             {NKikimrScheme::StatusMultipleModifications}); // Expect concurrent operation error
 
         env.TestWaitNotification(runtime, txId - 1);
@@ -1660,5 +1660,43 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         TestForgetIncrementalBackup(runtime, txId++, "/MyRoot", backupId);
 
         TestGetIncrementalBackup(runtime, backupId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(BackupServiceDirectoryValidation) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+        SetupLogging(runtime);
+
+        // Enable system names protection feature
+        runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(true);
+
+        ui64 txId = 100;
+
+        PrepareDirs(runtime, env, txId);
+
+        // Create a backup collection
+        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
+            Name: "TestCollection"
+            ExplicitEntryList {
+                Entries {
+                    Type: ETypeTable
+                    Path: "/MyRoot/Table1"
+                }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Try to create __ydb_backup_meta outside backup collection (should fail - reserved name)
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_meta", {NKikimrScheme::StatusSchemeError});
+
+        // Verify we can't create directories with reserved backup service prefix outside backup context
+        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_test", {NKikimrScheme::StatusSchemeError});
+
+        // But we CAN create __ydb_backup_meta inside a backup collection (should succeed)
+        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/TestCollection", "__ydb_backup_meta");
+        env.TestWaitNotification(runtime, txId);
+
+        // Verify it was created
+        TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
     }
 } // TBackupCollectionTests

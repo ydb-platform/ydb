@@ -635,13 +635,17 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         return *explainRes.GetStats()->GetPlan();
     }
 
-    std::vector<NYdb::TResultSet> ExecuteQuery(NYdb::NQuery::TSession session, std::string query) {
+    bool ExecuteQuery(NYdb::NQuery::TSession session, std::string query) {
         auto execRes = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+        if (execRes.GetStatus() == EStatus::TIMEOUT) {
+            return false;
+        }
 
         execRes.GetIssues().PrintTo(Cout);
         UNIT_ASSERT(execRes.IsSuccess());
 
-        return execRes.GetResultSets();
+        return true;
     }
 
     void JustPrintPlan(const TString &plan) {
@@ -725,8 +729,44 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         return TKikimrRunner(serverSettings);
     }
 
+    bool BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
+        Cout << "\n\n";
+        Cout << "================================= CREATE =================================\n";
+        graph.DumpGraph(Cout);
+
+        Cout << "================================= REORDER ================================\n";
+        graph.ReorderDFS();
+        graph.DumpGraph(Cout);
+
+        Cout << "================================= PREPARE ================================\n";
+        auto creationQuery = graph.GetSchema().MakeCreateQuery();
+        Cout << creationQuery;
+        if (!ExecuteQuery(session, creationQuery)) {
+            return false;
+        }
+
+        Cout << "================================= BENCHMARK ==============================\n";
+        TString query = graph.MakeQuery();
+        Cout << query;
+        auto resultTime = BenchmarkShuffleElimination(config, session, query);
+
+        Cout << "================================= FINALIZE ===============================\n";
+        auto deletionQuery = graph.GetSchema().MakeDropQuery();
+        Cout << deletionQuery;
+        if (!ExecuteQuery(session, deletionQuery)) { // TODO: this is really bad probably?
+            return false;
+        }
+        Cout << "==========================================================================\n";
+
+        if (!resultTime) {
+            return false; // query timed out
+        }
+
+        return true;
+    }
+
     template <auto Lambda>
-    void BenchmarkShuffleEliminationOnTopology(int maxNumTables, double probabilityStep, unsigned seed = 0) {
+    void BenchmarkShuffleEliminationOnTopologies(int maxNumTables, double probabilityStep, unsigned seed = 0) {
         auto config = TBenchmarkConfig {
             .Warmup = {
                 .MinRepeats = 1,
@@ -746,40 +786,14 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(maxNumTables);
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
 
-        auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(3));
+        auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(10));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        for (int i = 2 /* one table is not possible with all topoloties, so 2 */; i < maxNumTables; i ++) {
+        for (int i = 2 /* one table is not possible with all topologies, so 2 */; i < maxNumTables; i ++) {
             for (double probability = 0; probability <= 1.0; probability += probabilityStep) {
                 TRelationGraph graph = Lambda(mt, i, probability);
-
-                Cout << "\n\n";
-                Cout << "================================= CREATE =================================\n";
-                graph.DumpGraph(Cout);
-
-                Cout << "================================= REORDER ================================\n";
-                graph.ReorderDFS();
-                graph.DumpGraph(Cout);
-
-                Cout << "================================= PREPARE ================================\n";
-                auto creationQuery = graph.GetSchema().MakeCreateQuery();
-                Cout << creationQuery;
-                ExecuteQuery(session, creationQuery);
-
-                Cout << "================================= BENCHMARK ==============================\n";
-                TString query = graph.MakeQuery();
-                Cout << query;
-                auto resultTime = BenchmarkShuffleElimination(config, session, query);
-
-                Cout << "================================= FINALIZE ===============================\n";
-                auto deletionQuery = graph.GetSchema().MakeDropQuery();
-                Cout << deletionQuery;
-                ExecuteQuery(session, deletionQuery);
-                Cout << "==========================================================================\n";
-                if (!resultTime) {
-                    continue;
-                }
+                BenchmarkShuffleEliminationOnTopology(config, session, graph);
             }
         }
     }
@@ -1035,19 +1049,19 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     }
 
     Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
-        BenchmarkShuffleEliminationOnTopology<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+        BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
     }
 
     Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
-        BenchmarkShuffleEliminationOnTopology<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+        BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
     }
 
     Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
-        BenchmarkShuffleEliminationOnTopology<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+        BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
     }
 
     Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
-        BenchmarkShuffleEliminationOnTopology<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
+        BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
     }
 
     Y_UNIT_TEST(TRunningStatistics) {

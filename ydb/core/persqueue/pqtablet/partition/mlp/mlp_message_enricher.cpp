@@ -120,7 +120,6 @@ void TMessageEnricherActor::ProcessQueue() {
 
         auto request = std::make_unique<TEvPersQueue::TEvRequest>();
         auto* partitionRequest = request->Record.MutablePartitionRequest();
-        partitionRequest->SetTopic("TODO");
         partitionRequest->SetPartition(PartitionId);
         auto* read = partitionRequest->MutableCmdRead();
         read->SetClientId(ConsumerName);
@@ -128,8 +127,6 @@ void TMessageEnricherActor::ProcessQueue() {
         read->SetTimeoutMs(0);
 
         Send(TabletActorId, std::move(request), 0, ++Cookie);
-
-        //Send(TabletActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
 
         return;
     }

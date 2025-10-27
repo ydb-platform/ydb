@@ -195,8 +195,9 @@ TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::
             bool absent = label["absent"].GetBooleanSafe();
             bool truncated = label["truncated"].GetBooleanSafe();
             const auto& jsonValues = label["values"].GetArraySafe();
-            std::vector<TString> values(jsonValues.size());
+            std::vector<TString> values;
     
+            values.reserve(jsonValues.size());
             for (const auto& labelValue : jsonValues) {
                 if (!labelValue.IsString()) {
                     return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");

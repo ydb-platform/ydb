@@ -202,13 +202,9 @@ private:
             auto& labels = listLabelsResult.Labels;
             auto maxSizeLabelIt = std::max_element(labels.begin(), labels.end(),
                 [](const NSo::TLabelValues& a, const NSo::TLabelValues& b) {
-                    return std::make_pair(a.Truncated, a.Values.size()) < std::make_pair(b.Truncated, b.Values.size());
+                    return std::make_pair(!a.Truncated, a.Values.size()) < std::make_pair(!b.Truncated, b.Values.size());
                 }
             );
-
-            for (const auto& label : labels) {
-                LOG_D("TDqSolomonMetricsQueueActor", label.Name << " " << label.Values.size());
-            }
 
             if (maxSizeLabelIt->Truncated) {
                 MaybeIssues = "couldn't list metrics, all label values are too big for listing";

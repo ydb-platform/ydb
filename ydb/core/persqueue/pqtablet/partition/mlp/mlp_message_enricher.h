@@ -24,7 +24,7 @@ public:
     void PassAway() override;
 
 private:
-    void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
 

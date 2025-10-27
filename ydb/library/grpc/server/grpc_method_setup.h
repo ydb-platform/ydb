@@ -12,7 +12,7 @@
 #define YDB_API_DEFAULT_RESPONSE_TYPE(methodName) Y_CAT(methodName, Response)
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterName, auditMode, runtimeEventType)    \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterName, auditMode, runtimeEventType, operationCallClass, grpcProxyId) \
     MakeIntrusive<NGRpcService::TGRpcRequest<                                                         \
         inputType,                                                                                    \
         outputType,                                                                                   \
@@ -21,9 +21,9 @@
         this,                                                                                         \
         &Service_,                                                                                    \
         CQ_,                                                                                          \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                               \
+        [this, proxyId = grpcProxyId](NYdbGrpc::IRequestContextBase* reqCtx) {                        \
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer());                       \
-            ActorSystem_->Send(GRpcRequestProxyId_, new TGrpcRequestOperationCall<                    \
+            ActorSystem_->Send(proxyId, new operationCallClass<                                       \
                 inputType,                                                                            \
                 outputType,                                                                           \
                 NRuntimeEvents::EType::runtimeEventType>(reqCtx, methodCallback,                      \
@@ -42,6 +42,6 @@
 
 // Общий макрос для настройки методов gRPC
 #define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)    \
-    SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, counterName, auditMode, COMMON)
+    SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, counterName, auditMode, COMMON, TGrpcRequestOperationCall, GRpcRequestProxyId_)
 
 #endif // GRPC_METHOD_SETUP_H

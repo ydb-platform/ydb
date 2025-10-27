@@ -37,7 +37,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
 
     #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
-        SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), method, rlMode, requestType, config, auditModeFlags, BOOTSTRAP_CLUSTER)
+        SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), method, rlMode, requestType, config, auditModeFlags, BOOTSTRAP_CLUSTER, TGrpcRequestOperationCall, GRpcRequestProxyId_)
 
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, Rps, CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

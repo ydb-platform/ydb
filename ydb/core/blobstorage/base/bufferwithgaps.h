@@ -46,7 +46,7 @@ namespace NKikimr {
         {}
 
         TBufferWithGaps(ui32 offset, TRcBuf&& data)
-            : Data(data)
+            : Data(std::move(data))
             , Offset(offset)
             , IsCommited(false)
         {}

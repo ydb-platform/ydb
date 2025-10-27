@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
                 ++index;
 
                 env.Runtime->WrapInActorContext(writer, [&] {
-                    SendToBSProxy(writer, info->GroupID, new TEvBlobStorage::TEvPut(id, TRope(data), TInstant::Max()));
+                    SendToBSProxy(writer, info->GroupID, new TEvBlobStorage::TEvPut(id, TRcBuf(data), TInstant::Max()));
                 });
                 const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(writer, false);
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(CorruptedReads) {
                 index += 2;
 
                 env.Runtime->WrapInActorContext(writer, [&] {
-                    SendToBSProxy(writer, info->GroupID, new TEvBlobStorage::TEvPut(id, TRope(data), TInstant::Max()));
+                    SendToBSProxy(writer, info->GroupID, new TEvBlobStorage::TEvPut(id, TRcBuf(data), TInstant::Max()));
                 });
                 const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(writer, false);
                 UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);

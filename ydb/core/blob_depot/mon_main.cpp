@@ -5,6 +5,10 @@
 #include "space_monitor.h"
 #include "mon_main.h"
 #include "s3.h"
+#include "types.h"
+#include <ydb/public/api/protos/ydb_export.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
+#include <ydb/core/protos/blob_depot_config.pb.h>
 
 namespace NKikimr::NBlobDepot {
 
@@ -19,6 +23,7 @@ namespace NKikimr::NBlobDepot {
             Barriers,
             Blocks,
             Storage,
+            S3,
         };
 
         static constexpr const char *TableName(ETable table) {
@@ -29,12 +34,13 @@ namespace NKikimr::NBlobDepot {
                 case ETable::Barriers: return "barriers";
                 case ETable::Blocks: return "blocks";
                 case ETable::Storage: return "storage";
+                case ETable::S3: return "s3";
             }
         }
 
         static ETable TableByName(const TString& name) {
             for (const ETable table : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers, ETable::Blocks,
-                    ETable::Storage}) {
+                    ETable::Storage, ETable::S3}) {
                 if (name == TableName(table)) {
                     return table;
                 }
@@ -79,12 +85,17 @@ namespace NKikimr::NBlobDepot {
                 case ETable::Storage:
                     render = &TTxMonData::RenderStorageTable;
                     break;
+
+                case ETable::S3:
+                    render = &TTxMonData::RenderS3Table;
+                    break;
             }
             if (!render) {
                 Y_ABORT();
             }
 
             HTML(Stream) {
+                Stream << "<a href='app?TabletID=" << Self->TabletID() << "'>Back to main page</a>";
                 DIV_CLASS("panel panel-info") {
                     DIV_CLASS("panel-heading") {
                         Stream << "Data";
@@ -92,7 +103,7 @@ namespace NKikimr::NBlobDepot {
                     DIV_CLASS("panel-body") {
                         Stream << "<ul class='nav nav-tabs'>";
                         for (const ETable tab : {ETable::Data, ETable::RefCount, ETable::Trash, ETable::Barriers,
-                                ETable::Blocks, ETable::Storage}) {
+                                ETable::Blocks, ETable::Storage, ETable::S3}) {
                             Stream << "<li" << (table == tab ? " class='active'" : "") << ">"
                                 << "<a href='app?TabletID=" << Self->TabletID() << "&page=data&table="
                                 << TableName(tab) << "'>" << TableName(tab) << "</a></li>";
@@ -368,6 +379,198 @@ namespace NKikimr::NBlobDepot {
                                 TABLED() {}
                                 TABLED() {}
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+        void RenderS3Table(bool header) {
+            HTML(Stream) {
+                if (header) {
+                    TABLEH() { Stream << "Setting"; }
+                    TABLEH() { Stream << "Value"; }
+                } else {
+                    // Check if S3 is configured
+                    if (!Self->Config.HasS3BackendSettings()) {
+                        TABLER() {
+                            TABLED() { Stream << "Status"; }
+                            TABLED() { Stream << "S3 not configured"; }
+                        }
+                        return;
+                    }
+
+                    const auto& s3BackendSettings = Self->Config.GetS3BackendSettings();
+                    if (!s3BackendSettings.HasSettings()) {
+                        TABLER() {
+                            TABLED() { Stream << "Status"; }
+                            TABLED() { Stream << "S3 settings not configured"; }
+                        }
+                        return;
+                    }
+
+                    const auto& s3Settings = s3BackendSettings.GetSettings();
+
+                    // Helper function to mask sensitive data
+                    auto maskSensitive = [](const TString& value) -> TString {
+                        if (value.empty()) {
+                            return value;
+                        }
+                        if (value.size() <= 4) {
+                            return TString(value.size(), '*');
+                        }
+                        return "*****" + value.substr(value.size() - 4);
+                    };
+
+                    // Display S3 mode
+                    TABLER() {
+                        TABLED() { Stream << "Mode"; }
+                        if (s3BackendSettings.HasAsyncMode()) {
+                            TABLED() { Stream << "Async"; }
+                        } else if (s3BackendSettings.HasSyncMode()) {
+                            TABLED() { Stream << "Sync"; }
+                        } else {
+                            TABLED() { Stream << "Unknown"; }
+                        }
+                    }
+
+                    // Display async mode settings if applicable
+                    if (s3BackendSettings.HasAsyncMode()) {
+                        const auto& asyncMode = s3BackendSettings.GetAsyncMode();
+
+                        if (asyncMode.HasMaxPendingBytes()) {
+                            TABLER() {
+                                TABLED() { Stream << "MaxPendingBytes"; }
+                                TABLED() { Stream << FormatByteSize(asyncMode.GetMaxPendingBytes()); }
+                            }
+                        }
+
+                        if (asyncMode.HasThrottleStartBytes()) {
+                            TABLER() {
+                                TABLED() { Stream << "ThrottleStartBytes"; }
+                                TABLED() { Stream << FormatByteSize(asyncMode.GetThrottleStartBytes()); }
+                            }
+                        }
+
+                        if (asyncMode.HasThrottleMaxBytesPerSecond()) {
+                            TABLER() {
+                                TABLED() { Stream << "ThrottleMaxBytesPerSecond"; }
+                                TABLED() { Stream << FormatByteSize(asyncMode.GetThrottleMaxBytesPerSecond()) << "/s"; }
+                            }
+                        }
+
+                        if (asyncMode.HasUploadPutsInFlight()) {
+                            TABLER() {
+                                TABLED() { Stream << "UploadPutsInFlight"; }
+                                TABLED() { Stream << asyncMode.GetUploadPutsInFlight(); }
+                            }
+                        }
+                    }
+
+                    // Display S3 settings
+                    TABLER() {
+                        TABLED() { Stream << "Endpoint"; }
+                        TABLED() { Stream << s3Settings.GetEndpoint(); }
+                    }
+
+                    TABLER() {
+                        TABLED() { Stream << "Scheme"; }
+                        if (s3Settings.HasScheme()) {
+                            TABLED() { Stream << (s3Settings.GetScheme() == NKikimrSchemeOp::TS3Settings::HTTPS ? "HTTPS" : "HTTP"); }
+                        } else {
+                            TABLED() { Stream << "HTTPS (default)"; }
+                        }
+                    }
+
+                    TABLER() {
+                        TABLED() { Stream << "Bucket"; }
+                        TABLED() { Stream << s3Settings.GetBucket(); }
+                    }
+
+                    TABLER() {
+                        TABLED() { Stream << "AccessKey"; }
+                        TABLED() { Stream << maskSensitive(s3Settings.GetAccessKey()); }
+                    }
+
+                    TABLER() {
+                        TABLED() { Stream << "SecretKey"; }
+                        TABLED() { Stream << maskSensitive(s3Settings.GetSecretKey()); }
+                    }
+
+                    if (s3Settings.HasRegion()) {
+                        TABLER() {
+                            TABLED() { Stream << "Region"; }
+                            TABLED() { Stream << s3Settings.GetRegion(); }
+                        }
+                    }
+
+                    if (s3Settings.HasStorageClass()) {
+                        TABLER() {
+                            TABLED() { Stream << "StorageClass"; }
+                            TABLED() { Stream << Ydb::Export::ExportToS3Settings::StorageClass_Name(s3Settings.GetStorageClass()); }
+                        }
+                    }
+
+                    if (s3Settings.HasUseVirtualAddressing()) {
+                        TABLER() {
+                            TABLED() { Stream << "UseVirtualAddressing"; }
+                            TABLED() { Stream << ToString(s3Settings.GetUseVirtualAddressing()); }
+                        }
+                    }
+
+                    if (s3Settings.HasVerifySSL()) {
+                        TABLER() {
+                            TABLED() { Stream << "VerifySSL"; }
+                            TABLED() { Stream << ToString(s3Settings.GetVerifySSL()); }
+                        }
+                    }
+
+                    if (s3Settings.HasProxyHost()) {
+                        TABLER() {
+                            TABLED() { Stream << "ProxyHost"; }
+                            TABLED() { Stream << s3Settings.GetProxyHost(); }
+                        }
+                    }
+
+                    if (s3Settings.HasProxyPort()) {
+                        TABLER() {
+                            TABLED() { Stream << "ProxyPort"; }
+                            TABLED() { Stream << s3Settings.GetProxyPort(); }
+                        }
+                    }
+
+                    if (s3Settings.HasConnectionTimeoutMs()) {
+                        TABLER() {
+                            TABLED() { Stream << "ConnectionTimeoutMs"; }
+                            TABLED() { Stream << s3Settings.GetConnectionTimeoutMs(); }
+                        }
+                    }
+
+                    if (s3Settings.HasRequestTimeoutMs()) {
+                        TABLER() {
+                            TABLED() { Stream << "RequestTimeoutMs"; }
+                            TABLED() { Stream << s3Settings.GetRequestTimeoutMs(); }
+                        }
+                    }
+
+                    if (s3Settings.HasHttpRequestTimeoutMs()) {
+                        TABLER() {
+                            TABLED() { Stream << "HttpRequestTimeoutMs"; }
+                            TABLED() { Stream << s3Settings.GetHttpRequestTimeoutMs(); }
+                        }
+                    }
+
+                    if (s3Settings.HasExecutorThreadsCount()) {
+                        TABLER() {
+                            TABLED() { Stream << "ExecutorThreadsCount"; }
+                            TABLED() { Stream << s3Settings.GetExecutorThreadsCount(); }
+                        }
+                    }
+
+                    if (s3Settings.HasMaxConnectionsCount()) {
+                        TABLER() {
+                            TABLED() { Stream << "MaxConnectionsCount"; }
+                            TABLED() { Stream << s3Settings.GetMaxConnectionsCount(); }
                         }
                     }
                 }

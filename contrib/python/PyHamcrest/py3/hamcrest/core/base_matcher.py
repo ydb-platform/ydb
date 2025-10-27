@@ -1,13 +1,18 @@
-from __future__ import absolute_import
+from textwrap import shorten
+from typing import Optional, TypeVar
+
+from hamcrest.core.description import Description
+from hamcrest.core.matcher import Matcher
+from hamcrest.core.string_description import tostring
+
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
-from hamcrest.core.matcher import Matcher
-from hamcrest.core.string_description import tostring
+T = TypeVar("T")
 
 
-class BaseMatcher(Matcher):
+class BaseMatcher(Matcher[T]):
     """Base class for all :py:class:`~hamcrest.core.matcher.Matcher`
     implementations.
 
@@ -18,17 +23,26 @@ class BaseMatcher(Matcher):
 
     """
 
-    def __str__(self):
+    def __str__(self) -> str:
         return tostring(self)
 
-    def _matches(self, item):
-        raise NotImplementedError('_matches')
+    def __repr__(self) -> str:
+        """Returns matcher string representation."""
+        return "<{0}({1})>".format(
+            self.__class__.__name__, shorten(tostring(self), 60, placeholder="...")
+        )
 
-    def matches(self, item, mismatch_description=None):
+    def _matches(self, item: T) -> bool:
+        raise NotImplementedError("_matches")
+
+    def matches(self, item: T, mismatch_description: Optional[Description] = None) -> bool:
         match_result = self._matches(item)
         if not match_result and mismatch_description:
             self.describe_mismatch(item, mismatch_description)
         return match_result
 
-    def describe_mismatch(self, item, mismatch_description):
-        mismatch_description.append_text('was ').append_description_of(item)
+    def describe_mismatch(self, item: T, mismatch_description: Description) -> None:
+        mismatch_description.append_text("was ").append_description_of(item)
+
+    def describe_match(self, item: T, match_description: Description) -> None:
+        match_description.append_text("was ").append_description_of(item)

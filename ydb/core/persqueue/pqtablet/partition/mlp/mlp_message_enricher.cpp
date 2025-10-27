@@ -2,10 +2,10 @@
 
 namespace NKikimr::NPQ::NMLP {
 
-TMessageEnricherActor::TMessageEnricherActor(ui32 partitionId, const TActorId& partitionActor, const TString& consumerName, std::deque<TReadResult>&& replies)
+TMessageEnricherActor::TMessageEnricherActor(const TActorId& tabletActorId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
     : TBaseActor(NKikimrServices::EServiceKikimr::PQ_MLP_ENRICHER)
+    , TabletActorId(tabletActorId)
     , PartitionId(partitionId)
-    , PartitionActorId(partitionActor)
     , ConsumerName(consumerName)
     , Queue(std::move(replies))
     , Backoff(5, TDuration::MilliSeconds(50))
@@ -122,8 +122,15 @@ void TMessageEnricherActor::ProcessQueue() {
         auto firstOffset = reply.Offsets.front();
         auto lastOffset = Queue.back().Offsets.back();
         auto count = lastOffset - firstOffset + 1;
-        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << PartitionActorId);
-        Send(PartitionActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
+        LOG_D("Fetching from offset " << firstOffset << " count " << count << " from " << TabletActorId);
+
+        auto request = std::make_unique<TEvPersQueue::TEvRequest>();
+        auto* partitionRequest = request->Record.MutablePartitionRequest();
+        partitionRequest->SetPartition(PartitionId);
+
+        Send(TabletActorId, std::move(request), 0, ++Cookie);
+
+        //Send(TabletActorId, MakeEvRead(SelfId(), ConsumerName, firstOffset, count, ++Cookie));
 
         return;
     }

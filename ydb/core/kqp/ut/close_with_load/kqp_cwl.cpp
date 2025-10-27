@@ -23,7 +23,8 @@ Y_UNIT_TEST_SUITE(KqpService) {
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_SESSION, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_ACTOR, NLog::PRI_DEBUG);
         kikimr->GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NLog::PRI_DEBUG);
-
+        
+        
         auto db = kikimr->GetTableClient();
 
         const ui32 SessionsCount = 50;

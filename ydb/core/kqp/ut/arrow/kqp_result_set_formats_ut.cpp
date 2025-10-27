@@ -279,6 +279,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
         auto kikimr = CreateKikimrRunner(/* withSampleTables */ true);
         auto client = kikimr.GetQueryClient();
 
+
         auto result = client.ExecuteQuery(R"(
             SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
@@ -307,6 +308,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             SELECT Comment, Amount, Name FROM Test ORDER BY Amount DESC;
         )", TTxControl::BeginTx().CommitTx(), settings).GetValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
 
         auto resultSet = result.GetResultSet(0);
         UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
@@ -364,6 +366,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                 break;
             }
 
+
             if (part.HasResultSet()) {
                 auto resultSet = part.ExtractResultSet();
                 UNIT_ASSERT_VALUES_EQUAL(TArrowAccessor::Format(resultSet), TResultSet::EFormat::Value);
@@ -373,7 +376,7 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
             }
         }
 
-        UNIT_ASSERT_GT_C(count, 1, "Expected at least 2 result sets");
+        UNIT_ASSERT_GT_C(count, 100000, "Expected at least 2 result sets");
     }
 
     /**
@@ -446,7 +449,6 @@ Y_UNIT_TEST_SUITE(KqpResultSetFormats) {
                     UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 0);
                 }
 
-                ++count;
             }
         }
 

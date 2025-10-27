@@ -24,35 +24,23 @@ void TGRpcMonitoringService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST_NEW(NAME, CB, AUDIT_MODE) \
+#define ADD_REQUEST(NAME, CB, AUDIT_MODE, TGrpcRequestOperationCallType) \
      MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>> \
          (this, &Service_, CQ_,                                                                                 \
             [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));          \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestOperationCall<Monitoring::NAME##Request, Monitoring::NAME##Response>        \
+                    new TGrpcRequestOperationCallType<Monitoring::NAME##Request, Monitoring::NAME##Response>        \
                          (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Off, nullptr, AUDIT_MODE}));          \
             }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
-    ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest, TAuditMode::NonModifying());
-    ADD_REQUEST_NEW(ClusterState, DoClusterStateRequest, TAuditMode::NonModifying());
-
-#define ADD_REQUEST_OLD(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase* reqCtx) { \
-           NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
-           ACTION; \
-        }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
-
-    ADD_REQUEST_OLD(NodeCheck, NodeCheckRequest, NodeCheckResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvNodeCheckRequest(reqCtx));
-    });
+    ADD_REQUEST(SelfCheck, DoSelfCheckRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    ADD_REQUEST(ClusterState, DoClusterStateRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    ADD_REQUEST(NodeCheck, DoNodeCheckRequest, TAuditMode::NonModifying(), TGrpcRequestOperationCallNoAuth);
 
 
-#undef ADD_REQUEST_NEW
-#undef ADD_REQUEST_OLD
+#undef ADD_REQUEST
 }
 
 } // namespace NGRpcService

@@ -21,7 +21,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
         TString{},
         consumerName,
         0,
-        std::numeric_limits<ui32>::max(),
+        8_MB,
         0,
         0,
         "unknown",

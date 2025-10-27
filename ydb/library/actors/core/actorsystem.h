@@ -185,17 +185,20 @@ namespace NActors {
         bool MonitorStuckActors() const { return SystemSetup->MonitorStuckActors; }
 
     private:
-        typedef bool (IExecutorPool::*TEPSendFunction)(TAutoPtr<IEventHandle>& ev);
+        typedef bool (IExecutorPool::*TEPSendFunction)(std::unique_ptr<IEventHandle>& ev);
 
         template <TEPSendFunction EPSpecificSend>
-        bool GenericSend(TAutoPtr<IEventHandle> ev) const;
+        bool GenericSend(std::unique_ptr<IEventHandle>&& ev) const;
 
     public:
         template <ESendingType SendingType = ESendingType::Common>
         bool Send(TAutoPtr<IEventHandle> ev) const;
 
-        bool SpecificSend(TAutoPtr<IEventHandle> ev, ESendingType sendingType) const;
-        bool SpecificSend(TAutoPtr<IEventHandle> ev) const;
+        template <ESendingType SendingType = ESendingType::Common>
+        bool Send(std::unique_ptr<IEventHandle>&& ev) const;
+
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev, ESendingType sendingType) const;
+        bool SpecificSend(std::unique_ptr<IEventHandle>&& ev) const;
 
         bool Send(const TActorId& recipient, IEventBase* ev, ui32 flags = 0, ui64 cookie = 0) const;
 

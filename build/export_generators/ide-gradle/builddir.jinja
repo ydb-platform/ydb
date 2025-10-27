@@ -11,16 +11,3 @@ val mainProtosDir = layout.buildDirectory.dir("main_protos")
 val mainExtractedIncludeProtosDir = layout.buildDirectory.dir("extracted-include-protos/main")
 {%-     endif %}
 {%- endif %}
-
-var mkBuildDir = tasks.register("mkBuildDir") {
-    doFirst {
-        mkdir(layout.buildDirectory.asFile.get())
-    }
-    onlyIf {
-        !layout.buildDirectory.asFile.get().exists()
-    }
-}
-
-tasks.withType<JavaExec>().configureEach {
-    dependsOn(mkBuildDir)
-}

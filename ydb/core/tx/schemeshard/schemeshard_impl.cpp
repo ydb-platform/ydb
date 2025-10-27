@@ -4662,6 +4662,11 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                     result.SetSecurityStateVersion(subDomain->GetSecurityStateVersion());
                     generalVersion += result.GetSubDomainVersion();
                     generalVersion += result.GetSecurityStateVersion();
+
+                    if (ui64 version = subDomain->GetDomainStateVersion()) {
+                        result.SetSubDomainStateVersion(version);
+                        generalVersion += version;
+                    }
                 }
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
@@ -7623,6 +7628,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        TInstant now = AppData()->TimeProvider->Now();
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
@@ -7631,7 +7637,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
             auto it = partitionStats.find(p.ShardIdx);
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
-                UpdateShardMetrics(p.ShardIdx, it->second);
+                UpdateShardMetrics(p.ShardIdx, it->second, now);
             }
         }
 

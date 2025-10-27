@@ -1025,6 +1025,13 @@ namespace NActors {
             return send && ev && DoBeforeSending(ev);
         }
 
+        bool BeforeSending(std::unique_ptr<IEventHandle>& ev) {
+            TAutoPtr<IEventHandle> evPtr = ev.release();
+            bool result = BeforeSending(evPtr);
+            ev.reset(evPtr.Release());
+            return result;
+        }
+
         virtual bool DoBeforeSending(TAutoPtr<IEventHandle>& /*ev*/) {
             return true;
         }

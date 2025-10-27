@@ -4255,6 +4255,13 @@ Y_UNIT_TEST(AutoSampleWorksWithSubquery) {
     UNIT_ASSERT(SqlToYql("select * from (select * from plato.Input) sample 0.2").IsOk());
 }
 
+Y_UNIT_TEST(LinearAsColumnOrType) {
+    UNIT_ASSERT(SqlToYql("select FormatType(Linear<Int32>)").IsOk());
+    UNIT_ASSERT(SqlToYql("select Linear<2 from (select 1 as Linear)").IsOk());
+    UNIT_ASSERT(SqlToYql("select FormatType(DynamicLinear<Int32>)").IsOk());
+    UNIT_ASSERT(SqlToYql("select DynamicLinear<2 from (select 1 as DynamicLinear)").IsOk());
+}
+
 Y_UNIT_TEST(CreateTableTrailingComma) {
     UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32, PRIMARY KEY (Key),);").IsOk());
     UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE tableName (Key Uint32,);").IsOk());
@@ -8623,7 +8630,7 @@ Y_UNIT_TEST(UnknownSetting) {
 Y_UNIT_TEST_SUITE(TViewSyntaxTest) {
 Y_UNIT_TEST(CreateViewSimple) {
     NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
+                USE ydb;
                 CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
             )");
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -8631,7 +8638,7 @@ Y_UNIT_TEST(CreateViewSimple) {
 
 Y_UNIT_TEST(CreateViewWithUdfs) {
     NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
+                USE ydb;
                 CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT "bbb" LIKE Unwrap("aaa");
             )");
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -8640,7 +8647,7 @@ Y_UNIT_TEST(CreateViewWithUdfs) {
 Y_UNIT_TEST(CreateViewIfNotExists) {
     constexpr const char* name = "TheView";
     NYql::TAstParseResult res = SqlToYql(std::format(R"(
-                USE plato;
+                USE ydb;
                 CREATE VIEW IF NOT EXISTS {} AS SELECT 1;
             )", name));
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -8665,7 +8672,7 @@ Y_UNIT_TEST(CreateViewFromTable) {
         )";
 
     NYql::TAstParseResult res = SqlToYql(std::format(R"(
-                    USE plato;
+                    USE ydb;
                     CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                                                      path,
@@ -8691,7 +8698,7 @@ Y_UNIT_TEST(CheckReconstructedQuery) {
         )";
 
     NYql::TAstParseResult res = SqlToYql(std::format(R"(
-                    USE plato;
+                    USE ydb;
                     CREATE VIEW `{}` WITH (security_invoker = TRUE) AS {};
                 )",
                                                      path,
@@ -8713,7 +8720,7 @@ Y_UNIT_TEST(CheckReconstructedQuery) {
 Y_UNIT_TEST(DropView) {
     constexpr const char* path = "/PathPrefix/TheView";
     NYql::TAstParseResult res = SqlToYql(std::format(R"(
-                    USE plato;
+                    USE ydb;
                     DROP VIEW `{}`;
                 )",
                                                      path));
@@ -8734,7 +8741,7 @@ Y_UNIT_TEST(DropView) {
 Y_UNIT_TEST(DropViewIfExists) {
     constexpr const char* name = "TheView";
     NYql::TAstParseResult res = SqlToYql(std::format(R"(
-                USE plato;
+                USE ydb;
                 DROP VIEW IF EXISTS {};
             )", name));
     UNIT_ASSERT_C(res.Root, res.Issues.ToString());
@@ -8754,7 +8761,7 @@ Y_UNIT_TEST(DropViewIfExists) {
 
 Y_UNIT_TEST(CreateViewWithTablePrefix) {
     NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
+                USE ydb;
                 PRAGMA TablePathPrefix='/PathPrefix';
                 CREATE VIEW TheView WITH (security_invoker = TRUE) AS SELECT 1;
             )");
@@ -8775,7 +8782,7 @@ Y_UNIT_TEST(CreateViewWithTablePrefix) {
 
 Y_UNIT_TEST(DropViewWithTablePrefix) {
     NYql::TAstParseResult res = SqlToYql(R"(
-                USE plato;
+                USE ydb;
                 PRAGMA TablePathPrefix='/PathPrefix';
                 DROP VIEW TheView;
             )");
@@ -9630,7 +9637,6 @@ Y_UNIT_TEST(Lambda) {
 
     const auto programm = GetPrettyPrint(res);
 
-    Cerr << ">>>>> Root " << programm << Endl;
     auto expected = R"('transformLambda 'use plato;
 -- befor comment
             $a = "А";
@@ -10804,3 +10810,84 @@ Y_UNIT_TEST(FromValues) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(CreateViewNewSyntax) {
+
+Y_UNIT_TEST(Basic) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        CREATE VIEW plato.foo AS
+        DO BEGIN $foo = 1; select /* some hint */  $foo + 123; END DO;
+    )sql");
+    UNIT_ASSERT_C(res.IsOk(), res.Issues.ToOneLineString());
+
+    TWordCountHive stat = {
+        {TString("__query_text"), 0},
+        {TString("__query_ast"), 0},
+    };
+    VerifyProgram(res, stat, [](const TString& word, const TString& line) {
+        if (word == "__query_text") {
+            UNIT_ASSERT_STRING_CONTAINS(line, " $foo = 1; select /* some hint */  $foo + 123; ");
+        }
+    });
+    UNIT_ASSERT_VALUES_EQUAL(stat["__query_text"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["__query_ast"], 1);
+}
+
+Y_UNIT_TEST(NamedNodesAreNotVisibleInView) {
+    auto query = R"sql(
+        $foo = 1;
+        CREATE VIEW plato.foo AS
+        DO BEGIN
+            $bar = 2;
+            select $bar + $foo;
+        END DO;
+    )sql";
+
+    ExpectFailWithError(query, "<main>:6:27: Error: Unknown name: $foo\n");
+}
+
+Y_UNIT_TEST(ScopedPragmasDoNotAffectView) {
+    NYql::TAstParseResult res = SqlToYql(R"sql(
+        pragma CheckedOps = 'true';
+        CREATE VIEW plato.foo AS
+        DO BEGIN
+            select 1 + 1;
+        END DO;
+    )sql");
+
+    TWordCountHive stat = {
+        {TString("+MayWarn"), 0},
+        {TString("CheckedAdd"), 0},
+    };
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["+MayWarn"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["CheckedAdd"], 0);
+}
+
+Y_UNIT_TEST(NewSyntaxDoesntWorkOnYdb) {
+    ExpectFailWithError("create view ydb.foo as do begin select 1; end do",
+                        "<main>:1:13: Error: CREATE VIEW ... AS DO BEGIN ... END DO syntax is not supported for ydb provider. Please use CREATE VIEW ... AS SELECT\n");
+}
+
+Y_UNIT_TEST(OldSyntaxDoesntWorkOnYt) {
+    ExpectFailWithError("create view plato.foo as select 1;",
+                        "<main>:1:13: Error: CREATE VIEW ... AS SELECT syntax is not supported for yt provider. Please use CREATE VIEW ... AS DO BEGIN ... END DO\n");
+}
+
+Y_UNIT_TEST(EmptyViewBody) {
+    ExpectFailWithError("create view plato.foo as do begin end do", "<main>:1:13: Error: Empty view body is not allowed\n");
+    ExpectFailWithError("create view plato.foo as do begin /*comment*/;; end do", "<main>:1:13: Error: Empty view body is not allowed\n");
+}
+
+Y_UNIT_TEST(MultiSelectsInViewOrStatementAfterSelect) {
+    ExpectFailWithError("create view plato.foo as do begin select 1; select 2; end do",
+                        "<main>:1:52: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n");
+    ExpectFailWithError("create view plato.foo as do begin select 1;   $foo = 2; end do",
+                        "<main>:1:54: Error: Strictly one select/process/reduce statement is expected at the end of subquery\n");
+}
+
+Y_UNIT_TEST(ErrorOnMissingCluster) {
+    ExpectFailWithError("create view foo as do begin select 1; end do", "<main>:1:1: Error: No cluster name given and no default cluster is selected\n");
+}
+
+} // Y_UNIT_TEST_SUITE(CreateViewNewSyntax)

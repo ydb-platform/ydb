@@ -27,14 +27,14 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     using namespace Ydb::KeyValue;
 
-    #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditModeFlags) \
+    #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
         SETUP_METHOD( \
             methodName, \
             methodCallback, \
             rlMode, \
             requestType, \
             keyvalue, \
-            auditModeFlags \
+            auditMode \
         )
 
     SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, Rps, KEYVALUE_CREATEVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

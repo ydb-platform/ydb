@@ -30,8 +30,8 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     using namespace Ydb::RateLimiter;
     using namespace NGRpcService;
 
-    #define SETUP_RL_METHOD(methodName, methodCallback, rlMode, requestType, auditModeFlags) \
-        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, rate_limiter, auditModeFlags)
+    #define SETUP_RL_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, rate_limiter, auditMode)
 
     SETUP_RL_METHOD(CreateResource, DoCreateRateLimiterResource, Rps, RATELIMITER_CREATE_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_RL_METHOD(AlterResource, DoAlterRateLimiterResource, Rps, RATELIMITER_ALTER_RESOURCE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

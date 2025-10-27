@@ -2,6 +2,8 @@
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
@@ -243,7 +245,7 @@ public:
         ui32 end = offsets[tupleIndex + 1];
         ui32 size = end - start;
         
-        return holderFactory.CreateString(TStringBuf(reinterpret_cast<const char*>(data + start), size));
+        return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(data + start), size));
     }
 
     ui32 GetElementSize() override {
@@ -334,12 +336,18 @@ class TTzDateColumnDataPacker : public TTupleColumnDataPacker<Nullable> {
     using TBase = TTupleColumnDataPacker<Nullable>;
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
-public:
-    TTzDateColumnDataPacker(TType* type) {
-        this->Type_ = type;
-        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataPacker<TDateLayout, false>>(type));
-        this->Children_.push_back(std::make_unique<TFixedSizeColumnDataPacker<ui16, false>>(type));
+private:
+    static std::vector<IColumnDataPacker::TPtr> MakeChildren(TType* type) {
+        std::vector<IColumnDataPacker::TPtr> children;
+        children.push_back(std::make_unique<TFixedSizeColumnDataPacker<TDateLayout, false>>(type));
+        children.push_back(std::make_unique<TFixedSizeColumnDataPacker<ui16, false>>(type));
+        return children;
     }
+
+public:
+    TTzDateColumnDataPacker(TType* type) 
+        : TTupleColumnDataPacker<Nullable>(MakeChildren(type), type)
+    {}
 };
 
 class TExternalOptionalColumnDataPacker : public IColumnDataPacker {

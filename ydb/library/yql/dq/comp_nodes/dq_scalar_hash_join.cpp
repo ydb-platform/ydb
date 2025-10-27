@@ -82,11 +82,11 @@ class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
         return ConsumeBuff_.size();
     }
 
-    FetchResult<IScalarLayoutConverter::TPackResult> FetchRow() {
+    FetchResult<IScalarLayoutConverter::TPackResult> FetchRow(TComputationContext& ctx) {
         if (Finished()) {
             return Finish{};
         }
-        auto res = Flow_->FetchValues(Pointers_.data());
+        auto res = Flow_->FetchValues(ctx, Pointers_.data());
         if (res != EFetchResult::One) {
             if (res == EFetchResult::Finish) {
                 Finished_ = true;
@@ -259,8 +259,10 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
 template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputationValue<TScalarPackedHashJoinState<Kind>> {
   public:
     TScalarPackedHashJoinState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* leftFlow,
-                               IComputationWideFlowNode* rightFlow, const std::vector<ui32>& leftKeyColumns,
-                               const std::vector<ui32>& rightKeyColumns, const std::vector<TType*>& leftColumnTypes,
+                               IComputationWideFlowNode* rightFlow, 
+                               [[maybe_unused]] const std::vector<ui32>& leftKeyColumns,
+                               [[maybe_unused]] const std::vector<ui32>& rightKeyColumns, 
+                               const std::vector<TType*>& leftColumnTypes,
                                const std::vector<TType*>& rightColumnTypes, 
                                TSides<std::unique_ptr<IScalarLayoutConverter>> converters,
                                NUdf::TLoggerPtr logger, TString componentName,
@@ -278,8 +280,6 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
         , Output_(std::move(renames), 
                   TSides<IScalarLayoutConverter*>{.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()},
                   holderFactory)
-        , LeftColumnTypes_(leftColumnTypes)
-        , RightColumnTypes_(rightColumnTypes)
     {}
 
     EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
@@ -311,10 +311,8 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
 
   private:
     TSides<std::unique_ptr<IScalarLayoutConverter>> Converters_;
-    TJoinPackedTuples<TScalarPackedTupleSource, Kind> Join_;
+    TJoinPackedTuples<TScalarPackedTupleSource> Join_;
     TScalarPackedOutput Output_;
-    const std::vector<TType*> LeftColumnTypes_;
-    const std::vector<TType*> RightColumnTypes_;
 };
 
 template <EJoinKind Kind>

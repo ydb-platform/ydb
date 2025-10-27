@@ -8,6 +8,8 @@
 
 namespace NKikimr::NMiniKQL {
 
+class THolderFactory;
+
 class IScalarLayoutConverter : private TNonCopyable {
 public:
     struct TPackResult {

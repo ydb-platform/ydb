@@ -1,4 +1,4 @@
-# Backup Collections: Common Recipes and Examples {#backup-collections-recipes}
+# Backup Collections: Common Recipes and Examples
 
 This guide provides practical examples for common backup collection use cases. For basic operations, see the [operations guide](../maintenance/manual/backup-collections.md).
 

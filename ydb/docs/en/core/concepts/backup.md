@@ -23,17 +23,13 @@ For local database backups and development workflows:
 For production workloads requiring incremental backups:
 
 - **Use cases**: Production environments, large datasets, regular backup schedules.
-- **Storage**: Currently supports cluster storage only.
+- **Storage**: Currently supports cluster storage only. Collections are organized in a way that allows them to be exported to external storage using [export/import](../reference/ydb-cli/export-import/index.md) and dump-restore operations.
 
 Learn more:
 
 - [Backup collections concepts](backup-collections.md) - Architecture and concepts.
 - [Operations guide](../maintenance/manual/backup-collections.md) - Practical operations.
 - [Common recipes](../recipes/backup-collections.md) - Usage examples.
-
-Learn more:
-
-- [Export and import reference](../reference/ydb-cli/export-import/index.md) - Export/import operations.
 
 ## Choosing the right approach {#choosing-approach}
 

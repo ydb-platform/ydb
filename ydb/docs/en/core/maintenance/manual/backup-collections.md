@@ -1,4 +1,4 @@
-# Backup Collections Operations {#backup-collections-operations}
+# Backup Collections Operations
 
 This guide covers all practical operations for creating, managing, and restoring from backup collections. For conceptual information, see [Backup collections concepts](../../concepts/backup-collections.md).
 

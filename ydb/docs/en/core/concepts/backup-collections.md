@@ -1,4 +1,4 @@
-# Backup Collections {#backup-collections}
+# Backup Collections
 
 Backup collections provide an advanced backup solution for YDB that organizes full and incremental backups into managed collections. This approach is designed for production workloads requiring efficient disaster recovery and point-in-time recovery capabilities.
 
@@ -96,10 +96,12 @@ All backup operations run asynchronously in the background, allowing you to:
 ### Backup creation process {#backup-creation-process}
 
 1. **Transaction isolation**: Backup starts from a consistent snapshot point
-2. **Change tracking**: For incremental backups, only changes since last backup are captured and stored in CDC stream
-3. **Change materialization**: When incremental backup called CDC stream compacted to incremental backup tables
+2. **Change tracking**: For incremental backups, only changes since last backup are captured and stored in [changefeed](cdc.md)
+3. **Change materialization**: When incremental backup called changefeed compacted to incremental backup tables
 
 ### Incremental backup mechanism {#incremental-backup-mechanism}
+
+{% note info %}
 
 Incremental backups use change tracking to identify:
 
@@ -107,6 +109,8 @@ Incremental backups use change tracking to identify:
 - **Modified rows**: Changed data in existing rows.  
 - **Deleted rows**: Removed data (tombstone records).
 - **Schema changes**: Currently not supported.
+
+{% endnote %}
 
 ## Relationship with incremental backups {#relationship-with-incremental-backups}
 
@@ -120,7 +124,7 @@ Without backup collections, only full export/import operations are available.
 
 ## When to use backup collections {#when-to-use}
 
-**Ideal scenarios:**
+**Recommended scenarios:**
 
 - Production environments requiring regular backup schedules.
 - Large datasets where incremental changes are much smaller than total data size.
@@ -137,7 +141,7 @@ Without backup collections, only full export/import operations are available.
 
 ### Benefits
 
-- **Storage efficiency**: Incremental backups use significantly less storage.
+- **Storage efficiency**: Incremental backups use significantly less storage compared to full backups.
 - **Faster backups**: Only changes are processed after initial full backup (note: change capture still incurs storage and cpu costs).
 - **SQL interface**: Familiar SQL commands for backup management.
 - **Background processing**: Non-blocking operations.
@@ -148,13 +152,8 @@ Without backup collections, only full export/import operations are available.
 - **No collection modification**: Cannot add/remove tables after creation.
 - **No partial restore**: Partial restores from collections must be managed externally.
 
-## Next steps {#next-steps}
+## See also {#see-also}
 
-- **Get started**: Follow the [operations guide](../maintenance/manual/backup-collections.md) for step-by-step instructions
-- **See examples**: Explore [common scenarios](../recipes/backup-collections.md) and best practices
-
-## See also
-
-- [General backup concepts](backup.md) - Overview of all backup approaches in YDB.
-- [Operations guide](../maintenance/manual/backup-collections.md) - Practical instructions and examples.
-- [Common recipes](../recipes/backup-collections.md) - Real-world usage scenarios.
+- [General backup concepts](backup.md) - Overview of all backup approaches in YDB
+- [Operations guide](../maintenance/manual/backup-collections.md) - Step-by-step instructions and practical examples
+- [Common recipes](../recipes/backup-collections.md) - Real-world usage scenarios and best practices

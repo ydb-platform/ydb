@@ -138,6 +138,7 @@ TNode SerializeParamsForListJobs(
 
 TNode SerializeParamsForGetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options);
 
 TNode SerializeParamsForSelectRows(

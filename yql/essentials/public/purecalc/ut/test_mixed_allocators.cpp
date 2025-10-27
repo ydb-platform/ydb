@@ -9,83 +9,81 @@
 using namespace NYql::NPureCalc;
 
 namespace {
-    class TStatelessInputSpec : public TInputSpecBase {
-    public:
-        TStatelessInputSpec()
-            : Schemas_({NYT::TNode::CreateList()
-                .Add("StructType")
-                .Add(NYT::TNode::CreateList()
-                    .Add(NYT::TNode::CreateList()
-                        .Add("InputValue")
+class TStatelessInputSpec: public TInputSpecBase {
+public:
+    TStatelessInputSpec()
+        : Schemas_({NYT::TNode::CreateList()
+                        .Add("StructType")
                         .Add(NYT::TNode::CreateList()
-                            .Add("DataType")
-                            .Add("Utf8")
-                        )
-                    )
-                )
-            })
-        {};
+                                 .Add(NYT::TNode::CreateList()
+                                          .Add("InputValue")
+                                          .Add(NYT::TNode::CreateList()
+                                                   .Add("DataType")
+                                                   .Add("Utf8"))))})
+    {};
 
-        const TVector<NYT::TNode>& GetSchemas() const override {
-            return Schemas_;
+    const TVector<NYT::TNode>& GetSchemas() const override {
+        return Schemas_;
+    }
+
+private:
+    const TVector<NYT::TNode> Schemas_;
+};
+
+class TStatelessInputConsumer: public IConsumer<const NYql::NUdf::TUnboxedValue&> {
+public:
+    TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
+        : Worker_(std::move(worker))
+    {
+    }
+
+    void OnObject(const NYql::NUdf::TUnboxedValue& value) override {
+        with_lock (Worker_->GetScopedAlloc()) {
+            NYql::NUdf::TUnboxedValue* items = nullptr;
+            NYql::NUdf::TUnboxedValue result = Worker_->GetGraph().GetHolderFactory().CreateDirectArrayHolder(1, items);
+
+            items[0] = value;
+
+            Worker_->Push(std::move(result));
+
+            // Clear graph after each object because
+            // values allocated on another allocator and should be released
+            Worker_->Invalidate();
         }
+    }
 
-    private:
-        const TVector<NYT::TNode> Schemas_;
-    };
-
-    class TStatelessInputConsumer : public IConsumer<const NYql::NUdf::TUnboxedValue&> {
-    public:
-        TStatelessInputConsumer(TWorkerHolder<IPushStreamWorker> worker)
-            : Worker_(std::move(worker))
-        {}
-
-        void OnObject(const NYql::NUdf::TUnboxedValue& value) override {
-            with_lock (Worker_->GetScopedAlloc()) {
-                NYql::NUdf::TUnboxedValue* items = nullptr;
-                NYql::NUdf::TUnboxedValue result = Worker_->GetGraph().GetHolderFactory().CreateDirectArrayHolder(1, items);
-
-                items[0] = value;
-
-                Worker_->Push(std::move(result));
-
-                // Clear graph after each object because
-                // values allocated on another allocator and should be released
-                Worker_->Invalidate();
-            }
+    void OnFinish() override {
+        with_lock (Worker_->GetScopedAlloc()) {
+            Worker_->OnFinish();
         }
+    }
 
-        void OnFinish() override {
-            with_lock(Worker_->GetScopedAlloc()) {
-                Worker_->OnFinish();
-            }
-        }
+private:
+    TWorkerHolder<IPushStreamWorker> Worker_;
+};
 
-    private:
-        TWorkerHolder<IPushStreamWorker> Worker_;
-    };
+class TStatelessConsumer: public IConsumer<NPureCalcProto::TStringMessage*> {
+    const TString ExpectedData_;
+    const ui64 ExpectedRows_;
+    ui64 RowId_ = 0;
 
-    class TStatelessConsumer : public IConsumer<NPureCalcProto::TStringMessage*> {
-        const TString ExpectedData_;
-        const ui64 ExpectedRows_;
-        ui64 RowId_ = 0;
+public:
+    TStatelessConsumer(const TString& expectedData, ui64 expectedRows)
+        : ExpectedData_(expectedData)
+        , ExpectedRows_(expectedRows)
+    {
+    }
 
-    public:
-        TStatelessConsumer(const TString& expectedData, ui64 expectedRows)
-            : ExpectedData_(expectedData)
-            , ExpectedRows_(expectedRows)
-        {}
+    void OnObject(NPureCalcProto::TStringMessage* message) override {
+        UNIT_ASSERT_VALUES_EQUAL_C(ExpectedData_, message->GetX(), RowId_);
+        RowId_++;
+    }
 
-        void OnObject(NPureCalcProto::TStringMessage* message) override {
-            UNIT_ASSERT_VALUES_EQUAL_C(ExpectedData_, message->GetX(), RowId_);
-            RowId_++;
-        }
-
-        void OnFinish() override {
-            UNIT_ASSERT_VALUES_EQUAL(ExpectedRows_, RowId_);
-        }
-    };
-}
+    void OnFinish() override {
+        UNIT_ASSERT_VALUES_EQUAL(ExpectedRows_, RowId_);
+    }
+};
+} // namespace
 
 template <>
 struct TInputSpecTraits<TStatelessInputSpec> {
@@ -100,40 +98,39 @@ struct TInputSpecTraits<TStatelessInputSpec> {
 };
 
 Y_UNIT_TEST_SUITE(TestMixedAllocators) {
-    Y_UNIT_TEST(TestPushStream) {
-        const auto targetString = "large string >= 14 bytes";
-        const auto factory = MakeProgramFactory();
-        const auto sql = TStringBuilder() << "SELECT InputValue AS X FROM Input WHERE InputValue = \"" << targetString << "\";";
+Y_UNIT_TEST(TestPushStream) {
+    const auto targetString = "large string >= 14 bytes";
+    const auto factory = MakeProgramFactory();
+    const auto sql = TStringBuilder() << "SELECT InputValue AS X FROM Input WHERE InputValue = \"" << targetString << "\";";
 
-        const auto program = factory->MakePushStreamProgram(
-            TStatelessInputSpec(),
-            TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
-            sql
-        );
+    const auto program = factory->MakePushStreamProgram(
+        TStatelessInputSpec(),
+        TProtobufOutputSpec<NPureCalcProto::TStringMessage>(),
+        sql);
 
-        const ui64 numberRows = 5;
-        const auto inputConsumer = program->Apply(MakeHolder<TStatelessConsumer>(targetString, numberRows));
-        NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+    const ui64 numberRows = 5;
+    const auto inputConsumer = program->Apply(MakeHolder<TStatelessConsumer>(targetString, numberRows));
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
 
-        const auto pushString = [&](TString inputValue) {
-            NYql::NUdf::TUnboxedValue stringValue;
-            with_lock(alloc) {
-                stringValue = NKikimr::NMiniKQL::MakeString(inputValue);
-                alloc.Ref().LockObject(stringValue);
-            }
-
-            inputConsumer->OnObject(stringValue);
-
-            with_lock(alloc) {
-                alloc.Ref().UnlockObject(stringValue);
-                stringValue.Clear();
-            }
-        };
-
-        for (ui64 i = 0; i < numberRows; ++i) {
-            pushString(targetString);
-            pushString("another large string >= 14 bytes");
+    const auto pushString = [&](TString inputValue) {
+        NYql::NUdf::TUnboxedValue stringValue;
+        with_lock (alloc) {
+            stringValue = NKikimr::NMiniKQL::MakeString(inputValue);
+            alloc.Ref().LockObject(stringValue);
         }
-        inputConsumer->OnFinish();
+
+        inputConsumer->OnObject(stringValue);
+
+        with_lock (alloc) {
+            alloc.Ref().UnlockObject(stringValue);
+            stringValue.Clear();
+        }
+    };
+
+    for (ui64 i = 0; i < numberRows; ++i) {
+        pushString(targetString);
+        pushString("another large string >= 14 bytes");
     }
+    inputConsumer->OnFinish();
 }
+} // Y_UNIT_TEST_SUITE(TestMixedAllocators)

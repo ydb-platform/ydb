@@ -126,7 +126,7 @@ class TPartitionCompaction;
 
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("tablet_id", TabletId)("partition_id", Partition)
 
-class TPartition : public TBaseActor<TPartition> {
+class TPartition : public TBaseTabletActor<TPartition> {
     friend TInitializer;
     friend TInitializerStep;
     friend TInitConfigStep;
@@ -180,7 +180,8 @@ private:
 
     bool LastOffsetHasBeenCommited(const TUserInfoBase& userInfo) const;
 
-    void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal = false);
+    TActorId ReplyTo(const ui64 destination, const TActorId& replyTo) const;
+    void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo = {});
     void ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, NWilson::TSpan& span);
     void ReplyPropose(const TActorContext& ctx, const NKikimrPQ::TEvProposeTransaction& event, NKikimrPQ::TEvProposeTransactionResult::EStatus statusCode,
                       NKikimrPQ::TError::EKind kind, const TString& reason);
@@ -246,6 +247,7 @@ private:
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
+    void Handle(TEvPQ::TEvForceCompaction::TPtr& ev);
     void Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr& ev);
     void Handle(TEvPQ::TBroadcastPartitionError::TPtr& ev, const TActorContext& ctx);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
@@ -498,6 +500,7 @@ private:
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
     TConsumerSnapshot CreateSnapshot(TUserInfo& userInfo) const;
+    bool IsKeyCompactionEnabled() const;
     void CreateCompacter();
     void SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& request);
 
@@ -595,6 +598,11 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -663,6 +671,11 @@ private:
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
+            hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
+            hFuncTraced(TEvPQ::TEvMLPChangeMessageDeadlineRequest, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -916,12 +929,15 @@ private:
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
 
+    THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
+
     // Per partition counters
     NMonitoring::TDynamicCounters::TCounterPtr WriteTimeLagMsByLastWritePerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr SourceIdCountPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr TimeSinceLastWriteMsPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr BytesWrittenPerPartition;
     NMonitoring::TDynamicCounters::TCounterPtr MessagesWrittenPerPartition;
+
 
     TInstant LastCountersUpdate;
 
@@ -1001,6 +1017,9 @@ private:
     TMultiCounter CompactionUnprocessedCount;
     TMultiCounter CompactionUnprocessedBytes;
     TMultiCounter CompactionTimeLag;
+
+    // NKikimr::NPQ::TMultiCounter KeyCompactionReadCyclesTotal;
+    // NKikimr::NPQ::TMultiCounter KeyCompactionWriteCyclesTotal;
 
     // Writing blob with topic quota variables
     ui64 TopicQuotaRequestCookie = 0;
@@ -1109,7 +1128,7 @@ private:
                         const TEvPQ::TEvBlobResponse* blobResponse,
                         const TActorContext& ctx);
 
-    void TryRunCompaction();
+    void TryRunCompaction(bool force = false);
     void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
     void BlobsForCompactionWereWrite();
     ui64 NextReadCookie();
@@ -1147,16 +1166,56 @@ private:
                               bool needToCompactiHead,
                               TEvKeyValue::TEvRequest* compactionRequest,
                               TInstant& blobCreationUnixTime,
-                              bool wasThePreviousBlobBig);
+                              bool wasThePreviousBlobBig,
+                              bool& newHeadIsInitialized);
     void RenameCompactedBlob(TDataKey& k,
                              const size_t size,
                              const bool needToCompactHead,
+                             bool& newHeadIsInitialized,
                              TProcessParametersBase& parameters,
                              TEvKeyValue::TEvRequest* compactionRequest);
 
     bool WasTheLastBlobBig = true;
 
     void DumpKeysForBlobsCompaction() const;
+
+    void TryProcessGetWriteInfoRequest(const TActorContext& ctx);
+
+    std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest> PendingGetWriteInfoRequest;
+    bool StopCompaction = false;
+    TMaybe<std::pair<ui64, ui16>> FirstCompactionPart;
+
+    void InitFirstCompactionPart();
+    bool InitNewHeadForCompaction();
+
+private:
+    void HandleOnInit(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void HandleOnInit(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    void ProcessMLPPendingEvents();
+    template<typename TEventHandle>
+    void ForwardToMLPConsumer(const TString& consumer, TAutoPtr<TEventHandle>& ev);
+
+    void InitializeMLPConsumers();
+
+    struct TMLPConsumerInfo {
+        TActorId ActorId;
+    };
+    std::unordered_map<TString, TMLPConsumerInfo> MLPConsumers;
+
+    using TMLPPendingEvent = std::variant<
+        TEvPQ::TEvMLPReadRequest::TPtr,
+        TEvPQ::TEvMLPCommitRequest::TPtr,
+        TEvPQ::TEvMLPUnlockRequest::TPtr,
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    std::deque<TMLPPendingEvent> MLPPendingEvents;
 };
 
 inline ui64 TPartition::GetStartOffset() const {

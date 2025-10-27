@@ -25,6 +25,16 @@ unsuppored_distinct_types = [
 uncomparable_types = ["Json", "JsonDocument", "Yson"]
 
 
+def numeric_sort_key(s):
+    if isinstance(s, bytes):
+        s = s.decode('utf-8')
+    if isinstance(s, str):
+        if s.startswith('String') or s.startswith('Utf8'):
+            parts = s.split(' ', 1)
+            return parts[0] + ' ' + ('%04d' % int(parts[1]))
+    return s
+
+
 class TestDML(TestBase):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
@@ -157,20 +167,24 @@ class TestDML(TestBase):
                 and type not in uncomparable_types
             ):
                 rows_distinct = self.query(f"SELECT DISTINCT col_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(all_types, type, i + 1, rows_distinct[i][0])
         for type in pk_types.keys():
             if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT pk_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(pk_types, type, i + 1, rows_distinct[i][0])
         for type in index.keys():
             if type not in unsuppored_distinct_types:
                 rows_distinct = self.query(f"SELECT DISTINCT col_index_{cleanup_type_name(type)} from {table_name}")
+                rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
                 for i in range(len(rows_distinct)):
                     dml.assert_type(index, type, i + 1, rows_distinct[i][0])
         if ttl != "" and ttl != "DyNumber":
             rows_distinct = self.query(f"SELECT DISTINCT ttl_{cleanup_type_name(ttl)} from {table_name}")
+            rows_distinct = sorted(rows_distinct, key=lambda t: numeric_sort_key(t[0]))
             for i in range(len(rows_distinct)):
                 dml.assert_type(ttl_types, ttl, i + 1, rows_distinct[i][0])
 
@@ -210,19 +224,23 @@ class TestDML(TestBase):
                 type not in unsuppored_distinct_types
                 and type not in uncomparable_types
             ):
-                for line in range(len(rows)):
-                    dml.assert_type(all_types, type, line + 1, rows[line][f"col_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(all_types, type, line + 1, sorted_rows[line][f"col_{cleanup_type_name(type)}"])
         for type in pk_types.keys():
             if type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(pk_types, type, line + 1, rows[line][f"pk_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"pk_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(pk_types, type, line + 1, sorted_rows[line][f"pk_{cleanup_type_name(type)}"])
         for type in index.keys():
             if type not in unsuppored_distinct_types:
-                for line in range(len(rows)):
-                    dml.assert_type(index, type, line + 1, rows[line][f"col_index_{cleanup_type_name(type)}"])
+                sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"col_index_{cleanup_type_name(type)}"]))
+                for line in range(len(sorted_rows)):
+                    dml.assert_type(index, type, line + 1, sorted_rows[line][f"col_index_{cleanup_type_name(type)}"])
         if ttl != "" and ttl != "DyNumber":
-            for line in range(len(rows)):
-                dml.assert_type(ttl_types, ttl, line + 1, rows[line][f"ttl_{cleanup_type_name(ttl)}"])
+            sorted_rows = sorted(rows, key=lambda t: numeric_sort_key(t[f"ttl_{cleanup_type_name(ttl)}"]))
+            for line in range(len(sorted_rows)):
+                dml.assert_type(ttl_types, ttl, line + 1, sorted_rows[line][f"ttl_{cleanup_type_name(ttl)}"])
 
     def select_with(
         self,

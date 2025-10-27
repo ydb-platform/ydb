@@ -74,6 +74,18 @@ roaring_bitmap_t *roaring_bitmap_from_range(uint64_t min, uint64_t max,
  */
 roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
 
+/**
+ * Check if the bitmap contains any shared containers.
+ */
+bool roaring_contains_shared(const roaring_bitmap_t *r);
+
+/**
+ * Unshare all shared containers.
+ * Returns true if any unsharing was performed, false if there were no shared
+ * containers.
+ */
+bool roaring_unshare_all(roaring_bitmap_t *r);
+
 /*
  * Whether you want to use copy-on-write.
  * Saves memory and avoids copies, but needs more care in a threaded context.
@@ -82,6 +94,9 @@ roaring_bitmap_t *roaring_bitmap_of_ptr(size_t n_args, const uint32_t *vals);
  * Note: If you do turn this flag to 'true', enabling COW, then ensure that you
  * do so for all of your bitmaps, since interactions between bitmaps with and
  * without COW is unsafe.
+ *
+ * When setting this flag to false, if any containers are shared, they
+ * are unshared (cloned) immediately.
  */
 inline bool roaring_bitmap_get_copy_on_write(const roaring_bitmap_t *r) {
     return r->high_low_container.flags & ROARING_FLAG_COW;
@@ -90,6 +105,9 @@ inline void roaring_bitmap_set_copy_on_write(roaring_bitmap_t *r, bool cow) {
     if (cow) {
         r->high_low_container.flags |= ROARING_FLAG_COW;
     } else {
+        if (roaring_bitmap_get_copy_on_write(r)) {
+            roaring_unshare_all(r);
+        }
         r->high_low_container.flags &= ~ROARING_FLAG_COW;
     }
 }
@@ -545,7 +563,11 @@ bool roaring_bitmap_to_bitset(const roaring_bitmap_t *r, bitset_t *bitset);
  *
  *     ans = malloc(roaring_bitmap_get_cardinality(limit) * sizeof(uint32_t));
  *
- * Return false in case of failure (e.g., insufficient memory)
+ * This function always returns `true`
+ *
+ * For more control, see `roaring_uint32_iterator_skip` and
+ * `roaring_uint32_iterator_read`, which can be used to e.g. tell how many
+ * values were actually read.
  */
 bool roaring_bitmap_range_uint32_array(const roaring_bitmap_t *r, size_t offset,
                                        size_t limit, uint32_t *ans);
@@ -1172,7 +1194,7 @@ CROARING_DEPRECATED static inline void roaring_free_uint32_iterator(
     roaring_uint32_iterator_free(it);
 }
 
-/*
+/**
  * Reads next ${count} values from iterator into user-supplied ${buf}.
  * Returns the number of read elements.
  * This number can be smaller than ${count}, which means that iterator is
@@ -1191,6 +1213,30 @@ CROARING_DEPRECATED static inline uint32_t roaring_read_uint32_iterator(
     roaring_uint32_iterator_t *it, uint32_t *buf, uint32_t count) {
     return roaring_uint32_iterator_read(it, buf, count);
 }
+
+/**
+ * Skip the next ${count} values from iterator.
+ * Returns the number of values actually skipped.
+ * The number can be smaller than ${count}, which means that iterator is
+ * drained.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_advance()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip(roaring_uint32_iterator_t *it,
+                                      uint32_t count);
+
+/**
+ * Skip the previous ${count} values from iterator (move backwards).
+ * Returns the number of values actually skipped backwards.
+ * The number can be smaller than ${count}, which means that iterator reached
+ * the beginning.
+ *
+ * This function is equivalent to calling `roaring_uint32_iterator_previous()`
+ * ${count} times but is much more efficient.
+ */
+uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t count);
 
 #ifdef __cplusplus
 }

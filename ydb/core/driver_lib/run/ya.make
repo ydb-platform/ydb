@@ -14,6 +14,7 @@ SRCS(
     driver.h
     factories.h
     factories.cpp
+    grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
     main.h
@@ -54,6 +55,7 @@ PEERDIR(
     ydb/core/cms
     ydb/core/cms/console
     ydb/core/control
+    ydb/core/counters_info
     ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils

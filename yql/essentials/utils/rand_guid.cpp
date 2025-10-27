@@ -29,4 +29,4 @@ TString TRandGuid::GenGuid() {
 ui64 TRandGuid::GenNumber() {
     return GetRnd().GenRand();
 }
-}
+} // namespace NYql

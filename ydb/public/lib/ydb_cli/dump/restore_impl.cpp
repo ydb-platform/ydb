@@ -74,6 +74,10 @@ TString ReadAsyncReplicationQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateAsyncReplication());
 }
 
+TString ReadTransferQuery(const TFsPath& fsDirPath, const TLog* log) {
+    return ReadFromFile(fsDirPath, log, NFiles::CreateTransfer());
+}
+
 TString ReadExternalDataSourceQuery(const TFsPath& fsDirPath, const TLog* log) {
     return ReadFromFile(fsDirPath, log, NFiles::CreateExternalDataSource());
 }
@@ -417,6 +421,10 @@ TRestoreResult TDelayedRestoreManager::Restore(const TDelayedRestoreCall& call) 
         case ESchemeEntryType::Replication: {
             const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
             return Client->RestoreReplication(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
+        }
+        case ESchemeEntryType::Transfer: {
+            const auto& [dbRestoreRoot, dbPathRelativeToRestoreRoot] = std::get<TDelayedRestoreCall::TTwoComponentPath>(call.DbPath);
+            return Client->RestoreTransfer(call.FsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, call.Settings);
         }
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << call.FsPath;
@@ -984,6 +992,10 @@ namespace {
             types.emplace_back(ESchemeEntryType::Replication);
         }
 
+        if (IsFileExists(path.Child(NFiles::CreateTransfer().FileName))) {
+            types.emplace_back(ESchemeEntryType::Transfer);
+        }
+
         if (IsFileExists(path.Child(NFiles::CreateExternalDataSource().FileName))) {
             types.emplace_back(ESchemeEntryType::ExternalDataSource);
         }
@@ -1174,12 +1186,6 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreTable(fsPath, dbPath, settings);
         case ESchemeEntryType::Topic:
             return RestoreTopic(fsPath, dbPath, settings);
-        case ESchemeEntryType::View:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::View, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
         case ESchemeEntryType::CoordinationNode:
             return RestoreCoordinationNode(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalTable:
@@ -1190,18 +1196,30 @@ TRestoreResult TRestoreClient::Restore(NScheme::ESchemeEntryType type, const TFs
             return RestoreExternalTable(fsPath, dbPath, settings);
         case ESchemeEntryType::ExternalDataSource:
             return RestoreExternalDataSource(fsPath, dbPath, settings);
-        case ESchemeEntryType::Replication:
-            if (delay) {
-                DelayedRestoreManager.Add(ESchemeEntryType::Replication, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
-                return Result<TRestoreResult>();
-            }
-            return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
         case ESchemeEntryType::SysView:
             return RestoreSysView(fsPath, dbPath, settings);
+
+        case ESchemeEntryType::View:
+            if (!delay) {
+                return RestoreView(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+            [[fallthrough]];
+        case ESchemeEntryType::Replication:
+            if (!delay) {
+                return RestoreReplication(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+            [[fallthrough]];
+        case ESchemeEntryType::Transfer:
+            if (!delay) {
+                return RestoreTransfer(fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            }
+
+            DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPathRelativeToRestoreRoot, settings);
+            return Result<TRestoreResult>();
+
         default:
             ythrow TBadArgumentException() << "Attempting to restore an unexpected object from: " << fsPath << ", type: " << type;
     }
-
 }
 
 TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEntry>& backupEntries, const TVector<size_t>& externalDataSources, const THashMap<TString, size_t>& externalTables, const TRestoreSettings& settings) {
@@ -1252,7 +1270,7 @@ TRestoreResult TRestoreClient::DropAndRestoreExternals(const TVector<TFsBackupEn
     return Result<TRestoreResult>();
 }
 
-TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TString& dbRestoreRoot, const TRestoreSettings& settings) {
+TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<TFsBackupEntry>& backupEntries, const THashMap<TString, size_t>& tables, const TVector<size_t>& views, const THashMap<TString, size_t>& replications, const TVector<size_t>& transfers, const TString& dbRestoreRoot, const TRestoreSettings& settings) {
     // to do: verify that no replication in the entire database (not just the restore root!) depends on the tables we are going to drop
     for (const auto& [dbPath, type] : ExistingEntries) {
         if (type == ESchemeEntryType::Replication && !replications.contains(dbPath)) {
@@ -1288,6 +1306,15 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
         }
     }
 
+    for (size_t i : transfers) {
+        const auto& [fsPath, dbPath, type] = backupEntries[i];
+        if (ExistingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
+        }
+    }
+
     // the main loop: tables are restored here
     for (const auto& [_, i] : tables) {
         const auto& [fsPath, dbPath, type] = backupEntries[i];
@@ -1312,6 +1339,11 @@ TRestoreResult TRestoreClient::DropAndRestoreTablesAndDependents(const TVector<T
         const auto& [fsPath, dbPath, type] = backupEntries[i];
         Y_ENSURE(dbPath.StartsWith(dbRestoreRoot), "dbPath must be built by appending a relative path to dbRestoreRoot");
         // views might depend on other views, so we restore them with the help of a dedicated manager
+        DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
+    }
+
+    for (size_t i : transfers) {
+        const auto& [fsPath, dbPath, type] = backupEntries[i];
         DelayedRestoreManager.Add(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings);
     }
 
@@ -1349,9 +1381,9 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     TVector<size_t> views;
     TVector<size_t> systemViews;
     THashMap<TString, size_t> replications;
+    TVector<size_t> transfers;
     TVector<size_t> externalDataSources;
     THashMap<TString, size_t> externalTables;
-
     // scheme entries that do not require special handling (i.e. cannot have dependents)
     TVector<size_t> regular;
 
@@ -1372,6 +1404,9 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
                 break;
             case ESchemeEntryType::Replication:
                 replications.emplace(dbPath, i);
+                break;
+            case ESchemeEntryType::Transfer:
+                transfers.emplace_back(i);
                 break;
             case ESchemeEntryType::View:
                 views.emplace_back(i);
@@ -1402,7 +1437,8 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, settings); !result.IsSuccess()) {
         return result;
     }
-    if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, dbRestoreRoot, settings); !result.IsSuccess()) {
+    
+    if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, transfers, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
     }
 
@@ -1540,6 +1576,49 @@ TRestoreResult TRestoreClient::RestoreReplication(
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
     if (!RewriteCreateQuery(query, "CREATE ASYNC REPLICATION `{}`", dbPath, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+
+    auto result = QueryClient.RetryQuerySync([&](NQuery::TSession session) {
+        return session.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    });
+
+    if (result.IsSuccess()) {
+        LOG_D("Created " << dbPath.Quote());
+        return RestorePermissions(fsPath, dbPath, settings, ExistingEntries.contains(dbPath), false);
+    }
+
+    LOG_E("Failed to create " << dbPath.Quote());
+    return Result<TRestoreResult>(dbPath, std::move(result));
+}
+
+TRestoreResult TRestoreClient::RestoreTransfer(
+    const TFsPath& fsPath,
+    const TString& dbRestoreRoot,
+    const TString& dbPathRelativeToRestoreRoot,
+    const TRestoreSettings& settings)
+{
+    LOG_D("Process " << fsPath.GetPath().Quote());
+
+    const TString dbPath = dbRestoreRoot + dbPathRelativeToRestoreRoot;
+    LOG_I("Restore transfer " << fsPath.GetPath().Quote() << " to " << dbPath.Quote());
+
+    if (settings.DryRun_) {
+        return CheckExistenceAndType(dbPath, ESchemeEntryType::Transfer);
+    }
+
+    auto query = ReadTransferQuery(fsPath, Log.get());
+    if (const auto secretName = GetSecretName(query)) {
+        if (auto result = CheckSecretExistence(secretName); !result.IsSuccess()) {
+            return Result<TRestoreResult>(fsPath.GetPath(), std::move(result));
+        }
+    }
+
+    NYql::TIssues issues;
+    if (!RewriteObjectRefs(query, dbRestoreRoot, issues)) {
+        return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
+    }
+    if (!RewriteCreateQuery(query, "CREATE TRANSFER `{}`", dbPath, issues)) {
         return Result<TRestoreResult>(fsPath.GetPath(), EStatus::BAD_REQUEST, issues.ToString());
     }
 
@@ -2160,6 +2239,7 @@ TRestoreResult TRestoreClient::RestoreConsumers(const TString& topicPath, const 
                 .BeginAddConsumer()
                     .ConsumerName(consumer.GetConsumerName())
                     .Important(consumer.GetImportant())
+                    .AvailabilityPeriod(consumer.GetAvailabilityPeriod())
                     .Attributes(consumer.GetAttributes())
                 .EndAddConsumer()
         ).GetValueSync();

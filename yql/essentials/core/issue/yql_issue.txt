@@ -676,6 +676,10 @@ ids {
     severity: S_WARNING
 }
 ids {
+  code: YQL_SYNTAX_AMBIGUITY
+  severity: S_WARNING
+}
+ids {
   code: CORE_LINEAGE_INTERNAL_ERROR
   severity: S_WARNING
 }
@@ -689,6 +693,10 @@ ids {
 }
 ids {
   code: CORE_SINGULAR_TYPE_ENSURE
+  severity: S_WARNING
+}
+ids {
+  code: CORE_SIMPLE_PG
   severity: S_WARNING
 }
 ids {

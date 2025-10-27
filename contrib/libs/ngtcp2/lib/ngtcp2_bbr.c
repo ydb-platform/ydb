@@ -33,6 +33,7 @@
 #include "ngtcp2_rcvry.h"
 #include "ngtcp2_rst.h"
 #include "ngtcp2_conn_stat.h"
+#include "ngtcp2_pcg.h"
 
 #define NGTCP2_BBR_MAX_BW_FILTERLEN 2
 
@@ -383,8 +384,9 @@ static void bbr_check_full_bw_reached(ngtcp2_cc_bbr *bbr,
 
   bbr->full_bw_reached = 1;
 
-  ngtcp2_log_info(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
-                  "bbr reached full bandwidth, full_bw=%" PRIu64, bbr->full_bw);
+  ngtcp2_log_infof(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
+                   "bbr reached full bandwidth, full_bw=%" PRIu64,
+                   bbr->full_bw);
 }
 
 static void bbr_check_startup_high_loss(ngtcp2_cc_bbr *bbr) {
@@ -906,15 +908,9 @@ static int bbr_is_time_to_probe_bw(ngtcp2_cc_bbr *bbr, ngtcp2_conn_stat *cstat,
 }
 
 static void bbr_pick_probe_wait(ngtcp2_cc_bbr *bbr) {
-  uint8_t rand;
-
-  bbr->rand(&rand, 1, &bbr->rand_ctx);
-
-  bbr->rounds_since_bw_probe = (uint64_t)(rand / 128);
-
-  bbr->rand(&rand, 1, &bbr->rand_ctx);
-
-  bbr->bw_probe_wait = 2 * NGTCP2_SECONDS + NGTCP2_SECONDS * rand / 255;
+  bbr->rounds_since_bw_probe = ngtcp2_pcg32_rand_n(bbr->pcg, 2);
+  bbr->bw_probe_wait =
+    2 * NGTCP2_SECONDS + ngtcp2_pcg32_rand_n(bbr->pcg, NGTCP2_SECONDS + 1);
 }
 
 static int bbr_is_reno_coexistence_probe_time(ngtcp2_cc_bbr *bbr,
@@ -1030,8 +1026,8 @@ static void bbr_update_min_rtt(ngtcp2_cc_bbr *bbr, const ngtcp2_cc_ack *ack,
     bbr->min_rtt = bbr->probe_rtt_min_delay;
     bbr->min_rtt_stamp = bbr->probe_rtt_min_stamp;
 
-    ngtcp2_log_info(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
-                    "bbr update min_rtt=%" PRIu64, bbr->min_rtt);
+    ngtcp2_log_infof(bbr->cc.log, NGTCP2_LOG_EVENT_CCA,
+                     "bbr update min_rtt=%" PRIu64, bbr->min_rtt);
   }
 }
 
@@ -1388,8 +1384,7 @@ static void bbr_cc_reset(ngtcp2_cc *cc, ngtcp2_conn_stat *cstat,
 
 void ngtcp2_cc_bbr_init(ngtcp2_cc_bbr *bbr, ngtcp2_log *log,
                         ngtcp2_conn_stat *cstat, ngtcp2_rst *rst,
-                        ngtcp2_tstamp initial_ts, ngtcp2_rand rand,
-                        const ngtcp2_rand_ctx *rand_ctx) {
+                        ngtcp2_tstamp initial_ts, ngtcp2_pcg32 *pcg) {
   *bbr = (ngtcp2_cc_bbr){
     .cc =
       {
@@ -1403,8 +1398,7 @@ void ngtcp2_cc_bbr_init(ngtcp2_cc_bbr *bbr, ngtcp2_log *log,
         .reset = bbr_cc_reset,
       },
     .rst = rst,
-    .rand = rand,
-    .rand_ctx = *rand_ctx,
+    .pcg = pcg,
     .initial_cwnd = cstat->cwnd,
   };
 

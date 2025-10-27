@@ -129,13 +129,13 @@ namespace NActors {
          * EMailboxPush::Free the mailbox is currently locked by a free list
          * and the event cannot be delivered.
          */
-        EMailboxPush Push(TAutoPtr<IEventHandle>& ev) noexcept;
+        EMailboxPush Push(std::unique_ptr<IEventHandle>& ev) noexcept;
 
         /**
          * Removes the next event from the mailbox. Returns nullptr for an
          * empty mailbox, which stays locked.
          */
-        TAutoPtr<IEventHandle> Pop() noexcept;
+        std::unique_ptr<IEventHandle> Pop() noexcept;
 
         /**
          * Counts the number of events for the given localActorId
@@ -161,7 +161,7 @@ namespace NActors {
          * is useful when an event needs to be injected at the front of the
          * queue.
          */
-        void PushFront(TAutoPtr<IEventHandle>& ev) noexcept;
+        void PushFront(std::unique_ptr<IEventHandle>&& ev) noexcept;
 
         /**
          * Returns true for free mailboxes

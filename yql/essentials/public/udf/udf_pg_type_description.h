@@ -24,5 +24,5 @@ using TPgTypeDescription = TPgTypeDescription1;
 
 UDF_ASSERT_TYPE_SIZE(TPgTypeDescription1, 40);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

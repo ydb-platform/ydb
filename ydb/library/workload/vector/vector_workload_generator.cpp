@@ -37,7 +37,7 @@ std::string TVectorWorkloadGenerator::GetDDLQueries() const {
     return std::format(R"_(--!syntax_v1
         CREATE TABLE `{0}/{1}`(
             id Uint64,
-            embedding Utf8,
+            embedding String,
             PRIMARY KEY(id))
         WITH (
             AUTO_PARTITIONING_BY_SIZE = ENABLED,

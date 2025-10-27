@@ -1,7 +1,7 @@
 #pragma once
 
 #include "sql_translation.h"
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 
 namespace NSQLTranslationV1 {
 
@@ -24,7 +24,7 @@ private:
     bool ValidateSelectColumns(const TVector<TNodePtr>& terms);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_column_name& node);
     bool ColumnName(TVector<TNodePtr>& keys, const TRule_without_column_name& node);
-    template<typename TRule>
+    template <typename TRule>
     bool ColumnList(TVector<TNodePtr>& keys, const TRule& node);
     bool NamedColumn(TVector<TNodePtr>& columnList, const TRule_named_column& node);
     TSourcePtr SingleSource(const TRule_single_source& node, const TVector<TString>& derivedColumns, TPosition derivedColumnsPos, bool unorderedSubquery);
@@ -43,7 +43,7 @@ private:
     };
 
     TSourcePtr SelectCore(const TRule_select_core& node, const TWriteSettings& settings, TPosition& selectPos,
-        TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
+                          TMaybe<TSelectKindPlacement> placement, TVector<TSortSpecificationPtr>& selectOpOrederBy, bool& selectOpAssumeOrderBy);
 
     bool WindowDefinition(const TRule_window_definition& node, TWinSpecs& winSpecs);
     bool WindowClause(const TRule_window_clause& node, TWinSpecs& winSpecs);
@@ -108,4 +108,4 @@ private:
     TSelectKindResult SelectKind(const TRule_select_kind_parenthesis& node, TPosition& selectPos, TMaybe<TSelectKindPlacement> placement);
 };
 
-} //namespace NSQLTranslationV1
+} // namespace NSQLTranslationV1

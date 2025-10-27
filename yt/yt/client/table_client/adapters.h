@@ -50,17 +50,17 @@ void PipeReaderToWriterByBatches(
     TCallback<void(TRowBatchReadOptions* mutableOptions, TDuration timeForBatch)> optionsUpdater = {},
     TDuration pipeDelay = TDuration::Zero());
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     IInputStream* input,
     IOutputStream* output,
     i64 bufferBlockSize);
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const NConcurrency::IAsyncInputStreamPtr& input,
     IOutputStream* output,
     i64 bufferBlockSize);
 
-void PipeInputToOutput(
+i64 PipeInputToOutput(
     const NConcurrency::IAsyncZeroCopyInputStreamPtr& input,
     IOutputStream* output);
 

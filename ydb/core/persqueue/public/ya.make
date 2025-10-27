@@ -19,8 +19,10 @@ RECURSE(
     cluster_tracker
     codecs
     counters
+    describer
     fetcher
     list_topics
+    mlp
     partition_index_generator
     partition_key_range
     write_meta

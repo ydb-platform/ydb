@@ -16,8 +16,13 @@ def test_with_scheme_uppercased():
 
 
 def test_with_scheme_for_relative_url():
-    with pytest.raises(ValueError):
-        URL("path/to").with_scheme("http")
+    """Test scheme can be set for relative URL."""
+    msg = "scheme replacement is not allowed for " "relative URLs for the http scheme"
+    with pytest.raises(ValueError, match=msg):
+        assert URL("path/to").with_scheme("http")
+
+    expected = URL("file:///absolute/path")
+    assert expected.with_scheme("file") == expected
 
 
 def test_with_scheme_invalid_type():
@@ -191,6 +196,32 @@ def test_with_port():
     assert str(url.with_port(8888)) == "http://example.com:8888"
 
 
+@pytest.mark.skip
+def test_with_default_port_normalization() -> None:
+    url = URL("http://example.com")
+    assert str(url.with_scheme("https")) == "https://example.com"
+    assert str(url.with_scheme("https").with_port(443)) == "https://example.com"
+    assert str(url.with_port(443).with_scheme("https")) == "https://example.com"
+
+
+@pytest.mark.skip
+def test_with_custom_port_normalization() -> None:
+    url = URL("http://example.com")
+    u88 = url.with_port(88)
+    assert str(u88) == "http://example.com:88"
+    assert str(u88.with_port(80)) == "http://example.com"
+    assert str(u88.with_scheme("https")) == "https://example.com:88"
+
+
+@pytest.mark.skip
+def test_with_explicit_port_normalization() -> None:
+    url = URL("http://example.com")
+    u80 = url.with_port(80)
+    assert str(u80) == "http://example.com"
+    assert str(u80.with_port(81)) == "http://example.com:81"
+    assert str(u80.with_scheme("https")) == "https://example.com:80"
+
+
 def test_with_port_with_no_port():
     url = URL("http://example.com")
     assert str(url.with_port(None)) == "http://example.com"
@@ -198,7 +229,7 @@ def test_with_port_with_no_port():
 
 def test_with_port_ipv6():
     url = URL("http://[::1]:8080/")
-    assert str(url.with_port(80)) == "http://[::1]:80/"
+    assert str(url.with_port(81)) == "http://[::1]:81/"
 
 
 def test_with_port_keeps_query_and_fragment():

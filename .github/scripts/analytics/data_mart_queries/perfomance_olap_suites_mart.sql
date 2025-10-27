@@ -72,6 +72,7 @@ $suites = SELECT
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_30') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction30,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_40') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction40,
     SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_50') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction50,
+    SUM_IF(COALESCE(CAST(JSON_VALUE(Stats, '$.satisfaction_avg_test_pool_100') AS float)), Success > 0 AND Test not in {"_Verification", "Sum"}) AS Satisfaction100,
     Min(MIN_OF(Timestamp, CAST(RunId/1000 AS Timestamp))) AS Begin,
     Max(Timestamp) AS End,
 FROM `perfomance/olap/tests_results`
@@ -101,6 +102,7 @@ SELECT
     s.Satisfaction30 * IF(s.Satisfaction30 > 1., 1.e-6, 1.) AS Satisfaction30,
     s.Satisfaction40 * IF(s.Satisfaction40 > 1., 1.e-6, 1.) AS Satisfaction40,
     s.Satisfaction50 * IF(s.Satisfaction50 > 1., 1.e-6, 1.) AS Satisfaction50,
+    s.Satisfaction100 * IF(s.Satisfaction100 > 1., 1.e-6, 1.) AS Satisfaction100,
     s.Begin AS Begin,
     s.End AS End,
     d.DiffTests AS DiffTests,

@@ -7,48 +7,46 @@
 #include <util/generic/vector.h>
 #include <util/generic/map.h>
 
-// TODO(vityaman): Migrate YDB to corrected version
-#define BindParamterIdentifier BindParameterIdentifier // NOLINT
-
 namespace NSQLHighlight {
 
-    enum class EUnitKind {
-        Keyword,
-        Punctuation,
-        QuotedIdentifier,
-        BindParameterIdentifier,
-        TypeIdentifier,
-        FunctionIdentifier,
-        Identifier,
-        Literal,
-        StringLiteral,
-        Comment,
-        Whitespace,
-        Error,
-    };
+enum class EUnitKind {
+    Keyword,
+    Punctuation,
+    QuotedIdentifier,
+    BindParameterIdentifier,
+    OptionIdentifier,
+    TypeIdentifier,
+    FunctionIdentifier,
+    Identifier,
+    Literal,
+    StringLiteral,
+    Comment,
+    Whitespace,
+    Error,
+};
 
-    struct TRangePattern {
-        TString Begin;
-        TString End;
-    };
+struct TRangePattern {
+    TString Begin;
+    TString End;
+};
 
-    struct TUnit {
-        EUnitKind Kind;
-        TVector<NSQLTranslationV1::TRegexPattern> Patterns;
-        TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
-        TMaybe<TRangePattern> RangePattern;
-        bool IsPlain = true;
-        bool IsCodeGenExcluded = false;
-    };
+struct TUnit {
+    EUnitKind Kind;
+    TVector<NSQLTranslationV1::TRegexPattern> Patterns;
+    TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
+    TMaybe<TRangePattern> RangePattern;
+    bool IsPlain = true;
+    bool IsCodeGenExcluded = false;
+};
 
-    struct THighlighting {
-        TString Name = "YQL";
-        TString Extension = "yql";
-        TVector<TUnit> Units;
-    };
+struct THighlighting {
+    TString Name = "YQL";
+    TString Extension = "yql";
+    TVector<TUnit> Units;
+};
 
-    THighlighting MakeHighlighting();
+THighlighting MakeHighlighting();
 
-    THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
+THighlighting MakeHighlighting(const NSQLReflect::TLexerGrammar& grammar);
 
 } // namespace NSQLHighlight

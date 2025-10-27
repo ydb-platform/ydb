@@ -394,6 +394,7 @@ BELONGS ya.make
         source/json.c [3:3]
         source/lifo_cache.c [3:3]
         source/linked_hash_table.c [3:3]
+        source/linux/file_direct_io.c [3:3]
         source/linux/system_info.c [3:3]
         source/log_channel.c [3:3]
         source/log_formatter.c [3:3]

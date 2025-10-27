@@ -16,8 +16,7 @@ namespace NUdf {
 //////////////////////////////////////////////////////////////////////////////
 // TStringValue
 //////////////////////////////////////////////////////////////////////////////
-class TStringValue
-{
+class TStringValue {
     friend class TUnboxedValue;
     friend class TUnboxedValuePod;
     friend class TBlockItem;
@@ -25,25 +24,31 @@ class TStringValue
 
     class TData {
         friend class TStringValue;
+
     public:
         inline TData(ui32 size, ui64 cap)
             : Size_(size)
             , Refs_(1)
             , Capacity_(cap)
-        {}
+        {
+        }
 
-        inline i32 RefCount() const { return Refs_; }
+        inline i32 RefCount() const {
+            return Refs_;
+        }
         inline void Ref() {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
-            if (Refs_ < 0)
+            if (Refs_ < 0) {
                 return;
+            }
 #endif
             Refs_++;
         }
         inline void UnRef() {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
-            if (Refs_ < 0)
+            if (Refs_ < 0) {
                 return;
+            }
 #endif
             Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             if (!--Refs_) {
@@ -56,16 +61,18 @@ class TStringValue
         }
         inline void ReleaseRef() {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
-            if (Refs_ < 0)
+            if (Refs_ < 0) {
                 return;
+            }
 #endif
             Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
             --Refs_;
         }
         inline void DeleteUnreferenced() {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 4)
-            if (Refs_ < 0)
+            if (Refs_ < 0) {
                 return;
+            }
 #endif
             if (!Refs_) {
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
@@ -76,10 +83,18 @@ class TStringValue
             }
         }
 
-        inline char* Data() const { return (char*)(this+1); }
-        inline ui32 Size() const { return Size_; }
-        inline bool Empty() const { return Size_ == 0; }
-        inline ui64 Capacity() const { return Capacity_; }
+        inline char* Data() const {
+            return (char*)(this + 1);
+        }
+        inline ui32 Size() const {
+            return Size_;
+        }
+        inline bool Empty() const {
+            return Size_ == 0;
+        }
+        inline ui64 Capacity() const {
+            return Capacity_;
+        }
 
         inline i32 LockRef() noexcept {
             Y_DEBUG_ABORT_UNLESS(Refs_ != -1);
@@ -110,23 +125,42 @@ class TStringValue
 
     private:
         ui32 Size_;
-        i32  Refs_;
+        i32 Refs_;
         ui64 Capacity_;
     };
 
     UDF_ASSERT_TYPE_SIZE(TData, 16);
 
 public:
-    inline explicit TStringValue(ui32 size): Data_(AllocateData(size, size)) {}
-    inline explicit TStringValue(TData* data): Data_(data) { Ref(); }
-    inline explicit TStringValue(TStringRef data): Data_(AllocateData(data.Size(), data.Size())) {
+    inline explicit TStringValue(ui32 size)
+        : Data_(AllocateData(size, size))
+    {
+    }
+    inline explicit TStringValue(TData* data)
+        : Data_(data)
+    {
+        Ref();
+    }
+    inline explicit TStringValue(TStringRef data)
+        : Data_(AllocateData(data.Size(), data.Size()))
+    {
         memcpy(Data_->Data(), data.Data(), data.Size());
     }
 
-    inline TStringValue(const TStringValue& rhs): Data_(rhs.Data_) { Ref(); }
-    inline TStringValue(TStringValue&& rhs): Data_(rhs.Data_) { rhs.Data_ = nullptr; }
+    inline TStringValue(const TStringValue& rhs)
+        : Data_(rhs.Data_)
+    {
+        Ref();
+    }
+    inline TStringValue(TStringValue&& rhs)
+        : Data_(rhs.Data_)
+    {
+        rhs.Data_ = nullptr;
+    }
 
-    inline ~TStringValue() { UnRef(); }
+    inline ~TStringValue() {
+        UnRef();
+    }
 
     inline TStringValue& operator=(const TStringValue& rhs) {
         if (this != &rhs) {
@@ -148,12 +182,22 @@ public:
         return *this;
     }
 
-    inline ui64 Capacity() const { return Data_->Capacity(); }
-    inline ui32 Size() const { return Data_->Size(); }
-    inline char* Data() const { return Data_->Data(); }
+    inline ui64 Capacity() const {
+        return Data_->Capacity();
+    }
+    inline ui32 Size() const {
+        return Data_->Size();
+    }
+    inline char* Data() const {
+        return Data_->Data();
+    }
 
-    inline ui32 size() const { return Data_->Size(); }
-    inline char* data() const { return Data_->Data(); }
+    inline ui32 size() const {
+        return Data_->Size();
+    }
+    inline char* data() const {
+        return Data_->Data();
+    }
 
     inline void Ref() {
         if (Data_ != nullptr) {
@@ -180,8 +224,9 @@ public:
     }
 
     bool TryExpandOn(ui32 len) {
-        if (RefCount() < 0)
-           return false;
+        if (RefCount() < 0) {
+            return false;
+        }
 
         return Data_->TryExpandOn(len);
     }
@@ -213,9 +258,9 @@ public:
         const auto alligned = AlignUp<ui64>(cap, 16ULL);
         const auto dataSize = sizeof(TData) + alligned;
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 8)
-        return ::new(UdfAllocateWithSize(dataSize)) TData(len, alligned);
+        return ::new (UdfAllocateWithSize(dataSize)) TData(len, alligned);
 #else
-        return ::new(UdfAllocate(dataSize)) TData(len, alligned);
+        return ::new (UdfAllocate(dataSize)) TData(len, alligned);
 #endif
     }
 
@@ -225,5 +270,5 @@ private:
 
 UDF_ASSERT_TYPE_SIZE(TStringValue, 8);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

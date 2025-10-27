@@ -666,7 +666,8 @@ public:
                 node.IsCallable(TDqReadWrap::CallableName()) ||
                 node.IsCallable(TDqReadWideWrap::CallableName()) ||
                 node.IsCallable(TDqReadBlockWideWrap::CallableName()) ||
-                node.IsCallable(TDqSource::CallableName())
+                node.IsCallable(TDqSource::CallableName()) ||
+                node.IsCallable(TDqLookupSourceWrap::CallableName())
             )
         )
         {
@@ -758,6 +759,7 @@ public:
         const TString tablePath = key.GetTablePath();
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
+            YQL_ENSURE(tableDesc.Metadata);
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
                     ctx.AddError(TIssue(node->Pos(ctx),

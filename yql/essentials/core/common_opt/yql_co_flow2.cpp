@@ -1994,6 +1994,47 @@ TExprNode::TPtr FilterNullMembersToSkipNullMembers(const TCoFlatMapBase& node, T
         .Build();
 }
 
+bool CheckWindowFramesFieldSubset(const TExprNodeList& calcNodes, const TStructExprType& inputItemType, const TTypeAnnotationContext& types) {
+    static const char optName[] = "CheckWindowFramesFieldSubset";
+    if (!IsOptimizerEnabled<optName>(types) || IsOptimizerDisabled<optName>(types)) {
+        return true;
+    }
+
+    for (auto calcNode : calcNodes) {
+        TCoCalcOverWindowTuple calc(calcNode);
+        for (auto frameNode : calc.Frames().Ref().Children()) {
+            YQL_ENSURE(TCoWinOnBase::Match(frameNode.Get()));
+            for (ui32 i = 1; i < frameNode->ChildrenSize(); ++i) {
+                auto kvTuple = frameNode->ChildPtr(i);
+                YQL_ENSURE(kvTuple->IsList());
+                YQL_ENSURE(2 <= kvTuple->ChildrenSize() && kvTuple->ChildrenSize() <= 3);
+
+                auto traits = kvTuple->ChildPtr(1);
+                YQL_ENSURE(traits->IsCallable({"Lag", "Lead", "RowNumber", "Rank", "DenseRank", "WindowTraits", "PercentRank", "CumeDist", "NTile"}));
+                if (traits->IsCallable("WindowTraits")) {
+                    bool isDistinct = kvTuple->ChildrenSize() == 3;
+                    if (!isDistinct) {
+                        YQL_ENSURE(traits->Head().GetTypeAnn());
+                        const TStructExprType& specItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                        if (!IsFieldSubset(specItemType, inputItemType)) {
+                            return false;
+                        }
+                    }
+                } else if (traits->IsCallable({"Lag", "Lead", "Rank", "DenseRank", "PercentRank"})) {
+                    YQL_ENSURE(traits->Head().GetTypeAnn());
+                    const TStructExprType& specItemType = *traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()
+                        ->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                    if (!IsFieldSubset(specItemType, inputItemType)) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 } // namespace
 
 void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
@@ -2889,13 +2930,22 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
+        auto input = node->Head().HeadPtr();
+        YQL_ENSURE(input->GetTypeAnn());
+        const TStructExprType& inputItemType = *input->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
         TExprNodeList parentCalcs = ExtractCalcsOverWindow(node, ctx);
+        YQL_ENSURE(optCtx.Types);
+        if (!CheckWindowFramesFieldSubset(parentCalcs, inputItemType, *optCtx.Types)) {
+            return node;
+        }
+
         TExprNodeList calcs = ExtractCalcsOverWindow(node->HeadPtr(), ctx);
         calcs.insert(calcs.end(), parentCalcs.begin(), parentCalcs.end());
 
         YQL_CLOG(DEBUG, Core) << "Fuse nested " << node->Content() << " and " << node->Head().Content();
 
-        return RebuildCalcOverWindowGroup(node->Head().Pos(), node->Head().HeadPtr(), calcs, ctx);
+        return RebuildCalcOverWindowGroup(node->Head().Pos(), std::move(input), calcs, ctx);
     };
 
     map[TCoCondense::CallableName()] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

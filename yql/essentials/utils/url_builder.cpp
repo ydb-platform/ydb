@@ -10,7 +10,7 @@ TUrlBuilder::TUrlBuilder(const TString& uri)
 }
 
 TUrlBuilder& TUrlBuilder::AddUrlParam(const TString& name, const TString& value) {
-    Params_.emplace_back(TParam {name, value});
+    Params_.emplace_back(TParam{name, value});
     return *this;
 }
 
@@ -47,4 +47,4 @@ TString TUrlBuilder::Build() const {
     return std::move(res);
 }
 
-} // NYql
+} // namespace NYql

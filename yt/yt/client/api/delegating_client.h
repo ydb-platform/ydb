@@ -35,6 +35,7 @@ public:
     DELEGATE_METHOD(const NChaosClient::IReplicationCardCachePtr&, GetReplicationCardCache, (), ())
 
     DELEGATE_METHOD(const NTransactionClient::ITimestampProviderPtr&, GetTimestampProvider, (), ())
+    DELEGATE_METHOD(const TClientOptions&, GetOptions, (), ())
 
     // Transactions
     DELEGATE_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
@@ -546,10 +547,11 @@ public:
         const TGetJobStderrOptions& options),
         (operationIdOrAlias, jobId, options))
 
-    DELEGATE_METHOD(TFuture<std::vector<TJobTraceEvent>>, GetJobTrace, (
+    DELEGATE_METHOD(TFuture<NConcurrency::IAsyncZeroCopyInputStreamPtr>, GetJobTrace, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        NJobTrackerClient::TJobId jobId,
         const TGetJobTraceOptions& options),
-        (operationIdOrAlias, options))
+        (operationIdOrAlias, jobId, options))
 
     DELEGATE_METHOD(TFuture<TSharedRef>, GetJobFailContext, (
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
@@ -828,8 +830,8 @@ public:
         const TGetQueryTrackerInfoOptions& options),
         (options))
 
-    DELEGATE_METHOD(TFuture<TGetDeclaredParametersInfoResult>, GetDeclaredParametersInfo, (
-        const TGetDeclaredParametersInfoOptions& options),
+    DELEGATE_METHOD(TFuture<TGetQueryDeclaredParametersInfoResult>, GetQueryDeclaredParametersInfo, (
+        const TGetQueryDeclaredParametersInfoOptions& options),
         (options))
 
     // Bundle Controller

@@ -9,7 +9,6 @@
 
 #include <util/system/yassert.h>
 
-
 namespace NKikimr::NMiniKQL {
 
 std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, TType* itemType) {
@@ -36,4 +35,4 @@ std::shared_ptr<arrow::Buffer> MakeEmptyBuffer() {
     return std::make_shared<arrow::Buffer>(data, 0);
 }
 
-}
+} // namespace NKikimr::NMiniKQL

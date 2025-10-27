@@ -35,7 +35,6 @@ using namespace NTabletFlatExecutor;
 // But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
-TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
@@ -3293,6 +3292,24 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
     IncCounter(COUNTER_PREPARE_COMPLETE);
 }
 
+template <typename TEvRequest>
+bool TDataShard::ShouldDelayOperation(TEvRequest& ev) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    return false;
+}
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvUploadRowsRequest::TPtr>(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvEraseRowsRequest::TPtr>(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvS3UploadRowsRequest::TPtr>(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
+
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
         for (auto& ev : DelayedProposeQueue) {
@@ -4451,21 +4468,6 @@ void TDataShard::Handle(TEvDataShard::TEvGetS3DownloadInfo::TPtr& ev, const TAct
 void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TActorContext& ctx)
 {
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
-}
-
-void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
-{
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            DelayedS3UploadRows.emplace_back().Reset(ev.Release());
-            IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
-            return;
-        }
-    }
-
-    Execute(new TTxS3UploadRows(this, ev), ctx);
 }
 
 void TDataShard::ScanComplete(NTable::EStatus,

@@ -23,20 +23,17 @@ inline bool GetDigit(char c, ui32& digit) {
     digit = 0;
     if ('0' <= c && c <= '9') {
         digit = c - '0';
-    }
-    else if ('a' <= c && c <= 'f') {
+    } else if ('a' <= c && c <= 'f') {
         digit = c - 'a' + 10;
-    }
-    else if ('A' <= c && c <= 'F') {
+    } else if ('A' <= c && c <= 'F') {
         digit = c - 'A' + 10;
-    }
-    else {
+    } else {
         return false; // non-hex character
     }
     return true;
 }
 
-template<typename T>
+template <typename T>
 inline bool IsValidUuid(const T& buf) {
     if (buf.Size() != 36) {
         return false;
@@ -57,7 +54,7 @@ inline bool IsValidUuid(const T& buf) {
     return true;
 }
 
-template<typename T>
+template <typename T>
 bool ParseUuidToArray(const T& buf, ui16* dw, bool shortForm) {
     if (buf.size() != (shortForm ? 32 : 36)) {
         return false;
@@ -99,7 +96,7 @@ bool ParseUuidToArray(const T& buf, ui16* dw, bool shortForm) {
     return true;
 }
 
-inline void UuidHalfsToBytes(char *dst, size_t dstSize, ui64 hi, ui64 low) {
+inline void UuidHalfsToBytes(char* dst, size_t dstSize, ui64 hi, ui64 low) {
     union {
         char Bytes[UUID_LEN];
         ui64 Half[2];
@@ -110,7 +107,7 @@ inline void UuidHalfsToBytes(char *dst, size_t dstSize, ui64 hi, ui64 low) {
     memcpy(dst, buf.Bytes, sizeof(buf));
 }
 
-inline void UuidBytesToHalfs(const char *str, size_t sz, ui64 &high, ui64 &low) {
+inline void UuidBytesToHalfs(const char* str, size_t sz, ui64& high, ui64& low) {
     union {
         char Bytes[UUID_LEN];
         ui64 Half[2];
@@ -121,5 +118,5 @@ inline void UuidBytesToHalfs(const char *str, size_t sz, ui64 &high, ui64 &low) 
     high = buf.Half[1];
 }
 
-}
-}
+} // namespace NUuid
+} // namespace NKikimr

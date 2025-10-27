@@ -31,6 +31,7 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/protos/memory_controller_config.pb.h>
 #include <ydb/core/scheme/scheme_type_registry.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -45,10 +46,10 @@
 #include <util/generic/xrange.h>
 #include <util/generic/ymath.h>
 
+
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-static constexpr ui64 MaxTxInFly = 10000;
 
 LWTRACE_USING(TABLET_FLAT_PROVIDER)
 
@@ -132,6 +133,7 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
+    , MaxTxInFly(AppData()->MemoryControllerConfig.GetMaxTxInFly())
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
@@ -140,7 +142,6 @@ TExecutor::TExecutor(
 {}
 
 TExecutor::~TExecutor() {
-
 }
 
 bool TExecutor::OnUnhandledException(const std::exception& e) {
@@ -190,6 +191,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_scan_broken", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_boot_nodata", true);
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_broken", true);
+    GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_exception", true);
 }
 
 void TExecutor::PassAway() {
@@ -202,6 +204,10 @@ void TExecutor::PassAway() {
 
     if (CompactionLogic) {
         CompactionLogic->Stop();
+    }
+
+    if (CommitManager) {
+        CommitManager->Stop();
     }
 
     if (Broker || Scans || Memory) {
@@ -317,19 +323,13 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
     Stats->IsAnyChannelYellowStop = !Stats->YellowStopChannels.empty();
 
     if (newMoveCount > oldMoveCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels:";
-            for (ui32 channel : Stats->YellowMoveChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current light yellow move channels: " << Stats->YellowMoveChannels;
         }
     }
     if (newStopCount > oldStopCount) {
-        if (auto line = Logger->Log(ELnLev::Debug)) {
-            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels:";
-            for (ui32 channel : Stats->YellowStopChannels) {
-                line << ' ' << channel;
-            }
+        if (auto line = Logger->Log(ELnLev::Notice)) {
+            line << NFmt::Do(*this) << " CheckYellow current yellow stop channels: " << Stats->YellowStopChannels;
         }
     }
 
@@ -347,9 +347,14 @@ void TExecutor::CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&
 }
 
 void TExecutor::SendReassignYellowChannels(const TVector<ui32> &yellowChannels) {
+    Y_ASSERT(yellowChannels);
     if (Owner->ReassignChannelsEnabled()) {
         auto* info = Owner->Info();
         if (Y_LIKELY(info) && info->HiveId) {
+            if (auto logl = Logger->Log(ELnLev::Notice)) {
+                logl << NFmt::Do(*this) << " CheckYellow reassign channels: " << yellowChannels
+                    << " tablet# " << info->TabletID << " hive# " << info->HiveId;
+            }
             Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(
                     new TEvHive::TEvReassignTabletSpace(info->TabletID, yellowChannels),
@@ -4351,6 +4356,7 @@ STFUNC(TExecutor::StateWork) {
         hFunc(NMemory::TEvMemTableCompact, Handle);
         hFunc(TEvTablet::TEvGcForStepAckResponse, Handle);
         hFunc(NBackup::TEvSnapshotCompleted, Handle);
+        hFunc(NBackup::TEvChangelogFailed, Handle);
     default:
         break;
     }
@@ -5120,26 +5126,48 @@ void TExecutor::StartBackup() {
         return;
     }
 
+    if (!CommitManager) {
+        return;
+    }
+
     const auto& backupConfig = AppData()->SystemTabletBackupConfig;
     TTabletTypes::EType tabletType = Owner->TabletType();
     ui64 tabletId = Owner->TabletID();
     const auto& scheme = Database->GetScheme();
     const auto& tables = scheme.Tables;
 
-    if (auto* writer = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType, tabletId, Generation0, scheme.GetSnapshot())) {
-        auto writerActor = Register(writer, TMailboxType::HTSwap, AppData()->IOPoolId);
+    auto* snapshotWriter = NBackup::CreateSnapshotWriter(SelfId(), backupConfig, tables, tabletType,
+        tabletId, Generation0, scheme.GetSnapshot());
+    auto* changelogWriter = NBackup::CreateChangelogWriter(SelfId(), backupConfig, tabletType,
+        tabletId, Generation0, scheme);
 
+    if (snapshotWriter && changelogWriter) {
+        CommitManager->SetBackupWriter(Register(changelogWriter, TMailboxType::HTSwap, AppData()->IOPoolId));
+
+        auto snapshotWriterActor = Register(snapshotWriter, TMailboxType::HTSwap, AppData()->IOPoolId);
         for (const auto& [tableId, table] : tables) {
            auto opts = TScanOptions().SetResourceBroker("system_tablet_backup", 10);
-           QueueScan(tableId, NBackup::CreateSnapshotScan(writerActor, tableId, table.Columns), 0, opts);
+           QueueScan(tableId, NBackup::CreateSnapshotScan(snapshotWriterActor, tableId, table.Columns), 0, opts);
         }
     }
 }
 
 void TExecutor::Handle(NBackup::TEvSnapshotCompleted::TPtr& ev) {
-    Y_ENSURE(ev->Get()->Success, ev->Get()->Error);
+    Y_ENSURE(ev->Get()->Success, "Backup snapshot failed: " + ev->Get()->Error);
     Owner->BackupSnapshotComplete(OwnerCtx());
 }
 
+void TExecutor::Handle(NBackup::TEvChangelogFailed::TPtr& ev) {
+    Y_TABLET_ERROR("Backup changelog failed: " + ev->Get()->Error);
 }
+
+}
+}
+
+template<> inline
+void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x << ' ';
+    o << "]";
 }

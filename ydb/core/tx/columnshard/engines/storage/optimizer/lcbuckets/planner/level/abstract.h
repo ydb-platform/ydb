@@ -284,6 +284,8 @@ public:
 class IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const = 0;
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const = 0;
 
 public:
     virtual ~IOverloadChecker() = default;
@@ -291,11 +293,19 @@ public:
     bool IsOverloaded(const TSimplePortionsGroupInfo& portionsData) const {
         return DoIsOverloaded(portionsData);
     }
+    
+    bool IsHighPriority(const TSimplePortionsGroupInfo& portionsData) const {
+        return DoIsHighPriority(portionsData);
+    }
 };
 
 class TNoOverloadChecker: public IOverloadChecker {
 private:
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& /*portionsData*/) const override {
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& /* portionsData */) const override {
         return false;
     }
 };
@@ -306,9 +316,23 @@ private:
     const std::optional<ui64> PortionBlobsSizeLimit;
     virtual bool DoIsOverloaded(const TSimplePortionsGroupInfo& portionsData) const override {
         if (PortionsCountLimit && *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portions count limit")("value", (ui64)portionsData.GetCount())("limit", *PortionsCountLimit);
             return true;
         }
         if (PortionBlobsSizeLimit && *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
+           AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_WRITE)
+                   ("error", "overload: portion blobs size limit")("value", (ui64)portionsData.GetBlobBytes())("limit", *PortionBlobsSizeLimit);
+            return true;
+        }
+        return false;
+    }
+    
+    virtual bool DoIsHighPriority(const TSimplePortionsGroupInfo& portionsData) const override {
+        if (PortionsCountLimit && 0.7 * *PortionsCountLimit < (ui64)portionsData.GetCount()) {
+            return true;
+        }
+        if (PortionBlobsSizeLimit && 0.7 * *PortionBlobsSizeLimit < (ui64)portionsData.GetBlobBytes()) {
             return true;
         }
         return false;
@@ -328,7 +352,7 @@ private:
     virtual ui64 DoGetWeight(bool highPriority) const = 0;
     virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
-    virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
+    virtual std::vector<TCompactionTaskData> DoGetOptimizationTasks() const = 0;
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
     virtual ui64 DoGetAffectedPortionBytes(const NArrow::TSimpleRow& from, const NArrow::TSimpleRow& to) const = 0;
 
@@ -376,6 +400,10 @@ public:
 
     bool IsOverloaded() const {
         return NextLevel && OverloadChecker->IsOverloaded(GetPortionsInfo());
+    }
+    
+    bool IsHighPriority() const {
+        return NextLevel && OverloadChecker->IsHighPriority(GetPortionsInfo());
     }
 
     bool HasData() const {
@@ -499,10 +527,13 @@ public:
         return DoGetBucketPositions(pkSchema);
     }
 
-    TCompactionTaskData GetOptimizationTask() const {
+    std::vector<TCompactionTaskData> GetOptimizationTasks() const {
         AFL_VERIFY(NextLevel);
-        TCompactionTaskData result = DoGetOptimizationTask();
-        AFL_VERIFY(!result.IsEmpty());
+        std::vector<TCompactionTaskData> result = DoGetOptimizationTasks();
+        AFL_VERIFY(!result.empty());
+        for (const auto& compactionTaskData: result) {
+            AFL_VERIFY(!compactionTaskData.IsEmpty());
+        }
         return result;
     }
 };

@@ -29,6 +29,14 @@ arrow::Status AppendCell(arrow::NumericBuilder<T>& builder, const TCell& cell) {
     return builder.Append(cell.AsValue<ui8>());
 }
 
+[[maybe_unused]] arrow::Status AppendCell(arrow::UInt8Builder& builder, const TCell& cell) {
+    if (cell.IsNull()) {
+        return builder.AppendNull();
+    }
+
+    return builder.Append(cell.AsValue<ui8>());
+}
+
 [[maybe_unused]] arrow::Status AppendCell(arrow::BinaryBuilder& builder, const TCell& cell) {
     if (cell.IsNull()) {
         return builder.AppendNull();
@@ -236,6 +244,17 @@ arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NSc
     NumRows = NumBytes = 0;
     if (!status.ok()) {
         return arrow::Status::FromArgs(schema.status().code(), "Cannot make arrow builder: ", status.ToString());
+    }
+    return arrow::Status::OK();
+}
+
+arrow::Status TArrowBatchBuilder::Start(const std::vector<std::pair<TString, NScheme::TTypeInfo>>& ydbColumns, const std::shared_ptr<arrow::Schema>& schema) {
+    YdbSchema = ydbColumns;
+    Y_VERIFY(ydbColumns.size() == (size_t)schema->num_fields());
+    auto status = arrow::RecordBatchBuilder::Make(schema, MemoryPool, RowsToReserve, &BatchBuilder);
+    NumRows = NumBytes = 0;
+    if (!status.ok()) {
+        return arrow::Status::FromArgs(status.code(), "Cannot make arrow builder: ", status.ToString());
     }
     return arrow::Status::OK();
 }

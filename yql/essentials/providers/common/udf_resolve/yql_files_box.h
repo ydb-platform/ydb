@@ -29,5 +29,5 @@ private:
 
 THolder<TFilesBox> CreateFilesBox(const TFsPath& baseDir);
 
-}
-}
+} // namespace NCommon
+} // namespace NYql

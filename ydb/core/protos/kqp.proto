@@ -660,7 +660,7 @@ message TEvStartKqpTasksRequest {
     optional NKikimrDataEvents.ELockMode LockMode = 19;
     optional string UserToken = 20;
     optional bool SupportShuttingDown = 21 [default = true];
-    
+
     reserved 15;
     reserved 16;
     reserved 18;
@@ -866,6 +866,7 @@ message TKqpTableSinkSettings {
     repeated TKqpTableSinkIndexSettings Indexes = 19;
     repeated TKqpColumnMetadataProto LookupColumns = 20;
     optional bool IsIndexImplTable = 21;
+    optional string Database = 22;
 }
 
 message TKqpStreamLookupSettings {
@@ -937,6 +938,7 @@ message TScriptExecutionOperationMeta {
     optional TRlPath RlPath = 11;
     optional bool SaveQueryPhysicalGraph = 12;
     optional bool DisableDefaultTimeout = 13;
+    optional string CheckpointId = 14;
 }
 
 // stored in column "retry_state" of .metadata/script_executions table
@@ -971,6 +973,7 @@ message TQueryPhysicalGraph {
 
     optional TPreparedQuery PreparedQuery = 1;
     repeated TTask Tasks = 2;
+    optional bool ZeroCheckpointSaved = 3;
 }
 
 /// KQP workload manager Events
@@ -1004,6 +1007,7 @@ message TStreamingQueryState {
     optional EStatus Status = 1;
     optional string CurrentExecutionId = 2;
     repeated string PreviousExecutionIds = 3;
+    optional string CheckpointId = 11;
 
     // Inflight streaming query operation info
     optional string OperationName = 4;
@@ -1015,4 +1019,5 @@ message TStreamingQueryState {
     optional string QueryText = 8;
     optional bool Run = 9;
     optional string ResourcePool = 10;
+    optional uint64 QueryTextRevision = 12;
 }

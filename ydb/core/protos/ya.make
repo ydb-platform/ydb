@@ -34,6 +34,7 @@ SRCS(
     change_exchange.proto
     channel_purpose.proto
     cms.proto
+    cluster_state_info.proto
     compaction.proto
     compile_service_config.proto
     config.proto
@@ -52,6 +53,7 @@ SRCS(
     counters_coordinator.proto
     counters_datashard.proto
     counters_hive.proto
+    counters_info.proto
     counters_kesus.proto
     counters_keyvalue.proto
     counters_mediator.proto
@@ -91,6 +93,7 @@ SRCS(
     kafka.proto
     kesus.proto
     key.proto
+    kqp_compile_settings.proto
     kqp.proto
     kqp_physical.proto
     kqp_stats.proto

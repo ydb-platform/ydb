@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/duplicates/manager.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/collections/constructors.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
+#include <ydb/core/tx/columnshard/engines/portions/written.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
 
@@ -26,8 +27,20 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
         }
         return false;
     }();
+
     const auto* source = sourceExt->GetAs<IDataSource>();
-    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
+
+    NCommon::TPortionStateAtScanStart portionState = NCommon::TPortionStateAtScanStart{
+        .Committed = true,
+        .Conflicting = false,
+        .MaxRecordSnapshot = source->GetRecordSnapshotMax()
+    };
+    if (source->GetType() == NCommon::IDataSource::EType::SimplePortion) {
+        const auto* portion = static_cast<const TPortionDataSource*>(source);
+        portionState = GetPortionStateAtScanStart(portion->GetPortionInfo());
+    }
+
+    const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < portionState.MaxRecordSnapshot || portionState.Conflicting;
 
     const bool useIndexes = false;
     const bool hasDeletions = source->GetHasDeletions();
@@ -38,7 +51,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(
             needShardingFilter = true;
         }
     }
-    const bool preventDuplicates = NeedDuplicateFiltering();
+
+    const bool preventDuplicates = NeedDuplicateFiltering() && !portionState.Conflicting;
     {
         auto& result = CacheFetchingScripts[needSnapshots ? 1 : 0][partialUsageByPK ? 1 : 0][useIndexes ? 1 : 0][needShardingFilter ? 1 : 0]
                                            [hasDeletions ? 1 : 0][preventDuplicates ? 1 : 0];
@@ -94,8 +108,12 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());
         }
-        const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
-        acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        if (const auto& chainProgram = GetReadMetadata()->GetProgram().GetGraphOptional()) {
+            acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
+        } else {
+            acc.AddFetchingStep(*GetFFColumns(), NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching);
+            acc.AddAssembleStep(*GetFFColumns(), "LAST", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Fetching, false);
+        }
         if (GetSourcesAggregationScript()) {
             acc.AddStep(std::make_shared<TUpdateAggregatedMemoryStep>());
         }
@@ -110,9 +128,18 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
-        const auto* portions = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
-        AFL_VERIFY(portions);
-        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portions->GetConstructors()));
+        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        AFL_VERIFY(casted_sources);
+        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
+        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
+        for (auto&& constructor : casted_sources->GetConstructors()) {
+            const auto info = constructor.GetPortion();
+            auto state = GetPortionStateAtScanStart(*info);
+            if (!state.Conflicting) {
+                portionsToDuplicateFilter.emplace_back(std::move(info));
+            }
+        }
+        DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }
 }
 

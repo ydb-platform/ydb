@@ -3,9 +3,9 @@
 
 #include "vdisk_performance_params.h"
 #include "blob_header_mode.h"
+#include "vdisk_events_quoter.h"
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/vdisk/repl/repl_quoter.h>
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
@@ -132,6 +132,9 @@ namespace NKikimr {
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
+        TControlWrapper HullCompFullCompPeriodSec;
+        TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper DefragThrottlerBytesRate;
         double HullCompReadBatchEfficiencyThreshold;
         ui64 AnubisOsirisMaxInFly;
         EBlobHeaderMode BlobHeaderMode;
@@ -249,6 +252,7 @@ namespace NKikimr {
         TControlWrapper DefaultHugeGarbagePerMille = 300;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
         TControlWrapper MaxChunksToDefragInflight = 10;
+        TControlWrapper GarbageThresholdToRunFullCompactionPerMille = 0;
 
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;

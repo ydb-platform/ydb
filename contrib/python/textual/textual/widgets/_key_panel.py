@@ -71,7 +71,10 @@ class BindingsTable(Static):
             action_to_bindings: defaultdict[str, list[tuple[Binding, bool, str]]]
             action_to_bindings = defaultdict(list)
             for _, binding, enabled, tooltip in table_bindings:
-                action_to_bindings[binding.action].append((binding, enabled, tooltip))
+                if not binding.system:
+                    action_to_bindings[binding.action].append(
+                        (binding, enabled, tooltip)
+                    )
 
             description_style = self.get_component_rich_style(
                 "bindings-table--description"
@@ -90,11 +93,13 @@ class BindingsTable(Static):
             get_key_display = self.app.get_key_display
             for multi_bindings in action_to_bindings.values():
                 binding, enabled, tooltip = multi_bindings[0]
-                key_display = " ".join(
-                    get_key_display(binding) for binding, _, _ in multi_bindings
+                keys_display = " ".join(
+                    dict.fromkeys(  # Remove duplicates while preserving order
+                        get_key_display(binding) for binding, _, _ in multi_bindings
+                    )
                 )
                 table.add_row(
-                    Text(key_display, style=key_style),
+                    Text(keys_display, style=key_style),
                     render_description(binding),
                 )
             if namespace != previous_namespace:
@@ -126,7 +131,7 @@ class KeyPanel(VerticalScroll, can_focus=False):
         align: center top;
 
         &> BindingsTable > .bindings-table--key {
-            color: $secondary;           
+            color: $accent;           
             text-style: bold;
             padding: 0 1;
         }

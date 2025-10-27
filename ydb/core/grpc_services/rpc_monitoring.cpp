@@ -121,12 +121,14 @@ void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
     f.RegisterActor(new TSelfCheckRPC(p.release()));
 }
 
+using TEvNodeCheckRequest = TGrpcRequestOperationCall<Ydb::Monitoring::NodeCheckRequest, Ydb::Monitoring::NodeCheckResponse>;
+
 class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {
 public:
     using TRpcRequestActor::TRpcRequestActor;
 
     THolder<NHealthCheck::TEvSelfCheckResult> Result;
-    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
 
     void Bootstrap() {
         THolder<NHealthCheck::TEvNodeCheckRequest> request = MakeHolder<NHealthCheck::TEvNodeCheckRequest>();
@@ -165,12 +167,8 @@ public:
     }
 };
 
-// void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-//     f.RegisterActor(new TNodeCheckRPC(p.release()));
-// }
-
-void TGRpcRequestProxyHandleMethods::Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx) {
-    ctx.Register(new TNodeCheckRPC(ev->Release().Release()));
+void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    f.RegisterActor(new TNodeCheckRPC(p.release()));
 }
 
 } // namespace NGRpcService

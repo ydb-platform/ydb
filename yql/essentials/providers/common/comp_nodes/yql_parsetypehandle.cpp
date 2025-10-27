@@ -13,15 +13,17 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TParseTypeHandleWrapper : public TMutableComputationNode<TParseTypeHandleWrapper> {
+class TParseTypeHandleWrapper: public TMutableComputationNode<TParseTypeHandleWrapper> {
     typedef TMutableComputationNode<TParseTypeHandleWrapper> TBaseComputation;
+
 public:
     TParseTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* str, ui32 exprCtxMutableIndex, NYql::TPosition pos)
         : TBaseComputation(mutables)
         , Str_(str)
         , ExprCtxMutableIndex_(exprCtxMutableIndex)
         , Pos_(pos)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto str = Str_->GetValue(ctx);
@@ -34,8 +36,8 @@ public:
 
         auto exprCtxPtr = GetExprContextPtr(ctx, ExprCtxMutableIndex_);
         auto astRoot = NYql::TAstNode::NewList({}, pool,
-            NYql::TAstNode::NewList({}, pool,
-                NYql::TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType));
+                                               NYql::TAstNode::NewList({}, pool,
+                                                                       NYql::TAstNode::NewLiteralAtom({}, TStringBuf("return"), pool), parsedType));
         NYql::TExprNode::TPtr exprRoot;
         if (!CompileExpr(*astRoot, exprRoot, *exprCtxPtr, nullptr, nullptr)) {
             UdfTerminate(exprCtxPtr->IssueManager.GetIssues().ToString().data());
@@ -43,6 +45,7 @@ public:
 
         // TODO: Collect type annotation directly from AST.
         NYql::TTypeAnnotationContext typesCtx;
+        typesCtx.LangVer = ctx.LangVer;
         auto callableTransformer = NYql::CreateExtCallableTypeAnnotationTransformer(typesCtx);
         auto typeTransformer = NYql::CreateTypeAnnotationTransformer(callableTransformer, typesCtx);
         if (NYql::InstantTransform(*typeTransformer, exprRoot, *exprCtxPtr) != NYql::IGraphTransformer::TStatus::Ok) {
@@ -69,5 +72,5 @@ IComputationNode* WrapParseTypeHandle(TCallable& callable, const TComputationNod
     return new TParseTypeHandleWrapper(ctx.Mutables, str, exprCtxMutableIndex, pos);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

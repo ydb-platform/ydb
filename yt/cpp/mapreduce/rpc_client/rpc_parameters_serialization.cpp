@@ -737,6 +737,9 @@ NApi::TListJobsOptions SerializeOptionsForListJobs(const TListJobsOptions& optio
     if (options.OperationIncarnation_) {
         result.OperationIncarnation = *options.OperationIncarnation_;
     }
+    if (options.MonitoringDescriptor_) {
+        result.MonitoringDescriptor = *options.MonitoringDescriptor_;
+    }
     if (options.FromTime_) {
         result.FromTime = *options.FromTime_;
     }
@@ -779,23 +782,14 @@ NApi::TListJobsOptions SerializeOptionsForListJobs(const TListJobsOptions& optio
 NApi::TGetJobTraceOptions SerializeOptionsForGetJobTrace(const TGetJobTraceOptions& options)
 {
     NApi::TGetJobTraceOptions result;
-    if (options.JobId_) {
-        result.JobId = NJobTrackerClient::TJobId(YtGuidFromUtilGuid(*options.JobId_));
-    }
     if (options.TraceId_) {
-        result.TraceId = NScheduler::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
+        result.TraceId = NJobTrackerClient::TJobTraceId(YtGuidFromUtilGuid(*options.TraceId_));
     }
     if (options.FromTime_) {
         result.FromTime = *options.FromTime_;
     }
     if (options.ToTime_) {
         result.ToTime = *options.ToTime_;
-    }
-    if (options.FromEventIndex_) {
-        result.FromEventIndex = *options.FromEventIndex_;
-    }
-    if (options.ToEventIndex_) {
-        result.ToEventIndex = *options.ToEventIndex_;
     }
     return result;
 }

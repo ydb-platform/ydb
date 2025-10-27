@@ -1,5 +1,5 @@
 #include "mkql_tooptional.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,12 +8,15 @@ namespace NMiniKQL {
 namespace {
 
 template <bool IsOptional>
-class THeadWrapper : public TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> {
+class THeadWrapper: public TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<THeadWrapper<IsOptional>> TBaseComputation;
+
 public:
     THeadWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list)
-        : TBaseComputation(mutables, kind), List(list)
-    {}
+        : TBaseComputation(mutables, kind)
+        , List(list)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         const auto& value = List->GetValue(ctx);
@@ -90,8 +93,9 @@ public:
         BranchInst::Create(done, block);
 
         block = done;
-        if (List->IsTemporaryValue())
+        if (List->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
+        }
     }
 #endif
 private:
@@ -103,12 +107,15 @@ private:
 };
 
 template <bool IsOptional>
-class TLastWrapper : public TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> {
+class TLastWrapper: public TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> {
     typedef TMutableCodegeneratorPtrNode<TLastWrapper<IsOptional>> TBaseComputation;
+
 public:
     TLastWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list)
-        : TBaseComputation(mutables, kind), List(list)
-    {}
+        : TBaseComputation(mutables, kind)
+        , List(list)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         const auto& value = List->GetValue(ctx);
@@ -119,7 +126,9 @@ public:
         } else if (const auto iter = value.GetListIterator()) {
             NUdf::TUnboxedValue result;
             if (iter.Next(result)) {
-                while (iter.Next(result)) continue;
+                while (iter.Next(result)) {
+                    continue;
+                }
                 return result.Release().MakeOptionalIf<IsOptional>();
             }
         }
@@ -201,8 +210,9 @@ public:
         BranchInst::Create(done, block);
 
         block = done;
-        if (List->IsTemporaryValue())
+        if (List->IsTemporaryValue()) {
             CleanupBoxed(list, ctx, block);
+        }
     }
 #endif
 private:
@@ -213,7 +223,7 @@ private:
     IComputationNode* const List;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapHead(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
@@ -233,5 +243,5 @@ IComputationNode* WrapLast(TCallable& callable, const TComputationNodeFactoryCon
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

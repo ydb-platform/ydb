@@ -20,10 +20,10 @@ public:
     using TAuthBase = TAuthScanBase<TOwnersScan>;
 
     TOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken)
-        : TAuthBase(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken), false, true)
+        : TAuthBase(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken), true, false, true)
     {
     }
 
@@ -57,17 +57,15 @@ protected:
             batch.Rows.emplace_back(TOwnedCellVec::Make(ref));
             cells.clear();
         }
-
-        batch.Finished = false;
     }
 };
 
 THolder<NActors::IActor> CreateOwnersScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken)
 {
-    return MakeHolder<TOwnersScan>(ownerId, scanId, sysViewInfo, tableRange, columns, std::move(userToken));
+    return MakeHolder<TOwnersScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns, std::move(userToken));
 }
 
 }

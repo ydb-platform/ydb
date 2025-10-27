@@ -32,6 +32,11 @@ KSV_ATTR = '''{_yql_row_spec={
         [subkey;[DataType;String]];
         [value;[DataType;String]]]]}}'''
 
+UNDEFINED_SANITIZER_IGNORE_STRINGS = [
+    "Failed to find UDF function",
+    "Module not loaded for script type"
+]
+
 
 def get_param(name, default=None):
     name = 'YQL_' + name.upper()
@@ -58,6 +63,11 @@ def do_custom_error_check(res, sql_query):
     assert err_string, 'Expected custom error check in test.\nTest error: %s' % res.std_err
     log('Custom error: ' + err_string)
     assert err_string in res.std_err, '"' + err_string + '" is not found in "' + res.std_err + "'"
+
+
+def skip_on_ubsan_known_failure(res_text):
+    if yatest.common.context.sanitize == 'undefined' and any(known_failure in res_text for known_failure in UNDEFINED_SANITIZER_IGNORE_STRINGS):
+        pytest.skip('An attempt to load UDF under UBSan was detected. Ignoring these tests due to problems with shared library loading under UBSan.')
 
 
 def get_gateway_cfg_suffix():
@@ -444,9 +454,6 @@ def get_tables(suite, cfg, data_path, def_attr=None, attr_postprocess=None):
     res_dir = get_yql_dir('table_')
 
     for splitted in cfg:
-        if splitted[0] == 'udf' and yatest.common.context.sanitize == 'undefined':
-            pytest.skip("udf under ubsan")
-
         if len(splitted) == 4:
             type_name, table, file_name, format_name = splitted
         elif len(splitted) == 3:
@@ -695,9 +702,12 @@ def get_mount_config_file(content=None):
 
 
 def run_command(program, cmd, tmpdir_module=None, stdin=None,
-                check_exit_code=True, env=None, stdout=None):
+                check_exit_code=True, env=None, stdout=None,
+                cwd=None):
     if tmpdir_module is None:
         tmpdir_module = tempfile.mkdtemp()
+    if cwd is None:
+        cwd = tmpdir_module
 
     stdin_stream = None
     if isinstance(stdin, six.string_types):
@@ -728,7 +738,7 @@ def run_command(program, cmd, tmpdir_module=None, stdin=None,
 
     res = yatest.common.execute(
         cmd,
-        cwd=tmpdir_module,
+        cwd=cwd,
         stdin=stdin_stream,
         stdout=stdout_stream,
         stderr=stderr_stream,

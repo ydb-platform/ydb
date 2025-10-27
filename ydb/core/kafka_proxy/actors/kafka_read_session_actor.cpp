@@ -1,4 +1,5 @@
 #include "kafka_read_session_actor.h"
+#include "kafka_read_session_utils.h"
 
 namespace NKafka {
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
@@ -100,7 +101,7 @@ void TKafkaReadSessionActor::HandleJoinGroup(TEvKafka::TEvJoinGroupRequest::TPtr
                 << "_" << "kafka";
 
             if (!supportedProtocolFound) {
-                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << SUPPORTED_ASSIGN_STRATEGY);
+                SendJoinGroupResponseFail(ctx, ev->Get()->CorrelationId, INCONSISTENT_GROUP_PROTOCOL, TStringBuilder() << "unsupported assign protocol. Must be " << ASSIGN_STRATEGY_ROUNDROBIN);
                 CloseReadSession(ctx);
                 return;
             }
@@ -231,7 +232,7 @@ void TKafkaReadSessionActor::SendJoinGroupResponseOk(const TActorContext&, ui64 
     TJoinGroupResponseData::TPtr response = std::make_shared<TJoinGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
     response->GenerationId = GenerationId;
     response->MemberId = Session;
@@ -252,7 +253,7 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
     TSyncGroupResponseData::TPtr response = std::make_shared<TSyncGroupResponseData>();
 
     response->ProtocolType = SUPPORTED_JOIN_GROUP_PROTOCOL;
-    response->ProtocolName = SUPPORTED_ASSIGN_STRATEGY;
+    response->ProtocolName = ASSIGN_STRATEGY_ROUNDROBIN;
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
@@ -323,17 +324,28 @@ bool TKafkaReadSessionActor::CheckHeartbeatIsExpired() {
     return now - LastHeartbeatTime > MaxHeartbeatTimeoutMs;
 }
 
-bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> joinGroupRequestData, THashSet<TString>& topics) {
-    auto supportedProtocolFound = false;
-    for (auto protocol: joinGroupRequestData->Protocols) {
-        KAFKA_LOG_D("JOIN_GROUP assign protocol supported by client: " << protocol.Name);
-        if (protocol.Name == SUPPORTED_ASSIGN_STRATEGY) {
-            FillTopicsFromJoinGroupMetadata(protocol.Metadata, topics);
-            supportedProtocolFound = true;
-            break;
+bool TKafkaReadSessionActor::TryFillTopicsToRead(const TMessagePtr<TJoinGroupRequestData> request, THashSet<TString>& topics) {
+    auto validProtocol = request->ProtocolType == SUPPORTED_JOIN_GROUP_PROTOCOL
+        && AnyOf(request->Protocols, [](const TJoinGroupRequestData::TJoinGroupRequestProtocol& p) {
+            return p.Name == ASSIGN_STRATEGY_ROUNDROBIN || p.Name == ASSIGN_STRATEGY_SERVER;
+        });
+    if (!validProtocol) {
+        return false;
+    }
+
+    auto result = GetSubscriptions(*request);
+    for (auto topic: result->Topics) {
+        if (topic.has_value()) {
+            KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
+
+            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
+            OriginalTopicNames[normalizedTopicName] = topic.value();
+            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
+            topics.emplace(normalizedTopicName);
         }
     }
-    return supportedProtocolFound;
+
+    return true;
 }
 
 TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBalancerIfRelease(const TActorContext& ctx) {
@@ -374,26 +386,6 @@ TConsumerProtocolAssignment TKafkaReadSessionActor::BuildAssignmentAndInformBala
     }
 
     return assignment;
-}
-
-void TKafkaReadSessionActor::FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics) {
-    TKafkaVersion version = *(TKafkaVersion*)(metadata.value().data() + sizeof(TKafkaVersion));
-
-    TBuffer buffer(metadata.value().data() + sizeof(TKafkaVersion), metadata.value().size_bytes() - sizeof(TKafkaVersion));
-    TKafkaReadable readable(buffer);
-
-    TConsumerProtocolSubscription result;
-    result.Read(readable, version);
-
-    for (auto topic: result.Topics) {
-        if (topic.has_value()) {
-            auto normalizedTopicName = NormalizePath(Context->DatabasePath, topic.value());
-            OriginalTopicNames[normalizedTopicName] = topic.value();
-            OriginalTopicNames[normalizedTopicName + "/streamImpl"] = topic.value();
-            topics.emplace(normalizedTopicName);
-            KAFKA_LOG_D("JOIN_GROUP requested topic to read: " << topic);
-        }
-    }
 }
 
 void TKafkaReadSessionActor::HandlePipeConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {

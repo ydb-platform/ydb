@@ -55,8 +55,8 @@ public:
     using TBuilderAndReader = std::pair<std::unique_ptr<NYql::NUdf::IBlockReader>, std::unique_ptr<NYql::NUdf::IArrayBuilder>>;
 
     explicit TOffsetFuzzerBase(const NYql::NUdf::TType* type,
-                                bool isTypeOptional,
-                                const TTypeEnvironment& env)
+                               bool isTypeOptional,
+                               const TTypeEnvironment& env)
         : Type_(type)
     {
         if (isTypeOptional) {
@@ -115,8 +115,8 @@ template <bool IsOptional>
 class TTupleOffsetFuzzer: public TOffsetFuzzerBase {
 public:
     TTupleOffsetFuzzer(TVector<TOffsetFuzzerBase::TPtr>&& children,
-                        const NYql::NUdf::TType* type,
-                        const TTypeEnvironment& env)
+                       const NYql::NUdf::TType* type,
+                       const TTypeEnvironment& env)
         : TOffsetFuzzerBase(type, IsOptional, env)
         , Children_(std::move(children))
     {
@@ -212,15 +212,17 @@ struct TFuzzerTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular(const NYql::NUdf::TType* type,
                                                  const TTypeEnvironment& env) {
+        Y_UNUSED(IsNull);
         return std::make_unique<TLeafOffsetFuzzer</*IsOptional=*/false>>(type, env);
     }
 };
 
 std::unique_ptr<TFuzzerTraits::TResult> MakeBlockFuzzer(const TTypeInfoHelper& typeInfoHelper,
-                                                          const NYql::NUdf::TType* type,
-                                                          const TTypeEnvironment& env) {
+                                                        const NYql::NUdf::TType* type,
+                                                        const TTypeEnvironment& env) {
     return DispatchByArrowTraits<TFuzzerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, env);
 }
 
@@ -333,10 +335,10 @@ void TFuzzerHolder::ClearFuzzers() {
 }
 
 NYql::NUdf::TUnboxedValue TFuzzerHolder::ApplyFuzzers(NYql::NUdf::TUnboxedValue input,
-                                                       ui64 fuzzIdx,
-                                                       const THolderFactory& holderFactory,
-                                                       arrow::MemoryPool& memoryPool,
-                                                       IRandomProvider& randomProvider) const {
+                                                      ui64 fuzzIdx,
+                                                      const THolderFactory& holderFactory,
+                                                      arrow::MemoryPool& memoryPool,
+                                                      IRandomProvider& randomProvider) const {
     auto it = NodeToFuzzOptions_.find(fuzzIdx);
     if (it == NodeToFuzzOptions_.end()) {
         MKQL_ENSURE(fuzzIdx == EmptyFuzzerId, "Fuzzer expected.");

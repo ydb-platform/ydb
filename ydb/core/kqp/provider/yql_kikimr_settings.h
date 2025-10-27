@@ -216,10 +216,13 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableTempTablesForUser = false;
     bool EnableOlapPushdownAggregate = false;
     bool EnableOrderOptimizaionFSM = false;
+    bool EnableBuildAggregationResultStages = false;
 
     bool EnableTopSortSelectIndex = true;
     bool EnablePointPredicateSortAutoSelectIndex = true;
     bool EnableSimpleProgramsSinglePartitionOptimization = true;
+    bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
+    bool EnableDqHashCombineByDefault = true;
 
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
@@ -232,6 +235,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableOlapPushdownProjections() const;
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
+    bool GetUseDqHashCombine() const;
 };
 
 }

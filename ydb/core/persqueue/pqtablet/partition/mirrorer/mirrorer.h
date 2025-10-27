@@ -10,7 +10,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-class TMirrorer : public TBaseActor<TMirrorer>, private TConstantLogPrefix {
+class TMirrorer : public TBaseTabletActor<TMirrorer>, private TConstantLogPrefix {
 private:
     const ui64 MAX_READ_FUTURES_STORE = 25;
     const ui64 MAX_BYTES_IN_FLIGHT = 16_MB;

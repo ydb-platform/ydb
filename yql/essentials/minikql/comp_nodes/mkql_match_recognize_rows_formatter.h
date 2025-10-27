@@ -29,11 +29,12 @@ public:
             TOutputColumnOrder outputColumnOrder,
             TComputationNodePtrVector measures,
             NYql::NMatchRecognize::ERowsPerMatch rowsPerMatch)
-        : Cache(std::make_unique<TContainerCacheOnContext>(ctx.Mutables))
-        , OutputColumnOrder(std::move(outputColumnOrder))
-        , Measures(std::move(measures))
-        , RowsPerMatch(rowsPerMatch)
-        {}
+            : Cache(std::make_unique<TContainerCacheOnContext>(ctx.Mutables))
+            , OutputColumnOrder(std::move(outputColumnOrder))
+            , Measures(std::move(measures))
+            , RowsPerMatch(rowsPerMatch)
+        {
+        }
     };
 
     explicit IRowsFormatter(const TState& state);
@@ -68,7 +69,7 @@ protected:
     }
 
     const TState& State_;
-    TNfa::TMatch Match_ {};
+    TNfa::TMatch Match_{};
     size_t CurrentRowIndex_ = Max();
 };
 

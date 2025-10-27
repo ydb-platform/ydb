@@ -28,14 +28,14 @@ TVector<TString> GenerateStringKeyColumn(i32 size, i32 seed) {
 }
 
 template <typename KeyType>
-NKikimr::NMiniKQL::TInnerJoinDescription PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup,
-                                                            TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
+NKikimr::NMiniKQL::TJoinDescription
+PrepareDescription(NKikimr::NMiniKQL::TDqSetup<false>* setup, TVector<KeyType> leftKeys, TVector<KeyType> rightKeys) {
     const int leftSize = std::ssize(leftKeys);
     const int rightSize = std::ssize(rightKeys);
-    NKikimr::NMiniKQL::TInnerJoinDescription descr;
+    NKikimr::NMiniKQL::TJoinDescription descr;
     descr.Setup = setup;
-    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) = ConvertVectorsToRuntimeTypesAndValue(
-        *setup, std::move(leftKeys), TVector<ui64>(leftSize, 111), TVector<TString>(leftSize, "meow"));
+    std::tie(descr.LeftSource.ColumnTypes, descr.LeftSource.ValuesList) =
+        ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(leftKeys), TVector<ui64>(leftSize, 111));
     std::tie(descr.RightSource.ColumnTypes, descr.RightSource.ValuesList) =
         ConvertVectorsToRuntimeTypesAndValue(*setup, std::move(rightKeys), TVector<TString>(rightSize, "woo"));
     return descr;
@@ -61,19 +61,26 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
     const TVector<const ui32> keyColumns{0};
 
     for (auto keyType : params.KeyTypes) {
-        for (auto keyPreset : params.Presets) {
-            for (auto sizes : keyPreset.Cases) {
+        for (auto flavour : params.Flavours) {
+            for (auto tableSizes : params.Preset.Sizes) {
                 NKikimr::NMiniKQL::TDqSetup<false> setup{NKikimr::NMiniKQL::GetPerfTestFactory()};
-                TInnerJoinDescription descr = [&] {
+                Y_ABORT_IF(flavour == ETestedInputFlavour::kLittleRightTable && params.Scale < 128,
+                           "little right table preset requires scale to be at least 128");
+                tableSizes.Left *= params.Scale;
+                tableSizes.Right *= params.Scale;
+                if (flavour == ETestedInputFlavour::kLittleRightTable) {
+                    tableSizes.Right /= 128;
+                }
+                TJoinDescription descr = [&] {
                     using enum ETestedJoinKeyType;
                     switch (keyType) {
                     case kString: {
-                        return PrepareDescription(&setup, GenerateStringKeyColumn(sizes.Left, 123),
-                                                  GenerateStringKeyColumn(sizes.Right, 111));
+                        return PrepareDescription(&setup, GenerateStringKeyColumn(tableSizes.Left, params.Seed),
+                                                  GenerateStringKeyColumn(tableSizes.Right, 111));
                     }
                     case kInteger: {
-                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(sizes.Left, 123),
-                                                  GenerateIntegerKeyColumn(sizes.Right, 111));
+                        return PrepareDescription(&setup, GenerateIntegerKeyColumn(tableSizes.Left, params.Seed),
+                                                  GenerateIntegerKeyColumn(tableSizes.Right, 111));
                     }
                     default:
                         Y_ABORT("unreachable");
@@ -81,33 +88,37 @@ TVector<TBenchmarkCaseResult> NKikimr::NMiniKQL::RunJoinsBench(const TBenchmarkS
                 }();
                 descr.LeftSource.KeyColumnIndexes = keyColumns;
                 descr.RightSource.KeyColumnIndexes = keyColumns;
-                for (auto algo : params.Algorithms) {
+                for (int sample = 0; sample < params.Samples; ++sample) {
 
-                    TBenchmarkCaseResult result;
-                    result.CaseName = CaseName(algo, keyType, keyPreset, sizes);
+                    for (auto algo : params.Algorithms) {
 
-                    THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
-                        ConstructInnerJoinGraphStream(algo, descr);
-                    NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
-                    std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
-                    ui32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);
-                    fetchBuff.resize(cols);
-                    Cerr << "Compute graph result for case '" << result.CaseName << "'";
+                        TBenchmarkCaseResult result;
+                        result.CaseName = CaseName(algo, keyType, flavour, params, tableSizes);
+                        THolder<NKikimr::NMiniKQL::IComputationGraph> wideStreamGraph =
+                            ConstructJoinGraphStream(EJoinKind::Inner, algo, descr);
+                        NYql::NUdf::TUnboxedValue wideStream = wideStreamGraph->GetValue();
+                        std::vector<NYql::NUdf::TUnboxedValue> fetchBuff;
+                        ui32 cols = NKikimr::NMiniKQL::ResultColumnCount(algo, descr);
+                        fetchBuff.resize(cols);
+                        Cerr << "Compute graph result for case '" << result.CaseName << "'";
 
-                    NYql::NUdf::EFetchStatus fetchStatus;
-                    i64 lineCount = 0;
-                    const ui64 timeStartMicroSeconds = ThreadCPUTime();
+                        NYql::NUdf::EFetchStatus fetchStatus;
+                        i64 lineCount = 0;
+                        const ui64 timeStartMicroSeconds = ThreadCPUTime();
 
-                    while ((fetchStatus = wideStream.WideFetch(fetchBuff.data(), cols)) !=
-                           NYql::NUdf::EFetchStatus::Finish) {
-                        if (fetchStatus == NYql::NUdf::EFetchStatus::Ok) {
-                            lineCount += LineSize(algo, {fetchBuff.data(), cols});
+                        while ((fetchStatus = wideStream.WideFetch(fetchBuff.data(), cols)) !=
+                               NYql::NUdf::EFetchStatus::Finish) {
+                            if (fetchStatus == NYql::NUdf::EFetchStatus::Ok) {
+                                lineCount += LineSize(algo, {fetchBuff.data(), cols});
+                            }
                         }
-                    }
 
-                    result.RunDuration = TDuration::MicroSeconds(ThreadCPUTime() - timeStartMicroSeconds);
-                    Cerr << ". Output line count: " << lineCount << Endl;
-                    ret.push_back(result);
+                        result.RunDuration = TDuration::MicroSeconds(ThreadCPUTime() - timeStartMicroSeconds);
+                        Cerr << Sprintf(". output line count: %i, time took: %ims.", lineCount,
+                                        result.RunDuration.MilliSeconds())
+                             << Endl;
+                        ret.push_back(result);
+                    }
                 }
             }
         }

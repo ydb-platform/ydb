@@ -1197,7 +1197,8 @@ protected:
         Request.Transactions.crop(0);
         this->Send(Target, ResponseEv.release());
 
-        {
+        const auto& poolId = GetUserRequestContext()->PoolId.empty() ? NResourcePool::DEFAULT_POOL_ID : GetUserRequestContext()->PoolId;
+        if (!GetUserRequestContext()->DatabaseId.empty() && (poolId != NResourcePool::DEFAULT_POOL_ID || AccountDefaultPoolInScheduler)) {
             auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
             removeQueryEvent->QueryId = TxId;
             this->Send(MakeKqpSchedulerServiceId(SelfId().NodeId()), removeQueryEvent.Release());

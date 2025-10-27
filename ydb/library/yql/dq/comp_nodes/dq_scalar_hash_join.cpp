@@ -64,7 +64,7 @@ template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<
                          IComputationWideFlowNode* rightFlow, const std::vector<ui32>& leftKeyColumns,
                          const std::vector<ui32>& rightKeyColumns, const std::vector<TType*>& leftColumnTypes,
                          const std::vector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName,
-                         TDqRenames renames)
+                         TDqUserRenames renames)
         : NKikimr::NMiniKQL::TComputationValue<TScalarHashJoinState>(memInfo)
         , Join_(memInfo, TScalarRowSource{leftFlow, leftColumnTypes}, TScalarRowSource{rightFlow, rightColumnTypes},
                 TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightColumnTypes},
@@ -113,7 +113,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
                            TVector<TType*>&& leftColumnTypes,
                            TVector<ui32>&& leftKeyColumns,
                            TVector<TType*>&& rightColumnTypes,
-                           TVector<ui32>&& rightKeyColumns, TDqRenames renames)
+                           TVector<ui32>&& rightKeyColumns, TDqUserRenames renames)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)
@@ -155,7 +155,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
     const TVector<ui32> LeftKeyColumns_;
     const TVector<TType*> RightColumnTypes_;
     const TVector<ui32> RightKeyColumns_;
-    const TDqRenames Renames_;
+    const TDqUserRenames Renames_;
 };
 
 } // namespace
@@ -216,7 +216,7 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
     MKQL_ENSURE(rightFlow, "Expected WideFlow as a right input");
     MKQL_ENSURE(joinKind == EJoinKind::Inner, "Only inner is supported, see gh#26780 for details.");
 
-    TDqRenames renames =
+    TDqUserRenames renames =
         FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     ValidateRenames(renames, joinKind, std::ssize(leftFlowItems), std::ssize(rightFlowItems));
     return new TScalarHashJoinWrapper<EJoinKind::Inner>(ctx.Mutables, leftFlow, rightFlow, std::move(joinItems),

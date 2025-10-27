@@ -52,21 +52,21 @@ bool ForceLeftOptional(EJoinKind kind) {
     }
 }
 
-void ValidateRenames(const TDqRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth) {
+void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth) {
     if (LeftSemiOrOnly(kind)) {
-        MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide& data) {
-                        return data.Side == JoinSide::kRight;
+        MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide<EJoinSide>& data) {
+                        return data.Side == EJoinSide::kRight;
                     }) == renames.end(), "right side tuple in left semi or inner join renames?");
     }
     if (RightSemiOrOnly(kind)) {
-        MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide& data) {
-                        return data.Side == JoinSide::kLeft;
+        MKQL_ENSURE(std::find_if(renames.begin(), renames.end(), [&](const TIndexAndSide<EJoinSide>& data) {
+                        return data.Side == EJoinSide::kLeft;
                     }) == renames.end(), "right side tuple in right semi or inner join renames?");
     }
 
     for (TIndexAndSide rename : renames) {
         MKQL_ENSURE(rename.Index >= 0, "column index negative");
-        if (rename.Side == JoinSide::kLeft) {
+        if (rename.Side == EJoinSide::kLeft) {
             MKQL_ENSURE(rename.Index < leftTypesWidth, "column index too big");
         } else {
             MKQL_ENSURE(rename.Index < rightTypesWidth, "column index too big");
@@ -81,30 +81,30 @@ void Print(auto arr) {
     Cout << Endl;
 }
 
-TDqRenames FromGraceFormat(const TGraceJoinRenames& graceJoinRenames) {
-    TDqRenames map;
-    map.resize((graceJoinRenames.Left.size() + graceJoinRenames.Right.size()) / 2, {-1, JoinSide::kLeft});
+TDqUserRenames FromGraceFormat(const TGraceJoinRenames& graceJoinRenames) {
+    TDqUserRenames map;
+    map.resize((graceJoinRenames.Left.size() + graceJoinRenames.Right.size()) / 2, {-1, EJoinSide::kLeft});
     MKQL_ENSURE(graceJoinRenames.Left.size() % 2 == 0,
                 "grace join renames arrays go in pairs, left array has incorrect size");
     MKQL_ENSURE(graceJoinRenames.Right.size() % 2 == 0,
                 "grace join renames arrays go in pairs, right array has incorrect size");
     for (int index = 0; index < std::ssize(graceJoinRenames.Left); index += 2) {
         MKQL_ENSURE(map[graceJoinRenames.Left[index + 1]].Index == -1, "duplicate output column in grace join renames");
-        map[graceJoinRenames.Left[index + 1]] = {int(graceJoinRenames.Left[index]), JoinSide::kLeft};
+        map[graceJoinRenames.Left[index + 1]] = {int(graceJoinRenames.Left[index]), EJoinSide::kLeft};
     }
     for (int index = 0; index < std::ssize(graceJoinRenames.Right); index += 2) {
         MKQL_ENSURE(map[graceJoinRenames.Right[index + 1]].Index == -1,
                     "duplicate output column in grace join renames");
-        map[graceJoinRenames.Right[index + 1]] = {int(graceJoinRenames.Right[index]), JoinSide::kRight};
+        map[graceJoinRenames.Right[index + 1]] = {int(graceJoinRenames.Right[index]), EJoinSide::kRight};
     }
     return map;
 }
 
-TGraceJoinRenames TGraceJoinRenames::FromDq(const TDqRenames& dqJoinRenames) {
+TGraceJoinRenames TGraceJoinRenames::FromDq(const TDqUserRenames& dqJoinRenames) {
     TGraceJoinRenames renames;
     for (int index = 0; index < std::ssize(dqJoinRenames); ++index) {
         auto& dest = dqJoinRenames[index];
-        if (dest.Side == JoinSide::kLeft) {
+        if (dest.Side == EJoinSide::kLeft) {
             renames.Left.push_back(dest.Index);
             renames.Left.push_back(index);
         } else {

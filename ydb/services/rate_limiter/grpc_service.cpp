@@ -3,7 +3,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_ratelimiter.h>
-#include "ydb/library/grpc/server/grpc_method_setup.h"
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NQuoter {
 

@@ -4,7 +4,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_keyvalue.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
-#include "ydb/library/grpc/server/grpc_method_setup.h"
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 

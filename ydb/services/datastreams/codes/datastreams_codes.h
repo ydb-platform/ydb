@@ -3,7 +3,7 @@
 #include <util/system/types.h>
 
 
-namespace NKikimr::NSqsTopic {
+namespace NYds {
 
 enum class EErrorCodes : size_t {
     // Server statuses

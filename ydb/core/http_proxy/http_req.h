@@ -2,7 +2,7 @@
 
 #include "events.h"
 
-#include <ydb/services/datastreams/datastreams_codes.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 

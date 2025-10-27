@@ -1,5 +1,4 @@
 #include "sqs_topic_proxy.h"
-#include "codes.h"
 #include "utils.h"
 
 #include <ydb/services/sqs_topic/rpc_params.h>
@@ -12,7 +11,9 @@
 #include <ydb/core/protos/sqs.pb.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/services/datastreams/codes/datastreams_codes.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
+
 
 #include <ydb/services/lib/sharding/sharding.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
@@ -64,12 +65,11 @@ namespace NKikimr::NSqsTopic::V1 {
     void TGetQueueUrlActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
         if (GetRequest<TProtoRequest>(Request_.get()).queue_name().empty()) {
-
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NKikimr::NSqsTopic::EErrorCodes::INVALID_ARGUMENT),
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::MISSING_PARAMETER),
                                   "No QueueName parameter.");
         }
         if (!Request_->GetDatabaseName()) {
-            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NKikimr::NSqsTopic::EErrorCodes::INVALID_ARGUMENT),
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT),
                                   "Request without dabase is forbiden");
         }
 
@@ -120,7 +120,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
         void Bootstrap(const NActors::TActorContext& ctx) {
             TBase::Bootstrap(ctx);
-            this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NKikimr::NSqsTopic::EErrorCodes::ERROR)));
+            this->Request_->RaiseIssue(FillIssue("Method is not implemented yet", static_cast<size_t>(NYds::EErrorCodes::ERROR)));
             this->Request_->ReplyWithYdbStatus(Ydb::StatusIds::UNSUPPORTED);
             this->Die(ctx);
         }

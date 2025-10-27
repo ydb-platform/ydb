@@ -16,6 +16,7 @@ PEERDIR(
     ydb/public/api/grpc/draft
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/sdk/cpp/src/client/resources
+    ydb/services/datastreams/codes
     ydb/services/lib/actors
     ydb/services/lib/sharding
     ydb/services/persqueue_v1

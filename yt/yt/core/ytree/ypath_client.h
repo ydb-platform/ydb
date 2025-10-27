@@ -216,6 +216,7 @@ const google::protobuf::RepeatedPtrField<TProtobufString>& GetRequestAdditionalP
 const google::protobuf::RepeatedPtrField<TProtobufString>& GetOriginalRequestAdditionalPaths(const NRpc::NProto::TRequestHeader& header);
 
 void SetRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
+void RewriteRequestTargetYPath(NRpc::NProto::TRequestHeader* header, TYPathBuf path);
 
 bool IsRequestMutating(const NRpc::NProto::TRequestHeader& header);
 

@@ -2,42 +2,38 @@
 
 This section covers backup concepts and technologies available in {{ ydb-short-name }}.
 
-{{ ydb-short-name }} provides several approaches for creating backups, each designed for different use cases and requirements:
+{{ ydb-short-name }} provides several backup capabilities that can be classified in two ways: by storage type and by backup method.
 
-## Export/import {#export-import}
+## Classification by storage type {#by-storage}
 
-For large-scale data migration and portability scenarios:
+Backups can be stored in different locations depending on your requirements:
 
-- **Use cases**: Large data migration between systems, archival storage, production data transfers.
-- **Storage**: S3-compatible storage.
+|| Storage type | Backup type | Best for | How to use |
+||--------------|-------------|----------|------------|
+|| **S3-compatible storage** | Full snapshots of selected objects | Large data migration, archival, production data transfers | ydb export/import - link to [CLI docs](../reference/ydb-cli/export-import/index.md) |
+|| **File system** | Full snapshots of selected objects | Local development, testing, smaller production environments | ydb dump/restore - link to [CLI docs](../reference/ydb-cli/export-import/index.md) |
+|| **Locally in database** | Full snapshots of selected objects, incremental backups of selected objects | Production environments, large datasets | Requires backup collections - link to [backup collection docs](backup-collections.md) |
 
-## Backup/restore {#backup-restore}
+## Classification by backup method {#by-method}
 
-For local database backups and development workflows:
+Backups can be created using different methods:
 
-- **Use cases**: Local development environments, testing scenarios, smaller production environments, database cloning for local use.
-- **Storage**: Filesystem.
+|| Storage type | Best for | How to use | Limitations |
+||--------------|----------|------------|-------------|
+|| **Full snapshot** | Locally in database, s3-compatible storage, file system | One-time backups, database migration, testing, smaller production environments | ydb export/import or ydb dump/restore or link to [CLI docs](../reference/ydb-cli/export-import/index.md) | - |
+|| **Incremental backup** | Locally in database, s3-compatible storage*, file system* | Production environments, large datasets, regular backup schedules | Requires backup collections - link to [backup collection docs](backup-collections.md) | Only tables are backed up for now |
+
+\* In order to store incremental backup chain in s3-compatible storage or file system it is required to make a backup collection locally first, and then to back it up its directory using full snapshot backup.
 
 ## Backup collections {#backup-collections}
 
-For production workloads requiring incremental backups:
-
-- **Use cases**: Production environments, large datasets, regular backup schedules.
-- **Storage**: Currently supports cluster storage only. Collections are organized in a way that allows them to be exported to external storage using [export/import](../reference/ydb-cli/export-import/index.md) and dump-restore operations.
+Backup collections provide a way to organize full and incremental backups in a structured manner, enabling efficient point-in-time recovery for production workloads.
 
 Learn more:
 
 - [Backup collections concepts](backup-collections.md) - Architecture and concepts.
 - [Operations guide](../maintenance/manual/backup-collections.md) - Practical operations.
 - [Common recipes](../recipes/backup-collections.md) - Usage examples.
-
-## Choosing the right approach {#choosing-approach}
-
-| Approach | Best for | Key advantages | Considerations |
-|----------|----------|----------------|----------------|
-| **Export/import** | Large data migration, archival, production data transfers | Portability between systems, flexible formats, handles large datasets | Full snapshots only |
-| **Backup/restore** | Local development, testing, smaller production environments | Local filesystem operations, suitable for moderate data volumes | Full snapshots only, primarily for local use |
-| **Backup collections** | Production environments, large datasets | Incremental efficiency, point-in-time recovery | Requires collection setup, cluster storage only |
 
 ## See also
 

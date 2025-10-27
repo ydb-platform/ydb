@@ -35,6 +35,16 @@ CREATE BACKUP COLLECTION `shop_backups`
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
+**Parameters:**
+
+- `STORAGE` - Storage backend for backups:
+  - `'cluster'` - Store backups within the YDB cluster (currently the only supported option)
+  - Future versions may support: `'object-storage'`, `'nfs'`, or other storage backends
+
+- `INCREMENTAL_BACKUP_ENABLED` - Enable incremental backup support:
+  - `'true'` - Enable incremental backups (recommended for production)
+  - `'false'` - Only full backups allowed
+
 ## Taking backups {#taking-backups}
 
 ### Initial full backup {#initial-full-backup}
@@ -92,10 +102,15 @@ ydb operation list incbackup
 
 # Get details for specific operation
 ydb operation get <operation-id>
+```
 
-# Cancel running operation if needed
-ydb operation cancel <operation-id>
+{% note warning %}
 
+Canceling backup operations is not yet supported. The `ydb operation cancel` command will return an error for backup operations.
+
+{% endnote %}
+
+```bash
 # Browse backup collections
 ydb scheme ls .backups/collections/
 

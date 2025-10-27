@@ -4,17 +4,23 @@ Backup collections provide an advanced backup solution for YDB that organizes fu
 
 ## What are backup collections? {#what-are-backup-collections}
 
-A backup collection is a named set of coordinated backups for selected database tables. Collections organize related backups and ensure they can be restored together consistently, providing:
+A backup collection is a named set of coordinated backups for selected database objects. Collections organize related backups and ensure they can be restored together consistently, providing:
 
-- **Efficiency**: Incremental backups capture only changes since the previous backup.
+{% note info %}
+
+Currently only tables are supported. Support for other objects is planned for future releases.
+
+{% endnote %}
+
+- **Efficient incremental backups**: Collections enable incremental backups that capture only changes since the previous backup.
 - **Organization**: Related backups are grouped into logical collections.
-- **Recovery flexibility**: Enables recovery using any backup in the chain.
+- **Recovery flexibility**: Enables recovery to any point in time when one of the backups was made.
 
 ## Core concepts {#core-concepts}
 
 ### Backup collection {#backup-collection}
 
-A named container that groups backups for a specific set of database tables. Collections ensure that all included tables are backed up consistently.
+A named container that groups backups for a specific set of database objects (currently tables only). Collections ensure that all included objects are backed up consistently.
 
 ### Full backup {#full-backup}
 
@@ -32,9 +38,9 @@ An ordered sequence of backups starting with a full backup followed by zero or m
 
 ### Backup flow {#backup-flow}
 
-1. **Collection creation**: Define which tables to include and storage settings
+1. **Backup collection creation**: Define which tables to include and where to store backups
 2. **Initial full backup**: Create baseline snapshot of all tables
-3. **Regular incremental backups**: Capture ongoing changes on-demand
+3. **Incremental backups**: Capture ongoing changes (created on-demand)
 4. **Chain management**: Monitor backup chains and manage retention manually
 
 ### Storage structure {#storage-structure}
@@ -61,7 +67,7 @@ Backup collections are stored in a dedicated directory structure within the data
 
 Each backup contains:
 
-- Table schemas at backup time. (Implicitly)
+- Table schemas at backup time (stored as part of the backup metadata).
 - Data files (full or incremental changes).
 
 ### Storage backends {#storage-backends}
@@ -112,7 +118,7 @@ Incremental backups use change tracking to identify:
 
 {% endnote %}
 
-## Relationship with incremental backups {#relationship-with-incremental-backups}
+### Relation to incremental backups {#relation-to-incremental-backups}
 
 Backup collections are the foundation for incremental backup functionality:
 

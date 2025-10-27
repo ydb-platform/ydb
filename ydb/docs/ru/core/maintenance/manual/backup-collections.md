@@ -31,6 +31,16 @@ CREATE BACKUP COLLECTION `shop_backups`
 WITH ( STORAGE = 'cluster', INCREMENTAL_BACKUP_ENABLED = 'true' );
 ```
 
+**Параметры:**
+
+- `STORAGE` - Бэкенд хранения для резервных копий:
+  - `'cluster'` - Хранить резервные копии внутри кластера YDB (в настоящее время единственный поддерживаемый вариант)
+  - Будущие версии могут поддерживать: `'object-storage'`, `'nfs'` или другие бэкенды хранения
+
+- `INCREMENTAL_BACKUP_ENABLED` - Включить поддержку инкрементальных резервных копий:
+  - `'true'` - Разрешить инкрементальные резервные копии (рекомендуется для production)
+  - `'false'` - Разрешены только полные резервные копии
+
 ### Планирование коллекции {#collection-planning}
 
 Перед созданием коллекции рассмотрите:
@@ -113,10 +123,15 @@ ydb operation list incbackup
 
 # Получение подробностей о конкретной операции
 ydb operation get <operation-id>
+```
 
-# Отмена выполняющейся операции при необходимости
-ydb operation cancel <operation-id>
+{% note warning %}
 
+Отмена операций резервного копирования пока не поддерживается. Команда `ydb operation cancel` вернет ошибку для операций резервного копирования.
+
+{% endnote %}
+
+```bash
 # Просмотр коллекций резервных копий
 ydb scheme ls .backups/collections/
 

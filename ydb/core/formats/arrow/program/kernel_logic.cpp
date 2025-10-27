@@ -71,10 +71,30 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
         for (int64_t i = 0; i < binaryArray.length(); ++i) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_5")("i", i);
             auto value = binaryArray.Value(i);
+            if (value.empty()) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_6")("value", "");
+                builder.AddNull(recordIndex);
+                ++recordIndex;
+                continue;
+            }
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_6")("value", TStringBuf(value.data(), value.size()));
-            auto data = NBinaryJson::SerializeToJson(TStringBuf(value.data(), value.size()));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
-            builder.AddRecord(recordIndex, data);
+
+            auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(value.data(), value.size()));
+            auto rootCursor = reader->GetRootCursor();
+            if (rootCursor.GetType() == NBinaryJson::EContainerType::TopLevelScalar &&
+                rootCursor.GetElement(0).GetType() == NBinaryJson::EEntryType::String) {
+                auto data = rootCursor.GetElement(0).GetString();
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
+                builder.AddRecord(recordIndex, rootCursor.GetElement(0).GetString());
+            } else {
+                auto data = NBinaryJson::SerializeToJson(rootCursor);
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
+                builder.AddRecord(recordIndex, data);
+            }
+
+            // auto data = NBinaryJson::SerializeToJson(TStringBuf(value.data(), value.size()));
+            // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
+            // builder.AddRecord(recordIndex, data);
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_8");
             ++recordIndex;
         }

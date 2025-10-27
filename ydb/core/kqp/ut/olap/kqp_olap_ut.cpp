@@ -4859,7 +4859,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 CREATE TABLE `/Root/olapTable` (
-                    id Uint32 NOT NULL,
+                    id Int32 NOT NULL,
                     json_payload JsonDocument,
                     PRIMARY KEY (id)
                 )
@@ -4879,35 +4879,74 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
-
-                // VALUES
-                // (1, JsonDocument(@@{"a": "b", "c": 1}@@)),
-                // (2, JsonDocument(@@{"d": "e", "c": 2}@@));
         {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"a": "b", "c": 1, "d": 1.2, "e": true, "f": {"g": "h"}, "i": [1, 2]}@@));
+                VALUES (1, JsonDocument(@@{"a": "b", "c": 1, "d": 1.2, "e": true, "f": {"g": "h"}, "i": [1, 2], "top": {"middle": {"bottom": 42}}}@@));
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT");
-
-                // SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = "b";
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_0");
 
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
-                SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable`;
+                SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([[["1"]]])");
+            CompareYson(R"([[["1"]]])", result);
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_1");
+
+        // ok
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.c" RETURNING Int32) FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[[1]]])", result);
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_2");
+
+        // crash
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.top") FROM `/Root/olapTable` WHERE id = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[[1]]])", result);
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_3");
+
+        // array[int32] expected, array[string] got
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT js FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.c" RETURNING Int32) = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[[1]]])", result);
         }
     }
 }

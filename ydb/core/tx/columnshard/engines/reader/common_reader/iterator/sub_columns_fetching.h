@@ -178,8 +178,15 @@ private:
         } else {
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
-                i.Finish(std::make_shared<NArrow::TColumnFilter>(context.GetAccessors().GetAppliedFilter()->Slice(pos, i.GetRecordsCount())),
-                    context.GetSource());
+                const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "VLAD_DoOnDataCollected")
+                    ("records", i.GetRecordsCount())("filter", appliedFilter ? appliedFilter->DebugString() : "nullptr");
+                if (appliedFilter) {
+                    i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())),
+                        context.GetSource());
+                } else {
+                    i.Finish(nullptr, context.GetSource());
+                }
                 pos += i.GetRecordsCount();
             }
         }

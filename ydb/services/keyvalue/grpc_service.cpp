@@ -27,10 +27,10 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
 
     using namespace Ydb::KeyValue;
 
-    #define SETUP_KV_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
+    #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditModeFlags) \
         SETUP_METHOD( \
             methodName, \
-            method, \
+            methodCallback, \
             rlMode, \
             requestType, \
             keyvalue, \

@@ -40,7 +40,7 @@
     )->Run()
 
 
-// Общий макрос для настройки методов gRPC
+// Common macro for gRPC methods setup
 #define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)    \
     SETUP_RUNTIME_EVENT_METHOD(methodName, YDB_API_DEFAULT_REQUEST_TYPE(methodName), YDB_API_DEFAULT_RESPONSE_TYPE(methodName), methodCallback, rlMode, requestType, counterName, auditMode, COMMON, TGrpcRequestOperationCall, GRpcRequestProxyId_)
 

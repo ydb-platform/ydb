@@ -468,16 +468,23 @@ public:
         }
     }
 
-    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *occupancy) const {
-        return SpaceColorToStatusFlag(GetSpaceColor(owner, occupancy));
+    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *normalizedOccupancy, double *quotaUtilization = nullptr,
+            double *fairOccupancy = nullptr, double *pdiskOccupancy = nullptr) const {
+        if (quotaUtilization && IsOwnerUser(owner)) {
+            i64 used = OwnerQuota->GetUsed(owner);
+            i64 lightYellowLimit = OwnerQuota->ColorFlagLimit(owner, TColor::LIGHT_YELLOW);
+            *quotaUtilization = lightYellowLimit ? (double)(used) / lightYellowLimit : 1.0;
+        }
+        return SpaceColorToStatusFlag(GetSpaceColor(owner, normalizedOccupancy, fairOccupancy, pdiskOccupancy));
     }
 
-    TColor::E GetSpaceColor(TOwner owner, double *occupancy) const {
-        return EstimateSpaceColor(owner, 0, occupancy);
+    TColor::E GetSpaceColor(TOwner owner, double *normalizedOccupancy, double *fairOccupancy = nullptr, double *pdiskOccupancy = nullptr) const {
+        return EstimateSpaceColor(owner, 0, normalizedOccupancy, fairOccupancy, pdiskOccupancy);
     }
 
     // Estimate status flags after allocation of allocatinoSize
-    TColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {
+    TColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy,
+            double *fairOccupancy = nullptr, double *pdiskOccupancy = nullptr) const {
         if (IsOwnerUser(owner)) {
             double ownerOccupancy, sharedOccupancy;
             TColor::E ret = Min(ColorBorder, OwnerQuota->EstimateSpaceColor(owner, allocationSize, &ownerOccupancy));
@@ -486,6 +493,12 @@ public:
                 Min(ColorBorderOccupancy, ownerOccupancy), // owner occupancy can't exceed its color border top value
                 sharedOccupancy
             );
+            if (fairOccupancy) {
+                *fairOccupancy = ownerOccupancy;
+            }
+            if (pdiskOccupancy) {
+                *pdiskOccupancy = sharedOccupancy;
+            }
             return ret;
         } else {
             switch (owner) {

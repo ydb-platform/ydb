@@ -1047,6 +1047,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT(metrics.HasSlotSizeInUnits());
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(metrics.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
+            UNIT_ASSERT(metrics.HasOccupancy());
+            UNIT_ASSERT_VALUES_EQUAL(metrics.GetOccupancy(), 0.0);
         }
     }
 

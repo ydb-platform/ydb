@@ -596,19 +596,32 @@ ui32 TPDisk::GetNumActiveSlots() const {
     return Keeper.GetNumActiveSlots();
 }
 
-NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy) const {
-    double occupancy_;
+NPDisk::TStatusFlags TPDisk::GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy,
+        double *quotaUtilization, double *fairOccupancy, double *pdiskOccupancy) const {
+    double occupancy_, quotaUtilization_, fairOccupancy_, pdiskOccupancy_;
     NPDisk::TStatusFlags res;
 
     if (IsOwnerUser(ownerId)) {
-        res = Keeper.GetSpaceStatusFlags(ownerId, &occupancy_);
+        res = Keeper.GetSpaceStatusFlags(ownerId, &occupancy_, &quotaUtilization_, &fairOccupancy_, &pdiskOccupancy_);
     } else {
         TOwner keeperOwner = (ownerGroupType == EOwnerGroupType::Dynamic ? OwnerSystem : OwnerCommonStaticLog);
         res = Keeper.GetSpaceStatusFlags(keeperOwner, &occupancy_);
+        quotaUtilization_ = 0;
+        fairOccupancy_ = 0;
+        pdiskOccupancy_ = 0;
     }
 
     if (occupancy) {
         *occupancy = occupancy_;
+    }
+    if (quotaUtilization) {
+        *quotaUtilization = quotaUtilization_;
+    }
+    if (fairOccupancy) {
+        *fairOccupancy = fairOccupancy_;
+    }
+    if (pdiskOccupancy) {
+        *pdiskOccupancy = pdiskOccupancy_;
     }
 
     return res;
@@ -1589,7 +1602,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         pdiskState.SetSerialNumber(Cfg->ExpectedSerial);
         const auto& state = static_cast<NKikimrBlobStorage::TPDiskState::E>(Mon.PDiskState->Val());
         pdiskState.SetState(state);
-        
+
         // Only report size information when PDisk is not in error state
         if (*Mon.PDiskBriefState != TPDiskMon::TPDisk::Error) {
             pdiskState.SetAvailableSize(availableSize);
@@ -1606,6 +1619,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
 
         reportResult->DiskMetrics = MakeHolder<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
 
+        double pdiskOccupancy = 0.0;
         for (const auto& [vdiskId, owner] : VDiskOwners) {
             const TOwnerData &data = OwnerData[owner];
             // May be less than 0 if owner exceeded his quota
@@ -1623,9 +1637,16 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vdiskMetrics->MutableVDiskId()->ClearGroupGeneration();
             vdiskMetrics->SetAvailableSize(ownerFree);
             vdiskMetrics->SetAllocatedSize(ownerAllocated);
-            double occupancy;
-            vdiskMetrics->SetStatusFlags(Keeper.GetSpaceStatusFlags(owner, &occupancy));
-            vdiskMetrics->SetOccupancy(occupancy);
+
+            double normalizedOccupancy, fairOccupancy, quotaUtilization;
+            NPDisk::TStatusFlags statusFlags = Keeper.GetSpaceStatusFlags(owner, &normalizedOccupancy, &quotaUtilization, &fairOccupancy, &pdiskOccupancy);
+            NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor = StatusFlagToSpaceColor(statusFlags);
+            vdiskMetrics->SetStatusFlags(statusFlags);
+            vdiskMetrics->SetNormalizedOccupancy(normalizedOccupancy);
+            vdiskMetrics->SetQuotaUtilization(quotaUtilization);
+            vdiskMetrics->SetFairOccupancy(fairOccupancy);
+            vdiskMetrics->SetSpaceColor(spaceColor);
+
             auto *vslotId = vdiskMetrics->MutableVSlotId();
             vslotId->SetNodeId(PCtx->ActorSystem->NodeId);
             vslotId->SetPDiskId(PCtx->PDiskId);
@@ -1655,6 +1676,8 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         if (ExpectedSlotCount) {
             pDiskMetrics.SetSlotCount(ExpectedSlotCount);
         }
+
+        pDiskMetrics.SetOccupancy(pdiskOccupancy);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);
@@ -2172,9 +2195,9 @@ void TPDisk::SchedulerConfigure(const TConfigureScheduler &reqCfg) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
-    double occupancy;
+    double occupancy, quotaUtilization, fairOccupancy, pdiskOccupancy;
     auto result = std::make_unique<NPDisk::TEvCheckSpaceResult>(NKikimrProto::OK,
-                GetStatusFlags(evCheckSpace.Owner, evCheckSpace.OwnerGroupType, &occupancy),
+                GetStatusFlags(evCheckSpace.Owner, evCheckSpace.OwnerGroupType, &occupancy, &quotaUtilization, &fairOccupancy, &pdiskOccupancy),
                 GetFreeChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetTotalChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
                 GetUsedChunks(evCheckSpace.Owner, evCheckSpace.OwnerGroupType),
@@ -2183,6 +2206,9 @@ void TPDisk::CheckSpace(TCheckSpace &evCheckSpace) {
                 TString(),
                 GetStatusFlags(OwnerSystem, evCheckSpace.OwnerGroupType));
     result->Occupancy = occupancy;
+    result->QuotaUtilization = quotaUtilization;
+    result->FairOccupancy = fairOccupancy;
+    result->PDiskOccupancy = pdiskOccupancy;
     PCtx->ActorSystem->Send(evCheckSpace.Sender, result.release());
     Mon.CheckSpace.CountResponse();
     return;

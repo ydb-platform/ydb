@@ -277,7 +277,7 @@ namespace NActors {
 
 
         TTestActorRuntimeBase(THeSingleSystemEnv);
-        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false);
         virtual ~TTestActorRuntimeBase();
@@ -719,6 +719,7 @@ namespace NActors {
         const ui32 NodeCount;
         const ui32 DataCenterCount;
         const bool UseRealThreads;
+        const bool UseRdmaAllocator = false;
         std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)> ICCommonSetupper;
 
         ui64 LocalId;

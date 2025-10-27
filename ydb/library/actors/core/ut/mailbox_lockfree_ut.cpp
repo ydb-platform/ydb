@@ -20,8 +20,8 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         UNIT_ASSERT(m.IsEmpty());
 
         // Check that we cannot push events to free mailboxes
-        TAutoPtr<IEventHandle> ev1 = new IEventHandle(TActorId(), TActorId(), new TEvents::TEvPing);
-        IEventHandle* ev1raw = ev1.Get();
+        std::unique_ptr<IEventHandle> ev1 = std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing);
+        IEventHandle* ev1raw = ev1.get();
         UNIT_ASSERT(m.Push(ev1) == EMailboxPush::Free);
         UNIT_ASSERT(ev1);
 
@@ -31,8 +31,8 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         UNIT_ASSERT(!ev1);
 
         // Check that we pop the event we just pushed
-        TAutoPtr<IEventHandle> ev2 = m.Pop();
-        UNIT_ASSERT(ev2.Get() == ev1raw);
+        std::unique_ptr<IEventHandle> ev2 = m.Pop();
+        UNIT_ASSERT(ev2.get() == ev1raw);
 
         // Check that the mailbox is now empty
         UNIT_ASSERT(!m.Pop());
@@ -42,10 +42,10 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
 
         // Push m
         ev1 = std::move(ev2);
-        ev2 = new IEventHandle(TActorId(), TActorId(), new TEvents::TEvPing);
-        IEventHandle* ev2raw = ev2.Get();
-        TAutoPtr<IEventHandle> ev3 = new IEventHandle(TActorId(), TActorId(), new TEvents::TEvPing);
-        IEventHandle* ev3raw = ev3.Get();
+        ev2 =  std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing);
+        IEventHandle* ev2raw = ev2.get();
+        std::unique_ptr<IEventHandle> ev3 = std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing);
+        IEventHandle* ev3raw = ev3.get();
         UNIT_ASSERT(m.Push(ev1) == EMailboxPush::Locked);
         UNIT_ASSERT(!ev1);
         UNIT_ASSERT(m.Push(ev2) == EMailboxPush::Pushed);
@@ -56,12 +56,12 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
         // Switch back to free
         m.LockToFree();
 
-        TAutoPtr<IEventHandle> ev4 = new IEventHandle(TActorId(), TActorId(), new TEvents::TEvPing);
+        std::unique_ptr<IEventHandle> ev4 = std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing);
         UNIT_ASSERT(m.Push(ev4) == EMailboxPush::Free);
 
-        UNIT_ASSERT(m.Pop().Get() == ev1raw);
-        UNIT_ASSERT(m.Pop().Get() == ev2raw);
-        UNIT_ASSERT(m.Pop().Get() == ev3raw);
+        UNIT_ASSERT(m.Pop().get() == ev1raw);
+        UNIT_ASSERT(m.Pop().get() == ev2raw);
+        UNIT_ASSERT(m.Pop().get() == ev3raw);
         UNIT_ASSERT(!m.Pop());
 
         // We shouldn't be able to unlock a free mailbox
@@ -167,7 +167,7 @@ Y_UNIT_TEST_SUITE(LockFreeMailbox) {
                             // All events have been produced
                             break;
                         }
-                        TAutoPtr<IEventHandle> ev = new IEventHandle(TActorId(), TActorId(), new TEvents::TEvPing, 0, index);
+                        std::unique_ptr<IEventHandle> ev = std::make_unique<IEventHandle>(TActorId(), TActorId(), new TEvents::TEvPing, 0, index);
                         switch (mailbox.Push(ev)) {
                             case EMailboxPush::Locked:
                                 // This thread is now a consumer

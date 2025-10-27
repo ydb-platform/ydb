@@ -1898,7 +1898,8 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
                                    getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
                                    getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
 
-        # drop old
+        # Currently, deletion is not available for tables under the backup collection
+
         # try:
         #     with self.session_scope() as session:
         #         session.execute_scheme(f"DROP TABLE `{from_name}`;")
@@ -2037,6 +2038,8 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
         if extras:
             self._remove_tables([extras[0]])
 
+        # Currently, schema changes are not available for tables under the backup collection with increments enabled
+
         # with self.session_scope() as session:
         #     # add columns to initial tables
         #     try:
@@ -2137,6 +2140,8 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
 
         # Add/remove
         self._modify_data_add_and_remove(add_rows=[(50, 5000, "e1")], remove_ids=[30])
+
+        # Currently, schema changes are not available for tables under the backup collection with increments enabled
 
         # with self.session_scope() as session:
         #     # add columns to initial tables

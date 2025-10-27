@@ -9,9 +9,6 @@
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/grpc_services/rpc_scheme_base.h>
 #include <ydb/core/protos/sqs.pb.h>
-#include <ydb/core/persqueue/pqtablet/partition/partition.h>
-#include <ydb/core/persqueue/public/pq_rl_helpers.h>
-#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/services/lib/actors/pq_schema_actor.h>
@@ -26,13 +23,7 @@ using namespace NKikimrClient;
 
 namespace NKikimr::NSqsTopic::V1 {
 
-    static void SetQueueName(auto* result, const auto* request) {
-        Y_VERIFY(result != nullptr);
-        Y_VERIFY(request != nullptr);
-        const auto& queueUrl = request->queue_url();
-        auto parsedQueueUrl = ParseQueueUrl(queueUrl);
-        result->SetQueueName(std::move(parsedQueueUrl).value().TopicPath);
-    }
+
 
     template <class TRequest>
     static const TRequest& GetRequest(NGRpcService::IRequestOpCtx* ctx) {
@@ -41,6 +32,8 @@ namespace NKikimr::NSqsTopic::V1 {
         Y_ASSERT(request != nullptr);
         return dynamic_cast<const TRequest&>(*request);
     }
+
+    const TString DEFAULT_SQS_CONSUMER = "ydb-sqs-consumer";
 
     using namespace NGRpcService;
     using namespace NGRpcProxy::V1;

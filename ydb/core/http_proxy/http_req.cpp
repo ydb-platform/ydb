@@ -51,7 +51,7 @@
 #include <ydb/services/sqs_topic/grpc_service.h>
 #include <ydb/services/sqs_topic/sqs_topic_proxy.h>
 #include <ydb/services/sqs_topic/rpc_params.h>
-#include <ydb/services/sqs_topic/utils.h>
+#include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <util/generic/guid.h>
 #include <util/stream/file.h>

@@ -21,7 +21,6 @@ PEERDIR(
     ydb/services/persqueue_v1
     ydb/services/sqs_topic/queue_url
     ydb/services/ydb
-    ydb/services/ymq
 )
 
 END()

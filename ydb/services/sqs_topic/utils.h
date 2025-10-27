@@ -1,3 +1,16 @@
 #pragma once
 
-#include <ydb/services/sqs_topic/queue_url/utils.h>
+#include <util/generic/strbuf.h>
+
+
+namespace NKikimr::NSqsTopic {
+
+    struct TQueueNameWithConsumer {
+        TStringBuf TopicName;
+        TStringBuf Consumer;
+    };
+
+    TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt Y_LIFETIME_BOUND);
+
+
+}

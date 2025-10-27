@@ -489,9 +489,7 @@ class TestBoundedExecutor(unittest.TestCase):
             self.executor.submit(task, tag=tag, block=False)
         except NoResourcesAvailable:
             self.fail(
-                'Task {} should not have been blocked. Caused by:\n{}'.format(
-                    task, traceback.format_exc()
-                )
+                f'Task {task} should not have been blocked. Caused by:\n{traceback.format_exc()}'
             )
 
     def add_done_callback_to_future(self, future, fn, *args, **kwargs):

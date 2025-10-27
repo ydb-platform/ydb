@@ -11,6 +11,7 @@
 # ANY KIND, either express or implied. See the License for the specific
 # language governing permissions and limitations under the License.
 import logging
+import re
 import threading
 from io import BytesIO
 
@@ -18,7 +19,12 @@ import awscrt.http
 import awscrt.s3
 import botocore.awsrequest
 import botocore.session
-from awscrt.auth import AwsCredentials, AwsCredentialsProvider
+from awscrt.auth import (
+    AwsCredentials,
+    AwsCredentialsProvider,
+    AwsSigningAlgorithm,
+    AwsSigningConfig,
+)
 from awscrt.io import (
     ClientBootstrap,
     ClientTlsContext,
@@ -31,11 +37,18 @@ from botocore import UNSIGNED
 from botocore.compat import urlsplit
 from botocore.config import Config
 from botocore.exceptions import NoCredentialsError
+from botocore.utils import ArnParser, InvalidArnException
 
 from s3transfer.constants import MB
 from s3transfer.exceptions import TransferNotDoneError
 from s3transfer.futures import BaseTransferFuture, BaseTransferMeta
-from s3transfer.utils import CallArgs, OSUtils, get_callbacks
+from s3transfer.manager import TransferManager
+from s3transfer.utils import (
+    CallArgs,
+    OSUtils,
+    get_callbacks,
+    is_s3express_bucket,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +161,7 @@ def create_s3_crt_client(
         tls_mode=tls_mode,
         tls_connection_options=tls_connection_options,
         throughput_target_gbps=target_gbps,
+        enable_s3express=True,
     )
 
 
@@ -170,6 +184,14 @@ def _get_crt_throughput_target_gbps(provided_throughput_target_bytes=None):
 
 
 class CRTTransferManager:
+    ALLOWED_DOWNLOAD_ARGS = TransferManager.ALLOWED_DOWNLOAD_ARGS
+    ALLOWED_UPLOAD_ARGS = TransferManager.ALLOWED_UPLOAD_ARGS
+    ALLOWED_DELETE_ARGS = TransferManager.ALLOWED_DELETE_ARGS
+
+    VALIDATE_SUPPORTED_BUCKET_VALUES = True
+
+    _UNSUPPORTED_BUCKET_PATTERNS = TransferManager._UNSUPPORTED_BUCKET_PATTERNS
+
     def __init__(self, crt_s3_client, crt_request_serializer, osutil=None):
         """A transfer manager interface for Amazon S3 on CRT s3 client.
 
@@ -215,6 +237,8 @@ class CRTTransferManager:
             extra_args = {}
         if subscribers is None:
             subscribers = {}
+        self._validate_all_known_args(extra_args, self.ALLOWED_DOWNLOAD_ARGS)
+        self._validate_if_bucket_supported(bucket)
         callargs = CallArgs(
             bucket=bucket,
             key=key,
@@ -229,6 +253,8 @@ class CRTTransferManager:
             extra_args = {}
         if subscribers is None:
             subscribers = {}
+        self._validate_all_known_args(extra_args, self.ALLOWED_UPLOAD_ARGS)
+        self._validate_if_bucket_supported(bucket)
         self._validate_checksum_algorithm_supported(extra_args)
         callargs = CallArgs(
             bucket=bucket,
@@ -244,6 +270,8 @@ class CRTTransferManager:
             extra_args = {}
         if subscribers is None:
             subscribers = {}
+        self._validate_all_known_args(extra_args, self.ALLOWED_DELETE_ARGS)
+        self._validate_if_bucket_supported(bucket)
         callargs = CallArgs(
             bucket=bucket,
             key=key,
@@ -254,6 +282,27 @@ class CRTTransferManager:
 
     def shutdown(self, cancel=False):
         self._shutdown(cancel)
+
+    def _validate_if_bucket_supported(self, bucket):
+        # s3 high level operations don't support some resources
+        # (eg. S3 Object Lambda) only direct API calls are available
+        # for such resources
+        if self.VALIDATE_SUPPORTED_BUCKET_VALUES:
+            for resource, pattern in self._UNSUPPORTED_BUCKET_PATTERNS.items():
+                match = pattern.match(bucket)
+                if match:
+                    raise ValueError(
+                        f'TransferManager methods do not support {resource} '
+                        'resource. Use direct client calls instead.'
+                    )
+
+    def _validate_all_known_args(self, actual, allowed):
+        for kwarg in actual:
+            if kwarg not in allowed:
+                raise ValueError(
+                    f"Invalid extra_args key '{kwarg}', "
+                    f"must be one of: {', '.join(allowed)}"
+                )
 
     def _validate_checksum_algorithm_supported(self, extra_args):
         checksum_algorithm = extra_args.get('ChecksumAlgorithm')
@@ -807,7 +856,7 @@ class S3ClientArgsCreator:
         on_done_before_calls,
         on_done_after_calls,
     ):
-        return {
+        make_request_args = {
             'request': self._request_serializer.serialize_http_request(
                 request_type, future
             ),
@@ -819,6 +868,30 @@ class S3ClientArgsCreator:
             ),
             'on_progress': self.get_crt_callback(future, 'progress'),
         }
+
+        # For DEFAULT requests, CRT requires the official S3 operation name.
+        # So transform string like "delete_object" -> "DeleteObject".
+        if make_request_args['type'] == S3RequestType.DEFAULT:
+            make_request_args['operation_name'] = ''.join(
+                x.title() for x in request_type.split('_')
+            )
+
+        arn_handler = _S3ArnParamHandler()
+        if (
+            accesspoint_arn_details := arn_handler.handle_arn(call_args.bucket)
+        ) and accesspoint_arn_details['region'] == "":
+            # Configure our region to `*` to propogate in `x-amz-region-set`
+            # for multi-region support in MRAP accesspoints.
+            make_request_args['signing_config'] = AwsSigningConfig(
+                algorithm=AwsSigningAlgorithm.V4_ASYMMETRIC,
+                region="*",
+            )
+            call_args.bucket = accesspoint_arn_details['resource_name']
+        elif is_s3express_bucket(call_args.bucket):
+            make_request_args['signing_config'] = AwsSigningConfig(
+                algorithm=AwsSigningAlgorithm.V4_S3EXPRESS
+            )
+        return make_request_args
 
 
 class RenameTempFileHandler:
@@ -857,3 +930,41 @@ class OnBodyFileObjWriter:
 
     def __call__(self, chunk, **kwargs):
         self._fileobj.write(chunk)
+
+
+class _S3ArnParamHandler:
+    """Partial port of S3ArnParamHandler from botocore.
+
+    This is used to make a determination on MRAP accesspoints for signing
+    purposes. This should be safe to remove once we properly integrate auth
+    resolution from Botocore into the CRT transfer integration.
+    """
+
+    _RESOURCE_REGEX = re.compile(
+        r'^(?P<resource_type>accesspoint|outpost)[/:](?P<resource_name>.+)$'
+    )
+
+    def __init__(self):
+        self._arn_parser = ArnParser()
+
+    def handle_arn(self, bucket):
+        arn_details = self._get_arn_details_from_bucket(bucket)
+        if arn_details is None:
+            return
+        if arn_details['resource_type'] == 'accesspoint':
+            return arn_details
+
+    def _get_arn_details_from_bucket(self, bucket):
+        try:
+            arn_details = self._arn_parser.parse_arn(bucket)
+            self._add_resource_type_and_name(arn_details)
+            return arn_details
+        except InvalidArnException:
+            pass
+        return None
+
+    def _add_resource_type_and_name(self, arn_details):
+        match = self._RESOURCE_REGEX.match(arn_details['resource'])
+        if match:
+            arn_details['resource_type'] = match.group('resource_type')
+            arn_details['resource_name'] = match.group('resource_name')

@@ -301,9 +301,9 @@ std::optional<TStatistics<ui64>> RepeatedTest(TRepeatedTestConfig config, TLambd
     TRunningStatistics<ui64> stats;
     do {
         bool hasTimedOut = false;
-        ui64 ellapsedTime = MeasureTimeNanos([&]() { hasTimedOut = lambda(); });
+        ui64 ellapsedTime = MeasureTimeNanos([&]() { hasTimedOut = !lambda(); });
 
-        if (!hasTimedOut) {
+        if (hasTimedOut) {
             return std::nullopt;
         }
 

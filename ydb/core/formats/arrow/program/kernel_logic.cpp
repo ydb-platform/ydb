@@ -27,6 +27,7 @@ TConclusion<bool> TGetJsonPath::DoExecute(
     const std::optional<bool> applied =
         NAccessor::TCompositeChunkedArray::VisitDataOwners<bool>(accJson, [&](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
             if (arr->GetType() != IChunkedArray::EType::SubColumnsArray && arr->GetType() != IChunkedArray::EType::SubColumnsPartialArray) {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TGetJsonPath::DoExecute_return_false");
                 return std::optional<bool>(false);
             }
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TGetJsonPath::DoExecute");
@@ -42,6 +43,8 @@ TConclusion<bool> TGetJsonPath::DoExecute(
 
 std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     std::shared_ptr<IChunkedArray> accessor;
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_ExtractArray")("svPath", svPath);
+
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
         accessor = accJsonArray->GetPathAccessor(svPath, jsonAcc->GetRecordsCount());

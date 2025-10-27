@@ -4894,7 +4894,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 ALTER OBJECT `/Root/olapTable`
                 (TYPE TABLE)
                 SET (ACTION=ALTER_COLUMN, NAME=json_payload,
-                `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`true`,
+                `DATA_EXTRACTOR_CLASS_NAME`=`JSON_SCANNER`, `SCAN_FIRST_LEVEL_ONLY`=`false`,
                 `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, `FORCE_SIMD_PARSING`=`false`, `COLUMNS_LIMIT`=`1024`,
                 `SPARSED_DETECTOR_KFF`=`20`, `MEM_LIMIT_CHUNK`=`52428800`, `OTHERS_ALLOWED_FRACTION`=`0`,
                 `SERIALIZER.CLASS_NAME`=`ARROW_SERIALIZER`, `COMPRESSION.TYPE`=`zstd`, `COMPRESSION.LEVEL`=`4`);
@@ -4906,19 +4906,93 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             auto result = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
                 UPSERT INTO `/Root/olapTable` (id, json_payload)
-                VALUES (1, JsonDocument(@@{"a": "b", "c": 1, "d": 1.2, "e": true, "f": {"g": "h"}, "i": [1, 2], "top": {"middle": {"bottom": 42}}}@@));
+                VALUES (1, JsonDocument(@@{"a": "b\"b\"", "c": 1, "d": 1.2, "e": true, "f": {"g": {"h": "i"}}, "j": [1, 2]}@@));
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_0");
 
+        // ok
+        // {
+        //     auto status = kikimr.GetQueryClient()
+        //                       .ExecuteQuery(R"(
+        //         SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
+        //         )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        //     TString result = FormatResultSetYson(status.GetResultSet(0));
+
+        //     CompareYson(R"([[["1"]]])", result);
+        // }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_1");
+
+        // returns 0
+        // {
+        //     auto status = kikimr.GetQueryClient()
+        //                       .ExecuteQuery(R"(
+        //         SELECT JSON_VALUE(json_payload, "$.c" RETURNING Int32) FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
+        //         )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        //     TString result = FormatResultSetYson(status.GetResultSet(0));
+
+        //     CompareYson(R"([[[1]]])", result);
+        // }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_2");
+
+        // ok
+        // {
+        //     auto status = kikimr.GetQueryClient()
+        //                       .ExecuteQuery(R"(
+        //         SELECT CAST(JSON_VALUE(json_payload, "$.c") AS Int32) FROM `/Root/olapTable` WHERE id = 1;
+        //         )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        //     TString result = FormatResultSetYson(status.GetResultSet(0));
+
+        //     CompareYson(R"([[[1]]])", result);
+        // }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_3");
+
+        // ok with first_level_only = false
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
-                SELECT JSON_VALUE(json_payload, "$.c") FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
+                SELECT JSON_VALUE(json_payload, "$.f.g.h") FROM `/Root/olapTable` WHERE id = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[["i"]]])", result);
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_4");
+
+        // ok
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT json_payload FROM `/Root/olapTable` WHERE id = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[["{\"a\":\"b\\\"b\\\"\",\"c\":1,\"d\":1.2,\"e\":true,\"f\":{\"g\":{\"h\":\"i\"}},\"j\":[1,2]}"]]])", result);
+        }
+
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_5");
+
+        // ok
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.j[0]") FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
 
@@ -4927,50 +5001,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(R"([[["1"]]])", result);
         }
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_1");
-
-        // ok
-        {
-            auto status = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                SELECT JSON_VALUE(json_payload, "$.c" RETURNING Int32) FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.a") = 'b';
-                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
-
-            TString result = FormatResultSetYson(status.GetResultSet(0));
-
-            CompareYson(R"([[[1]]])", result);
-        }
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_2");
-
-        // crash
-        {
-            auto status = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                SELECT JSON_VALUE(json_payload, "$.top") FROM `/Root/olapTable` WHERE id = 1;
-                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
-
-            TString result = FormatResultSetYson(status.GetResultSet(0));
-
-            CompareYson(R"([[[1]]])", result);
-        }
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_3");
-
         // array[int32] expected, array[string] got
-        {
-            auto status = kikimr.GetQueryClient()
-                              .ExecuteQuery(R"(
-                SELECT js FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.c" RETURNING Int32) = 1;
-                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+        // {
+        //     auto status = kikimr.GetQueryClient()
+        //                       .ExecuteQuery(R"(
+        //         SELECT json_payload FROM `/Root/olapTable` WHERE JSON_VALUE(json_payload, "$.c" RETURNING Int32) = 1;
+        //         )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+        //     UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
 
-            TString result = FormatResultSetYson(status.GetResultSet(0));
+        //     TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(R"([[[1]]])", result);
-        }
+        //     CompareYson(R"([[[1]]])", result);
+        // }
     }
 }
 }

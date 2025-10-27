@@ -947,8 +947,16 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
             } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
                 // For fulltext indexes, we need to tokenize the text and create index rows
+                auto upsertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+                    .Connection<TDqCnUnionAll>()
+                        .Output()
+                            .Stage(ReadTableToStage(upsertIndexRows, ctx))
+                            .Index().Build("0")
+                            .Build()
+                        .Build()
+                    .Done();
                 THashSet<TStringBuf> upsertInputColumns(indexTableColumns.begin(), indexTableColumns.end());
-                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, upsertInputColumns,
+                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertRowsPrecompute, upsertInputColumns,
                     indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
             }
 

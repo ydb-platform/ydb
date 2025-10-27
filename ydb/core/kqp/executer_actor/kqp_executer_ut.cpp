@@ -17,6 +17,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         - Start query execution and receive TEvTxRequest.
         - When sending TEvAddQuery from executer to scheduler, immediately receive TEvAbortExecution.
         - Imitate receiving TEvQueryResponse before receiving self TEvPoison by executer.
+        - Check that scheduler got TEvRemoveQuery.
         - Do not crash or get undefined behavior.
      */
     Y_UNIT_TEST(TestSuddenAbortAfterReady) {
@@ -31,12 +32,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         ui8 queries = 0;
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            // TODO: remove debug logging
-            {
-                TStringStream ss;
-                ss << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl;
-                Cerr << ss.Str();
-            }
+            Cerr << (TStringBuilder() << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl);
 
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxRequest::EventType) {
                 targetId = ActorIdFromProto(ev->Get<TEvKqpExecuter::TEvTxRequest>()->Record.GetTarget());
@@ -142,4 +138,4 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     */
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

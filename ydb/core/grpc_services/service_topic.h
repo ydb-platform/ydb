@@ -28,6 +28,7 @@ void DoPQAlterTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProv
 void DoPQDescribeTopicRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoPQAddReadRuleRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoPQRemoveReadRuleRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoPQReadInfoRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }
 }

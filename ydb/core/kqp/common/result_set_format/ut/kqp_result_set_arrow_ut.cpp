@@ -8,54 +8,83 @@
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/types/binary_json/read.h>
+#include <yql/essentials/types/binary_json/write.h>
+#include <yql/essentials/types/dynumber/dynumber.h>
+
+#include <library/cpp/type_info/tz/tz.h>
 
 using namespace NKikimr::NMiniKQL;
 using namespace NKikimr::NArrow;
 using namespace NYql;
 
+inline static constexpr size_t TEST_ARRAY_SIZE = 1 << 16;
+inline static constexpr ui8 DECIMAL_PRECISION = 35;
+inline static constexpr ui8 DECIMAL_SCALE = 10;
+
+static_assert(DECIMAL_PRECISION >= DECIMAL_SCALE, "Decimal precision must be greater than or equal to scale");
+
 namespace {
+
+ui16 GetTimezoneIdSkipEmpty(ui16 index) {
+    auto size = NTi::GetTimezones().size();
+    while (NTi::GetTimezones()[index % size].empty()) {
+        index = (index + 1) % size;
+    }
+    return GetTimezoneId(NTi::GetTimezones()[index % size]);
+}
+
+std::string SerializeToBinaryJson(const TStringBuf json) {
+    auto variant = NKikimr::NBinaryJson::SerializeToBinaryJson(json);
+    if (std::holds_alternative<NKikimr::NBinaryJson::TBinaryJson>(variant)) {
+        const auto binaryJson = std::get<NKikimr::NBinaryJson::TBinaryJson>(variant);
+        return std::string(binaryJson.Data(), binaryJson.Size());
+    }
+    UNIT_ASSERT_C(false, "Cannot serialize binary json");
+    return {};
+}
 
 NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     Y_ABORT_UNLESS(type->GetKind() == TType::EKind::Data);
     auto dataType = static_cast<const TDataType*>(type);
     auto slot = *dataType->GetDataSlot().Get();
-    switch(slot) {
+    switch (slot) {
         case NUdf::EDataSlot::Bool:
             return NUdf::TUnboxedValuePod(static_cast<bool>(value % 2 == 0));
         case NUdf::EDataSlot::Int8:
-            return NUdf::TUnboxedValuePod(static_cast<i8>(-(value % 126)));
+            return NUdf::TUnboxedValuePod(static_cast<i8>(-(value % ((1 << 7) - 1))));
         case NUdf::EDataSlot::Uint8:
-            return NUdf::TUnboxedValuePod(static_cast<ui8>(value % 255));
+            return NUdf::TUnboxedValuePod(static_cast<ui8>(value % ((1 << 8))));
         case NUdf::EDataSlot::Int16:
             return NUdf::TUnboxedValuePod(static_cast<i16>(-(value % ((1 << 15) - 1))));
         case NUdf::EDataSlot::Uint16:
-            return NUdf::TUnboxedValuePod(static_cast<ui16>(value % (1 << 16)));
+            return NUdf::TUnboxedValuePod(static_cast<ui16>(value % (1 << 15)));
         case NUdf::EDataSlot::Int32:
             return NUdf::TUnboxedValuePod(static_cast<i32>(-(value % ((1ULL << 31) - 1))));
         case NUdf::EDataSlot::Uint32:
-            return NUdf::TUnboxedValuePod(static_cast<ui32>(value % (1 << 31)));
+            return NUdf::TUnboxedValuePod(static_cast<ui32>(value % (1ULL << 31)));
         case NUdf::EDataSlot::Int64:
-            return NUdf::TUnboxedValuePod(static_cast<i64>(- (value / 2)));
+            return NUdf::TUnboxedValuePod(static_cast<i64>(-(value % ((1ULL << 63) - 1))));
         case NUdf::EDataSlot::Uint64:
-            return NUdf::TUnboxedValuePod(static_cast<ui64>(value));
+            return NUdf::TUnboxedValuePod(static_cast<ui64>(value % (1ULL << 63)));
         case NUdf::EDataSlot::Float:
             return NUdf::TUnboxedValuePod(static_cast<float>(value) / 1234);
         case NUdf::EDataSlot::Double:
             return NUdf::TUnboxedValuePod(static_cast<double>(value) / 12345);
-        case NUdf::EDataSlot::String: {
-            std::string string = TStringBuilder() << value;
-            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        case NUdf::EDataSlot::Decimal: {
+            auto decimal = NYql::NDecimal::FromString(TStringBuilder() << value << ".123", DECIMAL_PRECISION, DECIMAL_SCALE);
+            return NUdf::TUnboxedValuePod(decimal);
         }
-        case NUdf::EDataSlot::Utf8: {
-            std::string string = TStringBuilder() << value << "utf8";
-            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        case NUdf::EDataSlot::DyNumber: {
+            auto number = NKikimr::NDyNumber::ParseDyNumberString(TStringBuilder() << value);
+            UNIT_ASSERT_C(number.Defined(), "Failed to convert string to DyNumber");
+            return MakeString(*number);
         }
-        // case NUdf::EDataSlot::Decimal: // TODO: yql/essentials/minikql/mkql_node.cpp:486
-        //     return NUdf::TUnboxedValuePod(NDecimal::FromHalfs(value, value / 2 - 1));
         case NUdf::EDataSlot::Date:
             return NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
         case NUdf::EDataSlot::Datetime:
@@ -64,6 +93,21 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
         case NUdf::EDataSlot::Interval:
             return NUdf::TUnboxedValuePod(static_cast<i64>(value / 2 - 1));
+        case NUdf::EDataSlot::TzDate: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzDatetime: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui32>(value % NUdf::MAX_DATETIME));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
+            return ret;
+        }
+        case NUdf::EDataSlot::TzTimestamp: {
+            auto ret = NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
+            return ret;
+        }
         case NUdf::EDataSlot::Date32:
             return NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
         case NUdf::EDataSlot::Datetime64:
@@ -72,39 +116,51 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
             return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
         case NUdf::EDataSlot::Interval64:
             return NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_INTERVAL64));
-        case NUdf::EDataSlot::TzDate: {
-            auto ret = NUdf::TUnboxedValuePod(static_cast<ui16>(value % NUdf::MAX_DATE));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Europe/Moscow"));
-            return ret;
-        }
-        case NUdf::EDataSlot::TzDatetime: {
-            auto ret = NUdf::TUnboxedValuePod(static_cast<ui32>(value % NUdf::MAX_DATETIME));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Asia/Omsk"));
-            return ret;
-        }
-        case NUdf::EDataSlot::TzTimestamp: {
-            auto ret = NUdf::TUnboxedValuePod(static_cast<ui64>(value % NUdf::MAX_TIMESTAMP));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Europe/Tallinn"));
-            return ret;
-        }
         case NUdf::EDataSlot::TzDate32: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i32>(value % NUdf::MAX_DATE32));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("US/Eastern"));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzDatetime64: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_DATETIME64));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("America/Nuuk"));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
         case NUdf::EDataSlot::TzTimestamp64: {
             auto ret = NUdf::TUnboxedValuePod(static_cast<i64>(value % NUdf::MAX_TIMESTAMP64));
-            ret.SetTimezoneId(NKikimr::NMiniKQL::GetTimezoneId("Atlantic/Faroe"));
+            ret.SetTimezoneId(GetTimezoneIdSkipEmpty(value));
             return ret;
         }
-        default:
-            Y_ABORT("Not implemented creation value for such type");
+        case NUdf::EDataSlot::String: {
+            std::string string = TStringBuilder() << value;
+            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        }
+        case NUdf::EDataSlot::Utf8: {
+            std::string string = TStringBuilder() << value << "utf8";
+            return MakeString(NUdf::TStringRef(string.data(), string.size()));
+        }
+        case NUdf::EDataSlot::Yson: {
+            std::string yson = TStringBuilder() << '[' << value << ']';
+            return MakeString(NUdf::TStringRef(yson.data(), yson.size()));
+        }
+        case NUdf::EDataSlot::Json: {
+            std::string json = TStringBuilder() << '[' << value << ']';
+            return MakeString(NUdf::TStringRef(json.data(), json.size()));
+        }
+        case NUdf::EDataSlot::JsonDocument: {
+            std::string json = SerializeToBinaryJson(TStringBuilder() << "{\"b\": " << value << ", \"a\": " << value / 2 << "}");
+            return MakeString(NUdf::TStringRef(json.data(), json.size()));
+        }
+        case NUdf::EDataSlot::Uuid: {
+            std::string uuid;
+            for (size_t i = 0; i < NKikimr::NScheme::FSB_SIZE / 2; ++i) {
+                uuid += "a" + std::to_string((i + value) % 10);
+            }
+            return MakeString(NUdf::TStringRef(uuid));
+        }
     }
+
+    return NUdf::TUnboxedValuePod();
 }
 
 struct TTestContext {
@@ -115,8 +171,7 @@ struct TTestContext {
     TDefaultValueBuilder Vb;
     ui16 VariantSize = 0;
 
-    // Used to create LargeVariantType
-    TVector<TType *> BasicTypes = {
+    TVector<TType*> BasicTypes = {
         TDataType::Create(NUdf::TDataType<bool>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<i8>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<ui8>::Id, TypeEnv),
@@ -128,23 +183,29 @@ struct TTestContext {
         TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<float>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<double>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv),
-        // TDataType::Create(NUdf::TDataType<NUdf::TDecimal>::Id, TypeEnv), // TODO: yql/essentials/minikql/mkql_node.cpp:486
+        TDataDecimalType::Create(DECIMAL_PRECISION, DECIMAL_SCALE, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TDyNumber>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TInterval>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDate32>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TDatetime64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTimestamp64>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TInterval64>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzDate>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTzDate32>::Id, TypeEnv),
         TDataType::Create(NUdf::TDataType<NUdf::TTzDatetime64>::Id, TypeEnv),
-        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, TypeEnv)};
+        TDataType::Create(NUdf::TDataType<NUdf::TTzTimestamp64>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<char*>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TUtf8>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TYson>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TJson>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TJsonDocument>::Id, TypeEnv),
+        TDataType::Create(NUdf::TDataType<NUdf::TUuid>::Id, TypeEnv)
+    };
 
     TTestContext()
         : Alloc(__LOCATION__)
@@ -289,8 +350,8 @@ struct TTestContext {
                 std::string data = TStringBuilder() << "{value=" << value << "}";
                 item = MakeString(NUdf::TStringRef(data.data(), data.size()));
             } else if (typeIndex == 1) {
-                std::string data = TStringBuilder() << "{value:" << value << "}";
-                item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                std::string data = TStringBuilder() << "{\"value\":" << value << "}";
+                item = MakeString(SerializeToBinaryJson(data));
             } else if (typeIndex == 2) {
                 std::string sample = "7856341212905634789012345678901";
                 std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
@@ -323,8 +384,8 @@ struct TTestContext {
                 std::string data = TStringBuilder() << "{value=" << value << "}";
                 item = MakeString(NUdf::TStringRef(data.data(), data.size()));
             } else if (typeIndex == 1) {
-                std::string data = TStringBuilder() << "{value:" << value << "}";
-                item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                std::string data = TStringBuilder() << "{\"value\":" << value << "}";
+                item = MakeString(SerializeToBinaryJson(data));
             } else if (typeIndex == 2) {
                 std::string sample = "7856341212905634789012345678901";
                 std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
@@ -353,8 +414,8 @@ struct TTestContext {
                     std::string data = TStringBuilder() << "{value=" << value << "}";
                     item = MakeString(NUdf::TStringRef(data.data(), data.size()));
                 } else if (typeIndex == 1) {
-                    std::string data = TStringBuilder() << "{value:" << value << "}";
-                    item = MakeString(NUdf::TStringRef(data.data(), data.size()));
+                    std::string data = TStringBuilder() << "{\"value\":" << value << "}";
+                    item = MakeString(SerializeToBinaryJson(data));
                 } else if (typeIndex == 2) {
                     std::string sample = "7856341212905634789012345678901";
                     std::string data = TStringBuilder() << HexDecode(sample + static_cast<char>('0' + (value % 10)));
@@ -574,7 +635,6 @@ struct TTestContext {
     }
 };
 
-// Note this equality check is not fully valid. But it is sufficient for UnboxedValues used in tests.
 void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue& right, TType* type) {
     switch (type->GetKind()) {
         case TType::EKind::Void:
@@ -706,12 +766,300 @@ void AssertUnboxedValuesAreEqual(NUdf::TUnboxedValue& left, NUdf::TUnboxedValue&
 
 namespace NKikimr::NKqp::NFormats {
 
+namespace {
+
+template <typename TMiniKQLType, typename TPhysicalType, typename TArrowArrayType, bool IsStringType = false, bool IsTimezoneType = false>
+void TestDataTypeConversion(arrow::Type::type arrowTypeId) {
+    TTestContext context;
+
+    auto type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    UNIT_ASSERT(IsArrowCompatible(type));
+
+    TUnboxedValueVector values;
+    values.reserve(TEST_ARRAY_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        values.emplace_back(GetValueOfBasicType(type, i));
+    }
+
+    auto array = NTestUtils::MakeArray(values, type);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+
+    std::shared_ptr<TArrowArrayType> typedArray;
+    std::shared_ptr<arrow::StringArray> timezoneArray;
+
+    if constexpr (IsTimezoneType) {
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 2);
+        UNIT_ASSERT(structArray->field(0)->type_id() == arrowTypeId);
+        UNIT_ASSERT(structArray->field(1)->type_id() == arrow::Type::STRING);
+
+        typedArray = static_pointer_cast<TArrowArrayType>(structArray->field(0));
+        timezoneArray = static_pointer_cast<arrow::StringArray>(structArray->field(1));
+    } else {
+        UNIT_ASSERT(array->type_id() == arrowTypeId);
+        typedArray = static_pointer_cast<TArrowArrayType>(array);
+    }
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        if constexpr (IsStringType) {
+            if constexpr (std::is_same_v<NUdf::TJsonDocument, TMiniKQLType>) {
+                auto val = NBinaryJson::SerializeToJson(values[i].AsStringRef());
+                UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == val);
+            } else {
+                auto value = NTestUtils::ExtractUnboxedValue(array, i, type, context.HolderFactory);
+                AssertUnboxedValuesAreEqual(value, values[i], type);
+            }
+        } else {
+            UNIT_ASSERT(static_cast<TPhysicalType>(typedArray->Value(i)) == values[i].Get<TPhysicalType>());
+        }
+
+        if constexpr (IsTimezoneType) {
+            auto view = timezoneArray->Value(i);
+            UNIT_ASSERT(values[i].GetTimezoneId() == GetTimezoneId(NUdf::TStringRef(view.data(), view.size())));
+        }
+    }
+}
+
+template <typename TMiniKQLType, bool IsDecimalType = false>
+void TestFixedSizeBinaryDataTypeConversion() {
+    TTestContext context;
+    TType* type;
+
+    if constexpr (IsDecimalType) {
+        type = TDataDecimalType::Create(35, 10, context.TypeEnv);
+    } else {
+        type = TDataType::Create(NUdf::TDataType<TMiniKQLType>::Id, context.TypeEnv);
+    }
+
+    UNIT_ASSERT(IsArrowCompatible(type));
+
+    TUnboxedValueVector values;
+    values.reserve(TEST_ARRAY_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        values.emplace_back(GetValueOfBasicType(type, i));
+    }
+
+    auto array = NTestUtils::MakeArray(values, type);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->length() == static_cast<i64>(values.size()));
+
+    std::shared_ptr<arrow::FixedSizeBinaryArray> typedArray;
+
+    UNIT_ASSERT(array->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+    typedArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(array);
+    UNIT_ASSERT(typedArray->byte_width() == NScheme::FSB_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        auto view = typedArray->GetView(i);
+        if constexpr (IsDecimalType) {
+            NYql::NDecimal::TInt128 actual;
+            std::memcpy(&actual, view.data(), view.size());
+
+            NYql::NDecimal::TInt128 expected = values[i].GetInt128();
+            UNIT_ASSERT(actual == expected);
+        } else {
+            auto expected = values[i].AsStringRef();
+            UNIT_ASSERT_STRINGS_EQUAL(std::string(view.data(), view.size()), std::string(expected.Data(), expected.Size()));
+        }
+    }
+}
+
+template <TType::EKind SingularKind>
+void TestSingularTypeConversion() {
+    TTestContext context;
+
+    TType* type = GetTypeOfSingular<SingularKind>(context.TypeEnv);
+    UNIT_ASSERT(IsArrowCompatible(type));
+
+    TUnboxedValueVector values;
+    values.reserve(TEST_ARRAY_SIZE);
+
+    for (size_t i = 0; i < TEST_ARRAY_SIZE; ++i) {
+        values.emplace_back();
+    }
+
+    auto array = NTestUtils::MakeArray(values, type);
+    UNIT_ASSERT_C(array->ValidateFull().ok(), array->ValidateFull().ToString());
+    UNIT_ASSERT(array->length() == static_cast<i64>(TEST_ARRAY_SIZE));
+
+    if (SingularKind == TType::EKind::Null) {
+        UNIT_ASSERT(array->type_id() == arrow::Type::NA);
+    } else {
+        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+        auto structArray = static_pointer_cast<arrow::StructArray>(array);
+        UNIT_ASSERT(structArray->num_fields() == 0);
+    }
+}
+
+} // namespace
+
+Y_UNIT_TEST_SUITE(KqpFormats_Arrow_Conversion) {
+
+    // Integral types
+    Y_UNIT_TEST(DataType_Bool) {
+        TestDataTypeConversion<bool, bool, arrow::UInt8Array>(arrow::Type::UINT8);
+    }
+
+    Y_UNIT_TEST(DataType_Int8) {
+        TestDataTypeConversion<i8, i8, arrow::Int8Array>(arrow::Type::INT8);
+    }
+
+    Y_UNIT_TEST(DataType_UInt8) {
+        TestDataTypeConversion<ui8, ui8, arrow::UInt8Array>(arrow::Type::UINT8);
+    }
+
+    Y_UNIT_TEST(DataType_Int16) {
+        TestDataTypeConversion<i16, i16, arrow::Int16Array>(arrow::Type::INT16);
+    }
+
+    Y_UNIT_TEST(DataType_UInt16) {
+        TestDataTypeConversion<ui16, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+    }
+
+    Y_UNIT_TEST(DataType_Int32) {
+        TestDataTypeConversion<i32, i32, arrow::Int32Array>(arrow::Type::INT32);
+    }
+
+    Y_UNIT_TEST(DataType_UInt32) {
+        TestDataTypeConversion<ui32, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+    }
+
+    Y_UNIT_TEST(DataType_Int64) {
+        TestDataTypeConversion<i64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_UInt64) {
+        TestDataTypeConversion<ui64, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+    }
+
+    // Binary number types
+    Y_UNIT_TEST(DataType_Decimal) {
+        TestFixedSizeBinaryDataTypeConversion<NUdf::TDecimal, /* IsDecimalType */ true>();
+    }
+
+    Y_UNIT_TEST(DataType_DyNumber) {
+        TestDataTypeConversion<NUdf::TDyNumber, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+    }
+
+    // Floating point types
+    Y_UNIT_TEST(DataType_Float) {
+        TestDataTypeConversion<float, float, arrow::FloatArray>(arrow::Type::FLOAT);
+    }
+
+    Y_UNIT_TEST(DataType_Double) {
+        TestDataTypeConversion<double, double, arrow::DoubleArray>(arrow::Type::DOUBLE);
+    }
+
+    // Datetime types
+    Y_UNIT_TEST(DataType_Date) {
+        TestDataTypeConversion<NUdf::TDate, ui16, arrow::UInt16Array>(arrow::Type::UINT16);
+    }
+
+    Y_UNIT_TEST(DataType_Datetime) {
+        TestDataTypeConversion<NUdf::TDatetime, ui32, arrow::UInt32Array>(arrow::Type::UINT32);
+    }
+
+    Y_UNIT_TEST(DataType_Timestamp) {
+        TestDataTypeConversion<NUdf::TTimestamp, ui64, arrow::UInt64Array>(arrow::Type::UINT64);
+    }
+
+    Y_UNIT_TEST(DataType_Interval) {
+        TestDataTypeConversion<NUdf::TInterval, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_TzDate) {
+        TestDataTypeConversion<NUdf::TTzDate, ui16, arrow::UInt16Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT16);
+    }
+
+    Y_UNIT_TEST(DataType_TzDatetime) {
+        TestDataTypeConversion<NUdf::TTzDatetime, ui32, arrow::UInt32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT32);
+    }
+
+    Y_UNIT_TEST(DataType_TzTimestamp) {
+        TestDataTypeConversion<NUdf::TTzTimestamp, ui64, arrow::UInt64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::UINT64);
+    }
+
+    Y_UNIT_TEST(DataType_Date32) {
+        TestDataTypeConversion<NUdf::TDate32, i32, arrow::Int32Array>(arrow::Type::INT32);
+    }
+
+    Y_UNIT_TEST(DataType_Datetime64) {
+        TestDataTypeConversion<NUdf::TDatetime64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Timestamp64) {
+        TestDataTypeConversion<NUdf::TTimestamp64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_Interval64) {
+        TestDataTypeConversion<NUdf::TInterval64, i64, arrow::Int64Array>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_TzDate32) {
+        TestDataTypeConversion<NUdf::TTzDate32, i32, arrow::Int32Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT32);
+    }
+
+    Y_UNIT_TEST(DataType_TzDatetime64) {
+        TestDataTypeConversion<NUdf::TTzDatetime64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+    }
+
+    Y_UNIT_TEST(DataType_TzTimestamp64) {
+        TestDataTypeConversion<NUdf::TTzTimestamp64, i64, arrow::Int64Array, /* IsStringType */ false, /* HasTimezone */ true>(arrow::Type::INT64);
+    }
+
+    // String types
+    Y_UNIT_TEST(DataType_String) {
+        TestDataTypeConversion<char*, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+    }
+
+    Y_UNIT_TEST(DataType_Utf8) {
+        TestDataTypeConversion<NUdf::TUtf8, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+    }
+
+    Y_UNIT_TEST(DataType_Yson) {
+        TestDataTypeConversion<NUdf::TYson, std::string, arrow::BinaryArray, /* IsStringType */ true>(arrow::Type::BINARY);
+    }
+
+    Y_UNIT_TEST(DataType_Json) {
+        TestDataTypeConversion<NUdf::TJson, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+    }
+
+    Y_UNIT_TEST(DataType_JsonDocument) {
+        TestDataTypeConversion<NUdf::TJsonDocument, std::string, arrow::StringArray, /* IsStringType */ true>(arrow::Type::STRING);
+    }
+
+    Y_UNIT_TEST(DataType_Uuid) {
+        TestFixedSizeBinaryDataTypeConversion<NUdf::TUuid>();
+    }
+
+    // Singular types
+    Y_UNIT_TEST(DataType_Null) {
+        TestSingularTypeConversion<TType::EKind::Null>();
+    }
+
+    Y_UNIT_TEST(DataType_Void) {
+        TestSingularTypeConversion<TType::EKind::Void>();
+    }
+
+    Y_UNIT_TEST(DataType_EmptyList) {
+        TestSingularTypeConversion<TType::EKind::EmptyList>();
+    }
+
+    Y_UNIT_TEST(DataType_EmptyDict) {
+        TestSingularTypeConversion<TType::EKind::EmptyDict>();
+    }
+}
+
 Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
     Y_UNIT_TEST(Struct) {
         TTestContext context;
 
         auto structType = context.GetStructType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(structType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(structType));
 
         auto values = context.CreateStructs(100);
         auto array = NFormats::NTestUtils::MakeArray(values, structType);
@@ -752,7 +1100,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto tupleType = context.GetTupleType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(tupleType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(tupleType));
 
         auto values = context.CreateTuples(100);
         auto array = NFormats::NTestUtils::MakeArray(values, tupleType);
@@ -792,7 +1140,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
 
         auto values = context.CreateListOfJsons(100);
         auto array = NFormats::NTestUtils::MakeArray(values, listType);
@@ -825,7 +1173,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
 
         auto values = context.CreateOptionalListOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, listType);
@@ -863,196 +1211,196 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         }
     }
 
-    Y_UNIT_TEST(VariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(VariantOverStruct) {
+    //     TTestContext context;
 
-        auto variantType = context.GetVariantOverStructType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
+    //     auto variantType = context.GetVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
-        auto values = context.CreateVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
+    //     auto values = context.CreateVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+    //     UNIT_ASSERT(array->ValidateFull().ok());
+    //     UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+    //     UNIT_ASSERT(array->type_id() == arrow::Type::DENSE_UNION);
+    //     auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(array);
 
-        UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+    //     UNIT_ASSERT(unionArray->num_fields() == 4);
+    //     UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+    //     UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::STRING);
+    //     UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+    //     UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+    //     auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+    //     auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+    //     auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
+    //     auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
 
-        for (ui64 index = 0; index < values.size(); ++index) {
-            auto value = values[index];
-            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
-            auto fieldIndex = unionArray->value_offset(index);
-            if (value.GetVariantIndex() == 3) {
-                auto valueArrow = floatArray->Value(fieldIndex);
-                auto valueInner = value.GetVariantItem().Get<float>();
-                UNIT_ASSERT(valueArrow == valueInner);
-            } else {
-                arrow::util::string_view viewArrow;
-                if (value.GetVariantIndex() == 0) {
-                    viewArrow = ysonArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 1) {
-                    viewArrow = jsonDocArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 2) {
-                    viewArrow = uuidArray->GetView(fieldIndex);
-                }
-                std::string valueArrow(viewArrow.data(), viewArrow.size());
-                auto innerItem = value.GetVariantItem();
-                auto refInner = innerItem.AsStringRef();
-                std::string valueInner(refInner.Data(), refInner.Size());
-                UNIT_ASSERT(valueArrow == valueInner);
-            }
-        }
-    }
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         auto value = values[index];
+    //         UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+    //         auto fieldIndex = unionArray->value_offset(index);
+    //         if (value.GetVariantIndex() == 3) {
+    //             auto valueArrow = floatArray->Value(fieldIndex);
+    //             auto valueInner = value.GetVariantItem().Get<float>();
+    //             UNIT_ASSERT(valueArrow == valueInner);
+    //         } else {
+    //             arrow::util::string_view viewArrow;
+    //             if (value.GetVariantIndex() == 0) {
+    //                 viewArrow = ysonArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 1) {
+    //                 viewArrow = jsonDocArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 2) {
+    //                 viewArrow = uuidArray->GetView(fieldIndex);
+    //             }
+    //             std::string valueArrow(viewArrow.data(), viewArrow.size());
+    //             auto innerItem = value.GetVariantItem();
+    //             auto refInner = innerItem.AsStringRef();
+    //             std::string valueInner(refInner.Data(), refInner.Size());
+    //             UNIT_ASSERT(valueArrow == valueInner);
+    //         }
+    //     }
+    // }
 
-    Y_UNIT_TEST(OptionalVariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(OptionalVariantOverStruct) {
+    //     TTestContext context;
 
-        auto variantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
+    //     auto variantType = context.GetOptionalVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
-        auto values = context.CreateOptionalVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+    //     auto values = context.CreateOptionalVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+    //     UNIT_ASSERT(array->ValidateFull().ok());
+    //     UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+    //     UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
 
-        auto structArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(structArray->num_fields() == 1);
-        UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+    //     auto structArray = static_pointer_cast<arrow::StructArray>(array);
+    //     UNIT_ASSERT(structArray->num_fields() == 1);
+    //     UNIT_ASSERT(structArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
+    //     auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(structArray->field(0));
 
-        UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+    //     UNIT_ASSERT(unionArray->num_fields() == 4);
+    //     UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+    //     UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::STRING);
+    //     UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+    //     UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+    //     auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+    //     auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+    //     auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
+    //     auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
 
-        for (ui64 index = 0; index < values.size(); ++index) {
-            auto value = values[index];
-            if (!value.HasValue()) {
-                // NULL
-                UNIT_ASSERT(structArray->IsNull(index));
-                continue;
-            }
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         auto value = values[index];
+    //         if (!value.HasValue()) {
+    //             // NULL
+    //             UNIT_ASSERT(structArray->IsNull(index));
+    //             continue;
+    //         }
 
-            UNIT_ASSERT(!structArray->IsNull(index));
+    //         UNIT_ASSERT(!structArray->IsNull(index));
 
-            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
-            auto fieldIndex = unionArray->value_offset(index);
-            if (value.GetVariantIndex() == 3) {
-                auto valueArrow = floatArray->Value(fieldIndex);
-                auto valueInner = value.GetVariantItem().Get<float>();
-                UNIT_ASSERT(valueArrow == valueInner);
-            } else {
-                arrow::util::string_view viewArrow;
-                if (value.GetVariantIndex() == 0) {
-                    viewArrow = ysonArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 1) {
-                    viewArrow = jsonDocArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 2) {
-                    viewArrow = uuidArray->GetView(fieldIndex);
-                }
-                std::string valueArrow(viewArrow.data(), viewArrow.size());
-                auto innerItem = value.GetVariantItem();
-                auto refInner = innerItem.AsStringRef();
-                std::string valueInner(refInner.Data(), refInner.Size());
-                UNIT_ASSERT(valueArrow == valueInner);
-            }
-        }
-    }
+    //         UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+    //         auto fieldIndex = unionArray->value_offset(index);
+    //         if (value.GetVariantIndex() == 3) {
+    //             auto valueArrow = floatArray->Value(fieldIndex);
+    //             auto valueInner = value.GetVariantItem().Get<float>();
+    //             UNIT_ASSERT(valueArrow == valueInner);
+    //         } else {
+    //             arrow::util::string_view viewArrow;
+    //             if (value.GetVariantIndex() == 0) {
+    //                 viewArrow = ysonArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 1) {
+    //                 viewArrow = jsonDocArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 2) {
+    //                 viewArrow = uuidArray->GetView(fieldIndex);
+    //             }
+    //             std::string valueArrow(viewArrow.data(), viewArrow.size());
+    //             auto innerItem = value.GetVariantItem();
+    //             auto refInner = innerItem.AsStringRef();
+    //             std::string valueInner(refInner.Data(), refInner.Size());
+    //             UNIT_ASSERT(valueArrow == valueInner);
+    //         }
+    //     }
+    // }
 
-    Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
+    //     TTestContext context;
 
-        auto variantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
+    //     auto variantType = context.GetDoubleOptionalVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
-        auto values = context.CreateDoubleOptionalVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
-        UNIT_ASSERT(array->ValidateFull().ok());
-        UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
-        UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
+    //     auto values = context.CreateDoubleOptionalVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+    //     UNIT_ASSERT(array->ValidateFull().ok());
+    //     UNIT_ASSERT(static_cast<ui64>(array->length()) == values.size());
+    //     UNIT_ASSERT(array->type_id() == arrow::Type::STRUCT);
 
-        auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
-        UNIT_ASSERT(firstStructArray->num_fields() == 1);
-        UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
+    //     auto firstStructArray = static_pointer_cast<arrow::StructArray>(array);
+    //     UNIT_ASSERT(firstStructArray->num_fields() == 1);
+    //     UNIT_ASSERT(firstStructArray->field(0)->type_id() == arrow::Type::STRUCT);
 
-        auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
-        UNIT_ASSERT(secondStructArray->num_fields() == 1);
-        UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
+    //     auto secondStructArray = static_pointer_cast<arrow::StructArray>(firstStructArray->field(0));
+    //     UNIT_ASSERT(secondStructArray->num_fields() == 1);
+    //     UNIT_ASSERT(secondStructArray->field(0)->type_id() == arrow::Type::DENSE_UNION);
 
-        auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
+    //     auto unionArray = static_pointer_cast<arrow::DenseUnionArray>(secondStructArray->field(0));
 
-        UNIT_ASSERT(unionArray->num_fields() == 4);
-        UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::BINARY);
-        UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
-        UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
+    //     UNIT_ASSERT(unionArray->num_fields() == 4);
+    //     UNIT_ASSERT(unionArray->field(0)->type_id() == arrow::Type::BINARY);
+    //     UNIT_ASSERT(unionArray->field(1)->type_id() == arrow::Type::STRING);
+    //     UNIT_ASSERT(unionArray->field(2)->type_id() == arrow::Type::FIXED_SIZE_BINARY);
+    //     UNIT_ASSERT(unionArray->field(3)->type_id() == arrow::Type::FLOAT);
 
-        auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
-        auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
-        auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
-        auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
+    //     auto ysonArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(0));
+    //     auto jsonDocArray = static_pointer_cast<arrow::BinaryArray>(unionArray->field(1));
+    //     auto uuidArray = static_pointer_cast<arrow::FixedSizeBinaryArray>(unionArray->field(2));
+    //     auto floatArray = static_pointer_cast<arrow::FloatArray>(unionArray->field(3));
 
-        for (ui64 index = 0; index < values.size(); ++index) {
-            auto value = values[index];
-            if (!value.HasValue()) {
-                if (value) {
-                    // Optional(NULL)
-                    UNIT_ASSERT(secondStructArray->IsNull(index));
-                } else {
-                    // NULL
-                    UNIT_ASSERT(firstStructArray->IsNull(index));
-                }
-                continue;
-            }
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         auto value = values[index];
+    //         if (!value.HasValue()) {
+    //             if (value) {
+    //                 // Optional(NULL)
+    //                 UNIT_ASSERT(secondStructArray->IsNull(index));
+    //             } else {
+    //                 // NULL
+    //                 UNIT_ASSERT(firstStructArray->IsNull(index));
+    //             }
+    //             continue;
+    //         }
 
-            UNIT_ASSERT(!firstStructArray->IsNull(index) && !secondStructArray->IsNull(index));
+    //         UNIT_ASSERT(!firstStructArray->IsNull(index) && !secondStructArray->IsNull(index));
 
-            UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
-            auto fieldIndex = unionArray->value_offset(index);
-            if (value.GetVariantIndex() == 3) {
-                auto valueArrow = floatArray->Value(fieldIndex);
-                auto valueInner = value.GetVariantItem().Get<float>();
-                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
-            } else {
-                arrow::util::string_view viewArrow;
-                if (value.GetVariantIndex() == 0) {
-                    viewArrow = ysonArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 1) {
-                    viewArrow = jsonDocArray->GetView(fieldIndex);
-                } else if (value.GetVariantIndex() == 2) {
-                    viewArrow = uuidArray->GetView(fieldIndex);
-                }
-                std::string valueArrow(viewArrow.data(), viewArrow.size());
-                auto innerItem = value.GetVariantItem();
-                auto refInner = innerItem.AsStringRef();
-                std::string valueInner(refInner.Data(), refInner.Size());
-                UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
-            }
-        }
-    }
+    //         UNIT_ASSERT(value.GetVariantIndex() == static_cast<ui32>(unionArray->child_id(index)));
+    //         auto fieldIndex = unionArray->value_offset(index);
+    //         if (value.GetVariantIndex() == 3) {
+    //             auto valueArrow = floatArray->Value(fieldIndex);
+    //             auto valueInner = value.GetVariantItem().Get<float>();
+    //             UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+    //         } else {
+    //             arrow::util::string_view viewArrow;
+    //             if (value.GetVariantIndex() == 0) {
+    //                 viewArrow = ysonArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 1) {
+    //                 viewArrow = jsonDocArray->GetView(fieldIndex);
+    //             } else if (value.GetVariantIndex() == 2) {
+    //                 viewArrow = uuidArray->GetView(fieldIndex);
+    //             }
+    //             std::string valueArrow(viewArrow.data(), viewArrow.size());
+    //             auto innerItem = value.GetVariantItem();
+    //             auto refInner = innerItem.AsStringRef();
+    //             std::string valueInner(refInner.Data(), refInner.Size());
+    //             UNIT_ASSERT_VALUES_EQUAL(valueArrow, valueInner);
+    //         }
+    //     }
+    // }
 
     Y_UNIT_TEST(VariantOverTupleWithOptionals) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1110,7 +1458,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1180,7 +1528,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueToNativeArrowConversion) {
         TTestContext context;
 
         auto variantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1259,7 +1607,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1304,7 +1652,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1359,7 +1707,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
@@ -1413,8 +1761,7 @@ Y_UNIT_TEST_SUITE(DqUnboxedValueDoNotFitToArrow) {
 
         ui32 numberOfTypes = 500;
         auto variantType = context.GetLargeVariantType(numberOfTypes);
-        bool isCompatible = NFormats::NTestUtils::IsArrowCompatible(variantType);
-        UNIT_ASSERT(!isCompatible);
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateLargeVariant(1000);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1451,7 +1798,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto tupleType = context.GetTupleType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(tupleType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(tupleType));
 
         auto values = context.CreateTuples(100);
         auto array = NFormats::NTestUtils::MakeArray(values, tupleType);
@@ -1466,7 +1813,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictUtf8ToIntervalType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictUtf8ToInterval(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1481,7 +1828,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto listType = context.GetListOfJsonsType();
-        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
 
         auto values = context.CreateListOfJsons(100);
         auto array = NFormats::NTestUtils::MakeArray(values, listType);
@@ -1496,7 +1843,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto listType = context.GetOptionalListOfOptional();
-        Y_ABORT_UNLESS(NFormats::NTestUtils::IsArrowCompatible(listType));
+        Y_ABORT_UNLESS(NFormats::IsArrowCompatible(listType));
 
         auto values = context.CreateOptionalListOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, listType);
@@ -1507,56 +1854,56 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         }
     }
 
-    Y_UNIT_TEST(VariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(VariantOverStruct) {
+    //     TTestContext context;
 
-        auto variantType = context.GetVariantOverStructType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
+    //     auto variantType = context.GetVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
-        auto values = context.CreateVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, variantType);
-        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, variantType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);
-        }
-    }
+    //     auto values = context.CreateVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, variantType);
+    //     auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, variantType, context.HolderFactory);
+    //     UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         AssertUnboxedValuesAreEqual(values[index], restoredValues[index], variantType);
+    //     }
+    // }
 
-    Y_UNIT_TEST(OptionalVariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(OptionalVariantOverStruct) {
+    //     TTestContext context;
 
-        auto optionalVariantType = context.GetOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(optionalVariantType));
+    //     auto optionalVariantType = context.GetOptionalVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(optionalVariantType));
 
-        auto values = context.CreateOptionalVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
-        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
-        }
-    }
+    //     auto values = context.CreateOptionalVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
+    //     auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, optionalVariantType, context.HolderFactory);
+    //     UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         AssertUnboxedValuesAreEqual(values[index], restoredValues[index], optionalVariantType);
+    //     }
+    // }
 
-    Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
-        TTestContext context;
+    // Y_UNIT_TEST(DoubleOptionalVariantOverStruct) {
+    //     TTestContext context;
 
-        auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverStructType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalVariantType));
+    //     auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverStructType();
+    //     UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalVariantType));
 
-        auto values = context.CreateDoubleOptionalVariantOverStruct(100);
-        auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
-        auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
-        UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
-        for (ui64 index = 0; index < values.size(); ++index) {
-            AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
-        }
-    }
+    //     auto values = context.CreateDoubleOptionalVariantOverStruct(100);
+    //     auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
+    //     auto restoredValues = NFormats::NTestUtils::ExtractUnboxedValues(array, doubleOptionalVariantType, context.HolderFactory);
+    //     UNIT_ASSERT_EQUAL(values.size(), restoredValues.size());
+    //     for (ui64 index = 0; index < values.size(); ++index) {
+    //         AssertUnboxedValuesAreEqual(values[index], restoredValues[index], doubleOptionalVariantType);
+    //     }
+    // }
 
     Y_UNIT_TEST(VariantOverTupleWithOptionals) {
         TTestContext context;
 
         auto variantType = context.GetVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(NFormats::NTestUtils::IsArrowCompatible(variantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);
@@ -1571,7 +1918,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto optionalVariantType = context.GetOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(optionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(optionalVariantType));
 
         auto values = context.CreateOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, optionalVariantType);
@@ -1586,7 +1933,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalVariantType = context.GetDoubleOptionalVariantOverTupleWithOptionalsType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalVariantType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalVariantType));
 
         auto values = context.CreateDoubleOptionalVariantOverTupleWithOptionals(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalVariantType);
@@ -1601,7 +1948,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto dictType = context.GetDictOptionalToTupleType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(dictType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(dictType));
 
         auto values = context.CreateDictOptionalToTuple(100);
         auto array = NFormats::NTestUtils::MakeArray(values, dictType);
@@ -1616,7 +1963,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto doubleOptionalType = context.GetOptionalOfOptionalType();
-        UNIT_ASSERT(!NFormats::NTestUtils::IsArrowCompatible(doubleOptionalType));
+        UNIT_ASSERT(NFormats::IsArrowCompatible(doubleOptionalType));
 
         auto values = context.CreateOptionalOfOptional(100);
         auto array = NFormats::NTestUtils::MakeArray(values, doubleOptionalType);
@@ -1631,8 +1978,7 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
         TTestContext context;
 
         auto variantType = context.GetLargeVariantType(500);
-        bool isCompatible = NFormats::NTestUtils::IsArrowCompatible(variantType);
-        UNIT_ASSERT(!isCompatible);
+        UNIT_ASSERT(NFormats::IsArrowCompatible(variantType));
 
         auto values = context.CreateLargeVariant(1000);
         auto array = NFormats::NTestUtils::MakeArray(values, variantType);

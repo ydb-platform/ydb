@@ -6,6 +6,8 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/fmt
+
     ydb/core/fq/libs/actors/logging
     ydb/core/fq/libs/row_dispatcher/events
     ydb/core/fq/libs/row_dispatcher/format_handler/common

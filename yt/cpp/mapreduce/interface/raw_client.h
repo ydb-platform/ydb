@@ -195,8 +195,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) = 0;
 
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files

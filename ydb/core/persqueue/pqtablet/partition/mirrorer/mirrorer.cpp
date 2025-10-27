@@ -31,7 +31,7 @@ TMirrorer::TMirrorer(
     const NKikimrPQ::TMirrorPartitionConfig& config,
     const TTabletCountersBase& counters
 )
-    : TBaseActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
+    : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_MIRRORER)
     , PartitionActor(partitionActor)
     , TopicConverter(topicConverter)
     , Partition(partition)
@@ -476,7 +476,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     ReadSession.reset();
     PartitionStream.Reset();
 
-    auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
+    auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
 
     TLog log(MakeHolder<TDeferredActorLogBackend>(

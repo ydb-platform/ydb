@@ -2853,8 +2853,13 @@ struct TBuiltinFuncInfo {
     TBuiltinFactoryCallback Callback;
 };
 
+struct TSimplePgFuncInfo {
+    std::string_view NativeFuncName;
+};
+
 using TBuiltinFactoryCallbackMap = std::unordered_map<TString, TBuiltinFuncInfo, THash<TString>>;
 using TCoreFuncMap = std::unordered_map<TString, TCoreFuncInfo, THash<TString>>;
+using TSimplePgFuncMap = std::unordered_map<TString, TSimplePgFuncInfo, THash<TString>>;
 
 TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
     const TString& functionName,
@@ -3008,6 +3013,7 @@ struct TBuiltinFuncData {
     const TBuiltinFactoryCallbackMap BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap AggrFuncs;
     const TCoreFuncMap CoreFuncs;
+    const TSimplePgFuncMap SimplePgFuncs;
 
     TBuiltinFuncData()
         : BuiltinFuncs(MakeBuiltinFuncs())
@@ -3015,6 +3021,8 @@ struct TBuiltinFuncData {
         AggrFuncs(MakeAggrFuncs())
         ,
         CoreFuncs(MakeCoreFuncs())
+        ,
+        SimplePgFuncs(MakeSimplePgFuncMap())
     {
     }
 
@@ -3035,6 +3043,7 @@ struct TBuiltinFuncData {
             {"byteat", {"ByteAt", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("ByteAt", 2, 2)}},
             {"startswith", {"StartsWith", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("StartsWith", 2, 2)}},
             {"endswith", {"EndsWith", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("EndsWith", 2, 2)}},
+            {"concat", {"Concat", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("SqlConcat", 1, -1)}},
 
             // Numeric builtins
             {"abs", {"Abs", "Normal", BuildNamedArgcBuiltinFactoryCallback<TCallNodeImpl>("Abs", 1, 1)}},
@@ -3519,6 +3528,15 @@ struct TBuiltinFuncData {
         };
         return coreFuncs;
     }
+
+    TSimplePgFuncMap MakeSimplePgFuncMap() {
+        TSimplePgFuncMap simplePgFuncs = {
+            {"now", {"CurrentUtcTimestamp"}},
+            {"to_date", {"DateTime::Format"}},
+            {"round", {"Math::Round"}},
+        };
+        return simplePgFuncs;
+    }
 };
 
 TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVector<TNodePtr>& args,
@@ -3527,6 +3545,7 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
+    const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
 
     for (auto& arg : args) {
         if (!arg) {
@@ -3582,6 +3601,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     if (ns == "datetime") {
         ns = "datetime2";
         nameSpace = "DateTime2";
+    }
+
+    // SimplePg shadows builtins
+    if (ctx.Scoped->SimplePgByDefault) {
+        if (simplePgFuncs.contains(lowerName)) {
+            ns = "simplepg";
+        }
     }
 
     auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(ns);
@@ -3994,7 +4020,23 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         } else if (normalizedName == "sqlexternalfunction") {
             return new TCallNodeImpl(pos, "SqlExternalFunction", args);
         } else {
-            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown builtin: " << name);
+            TStringBuilder b;
+            b << "Unknown builtin: " << name;
+            auto simplePgFunc = simplePgFuncs.find(lowerName);
+            if (simplePgFunc != simplePgFuncs.end()) {
+                b << ", consider using " << simplePgFunc->second.NativeFuncName << " function instead.";
+                b << " It's possible to use SimplePg::" << lowerName << " function as well but with some performance overhead.";
+            } else {
+                bool isAggregateFunc = NYql::NPg::HasAggregation(name, NYql::NPg::EAggKind::Normal);
+                bool isNormalFunc = NYql::NPg::HasProc(name, NYql::NPg::EProcKind::Function);
+                if (isAggregateFunc) {
+                    b << ", consider using PgAgg::" << name;
+                } else if (isNormalFunc) {
+                    b << ", consider using Pg::" << name;
+                }
+            }
+
+            return new TInvalidBuiltin(pos, b);
         }
     }
 
@@ -4086,6 +4128,21 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         };
     }
 
+    if (ns == "simplepg") {
+        auto simplePgFunc = simplePgFuncs.find(lowerName);
+        if (simplePgFunc == simplePgFuncs.end()) {
+            return new TInvalidBuiltin(pos, TStringBuilder() << "Unknown function: SimplePg::" << name);
+        }
+
+        nameSpace = "SimplePg";
+        name = lowerName;
+        if (!ctx.Warning(pos, TIssuesIds::CORE_SIMPLE_PG, [&](auto& out) {
+                out << "Consider using function " << simplePgFunc->second.NativeFuncName << " instead to avoid performance overhead";
+            })) {
+            return nullptr;
+        }
+    }
+
     TNodePtr typeConfig = MakeTypeConfig(pos, ns, usedArgs);
     return BuildSqlCall(ctx, pos, nameSpace, name, usedArgs, positionalArgs, namedArgs, externalTypes,
                         TDeferredAtom(typeConfig, ctx), nullptr, nullptr, {});
@@ -4096,8 +4153,9 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
     const TBuiltinFactoryCallbackMap& builtinFuncs = funcData->BuiltinFuncs;
     const TAggrFuncFactoryCallbackMap& aggrFuncs = funcData->AggrFuncs;
     const TCoreFuncMap& coreFuncs = funcData->CoreFuncs;
+    const TSimplePgFuncMap& simplePgFuncs = funcData->SimplePgFuncs;
 
-    std::map<std::string_view, std::string_view> map;
+    std::map<TString, TString> map;
     for (const auto& x : builtinFuncs) {
         if (!x.second.CanonicalSqlName.empty()) {
             map.emplace(x.second.CanonicalSqlName, x.second.Kind);
@@ -4112,6 +4170,10 @@ void EnumerateBuiltins(const std::function<void(std::string_view name, std::stri
 
     for (const auto& x : coreFuncs) {
         map.emplace(x.second.Name, "Normal");
+    }
+
+    for (const auto& x : simplePgFuncs) {
+        map.emplace(TString("SimplePg::") + x.first, "Normal");
     }
 
     for (const auto& x : map) {

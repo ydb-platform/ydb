@@ -131,7 +131,7 @@ TStringBuilder MakeTxWriteErrorMessage(TMaybe<ui64> txId,
                                        TStringBuf sourceId, ui64 seqNo)
 {
     TStringBuilder ss;
-    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", SourceId '" << sourceId << ", SeqNo " << seqNo << "] ";
+    ss << "[TxId: " << txId << ", Topic: '" << topicName << "', Partition " << partitionId << ", SourceId '" << EscapeC(sourceId) << ", SeqNo " << seqNo << "] ";
     return ss;
 }
 
@@ -264,10 +264,21 @@ TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant t
     }
 }
 
-void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, bool isInternal) {
+TActorId TPartition::ReplyTo(const ui64 destination, const TActorId& replyTo) const {
+    if (replyTo) {
+        return replyTo;
+    }
+    if (destination == 0) {
+        return SelfId();
+    }
+    return TabletActorId;
+}
+
+void TPartition::ReplyError(const TActorContext& ctx, const ui64 dst, NPersQueue::NErrorCode::EErrorCode errorCode, const TString& error, const TActorId& replyTo) {
+    auto replyToActor = ReplyTo(dst, replyTo);
     ReplyPersQueueError(
-        dst == 0 ? ctx.SelfID : TabletActorId, ctx, TabletId, TopicName(), Partition,
-        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, isInternal
+        replyToActor, ctx, TabletId, TopicName(), Partition,
+        TabletCounters, NKikimrServices::PERSQUEUE, dst, errorCode, error, true, replyToActor == SelfId()
     );
 }
 
@@ -319,7 +330,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const TActorId& writeQuoterActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
-    : TBaseActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
+    : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
     , Initializer(this)
     , TabletGeneration(tabletGeneration)
     , Partition(partition)
@@ -719,6 +730,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_INIT].IncrementFor(InitDuration.MilliSeconds());
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     InitUserInfoForImportantClients(ctx);
 
@@ -756,6 +768,8 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (MirroringEnabled(Config)) {
         CreateMirrorerActor();
     }
+
+    ProcessMLPPendingEvents();
 
     ReportCounters(ctx, true);
 }
@@ -803,9 +817,6 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
     if (userInfo.Offset >= static_cast<i64>(GetEndOffset())) {
         result.LastCommittedMessage.CreateTimestamp = now;
         result.LastCommittedMessage.WriteTimestamp = now;
-    } else if (userInfo.ActualTimestamps) {
-        result.LastCommittedMessage.CreateTimestamp = userInfo.CreateTimestamp;
-        result.LastCommittedMessage.WriteTimestamp = userInfo.WriteTimestamp;
     } else {
         auto timestamp = GetWriteTimeEstimate(userInfo.Offset);
         result.LastCommittedMessage.CreateTimestamp = timestamp;
@@ -827,14 +838,14 @@ TConsumerSnapshot TPartition::CreateSnapshot(TUserInfo& userInfo) const {
         result.LastReadMessage.WriteTimestamp = userInfo.ReadWriteTimestamp;
     } else {
         auto timestamp = GetWriteTimeEstimate(readOffset);
-        result.LastCommittedMessage.CreateTimestamp = timestamp;
-        result.LastCommittedMessage.WriteTimestamp = timestamp;
+        result.LastReadMessage.CreateTimestamp = timestamp;
+        result.LastReadMessage.WriteTimestamp = timestamp;
     }
 
     if (readOffset < (i64)GetEndOffset()) {
         result.ReadLag = result.LastReadTimestamp - result.LastReadMessage.WriteTimestamp;
     }
-    result.CommitedLag = result.LastCommittedMessage.WriteTimestamp - now;
+    result.CommitedLag = now - result.LastCommittedMessage.WriteTimestamp;
     result.TotalLag = TDuration::MilliSeconds(userInfo.GetWriteLagMs()) + result.ReadLag + (now - result.LastReadTimestamp);
 
     return result;
@@ -1731,7 +1742,7 @@ void TPartition::OnReadComplete(TReadInfo& info,
         TabletCounters.Cumulative()[COUNTER_PQ_READ_BYTES].Increment(resp->ByteSize());
     }
 
-    ctx.Send(info.Destination != 0 && !info.IsInternal ? TabletActorId : ctx.SelfID, answer.Event.Release());
+    ctx.Send(ReplyTo(info.Destination, info.ReplyTo), answer.Event.Release());
 
     OnReadRequestFinished(info.Destination, answer.Size, info.User, ctx);
 }
@@ -3246,6 +3257,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
     TotalPartitionWriteSpeed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
 
     CreateCompacter();
+    InitializeMLPConsumers();
 
     if (MirroringEnabled(Config)) {
         if (Mirrorer) {
@@ -4450,5 +4462,4 @@ void TPartition::ResetDetailedMetrics() {
     BytesWrittenPerPartition.Reset();
     MessagesWrittenPerPartition.Reset();
 }
-
 } // namespace NKikimr::NPQ

@@ -154,6 +154,8 @@ runs:
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
 
+        export UBSAN_OPTIONS=suppressions=$(realpath ydb/tests/supp/ubsan_default.txt)
+
         case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")

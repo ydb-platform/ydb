@@ -1060,8 +1060,14 @@ void TPartition::Initialize(const TActorContext& ctx) {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(EscapeBadChars(TopicName()),
                                                                          Partition.InternalPartitionId,
                                                                          Config.GetYdbDatabasePath()));
+
+            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(EscapeBadChars(TopicName()),
+                                                                                  Partition.InternalPartitionId,
+                                                                                  Config.GetYdbDatabasePath()));
         } else {
             PartitionCountersLabeled.Reset(new TPartitionLabeledCounters(TopicName(), Partition.InternalPartitionId));
+            PartitionCountersExtended.Reset(new TPartitionExtendedLabeledCounters(TopicName(),
+                                                                                  Partition.InternalPartitionId));
         }
     }
 

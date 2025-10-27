@@ -758,28 +758,6 @@ bool TPartition::ThereIsUncompactedData() const
         (BlobEncoder.BodySize >= GetCumulativeSizeLimit());
 }
 
-void TPartition::UpdateCompactionCounters()
-{
-    if (!InitDone) {
-        return;
-    }
-
-    const auto& ctx = ActorContext();
-
-    if (ThereIsUncompactedData()) {
-        auto now = ctx.Now();
-        auto begin = GetFirstUncompactedBlobTimestamp();
-
-        CompactionTimeLag.Set((now - begin).MilliSeconds());
-
-    } else {
-        CompactionTimeLag.Set(0);
-    }
-
-    CompactionUnprocessedBytes.Set(BlobEncoder.BodySize);
-    CompactionUnprocessedCount.Set(BlobEncoder.DataKeysBody.size());
-}
-
 TInstant TPartition::GetFirstUncompactedBlobTimestamp() const
 {
     const auto& ctx = ActorContext();

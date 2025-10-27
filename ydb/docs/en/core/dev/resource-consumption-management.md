@@ -29,7 +29,7 @@ CREATE RESOURCE POOL olap WITH (
 )
 ```
 
-For a complete list of resource pool parameters, see the help for [{#T}](../yql/reference/syntax/create-resource-pool.md#parameters). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT` , `QUEUE_SIZE` , `DATABASE_LOAD_CPU_THRESHOLD` ), while others apply only to one compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE` , `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` , `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` ). CPU can be shared between all pools in case of oversubscription on one compute node using `RESOURCES_WEIGHT` .
+For a complete list of resource pool parameters, see the help for (create-resource-pool.md#parameters). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT` , `QUEUE_SIZE` , `DATABASE_LOAD_CPU_THRESHOLD` ), while others apply only to one compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE` , `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` , `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` ). CPU can be shared between all pools in case of oversubscription on one compute node using `RESOURCES_WEIGHT` .
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -106,7 +106,7 @@ This means that the `default` resource pool does not have any restrictions appli
 
 ## Resource pool ACL management
 
-To create, modify, or delete a resource pool, you must grant access rights in accordance with the permissions described in the reference for [ {#T} ]( ../yql/reference/syntax/create-resource-pool.md ). For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a request like this:
+To create, modify, or delete a resource pool, you must grant access rights in accordance with the permissions described in the reference for (create-resource-pool.md). For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a request like this:
 
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
@@ -155,7 +155,7 @@ WITH (
 
 Let's say there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` matches both resource pools: `olap1` and `olap2` . If no classifier existed in the system before, then `RANK=1000` is set for `olap1` , and ` RANK =2000` for `olap2` . Resource pool classifiers with lower `RANK` values ​​have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2` , it will be selected.
 
-You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction [ {#T} ]( ../yql/reference/syntax/create-resource-pool-classifier.md ), or change `RANK` for existing resource pool classifiers using [ {#T} ]( ../yql/reference/syntax/alter-resource-pool-classifier.md ).
+You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction (create-resource-pool-classifier.md), or change `RANK` for existing resource pool classifiers using (alter-resource-pool-classifier.md).
 
 There cannot be two classifiers with the same `RANK` value in the system , which makes it possible to unambiguously determine which resource pool will be selected in the event of conflicting conditions.
 
@@ -234,13 +234,13 @@ Information about resource pool metrics can be found in [metrics reference](../r
 
 ### System Views
 
-Information about system views related to resource pools and resource pool qualifiers can be found at [{#T}](system-views.md#resource_pools).
+Information about system views related to resource pools and resource pool qualifiers can be found at (system-views.md#resource_pools).
 
 ### See also
 
-* [{#T}](../yql/reference/syntax/create-resource-pool.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool.md)
-* [{#T}](../yql/reference/syntax/create-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/alter-resource-pool-classifier.md)
-* [{#T}](../yql/reference/syntax/drop-resource-pool-classifier.md)
+* (create-resource-pool.md)
+* (alter-resource-pool.md)
+* (drop-resource-pool.md)
+* (create-resource-pool-classifier.md)
+* (alter-resource-pool-classifier.md)
+* (drop-resource-pool-classifier.md)

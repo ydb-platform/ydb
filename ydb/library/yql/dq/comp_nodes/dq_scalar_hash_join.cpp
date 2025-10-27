@@ -1,4 +1,5 @@
 
+
 #include "dq_scalar_hash_join.h"
 #include "dq_join_common.h"
 #include <dq_hash_join_table.h>
@@ -14,54 +15,7 @@
 namespace NKikimr::NMiniKQL {
 
 namespace {
-class TScalarRowSource : public NNonCopyable::TMoveOnly {
-  public:
-    TScalarRowSource(IComputationWideFlowNode* flow, const std::vector<TType*>& types)
-        : Flow_(flow)
-        , ConsumeBuff_(types.size())
-        , Pointers_(types.size())
-    {
-        for (int index = 0; index < std::ssize(types); ++index) {
-            Pointers_[index] = &ConsumeBuff_[index];
-        }
-        MKQL_ENSURE(std::ranges::is_permutation(
-                        ConsumeBuff_ | std::views::transform([](auto& value) { return &value; }), Pointers_),
-                    "Pointers_ should be a permutation of ConsumeBuff_ addresses");
-    }
-
-    bool Finished() const {
-        return Finished_;
-    }
-
-    int UserDataSize() const {
-        return ConsumeBuff_.size();
-    }
-
-    NYql::NUdf::EFetchStatus ForEachRow(TComputationContext& ctx, std::invocable<NJoinTable::TTuple> auto consume) {
-        auto res = Flow_->FetchValues(ctx, Pointers_.data());
-        switch (res) {
-        case EFetchResult::Finish: {
-            Finished_ = true;
-            return NYql::NUdf::EFetchStatus::Finish;
-        }
-        case EFetchResult::Yield: {
-            return NYql::NUdf::EFetchStatus::Yield;
-        }
-        case EFetchResult::One: {
-            consume(ConsumeBuff_.data());
-            return NYql::NUdf::EFetchStatus::Ok;
-        }
-        }
-    }
-
-  private:
-    bool Finished_ = false;
-    IComputationWideFlowNode* Flow_;
-    std::vector<NYql::NUdf::TUnboxedValue> ConsumeBuff_;
-    std::vector<NYql::NUdf::TUnboxedValue*> Pointers_;
-};
-
-// New packed tuple source for scalar join
+// Packed tuple source for scalar join
 class TScalarPackedTupleSource : public NNonCopyable::TMoveOnly {
   public:
     TScalarPackedTupleSource(TComputationContext& ctx, IComputationWideFlowNode* flow, const std::vector<TType*>& types, IScalarLayoutConverter* converter)
@@ -222,54 +176,9 @@ private:
     const THolderFactory& HolderFactory_;
 };
 
-// Old version using standard join table (kept for compatibility)
 template <EJoinKind Kind> class TScalarHashJoinState : public TComputationValue<TScalarHashJoinState<Kind>> {
   public:
-    TScalarHashJoinState(TMemoryUsageInfo* memInfo, IComputationWideFlowNode* leftFlow,
-                         IComputationWideFlowNode* rightFlow, const std::vector<ui32>& leftKeyColumns,
-                         const std::vector<ui32>& rightKeyColumns, const std::vector<TType*>& leftColumnTypes,
-                         const std::vector<TType*>& rightColumnTypes, NUdf::TLoggerPtr logger, TString componentName,
-                         TDqUserRenames renames)
-        : NKikimr::NMiniKQL::TComputationValue<TScalarHashJoinState>(memInfo)
-        , Join_(memInfo, TScalarRowSource{leftFlow, leftColumnTypes}, TScalarRowSource{rightFlow, rightColumnTypes},
-                TJoinMetadata{TColumnsMetadata{rightKeyColumns, rightColumnTypes},
-                              TColumnsMetadata{leftKeyColumns, leftColumnTypes},
-                              KeyTypesFromColumns(leftColumnTypes, leftKeyColumns)}, logger, componentName)
-        , Output_(std::move(renames), leftColumnTypes, rightColumnTypes)
-    {}
-
-    EFetchResult FetchValues(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) {
-        while (Output_.SizeTuples() == 0) {
-            auto res = Join_.MatchRows(ctx, Output_.MakeConsumeFn());
-            switch (res) {
-            case EFetchResult::Finish:
-                return res;
-            case EFetchResult::Yield:
-                return res;
-            case EFetchResult::One:
-                break;
-            }
-        }
-        const int outputTupleSize = Output_.TupleSize();
-        MKQL_ENSURE(std::ssize(Output_.OutputBuffer) >= outputTupleSize, "Output_ must contain at least one tuple");
-        for (int index = 0; index < outputTupleSize; ++index) {
-            int myIndex = std::ssize(Output_.OutputBuffer) - outputTupleSize + index;
-            int theirIndex = index;
-            *output[theirIndex] = Output_.OutputBuffer[myIndex];
-        }
-        Output_.OutputBuffer.resize(std::ssize(Output_.OutputBuffer) - outputTupleSize);
-        return EFetchResult::One;
-    }
-
-  private:
-    TJoin<TScalarRowSource, Kind> Join_;
-    TRenamedOutput<Kind> Output_;
-};
-
-// New version using packed tuples with layout converter
-template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputationValue<TScalarPackedHashJoinState<Kind>> {
-  public:
-    TScalarPackedHashJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
+    TScalarHashJoinState(TMemoryUsageInfo* memInfo, TComputationContext& ctx,
                                IComputationWideFlowNode* leftFlow,
                                IComputationWideFlowNode* rightFlow, 
                                [[maybe_unused]] const std::vector<ui32>& leftKeyColumns,
@@ -279,7 +188,7 @@ template <EJoinKind Kind> class TScalarPackedHashJoinState : public TComputation
                                TSides<std::unique_ptr<IScalarLayoutConverter>> converters,
                                NUdf::TLoggerPtr logger, TString componentName,
                                TDqUserRenames renames, const THolderFactory& holderFactory)
-        : NKikimr::NMiniKQL::TComputationValue<TScalarPackedHashJoinState>(memInfo)
+        : NKikimr::NMiniKQL::TComputationValue<TScalarHashJoinState>(memInfo)
         , Converters_(std::move(converters))
         , Join_(TSides<TScalarPackedTupleSource>{
                     .Build = TScalarPackedTupleSource{ctx, rightFlow, rightColumnTypes, Converters_.Build.get()},
@@ -349,8 +258,7 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
                            TVector<TType*>&& leftColumnTypes,
                            TVector<ui32>&& leftKeyColumns,
                            TVector<TType*>&& rightColumnTypes,
-                           TVector<ui32>&& rightKeyColumns, TDqUserRenames renames,
-                           bool usePacked = true)
+                           TVector<ui32>&& rightKeyColumns, TDqUserRenames renames)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Boxed)
         , LeftFlow_(leftFlow)
         , RightFlow_(rightFlow)
@@ -360,7 +268,6 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
         , RightColumnTypes_(std::move(rightColumnTypes))
         , RightKeyColumns_(std::move(rightKeyColumns))
         , Renames_(std::move(renames))
-        , UsePacked_(usePacked)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx,
@@ -369,43 +276,33 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
             MakeState(ctx, state);
         }
         
-        if (UsePacked_) {
-            return static_cast<TScalarPackedHashJoinState<Kind>*>(state.AsBoxed().Get())->FetchValues(ctx, output);
-        } else {
-            return static_cast<TScalarHashJoinState<Kind>*>(state.AsBoxed().Get())->FetchValues(ctx, output);
-        }
+        return static_cast<TScalarHashJoinState<Kind>*>(state.AsBoxed().Get())->FetchValues(ctx, output);
     }
 
   private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
 
-        if (UsePacked_) {
-            // Create layout converters for both sides
-            TTypeInfoHelper helper;
-            TSides<std::unique_ptr<IScalarLayoutConverter>> layouts;
+        // Create layout converters for both sides
+        TTypeInfoHelper helper;
+        TSides<std::unique_ptr<IScalarLayoutConverter>> layouts;
+        
+        ForEachSide([&](ESide side) {
+            const auto& columnTypes = (side == ESide::Probe) ? LeftColumnTypes_ : RightColumnTypes_;
+            const auto& keyColumns = (side == ESide::Probe) ? LeftKeyColumns_ : RightKeyColumns_;
             
-            ForEachSide([&](ESide side) {
-                const auto& columnTypes = (side == ESide::Probe) ? LeftColumnTypes_ : RightColumnTypes_;
-                const auto& keyColumns = (side == ESide::Probe) ? LeftKeyColumns_ : RightKeyColumns_;
-                
-                TVector<NPackedTuple::EColumnRole> roles(columnTypes.size(), NPackedTuple::EColumnRole::Payload);
-                for (ui32 column : keyColumns) {
-                    roles[column] = NPackedTuple::EColumnRole::Key;
-                }
-                
-                layouts.SelectSide(side) = MakeScalarLayoutConverter(helper, columnTypes, roles);
-            });
+            TVector<NPackedTuple::EColumnRole> roles(columnTypes.size(), NPackedTuple::EColumnRole::Payload);
+            for (ui32 column : keyColumns) {
+                roles[column] = NPackedTuple::EColumnRole::Key;
+            }
             
-            state = ctx.HolderFactory.Create<TScalarPackedHashJoinState<Kind>>(
-                ctx, LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, 
-                LeftColumnTypes_, RightColumnTypes_, 
-                std::move(layouts), logger, "ScalarHashJoin", Renames_, ctx.HolderFactory);
-        } else {
-            state = ctx.HolderFactory.Create<TScalarHashJoinState<Kind>>(
-                LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, 
-                LeftColumnTypes_, RightColumnTypes_, logger, "ScalarHashJoin", Renames_);
-        }
+            layouts.SelectSide(side) = MakeScalarLayoutConverter(helper, columnTypes, roles);
+        });
+        
+        state = ctx.HolderFactory.Create<TScalarHashJoinState<Kind>>(
+            ctx, LeftFlow_, RightFlow_, LeftKeyColumns_, RightKeyColumns_, 
+            LeftColumnTypes_, RightColumnTypes_, 
+            std::move(layouts), logger, "ScalarHashJoin", Renames_, ctx.HolderFactory);
     }
 
     void RegisterDependencies() const final {
@@ -422,7 +319,6 @@ class TScalarHashJoinWrapper : public TStatefulWideFlowComputationNode<TScalarHa
     const TVector<TType*> RightColumnTypes_;
     const TVector<ui32> RightKeyColumns_;
     const TDqUserRenames Renames_;
-    const bool UsePacked_;
 };
 
 } // namespace
@@ -491,4 +387,5 @@ IComputationWideFlowNode* WrapDqScalarHashJoin(TCallable& callable, const TCompu
                                                         std::move(rightFlowItems), std::move(rightKeyColumns), renames);
 }
 } // namespace NKikimr::NMiniKQL
+
 

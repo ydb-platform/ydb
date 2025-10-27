@@ -63,10 +63,16 @@ namespace NKikimr::NSqsTopic::V1 {
 
     void TGetQueueUrlActor::Bootstrap(const NActors::TActorContext& ctx) {
         TBase::Bootstrap(ctx);
+        if (GetRequest<TProtoRequest>(Request_.get()).queue_name().empty()) {
+
+            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NKikimr::NSqsTopic::EErrorCodes::INVALID_ARGUMENT),
+                                  "No QueueName parameter.");
+        }
         if (!Request_->GetDatabaseName()) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, static_cast<size_t>(NKikimr::NSqsTopic::EErrorCodes::INVALID_ARGUMENT),
                                   "Request without dabase is forbiden");
         }
+
         SendDescribeProposeRequest(ctx);
         Become(&TGetQueueUrlActor::StateWork);
     }
@@ -82,13 +88,6 @@ namespace NKikimr::NSqsTopic::V1 {
     void TGetQueueUrlActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const NSchemeCache::TSchemeCacheNavigate* result = ev->Get()->Request.Get();
         Y_ABORT_UNLESS(result->ResultSet.size() == 1); // describe only one topic
-        const auto& response = result->ResultSet.front();
-        const TString path = JoinSeq("/", response.Path);
-
-        if (0 && ReplyIfNotTopic(ev)) {
-            return;
-        }
-
         ReplyAndDie(ActorContext());
     }
 
@@ -103,7 +102,8 @@ namespace NKikimr::NSqsTopic::V1 {
         };
 
         TString path = PackQueueUrlPath(queueUrl);
-        result.set_queue_url(std::move(path));
+        TString url = TStringBuilder() << GetEndpoint(Cfg()) << path;
+        result.set_queue_url(std::move(url));
         return ReplyWithResult(Ydb::StatusIds::SUCCESS, result, ctx);
     }
 

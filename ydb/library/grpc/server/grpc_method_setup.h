@@ -20,7 +20,7 @@
 #define YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName) getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId) \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter) \
     MakeIntrusive<::NKikimr::NGRpcService::TGRpcRequest<                                                  \
         inputType,                                                                                        \
         outputType,                                                                                       \
@@ -28,7 +28,7 @@
     (                                                                                                     \
         this,                                                                                             \
         &Service_,                                                                                        \
-        CQ_,                                                                                              \
+        cq,                                                                                               \
         [this, proxyId = grpcProxyId](::NYdbGrpc::IRequestContextBase* reqCtx) {                          \
             ::NKikimr::NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer());                \
             ActorSystem_->Send(proxyId, new operationCallClass<                                           \
@@ -44,22 +44,25 @@
         &TGrpcAsyncService::Y_CAT(Request, methodName),                                                   \
         Y_STRINGIZE(methodName),                                                                          \
         logger,                                                                                           \
-        counterBlock                                                                                      \
+        counterBlock,                                                                                     \
+        limiter                                                                                           \
     )->Run()
 
 // Common macro for gRPC methods setup
 // Use RLSWITCH or RLMODE macro for rlMode
-#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode) \
-    SETUP_RUNTIME_EVENT_METHOD(methodName, \
-        YDB_API_DEFAULT_REQUEST_TYPE(methodName), \
-        YDB_API_DEFAULT_RESPONSE_TYPE(methodName), \
-        methodCallback, \
-        rlMode, \
-        requestType, \
-        YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName), \
-        auditMode, \
-        COMMON, \
-        ::NKikimr::NGRpcService::TGrpcRequestOperationCall, \
-        GRpcRequestProxyId_)
+#define SETUP_METHOD(methodName, methodCallback, rlMode, requestType, counterName, auditMode)             \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                                                                \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                                                         \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),                                                        \
+        methodCallback,                                                                                   \
+        rlMode,                                                                                           \
+        requestType,                                                                                      \
+        YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName),                                           \
+        auditMode,                                                                                        \
+        COMMON,                                                                                           \
+        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
+        GRpcRequestProxyId_,                                                                              \
+        CQ_,                                                                                              \
+        nullptr)
 
 #endif // GRPC_METHOD_SETUP_H

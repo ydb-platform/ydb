@@ -47,7 +47,9 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
             auditMode, \
             BOOTSTRAP_CLUSTER, \
             TGrpcRequestOperationCall, \
-            GRpcRequestProxyId_)
+            GRpcRequestProxyId_, \
+            CQ_, \
+            nullptr)
 
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, RLMODE(Rps), CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 

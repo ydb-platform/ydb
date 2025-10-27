@@ -15,8 +15,8 @@ class TMessageEnricherActor : public TBaseActor<TMessageEnricherActor>
     static constexpr TDuration Timeout = TDuration::Seconds(1);
 
 public:
-    TMessageEnricherActor(const ui32 partitionId,
-                          const TActorId& partitionActor,
+    TMessageEnricherActor(const TActorId& tabletActorId,
+                          const ui32 partitionId,
                           const TString& consumerName,
                           std::deque<TReadResult>&& replies);
 
@@ -24,7 +24,7 @@ public:
     void PassAway() override;
 
 private:
-    void Handle(TEvPQ::TEvProxyResponse::TPtr&);
+    void Handle(TEvPersQueue::TEvResponse::TPtr&);
     void Handle(TEvPQ::TEvError::TPtr&);
     void Handle(TEvents::TEvWakeup::TPtr&);
 
@@ -33,8 +33,8 @@ private:
     void ProcessQueue();
 
 private:
+    const TActorId TabletActorId;
     const ui32 PartitionId;
-    const TActorId PartitionActorId;
     const TString ConsumerName;
     std::deque<TReadResult> Queue;
     TBackoff Backoff;

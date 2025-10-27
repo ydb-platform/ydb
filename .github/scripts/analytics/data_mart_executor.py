@@ -78,24 +78,12 @@ def create_table(ydb_wrapper, table_path, column_types, store_type, partition_ke
     )
     """
 
-    print(f"Creating table with query: {create_table_sql}")
     ydb_wrapper.create_table(table_path, create_table_sql)
 def create_table_if_not_exists(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key):
     """Create table if it does not already exist, using ydb_wrapper."""
     # For now, we'll always try to create the table
     # In a more sophisticated implementation, we could check if table exists first
-    print(f"Creating table '{table_path}'...")
     create_table(ydb_wrapper, table_path, column_types, store_type, partition_keys, primary_keys, ttl_min, ttl_key)
-
-def bulk_upsert(ydb_wrapper, table_path, rows, column_types, store_type):
-    print(f"> Bulk upsert into: {table_path}")
-
-    column_types_map = ydb.BulkUpsertColumns()
-    for column_name, column_ydb_type in column_types:
-        column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, store_type.upper())
-        column_types_map.add_column(column_name, column_type_obj)
-
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types_map)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="YDB Table Manager")
@@ -143,9 +131,14 @@ def main():
 
         print(f'Preparing to upsert: {len(results)} rows')
         
-        for start in range(0, len(results), batch_size):
-            batch_rows = results[start:start + batch_size]
-            bulk_upsert(ydb_wrapper, full_table_path, batch_rows, column_types, args.store_type)
+        # Подготавливаем column_types_map один раз
+        column_types_map = ydb.BulkUpsertColumns()
+        for column_name, column_ydb_type in column_types:
+            column_type_obj, column_type_str = ydb_type_to_str(column_ydb_type, args.store_type.upper())
+            column_types_map.add_column(column_name, column_type_obj)
+        
+        # Используем bulk_upsert_batches для агрегированной статистики
+        ydb_wrapper.bulk_upsert_batches(full_table_path, results, column_types_map, batch_size)
         
         print('Data uploaded')
 

@@ -586,69 +586,6 @@ def create_issues_table(ydb_wrapper: YDBWrapper, table_path: str):
     elapsed = time.time() - start_time
     print(f"BI-optimized table created successfully (took {elapsed:.2f}s)")
 
-def bulk_upsert_issues(ydb_wrapper: YDBWrapper, table_path: str, issues: List[Dict[str, Any]]):
-    """Bulk upsert issues into YDB table optimized for BI"""
-    print(f"Bulk upserting {len(issues)} issues to BI-optimized table {table_path}")
-    start_time = time.time()
-    
-    column_types = (
-        ydb.BulkUpsertColumns()
-        # Primary identifiers
-        .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        
-        # Core issue data
-        .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # Time dimensions
-        .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        
-        # User dimensions
-        .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        
-        # Repository dimensions
-        .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # Project dimensions
-        .add_column("project_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("project_owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("project_priority", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_in_project", ydb.OptionalType(ydb.PrimitiveType.Int32))
-        
-        # Time-based metrics
-        .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        
-        # Complex data
-        .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
-        .add_column("issue_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        
-        # System fields
-        .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-    )
-    
-    ydb_wrapper.bulk_upsert(table_path, issues, column_types)
-    
-    elapsed = time.time() - start_time
-    print(f"BI-optimized bulk upsert completed (took {elapsed:.2f}s)")
-
 def main():
     """Main function to export GitHub issues to YDB"""
     print("Starting GitHub issues export to YDB")
@@ -709,19 +646,65 @@ def main():
             # Transform issues for YDB
             transformed_issues = transform_issues_for_ydb(issues, project_fields)
             
-            # Upsert issues in batches
+            # Upsert issues in batches using bulk_upsert_batches
             print(f"Uploading {len(transformed_issues)} issues in batches of {batch_size}")
             upload_start_time = time.time()
             
-            for start in range(0, len(transformed_issues), batch_size):
-                batch_start_time = time.time()
-                batch_issues = transformed_issues[start:start + batch_size]
+            # Подготавливаем column_types один раз
+            column_types = (
+                ydb.BulkUpsertColumns()
+                # Primary identifiers
+                .add_column("project_item_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("issue_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("issue_number", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                 
-                print(f"Uploading batch {start//batch_size + 1}: issues {start+1}-{start+len(batch_issues)}")
-                bulk_upsert_issues(ydb_wrapper, full_table_path, batch_issues)
+                # Core issue data
+                .add_column("title", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("body", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("body_text", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                 
-                batch_elapsed = time.time() - batch_start_time
-                print(f"Batch completed (took {batch_elapsed:.2f}s)")
+                # Time dimensions
+                .add_column("created_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("updated_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("closed_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("created_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+                .add_column("updated_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+                
+                # User dimensions
+                .add_column("author_login", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("author_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                
+                # Repository dimensions
+                .add_column("repository_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("repository_url", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                
+                # Project dimensions
+                .add_column("project_status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("project_owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("project_priority", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("is_in_project", ydb.OptionalType(ydb.PrimitiveType.Int32))
+                
+                # Time-based metrics
+                .add_column("days_since_created", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("days_since_updated", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("time_to_close_hours", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                
+                # Complex data
+                .add_column("assignees", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("labels", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("milestone", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("project_fields", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("info", ydb.OptionalType(ydb.PrimitiveType.Json))
+                .add_column("issue_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                
+                # System fields
+                .add_column("exported_at", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+            )
+            
+            # Используем bulk_upsert_batches для агрегированной статистики
+            ydb_wrapper.bulk_upsert_batches(full_table_path, transformed_issues, column_types, batch_size)
             
             upload_elapsed = time.time() - upload_start_time
             print(f"All issues uploaded (total upload time: {upload_elapsed:.2f}s)")

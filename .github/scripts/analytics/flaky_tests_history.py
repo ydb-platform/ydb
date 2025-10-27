@@ -82,6 +82,9 @@ def main():
             
             print(f'📊 Processing {len(date_list)} dates from {last_date} to {today}')
             
+            # Собираем все данные для bulk upsert
+            all_prepared_rows = []
+            
             for i, date in enumerate(sorted(date_list), 1):
                 print(f'📅 Processing date {i}/{len(date_list)}: {date}')
                 
@@ -161,11 +164,10 @@ def main():
                 print(f'📈 History data captured, {len(results)} rows')
                 
                 # Подготавливаем данные для upsert
-                prepared_for_update_rows = []
                 for row in results:
                     row['count'] = dict(zip(list(row['history_list']), [list(
                         row['history_list']).count(i) for i in list(row['history_list'])]))   
-                    prepared_for_update_rows.append({
+                    all_prepared_rows.append({
                         'suite_folder': row['suite_folder'],
                         'test_name': row['test_name'],
                         'full_name': row['full_name'],
@@ -182,8 +184,10 @@ def main():
                         'fail_count': row['count'].get('failure', 0),
                         'skip_count': row['count'].get('skipped', 0),
                     })
-                
-                print(f'💾 Upserting history for date {date}')
+            
+            # Вставляем все данные одним batch
+            if all_prepared_rows:
+                print(f'💾 Upserting {len(all_prepared_rows)} rows of history data')
                 
                 # Подготавливаем column types для bulk upsert
                 column_types = (
@@ -206,9 +210,11 @@ def main():
                 )
                 
                 full_path = f"{ydb_wrapper.database_path}/{table_path}"
-                ydb_wrapper.bulk_upsert(full_path, prepared_for_update_rows, column_types)
-
-            print('✅ History updated successfully')
+                ydb_wrapper.bulk_upsert_batches(full_path, all_prepared_rows, column_types, batch_size=1000)
+                
+                print('✅ History updated successfully')
+            else:
+                print('ℹ️  No data to upload')
 
         except Exception as e:
             print(f'❌ Script failed: {e}')

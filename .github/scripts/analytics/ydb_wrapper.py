@@ -47,6 +47,14 @@ class YDBWrapper:
         # GitHub Action info - получаем один раз
         self._github_info = self._get_github_action_info()
         
+        # Получаем версию кластера один раз при инициализации
+        try:
+            with self.get_driver() as driver:
+                self._get_cluster_version(driver)
+        except Exception as e:
+            self._log("warning", f"Failed to get cluster version: {e}")
+            self._cluster_version = "unknown"
+        
         # Проверяем доступность stats DB только один раз при инициализации
         self._stats_available = None
         if self._enable_statistics:
@@ -150,9 +158,14 @@ class YDBWrapper:
                 self._log("error", "Check your YDB credentials and network connectivity")
                 raise RuntimeError(f"YDB connection failed: {e}") from e
             
-            # Получаем версию кластера при первом подключении
+            # Версия кластера уже получена в __init__
+            # Дополнительно получаем её только если она None (fallback)
             if self._cluster_version is None:
-                self._get_cluster_version(driver)
+                try:
+                    self._get_cluster_version(driver)
+                except Exception as e:
+                    self._log("warning", f"Failed to get cluster version during operation: {e}")
+                    self._cluster_version = "unknown"
             
             yield driver
     
@@ -214,10 +227,16 @@ class YDBWrapper:
         
         # Логируем детали отправляемой статистики
         self._log("stats", "Sending statistics", 
-                  f"operation={operation_type}, status={status}, duration={duration:.2f}s, rows={rows_affected or 0}")
+                  f"operation={operation_type}, status={status}, duration={duration:.2f}s, rows={rows_affected or 0}, cluster={cluster_version or 'unknown'}")
         
         # Записываем статистику синхронно
-        self._write_stats_sync(stats_data)
+        send_start = time.time()
+        success = self._write_stats_sync(stats_data)
+        send_duration = time.time() - send_start
+        
+        # Логируем результат отправки
+        if success:
+            self._log("success", f"Statistics sent successfully in {send_duration:.2f}s")
     
     def _write_stats_sync(self, stats_data):
         """Синхронная запись статистики"""
@@ -264,7 +283,7 @@ class YDBWrapper:
                 full_path = f"{self.stats_path}/{self.stats_table}"
                 table_client.bulk_upsert(full_path, stats_data_list, column_types)
                 
-                self._log("success", "Statistics sent successfully")
+                return True
                 
             finally:
                 driver.stop()
@@ -272,10 +291,12 @@ class YDBWrapper:
         except TimeoutError as e:
             self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._connection_timeout}s)")
             self._stats_available = False
+            return False
         except Exception as e:
             error_type = type(e).__name__
             error_msg = str(e)
             self._log("warning", f"Failed to send statistics ({error_type}): {error_msg}")
+            return False
     
     def _ensure_stats_table_exists(self, driver):
         """Создание таблицы статистики если не существует"""
@@ -324,12 +345,12 @@ class YDBWrapper:
         status = "success"
         error = None
         rows_affected = 0
-        cluster_version = None
+        
+        # Используем _cluster_version или 'unknown' если он None
+        cluster_version = self._cluster_version or "unknown"
         
         try:
             with self.get_driver() as driver:
-                cluster_version = self._cluster_version
-                
                 if operation_type == "scan_query":
                     tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
                     table_client = ydb.TableClient(driver, tc_settings)
@@ -517,6 +538,81 @@ class YDBWrapper:
             return rows_count  # Возвращаем количество строк для статистики
         
         return self._execute_with_logging("bulk_upsert", operation, f"BULK_UPSERT to {table_path}", table_path)
+    
+    def bulk_upsert_batches(self, table_path: str, all_rows: List[Dict[str, Any]], 
+                           column_types: ydb.BulkUpsertColumns, batch_size: int = 1000):
+        """Выполнение bulk upsert с разбивкой на batches и агрегированной статистикой
+        
+        Args:
+            table_path: Путь к таблице
+            all_rows: Все данные для вставки
+            column_types: Типы колонок
+            batch_size: Размер batch (по умолчанию 1000)
+        """
+        start_time = time.time()
+        total_rows = len(all_rows)
+        
+        if total_rows == 0:
+            self._log("info", "bulk_upsert_batches: no rows to insert")
+            return
+        
+        num_batches = (total_rows - 1) // batch_size + 1
+        self._log("start", f"Executing bulk_upsert_batches", 
+                  f"{total_rows} rows in {num_batches} batches of {batch_size}")
+        
+        status = "success"
+        error = None
+        
+        # Используем _cluster_version или 'unknown' если он None
+        cluster_version = self._cluster_version or "unknown"
+        
+        try:
+            with self.get_driver() as driver:
+                table_client = ydb.TableClient(driver)
+                
+                for batch_num, start_idx in enumerate(range(0, total_rows, batch_size), 1):
+                    batch_rows = all_rows[start_idx:start_idx + batch_size]
+                    table_client.bulk_upsert(table_path, batch_rows, column_types)
+                    
+                    # Логируем прогресс каждые 10 batches или для последнего
+                    if batch_num % 10 == 0 or start_idx + batch_size >= total_rows:
+                        elapsed = time.time() - start_time
+                        processed = min(start_idx + batch_size, total_rows)
+                        self._log("progress", f"Batch {batch_num}/{num_batches}", 
+                                  f"{processed}/{total_rows} rows, {elapsed:.2f}s")
+            
+            duration = time.time() - start_time
+            self._log("success", f"bulk_upsert_batches completed", 
+                      f"Total: {total_rows} rows in {num_batches} batches, Duration: {duration:.2f}s")
+            
+            # Логируем ОДНУ запись статистики для всей операции
+            self._log_statistics(
+                operation_type="bulk_upsert",
+                query=f"BULK_UPSERT to {table_path} ({total_rows} rows in {num_batches} batches)",
+                duration=duration,
+                status=status,
+                rows_affected=total_rows,
+                cluster_version=cluster_version,
+                table_path=table_path
+            )
+            
+        except Exception as e:
+            duration = time.time() - start_time
+            status = "error"
+            error = str(e)
+            
+            self._log("error", f"bulk_upsert_batches failed", f"Error: {error}, Duration: {duration:.2f}s")
+            
+            self._log_statistics(
+                operation_type="bulk_upsert",
+                query=f"BULK_UPSERT to {table_path}",
+                duration=duration,
+                status=status,
+                error=error,
+                cluster_version=cluster_version,
+                table_path=table_path
+            )
+            raise
     
     def get_session_id(self) -> str:
         """Получение ID текущей сессии"""

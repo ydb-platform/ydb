@@ -35,29 +35,6 @@ def create_test_history_fast_table(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows):
-    print(f"> Bulk upsert into: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
-        .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
-
-
 def get_missed_data_for_upload(ydb_wrapper):
     query = f"""
        SELECT 
@@ -122,10 +99,28 @@ def main():
         print(f'Preparing to upsert: {len(prepared_for_upload_rows)} rows')
         
         if prepared_for_upload_rows:
-            for start in range(0, len(prepared_for_upload_rows), batch_size):
-                batch_rows_for_upload = prepared_for_upload_rows[start:start + batch_size]
-                print(f'upserting: {start}-{start + len(batch_rows_for_upload)}/{len(prepared_for_upload_rows)} rows')
-                bulk_upsert(ydb_wrapper, full_table_path, batch_rows_for_upload)
+            # Подготавливаем column_types один раз (те же поля, что возвращает get_missed_data_for_upload)
+            column_types = (
+                ydb.BulkUpsertColumns()
+                .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("job_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("job_id", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+                .add_column("commit", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("pull", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("run_timestamp", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+                .add_column("test_id", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("duration", ydb.OptionalType(ydb.PrimitiveType.Double))
+                .add_column("status", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("status_description", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            )
+            
+            # Используем bulk_upsert_batches для агрегированной статистики
+            ydb_wrapper.bulk_upsert_batches(full_table_path, prepared_for_upload_rows, column_types, batch_size)
             print('Tests uploaded')
         else:
             print('Nothing to upload')

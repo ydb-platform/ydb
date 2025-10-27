@@ -27,19 +27,6 @@ def create_tables(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
-
-
 def main():
     script_name = os.path.basename(__file__)
     
@@ -101,7 +88,19 @@ def main():
     print('upserting testowners')
     create_tables(ydb_wrapper, table_path)
     full_path = posixpath.join(ydb_wrapper.database_path, table_path)
-    bulk_upsert(ydb_wrapper, full_path, test_list)
+    
+    # Подготавливаем column_types
+    column_types = (
+        ydb.BulkUpsertColumns()
+        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+    )
+    
+    # Используем bulk_upsert_batches
+    ydb_wrapper.bulk_upsert_batches(full_path, test_list, column_types, batch_size=1000)
 
     print('testowners updated')
 

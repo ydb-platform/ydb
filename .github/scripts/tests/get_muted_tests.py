@@ -124,31 +124,6 @@ def create_tables(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows):
-    print(f'📤 Starting bulk upsert to: {table_path}')
-    print(f'   - Rows to upsert: {len(rows)}')
-    
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-    )
-    
-    print(f'🔧 Column types configured')
-    print(f'⏱️  Executing bulk upsert...')
-    
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
-    
-    print(f'✅ Bulk upsert completed successfully')
-    print(f'📊 Successfully upserted {len(rows)} rows')
-
-
 def write_to_file(text, file):
     os.makedirs(os.path.dirname(file), exist_ok=True)
     with open(file, 'w') as f:
@@ -176,7 +151,21 @@ def upload_muted_tests(tests):
         print(f'📤 Starting bulk upsert to: {full_path}')
         print(f'   - Records to upload: {len(tests)}')
         
-        bulk_upsert(ydb_wrapper, full_path, tests)
+        # Подготавливаем column_types
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+            .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        )
+        
+        # Используем bulk_upsert_batches
+        ydb_wrapper.bulk_upsert_batches(full_path, tests, column_types, batch_size=1000)
         
         print(f'✅ Bulk upsert completed successfully')
         print(f'📊 Successfully uploaded {len(tests)} test records')

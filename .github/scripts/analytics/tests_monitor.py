@@ -54,43 +54,6 @@ def create_tables(ydb_wrapper, table_path):
     ydb_wrapper.create_table(table_path, create_sql)
 
 
-def bulk_upsert(ydb_wrapper, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("history", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("success_rate", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("summary", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("is_test_chunk", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("previous_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("days_in_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("mute_state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    ydb_wrapper.bulk_upsert(table_path, rows, column_types)
-
-
 def process_test_group(name, group, last_day_data, default_start_date):
     state_list_for_filter = ['Muted', 'Muted Flaky', 'Muted Stable', 'Flaky', 'Passed']
     """Processes data for a single test group (by full_name)."""
@@ -712,21 +675,45 @@ def main():
         create_tables(ydb_wrapper, table_path)
         full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
-        def chunk_data(data, chunk_size):
-            for i in range(0, len(data), chunk_size):
-                yield data[i : i + chunk_size]
-
         chunk_size = 40000
-        total_chunks = len(prepared_for_update_rows) // chunk_size + (
-            1 if len(prepared_for_update_rows) % chunk_size != 0 else 0
-        )
 
-        for i, chunk in enumerate(chunk_data(prepared_for_update_rows, chunk_size), start=1):
-            start_time = time.time()
-            print(f"Uploading chunk {i}/{total_chunks}")
-            bulk_upsert(ydb_wrapper, full_path, chunk)
-            end_time = time.time()
-            print(f'upsert for: {end_time - start_time} ')
+        # Подготавливаем column_types один раз
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("history", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("success_rate", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("summary", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("is_test_chunk", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("previous_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("days_in_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("mute_state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("last_update_time", ydb.OptionalType(ydb.PrimitiveType.Datetime))
+        )
+        
+        # Используем bulk_upsert_batches для агрегированной статистики
+        ydb_wrapper.bulk_upsert_batches(full_path, prepared_for_update_rows, column_types, chunk_size)
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

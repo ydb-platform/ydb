@@ -78,7 +78,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             case TIndexDescription::EType::GlobalSync:
             case TIndexDescription::EType::GlobalAsync:
             case TIndexDescription::EType::GlobalSyncUnique: {
-                // deleteIndexKeys are already correct 
+                // deleteIndexKeys are already correct
                 break;
             }
             case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
@@ -133,7 +133,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildSecondaryIndexVector(table, del.Pos(), ctx);
+    const auto indexes = BuildEffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
     // Skip lookup means that the input already has all required columns and we only need to project them

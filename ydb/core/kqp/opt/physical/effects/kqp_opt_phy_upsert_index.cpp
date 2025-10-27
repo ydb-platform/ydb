@@ -610,7 +610,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildSecondaryIndexVector(table, pos, ctx, filter);
+    const auto indexes = BuildEffectedIndexTables(table, pos, ctx, filter);
 
     auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
 
@@ -885,27 +885,36 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 ? MakeRowsFromTupleDict(lookupDictRecomputed, pk, indexTableColumnsWithoutData, pos, ctx)
                 : MakeRowsFromDict(lookupDict.Cast(), pk, indexTableColumnsWithoutData, pos, ctx);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                    // deleteIndexKeys are already correct
+                    break;
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        deleteIndexKeys = BuildVectorIndexPrefixRows(table, *prefixTable, false, indexDesc, deleteIndexKeys, indexTableColumnsWithoutData, pos, ctx);
+                    }
+                    deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
+                    break;
                 }
-
-                deleteIndexKeys = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumnsWithoutData, deleteIndexKeys, false, pos, ctx);
-            } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
-                // For fulltext indexes, we need to tokenize the text from the rows being deleted
-                // and then delete the corresponding token rows from the index table
-                auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-                    .Connection<TDqCnUnionAll>()
-                        .Output()
-                            .Stage(ReadTableToStage(deleteIndexKeys, ctx))
-                            .Index().Build("0")
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text from the rows being deleted
+                    // and then delete the corresponding token rows from the index table
+                    auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+                        .Connection<TDqCnUnionAll>()
+                            .Output()
+                                .Stage(ReadTableToStage(deleteIndexKeys, ctx))
+                                .Index().Build("0")
+                                .Build()
                             .Build()
-                        .Build()
-                    .Done();
-                THashSet<TStringBuf> deleteInputColumns(indexTableColumnsWithoutData.begin(), indexTableColumnsWithoutData.end());
-                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, deleteInputColumns,
-                    indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                        .Done();
+                    THashSet<TStringBuf> deleteInputColumns(indexTableColumnsWithoutData.begin(), indexTableColumnsWithoutData.end());
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, deleteInputColumns,
+                        indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
+                    break;
+                }
             }
 
             auto indexDelete = Build<TKqlDeleteRows>(ctx, pos)
@@ -930,34 +939,41 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                 : MakeUpsertIndexRows(mode, rowsPrecompute.Cast(), lookupDict.Cast(),
                       inputColumnsSet, indexTableColumns, table, pos, ctx, false);
 
-            if (indexDesc->Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
-                if (indexDesc->KeyColumns.size() > 1) {
-                    if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
-                        auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
-                        upsertIndexRows = std::move(res.first);
-                        effects.emplace_back(std::move(res.second));
-                    } else {
-                        // Handle old prefixed vector index tables without the sequence
-                        upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique:
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        if (prefixTable->Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                            auto res = BuildVectorIndexPrefixRowsWithNew(table, *prefixTable, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                            upsertIndexRows = std::move(res.first);
+                            effects.emplace_back(std::move(res.second));
+                        } else {
+                            // Handle old prefixed vector index tables without the sequence
+                            upsertIndexRows = BuildVectorIndexPrefixRows(table, *prefixTable, true, indexDesc, upsertIndexRows, indexTableColumns, pos, ctx);
+                        }
                     }
+                    upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
+                        indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
+                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                    break;
                 }
-
-                upsertIndexRows = BuildVectorIndexPostingRows(table, mainTableNode,
-                    indexDesc->Name, indexTableColumns, upsertIndexRows, true, pos, ctx);
-                indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
-            } else if (indexDesc->Type == TIndexDescription::EType::GlobalFulltext) {
-                // For fulltext indexes, we need to tokenize the text and create index rows
-                auto upsertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-                    .Connection<TDqCnUnionAll>()
-                        .Output()
-                            .Stage(ReadTableToStage(upsertIndexRows, ctx))
-                            .Index().Build("0")
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create index rows
+                    auto upsertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
+                        .Connection<TDqCnUnionAll>()
+                            .Output()
+                                .Stage(ReadTableToStage(upsertIndexRows, ctx))
+                                .Index().Build("0")
+                                .Build()
                             .Build()
-                        .Build()
-                    .Done();
-                THashSet<TStringBuf> upsertInputColumns(indexTableColumns.begin(), indexTableColumns.end());
-                upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertRowsPrecompute, upsertInputColumns,
-                    indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                        .Done();
+                    THashSet<TStringBuf> upsertInputColumns(indexTableColumns.begin(), indexTableColumns.end());
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertRowsPrecompute, upsertInputColumns,
+                        indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
+                    break;
+                }
             }
 
             auto indexUpsert = Build<TKqlUpsertRows>(ctx, pos)

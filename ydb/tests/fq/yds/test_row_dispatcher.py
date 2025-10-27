@@ -1225,5 +1225,4 @@ class TestPqRowDispatcher(TestYdsBase):
                 break
             assert time.time() < deadline, f"Waiting sensor ParsingErrors value failed, current count {count}"
             time.sleep(1)
-        pass
         stop_yds_query(client, query_id)

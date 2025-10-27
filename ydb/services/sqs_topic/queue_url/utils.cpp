@@ -1,9 +1,11 @@
 #include "utils.h"
 
+#include <library/cpp/string_utils/url/url.h>
+
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/split.h>
-#include <library/cpp/string_utils/url/url.h>
+
 
 #include <expected>
 
@@ -16,7 +18,7 @@ namespace NKikimr::NSqsTopic {
         size_t NextPosition = TStringBuf::npos;
     };
 
-    static std::expected<TParsedString, TString> ReadString(TStringBuf part Y_LIFETIME_BOUND) {
+    static std::expected<TParsedString, TString> ReadLengthDelimitedString(TStringBuf part Y_LIFETIME_BOUND) {
         if (part.size() < 3) {
             return std::unexpected("part too short");
         }
@@ -44,13 +46,12 @@ namespace NKikimr::NSqsTopic {
         */
         TStringBuf stringValue = part.SubString(index1 + 1, length);
         if (stringValue.size() != length) {
-            return std::unexpected("Value too short");
+            return std::unexpected("value too short");
         }
         size_t endPos = index1 + 1 + length;
         Y_ASSERT(endPos <= part.size());
         return TParsedString{ToString(stringValue), endPos};
     }
-
 
     static std::expected<TRichQueueUrl, TString> ParsePathV1(const TStringBuf path) {
         TStringBuf part = path;
@@ -58,27 +59,26 @@ namespace NKikimr::NSqsTopic {
         Y_ASSERT(correctVer);
 
         TRichQueueUrl result;
-        if (auto v = ReadString(part); v.has_value()) {
-            result.Database = std::move(v.value().String);
-            part.Skip(v.value().NextPosition);
-        } else {
-            return std::unexpected("Database part " + std::move(v.error()));
-        }
 
-        if (auto v = ReadString(part); v.has_value()) {
-            result.TopicPath = std::move(v.value().String);
-            part.Skip(v.value().NextPosition);
-        } else {
-            return std::unexpected("TopicPath part " + std::move(v.error()));
-        }
+        auto consumePart = [&part](TStringBuf name, TString& dst) -> std::expected<void, TString> {
+            if (auto v = ReadLengthDelimitedString(part); v.has_value()) {
+                dst = std::move(v.value().String);
+                part.Skip(v.value().NextPosition);
+            } else {
+                return std::unexpected(TString::Join(name, " part ", v.error()));
+            }
+            return {};
+        };
 
-        if (auto v = ReadString(part); v.has_value()) {
-            result.Consumer = std::move(v.value().String);
-            part.Skip(v.value().NextPosition);
-        } else {
-            return std::unexpected("Consumer part  " + std::move(v.error()));
+        if (auto r = consumePart("Database", result.Database); !r) {
+            return std::unexpected{std::move(r).error()};
         }
-
+        if (auto r = consumePart("TopicPath", result.TopicPath); !r) {
+            return std::unexpected{std::move(r).error()};
+        }
+        if (auto r = consumePart("Consumer", result.Consumer); !r) {
+            return std::unexpected{std::move(r).error()};
+        }
         result.Fifo = AsciiHasSuffixIgnoreCase(part, ".fifo");
 
         return result;

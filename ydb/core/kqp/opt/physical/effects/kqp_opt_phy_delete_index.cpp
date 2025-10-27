@@ -94,15 +94,8 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             case TIndexDescription::EType::GlobalFulltext: {
                 // For fulltext indexes, we need to tokenize the text from the rows being deleted
                 // and then delete the corresponding token rows from the index table
-                auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, del.Pos())
-                    .Connection<TDqCnUnionAll>()
-                        .Output()
-                            .Stage(ReadInputToStage(deleteIndexKeys, ctx))
-                            .Index().Build("0")
-                            .Build()
-                        .Build()
-                    .Done();
-                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
+                deleteIndexKeys = ReadInput(deleteIndexKeys, del.Pos(), ctx);
+                deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet, indexTableColumns, /*includeDataColumns=*/false,
                     del.Pos(), ctx);
                 break;
             }

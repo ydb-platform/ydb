@@ -900,18 +900,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
-                    // For fulltext indexes, we need to tokenize the text from the rows being deleted
-                    // and then delete the corresponding token rows from the index table
-                    auto deleteKeysPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-                        .Connection<TDqCnUnionAll>()
-                            .Output()
-                                .Stage(ReadInputToStage(deleteIndexKeys, ctx))
-                                .Index().Build("0")
-                                .Build()
-                            .Build()
-                        .Done();
-                    THashSet<TStringBuf> deleteInputColumns(indexTableColumnsWithoutData.begin(), indexTableColumnsWithoutData.end());
-                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteKeysPrecompute, deleteInputColumns,
+                    // For fulltext indexes, we need to tokenize the text and create deleted rows
+                    deleteIndexKeys = ReadInput(deleteIndexKeys, pos, ctx);
+                    deleteIndexKeys = BuildFulltextIndexRows(table, indexDesc, deleteIndexKeys, indexTableColumnsSet,
                         indexTableColumnsWithoutData, /*includeDataColumns=*/false, pos, ctx);
                     break;
                 }
@@ -962,17 +953,9 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     break;
                 }
                 case TIndexDescription::EType::GlobalFulltext: {
-                    // For fulltext indexes, we need to tokenize the text and create index rows
-                    auto upsertRowsPrecompute = Build<TDqPhyPrecompute>(ctx, pos)
-                        .Connection<TDqCnUnionAll>()
-                            .Output()
-                                .Stage(ReadInputToStage(upsertIndexRows, ctx))
-                                .Index().Build("0")
-                                .Build()
-                            .Build()
-                        .Done();
-                    THashSet<TStringBuf> upsertInputColumns(indexTableColumns.begin(), indexTableColumns.end());
-                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, upsertInputColumns,
+                    // For fulltext indexes, we need to tokenize the text and create upserted rows
+                    upsertIndexRows = ReadInput(upsertIndexRows, pos, ctx);
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, upsertIndexRows, indexTableColumnsSet,
                         indexTableColumns, /*includeDataColumns=*/true, pos, ctx);
                     break;
                 }

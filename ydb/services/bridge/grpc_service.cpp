@@ -23,17 +23,16 @@ void TBridgeGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::
 }
 
 void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Bridge;
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
-    using namespace Ydb::Bridge;
-
-    #define SETUP_BRIDGE_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
+#define SETUP_BRIDGE_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
 
     SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, RLMODE(Rps), BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
     SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, RLMODE(Rps), BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
-    #undef SETUP_BRIDGE_METHOD
+#undef SETUP_BRIDGE_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

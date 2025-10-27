@@ -23,19 +23,18 @@ void TKeyValueGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc
 }
 
 void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
-
     using namespace Ydb::KeyValue;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-    #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-        SETUP_METHOD( \
-            methodName, \
-            methodCallback, \
-            rlMode, \
-            requestType, \
-            keyvalue, \
-            auditMode \
-        )
+#define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD( \
+        methodName, \
+        methodCallback, \
+        rlMode, \
+        requestType, \
+        keyvalue, \
+        auditMode \
+    )
 
     SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, RLMODE(Rps), KEYVALUE_CREATEVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_KV_METHOD(DropVolume, DoDropVolumeKeyValue, RLMODE(Rps), KEYVALUE_DROPVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
@@ -50,7 +49,7 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_KV_METHOD(ListRange, DoListRangeKeyValue, RLMODE(Rps), KEYVALUE_LISTRANGE, TAuditMode::NonModifying());
     SETUP_KV_METHOD(GetStorageChannelStatus, DoGetStorageChannelStatusKeyValue, RLMODE(Rps), KEYVALUE_GETSTORAGECHANNELSTATUS, TAuditMode::NonModifying());
 
-    #undef SETUP_KV_METHOD
+#undef SETUP_KV_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

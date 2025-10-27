@@ -23,37 +23,34 @@ void TConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::
 }
 
 void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Config;
     auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
 
-    using namespace Ydb::Config;
+#define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
 
-    #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-        SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
+#define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                 \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),          \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),         \
+        methodCallback,                                    \
+        rlMode,                                            \
+        requestType,                                       \
+        YDB_API_DEFAULT_COUNTER_BLOCK(config, methodName), \
+        auditMode,                                         \
+        BOOTSTRAP_CLUSTER,                                 \
+        TGrpcRequestOperationCall,                         \
+        GRpcRequestProxyId_,                               \
+        CQ_,                                               \
+        nullptr,                                           \
+        nullptr)
 
     SETUP_BS_METHOD(ReplaceConfig, DoReplaceConfig, RLMODE(Rps), CONFIG_REPLACECONFIG, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
     SETUP_BS_METHOD(FetchConfig, DoFetchConfig, RLMODE(Rps), CONFIG_FETCHCONFIG, TAuditMode::NonModifying());
-
-    #undef SETUP_BS_METHOD
-
-
-    #define SETUP_BOOTSTRAP_CLUSTER_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-        SETUP_RUNTIME_EVENT_METHOD(methodName, \
-            YDB_API_DEFAULT_REQUEST_TYPE(methodName), \
-            YDB_API_DEFAULT_RESPONSE_TYPE(methodName), \
-            methodCallback, \
-            rlMode, \
-            requestType, \
-            YDB_API_DEFAULT_COUNTER_BLOCK(config, methodName), \
-            auditMode, \
-            BOOTSTRAP_CLUSTER, \
-            TGrpcRequestOperationCall, \
-            GRpcRequestProxyId_, \
-            CQ_, \
-            nullptr)
-
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, RLMODE(Rps), CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
-    #undef SETUP_BS_METHOD_WITH_TYPE
+#undef SETUP_BS_METHOD
+#undef SETUP_BS_METHOD_WITH_TYPE
 }
 
 } // namespace NKikimr::NGRpcService

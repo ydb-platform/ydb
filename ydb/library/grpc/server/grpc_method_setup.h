@@ -20,7 +20,7 @@
 #define YDB_API_DEFAULT_COUNTER_BLOCK(counterName, methodName) getCounterBlock(Y_STRINGIZE(counterName), Y_STRINGIZE(methodName))
 
 // Implies usage from inside grpc service class, derived from TGrpcServiceBase
-#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter) \
+#define SETUP_RUNTIME_EVENT_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, counterBlock, auditMode, runtimeEventType, operationCallClass, grpcProxyId, cq, limiter, customAttributeProcessorCallback) \
     MakeIntrusive<::NKikimr::NGRpcService::TGRpcRequest<                                                  \
         inputType,                                                                                        \
         outputType,                                                                                       \
@@ -37,6 +37,7 @@
                 ::NKikimr::NGRpcService::NRuntimeEvents::EType::runtimeEventType>(reqCtx, methodCallback, \
                     ::NKikimr::NGRpcService::TRequestAuxSettings {                                        \
                         .RlMode = rlMode,                                                                 \
+                        .CustomAttributeProcessor = customAttributeProcessorCallback,                     \
                         .AuditMode = auditMode,                                                           \
                         .RequestType = ::NKikimr::NJaegerTracing::ERequestType::requestType,              \
                     }));                                                                                  \
@@ -63,6 +64,7 @@
         ::NKikimr::NGRpcService::TGrpcRequestOperationCall,                                               \
         GRpcRequestProxyId_,                                                                              \
         CQ_,                                                                                              \
+        nullptr,                                                                                          \
         nullptr)
 
 #endif // GRPC_METHOD_SETUP_H

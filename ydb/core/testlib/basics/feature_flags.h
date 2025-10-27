@@ -83,6 +83,7 @@ public:
     FEATURE_FLAG_SETTER(EnableDataShardWriteAlwaysVolatile)
     FEATURE_FLAG_SETTER(EnableStreamingQueries)
     FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
+    FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
 
     #undef FEATURE_FLAG_SETTER
 };

@@ -225,6 +225,10 @@ if __name__ == "__main__":
         thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
         dry_run = args.dry_run or os.getenv('DRY_RUN', 'false').lower() == 'true'
 
+        if not bot_token or not chat_id:
+            print('No bot-token or chat-id was set. Forcing dry-run mode')
+            dry_run = True
+
         message = f"""🚨 *Possible OOM*
 During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM *{round(max_agent_ram_with_threshold, 1)}GB*
 {max_agent_ram}GB total

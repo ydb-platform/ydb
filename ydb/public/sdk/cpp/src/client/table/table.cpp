@@ -2607,6 +2607,7 @@ void TFulltextIndexSettings::TAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSe
         case ETokenizer::Unspecified:
             return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
         }
+        return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
     };
 
     proto.set_tokenizer(convertTokenizer());
@@ -2695,6 +2696,7 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
         case ELayout::Unspecified:
             return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
         }
+        return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
     };
 
     settings.set_layout(convertLayout());

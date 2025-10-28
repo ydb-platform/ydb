@@ -427,7 +427,7 @@ namespace NKikimr::NBlobDepot {
 #define BD_MON_TABLE_ROW(key, value) \
         do { \
             TABLER() { \
-                TABLED() { Stream << #key ;} \
+                TABLED() { Stream << key ;} \
                 TABLED() { Stream << value ;} \
             } \
         } while(false)

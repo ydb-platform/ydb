@@ -2544,13 +2544,177 @@ void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
+TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::FromProto(const Ydb::Table::FulltextIndexSettings::Analyzers& proto) {
+    auto convertTokenizer = [&] {
+        switch (proto.tokenizer()) {
+        case Ydb::Table::FulltextIndexSettings::WHITESPACE:
+            return ETokenizer::Whitespace;
+        case Ydb::Table::FulltextIndexSettings::STANDARD:
+            return ETokenizer::Standard;
+        case Ydb::Table::FulltextIndexSettings::KEYWORD:
+            return ETokenizer::Keyword;
+        default:
+            return ETokenizer::Unspecified;
+        }
+    };
+
+    TAnalyzers result;
+    result.Tokenizer = convertTokenizer();
+    
+    if (proto.has_language()) {
+        result.Language = proto.language();
+    }
+    if (proto.has_use_filter_lowercase()) {
+        result.UseFilterLowercase = proto.use_filter_lowercase();
+    }
+    if (proto.has_use_filter_stopwords()) {
+        result.UseFilterStopwords = proto.use_filter_stopwords();
+    }
+    if (proto.has_use_filter_ngram()) {
+        result.UseFilterNgram = proto.use_filter_ngram();
+    }
+    if (proto.has_use_filter_edge_ngram()) {
+        result.UseFilterEdgeNgram = proto.use_filter_edge_ngram();
+    }
+    if (proto.has_filter_ngram_min_length()) {
+        result.FilterNgramMinLength = proto.filter_ngram_min_length();
+    }
+    if (proto.has_filter_ngram_max_length()) {
+        result.FilterNgramMaxLength = proto.filter_ngram_max_length();
+    }
+    if (proto.has_use_filter_length()) {
+        result.UseFilterLength = proto.use_filter_length();
+    }
+    if (proto.has_filter_length_min()) {
+        result.FilterLengthMin = proto.filter_length_min();
+    }
+    if (proto.has_filter_length_max()) {
+        result.FilterLengthMax = proto.filter_length_max();
+    }
+    
+    return result;
+}
+
+void TFulltextIndexSettings::TAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSettings::Analyzers& proto) const {
+    auto convertTokenizer = [&] {
+        switch (Tokenizer) {
+        case ETokenizer::Whitespace:
+            return Ydb::Table::FulltextIndexSettings::WHITESPACE;
+        case ETokenizer::Standard:
+            return Ydb::Table::FulltextIndexSettings::STANDARD;
+        case ETokenizer::Keyword:
+            return Ydb::Table::FulltextIndexSettings::KEYWORD;
+        case ETokenizer::Unspecified:
+            return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
+        }
+    };
+
+    proto.set_tokenizer(convertTokenizer());
+    
+    if (Language.has_value()) {
+        proto.set_language(*Language);
+    }
+    if (UseFilterLowercase.has_value()) {
+        proto.set_use_filter_lowercase(*UseFilterLowercase);
+    }
+    if (UseFilterStopwords.has_value()) {
+        proto.set_use_filter_stopwords(*UseFilterStopwords);
+    }
+    if (UseFilterNgram.has_value()) {
+        proto.set_use_filter_ngram(*UseFilterNgram);
+    }
+    if (UseFilterEdgeNgram.has_value()) {
+        proto.set_use_filter_edge_ngram(*UseFilterEdgeNgram);
+    }
+    if (FilterNgramMinLength.has_value()) {
+        proto.set_filter_ngram_min_length(*FilterNgramMinLength);
+    }
+    if (FilterNgramMaxLength.has_value()) {
+        proto.set_filter_ngram_max_length(*FilterNgramMaxLength);
+    }
+    if (UseFilterLength.has_value()) {
+        proto.set_use_filter_length(*UseFilterLength);
+    }
+    if (FilterLengthMin.has_value()) {
+        proto.set_filter_length_min(*FilterLengthMin);
+    }
+    if (FilterLengthMax.has_value()) {
+        proto.set_filter_length_max(*FilterLengthMax);
+    }
+}
+
+void TFulltextIndexSettings::TAnalyzers::Out(IOutputStream& o) const {
+    o << *this;
+}
+
+TFulltextIndexSettings::TColumnAnalyzers TFulltextIndexSettings::TColumnAnalyzers::FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
+    TColumnAnalyzers result;
+    if (proto.has_column()) {
+        result.Column = proto.column();
+    }
+    result.Analyzers = TAnalyzers::FromProto(proto.analyzers());
+    return result;
+}
+
+void TFulltextIndexSettings::TColumnAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) const {
+    if (Column.has_value()) {
+        proto.set_column(*Column);
+    }
+    Analyzers.SerializeTo(*proto.mutable_analyzers());
+}
+
+void TFulltextIndexSettings::TColumnAnalyzers::Out(IOutputStream& o) const {
+    o << *this;
+}
+
+TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::FulltextIndexSettings& proto) {
+    auto convertLayout = [&] {
+        switch (proto.layout()) {
+        case Ydb::Table::FulltextIndexSettings::FLAT:
+            return ELayout::Flat;
+        default:
+            return ELayout::Unspecified;
+        }
+    };
+
+    TFulltextIndexSettings result;
+    result.Layout = convertLayout();
+    
+    for (const auto& columnProto : proto.columns()) {
+        result.Columns.push_back(TColumnAnalyzers::FromProto(columnProto));
+    }
+    
+    return result;
+}
+
+void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const {
+    auto convertLayout = [&] {
+        switch (Layout) {
+        case ELayout::Flat:
+            return Ydb::Table::FulltextIndexSettings::FLAT;
+        case ELayout::Unspecified:
+            return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
+        }
+    };
+
+    settings.set_layout(convertLayout());
+    
+    for (const auto& column : Columns) {
+        column.SerializeTo(*settings.add_columns());
+    }
+}
+
+void TFulltextIndexSettings::Out(IOutputStream& o) const {
+    o << *this;
+}
+
 template <typename TProto>
 TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
     EIndexType type;
     std::vector<std::string> indexColumns;
     std::vector<std::string> dataColumns;
     std::vector<TGlobalIndexSettings> globalIndexSettings;
-    std::variant<std::monostate, TKMeansTreeSettings> specializedIndexSettings = std::monostate{};
+    std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings> specializedIndexSettings = std::monostate{};
 
     indexColumns.assign(proto.index_columns().begin(), proto.index_columns().end());
     dataColumns.assign(proto.data_columns().begin(), proto.data_columns().end());
@@ -2578,6 +2742,13 @@ TIndexDescription TIndexDescription::FromProto(const TProto& proto) {
             globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(vectorProto.prefix_table_settings()));
         }
         specializedIndexSettings = TKMeansTreeSettings::FromProto(vectorProto.vector_settings());
+        break;
+    }
+    case TProto::kGlobalFulltextIndex: {
+        type = EIndexType::GlobalFulltext;
+        const auto& fulltextProto = proto.global_fulltext_index();
+        globalIndexSettings.emplace_back(TGlobalIndexSettings::FromProto(fulltextProto.settings()));
+        specializedIndexSettings = TFulltextIndexSettings::FromProto(fulltextProto.fulltext_settings());
         break;
     }
     default: // fallback to global sync
@@ -2632,6 +2803,18 @@ void TIndexDescription::SerializeTo(Ydb::Table::TableIndex& proto) const {
         }
         if (const auto* settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
             settings->SerializeTo(vector_settings);
+        }
+        break;
+    }
+    case EIndexType::GlobalFulltext: {
+        auto* global_fulltext_index = proto.mutable_global_fulltext_index();
+        auto& settings = *global_fulltext_index->mutable_settings();
+        auto& fulltext_settings = *global_fulltext_index->mutable_fulltext_settings();
+        if (GlobalIndexSettings_.size() == 1) {
+            GlobalIndexSettings_[0].SerializeTo(settings);
+        }
+        if (const auto* ftSettings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            ftSettings->SerializeTo(fulltext_settings);
         }
         break;
     }

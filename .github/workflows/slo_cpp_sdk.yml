@@ -87,5 +87,5 @@ jobs:
       - name: Publish YDB SLO Report
         uses: ydb-platform/ydb-slo-action/report@main
         with:         
-          github_run_id: ${{ github.event.workflow_run.id }}
+          github_run_id: ${{ github.event.inputs.github_pull_request_number }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

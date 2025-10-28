@@ -210,7 +210,7 @@ class YDBWrapper:
             'timestamp': timestamp_us,
             'session_id': self._session_id,
             'operation_type': operation_type,
-            'query': query[:1000] if query and len(query) > 1000 else query,  # Ограничиваем длину запроса
+            'query': query,
             'duration_ms': int(duration * 1000),
             'status': status,
             'error': error,

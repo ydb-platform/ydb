@@ -82,7 +82,14 @@ namespace NDnsResolver {
         };
     };
 
+    enum class EDnsResolverType {
+        Ares,
+        Libc,
+    };
+
     struct TSimpleDnsResolverOptions {
+        // Type of dns resolver to use
+        EDnsResolverType Type = EDnsResolverType::Ares;
         // Initial per-server timeout, grows exponentially with each retry
         TDuration Timeout = TDuration::Seconds(1);
         // Number of attempts per-server

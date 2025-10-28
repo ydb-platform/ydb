@@ -464,7 +464,7 @@ protected:
          if (Config.SkipErrors) {
             OutputOffsets = Buffer.Offsets;
         }
-        ParsingState state{.Buffer = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
+        TParsingState state{.Buffer = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
 
         while (true) {
             auto status = ParseRows(state);
@@ -518,7 +518,7 @@ protected:
     }
 
 private: 
-    struct ParsingState {
+    struct TParsingState {
         const char* Buffer;
         size_t Size;
         bool SkipErrors = false;
@@ -534,7 +534,7 @@ private:
 
 private:
     
-    EParsingStatus ParseRows(ParsingState& state) {
+    EParsingStatus ParseRows(TParsingState& state) {
         LOG_ROW_DISPATCHER_TRACE("Init parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << " size " << state.Size);
 
         auto check = [this, &state](const TStatus& status) mutable {

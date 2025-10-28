@@ -1285,9 +1285,12 @@ template<typename TMessage>
     return defaultFields;
 }
 
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TTabletStateInfo>();
 template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TNodeStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TBSGroupStateInfo>();
 template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>();
-
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();
 }

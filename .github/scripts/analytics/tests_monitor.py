@@ -522,7 +522,7 @@ def main():
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
-        tart_time = time.time()
+        start_time = time.time()
 
         df = df.sort_values(by=['full_name', 'date_window'])
 

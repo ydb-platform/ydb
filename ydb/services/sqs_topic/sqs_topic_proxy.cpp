@@ -1,7 +1,6 @@
 #include "sqs_topic_proxy.h"
 #include "utils.h"
 
-#include <ydb/services/sqs_topic/rpc_params.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <ydb/core/grpc_services/service_sqs_topic.h>

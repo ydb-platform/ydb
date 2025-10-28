@@ -50,7 +50,6 @@
 
 #include <ydb/services/sqs_topic/grpc_service.h>
 #include <ydb/services/sqs_topic/sqs_topic_proxy.h>
-#include <ydb/services/sqs_topic/rpc_params.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
 #include <util/generic/guid.h>
@@ -1068,13 +1067,7 @@ namespace NKikimr::NHttpProxy {
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabasePath <<
                               "' iam token size: " << HttpContext.IamToken.size());
-                TMap<TString, TString> peerMetadata {
-                    {NSqsTopic::V1::FOLDER_ID, FolderId},
-                    {NSqsTopic::V1::CLOUD_ID, CloudId ? CloudId : HttpContext.UserName },
-                    {NSqsTopic::V1::USER_SID, UserSid},
-                    {NSqsTopic::V1::REQUEST_ID, HttpContext.RequestId},
-                    {NSqsTopic::V1::SECURITY_TOKEN, HttpContext.SecurityToken},
-                };
+                TMap<TString, TString> peerMetadata{};
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                         std::move(Request),
                         HttpContext.DatabasePath,

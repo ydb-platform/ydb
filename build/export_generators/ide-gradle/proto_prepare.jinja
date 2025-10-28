@@ -1,6 +1,6 @@
 {%- if prepareProtosTask %}
-
 val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+    val codegenPathRegexp = "build/{{ CODEGENS_DIRNAME }}/{{ MAIN_VARPREFIX }}\\.\\d+/".toRegex()
 {%-     if target.proto_files|length %}
     from("$arcadia_root") {
 {#- list of all current project proto files -#}
@@ -9,24 +9,28 @@ val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
 {%-         endfor %}
     }
 {%      endif -%}
-{%-     if target.runs|length or target.custom_runs|length %}
+{%-     if target.runs|length or target.custom_runs|length -%}
+{%-         set varprefix = MAIN_VARPREFIX %}
     from("$baseBuildDir") {
 {%-         for run in target.runs -%}
 {%-             for out in run.out %}
-        include({{ PatchGeneratedProto(out, true) }})
+        include({{ PatchGeneratedProto(out, true, run['_object_index']) }})
 {%-             endfor -%}
 {%-             for out_dir in run.out_dir %}
-        include({{ PatchGeneratedProto(out_dir, true) }} + "/**/*.proto")
+        include({{ PatchGeneratedProto(out_dir, true, run['_object_index']) }} + "/**/*.proto")
 {%-             endfor -%}
 {%-         endfor -%}
 {%-         for custom_run in target.custom_runs -%}
 {%-             for out in custom_run.outputs %}
-        include({{ PatchGeneratedProto(out, true) }})
+        include({{ PatchGeneratedProto(out, true, custom_run['_object_index']) }})
 {%-             endfor -%}
 {%-         endfor %}
     }
 {%      endif -%}
     into(mainProtosDir)
+    filesMatching("**/build/{{ CODEGENS_DIRNAME }}/{{ MAIN_VARPREFIX }}.*/**") {
+        path = path.replace(codegenPathRegexp, "")
+    }
 }
 {%- endif -%}
 

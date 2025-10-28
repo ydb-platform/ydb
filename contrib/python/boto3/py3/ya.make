@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.29.6)
+VERSION(1.34.89)
 
 LICENSE(Apache-2.0)
 
@@ -14,10 +14,15 @@ PEERDIR(
 
 NO_LINT()
 
+NO_CHECK_IMPORTS(
+    boto3.crt
+)
+
 PY_SRCS(
     TOP_LEVEL
     boto3/__init__.py
     boto3/compat.py
+    boto3/crt.py
     boto3/docs/__init__.py
     boto3/docs/action.py
     boto3/docs/attr.py
@@ -49,6 +54,7 @@ PY_SRCS(
     boto3/resources/params.py
     boto3/resources/response.py
     boto3/s3/__init__.py
+    boto3/s3/constants.py
     boto3/s3/inject.py
     boto3/s3/transfer.py
     boto3/session.py

@@ -1005,6 +1005,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
     RunOptions_.PrintInfo("");
     RunOptions_.PrintInfo("Done");
 
+    program->CommitFullCapture();
+
     return 0;
 }
 

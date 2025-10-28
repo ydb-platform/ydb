@@ -85,7 +85,7 @@ protected:
 
     TExpressionResorceUsage ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput);
 
-    void DumpFilesFromJob(const NYT::TNode& opSpec) const;
+    void DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const;
 
     NThreading::TFuture<NThreading::TAsyncSemaphore::TPtr> AcquireOperationLock() {
         return Session_->OperationSemaphore->AcquireAsync();
@@ -234,7 +234,7 @@ public:
                                 NYT::TOperationAttributeFilter().Add(NYT::EOperationAttribute::Spec)
                             ));
                             YQL_ENSURE(attrs.Spec.Defined());
-                            self->DumpFilesFromJob(*attrs.Spec);
+                            self->DumpFilesFromJob(*attrs.Spec, self->Options_.Config());
                         } catch (const std::exception& e) {
                             self->Session_->FullCapture_->ReportError(e);
                         }

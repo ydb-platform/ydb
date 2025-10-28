@@ -30,7 +30,7 @@
 
 {%- macro AddFileJars(file_jars) -%}
 {%-     for file_jar in file_jars %}
-        "$output_root/{{ file_jar }}"{%- if not loop.last -%},{%- endif -%}
+        "$output_root/{{ file_jar }}",
 {%-     endfor -%}
 {%- endmacro -%}
 

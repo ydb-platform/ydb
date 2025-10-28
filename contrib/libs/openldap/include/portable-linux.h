@@ -101,7 +101,7 @@
 #define HAVE_BCOPY 1
 
 /* Define to 1 if you have the <bits/types.h> header file. */
-#ifdef __linux__
+#if defined(__linux__) && !defined(_musl_)
 #define HAVE_BITS_TYPES_H 1
 #endif
 

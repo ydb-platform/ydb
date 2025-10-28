@@ -554,6 +554,12 @@ bool TProgram::IsFullCaptureReady() const {
     return true;
 }
 
+void TProgram::CommitFullCapture() const {
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+    }
+}
+
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
     NYT::TNode node;
@@ -1860,10 +1866,17 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CalculateLineage");
+        writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
-            writer.OnKeyedItem("Correct");
-            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnEndMap();
+    }
+    if (TypeCtx_->CorrectStandaloneLineage) {
+        writer.OnKeyedItem("CorrectStandaloneLineage");
+        writer.OnBeginMap();
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
         writer.OnEndMap();
     }
 
@@ -2004,10 +2017,6 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         }
 
         CloseLastSessionFuture_ = promise.GetFuture();
-    }
-
-    if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
     }
 
     TVector<NThreading::TFuture<void>> closeFutures;

@@ -701,25 +701,36 @@ class BaseJSONParser(ResponseParser):
         # if the message did not contain an error code
         # include the response status code
         response_code = response.get('status_code')
-        # Error response may contain an x-amzn-query-error header for json
-        # we need to fetch the error code from this header in that case
-        query_error = headers.get('x-amzn-query-error', '')
-        query_error_components = query_error.split(';')
-        code = None
-        if len(query_error_components) == 2 and query_error_components[0]:
-            code = query_error_components[0]
-            error['Error']['Type'] = query_error_components[1]
-        if code is None:
-            code = body.get('__type', response_code and str(response_code))
+
+        code = body.get('__type', response_code and str(response_code))
         if code is not None:
             # code has a couple forms as well:
             # * "com.aws.dynamodb.vAPI#ProvisionedThroughputExceededException"
             # * "ResourceNotFoundException"
             if '#' in code:
                 code = code.rsplit('#', 1)[1]
+            if 'x-amzn-query-error' in headers:
+                code = self._do_query_compatible_error_parse(
+                    code, headers, error
+                )
             error['Error']['Code'] = code
         self._inject_response_metadata(error, response['headers'])
         return error
+
+    def _do_query_compatible_error_parse(self, code, headers, error):
+        """
+        Error response may contain an x-amzn-query-error header to translate
+        errors codes from former `query` services into `json`. We use this to
+        do our lookup in the errorfactory for modeled errors.
+        """
+        query_error = headers['x-amzn-query-error']
+        query_error_components = query_error.split(';')
+
+        if len(query_error_components) == 2 and query_error_components[0]:
+            error['Error']['QueryErrorCode'] = code
+            error['Error']['Type'] = query_error_components[1]
+            return query_error_components[0]
+        return code
 
     def _inject_response_metadata(self, parsed, headers):
         if 'x-amzn-requestid' in headers:
@@ -1090,7 +1101,7 @@ class RestXMLParser(BaseRestParser, BaseXMLResponseParser):
             parsed.pop('HostId', '')
             return {'Error': parsed, 'ResponseMetadata': metadata}
         elif 'RequestId' in parsed:
-            # Other rest-xml serivces:
+            # Other rest-xml services:
             parsed['ResponseMetadata'] = {'RequestId': parsed.pop('RequestId')}
         default = {'Error': {'Message': '', 'Code': ''}}
         merge_dicts(default, parsed)

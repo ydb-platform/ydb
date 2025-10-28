@@ -228,7 +228,7 @@ class DecodeUtils:
         :param data: The bytes to parse from.
 
         :type length_byte_size: int
-        :param length_byte_size: The byte size of the preceeding integer that
+        :param length_byte_size: The byte size of the preceding integer that
         represents the length of the array. Supported values are 1, 2, and 4.
 
         :rtype: (bytes, int)
@@ -254,7 +254,7 @@ class DecodeUtils:
         :param bytes: The bytes to parse from.
 
         :type length_byte_size: int
-        :param length_byte_size: The byte size of the preceeding integer that
+        :param length_byte_size: The byte size of the preceding integer that
         represents the length of the array. Supported values are 1, 2, and 4.
 
         :rtype: (str, int)
@@ -406,7 +406,7 @@ class EventStreamHeaderParser:
         event stream message.
 
         :rtype: dict
-        :returns: A dicionary of header key, value pairs.
+        :returns: A dictionary of header key, value pairs.
         """
         self._data = data
         return self._parse_headers()

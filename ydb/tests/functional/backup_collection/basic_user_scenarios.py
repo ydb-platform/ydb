@@ -578,7 +578,7 @@ class BaseTestBackupInFiles(object):
             "last_success": last_success,
         }
 
-    def _rearrange_table(self, from_name: str, to_name: str):
+    def _copy_table(self, from_name: str, to_name: str):
         full_from = f"/Root/{from_name}"
         full_to = f"/Root/{to_name}"
 
@@ -600,6 +600,7 @@ class BaseTestBackupInFiles(object):
         src_rel = to_rel(full_from)
         dst_rel = to_rel(full_to)
 
+        # ensure parent directory for destination exists (idempotent)
         parent = os.path.dirname(dst_rel)
         parent_full = os.path.join(self.root_dir, parent) if parent else None
         if parent and parent_full:
@@ -666,6 +667,14 @@ class BaseTestBackupInFiles(object):
                                    rmdir_res.exit_code,
                                    getattr(rmdir_res, "std_out", b"").decode("utf-8", "ignore"),
                                    getattr(rmdir_res, "std_err", b"").decode("utf-8", "ignore"))
+
+        # Currently, deletion is not available for tables under the backup collection
+
+        # try:
+        #     with self.session_scope() as session:
+        #         session.execute_scheme(f"DROP TABLE `{from_name}`;")
+        # except Exception:
+        #     raise AssertionError(f"Failed to drop original table {full_from} after rearrange")
 
     def _setup_test_collections(self):
         collection_src = f"coll_src_{int(time.time())}"
@@ -1335,7 +1344,7 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
             shutil.rmtree(export_dir)
 
 
-class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupRestore):
+class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
     def _create_table_with_data(self, session, path, not_null=False):
         full_path = "/Root/" + path
         session.create_table(
@@ -1557,7 +1566,7 @@ class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupResto
             shutil.rmtree(export_dir)
 
 
-class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
+class TestIncrementalChainRestoreAfterDeletion(BaseTestBackupInFiles):
     def _record_snapshot_and_rows(self, collection_src: str, t_orders: str, t_products: str,
                                   created_snapshots: list, snapshot_rows: dict) -> str:
         """Record newest snapshot name and capture rows for orders/products."""
@@ -1726,36 +1735,12 @@ class TestIncrementalChainRestoreAfterDeletion(TestFullCycleLocalBackupRestore):
             shutil.rmtree(export_dir)
 
 
-class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackupRestoreWSchemaChange):
+class TestFullCycleLocalBackupRestoreWComplSchemaChange(BaseTestBackupInFiles):
     def _decode_output(self, result) -> tuple:
         """Helper to decode stdout and stderr from execution result"""
         stdout = getattr(result, "std_out", b"").decode("utf-8", "ignore")
         stderr = getattr(result, "std_err", b"").decode("utf-8", "ignore")
         return stdout, stderr
-
-    def _safe_capture_snapshot(self, table: str, default=None):
-        """Safely capture table snapshot, returning default on failure"""
-        try:
-            return self._capture_snapshot(table)
-        except Exception as e:
-            logger.debug(f"Failed to capture snapshot for {table}: {e}")
-            return default
-
-    def _safe_capture_schema(self, table_path: str, default=None):
-        """Safely capture table schema, returning default on failure"""
-        try:
-            return self._capture_schema(table_path)
-        except Exception as e:
-            logger.debug(f"Failed to capture schema for {table_path}: {e}")
-            return default
-
-    def _safe_capture_acl(self, table_path: str, default=None):
-        """Safely capture table ACL, returning default on failure"""
-        try:
-            return self._capture_acl(table_path)
-        except Exception as e:
-            logger.debug(f"Failed to capture ACL for {table_path}: {e}")
-            return default
 
     def _table_exists(self, table_path: str) -> bool:
         """Check if table exists"""
@@ -1764,86 +1749,6 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
             return True
         except Exception:
             return False
-
-    def _copy_table(self, from_name: str, to_name: str):
-        full_from = f"/Root/{from_name}"
-        full_to = f"/Root/{to_name}"
-
-        def run_cli(args):
-            cmd = [
-                backup_bin(),
-                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-                "--database", self.root_dir,
-            ] + args
-            return yatest.common.execute(cmd, check_exit_code=False)
-
-        def to_rel(p):
-            if p.startswith(self.root_dir + "/"):
-                return p[len(self.root_dir) + 1:]
-            if p == self.root_dir:
-                return ""
-            return p.lstrip("/")
-
-        src_rel = to_rel(full_from)
-        dst_rel = to_rel(full_to)
-
-        # Create parent directory if needed
-        parent = os.path.dirname(dst_rel)
-        parent_full = os.path.join(self.root_dir, parent) if parent else None
-        if parent and parent_full:
-            mkdir_res = run_cli(["scheme", "mkdir", parent])
-            if mkdir_res.exit_code != 0:
-                stdout, stderr = self._decode_output(mkdir_res)
-                logger.debug("scheme mkdir parent returned code=%s stdout=%s stderr=%s",
-                             mkdir_res.exit_code, stdout, stderr)
-
-        # Perform copy
-        item_arg = f"destination={dst_rel},source={src_rel}"
-        res = run_cli(["tools", "copy", "--item", item_arg])
-        if res.exit_code != 0:
-            stdout, stderr = self._decode_output(res)
-            raise AssertionError(f"tools copy failed: from={full_from} to={full_to} code={res.exit_code} STDOUT: {stdout} STDERR: {stderr}")
-
-        # Create temporary directory for additional operations
-        tmp_dir_rel = f"tmp_copy_{uuid.uuid4().hex[:8]}"
-        tmp_full = os.path.join(self.root_dir, tmp_dir_rel)
-
-        try:
-            # Create temp dir
-            res_mk = run_cli(["scheme", "mkdir", tmp_dir_rel])
-            if res_mk.exit_code != 0:
-                stdout, stderr = self._decode_output(res_mk)
-                logger.debug("tmp dir mkdir returned code=%s stdout=%s stderr=%s", res_mk.exit_code, stdout, stderr)
-
-            # Copy to temporary dir for verification
-            basename = os.path.basename(dst_rel) or to_rel(full_from)
-            item_tmp = f"destination={tmp_dir_rel}/{basename},source={src_rel}"
-            res_tmp = run_cli(["tools", "copy", "--item", item_tmp])
-            if res_tmp.exit_code != 0:
-                stdout, stderr = self._decode_output(res_tmp)
-                logger.warning("tools copy to tmp dir failed: code=%s stdout=%s stderr=%s", res_tmp.exit_code, stdout, stderr)
-            else:
-                # List temporary dir contents for visibility
-                try:
-                    desc = self.driver.scheme_client.list_directory(tmp_full)
-                    names = [c.name for c in desc.children if not is_system_object(c)]
-                    logger.info("Temporary directory %s contents: %s", tmp_full, names)
-                except Exception as e:
-                    logger.info("Failed to list tmp dir %s: %s", tmp_full, e)
-
-        finally:
-            # Always cleanup temp directory
-            rmdir_res = run_cli(["scheme", "rmdir", "-rf", tmp_dir_rel])
-            if rmdir_res.exit_code != 0:
-                stdout, stderr = self._decode_output(rmdir_res)
-                logger.warning("Failed to cleanup tmp dir %s: code=%s stdout=%s stderr=%s", tmp_dir_rel, rmdir_res.exit_code, stdout, stderr)
-
-        # drop old
-        # try:
-        #     with self.session_scope() as session:
-        #         session.execute_scheme(f"DROP TABLE `{from_name}`;")
-        # except Exception:
-        #     raise AssertionError(f"Failed to drop original table {full_from} after rearrange")
 
     def test_full_cycle_local_backup_restore_with_complex_schema_changes(self):
         # Define table names and paths as constants
@@ -2061,3 +1966,5 @@ class TestFullCycleLocalBackupRestoreWComplSchemaChange(TestFullCycleLocalBackup
         # Cleanup
         if os.path.exists(export_dir):
             shutil.rmtree(export_dir)
+
+

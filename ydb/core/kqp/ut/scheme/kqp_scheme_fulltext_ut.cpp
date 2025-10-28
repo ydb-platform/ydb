@@ -82,8 +82,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
             Cout << indexDesc.ToString() << Endl;
             // { name: "fulltext_idx", type: GlobalFulltext, index_columns: [Text], data_columns: [Data], 
-            //     fulltext_settings: { layout: { flat }, columns: [{ column: Text, 
-            //         analyzers: { tokenizer: { whitespace }, use_filter_lowercase: true } }] } }
+            //     fulltext_settings: { layout: flat, columns: [{ column: Text, 
+            //         analyzers: { tokenizer: whitespace, use_filter_lowercase: true } }] } }
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "fulltext_idx");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltext);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
@@ -91,11 +91,11 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Data");
             auto indexSettings = std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings());
-            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout, TFulltextIndexSettings::ELayout::Flat);
+            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout.value_or(TFulltextIndexSettings::ELayout::Unspecified), TFulltextIndexSettings::ELayout::Flat);
             UNIT_ASSERT_VALUES_EQUAL(indexSettings.Columns.size(), 1);
             auto columnSettings = indexSettings.Columns[0];
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Column, "Text");
-            UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->Tokenizer, TFulltextIndexSettings::ETokenizer::Whitespace);
+            UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->Tokenizer.value_or(TFulltextIndexSettings::ETokenizer::Unspecified), TFulltextIndexSettings::ETokenizer::Whitespace);
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->UseFilterLowercase.value_or(false), true);
             UNIT_ASSERT(!columnSettings.Analyzers->UseFilterLength.has_value());
         }
@@ -177,8 +177,8 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             auto indexDesc = result.GetTableDescription().GetIndexDescriptions()[0];
             Cout << indexDesc.ToString() << Endl;
             // { name: "fulltext_idx", type: GlobalFulltext, index_columns: [Text], data_columns: [Data], 
-            //     fulltext_settings: { layout: { flat }, columns: [{ column: Text, 
-            //         analyzers: { tokenizer: { whitespace }, use_filter_lowercase: true } }] } }
+            //     fulltext_settings: { layout: flat, columns: [{ column: Text, 
+            //         analyzers: { tokenizer: whitespace, use_filter_lowercase: true } }] } }
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexName(), "fulltext_idx");
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexType(), EIndexType::GlobalFulltext);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetIndexColumns().size(), 1);
@@ -186,11 +186,11 @@ Y_UNIT_TEST_SUITE(KqpSchemeFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(indexDesc.GetDataColumns()[0], "Data");
             auto indexSettings = std::get<TFulltextIndexSettings>(indexDesc.GetIndexSettings());
-            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout, TFulltextIndexSettings::ELayout::Flat);
+            UNIT_ASSERT_VALUES_EQUAL(indexSettings.Layout.value_or(TFulltextIndexSettings::ELayout::Unspecified), TFulltextIndexSettings::ELayout::Flat);
             UNIT_ASSERT_VALUES_EQUAL(indexSettings.Columns.size(), 1);
             auto columnSettings = indexSettings.Columns[0];
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Column, "Text");
-            UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->Tokenizer, TFulltextIndexSettings::ETokenizer::Whitespace);
+            UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->Tokenizer.value_or(TFulltextIndexSettings::ETokenizer::Unspecified), TFulltextIndexSettings::ETokenizer::Whitespace);
             UNIT_ASSERT_VALUES_EQUAL(columnSettings.Analyzers->UseFilterLowercase.value_or(false), true);
             UNIT_ASSERT(!columnSettings.Analyzers->UseFilterLength.has_value());
         }

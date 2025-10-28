@@ -85,7 +85,6 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, value) {
-    stream << "{ ";
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Flat:
             stream << "flat";
@@ -94,11 +93,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, valu
             stream << "unspecified";
             break;
     }
-    stream << " }";
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, value) {
-    stream << "{ ";
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Whitespace:
             stream << "whitespace";
@@ -113,11 +110,10 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, v
             stream << "unspecified";
             break;
     }
-    stream << " }";
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, value) {
-    stream << "{ tokenizer: " << value.Tokenizer;
+    stream << "{ tokenizer: " << value.Tokenizer.value_or(NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified);
     if (value.Language.has_value()) {
         stream << ", language: " << *value.Language;
     }
@@ -163,7 +159,7 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TColumnAnalyzers, str
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings, stream, value) {
-    stream << "{ layout: " << value.Layout;
+    stream << "{ layout: " << value.Layout.value_or(NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified);
     if (!value.Columns.empty()) {
         stream << ", columns: [";
         for (size_t i = 0; i < value.Columns.size(); ++i) {

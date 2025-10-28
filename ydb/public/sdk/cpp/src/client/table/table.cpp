@@ -2628,7 +2628,7 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     using ETokenizer = TFulltextIndexSettings::ETokenizer;
     
     auto convertTokenizer = [&] {
-        switch (analyzers.Tokenizer) {
+        switch (*analyzers.Tokenizer) {
         case ETokenizer::Whitespace:
             return Ydb::Table::FulltextIndexSettings::WHITESPACE;
         case ETokenizer::Standard:
@@ -2642,8 +2642,9 @@ Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSetting
     };
 
     Ydb::Table::FulltextIndexSettings::Analyzers proto;
-    proto.set_tokenizer(convertTokenizer());
-    
+    if (analyzers.Tokenizer) {
+        proto.set_tokenizer(convertTokenizer());
+    }
     if (analyzers.Language.has_value()) {
         proto.set_language(*analyzers.Language);
     }
@@ -2721,7 +2722,7 @@ TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::Fullt
 
 void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const {
     auto convertLayout = [&] {
-        switch (Layout) {
+        switch (*Layout) {
         case ELayout::Flat:
             return Ydb::Table::FulltextIndexSettings::FLAT;
         case ELayout::Unspecified:
@@ -2730,7 +2731,9 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
         return Ydb::Table::FulltextIndexSettings::LAYOUT_UNSPECIFIED;
     };
 
-    settings.set_layout(convertLayout());
+    if (Layout.has_value()) {
+        settings.set_layout(convertLayout());
+    }
     
     for (const auto& column : Columns) {
         *settings.add_columns() = ToProto(column);

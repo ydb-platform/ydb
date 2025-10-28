@@ -311,7 +311,7 @@ public:
     };
 
     struct TAnalyzers {
-        ETokenizer Tokenizer = ETokenizer::Unspecified;
+        std::optional<ETokenizer> Tokenizer;
         std::optional<std::string> Language;
         std::optional<bool> UseFilterLowercase;
         std::optional<bool> UseFilterStopwords;
@@ -329,7 +329,7 @@ public:
         std::optional<TAnalyzers> Analyzers;
     };
 
-    ELayout Layout = ELayout::Unspecified;
+    std::optional<ELayout> Layout;
     std::vector<TColumnAnalyzers> Columns;
 
     static TFulltextIndexSettings FromProto(const Ydb::Table::FulltextIndexSettings& proto);

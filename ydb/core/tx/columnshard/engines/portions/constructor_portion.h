@@ -23,6 +23,7 @@ protected:
     TPortionMetaConstructor MetaConstructor;
 
     std::optional<TSnapshot> RemoveSnapshot;
+    bool IsCommittedFlag;
     std::optional<ui64> SchemaVersion;
     std::optional<ui64> ShardingVersion;
 
@@ -33,8 +34,10 @@ protected:
         : PathId(portion.GetPathId())
         , PortionId(portion.GetPortionId())
         , RemoveSnapshot(portion.GetRemoveSnapshotOptional())
+        , IsCommittedFlag(portion.IsCommitted())
         , SchemaVersion(portion.GetSchemaVersionVerified())
-        , ShardingVersion(portion.GetShardingVersionOptional()) {
+        , ShardingVersion(portion.GetShardingVersionOptional())
+    {
         MetaConstructor = TPortionMetaConstructor(std::move(portion.Meta));
     }
 
@@ -87,6 +90,10 @@ public:
 
     TPortionAddress GetAddress() const {
         return TPortionAddress(PathId, GetPortionIdVerified());
+    }
+
+    bool IsCommitted() const {
+        return IsCommittedFlag;
     }
 
     bool HasRemoveSnapshot() const {

@@ -538,4 +538,54 @@ public:
     }
 };
 
+class TOrderedPortionsContainer {
+private:
+    std::set<TOrderedPortion, std::less<>> Portions;
+    YDB_READONLY_DEF(ui64, CommittedPortionCount);
+
+private:
+    void IncStats(const TPortionInfo::TConstPtr& portion) {
+        if (portion->IsCommitted()) {
+            ++CommittedPortionCount;
+        }
+    }
+    void DecStats(const TPortionInfo::TConstPtr& portion) {
+        if (portion->IsCommitted()) {
+            --CommittedPortionCount;
+        }
+    }
+
+public:
+    TOrderedPortionsContainer() = default;
+    TOrderedPortionsContainer(std::set<TOrderedPortion, std::less<>>&& portions)
+        : Portions(std::move(portions))
+    {
+        for (const auto& portion : Portions) {
+            IncStats(portion.GetPortion());
+        }
+    }
+
+    const decltype(Portions)& GetPortions() const {
+        return Portions;
+    }
+
+    decltype(Portions)::const_iterator Emplace(const TPortionInfo::TConstPtr& portion) {
+        IncStats(portion);
+        auto result = Portions.emplace(portion);
+        AFL_VERIFY(result.second);
+        return result.first;
+    }
+
+    void Erase(const TOrderedPortion& portion) {
+        auto it = Portions.find(portion);
+        AFL_VERIFY(it != Portions.end());
+        AFL_VERIFY(it->GetPortion()->GetPortionId() == portion.GetPortion()->GetPortionId());
+        Erase(it);
+    }
+    void Erase(const decltype(Portions)::const_iterator& it) {
+        DecStats(it->GetPortion());
+        Portions.erase(it);
+    }
+};
+
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

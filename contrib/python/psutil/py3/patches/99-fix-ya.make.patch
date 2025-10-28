@@ -1,12 +1,13 @@
 --- contrib/python/psutil/py3/ya.make    (index)
 +++ contrib/python/psutil/py3/ya.make    (working tree)
-@@ -32,6 +29,0 @@ CFLAGS(
+@@ -32,7 +29,0 @@ CFLAGS(
 -    -DPSUTIL_POSIX=1
 -    -DPSUTIL_LINUX=1
 -    -DPSUTIL_POSIX=1
 -    -DPSUTIL_OSX=1
 -    -DPSUTIL_WINDOWS=1
 -    -DPSUTIL_SIZEOF_PID_T=4
+-    -DPSUTIL_MAYBE_EXTERN=extern
 @@ -42,46 +33,2 @@ SRCS(
 -    psutil/_psutil_linux.c
 -    psutil/_psutil_osx.c

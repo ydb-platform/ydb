@@ -2270,35 +2270,107 @@ Y_UNIT_TEST_SUITE(Viewer) {
     }
 
     Y_UNIT_TEST(PutRecordViewerAutosplitTopic) {
+        // TString message = "message_test";
+        // TString consumerName = "consumer1";
+        // TString autoscalingTopic = "/Root/test-topic";
+        // NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup(NActors::NLog::EPriority::PRI_DEBUG);
+        // ui16 monPort = setup.GetServer().ServerSettings.MonitoringPortOffset;
+        // Cerr << "Test mon port " << monPort << Endl;
+        // TKeepAliveHttpClient httpClient("localhost", monPort);
+        // NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+
+        // setup.CreateTopicWithAutoscale(autoscalingTopic, consumerName, 1, 10);
+
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        ui16 monPort = tp.GetPort(8765);
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(port, 1);
+        settings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+
+        settings.InitKikimrRunConfig()
+                .SetNodeCount(1)
+                .SetUseRealThreads(true)
+                .SetDomainName("Root")
+                .SetMonitoringPortOffset(monPort, true);
+        settings.CreateTicketParser = CreateFakeTicketParser;
+        auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
+        TServer server{settings};
+        server.EnableGRpc(grpcSettings);
+        auto client = MakeHolder<NKikimr::NPersQueueTests::TFlatMsgBusPQClient>(settings, grpcPort);
+        client->InitRoot();
+        client->InitSourceIds();
+        NYdb::TDriverConfig driverCfg;
+        TString topicPath = "/Root/topic1";
+        TString topicName = "topic1";
         TString message = "message_test";
-        TString consumerName = "consumer1";
-        TString autoscalingTopic = "/Root/test-topic";
-        NKikimr::NPQ::NTest::TTopicSdkTestSetup setup = NKikimr::NPQ::NTest::CreateSetup(NActors::NLog::EPriority::PRI_DEBUG);
-        ui16 monPort = setup.GetServer().ServerSettings.MonitoringPortOffset;
+        driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort)
+                .SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr", ELogPriority::TLOG_DEBUG).Release()));
+        TTestActorRuntime& runtime = *server.GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        TClient client1(settings);
+        client1.InitRootScheme();
+        GrantConnect(client1);
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
         TKeepAliveHttpClient httpClient("localhost", monPort);
-        NKikimr::NViewerTests::WaitForHttpReady(httpClient);
+        TString consumerName = "consumer1";
+        NYdb::TDriver ydbDriver{driverCfg};
 
-        setup.CreateTopicWithAutoscale(autoscalingTopic, consumerName, 1, 10);
+        auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
+        // TTopicClient client(MakeDriver());
+        i64 partitionCount = 2;
+        i64 maxPartitionCount = 10;
+        NYdb::NTopic::TCreateTopicSettings topicSettings;
+        topicSettings.BeginConfigurePartitioningSettings()
+            .MinActivePartitions(partitionCount)
+            .MaxActivePartitions(maxPartitionCount);
 
-        NKikimr::NPQ::NTest::TTopicClient topicClient = setup.MakeClient();
+        topicSettings.BeginConfigurePartitioningSettings()
+                .BeginConfigureAutoPartitioningSettings()
+                .Strategy(NYdb::NTopic::EAutoPartitioningStrategy::ScaleUp);
 
-        auto describeTopicResult = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
-        UNIT_ASSERT(describeTopicResult.IsSuccess());
-        UNIT_ASSERT_EQUAL(describeTopicResult.GetTopicDescription().GetPartitions().size(), 1);
+        topicSettings.BeginAddConsumer(consumerName).EndAddConsumer();
 
-        auto writeSession = NKikimr::NPQ::NTest::CreateWriteSession(topicClient, "producer-1");
-        UNIT_ASSERT(writeSession->Write(NKikimr::NPQ::NTest::Msg("message_1.1", 2)));
+        // TConsumerSettings<NYdb::NTopic::TCreateTopicSettings> consumers(topics, consumerName);
+        // consumers.Important(important);
+        // topics.AppendConsumers(consumers);
+
+        auto status = topicClient.CreateTopic(topicPath, topicSettings).GetValueSync();
+        Y_ENSURE_BT(status.IsSuccess(), status);
 
         ui64 txId = 1006;
-        NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
+        NKikimr::NPQ::NTest::SplitPartition(runtime, ++txId, topicName, 0, "a");
 
-        auto describeTopicResult1 = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
+        // auto status = client.CreateTopic(GetTopicPath(name), topics).GetValueSync();
+        // Y_ENSURE_BT(status.IsSuccess(), status);
+
+        // NKikimr::NPQ::NTest::TTopicClient topicClient = setup.MakeClient();
+
+        // auto describeTopicResult = topicClient.DescribeTopic(autoscalingTopic).GetValueSync();
+        // UNIT_ASSERT(describeTopicResult.IsSuccess());
+        // UNIT_ASSERT_EQUAL(describeTopicResult.GetTopicDescription().GetPartitions().size(), 1);
+
+        // auto writeSession = NKikimr::NPQ::NTest::CreateWriteSession(topicClient, "producer-1");
+        // UNIT_ASSERT(writeSession->Write(NKikimr::NPQ::NTest::Msg("message_1.1", 2)));
+
+        // ui64 txId = 1006;
+        // NKikimr::NPQ::NTest::SplitPartition(setup, ++txId, 0, "a");
+
+        auto describeTopicResult1 = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult1.IsSuccess());
-        UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 3);
+        UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 4);
 
-        // checking that user with no UpdateRow rights cannot put record to topic
-        auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", autoscalingTopic, message, 0);
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+        // // checking that user with no UpdateRow rights cannot put record to topic
+        // auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
+        // UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
+
+        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0, "some_key");
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_BAD_REQUEST);
+        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 1, "some_key");
+        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
     }
 }

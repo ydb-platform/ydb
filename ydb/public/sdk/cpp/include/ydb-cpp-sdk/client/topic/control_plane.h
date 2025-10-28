@@ -63,6 +63,7 @@ public:
     bool GetKeepMessagesOrder() const;
     ui32 GetMaxProcessingAttempts() const;
     TDuration GetDefaultProcessingTimeout() const;
+    const std::string& GetDeadLetterQueue() const;
 
 private:
     std::string ConsumerName_;
@@ -75,6 +76,7 @@ private:
     bool KeepMessagesOrder_;
     ui32 MaxProcessingAttempts_;
     TDuration DefaultProcessingTimeout_;
+    std::string DeadLetterQueue_;
 };
 
 

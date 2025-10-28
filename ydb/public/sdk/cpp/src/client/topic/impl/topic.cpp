@@ -144,6 +144,10 @@ TDuration TConsumer::GetDefaultProcessingTimeout() const {
     return DefaultProcessingTimeout_;
 }
 
+const std::string& TConsumer::GetDeadLetterQueue() const {
+    return DeadLetterQueue_;
+}
+
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
     return PartitioningSettings_;
 }

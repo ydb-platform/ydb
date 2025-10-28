@@ -1030,9 +1030,6 @@ message CreateTopicRequest {
 
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
-
-    // Enable message dedupliction by message deduplication ID.
-    optional bool deduplicate_by_message_id = 14;
 }
 
 // Create topic response sent from server to client.
@@ -1169,9 +1166,6 @@ message DescribeTopicResult {
 
     // Metrics level.
     optional uint32 metrics_level = 16;
-
-    // Enable message dedupliction by message deduplication ID.
-    optional bool deduplicate_by_message_id = 17;
 }
 
 // Describe partition request sent from client to server.

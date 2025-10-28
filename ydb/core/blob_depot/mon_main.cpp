@@ -438,10 +438,10 @@ namespace NKikimr::NBlobDepot {
                                     if (value.empty()) {
                                         return value;
                                     }
-                                    if (value.size() <= 4) {
-                                        return TString(value.size(), '*');
+                                    if (value.size() <= 12) {
+                                        return TString(4, '*');
                                     }
-                                    return "*****" + value.substr(value.size() - 4);
+                                    return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
                                 };
 
                                 auto getSchemeStr = [&s3Settings] () -> TString {

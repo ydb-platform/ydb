@@ -131,14 +131,6 @@ bool CheckReservedName(const TString& name, const TPathCreationContext& context,
     return CheckReservedNameImpl(name, context, explain);
 }
 
-bool CheckReservedName(const TString& name, const TAppData* appData, const NACLib::TUserToken* userToken, bool isBackupRestoreContext, TString& explain) {
-    // Allow __ydb_backup_meta only in backup/restore operations
-    if (isBackupRestoreContext && name == "__ydb_backup_meta") {
-        return true;
-    }
-    return CheckReservedNameImpl(name, IsSystemUser(userToken), IsAdministrator(appData, userToken), explain);
-}
-
 }  // namespace NKikimr::NSchemeShard
 
 

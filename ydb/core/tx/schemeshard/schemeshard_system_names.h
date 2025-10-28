@@ -19,7 +19,6 @@ struct TPathCreationContext {
 
 bool CheckReservedName(const TString& name, const NACLib::TUserToken* userToken, const TVector<TString>& adminSids, TString& explain);
 bool CheckReservedName(const TString& name, const TAppData* appData, const NACLib::TUserToken* userToken, TString& explain);
-bool CheckReservedName(const TString& name, const TAppData* appData, const NACLib::TUserToken* userToken, bool isBackupRestoreContext, TString& explain);
 
 bool IsSystemUser(const NACLib::TUserToken* userToken);
 bool IsBackupServiceReservedName(const TString& name);

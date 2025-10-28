@@ -701,19 +701,6 @@ const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken
     return Fail(status, error);
 }
 
-const TPath::TChecker& TPath::TChecker::IsValidLeafName(const NACLib::TUserToken* userToken, bool isBackupRestoreContext, EStatus status) const {
-    if (Failed) {
-        return *this;
-    }
-
-    TString error;
-    if (Path.IsValidLeafName(userToken, isBackupRestoreContext, error)) {
-        return *this;
-    }
-
-    return Fail(status, error);
-}
-
 const TPath::TChecker& TPath::TChecker::DepthLimit(ui64 delta, EStatus status) const {
     if (Failed) {
         return *this;
@@ -1656,25 +1643,6 @@ bool TPath::IsUnderOutgoingIncrementalRestore() const {
         || Base()->PathState == NKikimrSchemeOp::EPathState::EPathStateAwaitingOutgoingIncrementalRestore;
 }
 
-bool TPath::IsUnderBackupCollection() const {
-    if (IsEmpty() || !IsResolved()) {
-        return false;
-    }
-
-    // Walk up the path hierarchy checking each level
-    TPath current = *this;
-    while (!current.IsEmpty() && current.IsResolved()) {
-        if (current.Base()->IsBackupCollection()) {
-            return true;
-        }
-        if (current.Base()->IsRoot()) {
-            break;
-        }
-        current.Rise();
-    }
-    return false;
-}
-
 TPath& TPath::RiseUntilOlapStore() {
     size_t end = Elements.size();
     while (end > 0) {
@@ -1880,10 +1848,6 @@ const TString& TPath::LeafName() const {
 }
 
 bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, TString& explain) const {
-    return IsValidLeafName(userToken, false, explain);
-}
-
-bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, bool isBackupRestoreContext, TString& explain) const {
     Y_ABORT_UNLESS(!IsEmpty());
 
     if (!SS->IsSchemeShardConfigured()) {
@@ -1930,7 +1894,7 @@ bool TPath::IsValidLeafName(const NACLib::TUserToken* userToken, bool isBackupRe
         // If system names protection is disabled, only `.sys` remains forbidden to create,
         // preserving behavior that existed before the introduction of system names protection.
         if (!AppData()->FeatureFlags.GetEnableRealSystemViewPaths()
-            || !CheckReservedName(leaf, AppData(), userToken, isBackupRestoreContext, explain))
+            || !CheckReservedName(leaf, AppData(), userToken, explain))
         {
             explain += TStringBuilder()
                 << "path part '" << leaf << "', name is reserved by the system: '" << leaf << "'";

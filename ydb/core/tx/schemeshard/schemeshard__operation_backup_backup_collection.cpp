@@ -66,10 +66,9 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
 
-    // Get OmitIndexes configuration (default: false = include indexes)
     bool omitIndexes = bc->Description.HasOmitIndexes() 
         ? bc->Description.GetOmitIndexes()
-        : true; // TEMPORARY: default to true (omit) to match old behavior while testing
+        : false;
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();

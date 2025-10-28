@@ -3,7 +3,12 @@ import os
 import requests
 import argparse
 
-from telegram.alert_queued_jobs import send_telegram_message, get_alert_logins
+from telegram.send_telegram_message import send_telegram_message
+
+
+def get_alert_logins() -> str:
+    logins = os.getenv('GH_ALERTS_TG_LOGINS')
+    return logins.strip() if logins else "@empEfarinov"
 
 
 def str_to_date(str):
@@ -14,12 +19,12 @@ def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
     """Get recent workflow runs filtered by status and event type."""
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs"
     workflow_runs = []
-    page_size = 25
+    page_size = min(100, max_runs)
     while len(workflow_runs) < max_runs:
         params = {
             'status': 'cancelled',
             'event': 'pull_request_target',
-            'per_page': 25,
+            'per_page': page_size,
             'page': len(workflow_runs) // page_size + 1
         }
         headers = {
@@ -151,8 +156,7 @@ def main():
                 bot_token,
                 chat_id,
                 message,
-                thread_id,
-                "MarkdownV2")
+                message_thread_id=thread_id)
         print(f"\nFound {len(errors)} workflows with shutdown errors out of {len(recent_workflows)} checked")
 
     except Exception as e:

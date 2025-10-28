@@ -14,15 +14,21 @@ from ydb.public.api.protos import ydb_config_pb2 as config_api
 logger = logging.getLogger()
 
 
-def config_client_factory(server, port, cluster=None, retry_count=1):
+def config_client_factory(server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
     return ConfigClient(
         server, port, cluster=cluster,
-        retry_count=retry_count
+        retry_count=retry_count,
+        ca_path=ca_path, cert_path=cert_path, key_path=key_path,
     )
 
 
 def channels_list():
     return os.getenv('CHANNELS_LIST', '')
+
+
+def read_file(path):
+    with open(path, 'rb') as f:
+        return f.read()
 
 
 class ConfigClient(object):
@@ -31,7 +37,7 @@ class ConfigClient(object):
         DETACH_STORAGE_CONFIG_SECTION = 2
         ATTACH_STORAGE_CONFIG_SECTION = 3
 
-    def __init__(self, server, port, cluster=None, retry_count=1):
+    def __init__(self, server, port, cluster=None, retry_count=1, ca_path=None, cert_path=None, key_path=None):
         self.server = server
         self.port = port
         self._cluster = cluster
@@ -42,7 +48,17 @@ class ConfigClient(object):
             ('grpc.max_receive_message_length', 64 * 10 ** 6),
             ('grpc.max_send_message_length', 64 * 10 ** 6)
         ]
-        self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
+
+        if cert_path and key_path:
+            credentials = grpc.ssl_channel_credentials(
+                root_certificates=read_file(ca_path) if ca_path else None,
+                private_key=read_file(key_path),
+                certificate_chain=read_file(cert_path)
+            )
+            self._channel = grpc.secure_channel("%s:%s" % (self.server, self.port), credentials, options=self._options)
+        else:
+            self._channel = grpc.insecure_channel("%s:%s" % (self.server, self.port), options=self._options)
+
         self._stub = grpc_server.ConfigServiceStub(self._channel)
         self._auth_token = None
 

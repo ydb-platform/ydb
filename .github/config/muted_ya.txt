@@ -32,6 +32,7 @@ ydb/core/kqp/ut/query KqpStats.CreateTableAsStats+IsOlap
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
+ydb/core/kqp/ut/service KqpQueryService.LargeUpsert-UseSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltpNoSink
@@ -50,10 +51,10 @@ ydb/core/persqueue/ut [*/*] chunk chunk
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.ClockPro
+ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex
 ydb/core/tablet_flat/ut TSharedPageCache.S3FIFO
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
-ydb/core/tx/schemeshard/ut_background_cleaning TSchemeshardBackgroundCleaningTest.SchemeshardBackgroundCleaningTestCreateCleanManyTables
 ydb/core/tx/schemeshard/ut_cdc_stream_reboots [*/*] chunk chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_pq_reboots TPqGroupTestReboots.AlterWithReboots-PQConfigTransactionsAtSchemeShard-false
@@ -86,6 +87,14 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-7-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-8-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-9-True-3-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_complex_results
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_integral_results
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_openapi_spec
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_optional_results
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_pg_results
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_result_offset_limit
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_set_result
+ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_streaming_query
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_top_level_listing_2[v2-kikimr_params0-false-client0]
 ydb/tests/fq/s3 test_s3_1.py.TestS3.test_write_result[v1-kikimr_params0-client0]
@@ -97,7 +106,6 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
-ydb/tests/functional/compatibility [test_compatibility.py */*] chunk chunk
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_current]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_24_4]
 ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_export[current_to_stable_25_1]
@@ -174,4 +182,3 @@ ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_p
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_resource_weight[1-True]
 ydb/tests/sql/large test_workload_manager.py.TestWorkloadManager.test_resource_pool_queue_size_limit
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/core/tablet_flat/ut TSharedPageCache.Compaction_BTreeIndex

@@ -27,6 +27,8 @@ public:
     void ConfigureCommonOpts(NLastGetopt::TOpts& opts);
     void ConfigureIndexOpts(NLastGetopt::TOpts& opts);
 
+    TVector<TString> GetColumns() const;
+
     TString TableName;
     TString QueryTableName;
     TString IndexName;

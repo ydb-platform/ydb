@@ -438,7 +438,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
 
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Propose merge request : " << request->Record.ShortDebugString()
+            "Propose merge request: " << request->Record.ShortDebugString()
             << ", reason: " << mergeReason);
 
         TMemoryChanges memChanges;

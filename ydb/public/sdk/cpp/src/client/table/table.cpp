@@ -480,6 +480,14 @@ public:
         Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {TGlobalIndexSettings()}, indexSettings));
+    }
+
+    void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {TGlobalIndexSettings()}, indexSettings));
+    }
+
     void AddChangefeed(const std::string& name, EChangefeedMode mode, EChangefeedFormat format) {
         Changefeeds_.emplace_back(name, mode, format);
     }
@@ -782,6 +790,14 @@ void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, c
 
 void TTableDescription::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TKMeansTreeSettings& indexSettings) {
     Impl_->AddVectorKMeansTreeIndex(indexName, EIndexType::GlobalVectorKMeansTree, indexColumns, dataColumns, indexSettings);
+}
+
+void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, indexSettings);
+}
+
+void TTableDescription::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+    Impl_->AddFulltextIndex(indexName, EIndexType::GlobalFulltext, indexColumns, dataColumns, indexSettings);
 }
 
 void TTableDescription::AddSecondaryIndex(const std::string& indexName, const std::vector<std::string>& indexColumns) {
@@ -1270,6 +1286,16 @@ TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexN
 
 TTableBuilder& TTableBuilder::AddVectorKMeansTreeIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TKMeansTreeSettings& indexSettings) {
     TableDescription_.AddVectorKMeansTreeIndex(indexName, indexColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, indexColumns, dataColumns, indexSettings);
+    return *this;
+}
+
+TTableBuilder& TTableBuilder::AddFulltextIndex(const std::string& indexName, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
+    TableDescription_.AddFulltextIndex(indexName, indexColumns, indexSettings);
     return *this;
 }
 

@@ -2299,7 +2299,6 @@ Y_UNIT_TEST_SUITE(Viewer) {
         TClient client1(settings);
         client1.InitRootScheme();
         GrantConnect(client1);
-        client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
         TKeepAliveHttpClient httpClient("localhost", monPort);
         TString consumerName = "consumer1";
         NYdb::TDriver ydbDriver{driverCfg};

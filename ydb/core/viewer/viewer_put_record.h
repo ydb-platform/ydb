@@ -48,7 +48,7 @@ private:
     TVector<TMetadataItem> Metadata;
     ui64 TabletId;
     TActorId WriteActorId;
-    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> ResultSchemeCache;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResultSchemeCache;
 
 public:
     STATEFN(StateWork) {
@@ -138,12 +138,14 @@ public:
     }
 
      void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        auto& result(ResultSchemeCache);
-        if (!result.Set(std::move(ev))) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+        if (!ResultSchemeCache->Set(std::move(ev))) {
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
         }
-        auto* navigate = result->Request.Get();
-        auto& info = navigate->ResultSet.front();
+        if (ResultSchemeCache->IsError()) {
+            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + ResultSchemeCache->GetError()));
+        }
+        auto navigate = *ResultSchemeCache->Get()->Request;
+        auto& info = navigate.ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
         }

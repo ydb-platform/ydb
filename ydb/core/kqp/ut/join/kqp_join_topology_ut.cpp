@@ -54,18 +54,18 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
     std::string ConfigureQuery(const std::string &query, bool enableShuffleElimination = false, unsigned optLevel = 2) {
-        std::string queryWithShuffleElimination = "PRAGMA ydb.OptShuffleElimination = \"";
+        std::string queryWithShuffleElimination = "PRAGMA ydb.OptShuffleElimination=\"";
         queryWithShuffleElimination += enableShuffleElimination ? "true" : "false";
         queryWithShuffleElimination += "\";\n";
         queryWithShuffleElimination += "PRAGMA ydb.MaxDPHypDPTableSize='4294967295';\n";
         queryWithShuffleElimination += "PRAGMA ydb.ForceShuffleElimination='true';\n";
-        queryWithShuffleElimination += "PRAGMA ydb.CostBasedOptimizationLevel = \"" + std::to_string(optLevel) + "\";\n";
+        queryWithShuffleElimination += "PRAGMA ydb.CostBasedOptimizationLevel=\"" + std::to_string(optLevel) + "\";\n";
         queryWithShuffleElimination += query;
 
         return queryWithShuffleElimination;
     }
 
-    std::optional<TStatistics<ui64>> BenchmarkExplain(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
+    std::optional<TRunningStatistics<ui64>> BenchmarkExplain(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
         std::optional<TString> savedPlan = std::nullopt;
         auto stats = Benchmark(config, [&]() -> bool {
             auto plan = ExplainQuery(session, query);
@@ -85,22 +85,47 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         JustPrintPlan(*savedPlan);
         Cout << "--------------------------------------------------------------------------\n";
 
-        stats->Dump(Cout);
+        DumpTimeStatistics(stats->GetStatistics(), Cout);
 
         return stats;
     }
 
 
-    std::optional<TStatistics<ui64>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
+    struct ShuffleEliminationBenchmarkResult {
+        TRunningStatistics<ui64> WithoutCBO;
+        TRunningStatistics<i64> WithShuffleElimination;
+        TRunningStatistics<i64> WithoutShuffleElimination;
+    };
+
+    std::optional<TRunningStatistics<double>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
         Cout << "--------------------------------- W/O CBO --------------------------------\n";
-        BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/1));
+        auto withoutCBO = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/0));
+        if (!withoutCBO) {
+            return std::nullopt;
+        }
+
         Cout << "--------------------------------- CBO-SE ---------------------------------\n";
-        BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
+        auto withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
+        if (!withoutShuffleElimination) {
+            return std::nullopt;
+        }
+
         Cout << "--------------------------------- CBO+SE ---------------------------------\n";
-        auto result = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+        auto withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+        if (!withShuffleElimination) {
+            return std::nullopt;
+        }
+
         Cout << "--------------------------------------------------------------------------\n";
 
-        return result;
+
+        ShuffleEliminationBenchmarkResult result {
+            .WithoutCBO = *withoutCBO,
+            .WithShuffleElimination = *withShuffleElimination - *withoutCBO,
+            .WithoutShuffleElimination = *withoutShuffleElimination - *withoutCBO
+        };
+
+        return result.WithShuffleElimination / result.WithoutShuffleElimination;
     }
 
     TKikimrRunner GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
@@ -125,7 +150,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return TKikimrRunner(serverSettings);
     }
 
-    bool BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
+    std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
         Cout << "\n\n";
         Cout << "================================= CREATE =================================\n";
         graph.DumpGraph(Cout);
@@ -138,7 +163,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto creationQuery = graph.GetSchema().MakeCreateQuery();
         Cout << creationQuery;
         if (!ExecuteQuery(session, creationQuery)) {
-            return false;
+            return std::nullopt;
         }
 
         Cout << "================================= BENCHMARK ==============================\n";
@@ -150,15 +175,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto deletionQuery = graph.GetSchema().MakeDropQuery();
         Cout << deletionQuery;
         if (!ExecuteQuery(session, deletionQuery)) { // TODO: this is really bad probably?
-            return false;
+            return std::nullopt;
         }
         Cout << "==========================================================================\n";
 
-        if (!resultTime) {
-            return false; // query timed out
-        }
-
-        return true;
+        return resultTime;
     }
 
     template <auto Lambda>
@@ -166,15 +187,18 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto config = TBenchmarkConfig {
             .Warmup = {
                 .MinRepeats = 1,
-                .MaxRepeats = 3,
-                .Timeout = 10'000'000,
+                .MaxRepeats = 5,
+                .Timeout = 1'000'000'000,
             },
 
             .Bench = {
-                .MinRepeats = 3,
-                .MaxRepeats = 100,
-                .Timeout = 1'000'000'000,
+                .MinRepeats = 10,
+                .MaxRepeats = 30,
+                .Timeout = 10'000'000'000,
             },
+
+            .SingleRunTimeout = 20'000'000'000,
+            .MADThreshold = 0.05
         };
 
         std::mt19937 mt(seed);
@@ -186,12 +210,22 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        for (int i = 2 /* one table is not possible with all topologies, so 2 */; i < maxNumTables; i ++) {
-            for (double probability = 0; probability <= 1.0; probability += probabilityStep) {
-                TRelationGraph graph = Lambda(mt, i, probability);
-                BenchmarkShuffleEliminationOnTopology(config, session, graph);
+        auto OS = TUnbufferedFileOutput("results.csv");
+        DumpBoxPlotCSVHeader(OS);
+
+        for (int i = 2 /* one table is not possible with all topologies, so 2 */; true; i ++) {
+            (void) probabilityStep;
+            double probability = 0.5;
+
+            TRelationGraph graph = Lambda(mt, i, probability);
+            auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
+            if (!result) {
+                goto stop;
             }
+
+            DumpBoxPlotToCSV(OS, i, result->GetStatistics());
         }
+    stop:;
     }
 
 

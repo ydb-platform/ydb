@@ -108,7 +108,7 @@ private:
 
 template <typename TValue>
 struct TStatistics {
-    TValue N;
+    ui64 N;
 
     TValue Min, Max;
 
@@ -118,12 +118,21 @@ struct TStatistics {
     double Mean;
     double Stdev;
 
-    void Dump(IOutputStream &OS) const {
-        OS << "Median = " << TimeFormatter::Format(Median, MAD) << " (MAD)\n";
-        OS << "Mean = " << TimeFormatter::Format(Mean, Stdev) << " (Std. dev.)\n";
-        OS << "N = " << N << " [ " << TimeFormatter::Format(Min) << ", " << TimeFormatter::Format(Max) << " ]\n";
-    }
+    double Q1;
+    double Q3;
+
+    double IQR;
+    std::vector<TValue> Outliers;
 };
+
+void DumpTimeStatistics(TStatistics<ui64> stats, IOutputStream &OS) {
+    OS << "Median = " << TimeFormatter::Format(stats.Median, stats.MAD) << " (MAD)\n";
+
+    OS << "N = " << stats.N << "\n";
+    OS << "Min, Max = [ " << TimeFormatter::Format(stats.Min) << ", " << TimeFormatter::Format(stats.Max) << " ]\n";
+
+    OS << "Mean = " << TimeFormatter::Format(stats.Mean, stats.Stdev) << " (Std. dev.)\n";
+}
 
 // TValue is arithmetic and can be compared with itself, added to itself, and dividable by floats
 // TValue is assumed to be cheap to pass by value
@@ -231,13 +240,9 @@ public:
         std::vector<double> deviation;
         double median = GetMedian();
 
-        for (TValue value : MaxHeap_) {
+        IterateElements([&](TValue value) {
             deviation.push_back(std::abs(value - median));
-        }
-
-        for (TValue value : MinHeap_) {
-            deviation.push_back(std::abs(value - median));
-        }
+        });
 
         std::sort(deviation.begin(), deviation.end());
         return (deviation[deviation.size() / 2] + deviation[(deviation.size() - 1) / 2]) / 2.0;
@@ -263,15 +268,70 @@ public:
     }
 
     TStatistics<TValue> GetStatistics() const {
+        auto elements = CollectElements();
+        std::sort(elements.begin(), elements.end());
+
+        double q1 = CalculateQuartile(elements, 0.25);
+        double q3 = CalculateQuartile(elements, 0.75);
+        double iqr = q3 - q1;
+
+        double median = GetMedian();
+
+        const double multiplier = 1.5;
+        double lowerFence = q1 - multiplier * iqr;
+        double upperFence = q3 + multiplier * iqr;
+
+        std::vector<TValue> outliers;
+        for (TValue value : elements) {
+            if (value < lowerFence || value > upperFence) {
+                outliers.push_back(value);
+            }
+        }
+
         return {
             .N = GetN(),
             .Min = GetMin(),
             .Max = GetMax(),
-            .Median = GetMedian(),
+            .Median = median,
             .MAD = CalculateMAD(),
             .Mean = GetMean(),
             .Stdev = CalculateStdDev(),
+            .Q1 = q1,
+            .Q3 = q3,
+            .IQR = iqr,
+            .Outliers = outliers
         };
+    }
+
+    std::vector<TValue> CollectElements() const {
+        std::vector<TValue> values;
+        IterateElements([&](TValue value) {
+            values.push_back(value);
+        });
+
+        return values;
+    }
+
+    TRunningStatistics<i64> operator-(TRunningStatistics rhsStats) const {
+        TRunningStatistics<i64> stats;
+        IterateElements([&](TValue lhs) {
+            rhsStats.IterateElements([&](TValue rhs) {
+                stats.AddValue((i64) lhs - (i64) rhs);
+            });
+        });
+
+        return stats;
+    }
+
+    TRunningStatistics<double> operator/(TRunningStatistics rhsStats) const {
+        TRunningStatistics<double> stats;
+        IterateElements([&](TValue lhs) {
+            rhsStats.IterateElements([&](TValue rhs) {
+                stats.AddValue((double) lhs / (double) rhs);
+            });
+        });
+
+        return stats;
     }
 
 private:
@@ -286,7 +346,62 @@ private:
 
     std::optional<TValue> Min_;
     std::optional<TValue> Max_;
+
+private:
+    template <typename Lambda>
+    void IterateElements(Lambda &&lambda) const {
+        for (TValue value : MaxHeap_) {
+            lambda(value);
+        }
+
+        for (TValue value : MinHeap_) {
+            lambda(value);
+        }
+    }
+
+    static double CalculateQuartile(const std::vector<TValue>& data, double percentile) { // TODO: rename
+        assert(percentile >= 0.0 && percentile <= 1.0);
+        assert(std::is_sorted(data.begin(), data.end()));
+
+        double position = percentile * (data.size() - 1);
+        int lowerIndex = floor(position);
+        int upperIndex = ceil(position);
+
+        if (lowerIndex == upperIndex) {
+            return data[lowerIndex];
+        }
+
+        double weight = position - lowerIndex;
+        return data[lowerIndex] * (1 - weight) + data[upperIndex] * weight;
+    }
 };
+
+template <typename TValue>
+static std::string joinVector(const std::vector<TValue> &data) {
+    if (data.empty()) {
+        return "";
+    }
+
+    std::string str;
+    str += std::to_string(data[0]);
+
+    for (ui32 i = 1; i < data.size(); ++ i) {
+        str += ";" + std::to_string(data[i]);
+    }
+
+    return str;
+}
+
+
+void DumpBoxPlotCSVHeader(IOutputStream &OS) {
+    OS << "N,median,Q1,Q3,IQR,MAD,outliers\n";
+}
+
+template <typename TValue>
+void DumpBoxPlotToCSV(IOutputStream &OS, ui32 i, TStatistics<TValue> stat) {
+    OS << i << "," << stat.Median << "," << stat.Q1  << "," << stat.Q3 << "," << stat.IQR << "," << stat.MAD << "," << joinVector(stat.Outliers) << "\n";
+}
+
 
 struct TRepeatedTestConfig {
     ui32 MinRepeats;
@@ -295,7 +410,7 @@ struct TRepeatedTestConfig {
 };
 
 template <typename TLambda>
-std::optional<TStatistics<ui64>> RepeatedTest(TRepeatedTestConfig config, TLambda &&lambda) {
+std::optional<TRunningStatistics<ui64>> RepeatedTest(TRepeatedTestConfig config, ui64 singleRunTimeout, double thresholdMAD, TLambda &&lambda) {
     assert(config.MinRepeats >= 1);
 
     TRunningStatistics<ui64> stats;
@@ -303,34 +418,37 @@ std::optional<TStatistics<ui64>> RepeatedTest(TRepeatedTestConfig config, TLambd
         bool hasTimedOut = false;
         ui64 ellapsedTime = MeasureTimeNanos([&]() { hasTimedOut = !lambda(); });
 
-        if (hasTimedOut) {
+        if (hasTimedOut || ellapsedTime > singleRunTimeout) {
             return std::nullopt;
         }
 
         stats.AddValue(ellapsedTime);
-    } while (stats.GetN() < config.MaxRepeats &&
+    } while ((stats.GetN() < config.MaxRepeats) &&
              (stats.GetN() < config.MinRepeats ||
-              stats.GetTotal() + stats.GetMedian() <= config.Timeout));
+              (stats.GetTotal() + stats.GetMedian() <= config.Timeout &&
+               stats.CalculateMAD() / stats.GetMedian() > thresholdMAD)));
 
-    return stats.GetStatistics();
+    return stats;
 }
 
 
 struct TBenchmarkConfig {
     TRepeatedTestConfig Warmup;
     TRepeatedTestConfig Bench;
+    ui64 SingleRunTimeout;
+    double MADThreshold;
 };
 
 template <typename Lambda>
-std::optional<TStatistics<ui64>> Benchmark(TBenchmarkConfig config, Lambda &&lambda) {
+std::optional<TRunningStatistics<ui64>> Benchmark(TBenchmarkConfig config, Lambda &&lambda) {
     if (config.Warmup.MaxRepeats != 0) {
-        auto warmupStats = RepeatedTest(config.Warmup, lambda);
+        auto warmupStats = RepeatedTest(config.Warmup, config.SingleRunTimeout, config.MADThreshold, lambda);
         if (!warmupStats) {
             return std::nullopt;
         }
     }
 
-    return RepeatedTest(config.Bench, lambda);
+    return RepeatedTest(config.Bench, config.SingleRunTimeout, config.MADThreshold, lambda);
 }
 
 } // end namespace NKikimr::NKqp

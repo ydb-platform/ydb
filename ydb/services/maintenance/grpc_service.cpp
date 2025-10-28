@@ -5,39 +5,43 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/service_maintenance.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
 void TGRpcMaintenanceService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    Y_UNUSED(logger);
-
+    using namespace Ydb::Maintenance;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-    using namespace Ydb;
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_MAINTENANCE_METHOD
+#error SETUP_MAINTENANCE_METHOD macro already defined
 #endif
 
-#define ADD_REQUEST(NAME, REQUEST, RESPONSE, CB, AUDIT_MODE)                                                    \
-    MakeIntrusive<TGRpcRequest<Maintenance::REQUEST, Maintenance::RESPONSE, TGRpcMaintenanceService>>           \
-        (this, &Service_, CQ_,                                                                                  \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                        \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
-                    new TGrpcRequestOperationCall<Maintenance::REQUEST, Maintenance::RESPONSE>                  \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE})); \
-            }, &Maintenance::V1::MaintenanceService::AsyncService::Request ## NAME,                             \
-            #NAME, logger, getCounterBlock("maintenance", #NAME))->Run();
+#define SETUP_MAINTENANCE_METHOD(methodName, inputType, outputType, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                      \
+        inputType,                                              \
+        outputType,                                             \
+        methodCallback,                                         \
+        rlMode,                                                 \
+        requestType,                                            \
+        YDB_API_DEFAULT_COUNTER_BLOCK(maintenance, methodName), \
+        auditMode,                                              \
+        COMMON,                                                 \
+        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,     \
+        GRpcRequestProxyId_,                                    \
+        CQ_,                                                    \
+        nullptr,                                                \
+        nullptr)
 
-    ADD_REQUEST(ListClusterNodes, ListClusterNodesRequest, ListClusterNodesResponse, DoListClusterNodes, TAuditMode::NonModifying());
-    ADD_REQUEST(CreateMaintenanceTask, CreateMaintenanceTaskRequest, MaintenanceTaskResponse, DoCreateMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(RefreshMaintenanceTask, RefreshMaintenanceTaskRequest, MaintenanceTaskResponse, DoRefreshMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(GetMaintenanceTask, GetMaintenanceTaskRequest, GetMaintenanceTaskResponse, DoGetMaintenanceTask, TAuditMode::NonModifying());
-    ADD_REQUEST(ListMaintenanceTasks, ListMaintenanceTasksRequest, ListMaintenanceTasksResponse, DoListMaintenanceTasks, TAuditMode::NonModifying());
-    ADD_REQUEST(DropMaintenanceTask, DropMaintenanceTaskRequest, ManageMaintenanceTaskResponse, DoDropMaintenanceTask, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
-    ADD_REQUEST(CompleteAction, CompleteActionRequest, ManageActionResponse, DoCompleteAction, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_MAINTENANCE_METHOD(ListClusterNodes, ListClusterNodesRequest, ListClusterNodesResponse, DoListClusterNodes, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_MAINTENANCE_METHOD(CreateMaintenanceTask, CreateMaintenanceTaskRequest, MaintenanceTaskResponse, DoCreateMaintenanceTask, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_MAINTENANCE_METHOD(RefreshMaintenanceTask, RefreshMaintenanceTaskRequest, MaintenanceTaskResponse, DoRefreshMaintenanceTask, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_MAINTENANCE_METHOD(GetMaintenanceTask, GetMaintenanceTaskRequest, GetMaintenanceTaskResponse, DoGetMaintenanceTask, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_MAINTENANCE_METHOD(ListMaintenanceTasks, ListMaintenanceTasksRequest, ListMaintenanceTasksResponse, DoListMaintenanceTasks, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::NonModifying());
+    SETUP_MAINTENANCE_METHOD(DropMaintenanceTask, DropMaintenanceTaskRequest, ManageMaintenanceTaskResponse, DoDropMaintenanceTask, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+    SETUP_MAINTENANCE_METHOD(CompleteAction, CompleteActionRequest, ManageActionResponse, DoCompleteAction, RLSWITCH(Rps), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
-#undef ADD_REQUEST
+#undef SETUP_MAINTENANCE_METHOD
 }
 
 }

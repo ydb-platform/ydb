@@ -35,7 +35,9 @@ static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
-using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+using TPartitionLabeledCounters =
+    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
@@ -919,6 +921,7 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
 
     THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
 
@@ -1136,7 +1139,6 @@ private:
     size_t GetBodyKeysCountLimit() const;
     ui64 GetCumulativeSizeLimit() const;
 
-    void UpdateCompactionCounters();
     bool ThereIsUncompactedData() const;
     TInstant GetFirstUncompactedBlobTimestamp() const;
 

@@ -18,8 +18,6 @@ using namespace NActors;
 
 class TConsumerActor : public TBaseTabletActor<TConsumerActor>
                      , public TConstantLogPrefix {
-    friend class TSerializer;
-
     static constexpr TDuration WakeupInterval = TDuration::Seconds(1);
 
 public:

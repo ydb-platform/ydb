@@ -251,16 +251,8 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
 
         auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& value, const bool isColumn) {
             if (isColumn) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TSubColumnsArray::BuildBJsonArray::onRecordKV")
-                    ("name", ColumnsData.GetStats().GetColumnNameString(index))
-                    ("index", index)
-                    ("value", value);
                 addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), value);
             } else {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TSubColumnsArray::BuildBJsonArray::onRecordKV")
-                    ("name", OthersData.GetStats().GetColumnNameString(index))
-                    ("index", index)
-                    ("value", value);
                 addValueToJson(OthersData.GetStats().GetColumnNameString(index), value);
             }
         };

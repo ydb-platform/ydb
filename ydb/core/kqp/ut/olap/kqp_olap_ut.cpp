@@ -4980,6 +4980,20 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         {
             auto status = kikimr.GetQueryClient()
                               .ExecuteQuery(R"(
+                SELECT JSON_VALUE(json_payload, "$.j") FROM `/Root/olapTable` WHERE id = 1;
+                )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+            TString result = FormatResultSetYson(status.GetResultSet(0));
+
+            CompareYson(R"([[["[1,2]"]]])", result);
+        }
+
+        // ok
+        {
+            auto status = kikimr.GetQueryClient()
+                              .ExecuteQuery(R"(
+                PRAGMA kikimr.OptEnableOlapPushdown="false";
                 SELECT JSON_VALUE(json_payload, "$.j[0]") FROM `/Root/olapTable` WHERE id = 1;
                 )",NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());

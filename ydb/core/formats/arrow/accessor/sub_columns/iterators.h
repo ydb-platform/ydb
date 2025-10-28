@@ -192,14 +192,10 @@ public:
         for (auto&& i : Iterators) {
             SortedIterators.emplace_back(&i);
         }
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TReadIteratorUnorderedKeys_before_erase")
-                ("SortedIterators.size()", SortedIterators.size());
         auto checkIterator = [](const TGeneralIterator* it) {
             return !it->IsValid();
         };
         SortedIterators.erase(std::remove_if(SortedIterators.begin(), SortedIterators.end(), checkIterator), SortedIterators.end());
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TReadIteratorUnorderedKeys_after_erase")
-                ("SortedIterators.size()", SortedIterators.size());
     }
 
     template <class TStartRecordActor, class TKVActor, class TFinishRecordActor>
@@ -217,8 +213,6 @@ public:
                     break;
                 }
             }
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TSubColumnsArray::ReadRecord")
-                    ("itColumn.IsValid()", itColumn.IsValid());
             if (!itColumn.IsValid()) {
                 std::swap(SortedIterators[iIter], SortedIterators[SortedIterators.size() - 1]);
                 SortedIterators.pop_back();

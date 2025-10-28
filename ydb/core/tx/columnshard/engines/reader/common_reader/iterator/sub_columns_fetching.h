@@ -179,8 +179,6 @@ private:
             ui32 pos = 0;
             for (auto&& i : ColumnChunks) {
                 const auto& appliedFilter = context.GetAccessors().GetAppliedFilter();
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "VLAD_DoOnDataCollected")
-                    ("records", i.GetRecordsCount())("filter", appliedFilter ? appliedFilter->DebugString() : "nullptr");
                 if (appliedFilter) {
                     i.Finish(std::make_shared<NArrow::TColumnFilter>(appliedFilter->Slice(pos, i.GetRecordsCount())),
                         context.GetSource());

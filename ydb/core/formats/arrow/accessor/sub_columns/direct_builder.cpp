@@ -109,10 +109,6 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
         std::string_view view = heap.back().GetValuePointer() ?
             std::string_view(heap.back().GetValuePointer()->Data(), heap.back().GetValuePointer()->Size()) : "";
         std::string_view* viewPtr = heap.back().GetValuePointer() ? &view : nullptr;
-        if (viewPtr) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_MergeOthers")
-                ("value", TStringBuf(viewPtr->data(), viewPtr->size()));
-        }
         othersBuilder->AddImpl(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), viewPtr);
         if (!heap.back().Next()) {
             heap.pop_back();

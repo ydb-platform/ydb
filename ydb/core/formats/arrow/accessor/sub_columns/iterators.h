@@ -153,16 +153,11 @@ public:
     }
 
     std::string_view GetRawValue() const {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TGeneralIterator:GetRawValue()")
-            ("view.size()", RawValue.size())("view", TString(RawValue.data(), RawValue.size()));
         return RawValue;
     }
 
     NJson::TJsonValue GetValue() const {
         AFL_VERIFY(IsValidFlag);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TGeneralIterator:GetValue()")
-            ("view.size()", RawValue.size())("view", TString(RawValue.data(), RawValue.size()))
-            ("Value", Value);
         return Value;
     }
 

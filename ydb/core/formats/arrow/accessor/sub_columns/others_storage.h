@@ -112,8 +112,6 @@ public:
             AFL_VERIFY(IsValid());
             auto view = Values->GetView(CurrentIndex);
             auto res = std::string_view(view.data(), view.size());
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_GetRawValue")
-                ("res", TStringBuf(res.data(), res.size()));
             return res;
         }
 

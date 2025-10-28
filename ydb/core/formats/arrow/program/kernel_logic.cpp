@@ -27,10 +27,8 @@ TConclusion<bool> TGetJsonPath::DoExecute(
     const std::optional<bool> applied =
         NAccessor::TCompositeChunkedArray::VisitDataOwners<bool>(accJson, [&](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
             if (arr->GetType() != IChunkedArray::EType::SubColumnsArray && arr->GetType() != IChunkedArray::EType::SubColumnsPartialArray) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TGetJsonPath::DoExecute_return_false");
                 return std::optional<bool>(false);
             }
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TGetJsonPath::DoExecute");
             builder.AddChunk(ExtractArray(arr, description->GetJsonPath()));
             return std::optional<bool>();
         });
@@ -43,7 +41,6 @@ TConclusion<bool> TGetJsonPath::DoExecute(
 
 std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<IChunkedArray>& jsonAcc, const std::string_view svPath) const {
     std::shared_ptr<IChunkedArray> accessor;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_ExtractArray")("svPath", svPath);
 
     if (jsonAcc->GetType() == IChunkedArray::EType::SubColumnsArray) {
         auto accJsonArray = std::static_pointer_cast<NAccessor::TSubColumnsArray>(jsonAcc);
@@ -60,50 +57,31 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
 
     auto builder = NAccessor::TTrivialArray::MakeBuilderUtf8(accessor->GetRecordsCount());
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_start")("accessor", accessor->DebugJson());
-
     ui32 recordIndex = 0;
     accessor->VisitValues([&](std::shared_ptr<arrow::Array> arr) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_1");
         AFL_VERIFY(arr);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_2")("arr", arr->ToString());
         AFL_VERIFY(arr->type_id() == arrow::binary()->id());
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_3");
         const auto& binaryArray = static_cast<const arrow::BinaryArray&>(*arr);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_4");
         for (int64_t i = 0; i < binaryArray.length(); ++i) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_5")("i", i);
             auto value = binaryArray.Value(i);
             if (value.empty()) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_6")("value", "");
                 builder.AddNull(recordIndex);
                 ++recordIndex;
                 continue;
             }
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_6")("value", TStringBuf(value.data(), value.size()));
 
             auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(value.data(), value.size()));
             auto rootCursor = reader->GetRootCursor();
             if (rootCursor.GetType() == NBinaryJson::EContainerType::TopLevelScalar &&
                 rootCursor.GetElement(0).GetType() == NBinaryJson::EEntryType::String) {
-                auto data = rootCursor.GetElement(0).GetString();
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
                 builder.AddRecord(recordIndex, rootCursor.GetElement(0).GetString());
             } else {
-                auto data = NBinaryJson::SerializeToJson(rootCursor);
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
-                builder.AddRecord(recordIndex, data);
+                builder.AddRecord(recordIndex, NBinaryJson::SerializeToJson(rootCursor));
             }
 
-            // auto data = NBinaryJson::SerializeToJson(TStringBuf(value.data(), value.size()));
-            // AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_7")("data", data);
-            // builder.AddRecord(recordIndex, data);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_8");
             ++recordIndex;
         }
     });
-
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Visit_finished");
 
     return builder.Finish(recordIndex);
 }

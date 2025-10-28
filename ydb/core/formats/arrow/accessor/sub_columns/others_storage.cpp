@@ -133,8 +133,6 @@ TOthersData TOthersData::ApplyFilter(const TColumnFilter& filter, const TSetting
         return TOthersData::BuildEmpty();
     }
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TOthersData::ApplyFilter");
-
     TOthersData::TIterator itOthersData = BuildIterator();
     bool currentAcceptance = filter.GetStartValue();
     ui32 filterIntervalStart = 0;
@@ -270,8 +268,6 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
 NJson::TJsonValue TOthersData::TIterator::GetValue() const {
     AFL_VERIFY(IsValid());
     auto view = Values->GetView(CurrentIndex);
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TOthersData::TIterator::GetValue()")
-        ("view.size()", view.size())("view", TString(view.data(), view.size()));
     auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
     NJson::TJsonValue res;
     AFL_VERIFY(NJson::ReadJsonTree(data, &res));

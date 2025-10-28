@@ -333,8 +333,6 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
             const ui32 columnIndex = itIndex - GetIndexInfo().ArrowSchema().begin();
             const ui32 columnId = GetIndexInfo().GetColumnIdByIndexVerified(columnIndex);
             auto loader = GetIndexInfo().GetColumnLoaderVerified(columnId);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_PrepareForWrite")
-                ("loader", loader->DebugString());
             auto saver = GetIndexInfo().GetColumnSaver(columnId); // ??
             saver.AddSerializerWithBorder(100, NArrow::NSerialization::TNativeSerializer::GetUncompressed()); // ??
             saver.AddSerializerWithBorder(100000000, NArrow::NSerialization::TNativeSerializer::GetFast()); // ??

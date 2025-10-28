@@ -4911,8 +4911,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
         }
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_0");
-
         // ok
         // {
         //     auto status = kikimr.GetQueryClient()
@@ -4925,8 +4923,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         //     CompareYson(R"([[["1"]]])", result);
         // }
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_1");
 
         // returns 0
         // {
@@ -4941,8 +4937,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         //     CompareYson(R"([[[1]]])", result);
         // }
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_2");
-
         // ok
         // {
         //     auto status = kikimr.GetQueryClient()
@@ -4955,8 +4949,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         //     CompareYson(R"([[[1]]])", result);
         // }
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_3");
 
         // ok with first_level_only = false
         {
@@ -4971,8 +4963,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson(R"([[["i"]]])", result);
         }
 
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_4");
-
         // ok
         {
             auto status = kikimr.GetQueryClient()
@@ -4985,8 +4975,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             CompareYson(R"([[["{\"a\":\"b\\\"b\\\"\",\"c\":1,\"d\":1.2,\"e\":true,\"f\":{\"g\":{\"h\":\"i\"}},\"j\":[1,2]}"]]])", result);
         }
-
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_BEFORE_SELECT_5");
 
         // ok
         {

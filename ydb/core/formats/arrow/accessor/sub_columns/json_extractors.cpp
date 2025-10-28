@@ -15,8 +15,6 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
         const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]");
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TArrayExtractor::DoFill()")
-            ("key", key);
         auto conclusion = AddDataToBuilder(dataBuilder, iterators, key, value);
         if (conclusion.IsFail()) {
             return conclusion;
@@ -63,11 +61,12 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
         res = NBinaryJson::SerializeToBinaryJson(trueString, false);
     } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
         auto container = value.GetContainer();
-        if (FirstLevelOnly) {
+        if (FirstLevelOnly || container.GetType() == NBinaryJson::EContainerType::Array) {
             res = NBinaryJson::SerializeToBinaryJson(NBinaryJson::SerializeToJson(container), false);
-        } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
-            iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
-            addRes = false;
+        // TODO: add support for arrays if needed
+        // } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
+        //     iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
+        //     addRes = false;
         } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
             iterators.emplace_back(std::make_unique<TKVExtractor>(container.GetObjectIterator(), key));
             addRes = false;
@@ -78,7 +77,6 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
     } else if (value.GetType() == NBinaryJson::EEntryType::Null) {
         static const TString nullString = "null";
         res = NBinaryJson::SerializeToBinaryJson(nullString, false);
-        // dataBuilder.AddKVNull(key);
     } else {
         return TConclusionStatus::Fail("unexpected json value type: " + ::ToString((int)value.GetType()));
     }
@@ -86,8 +84,6 @@ TConclusionStatus IJsonObjectExtractor::AddDataToBuilder(TDataBuilder& dataBuild
     if (addRes) {
         auto resBinaryJson = std::get_if<NBinaryJson::TBinaryJson>(&res);
         AFL_VERIFY(resBinaryJson);
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_AddDataToBuilder")
-            ("key", key)("value", TStringBuf(resBinaryJson->Data(), resBinaryJson->Size()));
         dataBuilder.AddKV(key, *resBinaryJson);
     }
 

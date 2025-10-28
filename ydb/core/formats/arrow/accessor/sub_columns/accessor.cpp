@@ -126,9 +126,6 @@ public:
 
     TConclusion<NBinaryJson::TBinaryJson> Finish() {
         auto str = Result.GetStringRobust();
-        // return NBinaryJson::TBinaryJson(str.data(), str.size());
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_GetStringRobust")
-            ("str", str);
         auto bJson = NBinaryJson::SerializeToBinaryJson(str);
         if (const TString* val = std::get_if<TString>(&bJson)) {
             return TConclusionStatus::Fail(*val);
@@ -222,14 +219,11 @@ public:
 };
 
 std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnConstructionContext& context) const {
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD1_TSubColumnsArray::BuildBJsonArray")
-        ("DebugJson", DebugJson());
     auto it = BuildUnorderedIterator();
     auto builder = NArrow::MakeBuilder(GetDataType());
     const ui32 start = context.GetStartIndex().value_or(0);
     const ui32 finish = start + context.GetRecordsCount().value_or(GetRecordsCount() - start);
     std::optional<std::vector<bool>> simpleFilter;
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TSubColumnsArray::BuildBJsonArray");
     if (context.GetFilter()) {
         simpleFilter = context.GetFilter()->BuildSimpleFilter();
     }

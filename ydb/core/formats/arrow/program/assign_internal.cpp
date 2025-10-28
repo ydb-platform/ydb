@@ -9,27 +9,19 @@ TConclusion<IResourceProcessor::EExecutionResult> TCalculationProcessor::DoExecu
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
 
     if (KernelLogic) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Before  KernelLogic->Execute");
         auto resultKernel = KernelLogic->Execute(GetInput(), GetOutput(), context.MutableResources());
         if (resultKernel.IsFail()) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_After  KernelLogic->Execute failed");
             return resultKernel;
         } else if (*resultKernel) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_After  KernelLogic->Execute ok");
             return IResourceProcessor::EExecutionResult::Success;
-        } else {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_After  KernelLogic->Execute no data");
         }
     }
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_Before Function->Call");
 
     auto result = Function->Call(GetInput(), context.MutableResources());
     if (result.IsFail()) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_After Function->Call failed");
         return result;
     }
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_After Function->Call ok");
     context.MutableResources().AddCalculated(GetOutputColumnIdOnce(), std::move(*result));
     return IResourceProcessor::EExecutionResult::Success;
 }

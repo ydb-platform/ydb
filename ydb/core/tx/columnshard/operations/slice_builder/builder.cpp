@@ -140,10 +140,6 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             }
 
             portions.emplace_back(portionConclusion.DetachResult());
-
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TBuildSlicesTask::DoExecute")
-                ("batch", batch->ToString())
-                ("portion", portions.back().GetPortion().DebugString());
         }
         auto writeController = std::make_shared<NOlap::TPortionWriteController>(
             Context.GetTabletActorId(), WriteData.GetBlobsAction(), wResult, std::move(portions));

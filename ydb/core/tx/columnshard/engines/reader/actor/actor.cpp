@@ -424,9 +424,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         }
     }
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_TColumnShardScan::SendResult")
-        ("arrowData", Result->ArrowBatch ? Result->ArrowBatch->ToString() : "");
-
     LWPROBE(SendResult, TabletId, ScanId, TxId, Result->GetRowsCount(), (Result->ArrowBatch ? NArrow::GetTableDataSize(Result->ArrowBatch) : 0), Result->CpuTime, Result->WaitTime, TInstant::Now() - LastSend, Result->Finished);
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
     LastSend = TInstant::Now();

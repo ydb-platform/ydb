@@ -600,9 +600,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     LWPROBE(EvWrite, TabletID(), source.ToString(), cookie, record.GetTxId(), writeTimeout.value_or(TDuration::Max()), arrowData->GetSize(), "", true, operation.GetIsBulk(), "", "");
 
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "!!!VLAD_WriteTasksQueue->Enqueue")
-        ("arrowData", arrowData ? arrowData->DebugString() : "");
-
     WriteTasksQueue->Enqueue(TWriteTask(arrowData, schema, source, ev->Recipient, granuleShardingVersionId, pathId, cookie, mvccSnapshot, lockId, record.GetLockNodeId(), *mType, behaviour, writeTimeout, record.GetTxId(),
         isBulk, record.HasOverloadSubscribe() ? record.GetOverloadSubscribe() : std::optional<ui64>()));
     WriteTasksQueue->Drain(false, ctx);

@@ -73,8 +73,6 @@ public:
 
         std::string_view GetRawValue() const {
             auto view = CurrentArrayData->GetView(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "!!!VLAD_TOthersData::TIterator::GetRawValue()")
-                ("view.size()", view.size())("view", TString(view.data(), view.size()));
             return std::string_view(view.data(), view.size());
         }
 

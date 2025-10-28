@@ -73,8 +73,8 @@ def check_logs_for_shutdown_signal(owner, repo, run_id, token):
                 if log_response.status_code == 200:
                     fail = fail or ("##[error]The runner has received a shutdown signal" in log_response.text)
         return fail
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Error while log reading: {e}")
     return False
 
 
@@ -141,7 +141,7 @@ def main():
             message = "🚨 *RUNNER DIED DURING RUN*\n"
             for error in errors:
                 message += f"""
-• Workflow *{workflow['name']}* [#{error['workflow_id']}]({error['workflow_url']})
+• Workflow *{error['workflow_name']}* [#{error['workflow_id']}]({error['workflow_url']})
   Created at: {error['created_at']}"""
                 if error['pr_url']:
                     message += f"""

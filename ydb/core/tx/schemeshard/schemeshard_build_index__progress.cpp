@@ -2538,6 +2538,23 @@ public:
         case TIndexBuildInfo::EState::DropBuild:
         case TIndexBuildInfo::EState::CreateBuild:
         case TIndexBuildInfo::EState::LockBuild:
+        {
+            Y_ENSURE(txId == buildInfo.ApplyTxId);
+
+            if (record.GetStatus() != NKikimrScheme::StatusAccepted &&
+                record.GetStatus() != NKikimrScheme::StatusAlreadyExists) {
+                // Otherwise we won't cancel the index build correctly
+                buildInfo.ApplyTxId = {};
+                buildInfo.ApplyTxStatus = NKikimrScheme::StatusSuccess;
+                buildInfo.ApplyTxDone = false;
+            } else {
+                buildInfo.ApplyTxStatus = record.GetStatus();
+            }
+            Self->PersistBuildIndexApplyTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Applying);
+            break;
+        }
         case TIndexBuildInfo::EState::Applying:
         case TIndexBuildInfo::EState::Rejection_Applying:
         {

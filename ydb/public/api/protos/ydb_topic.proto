@@ -16,6 +16,15 @@ option java_package = "com.yandex.ydb.topic";
 
 option cc_enable_arenas = true;
 
+enum ConsumerType {
+    // The consumer type is not specified. The default value will be used.
+    CONSUMER_TYPE_UNSPECIFIED = 0;
+    // The consumer is designed for streaming data processing.
+    CONSUMER_TYPE_STREAMING = 1;
+    // The consumer is designed to process messages independently.
+    CONSUMER_TYPE_SHARED = 2;
+}
+
 enum Codec {
     CODEC_UNSPECIFIED = 0;
     CODEC_RAW = 1;
@@ -123,8 +132,6 @@ message StreamWriteMessage {
         // Explicitly request for last sequential number
         // It may be expensive, if producer wrote to many partitions before.
         bool get_last_seq_no = 6;
-
-
     }
 
     // Response to the handshake.
@@ -792,6 +799,8 @@ message MultipleWindowsStat {
 message Consumer {
     // Must have valid not empty name as a key.
     string name = 1;
+    // Type of consumer.
+    ConsumerType type = 9;
     // Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
     // User should take care that such consumer never stalls, to prevent running out of disk space.
     // Flag that this consumer is important.
@@ -826,6 +835,17 @@ message Consumer {
 
     // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
     optional google.protobuf.Duration availability_period = 8;
+
+    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+    // For streaming consumers, the order of messages is always preserved.
+    bool keep_messages_order = 10;
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    google.protobuf.Duration default_processing_timeout = 11;
+    // If this is a shared consumer, it sets the number of attempts to process the message before it is placed in DQL.
+    uint32 max_processing_attempts = 12;
+    // The name of the topic for DLQ. It must be in the same database as the base topic.
+    string dead_letter_queue = 13;
 }
 
 // Consumer alter description.
@@ -854,6 +874,11 @@ message AlterConsumer {
         google.protobuf.Duration set_availability_period = 7;
         google.protobuf.Empty reset_availability_period = 8;
     }
+
+    // If this is a shared consumer, it sets the number of attempts to process the message before it is placed in DQL.
+    uint32 set_max_processing_attempts = 9;
+    // The duration of blocking messages for its processing.
+    google.protobuf.Duration set_default_processing_timeout = 10;
 }
 
 enum AutoPartitioningStrategy {
@@ -1005,6 +1030,9 @@ message CreateTopicRequest {
 
     // Metrics level. If the level is unset, use database setting.
     optional uint32 metrics_level = 13;
+
+    // Enable message dedupliction by message deduplication ID.
+    optional bool deduplicate_by_message_id = 14;
 }
 
 // Create topic response sent from server to client.
@@ -1141,6 +1169,9 @@ message DescribeTopicResult {
 
     // Metrics level.
     optional uint32 metrics_level = 16;
+
+    // Enable message dedupliction by message deduplication ID.
+    optional bool deduplicate_by_message_id = 17;
 }
 
 // Describe partition request sent from client to server.

@@ -36,6 +36,12 @@ enum class EAutoPartitioningStrategy: uint32_t {
     Paused = 4,
 };
 
+enum class EConsumerType {
+    Unspecified = 0,
+    Streaming = 1,
+    Shared = 2
+};
+
 // 0 - unspecified
 // 1 - disabeld
 // 2 - database level metrics
@@ -48,20 +54,27 @@ public:
     TConsumer(const Ydb::Topic::Consumer&);
 
     const std::string& GetConsumerName() const;
+    EConsumerType GetConsumerType() const;
     bool GetImportant() const;
     TDuration GetAvailabilityPeriod() const;
     const TInstant& GetReadFrom() const;
     const std::vector<ECodec>& GetSupportedCodecs() const;
     const std::map<std::string, std::string>& GetAttributes() const;
+    bool GetKeepMessagesOrder() const;
+    ui32 GetMaxDeliveryAttempts() const;
+    TDuration GetDefaultAcquisitionLockDuration() const;
 
 private:
     std::string ConsumerName_;
+    EConsumerType ConsumerType_;
     bool Important_;
     TDuration AvailabilityPeriod_;
     TInstant ReadFrom_;
     std::map<std::string, std::string> Attributes_;
     std::vector<ECodec> SupportedCodecs_;
-
+    bool KeepMessagesOrder_;
+    ui32 MaxDeliveryAttempts_;
+    TDuration DefaultAcquisitionLockDuration_;
 };
 
 
@@ -463,6 +476,7 @@ struct TConsumerSettings {
     void SerializeTo(Ydb::Topic::Consumer& proto) const;
 
     FLUENT_SETTING(std::string, ConsumerName);
+    FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Streaming);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
     FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, ReadFrom, TInstant::Zero());
@@ -470,6 +484,9 @@ struct TConsumerSettings {
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING(TAttributes, Attributes);
+    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
+    FLUENT_SETTING_DEFAULT(ui32, MaxDeliveryAttempts, 5);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultAcquisitionLockDuration, TDuration::Seconds(30));
 
     TConsumerSettings& AddAttribute(const std::string& key, const std::string& value) {
         Attributes_[key] = value;
@@ -528,6 +545,8 @@ struct TAlterConsumerSettings {
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
+    FLUENT_SETTING_DEFAULT(ui32, MaxDeliveryAttempts, 5);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultAcquisitionLockDuration, TDuration::Seconds(30));
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);

@@ -108,6 +108,10 @@ const std::string& TConsumer::GetConsumerName() const {
     return ConsumerName_;
 }
 
+EConsumerType TConsumer::GetConsumerType() const {
+    return ConsumerType_;
+}
+
 bool TConsumer::GetImportant() const {
     return Important_;
 }
@@ -126,6 +130,18 @@ const std::vector<ECodec>& TConsumer::GetSupportedCodecs() const {
 
 const std::map<std::string, std::string>& TConsumer::GetAttributes() const {
     return Attributes_;
+}
+
+bool TConsumer::GetKeepMessagesOrder() const {
+    return KeepMessagesOrder_;
+}
+
+ui32 TConsumer::GetMaxDeliveryAttempts() const {
+    return MaxDeliveryAttempts_;
+}
+
+TDuration TConsumer::GetDefaultAcquisitionLockDuration() const {
+    return DefaultAcquisitionLockDuration_;
 }
 
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {

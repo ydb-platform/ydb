@@ -92,16 +92,18 @@ def process_test_group(name, group, last_day_data, default_start_date):
         saved_prev_state_filtered = last_day_data[last_day_data['full_name'] == name]['previous_state_filtered'].iloc[0]
     else:
         prev_state = 'no_runs'
-        prev_date = datetime.datetime.combine(default_start_date, datetime.time.min)
+        prev_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
         current_days_in_state = 0
         
         prev_mute_state = 0
-        prev_mute_date = datetime.datetime.combine(default_start_date, datetime.time.min)
+        prev_mute_date = datetime.datetime(default_start_date.year, default_start_date.month, default_start_date.day)
         current_days_in_mute_state = 0
 
         state_filtered = ''
         prev_state_filtered = 'no_runs'
-        prev_date_filtered = datetime.datetime.combine(default_start_date, datetime.time.min)
+        prev_date_filtered = datetime.datetime(
+            default_start_date.year, default_start_date.month, default_start_date.day
+        )
         current_days_in_state_filtered = 0
         
         saved_prev_state = prev_state
@@ -263,19 +265,12 @@ def main():
             return 1
         
         base_date = datetime.datetime(1970, 1, 1)
-        base_date_obj = base_date.date()  # Convert to date object for comparison
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
         table_path = f'test_results/analytics/tests_monitor'
-        
-        # Helper function to convert date to days if needed
-        def to_days(date_value):
-            if isinstance(date_value, datetime.date):
-                return (date_value - base_date_obj).days
-            return date_value
 
         # Get last existing day
-        print("Getting date of last collected monitor data")
+        print("Geting date of last collected monitor data")
         query_last_exist_day = f"""
             SELECT MAX(date_window) AS last_exist_day
             FROM `{table_path}`
@@ -286,12 +281,6 @@ def main():
         try:
             results = ydb_wrapper.execute_scan_query(query_last_exist_day)
             last_exist_day = results[0]['last_exist_day'] if results else None
-            
-            # Convert to int if it's a Date object
-            if last_exist_day is not None and isinstance(last_exist_day, datetime.date):
-                # Convert date to number of days since base_date (1970-01-01)
-                last_exist_day = (last_exist_day - base_date_obj).days
-                
         except Exception as e:
             print(f"Error during fetching last existing day: {e}")
             last_exist_day = None
@@ -350,10 +339,7 @@ def main():
         print(f"Init new monitor collecting from date {last_exist_day_str}")
     else:
         # Get data from tests_monitor for last existing day
-        # If last_exist_day is already a date, convert from days to date
-        if not isinstance(last_exist_day, datetime.date):
-            last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
-        
+        last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
         if last_exist_day == today:  # to recalculate data for today
             last_exist_day = last_exist_day - datetime.timedelta(days=1)
         last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
@@ -377,7 +363,7 @@ def main():
                     'test_name': row['test_name'],
                     'suite_folder': row['suite_folder'],
                     'full_name': row['full_name'],
-                    'date_window': base_date + datetime.timedelta(days=to_days(row['date_window'])),
+                    'date_window': base_date + datetime.timedelta(days=row['date_window']),
                     'build_type': row['build_type'],
                     'branch': row['branch'],
                     'days_ago_window': row['days_ago_window'],
@@ -394,14 +380,14 @@ def main():
                     'is_test_chunk': row['is_test_chunk'],
                     'state': row['state'],
                     'previous_state': row['previous_state'],
-                    'state_change_date': base_date + datetime.timedelta(days=to_days(row['state_change_date'])),
+                    'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
                     'days_in_state': row['days_in_state'],
                     'previous_mute_state': row['previous_mute_state'],
-                    'mute_state_change_date': base_date + datetime.timedelta(days=to_days(row['mute_state_change_date'])),
+                    'mute_state_change_date': base_date + datetime.timedelta(days=row['mute_state_change_date']),
                     'days_in_mute_state': row['days_in_mute_state'],
                     'previous_state_filtered': row['previous_state_filtered'],
                     'state_change_date_filtered': base_date
-                    + datetime.timedelta(days=to_days(row['state_change_date_filtered'])),
+                    + datetime.timedelta(days=row['state_change_date_filtered']),
                     'days_in_state_filtered': row['days_in_state_filtered'],
                     'state_filtered': row['state_filtered'],
                 }
@@ -432,7 +418,6 @@ def main():
         }
 
         print(f'Getting aggregated history in window {history_for_n_day} days')
-        
         for date in sorted(date_list):
             # Query for data from flaky_tests_window with date_window >= last_existing_day
             query_get_history = f"""
@@ -489,7 +474,7 @@ def main():
                     data['test_name'].append(row['test_name'])
                     data['suite_folder'].append(row['suite_folder'])
                     data['full_name'].append(row['full_name'])
-                    data['date_window'].append(base_date + datetime.timedelta(days=to_days(row['date_window'])))
+                    data['date_window'].append(base_date + datetime.timedelta(days=row['date_window']))
                     data['build_type'].append(row['build_type'])
                     data['branch'].append(row['branch'])
                     data['owners'].append(row['owners'])

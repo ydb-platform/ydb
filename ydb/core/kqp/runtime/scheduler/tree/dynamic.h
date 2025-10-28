@@ -58,6 +58,8 @@ namespace NKikimr::NKqp::NScheduler::NHdrf::NDynamic {
         void RemoveTask(const TSchedulableTaskList::iterator& it);
         ui32 ResumeTasks(ui32 count);
 
+        void DumpTasks();
+
         void UpdateActualDemand();
 
     public:

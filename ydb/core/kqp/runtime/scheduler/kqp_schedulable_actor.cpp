@@ -18,9 +18,16 @@ TSchedulableActorBase::TSchedulableActorBase(const TOptions& options)
 {
     if (options.Query) {
         SchedulableTask = std::make_shared<TSchedulableTask>(options.Query);
+        Cerr << (TStringBuilder() << "SchedulableTask " << (uintptr_t)SchedulableTask.get() << Endl);
     }
 
     Y_ENSURE(!IsSchedulable || IsAccountable());
+}
+
+TSchedulableActorBase::~TSchedulableActorBase() {
+    if (IsSchedulable) {
+        Cerr << (TStringBuilder() << "~SchedulableTask " << (uintptr_t)SchedulableTask.get() << Endl);
+    }
 }
 
 void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) {
@@ -28,6 +35,7 @@ void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) 
 
     if (IsSchedulable) {
         SchedulableTask->RegisterForResume(actorId);
+        Cerr << (TStringBuilder() << "RegisterForResume " << (uintptr_t)SchedulableTask.get() << " " << actorId << Endl);
     }
 }
 

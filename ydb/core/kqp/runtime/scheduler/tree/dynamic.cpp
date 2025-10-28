@@ -82,6 +82,14 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     return run;
 }
 
+void TQuery::DumpTasks() {
+    TReadGuard lock(TasksMutex);
+
+    for (const auto& task : SchedulableTasks) {
+        Cerr << (TStringBuilder() << "Queries task: " << (uintptr_t)task.first.lock().get() << ", throttled: " << task.second.load() << Endl);
+    }
+}
+
 void TQuery::UpdateActualDemand() {
     auto demand = Usage + Throttle + 1;
     auto actualDemand = ActualDemand.load();

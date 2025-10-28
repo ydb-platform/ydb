@@ -370,7 +370,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvWatermarkIdleness::TPtr& ev) {
-        if (InflyIdlenessChecks.erase(ev->Get()->NotifyTime)) {
+        if (RemovePendingWatermarkIdlenessCheck(ev->Get()->NotifyTime)) {
             NotifyCA();
         }
     }

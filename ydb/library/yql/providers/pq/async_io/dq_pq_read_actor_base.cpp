@@ -170,9 +170,7 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
         return;
     }
 
-    for (auto it = InflyIdlenessChecks.begin(); it != InflyIdlenessChecks.end() && *it <= systemTime; ) {
-        it = InflyIdlenessChecks.erase(it);
-    }
+    RemovePendingWatermarkIdlenessCheck(systemTime);
 
     const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
     if (!nextIdleCheckAt) {
@@ -180,11 +178,21 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
     }
     Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
 
-    if (InflyIdlenessChecks.empty() || *InflyIdlenessChecks.cbegin() > *nextIdleCheckAt) {
-        InflyIdlenessChecks.insert(*nextIdleCheckAt);
+    if (InflyIdlenessChecks.empty() || InflyIdlenessChecks.front() > *nextIdleCheckAt) {
+        InflyIdlenessChecks.push_front(*nextIdleCheckAt);
         SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
         ScheduleSourcesCheck(*nextIdleCheckAt);
     }
+}
+
+bool TDqPqReadActorBase::RemovePendingWatermarkIdlenessCheck(TInstant notifyTime) {
+    if (InflyIdlenessChecks.empty() || InflyIdlenessChecks.front() > notifyTime) {
+        return false;
+    }
+    while (!InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime) {
+        InflyIdlenessChecks.pop_front();
+    }
+    return true;
 }
 
 } // namespace NYql::NDq::NInternal

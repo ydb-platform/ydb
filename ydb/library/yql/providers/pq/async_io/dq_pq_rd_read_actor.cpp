@@ -1540,7 +1540,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvWatermarkIdleness::TPtr& ev) {
-    if (InflyIdlenessChecks.erase(ev->Get()->NotifyTime)) {
+    if (RemovePendingWatermarkIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
 }

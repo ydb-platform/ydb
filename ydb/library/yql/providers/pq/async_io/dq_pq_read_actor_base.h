@@ -24,7 +24,7 @@ public:
     ui64 TaskId;
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     // << Initialized when watermark tracking is enabled
-    TSet<TInstant> InflyIdlenessChecks;
+    std::deque<TInstant> InflyIdlenessChecks;
 
     TDqPqReadActorBase(
         ui64 inputIndex,
@@ -47,6 +47,7 @@ public:
     virtual void InitWatermarkTracker() = 0;
     void InitWatermarkTracker(TDuration, TDuration);
     void MaybeScheduleNextIdleCheck(TInstant systemTime);
+    bool RemovePendingWatermarkIdlenessCheck(TInstant notifyTime);
 
     virtual TString GetSessionId() const {
         return TString{"empty"};

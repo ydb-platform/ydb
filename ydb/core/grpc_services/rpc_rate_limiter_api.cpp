@@ -169,7 +169,7 @@ protected:
         }
 
         auto req = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
-        req->DatabaseName = this->Request_->GetDatabaseName().GetOrElse(DatabaseFromDomain(AppData()));
+        req->DatabaseName = this->Request_->GetDatabaseName().GetOrElse("");
         req->ResultSet.emplace_back();
         req->ResultSet.back().Path.swap(path);
         req->ResultSet.back().Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

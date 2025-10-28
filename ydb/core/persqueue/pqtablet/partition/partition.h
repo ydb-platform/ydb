@@ -354,9 +354,31 @@ private:
     TAutoPtr<TEvPersQueue::TEvHasDataInfoResponse> MakeHasDataInfoResponse(ui64 lagSize, const TMaybe<ui64>& cookie, bool readingFinished = false);
 
     void ProcessTxsAndUserActs(const TActorContext& ctx);
+    void ProcessTxsAndUserActsOriginal(const TActorContext& ctx);
     void ContinueProcessTxsAndUserActs(const TActorContext& ctx);
     void ProcessCommitQueue();
     void RunPersist();
+
+    enum class EProcessResult;
+    struct TAffectedSourceIdsAndConsumers;
+
+    void ProcessUserActionAndTxEvents();
+    EProcessResult ProcessUserActionAndTxEvent(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult ProcessUserActionAndTxEvent(TSimpleSharedPtr<TTransaction>& tx,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+    EProcessResult ProcessUserActionAndTxEvent(TMessage& msg,
+                                               TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
+
+    void MoveUserActionAndTxToPendingCommitQueue();
+
+    void ProcessUserActionAndTxPendingCommits();
+    void ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
+                                             TEvKeyValue::TEvRequest* request);
+    void ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TTransaction>& tx,
+                                             TEvKeyValue::TEvRequest* request);
+    void ProcessUserActionAndTxPendingCommit(TMessage& msg,
+                                             TEvKeyValue::TEvRequest* request);
 
     void MoveUserActOrTxToCommitState();
     void PushBackDistrTx(TSimpleSharedPtr<TEvPQ::TEvTxCalcPredicate> event);
@@ -818,6 +840,9 @@ private:
     void DeleteAffectedSourceIdsAndConsumers();
     void DeleteAffectedSourceIdsAndConsumers(const TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
 
+    //
+    // TODO(abcdef): переименовать в ProcessUserActionAndTxEvent
+    //
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,
                                                      TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers);
     EProcessResult PreProcessUserActionOrTransaction(TSimpleSharedPtr<TTransaction>& tx,
@@ -1147,7 +1172,7 @@ private:
     size_t WriteNewSizeFromSupportivePartitions = 0;
 
     bool TryAddDeleteHeadKeysToPersistRequest();
-    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request) const;
 
     TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
 

@@ -4,10 +4,14 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <google/protobuf/text_format.h>
+
 #include <util/charset/utf8.h>
+#include <util/string/builder.h>
 #include <util/string/cast.h>
 #include <util/string/escape.h>
 #include <util/string/printf.h>
+#include <util/stream/output.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NKikimr {
@@ -117,6 +121,21 @@ TVector<TString> TValue::GetMembersNames() const {
     }
     return members;
 }
+
+TString TValue::DumpToString() const {
+    TStringBuilder dump;
+    TString res;
+    ::google::protobuf::TextFormat::PrintToString(Type, &res);
+    dump << "Type:" << Endl << res << Endl;
+    ::google::protobuf::TextFormat::PrintToString(Value, &res);
+    dump << "Value:" << Endl << res << Endl;
+    return std::move(dump);
+}
+
+void TValue::DumpValue() const {
+    Cerr << DumpToString();
+}
+
 
 TWriteValue TWriteValue::Create(NKikimrMiniKQL::TValue& value, NKikimrMiniKQL::TType& type) {
     return TWriteValue(value, type);

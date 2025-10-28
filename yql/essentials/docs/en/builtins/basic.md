@@ -330,17 +330,17 @@ FROM my_table;
 ## Udf {#udf}
 
 Builds a `Callable` given a function name and optional `external user types`, `RunConfig` and `TypeConfig`.
-You can also specify additional settings as named arguments; their type must be `String`:
-
-* Cpu - a factor describing how much CPU the udf consumes. The default value is "1". The higher this value, the more parallelism is required to call such a udf.
-* ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
 
 * `Udf(Foo::Bar)` — Function `Foo::Bar` without additional parameters.
 * `Udf(Foo::Bar)(1, 2, 'abc')` — Call udf `Foo::Bar`.
 * `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Call udf `Foo::Bar` with additional type `Int32` and specified `TypeConfig`.
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Call udf `Foo::Bar` with specified `RunConfig` and named parameters.
-* `Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1)` — Call udf `Foo::Bar` with the specified `Cpu` and `ExtraMem` settings.
 * `Udf(Foo::Bar, $parent as Depends)` — Call udf `Foo::Bar` with specified computation dependency on specified node - since version [2025.03](../changelog/2025.03.md).
+
+You can also specify additional settings as named arguments; their type must be `String`:
+
+* Cpu - a factor describing how much CPU the udf consumes. The default value is "1". The higher this value, the more parallelism is required to call such a udf.
+* ExtraMem - the additional memory required by the udf in bytes. The default value is "0".
 
 #### Signatures
 
@@ -367,6 +367,10 @@ $config = @@{
 "meta": "..."
 }@@;
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1);
 ```
 
 ## CurrentUtc... {#current-utc}

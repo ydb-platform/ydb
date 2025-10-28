@@ -94,7 +94,7 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
     , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
-    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds())) // TODO
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
@@ -661,7 +661,7 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
-    , Parent_(parent)
+    , Parent_(parent) // TODO
 {
 }
 
@@ -678,6 +678,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
+    // TODO
 }
 
 template struct TConsumerSettings<TCreateTopicSettings>;

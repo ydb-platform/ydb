@@ -842,10 +842,26 @@ message Consumer {
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
     google.protobuf.Duration default_processing_timeout = 11;
-    // If this is a shared consumer, it sets the number of attempts to process the message before it is placed in DQL.
-    uint32 max_processing_attempts = 12;
-    // The name of the topic for DLQ. It must be in the same database as the base topic.
-    string dead_letter_queue = 13;
+
+    message DeadLetterPolycyNone {
+    }
+
+    message DeadLetterPolycyDelete {
+        // The nuber of attempts to process the message before it is delete.
+        uint32 max_processing_attempts = 1;
+    }
+
+    message DeadLetterPolycyMove {
+        uint32 max_processing_attempts = 1;
+        // The nuber of attempts to process the message before it is placed in DQL.
+        string dead_letter_queue = 2;
+    }
+
+    oneof {
+        DeadLetterPolycyNone dead_letter_policy_none = 12;
+        DeadLetterPolycyDelete dead_letter_policy_delete = 13;
+        DeadLetterPolycyMove dead_letter_policy_move = 14;
+    }
 }
 
 // Consumer alter description.

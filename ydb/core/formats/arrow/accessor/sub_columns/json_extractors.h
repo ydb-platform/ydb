@@ -99,75 +99,79 @@ private:
                 RETURN_IF_NOT_SUCCESS(value.get(v));
                 return v.raw_json();
             }
+            case simdjson::ondemand::json_type::unknown:
+                return TConclusionStatus::Fail("unknown value type");
         }
     }
 
     // template <typename TOnDemandValue>
     //     requires std::is_same_v<TOnDemandValue, simdjson::ondemand::value> || std::is_same_v<TOnDemandValue, simdjson::ondemand::document>
-    // [[nodiscard]] TConclusionStatus ProcessValue(TDataBuilder& /*dataBuilder*/, TOnDemandValue& /*value*/, const TStringBuf /*currentKey*/) {
-        // switch (value.type()) {
-        //     case simdjson::ondemand::json_type::string: {
-        //         auto sv = (std::string_view)value.raw_json_token();
-        //         AFL_VERIFY(sv.size() >= 2);
-        //         dataBuilder.AddKV(currentKey, TStringBuf(sv.data() + 1, sv.size() - 2));
-        //         break;
-        //     }
-        //     case simdjson::ondemand::json_type::null: {
-        //         dataBuilder.AddKVNull(currentKey);
-        //         break;
-        //     }
-        //     case simdjson::ondemand::json_type::number:
-        //     case simdjson::ondemand::json_type::boolean: {
-        //         dataBuilder.AddKV(currentKey, (std::string_view)value.raw_json_token());
-        //         break;
-        //     }
-        //     case simdjson::ondemand::json_type::array: {
-        //         simdjson::ondemand::array v;
-        //         RETURN_IF_NOT_SUCCESS(value.get(v));
-        //         ui32 idx = 0;
-        //         for (auto item : v) {
-        //             RETURN_IF_NOT_SUCCESS(item.error());
-        //             const TStringBuf sbKey = dataBuilder.AddKeyOwn(currentKey, "[" + std::to_string(idx++) + "]");
-        //             if (FirstLevelOnly) {
-        //                 auto conclusion = PrintObject(item.value_unsafe());
-        //                 if (conclusion.IsFail()) {
-        //                     return conclusion;
-        //                 }
-        //                 dataBuilder.AddKV(sbKey, conclusion.DetachResult());
-        //             } else {
-        //                 auto conclusion =
-        //                     ProcessValue(dataBuilder, item.value_unsafe(), sbKey);
-        //                 if (conclusion.IsFail()) {
-        //                     return conclusion;
-        //                 }
-        //             }
-        //         }
-        //         break;
-        //     }
-        //     case simdjson::ondemand::json_type::object: {
-        //         simdjson::ondemand::object v;
-        //         RETURN_IF_NOT_SUCCESS(value.get(v));
-        //         for (auto item : v) {
-        //             RETURN_IF_NOT_SUCCESS(item.error());
-        //             auto& keyValue = item.value_unsafe();
-        //             const auto key = keyValue.escaped_key();
-        //             const auto sbKey = dataBuilder.AddKey(currentKey, key);
-        //             if (FirstLevelOnly) {
-        //                 auto conclusion = PrintObject(keyValue.value());
-        //                 if (conclusion.IsFail()) {
-        //                     return conclusion;
-        //                 }
-        //                 dataBuilder.AddKV(sbKey, conclusion.DetachResult());
-        //             } else {
-        //                 auto conclusion = ProcessValue(dataBuilder, keyValue.value(), sbKey);
-        //                 if (conclusion.IsFail()) {
-        //                     return conclusion;
-        //                 }
-        //             }
-        //         }
-        //         break;
-        //     }
-        // }
+    // [[nodiscard]] TConclusionStatus ProcessValue(TDataBuilder& dataBuilder, TOnDemandValue& value, const TStringBuf currentKey) {
+    //     switch (value.type()) {
+    //         case simdjson::ondemand::json_type::string: {
+    //             auto sv = (std::string_view)value.raw_json_token();
+    //             AFL_VERIFY(sv.size() >= 2);
+    //             dataBuilder.AddKV(currentKey, TStringBuf(sv.data() + 1, sv.size() - 2));
+    //             break;
+    //         }
+    //         case simdjson::ondemand::json_type::null: {
+    //             dataBuilder.AddKVNull(currentKey);
+    //             break;
+    //         }
+    //         case simdjson::ondemand::json_type::number:
+    //         case simdjson::ondemand::json_type::boolean: {
+    //             dataBuilder.AddKV(currentKey, (std::string_view)value.raw_json_token());
+    //             break;
+    //         }
+    //         case simdjson::ondemand::json_type::array: {
+    //             simdjson::ondemand::array v;
+    //             RETURN_IF_NOT_SUCCESS(value.get(v));
+    //             ui32 idx = 0;
+    //             for (auto item : v) {
+    //                 RETURN_IF_NOT_SUCCESS(item.error());
+    //                 const TStringBuf sbKey = dataBuilder.AddKeyOwn(currentKey, "[" + std::to_string(idx++) + "]");
+    //                 if (FirstLevelOnly) {
+    //                     auto conclusion = PrintObject(item.value_unsafe());
+    //                     if (conclusion.IsFail()) {
+    //                         return conclusion;
+    //                     }
+    //                     dataBuilder.AddKV(sbKey, conclusion.DetachResult());
+    //                 } else {
+    //                     auto conclusion =
+    //                         ProcessValue(dataBuilder, item.value_unsafe(), sbKey);
+    //                     if (conclusion.IsFail()) {
+    //                         return conclusion;
+    //                     }
+    //                 }
+    //             }
+    //             break;
+    //         }
+    //         case simdjson::ondemand::json_type::object: {
+    //             simdjson::ondemand::object v;
+    //             RETURN_IF_NOT_SUCCESS(value.get(v));
+    //             for (auto item : v) {
+    //                 RETURN_IF_NOT_SUCCESS(item.error());
+    //                 auto& keyValue = item.value_unsafe();
+    //                 const auto key = keyValue.escaped_key();
+    //                 const auto sbKey = dataBuilder.AddKey(currentKey, key);
+    //                 if (FirstLevelOnly) {
+    //                     auto conclusion = PrintObject(keyValue.value());
+    //                     if (conclusion.IsFail()) {
+    //                         return conclusion;
+    //                     }
+    //                     dataBuilder.AddKV(sbKey, conclusion.DetachResult());
+    //                 } else {
+    //                     auto conclusion = ProcessValue(dataBuilder, keyValue.value(), sbKey);
+    //                     if (conclusion.IsFail()) {
+    //                         return conclusion;
+    //                     }
+    //                 }
+    //             }
+    //             break;
+    //         }
+    //         case simdjson::ondemand::json_type::unknown:
+    //             return TConclusionStatus::Fail("unknown value type");
+    //     }
 
     //     return TConclusionStatus::Success();
     // }

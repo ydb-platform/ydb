@@ -18,6 +18,7 @@
 - source_filter: "^contrib/libs/libpq/src"
   includes:
   - arpa/inet.h:   contrib/libs/libpq/src/include/port/win32/arpa/inet.h
+  - dlfcn.h:       contrib/libs/libpq/src/include/port/win32/dlfcn.h
   - netdb.h:       contrib/libs/libpq/src/include/port/win32/netdb.h
   - netinet/in.h:  contrib/libs/libpq/src/include/port/win32/netinet/in.h
   - netinet/tcp.h: contrib/libs/libpq/src/include/port/win32/netinet/tcp.h

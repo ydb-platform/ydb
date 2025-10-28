@@ -6,6 +6,7 @@
 #include <yt/yql/providers/yt/provider/yql_yt_op_settings.h>
 #include <yt/yql/providers/yt/provider/yql_yt_table.h>
 #include <yt/yql/providers/yt/codec/yt_codec.h>
+#include <yt/yql/providers/yt/lib/dump_helpers/yql_yt_dump_helpers.h>
 #include <yt/yql/providers/yt/lib/schema/schema.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -36,6 +37,7 @@ namespace NNative {
 using namespace NNodes;
 
 TExecContextBase::TExecContextBase(
+    const IYtGateway::TPtr& gateway,
     const TYtNativeServices::TPtr& services,
     const TConfigClusters::TPtr& clusters,
     const TIntrusivePtr<NCommon::TMkqlCommonCallableCompiler>& mkqlCompiler,
@@ -44,6 +46,7 @@ TExecContextBase::TExecContextBase(
     const TYtUrlMapper& urlMapper,
     IMetricsRegistryPtr metrics)
     : TExecContextBaseSimple(services, clusters, mkqlCompiler, cluster, session)
+    , Gateway(gateway)
     , FileStorage_(services->FileStorage)
     , SecretMasker(services->SecretMasker)
     , Session_(session)
@@ -140,7 +143,7 @@ TTransactionCache::TEntry::TPtr TExecContextBase::GetOrCreateEntry(const TYtSett
             "Accessing YT cluster " << Cluster_.Quote() << " without OAuth token is not allowed";
     }
 
-    return Session_->TxCache_.GetOrCreateEntry(Cluster_, YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics);
+    return Session_->TxCache_.GetOrCreateEntry(Cluster_, YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics, bool(Session_->FullCapture_));
 }
 
 TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExprNode& node, const TYtSettings::TConstPtr& config, bool withInput) {
@@ -152,6 +155,47 @@ TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExpr
         }
     }
     return extraUsage;
+}
+
+void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const {
+    YQL_ENSURE(Session_->FullCapture_);
+
+    auto fileCountLimit = config->_QueryDumpFileCountPerOperationLimit.Get().GetOrElse(DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT);
+    if (JobFilesDumpPaths.size() > fileCountLimit) {
+        Session_->FullCapture_->ReportError(
+            yexception() << "file count limit exceeded (" << JobFilesDumpPaths.size() << " > " << fileCountLimit << ")"
+        );
+        return;
+    }
+
+    THashMap<TString, TString> snapshots;  // yt job basename -> snapshot node id
+    auto handlePaths = [&](const NYT::TNode& filePaths) {
+        for (auto& path : filePaths.AsList()) {
+            auto& attrs = path.GetAttributes().AsMap();
+            snapshots.emplace(attrs.at("file_name").AsString(), path.AsString());
+        }
+    };
+    if (opSpec.HasKey("mapper")) {
+        handlePaths(opSpec.At("mapper").At("file_paths"));
+    }
+    if (opSpec.HasKey("reducer")) {
+        handlePaths(opSpec.At("reducer").At("file_paths"));
+    }
+
+    IYtGateway::TDumpOptions dumpOptions(Session_->SessionId_);
+    for (auto& [basename, dumpPath] : JobFilesDumpPaths) {
+        YQL_ENSURE(snapshots.contains(basename), "file is not present in operation spec");
+        auto& snapshotNodeId = snapshots.at(basename);
+        dumpOptions.Entries()[Cluster_].push_back(IYtGateway::TDumpOptions::TEntry {
+            .SrcPath = snapshotNodeId,
+            .DstPath = dumpPath
+        });
+        YQL_CLOG(INFO, ProviderYt) << "Dump job file " << basename << " (snapshot " << snapshotNodeId << ") to " << dumpPath << " on cluster " << Cluster_;
+    }
+
+    Session_->FullCapture_->AddOperationFuture(Gateway->Dump(std::move(dumpOptions)).Apply([] (const NThreading::TFuture<IYtGateway::TDumpResult>& f) {
+        return NCommon::TOperationResult(f.GetValue());
+    }));
 }
 
 TString TExecContextBase::GetAuth(const TYtSettings::TConstPtr& config) const {

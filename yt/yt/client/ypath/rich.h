@@ -90,6 +90,11 @@ public:
         const NTableClient::TComparator& comparator = NTableClient::TComparator(),
         const NTableClient::TKeyColumnTypes& conversionTypeHints = {}) const;
 
+    //! Check whether ranges contain a range with row_index specified in either
+    //! limit. This method is intended to be more lightweight than #GetNewRanges
+    //! and it does not require comparator.
+    bool HasRowIndexInRanges() const;
+
     void SetRanges(const std::vector<NChunkClient::TReadRange>& ranges);
     bool HasNontrivialRanges() const;
 
@@ -179,6 +184,9 @@ public:
 
     // "access_method"
     std::optional<TString> GetAccessMethod() const;
+
+    // "input_query"
+    std::optional<TString> GetInputQuery() const;
 
 private:
     TYPath Path_;

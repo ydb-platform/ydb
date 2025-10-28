@@ -134,6 +134,12 @@ def post_install(self):
         "contrib/libs/xxhash/xxhash.h",
     )
 
+    fileutil.re_sub_dir(
+        f"{self.dstdir}/cpp",
+        "arrow/vendored/xxhash/xxhash.h",
+        "contrib/libs/xxhash/xxhash.h",
+    )
+
     with self.yamakes["."] as arrow:
         arrow.PEERDIR.add("contrib/libs/xxhash")
 
@@ -218,6 +224,7 @@ apache_arrow = CMakeNinjaNixProject(
         "mimalloc.h",
         "jemalloc_ep/dist/include/jemalloc/jemalloc.h",
         "glog/logging.h",
+        "pcg_uint128.hpp",
         "xsimd/xsimd.hpp",
         "arrow/filesystem/s3fs.h",
         "arrow/filesystem/hdfs.h",
@@ -226,6 +233,10 @@ apache_arrow = CMakeNinjaNixProject(
         "arrow/util/bpacking_avx2.h",
         "arrow/util/bpacking_avx512.h",
         "arrow/util/bpacking_neon.h",
+        "arrow/filesystem/azurefs.h",
+        "arrow/filesystem/gcsfs.h",
+        "opentelemetry/trace/provider.h",
+        "opentelemetry/trace/scope.h",
         # if defined(__sun__)
         "sys/byteorder.h",
     ],

@@ -42,4 +42,12 @@ NProto::TClearSessionRequest ClearSessionRequestToProto(const TClearSessionReque
 
 TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionRequest& protoRequest);
 
+NProto::TDropTablesRequest DropTablesRequestToProto(const TDropTablesRequest& request);
+
+TDropTablesRequest DropTablesRequestFromProto(const NProto::TDropTablesRequest& protoRequest);
+
+NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse& response);
+
+TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse);
+
 } // namespace NYql::NFmr

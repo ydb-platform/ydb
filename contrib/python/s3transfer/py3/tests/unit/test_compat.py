@@ -57,7 +57,7 @@ class TestSeekable(unittest.TestCase):
     def test_non_seekable_ioerror(self):
         # Should return False if IOError is thrown.
         with open(self.filename, 'w') as f:
-            self.assertFalse(seekable(ErrorRaisingSeekWrapper(f, IOError())))
+            self.assertFalse(seekable(ErrorRaisingSeekWrapper(f, OSError())))
 
     def test_non_seekable_oserror(self):
         # Should return False if OSError is thrown.

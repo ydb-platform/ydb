@@ -192,6 +192,7 @@ This snippet ensures that all clients created by the ``ProcessPoolDownloader``
 are using ``us-west-2`` as their region.
 
 """
+
 import collections
 import contextlib
 import logging

@@ -557,6 +557,13 @@ SequenceChangePersistence(Oid relid, char newrelpersistence)
 	Buffer		buf;
 	HeapTupleData seqdatatuple;
 
+	/*
+	 * ALTER SEQUENCE acquires this lock earlier.  If we're processing an
+	 * owned sequence for ALTER TABLE, lock now.  Without the lock, we'd
+	 * discard increments from nextval() calls (in other sessions) between
+	 * this function's buffer unlock and this transaction's commit.
+	 */
+	LockRelationOid(relid, AccessExclusiveLock);
 	init_sequence(relid, &elm, &seqrel);
 
 	/* check the comment above nextval_internal()'s equivalent call. */
@@ -1358,7 +1365,10 @@ init_params(ParseState *pstate, List *options, bool for_identity,
 			/*
 			 * The parser allows this, but it is only for identity columns, in
 			 * which case it is filtered out in parse_utilcmd.c.  We only get
-			 * here if someone puts it into a CREATE SEQUENCE.
+			 * here if someone puts it into a CREATE SEQUENCE, where it'd be
+			 * redundant.  (The same is true for the equally-nonstandard
+			 * LOGGED and UNLOGGED options, but for those, the default error
+			 * below seems sufficient.)
 			 */
 			ereport(ERROR,
 					(errcode(ERRCODE_SYNTAX_ERROR),
@@ -1795,11 +1805,8 @@ pg_sequence_last_value(PG_FUNCTION_ARGS)
 	Oid			relid = PG_GETARG_OID(0);
 	SeqTable	elm;
 	Relation	seqrel;
-	Buffer		buf;
-	HeapTupleData seqtuple;
-	Form_pg_sequence_data seq;
-	bool		is_called;
-	int64		result;
+	bool		is_called = false;
+	int64		result = 0;
 
 	/* open and lock sequence */
 	init_sequence(relid, &elm, &seqrel);
@@ -1810,12 +1817,28 @@ pg_sequence_last_value(PG_FUNCTION_ARGS)
 				 errmsg("permission denied for sequence %s",
 						RelationGetRelationName(seqrel))));
 
-	seq = read_seq_tuple(seqrel, &buf, &seqtuple);
+	/*
+	 * We return NULL for other sessions' temporary sequences.  The
+	 * pg_sequences system view already filters those out, but this offers a
+	 * defense against ERRORs in case someone invokes this function directly.
+	 *
+	 * Also, for the benefit of the pg_sequences view, we return NULL for
+	 * unlogged sequences on standbys instead of throwing an error.
+	 */
+	if (!RELATION_IS_OTHER_TEMP(seqrel) &&
+		(RelationIsPermanent(seqrel) || !RecoveryInProgress()))
+	{
+		Buffer		buf;
+		HeapTupleData seqtuple;
+		Form_pg_sequence_data seq;
 
-	is_called = seq->is_called;
-	result = seq->last_value;
+		seq = read_seq_tuple(seqrel, &buf, &seqtuple);
 
-	UnlockReleaseBuffer(buf);
+		is_called = seq->is_called;
+		result = seq->last_value;
+
+		UnlockReleaseBuffer(buf);
+	}
 	relation_close(seqrel, NoLock);
 
 	if (is_called)

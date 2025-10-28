@@ -223,6 +223,17 @@ private:
         }
     }
 
+    #define HFuncChecked(TEvType, HandleFunc) \
+        case TEvType::EventType: { \
+            typename TEvType::TPtr* x = reinterpret_cast<typename TEvType::TPtr*>(&ev); \
+            if (State->Config.Enable) { \
+                HandleFunc(*x, this->ActorContext()); \
+            } else { \
+                ReplyWithError<TEvCms::TEvPermissionResponse>(*x, NKikimrCms::TStatus::ERROR_TEMP, "CMS is disabled", this->ActorContext()); \
+            } \
+            break; \
+        } Y_SEMICOLON_GUARD
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPrivate::TEvClusterInfo, Handle);
@@ -234,9 +245,9 @@ private:
             cFunc(TEvPrivate::EvStartCollecting, StartCollecting);
             cFunc(TEvPrivate::EvProcessQueue, ProcessQueue);
             FFunc(TEvCms::EvClusterStateRequest, EnqueueRequest);
-            HFunc(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManageRequestRequest, Handle);
-            HFunc(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
+            HFuncChecked(TEvCms::TEvCheckRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvManagePermissionRequest, Handle);
             HFunc(TEvCms::TEvConditionalPermissionRequest, CheckAndEnqueueRequest);
             HFunc(TEvCms::TEvNotification, CheckAndEnqueueRequest);

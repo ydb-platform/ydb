@@ -1,12 +1,17 @@
-from __future__ import absolute_import
+from typing import Generic, Optional, TypeVar
+
+from hamcrest.core.description import Description
+
 from .selfdescribing import SelfDescribing
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
+T = TypeVar("T")
 
-class Matcher(SelfDescribing):
+
+class Matcher(Generic[T], SelfDescribing):
     """A matcher over acceptable values.
 
     A matcher is able to describe itself to give feedback when it fails.
@@ -20,7 +25,7 @@ class Matcher(SelfDescribing):
 
     """
 
-    def matches(self, item, mismatch_description=None):
+    def matches(self, item: T, mismatch_description: Optional[Description] = None) -> bool:
         """Evaluates the matcher for argument item.
 
         If a mismatch is detected and argument ``mismatch_description`` is
@@ -28,12 +33,13 @@ class Matcher(SelfDescribing):
         accepted the item.
 
         :param item: The object against which the matcher is evaluated.
+        :param mismatch_description:
         :returns: ``True`` if ``item`` matches, otherwise ``False``.
 
         """
-        raise NotImplementedError('matches')
+        raise NotImplementedError("matches")
 
-    def describe_mismatch(self, item, mismatch_description):
+    def describe_mismatch(self, item: T, mismatch_description: Description) -> None:
         """Generates a description of why the matcher has not accepted the
         item.
 
@@ -49,4 +55,20 @@ class Matcher(SelfDescribing):
             to.
 
         """
-        raise NotImplementedError('describe_mismatch')
+        raise NotImplementedError("describe_mismatch")
+
+    def describe_match(self, item: T, match_description: Description) -> None:
+        """Generates a description of why the matcher has accepted the item.
+
+        The description may be part of a larger description of why a matching
+        failed, so it should be concise.
+
+        This method assumes that ``matches(item)`` is ``True``, but will not
+        check this.
+
+        :param item: The item that the
+            :py:class:`~hamcrest.core.matcher.Matcher` has accepted.
+        :param match_description: The description to be built or appended to.
+
+        """
+        raise NotImplementedError("describe_match")

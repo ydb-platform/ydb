@@ -222,7 +222,7 @@ class TCompletionChunkRead : public TCompletionAction {
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce);
+            ui64 chunkNonce, IRcBufAllocator* alloc);
     void Exec(TActorSystem *actorSystem) override;
     ~TCompletionChunkRead();
     void ReplyError(TActorSystem *actorSystem, TString reason);

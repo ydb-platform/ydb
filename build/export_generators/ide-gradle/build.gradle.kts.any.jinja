@@ -2,12 +2,12 @@
 {#- Include macroses.jinja then include use_macroses.jinja not work! -#}
 {#- That is why all common macroses here -#}
 
-{%- macro PatchRoots(arg, depend = false, output = false, tail = "") -%}
+{%- macro PatchRoots(arg, depend = false, output = "") -%}
 {#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $arcadia_root in Gradle -#}
 {%-     if depend -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to $arcadia_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
-"{{ arg|replace(export_root, "$output_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}{{ tail }}"
-{%-     elif output -%}
+"{{ arg|replace(export_root, "$output_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}"
+{%-     elif output != "" -%}
 {%-         if arg[0] != '/' -%}
 {#-             Relative outputs in buildDir, make relative from baseBuildDir -#}
 {%-             set bindir = curdir + "/" + arg -%}
@@ -17,46 +17,36 @@
 {%-             set bindir = false -%}
 {%-         endif -%}
 {%-         if bindir and current_target -%}
-{%-             set all_sets = [] -%}
-{%-             if current_target.source_sets|length -%}
-{%-                 set all_sets = all_sets + current_target.source_sets -%}
-{%-             endif -%}
-{%-             if current_target.resource_sets|length -%}
-{%-                 set all_sets = all_sets + current_target.resource_sets -%}
-{%-             endif -%}
-{#-             Output is relative in export_root -#}
-{%-             set out_set = all_sets|selectattr('realdir', 'startsWith', export_root)|rejectattr('dir', 'startsWith', export_root)|selectattr('realdir', 'in', export_root + "/" + bindir) -%}
-{%-             if out_set|length -%}
-{#-                 Real output dir != output dir (symlink to output dir) -#}
-{%-                 set out_set = out_set|first -%}
-{%-                 set out_dir = out_set.dir -%}
-{%-                 if current_target.test_reldir -%}
-{%-                     set out_dir = current_target.test_reldir + "/" + out_set.dir -%}
-{%-                 endif -%}
-{%-                 set out_tail = (export_root + "/" + bindir)|replace(out_set.realdir + "/", "")|replace(out_set.realdir, "") -%}
-{%-                 if out_tail -%}
-{%-                     set out_dir = out_dir + "/" + out_tail -%}
-{%-                 endif -%}
-"$arcadia_root/{{ curdir }}/{{ out_dir }}{{ tail }}"
-{%-             else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-"{{ (export_root + "/" + bindir)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
+{#-             "_" - don't patch output dir by codegen number -#}
+{%-             if output != "_" -%}
+"{{ (export_root + "/" + bindir)|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{%-             else -%}
+"{{ (export_root + "/" + bindir)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%-             endif -%}
 {%-         else -%}
-"{{ arg|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}{{ tail }}"
+"{{ arg|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%-         endif -%}
 {%-     else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
-"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root")|replace(output_root, "$output_root") }}{{ tail }}"
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root")|replace(output_root, "$output_root") }}"
 {%-     endif -%}
 {%- endmacro -%}
 
 {%- if proto_template -%}
-{%-     macro PatchGeneratedProto(arg, relative = false) -%}
+{%-     macro PatchGeneratedProto(arg, relative = false, output = "") -%}
 {%-         if relative -%}
+{%-             if output != "" and output != "_" -%}
+"{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "")|replace(output_root + "/", "")|replace(curdir + "/", curdir + "/build/" + CODEGENS_DIRNAME + "/" + varprefix + "." + output + "/") }}"
+{%-             else -%}
 "{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "")|replace(output_root + "/", "") }}"
+{%-             endif -%}
 {%-         else -%}
+{%-             if output != "" and output != "_" -%}
+"{{ arg|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{%-             else -%}
 "{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{%-             endif -%}
 {%-         endif -%}
 {%-     endmacro -%}
 {%- endif -%}

@@ -435,7 +435,7 @@ namespace NKikimr::NBlobDepot {
 #define BD_MON_TABLE_ROW_WITH_FORMATTER(config, key, formatter) \
         do { \
             if (config.Has##key()) { \
-                BD_MON_TABLE_ROW(key, formatter(config.Get##key())); \
+                BD_MON_TABLE_ROW(#key, formatter(config.Get##key())); \
             } \
         } while(false)
 

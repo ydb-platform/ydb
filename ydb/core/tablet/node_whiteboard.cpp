@@ -1285,6 +1285,9 @@ template<typename TMessage>
     return defaultFields;
 }
 
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TNodeStateInfo>();
+template NProtoBuf::RepeatedField<int> GetDefaultWhiteboardFields<NKikimrWhiteboard::TSystemStateInfo>();
+
 IActor* CreateNodeWhiteboardService() {
     return new TNodeWhiteboardService();
 }

@@ -48,6 +48,7 @@
 #include <ydb/services/ymq/grpc_service.h>
 #include <ydb/services/ymq/ymq_proxy.h>
 
+#include <ydb/public/api/grpc/draft/ydb_sqs_topic_v1.grpc.pb.h>
 #include <ydb/services/sqs_topic/sqs_topic_proxy.h>
 #include <ydb/services/sqs_topic/queue_url/utils.h>
 
@@ -1429,12 +1430,12 @@ namespace NKikimr::NHttpProxy {
 
         #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
             Ydb::SqsTopic::V1::SqsTopicService,  \
-            Ydb::SqsTopic::V1::name##Request,  \
-            Ydb::SqsTopic::V1::name##Response, \
-            Ydb::SqsTopic::V1::name##Result,\
+            Ydb::Ymq::V1::name##Request,  \
+            Ydb::Ymq::V1::name##Response, \
+            Ydb::Ymq::V1::name##Result,\
             decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
             NKikimr::NGRpcService::TEvSqsTopic##name##Request>> \
-                (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name, [](Ydb::SqsTopic::V1::name##Request&){return "";})
+                (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name, [](Ydb::Ymq::V1::name##Request&){return "";})
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
         #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 

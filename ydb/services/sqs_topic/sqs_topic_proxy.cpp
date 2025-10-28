@@ -91,7 +91,7 @@ namespace NKikimr::NSqsTopic::V1 {
     }
 
     void TGetQueueUrlActor::ReplyAndDie(const TActorContext& ctx) {
-        Ydb::SqsTopic::V1::GetQueueUrlResult result;
+        Ydb::Ymq::V1::GetQueueUrlResult result;
 
         const TRichQueueUrl queueUrl{
             .Database = this->Database,
@@ -134,18 +134,12 @@ namespace NKikimr::NGRpcService {
     template <>                                                                                     \
     IActor* TEvSqsTopic##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) { \
         return new T##name##Actor(msg);                                                             \
-    }                                                                                               \
-    void DoSqsTopic##name##Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {    \
-        TActivationContext::AsActorContext().Register(new T##name##Actor(p.release()));             \
     }
 
-#define DECLARE_RPC_NI(name)                                                                                                                            \
-    template <>                                                                                                                                         \
-    IActor* TEvSqsTopic##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {                                                     \
-        return new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvSqsTopic##name##Request>(msg);                                                 \
-    }                                                                                                                                                   \
-    void DoSqsTopic##name##Request(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {                                                        \
-        TActivationContext::AsActorContext().Register(new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvSqsTopic##name##Request>(p.release())); \
+#define DECLARE_RPC_NI(name)                                                                            \
+    template <>                                                                                         \
+    IActor* TEvSqsTopic##name##Request::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {     \
+        return new TNotImplementedRequestActor<NKikimr::NGRpcService::TEvSqsTopic##name##Request>(msg); \
     }
 
     DECLARE_RPC(GetQueueUrl);

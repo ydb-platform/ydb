@@ -295,14 +295,22 @@ NApi::IClientPtr CreateHedgingClient(const THedgingExecutorPtr& hedgingExecutor)
 
 NApi::IClientPtr CreateHedgingClient(
     const THedgingClientOptionsPtr& config,
-    const IPenaltyProviderPtr& penaltyProvider)
+    const IPenaltyProviderPtr& penaltyProvider,
+    const TClientOptions& clientOptions)
 {
     return DoCreateHedgingClient(
         config,
         penaltyProvider,
-        [] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
-            return CreateClient(connectionConfig);
+        [=] (const NApi::NRpcProxy::TConnectionConfigPtr& connectionConfig) {
+            return CreateClient(connectionConfig, clientOptions);
         });
+}
+
+NApi::IClientPtr CreateHedgingClient(
+    const THedgingClientOptionsPtr& config,
+    const IPenaltyProviderPtr& penaltyProvider)
+{
+    return CreateHedgingClient(config, penaltyProvider, NApi::GetClientOptionsFromEnvStatic());
 }
 
 NApi::IClientPtr CreateHedgingClient(const THedgingClientOptionsPtr& config)

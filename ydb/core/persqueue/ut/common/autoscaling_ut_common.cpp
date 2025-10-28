@@ -104,7 +104,7 @@ TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     settings.SetFeatureFlags(ff);
 
     auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
-    
+
     setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, priority);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, priority);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, priority);

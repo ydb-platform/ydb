@@ -10054,6 +10054,7 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "1",
+                    "Module": "1",
                     "Rack": "1",
                     "Unit": "1"
                 },

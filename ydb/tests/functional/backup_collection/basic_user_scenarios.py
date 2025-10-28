@@ -678,6 +678,101 @@ class BaseTestBackupInFiles(object):
 
         return collection_src, t1, t2
 
+    def _get_columns_from_scheme_entry(self, desc, path_hint: str = None):
+        # Reuse original robust approach: try multiple candidate attributes
+        try:
+            table_obj = getattr(desc, "table", None)
+            if table_obj is not None:
+                cols = getattr(table_obj, "columns", None)
+                if cols:
+                    return [c.name for c in cols]
+
+            cols = getattr(desc, "columns", None)
+            if cols:
+                try:
+                    return [c.name for c in cols]
+                except Exception:
+                    return [str(c) for c in cols]
+
+            for attr in ("schema", "entry", "path"):
+                nested = getattr(desc, attr, None)
+                if nested is not None:
+                    table_obj = getattr(nested, "table", None)
+                    cols = getattr(table_obj, "columns", None) if table_obj is not None else None
+                    if cols:
+                        return [c.name for c in cols]
+        except Exception:
+            pass
+
+        if getattr(desc, "is_table", False) or getattr(desc, "is_row_table", False) or getattr(desc, "is_column_table", False):
+            if path_hint:
+                table_path = path_hint
+            else:
+                name = getattr(desc, "name", None)
+                assert name, f"SchemeEntry has no name, can't form path. desc repr: {repr(desc)}"
+                table_path = name if name.startswith("/Root") else os.path.join(self.root_dir, name)
+
+            try:
+                tc = getattr(self.driver, "table_client", None)
+                if tc is not None and hasattr(tc, "describe_table"):
+                    desc_tbl = tc.describe_table(table_path)
+                    cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
+                    if cols:
+                        try:
+                            return [c.name for c in cols]
+                        except Exception:
+                            return [str(c) for c in cols]
+            except Exception:
+                pass
+
+            try:
+                with self.session_scope() as session:
+                    if hasattr(session, "describe_table"):
+                        desc_tbl = session.describe_table(table_path)
+                        cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
+                        if cols:
+                            try:
+                                return [c.name for c in cols]
+                            except Exception:
+                                return [str(c) for c in cols]
+            except Exception:
+                pass
+
+        diagnostics = ["Failed to find columns via known candidates.\n"]
+        try:
+            diagnostics.append("dir(desc):\n" + ", ".join(dir(desc)) + "\n")
+        except Exception as e:
+            diagnostics.append(f"dir(desc) raised: {e}\n")
+
+        readable = []
+        for attr in sorted(set(dir(desc))):
+            if attr.startswith("_"):
+                continue
+            if len(readable) >= 40:
+                break
+            try:
+                val = getattr(desc, attr)
+                if callable(val):
+                    continue
+                s = repr(val)
+                if len(s) > 300:
+                    s = s[:300] + "...(truncated)"
+                readable.append(f"{attr} = {s}")
+            except Exception as e:
+                readable.append(f"{attr} = <unreadable: {e}>")
+
+        diagnostics.append("Sample attributes (truncated):\n" + "\n".join(readable) + "\n")
+
+        raise AssertionError(
+            "describe_path returned SchemeEntry in unexpected shape. Cannot locate columns.\n\nDiagnostic dump:\n\n"
+            + "\n".join(diagnostics)
+        )
+
+    def _capture_schema(self, table_path: str):
+        desc = self.driver.scheme_client.describe_path(table_path)
+        cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
+        return cols
+
 
 class TestFullCycleLocalBackupRestore(BaseTestBackupInFiles):
     def _modify_and_backup(self, collection_src):
@@ -1241,101 +1336,6 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
 
 
 class TestFullCycleLocalBackupRestoreWSchemaChange(TestFullCycleLocalBackupRestore):
-    def _get_columns_from_scheme_entry(self, desc, path_hint: str = None):
-        # Reuse original robust approach: try multiple candidate attributes
-        try:
-            table_obj = getattr(desc, "table", None)
-            if table_obj is not None:
-                cols = getattr(table_obj, "columns", None)
-                if cols:
-                    return [c.name for c in cols]
-
-            cols = getattr(desc, "columns", None)
-            if cols:
-                try:
-                    return [c.name for c in cols]
-                except Exception:
-                    return [str(c) for c in cols]
-
-            for attr in ("schema", "entry", "path"):
-                nested = getattr(desc, attr, None)
-                if nested is not None:
-                    table_obj = getattr(nested, "table", None)
-                    cols = getattr(table_obj, "columns", None) if table_obj is not None else None
-                    if cols:
-                        return [c.name for c in cols]
-        except Exception:
-            pass
-
-        if getattr(desc, "is_table", False) or getattr(desc, "is_row_table", False) or getattr(desc, "is_column_table", False):
-            if path_hint:
-                table_path = path_hint
-            else:
-                name = getattr(desc, "name", None)
-                assert name, f"SchemeEntry has no name, can't form path. desc repr: {repr(desc)}"
-                table_path = name if name.startswith("/Root") else os.path.join(self.root_dir, name)
-
-            try:
-                tc = getattr(self.driver, "table_client", None)
-                if tc is not None and hasattr(tc, "describe_table"):
-                    desc_tbl = tc.describe_table(table_path)
-                    cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
-                    if cols:
-                        try:
-                            return [c.name for c in cols]
-                        except Exception:
-                            return [str(c) for c in cols]
-            except Exception:
-                pass
-
-            try:
-                with self.session_scope() as session:
-                    if hasattr(session, "describe_table"):
-                        desc_tbl = session.describe_table(table_path)
-                        cols = getattr(desc_tbl, "columns", None) or getattr(desc_tbl, "Columns", None)
-                        if cols:
-                            try:
-                                return [c.name for c in cols]
-                            except Exception:
-                                return [str(c) for c in cols]
-            except Exception:
-                pass
-
-        diagnostics = ["Failed to find columns via known candidates.\n"]
-        try:
-            diagnostics.append("dir(desc):\n" + ", ".join(dir(desc)) + "\n")
-        except Exception as e:
-            diagnostics.append(f"dir(desc) raised: {e}\n")
-
-        readable = []
-        for attr in sorted(set(dir(desc))):
-            if attr.startswith("_"):
-                continue
-            if len(readable) >= 40:
-                break
-            try:
-                val = getattr(desc, attr)
-                if callable(val):
-                    continue
-                s = repr(val)
-                if len(s) > 300:
-                    s = s[:300] + "...(truncated)"
-                readable.append(f"{attr} = {s}")
-            except Exception as e:
-                readable.append(f"{attr} = <unreadable: {e}>")
-
-        diagnostics.append("Sample attributes (truncated):\n" + "\n".join(readable) + "\n")
-
-        raise AssertionError(
-            "describe_path returned SchemeEntry in unexpected shape. Cannot locate columns.\n\nDiagnostic dump:\n\n"
-            + "\n".join(diagnostics)
-        )
-
-    def _capture_schema(self, table_path: str):
-        desc = self.driver.scheme_client.describe_path(table_path)
-        cols = self._get_columns_from_scheme_entry(desc, path_hint=table_path)
-        return cols
-
     def _create_table_with_data(self, session, path, not_null=False):
         full_path = "/Root/" + path
         session.create_table(

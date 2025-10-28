@@ -1989,7 +1989,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
             wsSettings.MessageGroupId(producerId);
             wsSettings.Codec(codec);
 
-            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(NYdb::NPersQueue::TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
+            auto writer = TPersQueueClient(ydbDriver).CreateSimpleBlockingWriteSession(TWriteSessionSettings(wsSettings).ClusterDiscoveryMode(EClusterDiscoveryMode::Off));
             TString dataFiller{400u, 'a'};
 
             for (auto i = 0u; i < count; ++i) {
@@ -2226,7 +2226,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
-        
+
         // checking that user with no UpdateRow rights cannot put record to topic
         auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
         UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);

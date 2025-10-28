@@ -26,15 +26,12 @@ void TKeyValueGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::KeyValue;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
+#ifdef SETUP_KV_METHOD
+#error SETUP_KV_METHOD macro already defined
+#endif
+
 #define SETUP_KV_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD( \
-        methodName, \
-        methodCallback, \
-        rlMode, \
-        requestType, \
-        keyvalue, \
-        auditMode \
-    )
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, keyvalue, auditMode)
 
     SETUP_KV_METHOD(CreateVolume, DoCreateVolumeKeyValue, RLMODE(Rps), KEYVALUE_CREATEVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));
     SETUP_KV_METHOD(DropVolume, DoDropVolumeKeyValue, RLMODE(Rps), KEYVALUE_DROPVOLUME, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl));

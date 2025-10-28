@@ -24,10 +24,14 @@ void TBridgeGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::
 
 void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Bridge;
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+
+#ifdef SETUP_BRIDGE_METHOD
+#error SETUP_BRIDGE_METHOD macro already defined
+#endif
 
 #define SETUP_BRIDGE_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
-    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, bridge, auditMode)
 
     SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, RLMODE(Rps), BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
     SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, RLMODE(Rps), BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));

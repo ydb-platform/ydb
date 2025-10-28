@@ -24,7 +24,15 @@ void TConfigGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::
 
 void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using namespace Ydb::Config;
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+
+#ifdef SETUP_BS_METHOD
+#error SETUP_BS_METHOD macro already defined
+#endif
+
+#ifdef SETUP_BOOTSTRAP_CLUSTER_METHOD
+#error SETUP_BOOTSTRAP_CLUSTER_METHOD macro already defined
+#endif
 
 #define SETUP_BS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
     SETUP_METHOD(methodName, methodCallback, rlMode, requestType, config, auditMode)
@@ -50,7 +58,7 @@ void TConfigGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     SETUP_BOOTSTRAP_CLUSTER_METHOD(BootstrapCluster, DoBootstrapCluster, RLMODE(Rps), CONFIG_BOOTSTRAP, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
 
 #undef SETUP_BS_METHOD
-#undef SETUP_BS_METHOD_WITH_TYPE
+#undef SETUP_BOOTSTRAP_CLUSTER_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

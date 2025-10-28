@@ -29,6 +29,10 @@ void TRateLimiterGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
     using namespace NGRpcService;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
+#ifdef SETUP_RL_METHOD
+#error SETUP_RL_METHOD macro already defined
+#endif
+
 #define SETUP_RL_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
     SETUP_METHOD(methodName, methodCallback, rlMode, requestType, rate_limiter, auditMode)
 

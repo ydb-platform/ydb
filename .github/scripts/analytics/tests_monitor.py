@@ -263,7 +263,7 @@ def main():
             return 1
         
         base_date = datetime.datetime(1970, 1, 1)
-        base_date_obj = base_date.date()  # Cache for performance
+        base_date_obj = base_date.date()  # Convert to date object for comparison
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
         table_path = f'test_results/analytics/tests_monitor'

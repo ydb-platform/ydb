@@ -11,8 +11,6 @@ SRCS(
     event_filter.h
     event_holder_pool.h
     events_local.h
-    interconnect_address.cpp
-    interconnect_address.h
     interconnect_channel.cpp
     interconnect_channel.h
     interconnect_common.h
@@ -60,6 +58,7 @@ PEERDIR(
     ydb/library/actors/dnscachelib
     ydb/library/actors/dnsresolver
     ydb/library/actors/helpers
+    ydb/library/actors/interconnect/address
     ydb/library/actors/interconnect/poller
     ydb/library/actors/prof
     ydb/library/actors/protos

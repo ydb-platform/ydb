@@ -479,7 +479,7 @@ protected:
         LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
         ui16 outputRowId = 0;
         ui16 skipped = 0;
-        bool skipErrors = Config.SkipErrors;
+        const bool skipErrors = Config.SkipErrors;
         bool needInitOutputOffsets = true;
 
 retry:

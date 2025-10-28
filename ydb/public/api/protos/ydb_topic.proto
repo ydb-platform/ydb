@@ -795,7 +795,7 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
-message NoneDeadLetterPolicy {
+message DisabledDeadLetterPolicy {
 }
 
 message DeleteDeadLetterPolicy {
@@ -809,7 +809,7 @@ message MoveDeadLetterPolicy {
     string dead_letter_queue = 2;
 }
 
-message NoneAlterDeadLetterPolicy {
+message AlterDisabledDeadLetterPolicy {
 }
 
 message DeleteAlterDeadLetterPolicy {
@@ -872,7 +872,7 @@ message Consumer {
     google.protobuf.Duration default_processing_timeout = 11;
 
     oneof {
-        NoneDeadLetterPolicy none_dead_letter_policy = 12;
+        DisabledDeadLetterPolicy disabled_dead_letter_policy = 12;
         DeleteDeadLetterPolicy delete_dead_letter_policy = 13;
         MoveDeadLetterPolicy move_dead_letter_policy = 14;
     }
@@ -909,7 +909,7 @@ message AlterConsumer {
     google.protobuf.Duration set_default_processing_timeout = 10;
 
     oneof {
-        AlterNoneDeadLetterPolicy set_none_dead_letter_policy = 12;
+        AlterDisabledDeadLetterPolicy set_disabled_dead_letter_policy = 12;
         AlterDeleteDeadLetterPolicy set_delete_dead_letter_policy = 13;
         AlterMoveDeadLetterPolicy set_move_dead_letter_policy = 14;
     }

@@ -418,7 +418,12 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                         modifiedTables.insert(getTable(settings.GetTable()));
                         return true;
                     }
-                    // TODO: uniq index check here
+
+                    for (const auto& index : settings.GetIndexes()) {
+                        if (index.GetIsUniq() && modifiedTables.contains(getTable(settings.GetTable()))) {
+                            return true;
+                        }
+                    }
 
                     modifiedTables.insert(getTable(settings.GetTable()));
                     if (settings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT && !commit) {

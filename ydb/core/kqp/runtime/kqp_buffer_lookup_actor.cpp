@@ -250,7 +250,7 @@ public:
             record.MutableSnapshot()->SetTxId(Settings.MvccSnapshot->GetTxId());
         } else {
             // Unique index check has side effects, so it requires snapshot.
-            AFL_ENSURE(!uniqueCheck);
+            //AFL_ENSURE(!uniqueCheck);
         }
 
         AFL_ENSURE(Settings.LockTxId && Settings.LockNodeId);

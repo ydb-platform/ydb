@@ -1439,7 +1439,7 @@ public:
     };
 
     struct TPathLookupInfo {
-        TVector<ui32> KeyIndexes;
+        std::vector<ui32> KeyIndexes;
         IKqpBufferTableLookup* Lookup = nullptr;
     };
 
@@ -1497,6 +1497,7 @@ public:
                 case EState::LOOKUP_MAIN_TABLE:
                     return ProcessLookupMainTable();
                 case EState::LOOKUP_UNIQUE_INDEX:
+                    return ProcessLookupUniqueIndex();
                 case EState::FINISHED:
                     YQL_ENSURE(false);
             }
@@ -1515,7 +1516,7 @@ public:
     }
 
     bool IsEmpty() const {
-        return BufferedBatches.empty() && ProcessBatches.empty();
+        return BufferedBatches.empty() && ProcessBatches.empty() && Writes.empty();
     }
 
     bool IsClosed() const {
@@ -1551,12 +1552,11 @@ private:
                 Memory -= batch->GetMemory();
             }
 
-            // TODO: uniq index check + insert uniq check
+            // TODO: insert uniq check
             ProcessCells = GetSortedUniqueRows(ProcessBatches, keyColumnTypes);
             for (size_t index = 0; index < ProcessCells.size(); ++index) {
                 const auto& row = ProcessCells[index];
                 KeyToIndex[row.first(keyColumnTypes.size())] = index;
-
                 Memory += EstimateSize(row);
             }
 
@@ -1566,10 +1566,40 @@ private:
             State = EState::LOOKUP_MAIN_TABLE;
         } else if (!PathLookupInfo.empty()) {
             // Need to lookup unique indexes
-            AFL_ENSURE(false);
+            std::swap(BufferedBatches, ProcessBatches);
+
+            for (auto& [_, lookupInfo] : PathLookupInfo) {
+                std::vector<std::vector<TCell>> cells;
+                for (const auto& batch : ProcessBatches) {
+                    for (const auto& row : GetRows(batch)) {
+                        cells.emplace_back();
+                        for (const auto& index : lookupInfo.KeyIndexes) {
+                            cells.back().push_back(row[index]);
+                        }
+                    }
+                }
+
+                // todo: check uniq
+
+                std::vector<TConstArrayRef<TCell>> cellRefs;
+                cellRefs.reserve(cells.size());
+                for (const auto& row : cells) {
+                    cellRefs.push_back(row);
+                }
+
+                lookupInfo.Lookup->AddLookupTask(
+                    Cookie, /* unique check */ true, cellRefs);
+            }
+
+            Writes.reserve(ProcessBatches.size());
+            for (auto& batch : ProcessBatches) {
+                Writes.emplace_back(std::move(batch));
+            }
+            ProcessBatches.clear();
+
+            State = EState::LOOKUP_UNIQUE_INDEX;
         } else {
             // Write without lookups.
-            // We don't do uncessary copy here.
             Writes.reserve(BufferedBatches.size());
             for (auto& batch : BufferedBatches) {
                 Writes.emplace_back(std::move(batch));
@@ -1649,16 +1679,85 @@ private:
         });
 
         if (PathLookupInfo.size() > 1) {
-            // Need to lookup unique indexes
-            AFL_ENSURE(false);
-        } else {
-            // Write
-            FlushWritesToActors();
-            State = EState::BUFFERING;
+            THashMap<TConstArrayRef<TCell>, ui32, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> keyToProcessCellsIndex;
+
+            AFL_ENSURE(Writes.size() == 1);
+            const auto writeRows = GetRows(Writes[0].Batch);
+            for (size_t index = 0; index < writeRows.size(); ++index) {
+                const auto key = writeRows[index].first(keyColumnTypes.size());
+                AFL_ENSURE(keyToProcessCellsIndex.emplace(key, index).second);
+            }
+
+            for (auto& [pathId, lookupInfo] : PathLookupInfo) {
+                if (pathId == PathId) {
+                    continue;
+                }
+
+                std::vector<std::vector<TCell>> cells;
+                for (const auto& batch : ProcessBatches) {
+                    for (const auto& row : GetRows(batch)) {
+                        const auto key = row.first(keyColumnTypes.size());
+                        const auto& joinedRow = writeRows[keyToProcessCellsIndex.at(key)];
+                        AFL_ENSURE(row.size() <= joinedRow.size());
+
+                        cells.emplace_back();
+                        for (const auto& index : lookupInfo.KeyIndexes) {
+                            AFL_ENSURE(index < joinedRow.size());
+                            cells.back().push_back(index < row.size() ? row[index] : joinedRow[index]);
+                        }
+                    }
+                }
+
+                // todo: check uniq
+
+                std::vector<TConstArrayRef<TCell>> cellRefs;
+                cellRefs.reserve(cells.size());
+                for (const auto& row : cells) {
+                    cellRefs.push_back(row);
+                }
+
+                lookupInfo.Lookup->AddLookupTask(
+                    Cookie, /* unique check */ true, cellRefs);
+            }
 
             ProcessBatches.clear();
             ProcessCells.clear();
+
+            State = EState::LOOKUP_UNIQUE_INDEX;
+        } else {
+            // Write
+            ProcessBatches.clear();
+            ProcessCells.clear();
+
+            FlushWritesToActors();
+
+            State = EState::BUFFERING;
         }
+        return true;
+    }
+
+    bool ProcessLookupUniqueIndex() {
+        AFL_ENSURE(ProcessBatches.empty());
+        AFL_ENSURE(ProcessCells.empty());
+        AFL_ENSURE(!Writes.empty());
+
+        for (auto& [pathId, lookupInfo] : PathLookupInfo) {
+            if (pathId != PathId && !lookupInfo.Lookup->HasResult(Cookie)) {
+                return false;
+            }
+        }
+
+        for (auto& [pathId, lookupInfo] : PathLookupInfo) {
+            if (pathId != PathId) {
+                lookupInfo.Lookup->ExtractResult(Cookie, [](TConstArrayRef<TCell>) {
+                    AFL_ENSURE(false); // Can't return any row
+                });
+            }
+        }
+
+        FlushWritesToActors();
+        State = EState::BUFFERING;
+
         return true;
     }
 
@@ -2115,6 +2214,7 @@ struct TWriteSettings {
         TTableId TableId;
         TString TablePath;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> KeyColumns;
+        ui32 KeyPrefixSize;
         TVector<NKikimrKqp::TKqpColumnMetadataProto> Columns;
         std::vector<ui32> WriteIndex;
         bool IsUniq;
@@ -2415,7 +2515,23 @@ public:
                     return;
                 }
 
-                // TODO: lookup for uniq indexes
+                if (indexSettings.IsUniq) {
+                    auto& lookupInfo = LookupInfos[indexSettings.TableId.PathId];
+                    if (!lookupInfo.Actors.contains(indexSettings.TableId.PathId)) {
+                        const auto [ptr, id] = createLookupActor(indexSettings.TableId, indexSettings.TablePath);
+                        AFL_ENSURE(lookupInfo.Actors.emplace(indexSettings.TableId.PathId, TLookupInfo::TActorInfo{
+                            .LookupActor = ptr,
+                            .Id = id,
+                        }).second);
+                    } else {
+                        if (!checkSchemaVersion(
+                                lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor,
+                                indexSettings.TableId,
+                                indexSettings.TablePath)) {
+                            return;
+                        }
+                    }
+                }
             }
 
             EnableStreamWrite &= settings.EnableStreamWrite;
@@ -2483,7 +2599,30 @@ public:
                     .WriteActor = writeInfo.Actors.at(indexSettings.TableId.PathId).WriteActor,
                 });
 
-                // TODO: lookup for uniq indexes
+                if (indexSettings.IsUniq) {
+                    auto lookupInfo = LookupInfos.at(indexSettings.TableId.PathId);
+                    auto lookupActor = lookupInfo.Actors.at(indexSettings.TableId.PathId).LookupActor;
+                    lookups.emplace_back(TKqpWriteTask::TPathLookupInfo{
+                        .KeyIndexes = GetKeyIndexes(
+                            settings.Columns,
+                            settings.WriteIndex,
+                            settings.LookupColumns,
+                            TConstArrayRef{
+                                indexSettings.KeyColumns.data(),
+                                indexSettings.KeyColumns.size()}.first(indexSettings.KeyPrefixSize),
+                            TConstArrayRef{
+                                keyWriteIndex.data(),
+                                keyWriteIndex.size()}.first(indexSettings.KeyPrefixSize),
+                            /* preferAdditionalInputColumns */ false),
+                        .Lookup = lookupActor,
+                    });
+
+                    lookupActor->SetLookupSettings(
+                        token.Cookie,
+                        indexSettings.KeyPrefixSize,
+                        indexSettings.KeyColumns,
+                        {});
+                }
             }
 
             IDataBatchProjectionPtr projection = nullptr;
@@ -4076,6 +4215,7 @@ private:
                                         indexSettings.GetTable().GetVersion()),
                     .TablePath = indexSettings.GetTable().GetPath(),
                     .KeyColumns = std::move(keyColumnsMetadata),
+                    .KeyPrefixSize = indexSettings.GetKeyPrefixSize(),
                     .Columns = std::move(columnsMetadata),
                     .WriteIndex = std::move(writeIndex),
                     .IsUniq = indexSettings.GetIsUniq(),

@@ -84,6 +84,16 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
     const bool preferAdditionalInputColumns,
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
+std::vector<ui32> GetKeyIndexes(
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+    const TConstArrayRef<ui32> inputWriteIndex,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+    const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+    const TConstArrayRef<ui32> outputWriteIndex,
+    const bool preferAdditionalInputColumns);
+
+std::vector<TConstArrayRef<TCell>> GetRows(
+    const NKikimr::NKqp::IDataBatchPtr& batch);
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(
     const std::vector<NKikimr::NKqp::IDataBatchPtr>& batches,
     const TConstArrayRef<NScheme::TTypeInfo> keyColumnTypes);

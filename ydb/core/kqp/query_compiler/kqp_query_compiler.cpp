@@ -1353,7 +1353,6 @@ private:
                             }
                             const auto& implTable = tableMeta->ImplTables[index];
 
-                            AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                             AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                             for (const auto& columnName : implTable->KeyColumnNames) {
@@ -1388,7 +1387,6 @@ private:
                         }
                         const auto& implTable = tableMeta->ImplTables[index];
 
-                        AFL_ENSURE(indexDescription.Type == TIndexDescription::EType::GlobalSync);
                         AFL_ENSURE(implTable->Kind == EKikimrTableKind::Datashard);
 
                         auto indexSettings = settingsProto.AddIndexes();
@@ -1403,6 +1401,8 @@ private:
                             auto keyColumnProto = indexSettings->AddKeyColumns();
                             fillColumnProto(columnName, columnMeta, keyColumnProto);
                         }
+
+                        indexSettings->SetKeyPrefixSize(indexDescription.KeyColumns.size());
 
                         TVector<TStringBuf> indexColumns;
                         THashSet<TStringBuf> indexColumnsSet;

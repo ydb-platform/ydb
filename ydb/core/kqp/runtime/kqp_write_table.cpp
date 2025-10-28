@@ -1051,14 +1051,13 @@ IRowsBatcherPtr CreateRowsBatcher(
     return MakeIntrusive<TRowsBatcherProxy>(columnsCount, std::move(alloc));
 }
 
-IDataBatchProjectionPtr CreateDataBatchProjection(
+std::vector<ui32> CreateMapping(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const TConstArrayRef<ui32> inputWriteIndex,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
         const TConstArrayRef<ui32> outputWriteIndex,
-        const bool preferAdditionalInputColumns,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+        const bool preferAdditionalInputColumns) {
     // inputColumns (reordered using inputWriteIndex) + additionalInputColumns 
     // -> outputColumns (reordered using outputWriteIndex)
 
@@ -1098,8 +1097,51 @@ IDataBatchProjectionPtr CreateDataBatchProjection(
         columnsMapping[index] = inputIndex;
     }
 
+    return columnsMapping;
+}
+
+std::vector<ui32> GetKeyIndexes(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        const bool preferAdditionalInputColumns) {
+    auto columnsMapping = CreateMapping(
+        inputColumns,
+        inputWriteIndex,
+        additionalInputColumns,
+        outputColumns,
+        outputWriteIndex,
+        preferAdditionalInputColumns);
+    return columnsMapping;
+}
+
+IDataBatchProjectionPtr CreateDataBatchProjection(
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
+        const TConstArrayRef<ui32> inputWriteIndex,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> additionalInputColumns,
+        const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> outputColumns,
+        const TConstArrayRef<ui32> outputWriteIndex,
+        const bool preferAdditionalInputColumns,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    auto columnsMapping = CreateMapping(
+        inputColumns,
+        inputWriteIndex,
+        additionalInputColumns,
+        outputColumns,
+        outputWriteIndex,
+        preferAdditionalInputColumns);
+
     return MakeIntrusive<TDataBatchProjection>(
         std::move(columnsMapping), std::move(alloc));
+}
+
+std::vector<TConstArrayRef<TCell>> GetRows(const NKikimr::NKqp::IDataBatchPtr& batch) {
+    auto* data = dynamic_cast<TRowBatch*>(batch.Get());
+    AFL_ENSURE(data);
+    const auto& batchRows = data->GetRows();
+    return std::vector<TConstArrayRef<TCell>>(batchRows.begin(), batchRows.end());
 }
 
 std::vector<TConstArrayRef<TCell>> GetSortedUniqueRows(

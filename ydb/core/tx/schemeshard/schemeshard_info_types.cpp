@@ -1420,26 +1420,6 @@ bool TPartitionConfigMerger::VerifyAlterParams(
         return false;
     }
 
-    if (dstConfig.HasChannelProfileId()) {
-        for (const auto& family : dstConfig.GetColumnFamilies()) {
-            if (family.HasStorageConfig()) {
-                errDescr = TStringBuilder()
-                        << "Migration from profile id by storage config is not allowed, was "
-                        << srcConfig.GetChannelProfileId() << ", asks storage config";
-                return false;
-            }
-        }
-
-        if (srcConfig.GetChannelProfileId() != dstConfig.GetChannelProfileId()) {
-            errDescr = TStringBuilder()
-                    << "Profile modification is not allowed, was "
-                    << srcConfig.GetChannelProfileId()
-                    << ", asks "
-                    <<  dstConfig.GetChannelProfileId();
-            return false;
-        }
-    }
-
     const NKikimrSchemeOp::TStorageConfig* wasStorageConfig = nullptr;
     for (const auto& family : srcConfig.GetColumnFamilies()) {
         if (family.GetId() == 0 && family.HasStorageConfig()) {
@@ -1480,7 +1460,26 @@ bool TPartitionConfigMerger::VerifyAlterParams(
     if (isStorageConfig) {
         if (!wasStorageConfig) {
             errDescr = TStringBuilder()
-                    << "Couldn't add storage configuration if it hasn't been set before";
+                    << "Cannot add storage config if it hasn't been set before";
+            return false;
+        }
+    }
+
+    if (dstConfig.HasChannelProfileId()) {
+        // Note: ChannelProfileId == 0 may have been implicit
+        if (dstConfig.GetChannelProfileId() != srcConfig.GetChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Profile modification is not allowed, was "
+                    << srcConfig.GetChannelProfileId()
+                    << ", asks "
+                    <<  dstConfig.GetChannelProfileId();
+            return false;
+        }
+
+        if (isStorageConfig && !srcConfig.HasChannelProfileId()) {
+            errDescr = TStringBuilder()
+                    << "Setting ChannelProfileId to " << dstConfig.GetChannelProfileId()
+                    << " for tables with storage config is not allowed";
             return false;
         }
     }

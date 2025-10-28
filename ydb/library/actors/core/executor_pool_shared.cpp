@@ -292,7 +292,7 @@ namespace NActors {
                     SwitchToPool(thread.OwnerPoolId, hpnow); // already switched, needless
                     LocalThreads[thread.OwnerPoolId].fetch_sub(1, std::memory_order_acq_rel);
                     EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "going to sleep; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);
-                    Y_DEBUG_ABORT_UNLESS(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ", thread.OwnerPoolId, " Pools.size() == ", Pools.size());
+                    Y_DEBUG_ABORT_UNLESS(thread.OwnerPoolId < static_cast<i16>(Pools.size()), "thread.OwnerPoolId == ");//, thread.OwnerPoolId, " Pools.size() == ", Pools.size());
                     Y_DEBUG_ABORT_UNLESS(Pools[thread.OwnerPoolId] != nullptr, "Pools[thread.OwnerPoolId] is nullptr");
                     if (thread.Wait(Pools[thread.OwnerPoolId]->SpinThresholdCycles.load(std::memory_order_relaxed), &StopFlag, &LocalNotifications[thread.OwnerPoolId], &ThreadsState)) {
                         EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Executor, "interrupted; ownerPoolId == ", thread.OwnerPoolId, " currentPoolId == ", thread.CurrentPoolId);

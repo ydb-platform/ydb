@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/http/http.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 #include <library/cpp/uri/uri.h>
 
 #include <util/generic/guid.h>
@@ -149,22 +150,26 @@ void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
 }
 
 void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
-#endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
-         [this](NYdbGrpc::IRequestContextBase *reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
-            ACTION; \
-         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME, \
-         #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    ReportSdkBuildInfo();
 
-    ADD_REQUEST(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
+#ifdef SETUP_LEGACY_EVENT_METHOD
+#error SETUP_LEGACY_EVENT_METHOD macro already defined
+#endif
+
+#define SETUP_LEGACY_EVENT_METHOD(NAME, IN, OUT, ACTION)                                                               \
+     MakeIntrusive<TGRpcRequest<Ydb::Discovery::IN, Ydb::Discovery::OUT, TGRpcDiscoveryService>>(this, &Service_, CQ_, \
+         [this](NYdbGrpc::IRequestContextBase* reqCtx) {                                                               \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx));               \
+            ACTION;                                                                                                    \
+         }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                                      \
+         #NAME, logger, getCounterBlock("discovery", #NAME))->Run()
+
+    SETUP_LEGACY_EVENT_METHOD(ListEndpoints, ListEndpointsRequest, ListEndpointsResponse, {
         ActorSystem_->Register(new TGRpcRequestActor(reqCtx));
-    })
-#undef ADD_REQUEST
+    });
+
+#undef SETUP_LEGACY_EVENT_METHOD
 }
 
 } // namespace NKikimr

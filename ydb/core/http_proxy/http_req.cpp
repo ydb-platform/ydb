@@ -1427,24 +1427,26 @@ namespace NKikimr::NHttpProxy {
         DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN(UntagQueue);
         #undef DECLARE_YMQ_PROCESSOR_QUEUE_KNOWN
 
+#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<     \
+                                                            Ydb::SqsTopic::V1::SqsTopicService,                                       \
+                                                            Ydb::Ymq::V1::name##Request,                                              \
+                                                            Ydb::Ymq::V1::name##Response,                                             \
+                                                            Ydb::Ymq::V1::name##Result,                                               \
+                                                            decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
+                                                            NKikimr::NGRpcService::TEvSqsTopic##name##Request>>(#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name, [](Ydb::Ymq::V1::name##Request&) { return ""; })
 
-        #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
-            Ydb::SqsTopic::V1::SqsTopicService,  \
-            Ydb::Ymq::V1::name##Request,  \
-            Ydb::Ymq::V1::name##Response, \
-            Ydb::Ymq::V1::name##Result,\
-            decltype(&Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name), \
-            NKikimr::NGRpcService::TEvSqsTopic##name##Request>> \
-                (#name, &Ydb::SqsTopic::V1::SqsTopicService::Stub::AsyncSqsTopic##name, [](Ydb::Ymq::V1::name##Request&){return "";})
         DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN(GetQueueUrl);
-        #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
 
-/*
-        #define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor<Ydb::SqsTopic::V1::YmqService, Ydb::SqsTopic::V1::name##Request, Ydb::SqsTopic::V1::name##Response, Ydb::SqsTopic::V1::name##Result,\
-                    decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name), NKikimr::NGRpcService::TEvYmq##name##Request>> \
-                    (#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::SqsTopic::V1::name##Request& request){return request.Getqueue_url();})
-        #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
-*/
+#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_UNKNOWN
+
+#define DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN(name) Name2SqsTopicProcessor[#name] = MakeHolder<TSqsTopicHttpRequestProcessor< \
+                                                          Ydb::SqsTopic::V1::SqsTopicService,                                   \
+                                                          Ydb::SqsTopic::V1::name##Request,                                     \
+                                                          Ydb::SqsTopic::V1::name##Response,                                    \
+                                                          Ydb::SqsTopic::V1::name##Result,                                      \
+                                                          decltype(&Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name),       \
+                                                          NKikimr::NGRpcService::TEvYmq##name##Request>>(#name, &Ydb::SqsTopic::V1::YmqService::Stub::AsyncYmq##name, [](Ydb::Ymq::V1::name##Request& request) { return request.Getqueue_url(); })
+#undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
     }
 
     void SetApiVersionDisabledErrorText(THttpRequestContext& context) {

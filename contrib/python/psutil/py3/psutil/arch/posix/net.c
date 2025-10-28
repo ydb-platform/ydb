@@ -2,24 +2,18 @@
  * Copyright (c) 2009, Giampaolo Rodola'. All rights reserved.
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file.
- *
- * Functions specific to all POSIX compliant platforms.
  */
 
 #include <Python.h>
 #include <errno.h>
 #include <stdlib.h>
-#include <sys/resource.h>
 #include <sys/types.h>
-#include <signal.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <unistd.h>
 
-#ifdef PSUTIL_SUNOS10
-    #error #include "arch/solaris/v10/ifaddrs.h"
-#elif PSUTIL_AIX
+#ifdef PSUTIL_AIX
     #error #include "arch/aix/ifaddrs.h"
 #else
     #include <ifaddrs.h>
@@ -45,183 +39,15 @@
 #if defined(PSUTIL_AIX)
     #include <netdb.h>
 #endif
-#if defined(PSUTIL_LINUX) || defined(PSUTIL_FREEBSD)
-    #include <sys/resource.h>
-#endif
 
-#include "_psutil_common.h"
-
-
-#define INITERR return NULL
-
-
-// ====================================================================
-// --- Utils
-// ====================================================================
-
-
-/*
- * From "man getpagesize" on Linux, https://linux.die.net/man/2/getpagesize:
- *
- * > In SUSv2 the getpagesize() call is labeled LEGACY, and in POSIX.1-2001
- * > it has been dropped.
- * > Portable applications should employ sysconf(_SC_PAGESIZE) instead
- * > of getpagesize().
- * > Most systems allow the synonym _SC_PAGE_SIZE for _SC_PAGESIZE.
- * > Whether getpagesize() is present as a Linux system call depends on the
- * > architecture.
- */
-long
-psutil_getpagesize(void) {
-#ifdef _SC_PAGESIZE
-    // recommended POSIX
-    return sysconf(_SC_PAGESIZE);
-#elif _SC_PAGE_SIZE
-    // alias
-    return sysconf(_SC_PAGE_SIZE);
-#else
-    // legacy
-    return (long) getpagesize();
-#endif
-}
-
-
-/*
- * Check if PID exists. Return values:
- * 1: exists
- * 0: does not exist
- * -1: error (Python exception is set)
- */
-int
-psutil_pid_exists(pid_t pid) {
-    int ret;
-
-    // No negative PID exists, plus -1 is an alias for sending signal
-    // too all processes except system ones. Not what we want.
-    if (pid < 0)
-        return 0;
-
-    // As per "man 2 kill" PID 0 is an alias for sending the signal to
-    // every process in the process group of the calling process.
-    // Not what we want. Some platforms have PID 0, some do not.
-    // We decide that at runtime.
-    if (pid == 0) {
-#if defined(PSUTIL_LINUX) || defined(PSUTIL_FREEBSD)
-        return 0;
-#else
-        return 1;
-#endif
-    }
-
-    ret = kill(pid , 0);
-    if (ret == 0)
-        return 1;
-    else {
-        if (errno == ESRCH) {
-            // ESRCH == No such process
-            return 0;
-        }
-        else if (errno == EPERM) {
-            // EPERM clearly indicates there's a process to deny
-            // access to.
-            return 1;
-        }
-        else {
-            // According to "man 2 kill" possible error values are
-            // (EINVAL, EPERM, ESRCH) therefore we should never get
-            // here. If we do let's be explicit in considering this
-            // an error.
-            PyErr_SetFromErrno(PyExc_OSError);
-            return -1;
-        }
-    }
-}
-
-
-/*
- * Utility used for those syscalls which do not return a meaningful
- * error that we can translate into an exception which makes sense.
- * As such, we'll have to guess.
- * On UNIX, if errno is set, we return that one (OSError).
- * Else, if PID does not exist we assume the syscall failed because
- * of that so we raise NoSuchProcess.
- * If none of this is true we giveup and raise RuntimeError(msg).
- * This will always set a Python exception and return NULL.
- */
-void
-psutil_raise_for_pid(long pid, char *syscall) {
-    if (errno != 0)
-        psutil_PyErr_SetFromOSErrnoWithSyscall(syscall);
-    else if (psutil_pid_exists(pid) == 0)
-        NoSuchProcess(syscall);
-    else
-        PyErr_Format(PyExc_RuntimeError, "%s syscall failed", syscall);
-}
-
-
-// ====================================================================
-// --- Python wrappers
-// ====================================================================
-
-
-// Exposed so we can test it against Python's stdlib.
-static PyObject *
-psutil_getpagesize_pywrapper(PyObject *self, PyObject *args) {
-    return Py_BuildValue("l", psutil_getpagesize());
-}
-
-
-/*
- * Given a PID return process priority as a Python integer.
- */
-static PyObject *
-psutil_posix_getpriority(PyObject *self, PyObject *args) {
-    pid_t pid;
-    int priority;
-    errno = 0;
-
-    if (! PyArg_ParseTuple(args, _Py_PARSE_PID, &pid))
-        return NULL;
-
-#ifdef PSUTIL_OSX
-    priority = getpriority(PRIO_PROCESS, (id_t)pid);
-#else
-    priority = getpriority(PRIO_PROCESS, pid);
-#endif
-    if (errno != 0)
-        return PyErr_SetFromErrno(PyExc_OSError);
-    return Py_BuildValue("i", priority);
-}
-
-
-/*
- * Given a PID and a value change process priority.
- */
-static PyObject *
-psutil_posix_setpriority(PyObject *self, PyObject *args) {
-    pid_t pid;
-    int priority;
-    int retval;
-
-    if (! PyArg_ParseTuple(args, _Py_PARSE_PID "i", &pid, &priority))
-        return NULL;
-
-#ifdef PSUTIL_OSX
-    retval = setpriority(PRIO_PROCESS, (id_t)pid, priority);
-#else
-    retval = setpriority(PRIO_PROCESS, pid, priority);
-#endif
-    if (retval == -1)
-        return PyErr_SetFromErrno(PyExc_OSError);
-    Py_RETURN_NONE;
-}
+#include "../../arch/all/init.h"
 
 
 /*
  * Translate a sockaddr struct into a Python string.
  * Return None if address family is not AF_INET* or AF_PACKET.
  */
-static PyObject *
+PyObject *
 psutil_convert_ipaddr(struct sockaddr *addr, int family) {
     char buf[NI_MAXHOST];
     int err;
@@ -297,7 +123,7 @@ psutil_convert_ipaddr(struct sockaddr *addr, int family) {
  * Return NICs information a-la ifconfig as a list of tuples.
  * TODO: on Solaris we won't get any MAC address.
  */
-static PyObject*
+PyObject*
 psutil_net_if_addrs(PyObject* self, PyObject* args) {
     struct ifaddrs *ifaddr, *ifa;
     int family;
@@ -391,16 +217,12 @@ error:
  * Return NIC MTU. References:
  * http://www.i-scream.org/libstatgrab/
  */
-static PyObject *
+PyObject *
 psutil_net_if_mtu(PyObject *self, PyObject *args) {
     char *nic_name;
     int sock = -1;
     int ret;
-#ifdef PSUTIL_SUNOS10
-    struct lifreq lifr;
-#else
     struct ifreq ifr;
-#endif
 
     if (! PyArg_ParseTuple(args, "s", &nic_name))
         return NULL;
@@ -409,22 +231,13 @@ psutil_net_if_mtu(PyObject *self, PyObject *args) {
     if (sock == -1)
         goto error;
 
-#ifdef PSUTIL_SUNOS10
-    PSUTIL_STRNCPY(lifr.lifr_name, nic_name, sizeof(lifr.lifr_name));
-    ret = ioctl(sock, SIOCGIFMTU, &lifr);
-#else
     PSUTIL_STRNCPY(ifr.ifr_name, nic_name, sizeof(ifr.ifr_name));
     ret = ioctl(sock, SIOCGIFMTU, &ifr);
-#endif
     if (ret == -1)
         goto error;
     close(sock);
 
-#ifdef PSUTIL_SUNOS10
-    return Py_BuildValue("i", lifr.lifr_mtu);
-#else
     return Py_BuildValue("i", ifr.ifr_mtu);
-#endif
 
 error:
     if (sock != -1)
@@ -433,7 +246,7 @@ error:
 }
 
 static int
-append_flag(PyObject *py_retlist, const char * flag_name)
+append_flag(PyObject *py_retlist, const char *flag_name)
 {
     PyObject *py_str = NULL;
 
@@ -452,7 +265,7 @@ append_flag(PyObject *py_retlist, const char * flag_name)
 /*
  * Get all of the NIC flags and return them.
  */
-static PyObject *
+PyObject *
 psutil_net_if_flags(PyObject *self, PyObject *args) {
     char *nic_name;
     int sock = -1;
@@ -638,7 +451,7 @@ error:
  * running. References:
  * http://www.i-scream.org/libstatgrab/
  */
-static PyObject *
+PyObject *
 psutil_net_if_is_running(PyObject *self, PyObject *args) {
     char *nic_name;
     int sock = -1;
@@ -670,10 +483,9 @@ error:
 }
 
 
-/*
- * net_if_stats() macOS/BSD implementation.
- */
-#if defined(PSUTIL_BSD) || defined(PSUTIL_OSX)
+
+// net_if_stats() macOS/BSD implementation.
+#ifdef PSUTIL_HAS_NET_IF_DUPLEX_SPEED
 
 int psutil_get_nic_speed(int ifm_active) {
     // Determine NIC speed. Taken from:
@@ -817,7 +629,7 @@ int psutil_get_nic_speed(int ifm_active) {
  * References:
  * http://www.i-scream.org/libstatgrab/
  */
-static PyObject *
+PyObject *
 psutil_net_if_duplex_speed(PyObject *self, PyObject *args) {
     char *nic_name;
     int sock = -1;
@@ -856,162 +668,4 @@ psutil_net_if_duplex_speed(PyObject *self, PyObject *args) {
     close(sock);
     return Py_BuildValue("[ii]", duplex, speed);
 }
-#endif  // net_if_stats() macOS/BSD implementation
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-
-/*
- * define the psutil C module methods and initialize the module.
- */
-static PyMethodDef mod_methods[] = {
-    {"getpagesize", psutil_getpagesize_pywrapper, METH_VARARGS},
-    {"getpriority", psutil_posix_getpriority, METH_VARARGS},
-    {"net_if_addrs", psutil_net_if_addrs, METH_VARARGS},
-    {"net_if_flags", psutil_net_if_flags, METH_VARARGS},
-    {"net_if_is_running", psutil_net_if_is_running, METH_VARARGS},
-    {"net_if_mtu", psutil_net_if_mtu, METH_VARARGS},
-    {"setpriority", psutil_posix_setpriority, METH_VARARGS},
-#if defined(PSUTIL_BSD) || defined(PSUTIL_OSX)
-    {"net_if_duplex_speed", psutil_net_if_duplex_speed, METH_VARARGS},
-#endif
-    {NULL, NULL, 0, NULL}
-};
-
-
-static struct PyModuleDef moduledef = {
-    PyModuleDef_HEAD_INIT,
-    "_psutil_posix",
-    NULL,
-    -1,
-    mod_methods,
-    NULL,
-    NULL,
-    NULL,
-    NULL
-};
-
-PyObject *
-PyInit__psutil_posix(void) {
-    PyObject *mod = PyModule_Create(&moduledef);
-    if (mod == NULL)
-        INITERR;
-
-#ifdef Py_GIL_DISABLED
-    PyUnstable_Module_SetGIL(mod, Py_MOD_GIL_NOT_USED);
-#endif
-
-#if defined(PSUTIL_BSD) || \
-        defined(PSUTIL_OSX) || \
-        defined(PSUTIL_SUNOS) || \
-        defined(PSUTIL_AIX)
-    if (PyModule_AddIntConstant(mod, "AF_LINK", AF_LINK)) INITERR;
-#endif
-
-#if defined(PSUTIL_LINUX) || defined(PSUTIL_FREEBSD)
-    PyObject *v;
-
-#ifdef RLIMIT_AS
-    if (PyModule_AddIntConstant(mod, "RLIMIT_AS", RLIMIT_AS)) INITERR;
-#endif
-
-#ifdef RLIMIT_CORE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_CORE", RLIMIT_CORE)) INITERR;
-#endif
-
-#ifdef RLIMIT_CPU
-    if (PyModule_AddIntConstant(mod, "RLIMIT_CPU", RLIMIT_CPU)) INITERR;
-#endif
-
-#ifdef RLIMIT_DATA
-    if (PyModule_AddIntConstant(mod, "RLIMIT_DATA", RLIMIT_DATA)) INITERR;
-#endif
-
-#ifdef RLIMIT_FSIZE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_FSIZE", RLIMIT_FSIZE)) INITERR;
-#endif
-
-#ifdef RLIMIT_MEMLOCK
-    if (PyModule_AddIntConstant(mod, "RLIMIT_MEMLOCK", RLIMIT_MEMLOCK)) INITERR;
-#endif
-
-#ifdef RLIMIT_NOFILE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_NOFILE", RLIMIT_NOFILE)) INITERR;
-#endif
-
-#ifdef RLIMIT_NPROC
-    if (PyModule_AddIntConstant(mod, "RLIMIT_NPROC", RLIMIT_NPROC)) INITERR;
-#endif
-
-#ifdef RLIMIT_RSS
-    if (PyModule_AddIntConstant(mod, "RLIMIT_RSS", RLIMIT_RSS)) INITERR;
-#endif
-
-#ifdef RLIMIT_STACK
-    if (PyModule_AddIntConstant(mod, "RLIMIT_STACK", RLIMIT_STACK)) INITERR;
-#endif
-
-// Linux specific
-
-#ifdef RLIMIT_LOCKS
-    if (PyModule_AddIntConstant(mod, "RLIMIT_LOCKS", RLIMIT_LOCKS)) INITERR;
-#endif
-
-#ifdef RLIMIT_MSGQUEUE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_MSGQUEUE", RLIMIT_MSGQUEUE)) INITERR;
-#endif
-
-#ifdef RLIMIT_NICE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_NICE", RLIMIT_NICE)) INITERR;
-#endif
-
-#ifdef RLIMIT_RTPRIO
-    if (PyModule_AddIntConstant(mod, "RLIMIT_RTPRIO", RLIMIT_RTPRIO)) INITERR;
-#endif
-
-#ifdef RLIMIT_RTTIME
-    if (PyModule_AddIntConstant(mod, "RLIMIT_RTTIME", RLIMIT_RTTIME)) INITERR;
-#endif
-
-#ifdef RLIMIT_SIGPENDING
-    if (PyModule_AddIntConstant(mod, "RLIMIT_SIGPENDING", RLIMIT_SIGPENDING)) INITERR;
-#endif
-
-// Free specific
-
-#ifdef RLIMIT_SWAP
-    if (PyModule_AddIntConstant(mod, "RLIMIT_SWAP", RLIMIT_SWAP)) INITERR;
-#endif
-
-#ifdef RLIMIT_SBSIZE
-    if (PyModule_AddIntConstant(mod, "RLIMIT_SBSIZE", RLIMIT_SBSIZE)) INITERR;
-#endif
-
-#ifdef RLIMIT_NPTS
-    if (PyModule_AddIntConstant(mod, "RLIMIT_NPTS", RLIMIT_NPTS)) INITERR;
-#endif
-
-#if defined(HAVE_LONG_LONG)
-    if (sizeof(RLIM_INFINITY) > sizeof(long)) {
-        v = PyLong_FromLongLong((PY_LONG_LONG) RLIM_INFINITY);
-    } else
-#endif
-    {
-        v = PyLong_FromLong((long) RLIM_INFINITY);
-    }
-    if (v) {
-        PyModule_AddObject(mod, "RLIM_INFINITY", v);
-    }
-#endif  // defined(PSUTIL_LINUX) || defined(PSUTIL_FREEBSD)
-
-    if (mod == NULL)
-        INITERR;
-    return mod;
-}
-
-#ifdef __cplusplus
-}
-#endif
+#endif  // PSUTIL_HAS_NET_IF_DUPLEX_SPEED

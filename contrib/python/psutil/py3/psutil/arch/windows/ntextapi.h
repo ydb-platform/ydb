@@ -10,10 +10,6 @@
 #include <winternl.h>
 #include <iphlpapi.h>
 
-#ifndef PSUTIL_MAYBE_EXTERN
-#define PSUTIL_MAYBE_EXTERN extern
-#endif
-
 typedef LONG NTSTATUS;
 
 // https://github.com/ajkhoury/TestDll/blob/master/nt_ddk.h
@@ -663,6 +659,12 @@ PSUTIL_MAYBE_EXTERN ULONGLONG (CALLBACK *_GetTickCount64) (
     void);
 
 #define GetTickCount64 _GetTickCount64
+
+PSUTIL_MAYBE_EXTERN VOID(CALLBACK *_QueryInterruptTime) (
+    PULONGLONG lpInterruptTime
+);
+
+#define QueryInterruptTime _QueryInterruptTime
 
 PSUTIL_MAYBE_EXTERN NTSTATUS (NTAPI *_NtQueryObject) (
     HANDLE Handle,

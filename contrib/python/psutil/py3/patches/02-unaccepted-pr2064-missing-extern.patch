@@ -1,29 +1,12 @@
-commit a03e18c3d85dd0e4c50be4630afd5bf5cffd9a0e (HEAD -> ymake-refactoring)
-author: thegeorg
-date: 2022-01-24T14:25:44+03:00
-
-    Make psutil compile with -fno-common
-
---- contrib/python/psutil/py3/psutil/_psutil_common.c	(dd7c6db013778a31c03086c567edb72a9dfa4604)
-+++ contrib/python/psutil/py3/psutil/_psutil_common.c	(a03e18c3d85dd0e4c50be4630afd5bf5cffd9a0e)
-@@ -7,6 +7,7 @@
-  */
- 
+--- contrib/python/psutil/py3/psutil/_psutil_windows.c	(index)
++++ contrib/python/psutil/py3/psutil/_psutil_windows.c	(working tree)
+@@ -17,6 +17,9 @@
  #include <Python.h>
-+#define PSUTIL_MAYBE_EXTERN 
- #include "_psutil_common.h"
+ #include <windows.h>
  
- // ====================================================================
---- contrib/python/psutil/py3/psutil/arch/windows/ntextapi.h	(dd7c6db013778a31c03086c567edb72a9dfa4604)
-+++ contrib/python/psutil/py3/psutil/arch/windows/ntextapi.h	(a03e18c3d85dd0e4c50be4630afd5bf5cffd9a0e)
-@@ -10,6 +10,10 @@
- #include <winternl.h>
- #include <iphlpapi.h>
- 
-+#ifndef PSUTIL_MAYBE_EXTERN
-+#define PSUTIL_MAYBE_EXTERN extern
-+#endif
++#undef PSUTIL_MAYBE_EXTERN
++#define PSUTIL_MAYBE_EXTERN
 +
- typedef LONG NTSTATUS;
+ #include "arch/all/init.h"
+ #include "arch/windows/init.h"
  
- // https://github.com/ajkhoury/TestDll/blob/master/nt_ddk.h

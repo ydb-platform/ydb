@@ -92,6 +92,15 @@ void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
         .Required().StoreResult(&KmeansTreeClusters);
 }
 
+TVector<TString> TVectorWorkloadParams::GetColumns() const {
+    TVector<TString> result(KeyColumns.begin(), KeyColumns.end());
+    result.emplace_back(EmbeddingColumn);
+    if (PrefixColumn.has_value()) {
+        result.emplace_back(PrefixColumn.value());
+    }
+    return result;
+}
+
 void TVectorWorkloadParams::Init() {
     const TString tablePath = GetFullTableName(TableName.c_str());
 

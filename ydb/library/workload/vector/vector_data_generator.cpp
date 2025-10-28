@@ -18,7 +18,7 @@ void TWorkloadVectorFilesDataInitializer::ConfigureOpts(NLastGetopt::TOpts& opts
 
 TBulkDataGeneratorList TWorkloadVectorFilesDataInitializer::DoGetBulkInitialData() {
     return {
-        std::make_shared<TDataGenerator>(*this, Params.TableName, 0, Params.TableName, DataFiles, Default<TVector<TString>>(), TDataGenerator::EPortionSizeUnit::Line)
+        std::make_shared<TDataGenerator>(*this, Params.TableName, 0, Params.TableName, DataFiles, Params.GetColumns(), TDataGenerator::EPortionSizeUnit::Line)
     };
 }
 

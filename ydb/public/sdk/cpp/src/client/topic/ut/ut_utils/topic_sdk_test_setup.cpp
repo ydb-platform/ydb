@@ -61,7 +61,7 @@ void TTopicSdkTestSetup::Write(const std::string& message, std::uint32_t partiti
 
 void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& message, std::uint32_t partitionId,
                                const std::optional<std::string> producer,
-                               std::optional<std::uint64_t> seqNo) {
+                               std::optional<std::uint64_t> seqNo) {                            
     TTopicClient client(MakeDriver());
 
     TWriteSessionSettings settings;

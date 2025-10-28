@@ -440,8 +440,9 @@ private:
         return {};
     }
 
-    if (filterExpr.starts_with("WHERE "sv)) { // workaround for YQ-4827
-        filterExpr = filterExpr.substr("WHERE "sv.size());
+    constexpr auto wherePrefix = "WHERE "sv;
+    if (filterExpr.starts_with(wherePrefix)) { // workaround for YQ-4827
+        filterExpr.remove_prefix(wherePrefix.size());
     }
 
     using namespace fmt::literals;

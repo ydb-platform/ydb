@@ -209,7 +209,8 @@ public:
     {
         Config->DefaultCostBasedOptimizationLevel = 2;
         Config->EnableOltpSink = enableOltpSink;
-        Config->Antlr4ParserIsAmbiguityError = antlr4ParserIsAmbiguityError;
+        Y_UNUSED(antlr4ParserIsAmbiguityError);
+        Config->Antlr4ParserIsAmbiguityError = true;
     }
 
     void Bootstrap() {

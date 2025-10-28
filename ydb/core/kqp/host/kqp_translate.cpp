@@ -307,6 +307,7 @@ NYql::TAstParseResult ParseQuery(const TString& queryText, bool isSql, TMaybe<ui
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
         lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
         NSQLTranslationV1::TParsers parsers;
+        YQL_ENSURE(settingsBuilder.GetIsAmbiguityError());
         parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(settingsBuilder.GetIsAmbiguityError());
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 

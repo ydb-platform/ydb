@@ -51,6 +51,7 @@ class NopHostsInformationProvider(HostsInformationProvider):
     def get_module(self, hostname):
         return "FAKE"
 
+
 class WalleHostsInformationProvider(HostsInformationProvider):
     def __init__(self, provider_url=None, cloud_mode=False):
         if provider_url is None:

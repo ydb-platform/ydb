@@ -103,9 +103,9 @@ public:
                         ExpiringRequests.erase(expireIt);
                     }
 
-                    if (auto query = requestIt->second.Query) {
+                    if (requestIt->second.Query) {
                         auto removeQueryEvent = MakeHolder<NScheduler::TEvRemoveQuery>();
-                        removeQueryEvent->Query = query;
+                        removeQueryEvent->QueryId = txId;
                         actorSystem->Send(MakeKqpSchedulerServiceId(actorSystem->NodeId), removeQueryEvent.Release());
                     }
 

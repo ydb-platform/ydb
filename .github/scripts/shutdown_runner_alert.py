@@ -20,7 +20,7 @@ def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
             'status': 'cancelled',
             'event': 'pull_request_target',
             'per_page': 25,
-            'page': len(workflow_runs) // page_size + 15
+            'page': len(workflow_runs) // page_size + 1
         }
         headers = {
             'Accept': 'application/vnd.github.v3+json',

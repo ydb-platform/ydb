@@ -48,11 +48,12 @@ private:
     TVector<TMetadataItem> Metadata;
     ui64 TabletId;
     TActorId WriteActorId;
+    TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> RequestSchemeCache;
 
 public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateKeySetResult);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
             HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
@@ -89,7 +90,7 @@ public:
             }
         }
 
-        SendSchemeCacheRequest(ActorContext());
+        RequestSchemeCache = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow, 1);
         TBase::Become(&TThis::StateWork);
     }
 
@@ -136,25 +137,11 @@ public:
         return std::move(ev);
     }
 
-    void SendSchemeCacheRequest(const TActorContext& ctx) {
-        auto request = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
-        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-        entry.Path = NKikimr::SplitPath(TopicPath);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
-        entry.SyncVersion = true;
-
-        request->ResultSet.emplace_back(entry);
-
-        request->DatabaseName = CanonizePath(Database);
-
-        ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
-    }
-
-    void HandleNavigateKeySetResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         auto* navigate = ev.Get()->Get()->Request.Get();
         auto& info = navigate->ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists"));
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
         }
 
         const auto& pqDescription = info.PQGroupInfo->Description;
@@ -168,16 +155,6 @@ public:
                 auto* partition = chooser->GetPartition(CreateGuidAsString());
                 Partition = partition->PartitionId;
             }
-        }
-
-        if (Event->Get()->UserToken.empty()) {
-            if (AppData(ctx)->EnforceUserTokenRequirement || AppData(ctx)->PQConfig.GetRequireCredentialsInNewProtocol()) {
-                return ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
-            }
-        } else {
-            if (!info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, NACLib::TUserToken(Event->Get()->UserToken))) {
-                return ReplyAndPassAway(TBase::GetHTTPFORBIDDEN("text/plain", "Unauthenticated access is forbidden, please provide credentials, PersQueue::ErrorCode::ACCESS_DENIED"));
-            };
         }
 
         const auto& partitions = pqDescription.GetPartitions();
@@ -197,7 +174,7 @@ public:
             .WithTopicPath(TopicPath);
 
         auto* writerActor = CreatePartitionWriter(SelfId(), TabletId, *Partition, opts);
-        WriteActorId = ctx.RegisterWithSameMailbox(writerActor);
+        WriteActorId = ActorContext().RegisterWithSameMailbox(writerActor);
         auto writeEvent = FormWriteRequest();
         Send(WriteActorId, std::move(writeEvent));
     }

@@ -2232,7 +2232,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NKikimr::NViewerTests::WaitForHttpReady(httpClient);
         // checking that user with no UpdateRow rights cannot put record to topic
         auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
-        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_FORBIDDEN);
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
 
         client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
         auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0, "some_key");

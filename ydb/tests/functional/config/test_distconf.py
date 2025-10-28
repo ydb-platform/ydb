@@ -45,7 +45,7 @@ class DistConfKiKiMRTest(object):
     use_config_store = True
     separate_node_configs = True
     nodes_count = 0
-    secure_mode = False
+    protected_mode = False
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -73,14 +73,14 @@ class DistConfKiKiMRTest(object):
             separate_node_configs=cls.separate_node_configs,
             simple_config=True,
             use_self_management=True,
-            secure_mode=cls.secure_mode,
+            protected_mode=cls.protected_mode,
             extra_grpc_services=['config'],
             additional_log_configs=log_configs)
 
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
 
-        if not cls.secure_mode:
+        if not cls.protected_mode:
             cms.request_increase_ratio_limit(cls.cluster.client)
         host = cls.cluster.nodes[1].host
         cls.swagger_client = SwaggerClient(host, cls.cluster.nodes[1].mon_port)
@@ -351,7 +351,7 @@ class TestDistConfBootstrapValidation:
 
 
 class TestDistConfWithAuth(DistConfKiKiMRTest):
-    secure_mode = True
+    protected_mode = True
 
     def test_auth_v2_initialization(self):
         table_path = '/Root/mydb/mytable_with_auth'

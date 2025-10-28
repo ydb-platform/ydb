@@ -188,7 +188,7 @@ class KikimrConfigGenerator(object):
             enable_static_auth=False,
             cms_config=None,
             explicit_statestorage_config=None,
-            secure_mode=False
+            protected_mode=False
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -215,8 +215,8 @@ class KikimrConfigGenerator(object):
         self.app_config = config_pb2.TAppConfig()
         self.port_allocator = KikimrPortManagerPortAllocator() if port_allocator is None else port_allocator
         erasure = Erasure.NONE if erasure is None else erasure
-        self.secure_mode = secure_mode
-        self.__grpc_ssl_enable = grpc_ssl_enable or secure_mode
+        self.protected_mode = protected_mode
+        self.__grpc_ssl_enable = grpc_ssl_enable or protected_mode
         self.__grpc_tls_data_path = None
         self.__grpc_tls_ca = None
         self.__grpc_tls_key = None
@@ -464,13 +464,15 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_ALLOW_ORIGIN") is not None:
             self.yaml_config["monitoring_config"] = {"allow_origin": str(os.getenv("YDB_ALLOW_ORIGIN"))}
 
-        if enforce_user_token_requirement or secure_mode:
+        if enforce_user_token_requirement or protected_mode:
             security_config_root["security_config"]["enforce_user_token_requirement"] = True
 
         if default_user_sid:
             security_config_root["security_config"]["default_user_sids"] = [default_user_sid]
 
-        if secure_mode:
+        # protected mode is described in the YDB documentation for cluster deployment: it uses both certificate and token authentication.
+        # see https://ydb.tech/docs/en/devops/deployment-options/manual/initial-deployment?version=main
+        if protected_mode:
             security_config = security_config_root.setdefault("security_config", {})
             if "default_users" in security_config:
                 del security_config["default_users"]
@@ -585,8 +587,6 @@ class KikimrConfigGenerator(object):
             for name in ['blob_storage_config', 'domains_config', 'system_tablets',
                          'channel_profile_config']:
                 del self.yaml_config[name]
-            self.yaml_config["domains_config"] = dict()
-            self.yaml_config["domains_config"].setdefault("domain", []).append({"domain_id": 1, "name": "Root"})
         if self.simple_config:
             self.yaml_config.pop("feature_flags")
             self.yaml_config.pop("federated_query_config")

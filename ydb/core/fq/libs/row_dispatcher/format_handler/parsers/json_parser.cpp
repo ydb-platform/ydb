@@ -455,7 +455,7 @@ public:
 protected:
 
 #define HANDLE_ERROR(status) \
-    if (Y_UNLIKELY(!skipErrors)) { \
+    if (!skipErrors) { \
         return status; \
     } \
     ++skipped; \

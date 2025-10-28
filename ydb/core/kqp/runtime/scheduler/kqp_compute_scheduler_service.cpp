@@ -259,6 +259,11 @@ void TComputeScheduler::RemoveQuery(const TQueryPtr& query) {
     TWriteGuard lock(Mutex);
     const auto& queryId = std::get<NHdrf::TQueryId>(query->GetId());
 
+    if (auto demand = query->Demand.load()) {
+        Cerr << (TStringBuilder() << "query with demand: " << queryId << " " << demand << Endl);
+        query->DumpTasks();
+    }
+
     Y_ENSURE(Queries.erase(queryId));
     query->GetParent()->RemoveQuery(queryId);
 }

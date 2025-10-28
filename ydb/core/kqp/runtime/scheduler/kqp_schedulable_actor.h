@@ -21,6 +21,7 @@ public:
 
 protected:
     explicit TSchedulableActorBase(const TOptions& options);
+    ~TSchedulableActorBase();
 
     static inline TMonotonic Now() {
         return TMonotonic::Now();

@@ -500,12 +500,6 @@ protected:
         return TStatus::Success();
     }
 
-    void ClearRowBuffer(ui16 outputRowId) {
-        for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
-            ParsedValues[columnId][outputRowId].Clear();
-        }
-    }
-
     void ClearBuffer() override {
         for (size_t i = 0; i < Columns.size(); ++i) {
             auto& parsedColumn = ParsedValues[i];
@@ -622,6 +616,12 @@ private:
             state.OutputRowId++;
         }
         return EParsingStatus::Finish;
+    }
+
+    void ClearRowBuffer(ui16 outputRowId) {
+        for (size_t columnId = 0; columnId < Columns.size(); ++columnId) {
+            ParsedValues[columnId][outputRowId].Clear();
+        }
     }
 
     void FillColumnsBuffers() {

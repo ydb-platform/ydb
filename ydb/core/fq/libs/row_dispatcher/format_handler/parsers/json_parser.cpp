@@ -614,6 +614,16 @@ private:
             }
             state.OutputRowId++;
         }
+
+        if (state.OutputRowId + state.ErrorsCount < Buffer.NumberValues) {
+            if (documents.truncated_bytes()) {
+                ++state.ErrorsCount;
+                return EParsingStatus::RepeatFromNextJson;
+            } else {
+                state.ErrorsCount = Buffer.NumberValues - state.OutputRowId;
+                return EParsingStatus::Finish;
+            }
+        }
         return EParsingStatus::Finish;
     }
 

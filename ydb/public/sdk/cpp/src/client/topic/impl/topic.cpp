@@ -136,12 +136,12 @@ bool TConsumer::GetKeepMessagesOrder() const {
     return KeepMessagesOrder_;
 }
 
-ui32 TConsumer::GetMaxDeliveryAttempts() const {
-    return MaxDeliveryAttempts_;
+ui32 TConsumer::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
 }
 
-TDuration TConsumer::GetDefaultAcquisitionLockDuration() const {
-    return DefaultAcquisitionLockDuration_;
+TDuration TConsumer::GetDefaultProcessingTimeout() const {
+    return DefaultProcessingTimeout_;
 }
 
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {

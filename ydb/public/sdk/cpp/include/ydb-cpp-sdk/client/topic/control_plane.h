@@ -61,8 +61,8 @@ public:
     const std::vector<ECodec>& GetSupportedCodecs() const;
     const std::map<std::string, std::string>& GetAttributes() const;
     bool GetKeepMessagesOrder() const;
-    ui32 GetMaxDeliveryAttempts() const;
-    TDuration GetDefaultAcquisitionLockDuration() const;
+    ui32 GetMaxProcessingAttempts() const;
+    TDuration GetDefaultProcessingTimeout() const;
 
 private:
     std::string ConsumerName_;
@@ -73,8 +73,8 @@ private:
     std::map<std::string, std::string> Attributes_;
     std::vector<ECodec> SupportedCodecs_;
     bool KeepMessagesOrder_;
-    ui32 MaxDeliveryAttempts_;
-    TDuration DefaultAcquisitionLockDuration_;
+    ui32 MaxProcessingAttempts_;
+    TDuration DefaultProcessingTimeout_;
 };
 
 
@@ -485,8 +485,8 @@ struct TConsumerSettings {
 
     FLUENT_SETTING(TAttributes, Attributes);
     FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
-    FLUENT_SETTING_DEFAULT(ui32, MaxDeliveryAttempts, 5);
-    FLUENT_SETTING_DEFAULT(TDuration, DefaultAcquisitionLockDuration, TDuration::Seconds(30));
+    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 5);
+    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Seconds(30));
 
     TConsumerSettings& AddAttribute(const std::string& key, const std::string& value) {
         Attributes_[key] = value;
@@ -545,8 +545,8 @@ struct TAlterConsumerSettings {
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
-    FLUENT_SETTING_DEFAULT(ui32, MaxDeliveryAttempts, 5);
-    FLUENT_SETTING_DEFAULT(TDuration, DefaultAcquisitionLockDuration, TDuration::Seconds(30));
+    FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
+    FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);

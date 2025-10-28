@@ -195,11 +195,11 @@ TStatus ComputeTypes(std::shared_ptr<TOpUnionAll> unionAll, TRBOContext & ctx) {
 TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) {
     auto inputType = aggregate->GetInput()->Type;
     const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-    THashMap<TStringBuf, std::pair<TStringBuf, TStringBuf>> aggTraitsMap;
+    THashMap<TString, std::pair<TString, TString>> aggTraitsMap;
     for (const auto& aggTraits : aggregate->AggregationTraitsList) {
-        const auto originalColName = aggTraits.OriginalColName.GetFullName();
-        const auto resultColName = aggTraits.ResultColName.GetFullName();
-        const auto funcName = aggTraits.AggFunction;
+        const auto originalColName = TString(aggTraits.OriginalColName.GetFullName());
+        const auto resultColName = TString(aggTraits.ResultColName.GetFullName());
+        const auto funcName = TString(aggTraits.AggFunction);
         aggTraitsMap[originalColName] = {resultColName, funcName};
     }
 

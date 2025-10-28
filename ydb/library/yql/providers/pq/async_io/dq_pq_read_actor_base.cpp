@@ -186,13 +186,12 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
 }
 
 bool TDqPqReadActorBase::RemovePendingWatermarkIdlenessCheck(TInstant notifyTime) {
-    if (InflyIdlenessChecks.empty() || InflyIdlenessChecks.front() > notifyTime) {
-        return false;
-    }
+    bool removedAny = false;
     while (!InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime) {
         InflyIdlenessChecks.pop_front();
+        removedAny = true;
     }
-    return true;
+    return removedAny;
 }
 
 } // namespace NYql::NDq::NInternal

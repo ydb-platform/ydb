@@ -423,17 +423,77 @@ namespace NKikimr::NBlobDepot {
                                 }
 
                                 const auto& s3BackendSettings = Self->Config.GetS3BackendSettings();
+
+#define BD_MON_TABLE_ROW(key, value) \
+        do { \
+            TABLER() { \
+                TABLED() { Stream << #key ;} \
+                TABLED() { Stream << value ;} \
+            } \
+        } while(false)
+
+#define BD_MON_TABLE_ROW_WITH_FORMATTER(config, key, formatter) \
+        do { \
+            if (config.Has##key()) { \
+                BD_MON_TABLE_ROW(key, formatter(config.Get##key())); \
+            } \
+        } while(false)
+
+
                                 if (!s3BackendSettings.HasSettings()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "Status"; }
-                                        TABLED() { Stream << "S3 settings not configured"; }
-                                    }
+                                    BD_MON_TABLE_ROW("Status", "S3 settings not configured");
                                     return true;
                                 }
 
                                 const auto& s3Settings = s3BackendSettings.GetSettings();
 
-                                // Helper function to mask sensitive data
+                                TString mode;
+                                if (s3BackendSettings.HasAsyncMode()) {
+                                    mode = "Async";
+                                } else if (s3BackendSettings.HasSyncMode()) {
+                                    mode = "Sync";
+                                } else {
+                                    mode = "Unknown";
+                                }
+                                BD_MON_TABLE_ROW("Mode", mode);
+
+                                auto id_formatter = [] (auto x) { return x; };
+
+                                // Display async mode settings if applicable
+                                if (s3BackendSettings.HasAsyncMode()) {
+                                    const auto& asyncMode = s3BackendSettings.GetAsyncMode();
+
+                                    auto formatBytePerSecond = [](ui64 bytes) -> TString {
+                                        return FormatByteSize(bytes) + "/s";
+                                    };
+
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, MaxPendingBytes, FormatByteSize);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleStartBytes, FormatByteSize);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, ThrottleMaxBytesPerSecond, formatBytePerSecond);
+                                    BD_MON_TABLE_ROW_WITH_FORMATTER(asyncMode, UploadPutsInFlight, id_formatter);
+
+                                }
+
+                                BD_MON_TABLE_ROW(Endpoint, s3Settings.GetEndpoint());
+
+                                TString schemeStr;
+                                if (s3Settings.HasScheme()) {
+                                    switch (s3Settings.GetScheme()) {
+                                    case NKikimrSchemeOp::TS3Settings::HTTPS:
+                                        schemeStr = "https";
+                                        break;
+                                    case NKikimrSchemeOp::TS3Settings::HTTP:
+                                        schemeStr = "http";
+                                        break;
+                                    }
+                                } else {
+                                    schemeStr = "unspecified";
+                                }
+                                BD_MON_TABLE_ROW("Scheme", schemeStr);
+
+                                BD_MON_TABLE_ROW("Bucket", s3Settings.GetBucket());
+
+                                                                // Helper function to mask sensitive data
                                 auto maskSensitive = [](const TString& value) -> TString {
                                     if (value.empty()) {
                                         return value;
@@ -443,169 +503,20 @@ namespace NKikimr::NBlobDepot {
                                     }
                                     return value.substr(0, 2) + "****" + value.substr(value.size() - 2);
                                 };
+                                BD_MON_TABLE_ROW("AccessKey", maskSensitive(s3Settings.GetAccessKey()));
+                                BD_MON_TABLE_ROW("SecretKey", maskSensitive(s3Settings.GetSecretKey()));
 
-                                auto getSchemeStr = [&s3Settings] () -> TString {
-                                    auto scheme = s3Settings.GetScheme();
-                                    if (scheme == NKikimrSchemeOp::TS3Settings::HTTPS) {
-                                        return "https";
-                                    } else if (scheme == NKikimrSchemeOp::TS3Settings::HTTP) {
-                                        return "http";
-                                    } else {
-                                        return "unknown";
-                                    }
-                                };
-
-                                // Display S3 mode
-                                TABLER() {
-                                    TABLED() { Stream << "Mode"; }
-                                    if (s3BackendSettings.HasAsyncMode()) {
-                                        TABLED() { Stream << "Async"; }
-                                    } else if (s3BackendSettings.HasSyncMode()) {
-                                        TABLED() { Stream << "Sync"; }
-                                    } else {
-                                        TABLED() { Stream << "Unknown"; }
-                                    }
-                                }
-
-                                // Display async mode settings if applicable
-                                if (s3BackendSettings.HasAsyncMode()) {
-                                    const auto& asyncMode = s3BackendSettings.GetAsyncMode();
-
-                                    if (asyncMode.HasMaxPendingBytes()) {
-                                        TABLER() {
-                                            TABLED() { Stream << "MaxPendingBytes"; }
-                                            TABLED() { Stream << FormatByteSize(asyncMode.GetMaxPendingBytes()); }
-                                        }
-                                    }
-
-                                    if (asyncMode.HasThrottleStartBytes()) {
-                                        TABLER() {
-                                            TABLED() { Stream << "ThrottleStartBytes"; }
-                                            TABLED() { Stream << FormatByteSize(asyncMode.GetThrottleStartBytes()); }
-                                        }
-                                    }
-
-                                    if (asyncMode.HasThrottleMaxBytesPerSecond()) {
-                                        TABLER() {
-                                            TABLED() { Stream << "ThrottleMaxBytesPerSecond"; }
-                                            TABLED() { Stream << FormatByteSize(asyncMode.GetThrottleMaxBytesPerSecond()) << "/s"; }
-                                        }
-                                    }
-
-                                    if (asyncMode.HasUploadPutsInFlight()) {
-                                        TABLER() {
-                                            TABLED() { Stream << "UploadPutsInFlight"; }
-                                            TABLED() { Stream << asyncMode.GetUploadPutsInFlight(); }
-                                        }
-                                    }
-                                }
-
-                                // Display S3 settings
-                                TABLER() {
-                                    TABLED() { Stream << "Endpoint"; }
-                                    TABLED() { Stream << s3Settings.GetEndpoint(); }
-                                }
-
-                                TABLER() {
-                                    TABLED() { Stream << "Scheme"; }
-                                    if (s3Settings.HasScheme()) {
-                                        TABLED() { Stream << getSchemeStr(); }
-                                    } else {
-                                        TABLED() { Stream << "Unspecified"; }
-                                    }
-                                }
-
-                                TABLER() {
-                                    TABLED() { Stream << "Bucket"; }
-                                    TABLED() { Stream << s3Settings.GetBucket(); }
-                                }
-
-                                TABLER() {
-                                    TABLED() { Stream << "AccessKey"; }
-                                    TABLED() { Stream << maskSensitive(s3Settings.GetAccessKey()); }
-                                }
-
-                                TABLER() {
-                                    TABLED() { Stream << "SecretKey"; }
-                                    TABLED() { Stream << maskSensitive(s3Settings.GetSecretKey()); }
-                                }
-
-                                if (s3Settings.HasRegion()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "Region"; }
-                                        TABLED() { Stream << s3Settings.GetRegion(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasStorageClass()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "StorageClass"; }
-                                        TABLED() { Stream << Ydb::Export::ExportToS3Settings::StorageClass_Name(s3Settings.GetStorageClass()); }
-                                    }
-                                }
-
-                                if (s3Settings.HasUseVirtualAddressing()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "UseVirtualAddressing"; }
-                                        TABLED() { Stream << ToString(s3Settings.GetUseVirtualAddressing()); }
-                                    }
-                                }
-
-                                if (s3Settings.HasVerifySSL()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "VerifySSL"; }
-                                        TABLED() { Stream << ToString(s3Settings.GetVerifySSL()); }
-                                    }
-                                }
-
-                                if (s3Settings.HasProxyHost()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "ProxyHost"; }
-                                        TABLED() { Stream << s3Settings.GetProxyHost(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasProxyPort()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "ProxyPort"; }
-                                        TABLED() { Stream << s3Settings.GetProxyPort(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasConnectionTimeoutMs()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "ConnectionTimeoutMs"; }
-                                        TABLED() { Stream << s3Settings.GetConnectionTimeoutMs(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasRequestTimeoutMs()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "RequestTimeoutMs"; }
-                                        TABLED() { Stream << s3Settings.GetRequestTimeoutMs(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasHttpRequestTimeoutMs()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "HttpRequestTimeoutMs"; }
-                                        TABLED() { Stream << s3Settings.GetHttpRequestTimeoutMs(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasExecutorThreadsCount()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "ExecutorThreadsCount"; }
-                                        TABLED() { Stream << s3Settings.GetExecutorThreadsCount(); }
-                                    }
-                                }
-
-                                if (s3Settings.HasMaxConnectionsCount()) {
-                                    TABLER() {
-                                        TABLED() { Stream << "MaxConnectionsCount"; }
-                                        TABLED() { Stream << s3Settings.GetMaxConnectionsCount(); }
-                                    }
-                                }
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, Region, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, StorageClass, Ydb::Export::ExportToS3Settings::StorageClass_Name);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, UseVirtualAddressing, ToString);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, VerifySSL, ToString);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyHost, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ProxyPort, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ConnectionTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, RequestTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, HttpRequestTimeoutMs, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, ExecutorThreadsCount, id_formatter);
+                                BD_MON_TABLE_ROW_WITH_FORMATTER(s3Settings, MaxConnectionsCount, id_formatter);
                             }
                         }
                     }

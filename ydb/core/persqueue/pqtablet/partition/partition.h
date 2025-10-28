@@ -1192,6 +1192,7 @@ private:
     size_t CompactionBlobsCount = 0;
 
     void DumpZones(const char* file = nullptr, unsigned line = 0) const;
+    void DumpTheSizeOfInternalQueues() const;
 
     const TPartitionBlobEncoder& GetBlobEncoder(ui64 offset) const;
 

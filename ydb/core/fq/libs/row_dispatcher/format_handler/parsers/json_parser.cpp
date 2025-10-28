@@ -563,7 +563,7 @@ end_parsing:
         }
 
         if (ParsingFailedRowCount) {
-            ParsingErrors->Inc();
+            ParsingErrors->Add(ParsingFailedRowCount);
             OutputOffsets.resize(Buffer.Offsets.size() - ParsingFailedRowCount);
         }
         for (auto& column : Columns) {

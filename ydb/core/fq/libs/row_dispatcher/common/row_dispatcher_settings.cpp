@@ -9,15 +9,13 @@ namespace NFq {
 
 TRowDispatcherSettings::TJsonParserSettings::TJsonParserSettings(const NConfig::TJsonParserConfig& config)
     : BatchCreationTimeout(TDuration::MilliSeconds(config.GetBatchCreationTimeoutMs()))
+    , SkipErrors(config.GetSkipErrors())
 {
     if (config.GetBatchSizeBytes()) {
         BatchSizeBytes = config.GetBatchSizeBytes();
     }
     if (config.GetBufferCellCount()) {
         BufferCellCount = config.GetBufferCellCount();
-    }
-    if (config.GetSkipErrors()) {
-        SkipErrors = config.GetSkipErrors();
     }
 }
 

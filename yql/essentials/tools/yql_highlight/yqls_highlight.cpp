@@ -69,13 +69,10 @@ THighlighting MakeYQLsHighlighting() {
             },
             TUnit{
                 .Kind = EUnitKind::StringLiteral,
+                .RangePatterns = {{"@@", "@@", Nothing()}},
                 .Patterns = {
                     TRe{R"re(\"[^\"\n]*\")re"},
                     TRe{R"re(\@\@(.|\n)*\@\@)re"},
-                },
-                .RangePattern = TRangePattern{
-                    .Begin = "@@",
-                    .End = "@@",
                 },
                 .IsPlain = false,
             },

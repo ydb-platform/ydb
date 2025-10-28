@@ -58,7 +58,6 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
-            Cerr << "Unalbe to load ibverbs library: " << ex.what() << Endl;
             return;
         }
         ScanDevices();

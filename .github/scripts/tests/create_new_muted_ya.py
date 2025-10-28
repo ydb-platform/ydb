@@ -177,6 +177,12 @@ def aggregate_test_data(all_data, period_days):
     start_date = today - datetime.timedelta(days=period_days-1)
     start_days = (start_date - base_date).days
     
+    # Helper function to convert date to days if needed
+    def to_days(date_value):
+        if isinstance(date_value, datetime.date):
+            return (date_value - base_date).days
+        return date_value
+    
     logging.info(f"Starting aggregation for {period_days} days period...")
     logging.info(f"Processing {len(all_data)} test records...")
     
@@ -192,7 +198,7 @@ def aggregate_test_data(all_data, period_days):
             progress_percent = (processed_count / total_count) * 100
             logging.info(f"Aggregation progress: {processed_count}/{total_count} ({progress_percent:.1f}%)")
         
-        if test.get('date_window', 0) >= start_days:
+        if to_days(test.get('date_window', 0)) >= start_days:
             full_name = test.get('full_name')
             if full_name not in aggregated:
                 aggregated[full_name] = {
@@ -225,7 +231,7 @@ def aggregate_test_data(all_data, period_days):
                     aggregated[full_name]['state_dates'].append(current_date)
                 
                 # Обновляем is_muted если текущая дата новее
-                if test.get('date_window', 0) > aggregated[full_name].get('is_muted_date', 0):
+                if to_days(test.get('date_window', 0)) > to_days(aggregated[full_name].get('is_muted_date', 0)):
                     aggregated[full_name]['is_muted'] = test.get('is_muted')
                     aggregated[full_name]['is_muted_date'] = test.get('date_window')
             
@@ -255,7 +261,10 @@ def aggregate_test_data(all_data, period_days):
             for i, (state, date) in enumerate(zip(test_data['state_history'], test_data['state_dates'])):
                 if date:
                     # Преобразуем дату в читаемый формат
-                    date_obj = base_date + datetime.timedelta(days=date)
+                    if isinstance(date, int):
+                        date_obj = base_date + datetime.timedelta(days=date)
+                    else:
+                        date_obj = date
                     date_str = date_obj.strftime('%m-%d')
                     state_with_dates.append(f"{state}({date_str})")
                 else:

@@ -40,9 +40,19 @@ def main():
             results = ydb_wrapper.execute_scan_query(last_date_query)
             
             default_start_date = datetime.date(2024, 9, 1)
+            base_date = datetime.date(1970, 1, 1)
             
-            if results[0] and results[0].get('max_date_window', default_start_date) is not None and results[0].get('max_date_window', default_start_date) > default_start_date:
-                last_datetime = results[0].get('max_date_window', default_start_date)
+            # YDB может вернуть date_window как int (дни с 1970-01-01) или datetime.date
+            max_date_window = results[0].get('max_date_window') if results[0] else None
+            if max_date_window is not None:
+                # Конвертируем int в date если нужно
+                if isinstance(max_date_window, int):
+                    max_date_window = base_date + datetime.timedelta(days=max_date_window)
+                # Теперь max_date_window это datetime.date, можно сравнивать
+                if max_date_window > default_start_date:
+                    last_datetime = max_date_window
+                else:
+                    last_datetime = default_start_date
             else:
                 last_datetime = default_start_date
                 

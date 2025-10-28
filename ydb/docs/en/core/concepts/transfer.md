@@ -41,7 +41,7 @@ To create and execute a transfer, the user must have write permissions to the ta
 ## Diagnostics
 
 Current transfer parameters, including the lambda function text, can be viewed in the [Embedded UI](../reference/embedded-ui/index.md) and in the [description](../reference/ydb-cli/commands/scheme-describe.md) of the transfer instance.
-
+ 
 Data processing speed and delays can be monitored using [consumer metrics](../reference/observability/metrics/index.md#topics) that are used for reading from the topic.
 
 ## Temporary transfer suspension {#pause-and-resume}

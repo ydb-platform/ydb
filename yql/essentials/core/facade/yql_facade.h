@@ -352,6 +352,12 @@ public:
     }
 
     TString GetSourceCode() const;
+    bool IsFullCaptureReady() const;
+    void CommitFullCapture() const;
+
+    void SetEnableLineage() {
+        EnableLineage_ = true;
+    }
 
 private:
     TProgram(
@@ -483,8 +489,10 @@ private:
     TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
     TMaybe<TIssue> ParametersIssue_;
+    bool EnableLineage_ = false;
 };
 
 void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags, TMaybe<TString> gatewaysPatch = {});
+bool HasFullCapture(const IQReaderPtr& reader);
 
 } // namespace NYql

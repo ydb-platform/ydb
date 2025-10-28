@@ -53,6 +53,11 @@ bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
         ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
 }
 
+bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev) {
+    return ev->Get()->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK &&
+        ev->Get()->Record.GetErrorCode() == NPersQueue::NErrorCode::OK;
+}
+
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetCookie();
 }

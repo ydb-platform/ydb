@@ -15,7 +15,7 @@ tasks.test {
 }
 {%  endif -%}
 
-{%- if has_junit5_test %}
+{%- if has_junit5_test or has_junit6_test %}
 tasks.named<Test>("test") {
     useJUnitPlatform()
 }

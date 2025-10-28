@@ -55,7 +55,8 @@ void MediaValidator(const NYT::TNode& value) {
     }
 }
 
-TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
+TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx, const TQContext& qContext)
+    : NCommon::TSettingDispatcher(qContext)
 {
     const auto codecValidator = [] (const TString&, TString str) {
         if (!ValidateCompressionCodecValue(str)) {
@@ -73,11 +74,12 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             for (auto& x: Tokens) {
                 x.second = value;
             }
-        });
-    REGISTER_SETTING(*this, ExternalTx);
-    REGISTER_SETTING(*this, TmpFolder);
-    REGISTER_SETTING(*this, TablesTmpFolder);
-    REGISTER_SETTING(*this, TempTablesTtl);
+        })
+        .IgnoreInFullReplay();
+    REGISTER_SETTING(*this, ExternalTx).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, TmpFolder).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, TablesTmpFolder).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, TempTablesTtl).IgnoreInFullReplay();
     REGISTER_SETTING(*this, KeepTempTables)
         .ValueSetter([this](const TString& cluster, bool value) {
             Y_UNUSED(cluster);
@@ -111,7 +113,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
 
     REGISTER_SETTING(*this, InferSchemaTableCountThreshold);
 
-    REGISTER_SETTING(*this, QueryCacheMode).Parser([](const TString& v) { return FromString<EQueryCacheMode>(v); });
+    REGISTER_SETTING(*this, QueryCacheMode)
+        .Parser([](const TString& v) { return FromString<EQueryCacheMode>(v); })
+        .IgnoreInFullReplay();
     REGISTER_SETTING(*this, QueryCacheIgnoreTableRevision);
     REGISTER_SETTING(*this, QueryCacheSalt);
     REGISTER_SETTING(*this, QueryCacheTtl);
@@ -136,7 +140,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MinLocalityInputDataWeight);
     REGISTER_SETTING(*this, MaxJobCount).Lower(1);
     REGISTER_SETTING(*this, UserSlots).Lower(1);
-    REGISTER_SETTING(*this, Pool).NonEmpty();
+    REGISTER_SETTING(*this, Pool).NonEmpty().IgnoreInFullReplay();
     REGISTER_SETTING(*this, DefaultOperationWeight).Lower(0.0);
     REGISTER_SETTING(*this, DefaultMapSelectivityFactor).Lower(0.0);
     REGISTER_SETTING(*this, NightlyCompress);
@@ -146,7 +150,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, PublishedErasureCodec).Parser([](const TString& v) { return FromString<NYT::EErasureCodecAttr>(v); });
     REGISTER_SETTING(*this, TemporaryErasureCodec).Parser([](const TString& v) { return FromString<NYT::EErasureCodecAttr>(v); });
     REGISTER_SETTING(*this, ClientMapTimeout).Deprecated();
-    REGISTER_SETTING(*this, CoreDumpPath).NonEmpty();
+    REGISTER_SETTING(*this, CoreDumpPath).NonEmpty().IgnoreInFullReplay();
     REGISTER_SETTING(*this, UseTmpfs);
     REGISTER_SETTING(*this, SuspendIfAccountLimitExceeded);
     REGISTER_SETTING(*this, ExtraTmpfsSize);
@@ -171,7 +175,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UseNativeDescSort);
     REGISTER_SETTING(*this, UseIntermediateSchema).Deprecated();
     REGISTER_SETTING(*this, UseIntermediateStreams);
-    REGISTER_SETTING(*this, StaticPool);
+    REGISTER_SETTING(*this, StaticPool).IgnoreInFullReplay();
     REGISTER_SETTING(*this, UseFlow)
         .ValueSetter([this](const TString&, bool value) {
             UseFlow = value;
@@ -213,22 +217,23 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             } else {
                 Owners[cluster].insert(owners.begin(), owners.end());
             }
-        });
-    REGISTER_SETTING(*this, OperationReaders).NonEmpty();
-    REGISTER_SETTING(*this, SchedulingTag);
-    REGISTER_SETTING(*this, SchedulingTagFilter);
-    REGISTER_SETTING(*this, PoolTrees)
+        })
+        .IgnoreInFullReplay();
+    REGISTER_SETTING(*this, OperationReaders).NonEmpty().IgnoreInFullReplay();
+    REGISTER_SETTING(*this, SchedulingTag).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, SchedulingTagFilter).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, PoolTrees).IgnoreInFullReplay()
         .NonEmpty()
         .ValueSetter([this] (const TString& cluster, TSet<TString> trees) {
             HybridDqExecution = false;
             PoolTrees[cluster] = trees;
         });
-    REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty();
+    REGISTER_SETTING(*this, TentativePoolTrees).NonEmpty().IgnoreInFullReplay();
     REGISTER_SETTING(*this, TentativeTreeEligibilitySampleJobCount);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMaxJobDurationRatio);
     REGISTER_SETTING(*this, TentativeTreeEligibilityMinJobDuration);
     REGISTER_SETTING(*this, UseDefaultTentativePoolTrees);
-    REGISTER_SETTING(*this, IntermediateAccount).NonEmpty();
+    REGISTER_SETTING(*this, IntermediateAccount).NonEmpty().IgnoreInFullReplay();
     REGISTER_SETTING(*this, IntermediateReplicationFactor).Lower(1).Upper(10);
     REGISTER_SETTING(*this, PublishedReplicationFactor).Lower(1).Upper(10);
     REGISTER_SETTING(*this, TemporaryReplicationFactor).Lower(1).Upper(10);
@@ -403,7 +408,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
         .ValueSetter([this](const TString& cluster, const NYT::TNode& spec) {
             OperationSpec[cluster] = spec;
             HybridDqExecution = false;
-        });
+        })
+        .IgnoreInFullReplay();
     REGISTER_SETTING(*this, FmrOperationSpec)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
         .Validator([] (const TString&, const NYT::TNode& value) {
@@ -437,9 +443,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, LLVMPerNodeMemSize);
     REGISTER_SETTING(*this, LLVMNodeCountLimit);
     REGISTER_SETTING(*this, SamplingIoBlockSize);
-    REGISTER_SETTING(*this, BinaryTmpFolder);
+    REGISTER_SETTING(*this, BinaryTmpFolder).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _BinaryCacheFolder);
-    REGISTER_SETTING(*this, BinaryExpirationInterval);
+    REGISTER_SETTING(*this, BinaryExpirationInterval).IgnoreInFullReplay();
     REGISTER_SETTING(*this, FolderInlineDataLimit);
     REGISTER_SETTING(*this, FolderInlineItemsLimit);
     REGISTER_SETTING(*this, TableContentMinAvgChunkSize);
@@ -496,9 +502,9 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
     REGISTER_SETTING(*this, MaxChunksForDqRead).Lower(1);
-    REGISTER_SETTING(*this, NetworkProject);
-    REGISTER_SETTING(*this, StaticNetworkProject);
-    REGISTER_SETTING(*this, FileCacheTtl);
+    REGISTER_SETTING(*this, NetworkProject).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, StaticNetworkProject).IgnoreInFullReplay();
+    REGISTER_SETTING(*this, FileCacheTtl).IgnoreInFullReplay();
     REGISTER_SETTING(*this, _ImpersonationUser);
     REGISTER_SETTING(*this, InferSchemaMode).Parser([](const TString& v) { return FromString<EInferSchemaMode>(v); });
     REGISTER_SETTING(*this, BatchListFolderConcurrency).Lower(1); // Upper bound on concurrent batch folder list requests https://yt.yandex-team.ru/docs/api/commands#execute_batch
@@ -603,6 +609,12 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, _ForbidSensitiveDataInOperationSpec);
     REGISTER_SETTING(*this, DontForceTransformForInputTables);
     REGISTER_SETTING(*this, _LocalTableContentLimit);
+    REGISTER_SETTING(*this, ValidatePool);
+    REGISTER_SETTING(*this, ValidateClusters);
+    REGISTER_SETTING(*this, _QueryDumpFolder);
+    REGISTER_SETTING(*this, _QueryDumpTableSizeLimit);
+    REGISTER_SETTING(*this, _QueryDumpTableCountPerClusterLimit);
+    REGISTER_SETTING(*this, _QueryDumpFileCountPerOperationLimit);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

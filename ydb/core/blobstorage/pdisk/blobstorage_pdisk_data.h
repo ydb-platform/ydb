@@ -36,9 +36,28 @@ constexpr ui32 DefaultSectorSize = 4 * (1 << 10); // 4 KiB
 constexpr ui32 ReplicationFactor = 3;
 constexpr ui32 RecordsInSysLog = 16;
 
-constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
-constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
-constexpr ui64 TinyDiskSizeThreshold = 80ull * (1 << 30); // 80GB, all disks smaller are considered "tiny"
+// normal disks, 128MB chunks
+// - 800GB
+// small disks, 32MB chunks
+// - 80GB
+// tiny disks, 32MB chunks
+
+constexpr ui64 SmallDiskSizeBoundary = 800ull * (1 << 30);
+constexpr ui64 TinyDiskSizeBoundary = 80ull * (1 << 30);
+constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20);
+
+// reserved log: 200 chunks, reserved static log: 70 chunks
+// - 200GB
+// linear interpolation
+// - 8GB
+// reserved log: 20 chunks, reserved static log: 5 chunks
+
+constexpr ui64 SmallDiskSizeLogBoundary = 200ull * (1 << 30);
+constexpr ui64 TinyDiskSizeLogBoundary = 8ull * (1 << 30);
+constexpr i64 MaxCommonLogChunks = 200; // default, can also be set from ICB
+constexpr i64 CommonStaticLogChunks = 70; // default, can also be set from ICB
+constexpr i64 TinyDiskMaxCommonLogChunks = 20;
+constexpr i64 TinyDiskCommonStaticLogChunks = 5;
 
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
@@ -897,7 +916,7 @@ struct TDiskFormat {
     }
 
     bool IsDiskSmall() {
-        return DiskSize < FullSizeDiskMinimumSize;
+        return DiskSize < SmallDiskSizeBoundary;
     }
 };
 

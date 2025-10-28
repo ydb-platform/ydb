@@ -15,6 +15,7 @@ private:
     std::optional<ui64> PortionsCountAvailable;
     std::optional<ui64> PortionsCountLimit;
     std::optional<ui64> PortionsSizeLimit;
+    std::optional<ui64> Concurrency;
 
     virtual std::shared_ptr<IPortionsLevel> DoBuildLevel(const std::shared_ptr<IPortionsLevel>& nextLevel, const ui32 indexLevel,
         const std::shared_ptr<TSimplePortionsGroupInfo>& portionsInfo, const TLevelCounters& counters,

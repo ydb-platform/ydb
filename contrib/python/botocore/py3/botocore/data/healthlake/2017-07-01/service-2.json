@@ -422,6 +422,10 @@
         "IdentityProviderConfiguration":{
           "shape":"IdentityProviderConfiguration",
           "documentation":"<p>The identity provider that you selected when you created the data store.</p>"
+        },
+        "ErrorCause":{
+          "shape":"ErrorCause",
+          "documentation":"<p>The error cause for the current data store operation.</p>"
         }
       },
       "documentation":"<p>Displays the properties of the data store, including the ID, ARN, name, and the status of the data store.</p>"
@@ -436,7 +440,8 @@
         "CREATING",
         "ACTIVE",
         "DELETING",
-        "DELETED"
+        "DELETED",
+        "CREATE_FAILED"
       ]
     },
     "DeleteFHIRDatastoreRequest":{
@@ -546,7 +551,7 @@
       "members":{
         "ImportJobProperties":{
           "shape":"ImportJobProperties",
-          "documentation":"<p>The properties of the Import job request, including the ID, ARN, name, and the status of the job.</p>"
+          "documentation":"<p>The properties of the Import job request, including the ID, ARN, name, status of the job, and the progress report of the job.</p>"
         }
       }
     },
@@ -555,6 +560,32 @@
       "max":400,
       "min":1,
       "pattern":"(arn:aws((-us-gov)|(-iso)|(-iso-b)|(-cn))?:kms:)?([a-z]{2}-[a-z]+(-[a-z]+)?-\\d:)?(\\d{12}:)?(((key/)?[a-zA-Z0-9-_]+)|(alias/[a-zA-Z0-9:/_-]+))"
+    },
+    "ErrorCategory":{
+      "type":"string",
+      "enum":[
+        "RETRYABLE_ERROR",
+        "NON_RETRYABLE_ERROR"
+      ]
+    },
+    "ErrorCause":{
+      "type":"structure",
+      "members":{
+        "ErrorMessage":{
+          "shape":"ErrorMessage",
+          "documentation":"<p>The text of the error message.</p>"
+        },
+        "ErrorCategory":{
+          "shape":"ErrorCategory",
+          "documentation":"<p>The error category of the create/delete data store operation. Possible statuses are RETRYABLE_ERROR or NON_RETRYABLE_ERROR.</p>"
+        }
+      },
+      "documentation":"<p>The error info of the create/delete data store operation.</p>"
+    },
+    "ErrorMessage":{
+      "type":"string",
+      "max":4096,
+      "min":1
     },
     "ExportJobProperties":{
       "type":"structure",
@@ -613,6 +644,8 @@
       "type":"string",
       "enum":["R4"]
     },
+    "GenericDouble":{"type":"double"},
+    "GenericLong":{"type":"long"},
     "IamRoleArn":{
       "type":"string",
       "max":2048,
@@ -681,6 +714,10 @@
           "documentation":"<p>The input data configuration that was supplied when the Import job was created.</p>"
         },
         "JobOutputDataConfig":{"shape":"OutputDataConfig"},
+        "JobProgressReport":{
+          "shape":"JobProgressReport",
+          "documentation":"<p>Displays the progress of the import job, including total resources scanned, total resources ingested, and total size of data ingested.</p>"
+        },
         "DataAccessRoleArn":{
           "shape":"IamRoleArn",
           "documentation":"<p>The Amazon Resource Name (ARN) that gives AWS HealthLake access to your input data.</p>"
@@ -690,7 +727,7 @@
           "documentation":"<p>An explanation of any errors that may have occurred during the FHIR import job. </p>"
         }
       },
-      "documentation":"<p>Displays the properties of the import job, including the ID, Arn, Name, and the status of the data store.</p>"
+      "documentation":"<p>Displays the properties of the import job, including the ID, Arn, Name, the status of the job, and the progress report of the job.</p>"
     },
     "ImportJobPropertiesList":{
       "type":"list",
@@ -727,6 +764,44 @@
       "max":64,
       "min":1,
       "pattern":"^([\\p{L}\\p{Z}\\p{N}_.:/=+\\-%@]*)$"
+    },
+    "JobProgressReport":{
+      "type":"structure",
+      "members":{
+        "TotalNumberOfScannedFiles":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of files scanned from input S3 bucket.</p>"
+        },
+        "TotalSizeOfScannedFilesInMB":{
+          "shape":"GenericDouble",
+          "documentation":"<p>The size (in MB) of the files scanned from the input S3 bucket.</p>"
+        },
+        "TotalNumberOfImportedFiles":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of files imported so far.</p>"
+        },
+        "TotalNumberOfResourcesScanned":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of resources scanned from the input S3 bucket.</p>"
+        },
+        "TotalNumberOfResourcesImported":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of resources imported so far.</p>"
+        },
+        "TotalNumberOfResourcesWithCustomerError":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of resources that failed due to customer error.</p>"
+        },
+        "TotalNumberOfFilesReadWithCustomerError":{
+          "shape":"GenericLong",
+          "documentation":"<p>The number of files that failed to be read from the input S3 bucket due to customer error.</p>"
+        },
+        "Throughput":{
+          "shape":"GenericDouble",
+          "documentation":"<p>The throughput (in MB/sec) of the import job.</p>"
+        }
+      },
+      "documentation":"<p>The progress report of an import job.</p>"
     },
     "JobStatus":{
       "type":"string",
@@ -882,7 +957,7 @@
       "members":{
         "ImportJobPropertiesList":{
           "shape":"ImportJobPropertiesList",
-          "documentation":"<p> The properties of a listed FHIR import jobs, including the ID, ARN, name, and the status of the job. </p>"
+          "documentation":"<p> The properties of a listed FHIR import jobs, including the ID, ARN, name, the status of the job, and the progress report of the job. </p>"
         },
         "NextToken":{
           "shape":"NextToken",

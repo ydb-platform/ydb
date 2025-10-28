@@ -2,6 +2,6 @@
 +++ b/include/portable-linux.h	(working tree)
 @@ -104,1 +104,3 @@
 -#define HAVE_BITS_TYPES_H 1
-+#ifdef __linux__
++#if defined(__linux__) && !defined(_musl_)
 +#define HAVE_BITS_TYPES_H 1
 +#endif

@@ -115,6 +115,23 @@ public:
         return *DoWithRetry<NThreading::TFuture<void>, yexception>(clearSessionFunc, RetryPolicy_, true, OnFail_);
     };
 
+    NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) override {
+        NProto::TDropTablesRequest protoRequest = DropTablesRequestToProto(request);
+        TString dropTablesUrl = "/drop_tables";
+        auto httpClient = TKeepAliveHttpClient(Host_, Port_);
+        TStringStream outputStream;
+
+        auto dropTablesFunc = [&]() {
+            httpClient.DoPost(dropTablesUrl, protoRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
+            TString serializedResponse = outputStream.ReadAll();
+            NProto::TDropTablesResponse protoResponse;
+            YQL_ENSURE(protoResponse.ParseFromString(serializedResponse));
+            return NThreading::MakeFuture(DropTablesResponseFromProto(protoResponse));
+        };
+
+        return *DoWithRetry<NThreading::TFuture<TDropTablesResponse>, yexception>(dropTablesFunc, RetryPolicy_, true, OnFail_);
+    }
+
 
 private:
     TString Host_;

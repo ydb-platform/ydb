@@ -1,9 +1,9 @@
 pkgs: attrs: with pkgs; rec {
-  version = "1.15.1";
+  version = "1.16.0";
 
   src = fetchurl {
     url = "https://github.com/ngtcp2/ngtcp2/releases/download/v${version}/ngtcp2-${version}.tar.xz";
-    hash = "sha256-BvLux8p2VSBBBQRz2ZLTBjeC4m/f9XUzy4zYyaaFmhc=";
+    hash = "sha256-Nny87KylOfdkU8SUVNjns47LFirPic1XFTWsSs+CorQ=";
   };
 
   patches = [];

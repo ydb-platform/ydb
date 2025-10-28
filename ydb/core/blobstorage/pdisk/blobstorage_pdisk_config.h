@@ -146,7 +146,8 @@ struct TPDiskConfig : public TThrRefBase {
 
     NKikimrConfig::TFeatureFlags FeatureFlags;
 
-    TControlWrapper MaxCommonLogChunks = 200;
+    i64 MaxCommonLogChunks = 200ll;
+    i64 CommonStaticLogChunks = 70ll;
     ui64 MinLogChunksTotal = 4ull; // for tiny disks
 
     // Common multiplier and divisor

@@ -155,7 +155,7 @@ SELECT FormatType(CallableType(
 )); -- Callable<(String,[Int64?])->Double>
 ```
 
-## GenericType, UnitType, and VoidType {#generictype}
+## GenericType, UnitType, VoidType, NullType, EmptyListType, EmptyDictType {#generictype}
 
 Return the same-name [special data types](../types/special.md). They have no arguments because they are not parameterized.
 
@@ -163,6 +163,24 @@ Return the same-name [special data types](../types/special.md). They have no arg
 
 ```yql
 SELECT FormatType(VoidType()); -- Void
+```
+
+## LinearType, DynamicLinearType {#lineartype}
+
+#### Signature
+
+```yql
+LinearType(Type) -> linear type parameterized by the given type
+```
+
+Functions available since version [2025.04](../changelog/2025.04.md).
+Returns the [linear](../types/linear.md) type.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearType(ResourceType("Foo"))); -- Linear<Resource<'Foo'>>
+SELECT FormatType(DynamicLinearType(ResourceType("Foo"))); -- DynamicLinear<Resource<'Foo'>>
 ```
 
 ## OptionalItemType, ListItemType and StreamItemType {#optionalitemtype}
@@ -182,6 +200,34 @@ SELECT FormatType(ListItemType(
 ```yql
 SELECT FormatType(ListItemType(
   ParseTypeHandle("List<Int32>")
+)); -- Int32
+```
+
+## LinearItemType {#linearitemtype}
+
+#### Signature
+
+```yql
+LinearItemType(LinearType)->linear type parameter
+LinearItemType(DynamicLinearType)->linear type parameter
+```
+
+These functions are available starting with version [2025.04](../changelog/2025.04.md).
+If these functions are passed a type, they perform the inverse of [LinearType](#lineartype) or [DynamicLinearType](#lineartype) — they return the type of the linear type parameter.
+
+If these functions are passed a type handle, they perform the inverse of [LinearTypeHandle](#lineartypehandle) or [DynamicLinearTypeHandle](#lineartypehandle)—they return the handle of the parameter type based on the linear type handle.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearItemType(
+    ParseType("Linear<Int32>")
+)); -- Int32
+```
+
+```yql
+SELECT FormatType(LinearItemType(
+    ParseTypeHandle("Linear<Int32>")
 )); -- Int32
 ```
 
@@ -634,4 +680,24 @@ Getting the number of arguments in a lambda function.
 ```yql
 SELECT LambdaArgumentsCount(($x, $y)->($x+$y))
 ; -- 2
+```
+
+### LinearTypeHandle and DynamicLinearTypeHandle {#lineartypehandle}
+
+#### Signature
+
+```yql
+LinearTypeHandle(TypeHandle)->handle of a static linear type
+DynamicLinearTypeHandle(TypeHandle)->handle of a dynamic linear type
+```
+
+Functions available starting with version [2025.04](../changelog/2025.04.md).
+These functions construct a handle of a static or dynamic linear type based on the passed handle of the parameter type.
+
+#### Examples
+
+```yql
+SELECT FormatType(LinearTypeHandle(
+    TypeHandle(DataType("Bool"))
+)); -- Linear<Bool>
 ```

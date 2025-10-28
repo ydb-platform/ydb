@@ -1857,7 +1857,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
     P_LOG(PRI_ERROR, BPD01, error.Str());
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
     PCtx->ActorSystem->Send(evYardInit.Sender, new NPDisk::TEvYardInitResult(status,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
@@ -1913,7 +1913,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
     ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
@@ -2077,7 +2077,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
 
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeThreshold);
+    bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(
         NKikimrProto::OK,
@@ -3187,7 +3187,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 --state.OperationsInProgress;
                 --inFlight->ChunkReads;
             };
-            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce);
+            read->FinalCompletion = new TCompletionChunkRead(this, read, std::move(onDestroy), state.Nonce, PCtx->ActorSystem->GetRcBufAllocator());
 
             static_cast<TChunkRead*>(request)->SelfPointer = std::move(read);
 

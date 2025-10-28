@@ -1,3 +1,4 @@
+#include "vector_data_generator.h"
 #include "vector_enums.h"
 #include "vector_workload_params.h"
 #include "vector_workload_generator.h"
@@ -191,6 +192,12 @@ void TVectorWorkloadParams::Validate(const ECommandType commandType, int workloa
 
 THolder<IWorkloadQueryGenerator> TVectorWorkloadParams::CreateGenerator() const {
     return MakeHolder<TVectorWorkloadGenerator>(this);
+}
+
+TWorkloadDataInitializer::TList TVectorWorkloadParams::CreateDataInitializers() const {
+    return {
+        std::make_shared<TWorkloadVectorFilesDataInitializer>(*this)
+    };
 }
 
 TString TVectorWorkloadParams::GetWorkloadName() const {

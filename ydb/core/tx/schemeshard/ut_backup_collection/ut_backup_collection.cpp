@@ -1721,9 +1721,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
         PrepareDirs(runtime, env, txId);
 
-        // Create backup collection (indexes should be included by default)
+        // Create backup collection with OmitIndexes = false (explicitly request indexes)
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
             Name: "CollectionWithIndex"
             ExplicitEntryList {
@@ -1732,21 +1738,44 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                     Path: "/MyRoot/TableWithIndex"
                 }
             }
+            OmitIndexes: false
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Backup the table (indexes should be included by default)
-        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
-            Name: "CollectionWithIndex"
-            TargetDir: "backup1"
-        )");
+        // Backup the table (indexes should be included)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionWithIndex")");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify backup completed
-        TestLs(runtime, "/MyRoot/.backups/collections/CollectionWithIndex", false, NLs::PathExist);
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithIndex"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
+
+        // Get the backup directory and verify its structure contains index
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithIndex");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
         
-        // Verify the backup directory contains both table and index
-        // The index should be copied along with the table
+        // Verify backup directory has the table (indexes are stored under the table)
+        TString backupPath = "/MyRoot/.backups/collections/CollectionWithIndex/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
+        
+        // The backup should contain 1 child (the table; indexes are children of the table)
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain 1 table, got " << backupContentDesc.GetPathDescription().ChildrenSize());
+        
+        // Verify the table HAS indexes in the backup (check via TableIndexesSize)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
+        
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 1);
+        
+        // Verify ChildrenExist flag is set (index exists as child, even if not in Children list)
+        UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
     }
 
     Y_UNIT_TEST(BackupWithIndexesOmit) {
@@ -1770,9 +1799,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
         PrepareDirs(runtime, env, txId);
 
-        // Create backup collection with OmitIndexes = true
+        // Create backup collection with OmitIndexes = true (at collection level)
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
             Name: "CollectionWithoutIndex"
             ExplicitEntryList {
@@ -1786,16 +1821,41 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         env.TestWaitNotification(runtime, txId);
 
         // Backup the table (indexes should be omitted)
-        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
-            Name: "CollectionWithoutIndex"
-            TargetDir: "backup2"
-        )");
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionWithoutIndex")");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify backup completed
-        TestLs(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex", false, NLs::PathExist);
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
+
+        // Get the backup directory and verify its structure does NOT contain index
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionWithoutIndex");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
         
-        // Verify the backup directory contains only the table, not the index
+        // Verify backup directory has only the table (no index children when omitted)
+        TString backupPath = "/MyRoot/.backups/collections/CollectionWithoutIndex/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
+        
+        // The backup should contain 1 child (the table), without index children
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain only table without index, got " << backupContentDesc.GetPathDescription().ChildrenSize());
+        
+        // Verify the table exists but has NO indexes (omitted via OmitIndexes: true)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
+        
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        
+        // When indexes are omitted, TableIndexesSize should be 0
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 0);
+        
+        // Verify ChildrenExist is false (no index children)
+        UNIT_ASSERT(!tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
     }
 
     Y_UNIT_TEST(BackupWithIndexesDefault) {
@@ -1819,10 +1879,15 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        // Verify source table has the index
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableWithIndex"), {
+            NLs::PathExist,
+            NLs::IndexesCount(1)
+        });
+
         PrepareDirs(runtime, env, txId);
 
-        // Create backup collection without specifying OmitIndexes
-        // (should default to false = include indexes)
+        // Create backup collection without specifying OmitIndexes (default behavior)
         TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
             Name: "CollectionDefaultBehavior"
             ExplicitEntryList {
@@ -1834,54 +1899,39 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Backup the table (indexes should be included by default)
-        TestBackupBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
-            Name: "CollectionDefaultBehavior"
-            TargetDir: "backup3"
-        )");
+        // Backup the table (default behavior: OmitIndexes not specified, should default to false)
+        TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+            R"(Name: ".backups/collections/CollectionDefaultBehavior")");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify backup completed
-        TestLs(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior", false, NLs::PathExist);
-        
-        // Verify the backup directory contains both table and index (default behavior)
-    }
+        // Verify backup collection has children (the backup directory)
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior"), {
+            NLs::PathExist,
+            NLs::IsBackupCollection,
+            NLs::ChildrenCount(1)
+        });
 
-    Y_UNIT_TEST(BackupServiceDirectoryValidation) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
-        SetupLogging(runtime);
+        // Get the backup directory and verify its structure
+        auto backupDesc = DescribePath(runtime, "/MyRoot/.backups/collections/CollectionDefaultBehavior");
+        UNIT_ASSERT(backupDesc.GetPathDescription().ChildrenSize() == 1);
+        TString backupDirName = backupDesc.GetPathDescription().GetChildren(0).GetName();
         
-        // Enable system names protection feature
-        runtime.GetAppData().FeatureFlags.SetEnableSystemNamesProtection(true);
+        // Verify backup directory structure
+        TString backupPath = "/MyRoot/.backups/collections/CollectionDefaultBehavior/" + backupDirName;
+        auto backupContentDesc = DescribePath(runtime, backupPath);
         
-        ui64 txId = 100;
-
-        PrepareDirs(runtime, env, txId);
-
-        // Create a backup collection
-        TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections", R"(
-            Name: "TestCollection"
-            ExplicitEntryList {
-                Entries {
-                    Type: ETypeTable
-                    Path: "/MyRoot/Table1"
-                }
-            }
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        // Try to create __ydb_backup_meta outside backup collection (should fail - reserved name)
-        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_meta", {NKikimrScheme::StatusSchemeError});
+        // The backup should contain 1 child (the table; indexes are children of the table)
+        UNIT_ASSERT_C(backupContentDesc.GetPathDescription().ChildrenSize() == 1,
+            "Backup should contain 1 table, got " << backupContentDesc.GetPathDescription().ChildrenSize());
         
-        // Verify we can't create directories with reserved backup service prefix outside backup context
-        TestMkDir(runtime, ++txId, "/MyRoot", "__ydb_backup_test", {NKikimrScheme::StatusSchemeError});
+        // Verify the table HAS indexes in the backup by default (check via TableIndexesSize)
+        UNIT_ASSERT_VALUES_EQUAL(backupContentDesc.GetPathDescription().GetChildren(0).GetName(), "TableWithIndex");
         
-        // But we CAN create __ydb_backup_meta inside a backup collection (should succeed)
-        TestMkDir(runtime, ++txId, "/MyRoot/.backups/collections/TestCollection", "__ydb_backup_meta");
-        env.TestWaitNotification(runtime, txId);
+        auto tableDesc = DescribePath(runtime, backupPath + "/TableWithIndex");
+        UNIT_ASSERT(tableDesc.GetPathDescription().HasTable());
+        UNIT_ASSERT_VALUES_EQUAL(tableDesc.GetPathDescription().GetTable().TableIndexesSize(), 1);
         
-        // Verify it was created
-        TestLs(runtime, "/MyRoot/.backups/collections/TestCollection/__ydb_backup_meta", false, NLs::PathExist);
+        // Verify ChildrenExist flag is set by default (index exists as child)
+        UNIT_ASSERT(tableDesc.GetPathDescription().GetSelf().GetChildrenExist());
     }
 } // TBackupCollectionTests

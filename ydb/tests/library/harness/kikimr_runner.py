@@ -24,6 +24,7 @@ from . import kikimr_cluster_interface
 from ydb.public.api.protos.ydb_status_codes_pb2 import StatusIds
 import ydb.core.protos.blobstorage_config_pb2 as bs
 from ydb.tests.library.predicates.blobstorage import blobstorage_controller_has_started_on_some_node
+from ydb.tests.library.clients.kikimr_config_client import config_client_factory
 
 
 logger = logging.getLogger(__name__)
@@ -204,6 +205,14 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 "--ca=%s" % self.__configurator.grpc_tls_ca_path
             )
 
+        if self.__configurator.protected_mode:
+            command.append(
+                "--cert=%s" % self.__configurator.grpc_tls_cert_path
+            )
+            command.append(
+                "--key=%s" % self.__configurator.grpc_tls_key_path
+            )
+
         if self.__role == 'slot' or (self.__configurator.node_kind == "yq" and self._tenant_affiliation is not None):
             command.append(
                 "--tenant=%s" % self._tenant_affiliation
@@ -354,6 +363,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self._node_index_allocator = itertools.count(1)
         self.default_channel_bindings = None
         self.__initialy_prepared = False
+        self.root_token = None
 
     @property
     def config(self):
@@ -375,16 +385,26 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
     def server(self):
         return self.__server
 
+    def _get_token(self):
+        result = self.__call_ydb_cli(['--user', 'root', '--no-password', 'auth', 'get-token', '--force'], use_certs=True, use_database=True)
+        return result.std_out.decode('utf-8').strip()
+
     def __call_kikimr_new_cli(self, cmd, connect_to_server=True, token=None):
-        server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        if self.__configurator.protected_mode:
+            server = 'grpcs://{server}:{port}'.format(server=self.server, port=self.nodes[1].grpc_ssl_port)
+        else:
+            server = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+
         binary_path = self.__configurator.get_binary_path(0)
         full_command = [binary_path]
         if connect_to_server:
-            full_command += ["--server={server}".format(server=server)]
+            full_command += ["--server", server]
+            if self.__configurator.protected_mode:
+                full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
         full_command += cmd
 
         env = None
-        token = token or self.__configurator.default_clusteradmin
+        token = token or self.root_token or self.__configurator.default_clusteradmin
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
@@ -407,12 +427,25 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
-    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True):
-        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
-        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+    def __call_ydb_cli(self, cmd, token=None, check_exit_code=True, use_certs=False, use_database=False):
+        if self.__configurator.protected_mode:
+            endpoint = 'grpcs://{server}:{port}'.format(server=self.server, port=self.nodes[1].grpc_ssl_port)
+        else:
+            endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint]
+
+        if use_database:
+            full_command += ['--database', '/{}'.format(self.domain_name)]
+        if use_certs:
+            full_command += ['--ca-file', self.__configurator.grpc_tls_ca_path]
+            full_command += ['--client-cert-file', self.__configurator.grpc_tls_cert_path]
+            full_command += ['--client-cert-key-file', self.__configurator.grpc_tls_key_path]
+
+        full_command += ['-y'] + cmd
 
         env = None
-        token = token or self.__configurator.default_clusteradmin
+        token = token or self.root_token or self.__configurator.default_clusteradmin
         if token is not None:
             env = os.environ.copy()
             env['YDB_TOKEN'] = token
@@ -483,6 +516,9 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if self.__configurator.use_self_management:
             self._bootstrap_cluster(self_assembly_uuid="test-cluster")
 
+        if self.__configurator.protected_mode:
+            self.root_token = self._get_token()
+
         bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
@@ -500,7 +536,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             )
             pools[p['name']] = p['kind']
 
-        root_token = self.__configurator.default_clusteradmin
+        root_token = self.root_token or self.__configurator.default_clusteradmin
+
         if not root_token and self.__configurator.enable_static_auth:
             root_token = requests.post("http://localhost:%s/login" % self.nodes[1].mon_port, json={
                 "user": self.__configurator.yaml_config["domains_config"]["security_config"]["default_users"][0]["name"],
@@ -872,6 +909,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ]
         )
         return result.std_out.decode('utf-8')
+
+    def _create_config_client(self):
+        first_node = self.nodes[list(self.nodes.keys())[0]]
+        if self.__configurator.protected_mode:
+            port = first_node.grpc_ssl_port
+            client = config_client_factory(
+                first_node.host, port, retry_count=20,
+                ca_path=self.__configurator.grpc_tls_ca_path,
+                cert_path=self.__configurator.grpc_tls_cert_path,
+                key_path=self.__configurator.grpc_tls_key_path
+            )
+            return client
+        else:
+            port = first_node.port
+            return config_client_factory(first_node.host, port, retry_count=20)
 
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):

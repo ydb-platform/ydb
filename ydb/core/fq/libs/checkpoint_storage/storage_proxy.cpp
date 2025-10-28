@@ -1,6 +1,9 @@
 #include "storage_proxy.h"
 
 #include "gc.h"
+
+#include <ydb/core/base/appdata_fwd.h>
+
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include "ydb_checkpoint_storage.h"
@@ -21,8 +24,6 @@
 #include <util/stream/file.h>
 #include <util/string/join.h>
 #include <util/string/strip.h>
-
-#include <ydb/core/base/appdata_fwd.h>
 
 namespace NFq {
 

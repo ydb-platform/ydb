@@ -17,7 +17,7 @@ namespace NFq {
 using namespace NThreading;
 using namespace NYdb;
 using namespace NYdb::NTable;
-//using namespace NKikimr;
+
 using NYql::TIssues;
 using TTxControl = NFq::ISession::TTxControl;
 

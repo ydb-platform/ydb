@@ -3,7 +3,6 @@ import os
 import time
 import random
 import string
-import pytest
 
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
 
@@ -63,6 +62,11 @@ class TestStreamingInYdb(TestYdsBase):
                 break
             assert time.time() < deadline, "Wait checkpoint failed, actual completed: " + str(completed)
             time.sleep(plain_or_under_sanitizer_wrapper(0.5, 2))
+
+    def get_actor_count(self, kikimr, node_id, activity):
+        result = self.get_sensors(kikimr, node_id, "utils").find_sensor(
+            {"activity": activity, "sensor": "ActorsAliveByActivity", "execpool": "User"})
+        return result if result is not None else 0
 
     def test_read_topic(self, kikimr):
         sourceName = "test_read_topic" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
@@ -193,7 +197,7 @@ class TestStreamingInYdb(TestYdsBase):
 
     def test_read_topic_shared_reading_restart_nodes(self, kikimr):
         sourceName = "source_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        self.init_topics(sourceName, partitions_count=10)
+        self.init_topics(sourceName, partitions_count=1)
         self.create_source(kikimr, sourceName, True)
 
         sql = R'''
@@ -216,8 +220,14 @@ class TestStreamingInYdb(TestYdsBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, query_id)
 
-        logging.debug("Restart node 1")
-        node = kikimr.Cluster.nodes[1]
+        restart_node_id = None
+        for node_id in kikimr.Cluster.nodes:
+            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count:
+                restart_node_id = node_id
+
+        logging.debug(f"Restart node {restart_node_id}")
+        node = kikimr.Cluster.nodes[restart_node_id]
         node.stop()
         node.start()
 
@@ -226,17 +236,6 @@ class TestStreamingInYdb(TestYdsBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, query_id)
 
-        logging.debug("Restart node 2")
-        node = kikimr.Cluster.nodes[2]
-        node.stop()
-        node.start()
-
-        self.write_stream(['{"value": "value3"}'])
-        expected_data = ['value3']
-        assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
-        self.wait_completed_checkpoints(kikimr, query_id)
-
-    # @pytest.mark.skip("This test is not ready yet")
     def test_read_topic_restore_state(self, kikimr):
         sourceName = "source4_" + ''.join(random.choices(string.ascii_letters + string.digits, k=8))
         self.init_topics(sourceName, partitions_count=1)
@@ -281,8 +280,14 @@ class TestStreamingInYdb(TestYdsBase):
         assert self.read_stream(len(expected_data), topic_path=self.output_topic) == expected_data
         self.wait_completed_checkpoints(kikimr, query_id)
 
-        logging.debug("Restart node 1")
-        node = kikimr.Cluster.nodes[1]
+        restart_node_id = None
+        for node_id in kikimr.Cluster.nodes:
+            count = self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+            if count:
+                restart_node_id = node_id
+
+        logging.debug(f"Restart node {restart_node_id}")
+        node = kikimr.Cluster.nodes[restart_node_id]
         node.stop()
         node.start()
 

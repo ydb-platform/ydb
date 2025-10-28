@@ -32,11 +32,7 @@ public:
 
 public:
     void SetUp(NUnitTest::TTestContext& /* context */) override {
-        if constexpr (UseYdbSdk) {
-            InitCheckpointStorage();
-        } else {
-            // InitLocalConnection();    // TODO
-        }
+        InitCheckpointStorage();
     }
 
     void InitCheckpointStorage(IEntityIdGenerator::TPtr entityIdGenerator = CreateEntityIdGenerator("id")) {
@@ -104,9 +100,7 @@ public:
     }
 };
 
-
 using TSdkCheckpoints = TFixture<true>;
-using TLocalCheckpoints = TFixture<false>;
 
 } // namespace
 

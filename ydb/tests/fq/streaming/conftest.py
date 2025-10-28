@@ -1,6 +1,7 @@
 import os
 import logging
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
@@ -41,13 +42,13 @@ def kikimr(request):
 
     def get_ydb_config():
         config = KikimrConfigGenerator(
+            erasure=Erasure.MIRROR_3_DC,
             extra_feature_flags={
                 "enable_external_data_sources": True,
                 "enable_streaming_queries": True
             },
             query_service_config={"available_external_data_sources": ["Ydb"]},
             table_service_config={},
-            nodes=2,
             default_clusteradmin="root@builtin",
             use_in_memory_pdisks=False
         )

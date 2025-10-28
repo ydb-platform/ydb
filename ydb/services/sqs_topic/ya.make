@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     sqs_topic_proxy.cpp
-    grpc_service.cpp
     utils.cpp
 )
 

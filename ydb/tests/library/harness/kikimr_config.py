@@ -20,7 +20,6 @@ from . import tls_tools
 from .kikimr_port_allocator import KikimrPortManagerPortAllocator
 from .param_constants import kikimr_driver_path, ydb_cli_path
 from .util import LogLevels
-from ydb.tests.library.clients.kikimr_config_client import config_client_factory
 
 import logging
 
@@ -578,8 +577,13 @@ class KikimrConfigGenerator(object):
             self._add_host_config_and_hosts()
             self.yaml_config.pop("nameservice_config")
         if self.use_self_management:
+
             if "security_config" in self.yaml_config["domains_config"]:
                 self.yaml_config["security_config"] = self.yaml_config["domains_config"].pop("security_config")
+
+            if "services" in self.yaml_config["grpc_config"] and "config" not in self.yaml_config["grpc_config"]["services"]:
+                self.yaml_config["grpc_config"]["services"].append("config")
+
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")

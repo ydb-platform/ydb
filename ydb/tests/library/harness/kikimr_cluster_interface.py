@@ -8,7 +8,6 @@ from ydb.tests.library.common.wait_for import wait_for
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.clients.kikimr_keyvalue_client import keyvalue_client_factory
 from ydb.tests.library.clients.kikimr_scheme_client import scheme_client_factory
-from ydb.tests.library.clients.kikimr_config_client import ConfigClient
 from ydb.tests.library.common.protobuf_console import (
     CreateTenantRequest, AlterTenantRequest, GetTenantStatusRequest,
     RemoveTenantRequest, GetOperationRequest)

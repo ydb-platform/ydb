@@ -2139,7 +2139,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic1");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic1");
             req.set_consumer("user");
             req.set_offset(5);
             grpc::ClientContext rcontext;

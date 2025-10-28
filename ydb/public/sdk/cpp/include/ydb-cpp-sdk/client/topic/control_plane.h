@@ -486,9 +486,10 @@ struct TConsumerSettings {
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING(TAttributes, Attributes);
-    FLUENT_SETTING_DEFAULT(bool, KeepMessagesOrder, false);
-    FLUENT_SETTING_DEFAULT(ui32, MaxProcessingAttempts, 5);
-    FLUENT_SETTING_DEFAULT(TDuration, DefaultProcessingTimeout, TDuration::Seconds(30));
+    FLUENT_SETTING(bool, KeepMessagesOrder);
+    FLUENT_SETTING(ui32, MaxProcessingAttempts);
+    FLUENT_SETTING(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING(std::string, DeadLetterQueue);
 
     TConsumerSettings& AddAttribute(const std::string& key, const std::string& value) {
         Attributes_[key] = value;

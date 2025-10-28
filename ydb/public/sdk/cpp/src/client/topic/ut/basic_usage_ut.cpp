@@ -107,6 +107,38 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         setup.CreateTopic(name, TEST_CONSUMER, 1);
     }
 
+    Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
+        TTopicSdkTestSetup setup{TEST_CASE_NAME, TTopicSdkTestSetup::MakeServerSettings(), false};
+
+        TTopicClient client(setup.MakeDriver());
+
+        TCreateTopicSettings topics;
+        topics.BeginAddConsumer()
+                .ConsumerName("shared_consumer_name")
+                .ConsumerType(EConsumerType::Shared)
+                .KeepMessagesOrder(true)
+                .DefaultProcessingTimeout(TDuration::Seconds(13))
+                .MaxProcessingAttempts(17)
+                .DeadLetterQueue("dlq-topic")
+            .EndAddConsumer();
+
+        auto status = client.CreateTopic("topic_name", topics).GetValueSync();
+        UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
+
+        auto describe = client.DescribeTopic("topic_name").GetValue(TDuration::Seconds(5));
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToOneLineString());
+
+        auto& d = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
+        auto& c = d.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(13));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dlq-topic");
+    }
+
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         if (EnableDirectRead) {
             // TODO(qyryq) Enable the test when LOGBROKER-9364 is done.

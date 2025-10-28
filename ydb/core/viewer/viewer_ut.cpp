@@ -48,9 +48,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
-#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
-
 using namespace NKikimr;
 using namespace NViewer;
 using namespace NKikimrWhiteboard;
@@ -60,8 +58,6 @@ using namespace Tests;
 using namespace NMonitoring;
 using namespace NMonitoring::NTests;
 using namespace NKikimr::NViewerTests;
-using namespace NYdb::NPersQueue;
-using namespace NJson;
 using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 using namespace NYdb::NPersQueue;
 using namespace NJson;
@@ -2321,7 +2317,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         auto topicClient = NYdb::NTopic::TTopicClient(ydbDriver);
 
         // TTopicClient client(MakeDriver());
-        i64 partitionCount = 2;
+        i64 partitionCount = 1;
         i64 maxPartitionCount = 10;
         NYdb::NTopic::TCreateTopicSettings topicSettings;
         topicSettings.BeginConfigurePartitioningSettings()
@@ -2361,16 +2357,53 @@ Y_UNIT_TEST_SUITE(Viewer) {
 
         auto describeTopicResult1 = topicClient.DescribeTopic(topicPath).GetValueSync();
         UNIT_ASSERT(describeTopicResult1.IsSuccess());
-        UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 4);
+        UNIT_ASSERT_EQUAL(describeTopicResult1.GetTopicDescription().GetPartitions().size(), 3);
 
-        // // checking that user with no UpdateRow rights cannot put record to topic
-        // auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0);
-        // UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
+        // checking that user with no UpdateRow rights cannot put record to topic
+        auto postReturnCode1 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0, "some_key");
+        UNIT_ASSERT_EQUAL(postReturnCode1, HTTP_BAD_REQUEST);
 
+        // checking that write to inactive partition after split returns error
         client1.Grant("/", "Root", "username", NACLib::EAccessRights::UpdateRow);
         auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 0, "some_key");
         UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_BAD_REQUEST);
-        auto postReturnCode2 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 1, "some_key");
-        UNIT_ASSERT_EQUAL(postReturnCode2, HTTP_OK);
+
+        // checking that write to active partition is successfull
+        auto postReturnCode3 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, 1, "some_key");
+        UNIT_ASSERT_EQUAL(postReturnCode3, HTTP_OK);
+
+        // checking that write with partition chooser by key is successfull
+        auto postReturnCode4 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, std::nullopt, "some_key");
+        UNIT_ASSERT_EQUAL(postReturnCode4, HTTP_OK);
+
+        // checking that write with partition chooser without key is successfull
+        auto postReturnCode5 = PostPutRecord(httpClient, VALID_TOKEN, "/Root", topicPath, message, std::nullopt);
+        UNIT_ASSERT_EQUAL(postReturnCode5, HTTP_OK);
+
+        NYdb::NTopic::TReadSessionSettings rSSettings{.ConsumerName_ = consumerName};
+        rSSettings.AppendTopics({topicPath});
+        auto readSession = topicClient.CreateReadSession(rSSettings);
+        std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage> messages = GetMessagesCount(readSession);
+        ui64 messageCount = static_cast<ui64>(messages.size());
+        Cerr << "Total messages: " << messageCount << Endl;
+        UNIT_ASSERT_EQUAL(messageCount, 3);
+        for (size_t i = 0; i < messages.size(); i++) {
+            auto& messageItem = messages[i];
+            Cerr << "Message partition Id: " << messageItem.GetPartitionSession()->GetPartitionId() << Endl;
+            auto metaFields = messageItem.GetMessageMeta()->Fields;
+            for (size_t j = 0; j < metaFields.size(); j++) {
+                const auto& [key, value] = metaFields[j];
+                if (j == 0) {
+                    UNIT_ASSERT_EQUAL(key, "grey");
+                    UNIT_ASSERT_EQUAL(value, "bird");
+                } else if (j == 1) {
+                    UNIT_ASSERT_EQUAL(key, "brown");
+                    UNIT_ASSERT_EQUAL(value, "dog");
+                } else {
+                    UNIT_ASSERT_EQUAL(key, "__key");
+                    UNIT_ASSERT_EQUAL(value, "some_key");
+                }
+            }
+        }
     }
 }

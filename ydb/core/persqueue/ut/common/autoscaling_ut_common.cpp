@@ -100,18 +100,11 @@ TTopicSdkTestSetup CreateSetup(NActors::NLog::EPriority priority) {
     ff.SetEnableTopicAutopartitioningForCDC(true);
     ff.SetEnableTopicAutopartitioningForReplication(true);
 
-
-    TPortManager tp;
-    ui16 monPort = tp.GetPort(8765);
-    // ui16 grpcPort = tp.GetPort(2135);
-
     auto settings = TTopicSdkTestSetup::MakeServerSettings();
     settings.SetFeatureFlags(ff);
-    settings.SetMonitoringPortOffset(monPort, true);
 
     auto setup = TTopicSdkTestSetup("TopicSplitMerge", settings, false);
-    // auto grpcSettings = NYdbGrpc::TServerOptions().SetHost("[::1]").SetPort(grpcPort);
-    // setup.GetServer().EnableGRpc(grpcSettings);
+    
     setup.GetRuntime().SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, priority);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PERSQUEUE, priority);
     setup.GetRuntime().SetLogPriority(NKikimrServices::PQ_PARTITION_CHOOSER, priority);

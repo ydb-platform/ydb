@@ -90,8 +90,7 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
 
         for (const auto& stat : taskStats.MkqlStats) {
             if (!StatsLevelCollectProfile(level) &&
-                "MultiHop_EarlyThrownEventsCount" != stat.Key.GetName() &&
-                "MultiHop_LateThrownEventsCount"  != stat.Key.GetName()) {
+                !(stat.Value != 0 && stat.Key.GetName().starts_with("MultiHop_"sv))) {
                 continue;
             }
             auto* s = protoTask->MutableMkqlStats()->Add();

@@ -105,6 +105,11 @@ std::vector<NKikimr::TSystemThreadsMonitor::TSystemThreadPoolInfo> NKikimr::TSys
                 info.States.emplace_back(c, states[c]);
             }
         }
+        // /home/maxim-yurchuk/ydb/ydb/core/util/cpuinfo.cpp:108:32: runtime error: -nan is outside the range of representable values of type 'unsigned int'
+        if (std::isnan(passedSeconds) || passedSeconds == 0)
+        {
+            passedSeconds = 1;
+        }
         info.MajorPageFaults = double(majorPageFaults) / passedSeconds;
         info.MinorPageFaults = double(minorPageFaults) / passedSeconds;
         info.SystemUsage = double(systemTime) / ticks / info.Threads;

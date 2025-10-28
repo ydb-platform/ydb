@@ -170,6 +170,8 @@ runs:
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
 
+        export UBSAN_OPTIONS=suppressions=$(realpath ydb/tests/supp/ubsan_default.txt)
+
         case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")
@@ -182,7 +184,7 @@ runs:
             ;;
           release-asan)
             params+=(
-              --build "release" --sanitize="address"
+              --build "release" --sanitize="undefined"
             )
             if [ -z $TEST_RETRY_COUNT ]; then
               TEST_RETRY_COUNT=1

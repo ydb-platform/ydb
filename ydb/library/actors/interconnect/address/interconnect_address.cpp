@@ -19,21 +19,21 @@
 #endif
 
 namespace NInterconnect {
-    TAddress::TAddress() {
+    TAddress::TAddress() noexcept {
         memset(&Addr, 0, sizeof(Addr));
     }
 
-    TAddress::TAddress(NAddr::IRemoteAddr& addr) {
+    TAddress::TAddress(NAddr::IRemoteAddr& addr) noexcept {
         socklen_t len = addr.Len();
         Y_ABORT_UNLESS(len <= sizeof(Addr));
         memcpy(&Addr.Generic, addr.Addr(), len);
     }
 
-    int TAddress::GetFamily() const {
+    int TAddress::GetFamily() const noexcept {
         return Addr.Generic.sa_family;
     }
 
-    socklen_t TAddress::Size() const {
+    socklen_t TAddress::Size() const noexcept {
         switch (Addr.Generic.sa_family) {
             case AF_INET6:
                 return sizeof(sockaddr_in6);
@@ -44,15 +44,15 @@ namespace NInterconnect {
         }
     }
 
-    sockaddr* TAddress::SockAddr() {
+    sockaddr* TAddress::SockAddr() noexcept {
         return &Addr.Generic;
     }
 
-    const sockaddr* TAddress::SockAddr() const {
+    const sockaddr* TAddress::SockAddr() const noexcept {
         return &Addr.Generic;
     }
 
-    ui16 TAddress::GetPort() const {
+    ui16 TAddress::GetPort() const noexcept {
         switch (Addr.Generic.sa_family) {
             case AF_INET6:
                 return ntohs(Addr.Ipv6.sin6_port);
@@ -67,7 +67,7 @@ namespace NInterconnect {
         return GetAddress() + ":" + ::ToString(GetPort());
     }
 
-    TAddress::TAddress(const char* addr, ui16 port) {
+    TAddress::TAddress(const char* addr, ui16 port) noexcept {
         memset(&Addr, 0, sizeof(Addr));
         if (inet_pton(Addr.Ipv6.sin6_family = AF_INET6, addr, &Addr.Ipv6.sin6_addr) > 0) {
             Addr.Ipv6.sin6_port = htons(port);
@@ -76,17 +76,17 @@ namespace NInterconnect {
         }
     }
 
-    TAddress::TAddress(const TString& addr, ui16 port)
+    TAddress::TAddress(const TString& addr, ui16 port) noexcept
         : TAddress(addr.data(), port)
     {}
 
-    TAddress::TAddress(in_addr addr, ui16 port) {
+    TAddress::TAddress(in_addr addr, ui16 port) noexcept {
         Addr.Ipv4.sin_family = AF_INET;
         Addr.Ipv4.sin_port = htons(port);
         Addr.Ipv4.sin_addr = addr;
     }
 
-    TAddress::TAddress(in6_addr addr, ui16 port) {
+    TAddress::TAddress(in6_addr addr, ui16 port) noexcept {
         Addr.Ipv6.sin6_family = AF_INET6;
         Addr.Ipv6.sin6_port = htons(port);
         Addr.Ipv6.sin6_addr = addr;

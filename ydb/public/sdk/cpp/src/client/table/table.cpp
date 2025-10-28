@@ -481,11 +481,11 @@ public:
     }
 
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const TFulltextIndexSettings& indexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {TGlobalIndexSettings()}, indexSettings));
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, {}, {}, indexSettings));
     }
 
     void AddFulltextIndex(const std::string& indexName, EIndexType type, const std::vector<std::string>& indexColumns, const std::vector<std::string>& dataColumns, const TFulltextIndexSettings& indexSettings) {
-        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {TGlobalIndexSettings()}, indexSettings));
+        Indexes_.emplace_back(TIndexDescription(indexName, type, indexColumns, dataColumns, {}, indexSettings));
     }
 
     void AddChangefeed(const std::string& name, EChangefeedMode mode, EChangefeedFormat format) {
@@ -2356,7 +2356,7 @@ TIndexDescription::TIndexDescription(
     const std::vector<std::string>& indexColumns,
     const std::vector<std::string>& dataColumns,
     const std::vector<TGlobalIndexSettings>& globalIndexSettings,
-    const std::variant<std::monostate, TKMeansTreeSettings>& specializedIndexSettings
+    const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& specializedIndexSettings
 )   : IndexName_(name)
     , IndexType_(type)
     , IndexColumns_(indexColumns)
@@ -2397,7 +2397,7 @@ const std::vector<std::string>& TIndexDescription::GetDataColumns() const {
     return DataColumns_;
 }
 
-const std::variant<std::monostate, TKMeansTreeSettings>& TIndexDescription::GetIndexSettings() const {
+const std::variant<std::monostate, TKMeansTreeSettings, TFulltextIndexSettings>& TIndexDescription::GetIndexSettings() const {
     return SpecializedIndexSettings_;
 }
 
@@ -2570,7 +2570,10 @@ void TKMeansTreeSettings::Out(IOutputStream& o) const {
     o << *this;
 }
 
-TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::FromProto(const Ydb::Table::FulltextIndexSettings::Analyzers& proto) {
+TFulltextIndexSettings::TAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::Analyzers& proto) {
+    using ETokenizer = TFulltextIndexSettings::ETokenizer;
+    using TAnalyzers = TFulltextIndexSettings::TAnalyzers;
+
     auto convertTokenizer = [&] {
         switch (proto.tokenizer()) {
         case Ydb::Table::FulltextIndexSettings::WHITESPACE:
@@ -2621,9 +2624,11 @@ TFulltextIndexSettings::TAnalyzers TFulltextIndexSettings::TAnalyzers::FromProto
     return result;
 }
 
-void TFulltextIndexSettings::TAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSettings::Analyzers& proto) const {
+Ydb::Table::FulltextIndexSettings::Analyzers ToProto(const TFulltextIndexSettings::TAnalyzers& analyzers) {
+    using ETokenizer = TFulltextIndexSettings::ETokenizer;
+    
     auto convertTokenizer = [&] {
-        switch (Tokenizer) {
+        switch (analyzers.Tokenizer) {
         case ETokenizer::Whitespace:
             return Ydb::Table::FulltextIndexSettings::WHITESPACE;
         case ETokenizer::Standard:
@@ -2636,62 +2641,63 @@ void TFulltextIndexSettings::TAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSe
         return Ydb::Table::FulltextIndexSettings::TOKENIZER_UNSPECIFIED;
     };
 
+    Ydb::Table::FulltextIndexSettings::Analyzers proto;
     proto.set_tokenizer(convertTokenizer());
     
-    if (Language.has_value()) {
-        proto.set_language(*Language);
+    if (analyzers.Language.has_value()) {
+        proto.set_language(*analyzers.Language);
     }
-    if (UseFilterLowercase.has_value()) {
-        proto.set_use_filter_lowercase(*UseFilterLowercase);
+    if (analyzers.UseFilterLowercase.has_value()) {
+        proto.set_use_filter_lowercase(*analyzers.UseFilterLowercase);
     }
-    if (UseFilterStopwords.has_value()) {
-        proto.set_use_filter_stopwords(*UseFilterStopwords);
+    if (analyzers.UseFilterStopwords.has_value()) {
+        proto.set_use_filter_stopwords(*analyzers.UseFilterStopwords);
     }
-    if (UseFilterNgram.has_value()) {
-        proto.set_use_filter_ngram(*UseFilterNgram);
+    if (analyzers.UseFilterNgram.has_value()) {
+        proto.set_use_filter_ngram(*analyzers.UseFilterNgram);
     }
-    if (UseFilterEdgeNgram.has_value()) {
-        proto.set_use_filter_edge_ngram(*UseFilterEdgeNgram);
+    if (analyzers.UseFilterEdgeNgram.has_value()) {
+        proto.set_use_filter_edge_ngram(*analyzers.UseFilterEdgeNgram);
     }
-    if (FilterNgramMinLength.has_value()) {
-        proto.set_filter_ngram_min_length(*FilterNgramMinLength);
+    if (analyzers.FilterNgramMinLength.has_value()) {
+        proto.set_filter_ngram_min_length(*analyzers.FilterNgramMinLength);
     }
-    if (FilterNgramMaxLength.has_value()) {
-        proto.set_filter_ngram_max_length(*FilterNgramMaxLength);
+    if (analyzers.FilterNgramMaxLength.has_value()) {
+        proto.set_filter_ngram_max_length(*analyzers.FilterNgramMaxLength);
     }
-    if (UseFilterLength.has_value()) {
-        proto.set_use_filter_length(*UseFilterLength);
+    if (analyzers.UseFilterLength.has_value()) {
+        proto.set_use_filter_length(*analyzers.UseFilterLength);
     }
-    if (FilterLengthMin.has_value()) {
-        proto.set_filter_length_min(*FilterLengthMin);
+    if (analyzers.FilterLengthMin.has_value()) {
+        proto.set_filter_length_min(*analyzers.FilterLengthMin);
     }
-    if (FilterLengthMax.has_value()) {
-        proto.set_filter_length_max(*FilterLengthMax);
+    if (analyzers.FilterLengthMax.has_value()) {
+        proto.set_filter_length_max(*analyzers.FilterLengthMax);
     }
+
+    return proto;
 }
 
-void TFulltextIndexSettings::TAnalyzers::Out(IOutputStream& o) const {
-    o << *this;
-}
-
-TFulltextIndexSettings::TColumnAnalyzers TFulltextIndexSettings::TColumnAnalyzers::FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
-    TColumnAnalyzers result;
+TFulltextIndexSettings::TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) {
+    TFulltextIndexSettings::TColumnAnalyzers result;
     if (proto.has_column()) {
         result.Column = proto.column();
     }
-    result.Analyzers = TAnalyzers::FromProto(proto.analyzers());
+    if (proto.has_analyzers()) {
+        result.Analyzers = FromProto(proto.analyzers());
+    }
     return result;
 }
 
-void TFulltextIndexSettings::TColumnAnalyzers::SerializeTo(Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) const {
-    if (Column.has_value()) {
-        proto.set_column(*Column);
+Ydb::Table::FulltextIndexSettings::ColumnAnalyzers ToProto(const TFulltextIndexSettings::TColumnAnalyzers& columnAnalyzers) {
+    Ydb::Table::FulltextIndexSettings::ColumnAnalyzers proto;
+    if (columnAnalyzers.Column.has_value()) {
+        proto.set_column(*columnAnalyzers.Column);
     }
-    Analyzers.SerializeTo(*proto.mutable_analyzers());
-}
-
-void TFulltextIndexSettings::TColumnAnalyzers::Out(IOutputStream& o) const {
-    o << *this;
+    if (columnAnalyzers.Analyzers.has_value()) {
+        *proto.mutable_analyzers() = ToProto(*columnAnalyzers.Analyzers);
+    }
+    return proto;
 }
 
 TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::FulltextIndexSettings& proto) {
@@ -2706,11 +2712,10 @@ TFulltextIndexSettings TFulltextIndexSettings::FromProto(const Ydb::Table::Fullt
 
     TFulltextIndexSettings result;
     result.Layout = convertLayout();
-    
     for (const auto& columnProto : proto.columns()) {
-        result.Columns.push_back(TColumnAnalyzers::FromProto(columnProto));
+        result.Columns.push_back(NTable::FromProto(columnProto));
     }
-    
+
     return result;
 }
 
@@ -2728,7 +2733,7 @@ void TFulltextIndexSettings::SerializeTo(Ydb::Table::FulltextIndexSettings& sett
     settings.set_layout(convertLayout());
     
     for (const auto& column : Columns) {
-        column.SerializeTo(*settings.add_columns());
+        *settings.add_columns() = ToProto(column);
     }
 }
 

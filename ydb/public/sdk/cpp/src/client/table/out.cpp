@@ -88,10 +88,10 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, valu
     stream << "{ ";
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Flat:
-            stream << "Flat";
+            stream << "flat";
             break;
         case NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified:
-            stream << "Unspecified";
+            stream << "unspecified";
             break;
     }
     stream << " }";
@@ -101,16 +101,16 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, v
     stream << "{ ";
     switch (value) {
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Whitespace:
-            stream << "Whitespace";
+            stream << "whitespace";
             break;
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Standard:
-            stream << "Standard";
+            stream << "standard";
             break;
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Keyword:
-            stream << "Keyword";
+            stream << "keyword";
             break;
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified:
-            stream << "Unspecified";
+            stream << "unspecified";
             break;
     }
     stream << " }";
@@ -152,10 +152,7 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, v
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TColumnAnalyzers, stream, value) {
-    stream << "{ ";
-    if (value.Column.has_value()) {
-        stream << "column: " << *value.Column << ", ";
-    }
+    stream << "{ column: " << value.Column << ", ";
     stream << "analyzers: " << value.Analyzers << " }";
 }
 

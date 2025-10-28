@@ -322,26 +322,20 @@ public:
         std::optional<bool> UseFilterLength;
         std::optional<int32_t> FilterLengthMin;
         std::optional<int32_t> FilterLengthMax;
-
-        static TAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::Analyzers& proto);
-        void SerializeTo(Ydb::Table::FulltextIndexSettings::Analyzers& proto) const;
-        void Out(IOutputStream& o) const;
     };
 
     struct TColumnAnalyzers {
         std::optional<std::string> Column;
-        TAnalyzers Analyzers;
-
-        static TColumnAnalyzers FromProto(const Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto);
-        void SerializeTo(Ydb::Table::FulltextIndexSettings::ColumnAnalyzers& proto) const;
-        void Out(IOutputStream& o) const;
+        std::optional<TAnalyzers> Analyzers;
     };
 
     ELayout Layout = ELayout::Unspecified;
     std::vector<TColumnAnalyzers> Columns;
 
     static TFulltextIndexSettings FromProto(const Ydb::Table::FulltextIndexSettings& proto);
+
     void SerializeTo(Ydb::Table::FulltextIndexSettings& settings) const;
+
     void Out(IOutputStream& o) const;
 };
 

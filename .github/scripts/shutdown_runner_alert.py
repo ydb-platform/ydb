@@ -58,6 +58,8 @@ def check_logs_for_shutdown_signal(owner, repo, run_id, token):
     fail = False
     try:
         for job in all_jobs:
+            if job['conclusion'] != 'cancelled':
+                continue
             url = f"https://api.github.com/repos/{owner}/{repo}/actions/jobs/{job['id']}/logs"
             headers = {
                 'Accept': 'application/vnd.github.v3+json',

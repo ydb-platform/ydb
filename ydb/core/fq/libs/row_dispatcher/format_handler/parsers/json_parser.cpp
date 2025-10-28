@@ -460,7 +460,7 @@ protected:
     } \
     ++skipped; \
     ClearRowBuffer(outputRowId); \
-    if (Y_LIKELY(outputRowId + skipped < Buffer.MessageOffsets.size())) { \
+    if (outputRowId + skipped < Buffer.MessageOffsets.size()) { \
         values = begin + Buffer.MessageOffsets[outputRowId + skipped]; \
         size -= (values - begin); \
         goto retry; \

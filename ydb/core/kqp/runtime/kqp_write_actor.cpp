@@ -161,9 +161,10 @@ namespace {
             case NKikimr::NKqp::IKqpTransactionManager::EXECUTING:
             case NKikimr::NKqp::IKqpTransactionManager::PREPARED:
                 break;
-            case NKikimr::NKqp::IKqpTransactionManager::PREPARING:
             case NKikimr::NKqp::IKqpTransactionManager::FINISHED:
             case NKikimr::NKqp::IKqpTransactionManager::ERROR:
+                return std::nullopt;
+            case NKikimr::NKqp::IKqpTransactionManager::PREPARING:
             case NKikimr::NKqp::IKqpTransactionManager::PROCESSING:
                 YQL_ENSURE(false);
         }

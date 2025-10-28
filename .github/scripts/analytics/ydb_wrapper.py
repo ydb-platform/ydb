@@ -352,7 +352,7 @@ class YDBWrapper:
         try:
             with self.get_driver() as driver:
                 if operation_type == "scan_query":
-                    tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
+                    tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
                     table_client = ydb.TableClient(driver, tc_settings)
                     scan_query = ydb.ScanQuery(query, {})
                     it = table_client.scan_query(scan_query)

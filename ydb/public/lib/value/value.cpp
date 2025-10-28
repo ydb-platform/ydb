@@ -35,7 +35,17 @@ bool TValue::HaveValue() const {
 bool TValue::IsNull() const {
     if (&Value == &Null)
         return true;
-    return Value.ByteSize() == 0;
+
+    bool emptyPayload = true;
+    emptyPayload &= (Value.value_value_case() == Value.VALUE_VALUE_NOT_SET);
+    emptyPayload &= Value.GetList().empty();
+    emptyPayload &= Value.GetTuple().empty();
+    emptyPayload &= Value.GetStruct().empty();
+    emptyPayload &= Value.GetDict().empty();
+    emptyPayload &= !Value.HasHi128();
+    emptyPayload &= !Value.HasVariantIndex();
+    emptyPayload &= Value.unknown_fields().empty();
+    return emptyPayload;
 }
 
 TValue TValue::operator [](const char* name) const {
@@ -453,7 +463,7 @@ TString TValue::GetDataText() const {
     case NScheme::NTypeIds::Datetime64:
     case NScheme::NTypeIds::Timestamp64:
     case NScheme::NTypeIds::Interval64:
-        return ToString(Value.GetInt64());        
+        return ToString(Value.GetInt64());
     case NScheme::NTypeIds::JsonDocument:
         return "\"<JsonDocument>\"";
     case NScheme::NTypeIds::Uuid:

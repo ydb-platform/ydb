@@ -17,6 +17,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         - Start query execution and receive TEvTxRequest.
         - When sending TEvAddQuery from executer to scheduler, immediately receive TEvAbortExecution.
         - Imitate receiving TEvQueryResponse before receiving self TEvPoison by executer.
+        - Check that scheduler got TEvRemoveQuery.
         - Do not crash or get undefined behavior.
      */
     Y_UNIT_TEST(TestSuddenAbortAfterReady) {
@@ -27,27 +28,18 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         auto db = kikimr.RunCall([&] { return kikimr.GetTableClient(); } );
         auto session = kikimr.RunCall([&] { return db.CreateSession().GetValueSync().GetSession(); } );
 
-        auto prepareResult = kikimr.RunCall([&] { return session.PrepareDataQuery(Q_(R"(
-                SELECT COUNT(*) FROM `/Root/TwoShard`;
-            )")).GetValueSync();
-        });
-        UNIT_ASSERT_VALUES_EQUAL_C(prepareResult.GetStatus(), EStatus::SUCCESS, prepareResult.GetIssues().ToString());
-        auto dataQuery = prepareResult.GetQuery();
-
         TActorId executerId, targetId;
+        ui8 queries = 0;
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-            {
-                TStringStream ss;
-                ss << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl;
-                Cerr << ss.Str();
-            }
+            Cerr << (TStringBuilder() << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl);
 
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxRequest::EventType) {
                 targetId = ActorIdFromProto(ev->Get<TEvKqpExecuter::TEvTxRequest>()->Record.GetTarget());
             }
 
             if (ev->GetTypeRewrite() == NScheduler::TEvAddQuery::EventType) {
+                ++queries;
                 executerId = ev->Sender;
                 auto* abortExecution = new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues());
                 runtime.Send(new IEventHandle(ev->Sender, targetId, abortExecution));
@@ -60,11 +52,16 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        auto future = kikimr.RunInThreadPool([&] { return dataQuery.Execute(TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings()).GetValueSync(); });
+        auto future = kikimr.RunInThreadPool([&] {
+            return session.ExecuteDataQuery("SELECT COUNT(*) FROM `/Root/TwoShard`;", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
 
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType;
+            if (ev.GetTypeRewrite() == NScheduler::TEvRemoveQuery::EventType) {
+                --queries;
+            }
+            return (ev.GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType || ev.GetTypeRewrite() == NScheduler::TEvRemoveQuery::EventType) && !queries;
         });
         runtime.DispatchEvents(opts);
 
@@ -141,4 +138,4 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
     */
 }
 
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

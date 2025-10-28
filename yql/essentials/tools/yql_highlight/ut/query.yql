@@ -25,6 +25,10 @@ multiline with double at: @@@@
 text@@;
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
 
+SELECT 'singleline
+but \'
+multiline';
+
 INSERT INTO @tmp WITH TRUNCATE;
 
 CREATE TABLE t (id Uint64 PRIMARY KEY (id)) WITH (

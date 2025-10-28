@@ -179,13 +179,14 @@ template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
+        .RangePatterns = {
+            {R"(')", R"(')", R"re(\\.)re"},
+            {R"(")", R"(")", R"re(\\.)re"},
+            {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
+        },
         .Patterns = {{s.Get("STRING_VALUE")}},
         .PatternsANSI = TVector<TRegexPattern>{
             TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
-        },
-        .RangePattern = TRangePattern{
-            .Begin = R"(@@)",
-            .End = R"(@@)",
         },
         .IsPlain = false,
     };
@@ -195,12 +196,9 @@ template <>
 TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
     return {
         .Kind = EUnitKind::Comment,
+        .RangePatterns = {{R"(/*)", R"(*/)"}},
         .Patterns = {{s.Get("COMMENT")}},
         .PatternsANSI = Nothing(),
-        .RangePattern = TRangePattern{
-            .Begin = R"(/*)",
-            .End = R"(*/)",
-        },
         .IsPlain = false,
     };
 }

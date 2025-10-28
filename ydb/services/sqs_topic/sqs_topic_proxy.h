@@ -1,6 +1,5 @@
 #pragma once
 
-#include <ydb/public/api/grpc/draft/ydb_sqs_topic_v1.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_ymq_v1.pb.h>
 
 #include <ydb/core/client/server/grpc_base.h>

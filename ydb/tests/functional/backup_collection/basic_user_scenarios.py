@@ -2645,7 +2645,7 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
         self._remove_tables([full_orders, full_products] + extras[4:])
 
         # Restore to full backup 1
-        col_full1 = f"restore_full1_{int(time.time())}"
+        col_full1 = f"restore_full1_{uuid.uuid4().hex[:8]}"
         ts_full1 = self.extract_ts(snap_full1)
         self.import_exported_up_to_timestamp(col_full1, ts_full1, export_dir, full_orders, full_products)
         rest_full1 = self._execute_yql(f"RESTORE `{col_full1}`;")
@@ -2658,7 +2658,7 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
             assert 'show_grants' in (restored_acl1 or {}) and acl_stage1_t_orders['show_grants'] in restored_acl1['show_grants'], "Verify ACLs in backup (1) failed"
 
         # Restore to incremental 1 (full1 + inc1)
-        col_inc1 = f"restore_inc1_{int(time.time())}"
+        col_inc1 = f"restore_inc1_{uuid.uuid4().hex[:8]}"
         ts_inc1 = self.extract_ts(snap_inc1)
         self.import_exported_up_to_timestamp(col_inc1, ts_inc1, export_dir, full_orders, full_products)
         self._remove_tables([full_orders, full_products])
@@ -2679,7 +2679,7 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
             assert 'show_grants' in (restored_acl2 or {}) and acl_stage2_t_orders['show_grants'] in restored_acl2['show_grants'], "Verify ACLs in backup (1) failed"
 
         # Restore to incremental 2 (full1 + inc1 + inc2)
-        col_inc2 = f"restore_inc2_{int(time.time())}"
+        col_inc2 = f"restore_inc2_{uuid.uuid4().hex[:8]}"
         ts_inc2 = self.extract_ts(snap_inc2)
         self.import_exported_up_to_timestamp(col_inc2, ts_inc2, export_dir, full_orders, full_products)
         self._remove_tables([full_orders, full_products])
@@ -2703,7 +2703,7 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
         self._remove_tables([full_orders, full_products])
 
         # Restore to full backup 2 and verify
-        col_full2 = f"restore_full2_{int(time.time())}"
+        col_full2 = f"restore_full2_{uuid.uuid4().hex[:8]}"
         ts_full2 = self.extract_ts(snap_full2)
         # import all snapshots up to full2
         self.import_exported_up_to_timestamp(col_full2, ts_full2, export_dir, full_orders, full_products)
@@ -2723,7 +2723,7 @@ class TestFullCycleLocalBackupRestoreWIncrComplSchemaChange(TestFullCycleLocalBa
                 chosen_inc_after_full2 = cand
                 break
 
-        col_post_full2 = f"restore_postfull2_{int(time.time())}"
+        col_post_full2 = f"restore_postfull2_{uuid.uuid4().hex[:8]}"
         idx_chosen = created_snapshots.index(chosen_inc_after_full2)
         snaps_for_post = created_snapshots[: idx_chosen + 1]
         # import required snapshots

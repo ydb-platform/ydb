@@ -453,7 +453,6 @@ public:
     }
 
 protected:
-
     TStatus DoParsing() override {
         Y_ENSURE(Buffer.IsReady(), "Nothing to parse");
         Y_ENSURE(Buffer.NumberValues <= MaxNumberRows, "Too many values to parse");

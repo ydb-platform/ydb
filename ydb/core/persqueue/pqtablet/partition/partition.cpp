@@ -2299,11 +2299,17 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
         return;
     }
 
+    LOG_D("Process user action and tx events");
     ProcessUserActionAndTxEvents();
+    DumpTheSizeOfInternalQueues();
     if (!UserActionAndTxPendingWrite.empty()) {
+        LOG_D("Waiting for the batch to finish");
         return;
     }
+
+    LOG_D("Process user action and tx pending commits");
     ProcessUserActionAndTxPendingCommits();
+    DumpTheSizeOfInternalQueues();
 
     if (CurrentBatchSize > 0) {
         LOG_D("Batch completed (" << CurrentBatchSize << ")");
@@ -2311,10 +2317,12 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
     }
     CurrentBatchSize = 0;
 
-    if (UserActionAndTxPendingWrite.empty()) {
-        return;
-    }
+    //if (UserActionAndTxPendingWrite.empty()) {
+    //    LOG_D("Waiting for the commits to arrive");
+    //    return;
+    //}
 
+    LOG_D("Try persist");
     RunPersist();
 }
 
@@ -2420,6 +2428,13 @@ void TPartition::ProcessUserActionAndTxEvents()
                 return;
         }
     }
+}
+
+void TPartition::DumpTheSizeOfInternalQueues() const
+{
+    LOG_D("Events: " << UserActionAndTransactionEvents.size() <<
+          ", PendingCommits: " << UserActionAndTxPendingCommit.size() <<
+          ", PendingWrites: " << UserActionAndTxPendingWrite.size());
 }
 
 auto TPartition::ProcessUserActionAndTxEvent(TSimpleSharedPtr<TEvPQ::TEvSetClientInfo>& event,

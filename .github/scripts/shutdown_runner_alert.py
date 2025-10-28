@@ -6,6 +6,10 @@ import argparse
 from telegram.alert_queued_jobs import send_telegram_message, get_alert_logins
 
 
+def str_to_date(str):
+    return datetime.datetime.strptime(str, '%Y-%m-%dT%H:%M:%SZ')
+
+
 def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
     """Get recent workflow runs filtered by status and event type."""
     url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs"
@@ -16,7 +20,7 @@ def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
             'status': 'cancelled',
             'event': 'pull_request_target',
             'per_page': 25,
-            'page': len(workflow_runs) // page_size + 1
+            'page': len(workflow_runs) // page_size + 15
         }
         headers = {
             'Accept': 'application/vnd.github.v3+json',
@@ -25,9 +29,10 @@ def get_workflows_from_ts(owner, repo, token, ts, max_runs=50):
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
         workflow_runs += response.json()['workflow_runs']
-        if workflow_runs[-1]['created_at'] > ts:
+
+        if str_to_date(workflow_runs[-1]['created_at']) < ts:
             break
-    return workflow_runs
+    return list(filter(lambda run: str_to_date(run['created_at']) >= ts, workflow_runs))
 
 
 def get_workflow_jobs(owner, repo, run_id, token):
@@ -45,7 +50,6 @@ def get_workflow_jobs(owner, repo, run_id, token):
 def check_logs_for_shutdown_signal(owner, repo, run_id, token):
     """Check workflow logs for the specific shutdown signal error."""
     all_jobs = get_workflow_jobs(owner, repo, run_id, token)
-    print(len(all_jobs))
     fail = False
     try:
         for job in all_jobs:
@@ -80,8 +84,8 @@ def main():
     parser.add_argument('--owner', help='Repository owner')
     parser.add_argument('--repo', help='Repository name')
     parser.add_argument('--token', help='Github token')
-    parser.add_argument('--hours-delta', help='Number of hours to analyze from current timestamp', default=12)
-    parser.add_argument('--max-rows', help='Max number of workflow runs to analyze', default=100)
+    parser.add_argument('--hours-delta', help='Number of hours to analyze from current timestamp', default=12, type=int)
+    parser.add_argument('--max-rows', help='Max number of workflow runs to analyze', default=100, type=int)
     args = parser.parse_args()
 
     # Get GitHub token from environment
@@ -103,13 +107,12 @@ def main():
     try:
         # Get recent workflow runs
         current_date = datetime.datetime.now()
-        workflows = get_workflows_from_ts(owner, repo, token, current_date.add(hours=-args.hours_delta), max_runs=args.max_rows)
+        workflows = get_workflows_from_ts(owner, repo, token, current_date - datetime.timedelta(hours=args.hours_delta), max_runs=args.max_rows)
         print(f'Got {len(workflows)} workflows created from the last {args.hours_delta} hours')
         recent_workflows = sorted(workflows, key=lambda x: x['created_at'], reverse=True)
 
         errors = []
         for workflow in recent_workflows:
-            print(workflow['created_at'])
             if check_logs_for_shutdown_signal(owner, repo, workflow['id'], token):
                 print(f"\n🔴 SHUTDOWN ERROR - Workflow #{workflow['id']}")
                 print(f"Created: {workflow['created_at']}")
@@ -118,8 +121,9 @@ def main():
                 errors.append({
                     "workflow_id": workflow['id'],
                     "workflow_name": workflow['name'],
+                    "created_at": str_to_date(workflow['created_at']).strftime('%Y-%m-%d %H:%M'),
                     "workflow_url": workflow['html_url'],
-                    "pr_url": workflow['pull_requests'][0]['url'] if workflow['pull_requests'] else 'N/A'
+                    "pr_url": workflow['pull_requests'][0]['url'] if workflow['pull_requests'] else None
                 })
 
         if len(errors) > 0:
@@ -127,15 +131,18 @@ def main():
             chat_id = args.channel or args.chat_id or os.getenv('TELEGRAM_CHAT_ID')
             thread_id = args.thread_id or os.getenv('TELEGRAM_THREAD_ID')
 
-            message = "🚨 *RUNNER DIED DURING RUN*"
+            message = "🚨 *RUNNER DIED DURING RUN*\n"
             for error in errors:
                 message += f"""
-Created: {error['created_at']}
-Workflow {workflow['name']} [#{error['workflow_id']}]({error['workflow_url']})
-Linked PR: {error['pr_url']}"""
-            message += f"""
+• Workflow *{workflow['name']}* [#{error['workflow_id']}]({error['workflow_url']})
+  Created at: {error['created_at']}"""
+                if error['pr_url']:
+                    message += f"""
+  Linked PR: {error['pr_url']}"""
+                message += "\n"
 
-CC {get_alert_logins()}"""
+            message += f"""
+  CC {get_alert_logins()}"""
 
             if chat_id and not chat_id.startswith('-') and len(chat_id) >= 10:
                 # Add -100 prefix for supergroup
@@ -150,6 +157,7 @@ CC {get_alert_logins()}"""
 
     except Exception as e:
         print(f"Error: {str(e)}")
+        raise e
 
 
 if __name__ == "__main__":

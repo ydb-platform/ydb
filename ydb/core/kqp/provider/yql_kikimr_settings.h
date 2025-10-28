@@ -224,6 +224,8 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool EnableSimpleProgramsSinglePartitionOptimizationBroadPrograms = true;
     bool EnableDqHashCombineByDefault = true;
 
+    bool Antlr4ParserIsAmbiguityError = false;
+
     ui32 LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
 

@@ -151,6 +151,15 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetIsAmbiguityError(bool isAmbiguityError) {
+        IsAmbiguityError = isAmbiguityError;
+        return *this;
+    }
+
+    bool GetIsAmbiguityError() const {
+        return IsAmbiguityError;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     const ui16 KqpYqlSyntaxVersion;
@@ -170,6 +179,7 @@ private:
     TMaybe<ui16> SqlVersion = {};
     NYql::TLangVersion LangVer = NYql::MinLangVersion;
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
+    bool IsAmbiguityError = false;
 };
 
 NSQLTranslation::EBindingsMode RemapBindingsMode(NKikimrConfig::TTableServiceConfig::EBindingsMode mode);

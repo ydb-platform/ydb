@@ -102,7 +102,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     const bool isSink = NeedSinks(table, kqpCtx);
 
-    auto indexes = BuildEffectedIndexTables(table, insert.Pos(), ctx, nullptr);
+    auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {

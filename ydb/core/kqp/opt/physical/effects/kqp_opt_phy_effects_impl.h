@@ -12,7 +12,7 @@ using TSecondaryIndexes = TVector<std::pair<
     NYql::TExprNode::TPtr,
     const NYql::TIndexDescription*>>;
 
-TSecondaryIndexes BuildEffectedIndexTables(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
+TSecondaryIndexes BuildAffectedIndexTables(const NYql::TKikimrTableDescription& table, NYql::TPositionHandle pos,
     NYql::TExprContext& ctx, const THashSet<TStringBuf>* filter = nullptr);
 
 struct TCondenseInputResult {

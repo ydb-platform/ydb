@@ -610,7 +610,7 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
     }
 
     auto filter = (mode == TKqpPhyUpsertIndexMode::UpdateOn) ? &inputColumnsSet : nullptr;
-    const auto indexes = BuildEffectedIndexTables(table, pos, ctx, filter);
+    const auto indexes = BuildAffectedIndexTables(table, pos, ctx, filter);
 
     auto checkedInput = RewriteInputForConstraint(inputRows, inputColumnsSet, columnsWithDefaultsSet, table, indexes, pos, ctx);
 

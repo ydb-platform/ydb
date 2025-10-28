@@ -124,7 +124,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, del.Table().Path());
     const auto& pk = table.Metadata->KeyColumnNames;
 
-    const auto indexes = BuildEffectedIndexTables(table, del.Pos(), ctx);
+    const auto indexes = BuildAffectedIndexTables(table, del.Pos(), ctx);
     YQL_ENSURE(indexes);
 
     // Skip lookup means that the input already has all required columns and we only need to project them

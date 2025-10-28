@@ -75,7 +75,7 @@ TDqPhyPrecompute PrecomputeCondenseInputResult(const TCondenseInputResult& conde
         .Done();
 }
 
-TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildEffectedIndexTables(
+TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildAffectedIndexTables(
     const TKikimrTableDescription& table,
     TPositionHandle pos,
     TExprContext& ctx,
@@ -139,14 +139,14 @@ TVector<std::pair<TExprNode::TPtr, const TIndexDescription*>> BuildEffectedIndex
     return result;
 }
 
-TSecondaryIndexes BuildEffectedIndexTables(const TKikimrTableDescription& table, TPositionHandle pos,
+TSecondaryIndexes BuildAffectedIndexTables(const TKikimrTableDescription& table, TPositionHandle pos,
     TExprContext& ctx, const THashSet<TStringBuf>* filter)
 {
     static auto cb = [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
         return BuildTableMeta(meta, pos, ctx);
     };
 
-    return BuildEffectedIndexTables(table, pos, ctx, filter, cb);
+    return BuildAffectedIndexTables(table, pos, ctx, filter, cb);
 }
 
 TMaybeNode<TDqPhyPrecompute> PrecomputeTableLookupDict(const TDqPhyPrecompute& lookupKeys,

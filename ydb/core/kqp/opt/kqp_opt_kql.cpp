@@ -473,7 +473,7 @@ TExprBase BuildUpdateOnTableWithIndex(const TKiWriteTable& write, const TCoAtomL
     const bool isSink, const TKikimrTableDescription& tableData, TExprContext& ctx)
 {
     if (isSink) {
-        auto indexes = BuildEffectedIndexTables(tableData, write.Pos(), ctx, nullptr,
+        auto indexes = BuildAffectedIndexTables(tableData, write.Pos(), ctx, nullptr,
             [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
                 return BuildTableMeta(meta, pos, ctx);
             });
@@ -695,7 +695,7 @@ TExprBase BuildUpdateTableWithIndex(const TKiUpdateTable& update, const TKikimrT
         updateColumnsList.push_back(TCoAtom(ctx.NewAtom(update.Pos(), column)));
     }
 
-    auto indexes = BuildEffectedIndexTables(tableData, update.Pos(), ctx, nullptr,
+    auto indexes = BuildAffectedIndexTables(tableData, update.Pos(), ctx, nullptr,
         [] (const TKikimrTableMetadata& meta, TPositionHandle pos, TExprContext& ctx) -> TExprBase {
             return BuildTableMeta(meta, pos, ctx);
         });

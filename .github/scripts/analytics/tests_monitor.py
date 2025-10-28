@@ -275,7 +275,7 @@ def main():
             return date_value
 
         # Get last existing day
-        print("Geting date of last collected monitor data")
+        print("Getting date of last collected monitor data")
         query_last_exist_day = f"""
             SELECT MAX(date_window) AS last_exist_day
             FROM `{table_path}`

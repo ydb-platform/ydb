@@ -31,7 +31,7 @@ jobs:
         GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
       run: |
         python .github/scripts/shutdown_runner_alert.py \
-          --chat-id -4792293503 \
+          --chat-id ${{ vars.GH_ALERTS_TG_CHAT }} \
           --token ${{ secrets.GITHUB_TOKEN }} \
           --hours-delta 12 \
           --max-rows 100

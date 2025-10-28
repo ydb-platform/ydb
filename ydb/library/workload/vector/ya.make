@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     vector_command_index.cpp
+    vector_data_generator.cpp
     vector_recall_evaluator.cpp
     vector_sampler.cpp
     vector_sql.cpp

@@ -15,6 +15,7 @@ ENDIF()
 SRCS(
     accumulator_ut.cpp
     block_layout_converter_ut.cpp
+    scalar_layout_converter_ut.cpp
     hash_table_ut.cpp
     packed_tuple_ut.cpp
 )

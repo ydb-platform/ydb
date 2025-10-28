@@ -1093,14 +1093,6 @@ namespace NKikimr::NHttpProxy {
                             NYdb::EStatus(response.operation().status()),
                             NYdb::NAdapters::ToSdkIssues(std::move(issues))
                         );
-                        Ydb::SqsTopic::V1::QueueTags queueTags;
-                        response.operation().metadata().UnpackTo(&queueTags);
-                        for (const auto& [k, v] : queueTags.GetTags()) {
-                            if (!result->QueueTags.Get()) {
-                                result->QueueTags = MakeHolder<THashMap<TString, TString>>();
-                            }
-                            result->QueueTags->emplace(k, v);
-                        }
                         actorSystem->Send(actorId, result.Release());
                     }
                 );

@@ -555,9 +555,6 @@ namespace NYql::NDq {
     {
         auto credentialsProvider = NYql::NDq::CreateGenericCredentialsProvider(
             secureParams.Value(lookupSource.GetTokenName(), TString()),
-            lookupSource.GetToken(),
-            lookupSource.GetServiceAccountId(),
-            lookupSource.GetServiceAccountIdSignature(),
             securedServiceAccountCredentialsFactory);
         auto guard = Guard(*alloc);
         const auto actor = new TGenericLookupActor(

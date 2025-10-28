@@ -5,29 +5,6 @@
 #include <yql/essentials/utils/log/log.h>
 
 namespace NYql::NDq {
-    TGenericCredentialsProvider::TGenericCredentialsProvider(const TString& staticIamToken)
-        : StaticIAMToken_(staticIamToken)
-    {
-    }
-
-    TGenericCredentialsProvider::TGenericCredentialsProvider(
-        const TString& serviceAccountId,
-        const TString& serviceAccountIdSignature,
-        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
-        Y_ENSURE(!serviceAccountId.empty(), "No service account provided");
-        Y_ENSURE(!serviceAccountIdSignature.empty(), "No service account signature provided");
-        Y_ENSURE(credentialsFactory, "CredentialsFactory is not initialized");
-
-        auto structuredTokenJSON =
-            TStructuredTokenBuilder().SetServiceAccountIdAuth(serviceAccountId, serviceAccountIdSignature).ToJson();
-
-        Y_ENSURE(structuredTokenJSON, "empty structured token");
-
-        auto credentialsProviderFactory =
-            CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, structuredTokenJSON, false);
-        CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
-    }
-
     TGenericCredentialsProvider::TGenericCredentialsProvider(
         const TString& structuredTokenJSON,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
@@ -88,18 +65,9 @@ namespace NYql::NDq {
 
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(const TString& structuredTokenJSON,
-                                     /*[[deprecated]]*/ const TString& staticIamToken,
-                                     /*[[deprecated]]*/ const TString& serviceAccountId,
-                                     /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
                                      const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
         if (!structuredTokenJSON.empty()) {
             return std::make_unique<TGenericCredentialsProvider>(structuredTokenJSON, credentialsFactory);
-        }
-        if (!staticIamToken.empty()) {
-            return std::make_unique<TGenericCredentialsProvider>(staticIamToken);
-        }
-        if (!serviceAccountId.empty() && !serviceAccountIdSignature.empty()) {
-            return std::make_unique<TGenericCredentialsProvider>(serviceAccountId, serviceAccountIdSignature, credentialsFactory);
         }
         return std::make_unique<TGenericCredentialsProvider>();
     }

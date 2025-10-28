@@ -9,21 +9,12 @@ namespace NYql {
 }
 
 namespace NYql::NDq {
-    // When accessing the external data sources, there are several options for authentication:
-    //
-    // 1. Use static IAM-token provided by user (especially useful during debugging).
-    // 2. Use service account credentials in order to get (and refresh) IAM-token by demand.
-    // 3. Use login + password for basic auth.
     class TGenericCredentialsProvider {
     public:
         using TPtr = std::unique_ptr<TGenericCredentialsProvider>;
+
         TGenericCredentialsProvider() = default; // No auth required
-        TGenericCredentialsProvider(const TString& staticIamToken);
-        // Remove this constructor as soon as the first part of YQ-4730 is merged
-        TGenericCredentialsProvider(
-            const TString& serviceAccountId,
-            const TString& ServiceAccountIdSignature,
-            const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
+
         TGenericCredentialsProvider(
             const TString& structuredToken,
             const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
@@ -48,8 +39,5 @@ namespace NYql::NDq {
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(
         const TString& structuredTokenJSON,
-        /*[[deprecated]]*/ const TString& staticIamToken,
-        /*[[deprecated]]*/ const TString& serviceAccountId,
-        /*[[deprecated]]*/ const TString& serviceAccountIdSignature,
         const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory);
 } // namespace NYql::NDq

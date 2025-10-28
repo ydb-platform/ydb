@@ -148,6 +148,11 @@ message TStaticNameserviceConfig {
         NS_EXTERNAL = 3;    // may be paired with external discovery
     }
 
+    enum EDnsResolverType {
+        ARES = 0;
+        LIBC = 1;
+    }
+
     message TEndpoint {
         optional string Name = 1;
         optional string Address = 2;
@@ -177,6 +182,7 @@ message TStaticNameserviceConfig {
     optional ENameserviceType Type = 5;
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
+    optional EDnsResolverType DnsResolverType = 8 [default = ARES];
 }
 
 message TDynamicNameserviceConfig {

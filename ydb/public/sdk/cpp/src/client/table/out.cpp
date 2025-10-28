@@ -152,8 +152,14 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, v
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TColumnAnalyzers, stream, value) {
-    stream << "{ column: " << value.Column << ", ";
-    stream << "analyzers: " << value.Analyzers << " }";
+    stream << "{ ";
+    if (value.Column.has_value()) {
+        stream << "column: " << *value.Column << ", ";
+    }
+    if (value.Analyzers.has_value()) {
+        stream << "analyzers: " << *value.Analyzers;
+    }
+    stream << " }";
 }
 
 Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings, stream, value) {

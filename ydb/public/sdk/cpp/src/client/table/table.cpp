@@ -2872,11 +2872,23 @@ void TIndexDescription::Out(IOutputStream& o) const {
         o << ", data_columns: [" << JoinSeq(", ", DataColumns_) << "]";
     }
 
-    std::visit([&]<typename T>(const T& settings) {
-        if constexpr (!std::is_same_v<T, std::monostate>) {
-            o << ", vector_settings: " << settings;
+    switch (IndexType_) {
+    case EIndexType::GlobalSync:
+    case EIndexType::GlobalAsync:
+    case EIndexType::GlobalUnique:
+    case EIndexType::Unknown:
+        break;
+    case EIndexType::GlobalVectorKMeansTree:
+        if (auto settings = std::get_if<TKMeansTreeSettings>(&SpecializedIndexSettings_)) {
+            o << ", vector_settings: " << *settings;
         }
-    }, SpecializedIndexSettings_);
+        break;
+    case EIndexType::GlobalFulltext:
+        if (auto settings = std::get_if<TFulltextIndexSettings>(&SpecializedIndexSettings_)) {
+            o << ", fulltext_settings: " << *settings;
+        }
+        break;
+    }
 
     o << " }";
 }

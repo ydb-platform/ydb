@@ -15,21 +15,21 @@ namespace NInterconnect {
         } Addr;
 
         using TV6Addr = in6_addr;
-        TAddress();
-        TAddress(const char* addr, ui16 port);
-        TAddress(const TString& addr, ui16 port);
-        TAddress(in_addr addr, ui16 port);
-        TAddress(in6_addr addr, ui16 port);
-        TAddress(NAddr::IRemoteAddr& addr);
-        int GetFamily() const;
-        socklen_t Size() const;
-        ::sockaddr* SockAddr();
-        const ::sockaddr* SockAddr() const;
-        ui16 GetPort() const;
+        TAddress() noexcept;
+        TAddress(const char* addr, ui16 port) noexcept;
+        TAddress(const TString& addr, ui16 port) noexcept;
+        TAddress(in_addr addr, ui16 port) noexcept;
+        TAddress(in6_addr addr, ui16 port) noexcept;
+        TAddress(NAddr::IRemoteAddr& addr) noexcept;
+        int GetFamily() const noexcept;
+        socklen_t Size() const noexcept;
+        ::sockaddr* SockAddr() noexcept;
+        const ::sockaddr* SockAddr() const noexcept;
+        ui16 GetPort() const noexcept;
         TString GetAddress() const;
         TString ToString() const;
 
-        static TAddress AnyIPv4(ui16 port) {
+        static TAddress AnyIPv4(ui16 port) noexcept {
             TAddress res;
             res.Addr.Ipv4.sin_family = AF_INET;
             res.Addr.Ipv4.sin_port = htons(port);
@@ -37,7 +37,7 @@ namespace NInterconnect {
             return res;
         }
 
-        static TAddress AnyIPv6(ui16 port) {
+        static TAddress AnyIPv6(ui16 port) noexcept {
             TAddress res;
             res.Addr.Ipv6.sin6_family = AF_INET6;
             res.Addr.Ipv6.sin6_port = htons(port);

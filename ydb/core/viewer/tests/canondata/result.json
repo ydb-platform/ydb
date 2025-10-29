@@ -9922,7 +9922,6 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "",
-                    "Module": "",
                     "Rack": "",
                     "Unit": "0"
                 },
@@ -9989,7 +9988,6 @@
                 "LoadAverage": "not-empty-array",
                 "Location": {
                     "DataCenter": "",
-                    "Module": "",
                     "Rack": "",
                     "Unit": "0"
                 },

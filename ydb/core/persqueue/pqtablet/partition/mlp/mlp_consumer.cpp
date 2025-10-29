@@ -451,7 +451,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
+            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), static_cast<ui32>(Hash(result.GetSourceId())));
             ++messageCount;
         }
 

@@ -30,6 +30,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle);
+        hFunc(TEvRowDispatcher::TEvPurecalcCompileAbort, Handle);
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
@@ -43,6 +44,10 @@ public:
 
         Send(ev->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, ev->Cookie);
         Send(Owner, new NActors::TEvents::TEvPing());
+    }
+
+    void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr&) {
+        Cerr << "Ignore TEvPurecalcCompileAbort" << Endl;
     }
 
 private:

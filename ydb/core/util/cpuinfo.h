@@ -14,11 +14,11 @@ class TSystemThreadsMonitor {
 public:
     struct TSystemThreadPoolInfo { // returned data per refresh per second
         TString Name;
-        ui32 Threads;
-        float SystemUsage;
-        float UserUsage;
-        ui32 MajorPageFaults;
-        ui32 MinorPageFaults;
+        ui32 Threads = 0;
+        float SystemUsage = 0;
+        float UserUsage = 0;
+        ui32 MajorPageFaults = 0;
+        ui32 MinorPageFaults = 0;
         std::vector<std::pair<char, ui32>> States;
     };
 

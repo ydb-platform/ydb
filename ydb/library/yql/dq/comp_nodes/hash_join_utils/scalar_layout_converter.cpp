@@ -1,4 +1,3 @@
-
 #include "scalar_layout_converter.h"
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
@@ -19,30 +18,25 @@
 
 namespace NKikimr::NMiniKQL {
 
-struct IColumnDataPacker {
-    using TPtr = std::unique_ptr<IColumnDataPacker>;
+struct IColumnDataExtractor {
+    using TPtr = std::unique_ptr<IColumnDataExtractor>;
 
-    virtual ~IColumnDataPacker() = default;
+    virtual ~IColumnDataExtractor() = default;
 
-    // Extract data from UnboxedValue for packing
-    virtual void ExtractForPack(const NYql::NUdf::TUnboxedValue& value, TVector<const ui8*>& columnsData, TVector<const ui8*>& columnsNullBitmap, TVector<TVector<ui8>>& tempStorage) = 0;
+    virtual TVector<const ui8*> GetColumnsDataConst(const NYql::NUdf::TUnboxedValue& value, TVector<TVector<ui8>>& tempStorage) = 0;
+    virtual TVector<const ui8*> GetNullBitmapConst(const NYql::NUdf::TUnboxedValue& value, TVector<TVector<ui8>>& tempStorage) = 0;
     
-    // Create UnboxedValue from unpacked data
-    virtual NYql::NUdf::TUnboxedValue CreateFromUnpack(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) = 0;
+    virtual NYql::NUdf::TUnboxedValue CreateValue(ui8** columnsData, ui8** columnsNullBitmap, ui32 tupleIndex, const THolderFactory& holderFactory) = 0;
     
     virtual ui32 GetElementSize() = 0;
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
-    
-    // How many pointers this packer adds to columnsData/columnsNullBitmap arrays
-    virtual ui32 GetPointersCount() const { return 1; }
-    
-    virtual void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) = 0;
+    virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
 };
 
 // ------------------------------------------------------------
 
 template <typename TLayout, bool Nullable>
-class TFixedSizeColumnDataPacker : public IColumnDataPacker {
+class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
     TFixedSizeColumnDataPacker(TType* type)
         : Type_(type)
@@ -94,7 +88,7 @@ public:
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
 
@@ -103,7 +97,7 @@ protected:
 };
 
 template <bool Nullable>
-class TResourceColumnDataPacker : public IColumnDataPacker {
+class TResourceColumnDataExtractor : public IColumnDataExtractor {
 public:
     TResourceColumnDataPacker(TType* type)
         : Type_(type)
@@ -154,7 +148,7 @@ public:
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
 
@@ -162,7 +156,7 @@ protected:
     TType* Type_;
 };
 
-class TSingularColumnDataPacker : public IColumnDataPacker {
+class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
     TSingularColumnDataPacker(TType* type) {
         Y_UNUSED(type);
@@ -190,13 +184,13 @@ public:
         return NPackedTuple::EColumnSizeType::Fixed;
     }
 
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
 };
 
 template <bool Nullable>
-class TStringColumnDataPacker : public IColumnDataPacker {
+class TStringColumnDataExtractor : public IColumnDataExtractor {
 public:
     TStringColumnDataPacker(TType* type)
         : Type_(type)
@@ -284,7 +278,7 @@ public:
         return 2; // offset buffer + data buffer
     }
     
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
 
@@ -293,9 +287,9 @@ protected:
 };
 
 template <bool Nullable>
-class TTupleColumnDataPacker : public IColumnDataPacker {
+class TTupleColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TTupleColumnDataPacker(std::vector<IColumnDataPacker::TPtr> children, TType* type)
+    TTupleColumnDataPacker(std::vector<IColumnDataExtractor::TPtr> children, TType* type)
         : Children_(std::move(children))
         , Type_(type)
     {}
@@ -324,8 +318,8 @@ public:
         size_t offset = 0;
         for (size_t i = 0; i < Children_.size(); i++) {
             // Calculate how many inner columns this child uses
-            std::vector<IColumnDataPacker*> innerPackers;
-            Children_[i]->AppendInnerPackers(innerPackers);
+            std::vector<IColumnDataExtractor*> innerPackers;
+            Children_[i]->AppendInnerExtractors(innerPackers);
             size_t innerCount = innerPackers.size();
             
             items[i] = Children_[i]->CreateFromUnpack(
@@ -348,25 +342,25 @@ public:
         THROW yexception() << "Do not call GetElementSizeType on tuples";
     }
 
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         for (auto& child: Children_) {
-            child->AppendInnerPackers(packers);
+            child->AppendInnerExtractors(packers);
         }
     }
 
 protected:
-    std::vector<IColumnDataPacker::TPtr> Children_;
+    std::vector<IColumnDataExtractor::TPtr> Children_;
     TType* Type_;
 };
 
 template<typename TDate, bool Nullable>
-class TTzDateColumnDataPacker : public TTupleColumnDataPacker<Nullable> {
+class TTzDateColumnDataExtractor : public TTupleColumnDataExtractor<Nullable> {
     using TBase = TTupleColumnDataPacker<Nullable>;
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
 private:
-    static std::vector<IColumnDataPacker::TPtr> MakeChildren(TType* type) {
-        std::vector<IColumnDataPacker::TPtr> children;
+    static std::vector<IColumnDataExtractor::TPtr> MakeChildren(TType* type) {
+        std::vector<IColumnDataExtractor::TPtr> children;
         children.push_back(std::make_unique<TFixedSizeColumnDataPacker<TDateLayout, false>>(type));
         children.push_back(std::make_unique<TFixedSizeColumnDataPacker<ui16, false>>(type));
         return children;
@@ -378,9 +372,9 @@ public:
     {}
 };
 
-class TExternalOptionalColumnDataPacker : public IColumnDataPacker {
+class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TExternalOptionalColumnDataPacker(IColumnDataPacker::TPtr inner, [[maybe_unused]] TType* type)
+    TExternalOptionalColumnDataPacker(IColumnDataExtractor::TPtr inner, [[maybe_unused]] TType* type)
         : Inner_(std::move(inner))
     {}
 
@@ -400,30 +394,30 @@ public:
         return Inner_->GetElementSizeType();
     }
 
-    void AppendInnerPackers(std::vector<IColumnDataPacker*>& packers) override {
+    void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
 
 private:
-    IColumnDataPacker::TPtr Inner_;
+    IColumnDataExtractor::TPtr Inner_;
 };
 
 // ------------------------------------------------------------
 
-struct TColumnDataPackerTraits {
-    using TResult = IColumnDataPacker;
+struct TColumnDataExtractorTraits {
+    using TResult = IColumnDataExtractor;
     template <bool Nullable>
-    using TTuple = TTupleColumnDataPacker<Nullable>;
+    using TTuple = TTupleColumnDataExtractor<Nullable>;
     template <typename T, bool Nullable>
-    using TFixedSize = TFixedSizeColumnDataPacker<T, Nullable>;
+    using TFixedSize = TFixedSizeColumnDataExtractor<T, Nullable>;
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot>
-    using TStrings = TStringColumnDataPacker<Nullable>;
-    using TExtOptional = TExternalOptionalColumnDataPacker;
+    using TStrings = TStringColumnDataExtractor<TStringType, Nullable>;
+    using TExtOptional = TExternalOptionalColumnDataExtractor;
     template<bool Nullable>
-    using TResource = TResourceColumnDataPacker<Nullable>;
+    using TResource = TResourceColumnDataExtractor<Nullable>;
     template<typename TTzDate, bool Nullable>
-    using TTzDateReader = TTzDateColumnDataPacker<TTzDate, Nullable>;
-    using TSingular = TSingularColumnDataPacker;
+    using TTzDateReader = TTzDateColumnDataExtractor<TTzDate, Nullable>;
+    using TSingular = TSingularColumnDataExtractor;
 
     constexpr static bool PassType = false;
 
@@ -465,24 +459,24 @@ struct TColumnDataPackerTraits {
 class TScalarLayoutConverter : public IScalarLayoutConverter {
 public:
     TScalarLayoutConverter(
-        TVector<IColumnDataPacker::TPtr>&& packers,
+        TVector<IColumnDataExtractor::TPtr>&& packers,
         const TVector<NPackedTuple::EColumnRole>& roles
     )
-        : Packers_(std::move(packers))
-        , InnerMapping_(Packers_.size())
+        : Extractors_(std::move(packers))
+        , InnerMapping_(Extractors_.size())
     {
-        Y_ENSURE(roles.size() == Packers_.size());
+        Y_ENSURE(roles.size() == Extractors_.size());
 
         ui32 colCounter = 0;
         TVector<NPackedTuple::TColumnDesc> columnDescrs;
-        for (size_t i = 0; i < Packers_.size(); ++i) {
-            auto& packer = Packers_[i];
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
+            auto& packer = Extractors_[i];
             auto& mapping = InnerMapping_[i];
-            auto prevSize = InnerPackers_.size();
-            packer->AppendInnerPackers(InnerPackers_);
+            auto prevSize = InnerExtractors_.size();
+            packer->AppendInnerExtractors(InnerExtractors_);
 
             // Each InnerPacker creates one ColumnDesc
-            for (size_t j = 0; j < InnerPackers_.size() - prevSize; ++j) {
+            for (size_t j = 0; j < InnerExtractors_.size() - prevSize; ++j) {
                 NPackedTuple::TColumnDesc descr;
                 descr.Role = roles[i];
                 columnDescrs.push_back(descr);
@@ -493,7 +487,7 @@ public:
             // But each packer may produce more pointers than ColumnDescs (strings produce 2)
             // We need to track these extra pointers in mapping too
             ui32 pointersCount = packer->GetPointersCount();
-            ui32 descrsCount = InnerPackers_.size() - prevSize;
+            ui32 descrsCount = InnerExtractors_.size() - prevSize;
             for (ui32 j = descrsCount; j < pointersCount; ++j) {
                 mapping.push_back(colCounter);
                 colCounter++;
@@ -502,7 +496,7 @@ public:
 
         for (size_t i = 0; i < columnDescrs.size(); ++i) {
             auto& descr = columnDescrs[i];
-            auto* packer = InnerPackers_[i];
+            auto* packer = InnerExtractors_[i];
             descr.DataSize = packer->GetElementSize();
             descr.SizeType = packer->GetElementSizeType();
         }
@@ -520,7 +514,7 @@ public:
         
         // Calculate total pointers count
         size_t totalPointers = 0;
-        for (const auto& packer : Packers_) {
+        for (const auto& packer : Extractors_) {
             totalPointers += packer->GetPointersCount();
         }
         
@@ -529,14 +523,14 @@ public:
         columnsNullBitmap.reserve(totalPointers);
         tempStorage.reserve(totalPointers * 2); // Estimate
         
-        for (size_t i = 0; i < Packers_.size(); ++i) {
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
             size_t beforeSize = columnsData.size();
-            Packers_[i]->ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
+            Extractors_[i]->ExtractForPack(values[i], columnsData, columnsNullBitmap, tempStorage);
             
             // Validate that packer added correct number of pointers
             size_t added = columnsData.size() - beforeSize;
-            Y_ENSURE(added == Packers_[i]->GetPointersCount(),
-                "Packer " << i << " added " << added << " pointers, but GetPointersCount() returns " << Packers_[i]->GetPointersCount());
+            Y_ENSURE(added == Extractors_[i]->GetPointersCount(),
+                "Packer " << i << " added " << added << " pointers, but GetPointersCount() returns " << Extractors_[i]->GetPointersCount());
             
             // Replace any nullptr with dummy buffer to avoid segfaults
             for (size_t j = beforeSize; j < columnsData.size(); ++j) {
@@ -553,8 +547,8 @@ public:
             }
         }
         
-        // Now columnsData.size() != InnerPackers_.size() for strings!
-        // InnerPackers_.size() = number of ColumnDescs
+        // Now columnsData.size() != InnerExtractors_.size() for strings!
+        // InnerExtractors_.size() = number of ColumnDescs
         // columnsData.size() = total number of pointers
         Y_ENSURE(columnsData.size() == totalPointers, 
             "columnsData size mismatch: expected " << totalPointers << ", got " << columnsData.size());
@@ -581,9 +575,9 @@ public:
         TupleLayout_->CalculateColumnSizes(
             packed.PackedTuples.data(), packed.NTuples, bytesPerColumn);
 
-        // Calculate total pointers needed (InnerPackers corresponds to ColumnDescs)
-        Y_ENSURE(bytesPerColumn.size() == InnerPackers_.size(),
-            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerPackers size " << InnerPackers_.size());
+        // Calculate total pointers needed (InnerExtractors corresponds to ColumnDescs)
+        Y_ENSURE(bytesPerColumn.size() == InnerExtractors_.size(),
+            "bytesPerColumn size " << bytesPerColumn.size() << " != InnerExtractors size " << InnerExtractors_.size());
 
         TVector<TVector<ui8>> columnsDataStorage;
         TVector<TVector<ui8>> columnsNullBitmapStorage;
@@ -591,9 +585,9 @@ public:
         TVector<ui8*> columnsData;
         TVector<ui8*> columnsNullBitmap;
         
-        // Create buffers based on InnerPackers (= ColumnDescs count)
-        for (size_t i = 0; i < InnerPackers_.size(); ++i) {
-            auto* packer = InnerPackers_[i];
+        // Create buffers based on InnerExtractors (= ColumnDescs count)
+        for (size_t i = 0; i < InnerExtractors_.size(); ++i) {
+            auto* packer = InnerExtractors_[i];
             
             // For variable-size columns (strings), we need to create offset buffer first
             if (packer->GetElementSizeType() == NPackedTuple::EColumnSizeType::Variable) {
@@ -631,11 +625,11 @@ public:
             packed.PackedTuples.data(), packed.Overflow, 0, packed.NTuples);
         
         // Now extract the specific tuple for each packer
-        for (size_t i = 0; i < Packers_.size(); ++i) {
+        for (size_t i = 0; i < Extractors_.size(); ++i) {
             const auto& mapping = InnerMapping_[i];
             size_t offset = mapping.front();
             
-            values[i] = Packers_[i]->CreateFromUnpack(
+            values[i] = Extractors_[i]->CreateFromUnpack(
                 columnsData.data() + offset,
                 columnsNullBitmap.data() + offset,
                 tupleIndex,
@@ -648,8 +642,8 @@ public:
     }
 
 private:
-    TVector<IColumnDataPacker::TPtr> Packers_;
-    std::vector<IColumnDataPacker*> InnerPackers_;
+    TVector<IColumnDataExtractor::TPtr> Extractors_;
+    std::vector<IColumnDataExtractor*> InnerExtractors_;
     TVector<TVector<ui32>> InnerMapping_;
     THolder<NPackedTuple::TTupleLayout> TupleLayout_;
 };
@@ -660,15 +654,14 @@ IScalarLayoutConverter::TPtr MakeScalarLayoutConverter(
     const NUdf::ITypeInfoHelper& typeInfoHelper, const TVector<TType*>& types,
     const TVector<NPackedTuple::EColumnRole>& roles)
 {
-    TVector<IColumnDataPacker::TPtr> packers;
+    TVector<IColumnDataExtractor::TPtr> packers;
 
     for (auto type: types) {
-        packers.emplace_back(DispatchByArrowTraits<TColumnDataPackerTraits>(typeInfoHelper, type, nullptr, type));
+        packers.emplace_back(DispatchByArrowTraits<TColumnDataExtractorTraits>(typeInfoHelper, type, nullptr, type));
     }
 
     return std::make_unique<TScalarLayoutConverter>(std::move(packers), roles);
 }
 
 } // namespace NKikimr::NMiniKQL
-
 

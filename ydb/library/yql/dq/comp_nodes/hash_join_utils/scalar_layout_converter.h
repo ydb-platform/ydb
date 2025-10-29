@@ -13,7 +13,6 @@ class THolderFactory;
 
 class IScalarLayoutConverter : private TNonCopyable {
 public:
-    // Use the same TPackResult as IBlockLayoutConverter for compatibility
     using TPackResult = IBlockLayoutConverter::TPackResult;
     using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
     using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;

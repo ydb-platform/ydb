@@ -196,6 +196,19 @@ public:
     TFuture<void> FinishDistributedWriteSession(
         const TDistributedWriteSessionWithResults& sessionWithResults,
         const TDistributedWriteSessionFinishOptions& options) override;
+
+    // Distributed file client
+    TFuture<TDistributedWriteFileSessionWithCookies> StartDistributedWriteFileSession(
+        const NYPath::TRichYPath& path,
+        const TDistributedWriteFileSessionStartOptions& options) override;
+
+    TFuture<void> PingDistributedWriteFileSession(
+        const TSignedDistributedWriteFileSessionPtr& session,
+        const TDistributedWriteFileSessionPingOptions& options) override;
+
+    TFuture<void> FinishDistributedWriteFileSession(
+        const TDistributedWriteFileSessionWithResults& sessionWithResults,
+        const TDistributedWriteFileSessionFinishOptions& options) override;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientBase)

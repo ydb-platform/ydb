@@ -29,8 +29,9 @@ class TBatchRowsUploader
     };
 
 public:
-    TBatchRowsUploader(const TIndexBuildScanSettings& scanSettings)
-        : ScanSettings(scanSettings)
+    TBatchRowsUploader(const TString& database, const TIndexBuildScanSettings& scanSettings)
+        : Database(database)
+        , ScanSettings(scanSettings)
     {}
 
     TBufferData* AddDestination(TString table, std::shared_ptr<NTxProxy::TUploadTypes> types) {
@@ -208,7 +209,7 @@ private:
         Y_ENSURE(!UploaderId);
         Y_ENSURE(Owner);
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            Owner, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
+            Owner, Database, Uploading.Table, Uploading.Types, Uploading.Buffer.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow,
             true /*writeToPrivateTable*/,
             true /*writeToIndexImplTable*/);
@@ -217,6 +218,7 @@ private:
     }
 
 private:
+    const TString Database;
     const TIndexBuildScanSettings ScanSettings;
     TActorId Owner;
 

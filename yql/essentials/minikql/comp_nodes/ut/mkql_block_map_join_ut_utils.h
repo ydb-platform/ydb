@@ -1,3 +1,5 @@
+#pragma once
+
 #include "mkql_computation_node_ut.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -11,16 +13,15 @@ inline bool IsOptionalOrNull(const TType* type) {
 
 TType* MakeBlockTupleType(TProgramBuilder& pgmBuilder, TType* tupleType, bool scalar);
 TType* MakeJoinType(TProgramBuilder& pgmBuilder, EJoinKind joinKind,
-    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
-    TType* rightListType, const TVector<ui32>& rightKeyDrops
-);
+                    TType* leftStreamType, const TVector<ui32>& leftKeyDrops,
+                    TType* rightListType, const TVector<ui32>& rightKeyDrops);
 
 NUdf::TUnboxedValuePod ToBlocks(TComputationContext& ctx, size_t blockSize,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+                                const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
 NUdf::TUnboxedValuePod MakeUint64ScalarBlock(TComputationContext& ctx, size_t blockSize,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+                                             const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
 NUdf::TUnboxedValuePod FromBlocks(TComputationContext& ctx,
-    const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
+                                  const TArrayRef<TType* const> types, const NUdf::TUnboxedValuePod& values);
 
 TComputationNodeFactory GetNodeFactory();
 TRuntimeNode ThrottleStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream);
@@ -39,12 +40,17 @@ TSet<ui64> GenerateFibonacci(size_t count);
 struct TTypeMapperBase {
     TProgramBuilder& Pb;
     TType* ItemType;
-    auto GetType() { return ItemType; }
+    auto GetType() {
+        return ItemType;
+    }
 };
 
 template <typename Type>
 struct TTypeMapper: TTypeMapperBase {
-    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::TDataType<Type>::Id) } {}
+    TTypeMapper(TProgramBuilder& pb)
+        : TTypeMapperBase{pb, pb.NewDataType(NUdf::TDataType<Type>::Id)}
+    {
+    }
     auto GetValue(const Type& value) {
         return Pb.NewDataLiteral<Type>(value);
     }
@@ -52,7 +58,10 @@ struct TTypeMapper: TTypeMapperBase {
 
 template <>
 struct TTypeMapper<TString>: TTypeMapperBase {
-    TTypeMapper(TProgramBuilder& pb): TTypeMapperBase {pb, pb.NewDataType(NUdf::EDataSlot::String)} {}
+    TTypeMapper(TProgramBuilder& pb)
+        : TTypeMapperBase{pb, pb.NewDataType(NUdf::EDataSlot::String)}
+    {
+    }
     auto GetValue(const TString& value) {
         return Pb.NewDataLiteral<NUdf::EDataSlot::String>(value);
     }
@@ -61,9 +70,15 @@ struct TTypeMapper<TString>: TTypeMapperBase {
 template <typename TNested>
 class TTypeMapper<std::optional<TNested>>: TTypeMapper<TNested> {
     using TBase = TTypeMapper<TNested>;
+
 public:
-    TTypeMapper(TProgramBuilder& pb): TBase(pb) {}
-    auto GetType() { return TBase::Pb.NewOptionalType(TBase::GetType()); }
+    TTypeMapper(TProgramBuilder& pb)
+        : TBase(pb)
+    {
+    }
+    auto GetType() {
+        return TBase::Pb.NewOptionalType(TBase::GetType());
+    }
     auto GetValue(const std::optional<TNested>& value) {
         if (value == std::nullopt) {
             return TBase::Pb.NewEmptyOptional(GetType());
@@ -73,40 +88,38 @@ public:
     }
 };
 
-template<typename Type>
+template <typename Type>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
-    const TVector<Type>& vector
-) {
+                                                 const TVector<Type>& vector) {
     TTypeMapper<Type> mapper(pb);
 
     TRuntimeNode::TList listItems;
     std::transform(vector.cbegin(), vector.cend(), std::back_inserter(listItems),
-        [&](const auto value) {
-            return mapper.GetValue(value);
-        });
+                   [&](const auto value) {
+                       return mapper.GetValue(value);
+                   });
 
     return {pb.NewList(mapper.GetType(), listItems)};
 }
 
-template<typename Type, typename... Tail>
+template <typename Type, typename... Tail>
 const TVector<const TRuntimeNode> BuildListNodes(TProgramBuilder& pb,
-    const TVector<Type>& vector, Tail... vectors
-) {
+                                                 const TVector<Type>& vector, Tail... vectors) {
     const auto frontList = BuildListNodes(pb, vector);
     const auto tailLists = BuildListNodes(pb, std::forward<Tail>(vectors)...);
     TVector<const TRuntimeNode> lists;
     lists.reserve(tailLists.size() + 1);
-    lists.push_back(frontList.front());;
+    lists.push_back(frontList.front());
+    ;
     for (const auto& list : tailLists) {
         lists.push_back(list);
     }
     return lists;
 }
 
-template<typename... TVectors>
+template <typename... TVectors>
 const std::pair<TType*, NUdf::TUnboxedValue> ConvertVectorsToTuples(
-    TSetup<false>& setup, TVectors... vectors
-) {
+    TSetup<false>& setup, TVectors... vectors) {
     TProgramBuilder& pb = *setup.PgmBuilder;
     const auto lists = BuildListNodes(pb, std::forward<TVectors>(vectors)...);
     const auto tuplesNode = pb.Zip(lists);

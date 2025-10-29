@@ -351,7 +351,7 @@ void TKafkaBalancerActor::JoinStepCheckGroupState(NKqp::TEvKqp::TEvQueryResponse
     if (SessionTimeoutMs > MAX_SESSION_TIMEOUT_MS || SessionTimeoutMs < MIN_SESSION_TIMEOUT_MS) {
         SendJoinGroupResponseFail(ctx, CorrelationId,
             EKafkaErrors::INVALID_SESSION_TIMEOUT,
-            "Invalid session timeout");
+            TStringBuilder() << "Invalid session timeout " << SessionTimeoutMs);
         return;
     }
 

@@ -14,9 +14,8 @@ namespace NUdf {
 //////////////////////////////////////////////////////////////////////////////
 // TStringRefBase
 //////////////////////////////////////////////////////////////////////////////
-template<bool Const>
-class TStringRefBase
-{
+template <bool Const>
+class TStringRefBase {
 public:
     typedef std::conditional_t<Const, const char*, char*> TDataType;
 
@@ -26,18 +25,35 @@ protected:
     inline constexpr TStringRefBase(TDataType data, ui32 size) noexcept
         : Data_(data)
         , Size_(size)
-    {}
+    {
+    }
 
 public:
-    inline constexpr operator std::string_view() const noexcept { return { Data_, Size_ }; }
-    inline constexpr operator TStringBuf() const noexcept { return { Data_, Size_ }; }
-    inline constexpr TDataType Data() const noexcept { return Data_; }
-    inline constexpr ui32 Size() const noexcept { return Size_; }
-    inline constexpr bool Empty() const noexcept { return Size_ == 0; }
+    inline constexpr operator std::string_view() const noexcept {
+        return {Data_, Size_};
+    }
+    inline constexpr operator TStringBuf() const noexcept {
+        return {Data_, Size_};
+    }
+    inline constexpr TDataType Data() const noexcept {
+        return Data_;
+    }
+    inline constexpr ui32 Size() const noexcept {
+        return Size_;
+    }
+    inline constexpr bool Empty() const noexcept {
+        return Size_ == 0;
+    }
 
-    inline constexpr TDataType data() const noexcept { return Data_; }
-    inline constexpr ui32 size() const noexcept { return Size_; }
-    inline constexpr bool empty() const noexcept { return Size_ == 0; }
+    inline constexpr TDataType data() const noexcept {
+        return Data_;
+    }
+    inline constexpr ui32 size() const noexcept {
+        return Size_;
+    }
+    inline constexpr bool empty() const noexcept {
+        return Size_ == 0;
+    }
 
 protected:
     TDataType Data_ = nullptr;
@@ -48,14 +64,14 @@ protected:
 //////////////////////////////////////////////////////////////////////////////
 // TMutableStringRef
 //////////////////////////////////////////////////////////////////////////////
-class TMutableStringRef : public TStringRefBase<false>
-{
+class TMutableStringRef: public TStringRefBase<false> {
 public:
     typedef TStringRefBase<false> TBase;
 
     inline constexpr TMutableStringRef(TDataType data, ui32 size) noexcept
         : TBase(data, size)
-    {}
+    {
+    }
 };
 
 UDF_ASSERT_TYPE_SIZE(TMutableStringRef, 16);
@@ -63,8 +79,7 @@ UDF_ASSERT_TYPE_SIZE(TMutableStringRef, 16);
 //////////////////////////////////////////////////////////////////////////////
 // TStringRef
 //////////////////////////////////////////////////////////////////////////////
-class TStringRef : public TStringRefBase<true>
-{
+class TStringRef: public TStringRefBase<true> {
 public:
     typedef TStringRefBase<true> TBase;
 
@@ -72,24 +87,28 @@ public:
 
     inline constexpr TStringRef(TDataType data, ui32 size) noexcept
         : TBase(data, size)
-    {}
+    {
+    }
 
-    template<size_t Size>
+    template <size_t Size>
     inline constexpr TStringRef(const char (&data)[Size]) noexcept
         : TBase(data, Size - 1)
-    {}
+    {
+    }
 
     inline constexpr TStringRef(const TMutableStringRef& buf) noexcept
         : TBase(buf.Data(), buf.Size())
-    {}
+    {
+    }
 
     template <typename TStringType>
     inline constexpr TStringRef(const TStringType& buf) noexcept
         : TBase(TGetData<TStringType>::Get(buf), TGetSize<TStringType>::Get(buf))
-    {}
+    {
+    }
 
     template <size_t size>
-    inline static constexpr TStringRef Of(const char(&str)[size]) noexcept {
+    inline static constexpr TStringRef Of(const char (&str)[size]) noexcept {
         return TStringRef(str);
     }
 
@@ -137,50 +156,51 @@ public:
 private:
     inline static constexpr i64 Compare(const TStringRef& s1, const TStringRef& s2) noexcept {
         auto minSize = std::min(s1.Size(), s2.Size());
-        if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0)
+        if (const auto result = minSize > 0 ? std::memcmp(s1.Data(), s2.Data(), minSize) : 0) {
             return result;
+        }
         return i64(s1.Size()) - i64(s2.Size());
     }
 
     Y_HAS_MEMBER(Data);
     Y_HAS_MEMBER(Size);
 
-    template<typename TStringType>
+    template <typename TStringType>
     struct TByData {
         static constexpr auto Get(const TStringType& buf) noexcept {
             return buf.data();
         }
     };
 
-    template<typename TStringType>
+    template <typename TStringType>
     struct TBySize {
         static constexpr auto Get(const TStringType& buf) noexcept {
             return buf.size();
         }
     };
 
-    template<typename TStringType>
+    template <typename TStringType>
     struct TBydata {
         static constexpr auto Get(const TStringType& buf) noexcept {
             return buf.data();
         }
     };
 
-    template<typename TStringType>
+    template <typename TStringType>
     struct TBysize {
         static constexpr auto Get(const TStringType& buf) noexcept {
             return buf.size();
         }
     };
 
-    template<typename TStringType>
+    template <typename TStringType>
     using TGetData = std::conditional_t<THasData<TStringType>::value, TByData<TStringType>, TBydata<TStringType>>;
 
-    template<typename TStringType>
+    template <typename TStringType>
     using TGetSize = std::conditional_t<THasSize<TStringType>::value, TBySize<TStringType>, TBysize<TStringType>>;
 };
 
 UDF_ASSERT_TYPE_SIZE(TStringRef, 16);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

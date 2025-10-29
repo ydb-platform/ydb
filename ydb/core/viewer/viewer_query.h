@@ -250,6 +250,16 @@ private:
         }
     }
 
+    std::optional<TString> GetUserSID() const {
+        if (const auto tokenString = GetRequest().GetUserTokenObject()) {
+            if (NACLibProto::TUserToken userToken; userToken.ParseFromString(tokenString)) {
+                return userToken.GetUserSID();
+            }
+        }
+
+        return std::nullopt;
+    }
+
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
         if (schemaStr == "classic") {
@@ -487,6 +497,7 @@ public:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -510,11 +521,8 @@ public:
             event->Record.SetApplicationName("ydb-ui");
             event->Record.SetClientAddress(request.GetRemoteAddr());
             event->Record.SetClientUserAgent(TString(request.GetHeader("User-Agent")));
-            if (TString tokenString = request.GetUserTokenObject()) {
-                NACLibProto::TUserToken userToken;
-                if (userToken.ParseFromString(tokenString)) {
-                    event->Record.SetUserSID(userToken.GetUserSID());
-                }
+            if (const auto userSID = GetUserSID()) {
+                event->Record.SetUserSID(*userSID);
             }
             CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
@@ -1004,6 +1012,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows),
@@ -1054,6 +1063,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1067,6 +1077,7 @@ private:
                     SelfId(),
                     Database,
                     ExecutionId,
+                    GetUserSID(),
                     FetchResultSetIndex,
                     FetchResultRowsOffset,
                     std::min<i64>(FetchResultRowsLimit, LimitRows - TotalRows),
@@ -1122,7 +1133,7 @@ private:
 
     void CheckOperationStatus() {
         if (!GetOperationResponse.has_value() || GetOperationResponse->IsDone()) {
-            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId));
+            GetOperationResponse = MakeRequest<NKqp::TEvGetScriptExecutionOperationResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), new NKqp::TEvGetScriptExecutionOperation(Database, *OperationId, GetUserSID()));
         }
     }
 

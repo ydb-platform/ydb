@@ -1,6 +1,6 @@
 #include "mkql_toindexdict.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,8 +8,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TToIndexDictWrapper : public TMutableCodegeneratorNode<TToIndexDictWrapper> {
+class TToIndexDictWrapper: public TMutableCodegeneratorNode<TToIndexDictWrapper> {
     typedef TMutableCodegeneratorNode<TToIndexDictWrapper> TBaseComputation;
+
 public:
     TToIndexDictWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, list->GetRepresentation())
@@ -52,12 +53,12 @@ private:
     IComputationNode* const List;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapToIndexDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 args");
     return new TToIndexDictWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

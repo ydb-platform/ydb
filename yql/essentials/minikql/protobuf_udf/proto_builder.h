@@ -15,6 +15,5 @@ namespace NUdf {
 void FillProtoFromValue(const NKikimr::NUdf::TUnboxedValuePod& source, NProtoBuf::Message& target,
                         const NKikimr::NUdf::TProtoInfo& info);
 
-
 } // namespace NUdf
 } // namespace NYql

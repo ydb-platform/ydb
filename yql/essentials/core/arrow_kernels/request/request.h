@@ -59,6 +59,7 @@ public:
 private:
     NKikimr::NMiniKQL::TRuntimeNode MakeArg(const TTypeAnnotationNode* type);
     NKikimr::NMiniKQL::TBlockType* MakeType(const TTypeAnnotationNode* type);
+
 private:
     const TLangVersion Langver_;
     NKikimr::NMiniKQL::TScopedAlloc Alloc_;
@@ -70,4 +71,4 @@ private:
     std::unordered_map<const TTypeAnnotationNode*, NKikimr::NMiniKQL::TRuntimeNode> CachedArgs_;
 };
 
-}
+} // namespace NYql

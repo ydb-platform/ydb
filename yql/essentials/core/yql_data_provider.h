@@ -2,6 +2,7 @@
 
 #include "yql_graph_transformer.h"
 #include <yql/essentials/core/sql_types/yql_callable_names.h>
+#include <yql/essentials/core/layers/layers.h>
 
 #include <yql/essentials/public/udf/udf_validate.h>
 
@@ -191,6 +192,12 @@ public:
     // ytflow
     virtual IYtflowIntegration* GetYtflowIntegration() = 0;
     virtual IYtflowOptimization* GetYtflowOptimization() = 0;
+
+    // layers
+    virtual NLayers::ILayersIntegrationPtr GetLayersIntegration() const = 0;
+
+    // query capture
+    virtual bool IsFullCaptureReady() = 0;
 };
 
 struct IPipelineConfigurator;

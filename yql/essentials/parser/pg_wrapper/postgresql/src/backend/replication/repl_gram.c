@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.7.5.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison implementation for Yacc-like parsers in C
 
@@ -16,7 +16,7 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* As a special exception, you may create a larger work that contains
    part or all of the Bison parser skeleton and distribute that work
@@ -46,10 +46,10 @@
    USER NAME SPACE" below.  */
 
 /* Identify Bison output, and Bison version.  */
-#define YYBISON 30705
+#define YYBISON 30802
 
 /* Bison version string.  */
-#define YYBISON_VERSION "3.7.5"
+#define YYBISON_VERSION "3.8.2"
 
 /* Skeleton name.  */
 #define YYSKELETON_NAME "yacc.c"
@@ -357,12 +357,18 @@ typedef int yy_state_fast_t;
 # define YY_USE(E) /* empty */
 #endif
 
-#if defined __GNUC__ && ! defined __ICC && 407 <= __GNUC__ * 100 + __GNUC_MINOR__
 /* Suppress an incorrect diagnostic about yylval being uninitialized.  */
-# define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                            \
+#if defined __GNUC__ && ! defined __ICC && 406 <= __GNUC__ * 100 + __GNUC_MINOR__
+# if __GNUC__ * 100 + __GNUC_MINOR__ < 407
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
+    _Pragma ("GCC diagnostic push")                                     \
+    _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")
+# else
+#  define YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN                           \
     _Pragma ("GCC diagnostic push")                                     \
     _Pragma ("GCC diagnostic ignored \"-Wuninitialized\"")              \
     _Pragma ("GCC diagnostic ignored \"-Wmaybe-uninitialized\"")
+# endif
 # define YY_IGNORE_MAYBE_UNINITIALIZED_END      \
     _Pragma ("GCC diagnostic pop")
 #else
@@ -579,7 +585,7 @@ static const yytype_int8 yytranslate[] =
 };
 
 #if YYDEBUG
-  /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
+/* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int16 yyrline[] =
 {
        0,    97,    97,   103,   104,   108,   109,   110,   111,   112,
@@ -630,18 +636,6 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#ifdef YYPRINT
-/* YYTOKNUM[NUM] -- (External) token number corresponding to the
-   (internal) symbol number NUM (which must be that of a token).  */
-static const yytype_int16 yytoknum[] =
-{
-       0,   256,   257,   258,   259,   260,   261,   262,   263,   264,
-     265,   266,   267,   268,   269,   270,   271,   272,   273,   274,
-     275,   276,   277,   278,   279,   280,    59,    46,    40,    41,
-      44
-};
-#endif
-
 #define YYPACT_NINF (-29)
 
 #define yypact_value_is_default(Yyn) \
@@ -652,8 +646,8 @@ static const yytype_int16 yytoknum[] =
 #define yytable_value_is_error(Yyn) \
   0
 
-  /* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
-     STATE-NUM.  */
+/* YYPACT[STATE-NUM] -- Index in YYTABLE of the portion describing
+   STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
       15,   -23,   -29,    27,    27,    26,    42,    43,    44,    48,
@@ -668,9 +662,9 @@ static const yytype_int8 yypact[] =
       63,    14,   -29,   -29,   -29,   -29,   -29,    61,   -29
 };
 
-  /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
-     Performed when YYTABLE does not specify something else to do.  Zero
-     means the default is an error.  */
+/* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
+   Performed when YYTABLE does not specify something else to do.  Zero
+   means the default is an error.  */
 static const yytype_int8 yydefact[] =
 {
        0,    20,    14,     0,     0,    42,     0,     0,     0,     0,
@@ -685,7 +679,7 @@ static const yytype_int8 yydefact[] =
       51,     0,    47,    23,    50,    49,    45,     0,    48
 };
 
-  /* YYPGOTO[NTERM-NUM].  */
+/* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
      -29,   -29,   -29,   -29,   -29,   -29,   -29,    64,   -29,   -29,
@@ -693,7 +687,7 @@ static const yytype_int8 yypgoto[] =
      -29,   -29,   -29,   -27,   -29,    -6,     9,   -29
 };
 
-  /* YYDEFGOTO[NTERM-NUM].  */
+/* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
        0,     9,    31,    10,    11,    12,    13,    22,    14,    15,
@@ -701,9 +695,9 @@ static const yytype_int8 yydefgoto[] =
       74,    80,    91,    92,    95,    51,    52,    53
 };
 
-  /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
-     positive, shift that token.  If negative, reduce the rule whose
-     number is the opposite.  If YYTABLE_NINF, syntax error.  */
+/* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
+   positive, shift that token.  If negative, reduce the rule whose
+   number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
       32,    61,    62,    33,    34,    20,    35,    36,    37,    38,
@@ -728,8 +722,8 @@ static const yytype_int8 yycheck[] =
       97,    62
 };
 
-  /* YYSTOS[STATE-NUM] -- The (internal number of the) accessing
-     symbol of state STATE-NUM.  */
+/* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
+   state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
        0,     7,     8,     9,    10,    11,    12,    13,    14,    32,
@@ -744,7 +738,7 @@ static const yytype_int8 yystos[] =
        4,    53,    54,    29,     3,    55,    29,    30,    54
 };
 
-  /* YYR1[YYN] -- Symbol number of symbol that rule YYN derives.  */
+/* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
        0,    31,    32,    33,    33,    34,    34,    34,    34,    34,
@@ -757,7 +751,7 @@ static const yytype_int8 yyr1[] =
       58,    58,    58,    58,    58,    58,    58
 };
 
-  /* YYR2[YYN] -- Number of symbols on the right hand side of rule YYN.  */
+/* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     2,     1,     0,     1,     1,     1,     1,     1,
@@ -779,6 +773,7 @@ enum { YYENOMEM = -2 };
 #define YYACCEPT        goto yyacceptlab
 #define YYABORT         goto yyabortlab
 #define YYERROR         goto yyerrorlab
+#define YYNOMEM         goto yyexhaustedlab
 
 
 #define YYRECOVERING()  (!!yyerrstatus)
@@ -819,10 +814,7 @@ do {                                            \
     YYFPRINTF Args;                             \
 } while (0)
 
-/* This macro is provided for backward compatibility. */
-# ifndef YY_LOCATION_PRINT
-#  define YY_LOCATION_PRINT(File, Loc) ((void) 0)
-# endif
+
 
 
 # define YY_SYMBOL_PRINT(Title, Kind, Value, Location)                    \
@@ -849,10 +841,6 @@ yy_symbol_value_print (FILE *yyo,
   YY_USE (yyoutput);
   if (!yyvaluep)
     return;
-# ifdef YYPRINT
-  if (yykind < YYNTOKENS)
-    YYPRINT (yyo, yytoknum[yykind], *yyvaluep);
-# endif
   YY_IGNORE_MAYBE_UNINITIALIZED_BEGIN
   YY_USE (yykind);
   YY_IGNORE_MAYBE_UNINITIALIZED_END
@@ -1037,6 +1025,7 @@ yyparse (void)
   YYDPRINTF ((stderr, "Starting parse\n"));
 
   yychar = YYEMPTY; /* Cause a token to be read.  */
+
   goto yysetstate;
 
 
@@ -1062,7 +1051,7 @@ yysetstate:
 
   if (yyss + yystacksize - 1 <= yyssp)
 #if !defined yyoverflow && !defined YYSTACK_RELOCATE
-    goto yyexhaustedlab;
+    YYNOMEM;
 #else
     {
       /* Get the current used size of the three stacks, in elements.  */
@@ -1090,7 +1079,7 @@ yysetstate:
 # else /* defined YYSTACK_RELOCATE */
       /* Extend the stack our own way.  */
       if (YYMAXDEPTH <= yystacksize)
-        goto yyexhaustedlab;
+        YYNOMEM;
       yystacksize *= 2;
       if (YYMAXDEPTH < yystacksize)
         yystacksize = YYMAXDEPTH;
@@ -1101,7 +1090,7 @@ yysetstate:
           YY_CAST (union yyalloc *,
                    YYSTACK_ALLOC (YY_CAST (YYSIZE_T, YYSTACK_BYTES (yystacksize))));
         if (! yyptr)
-          goto yyexhaustedlab;
+          YYNOMEM;
         YYSTACK_RELOCATE (yyss_alloc, yyss);
         YYSTACK_RELOCATE (yyvs_alloc, yyvs);
 #  undef YYSTACK_RELOCATE
@@ -1122,6 +1111,7 @@ yysetstate:
         YYABORT;
     }
 #endif /* !defined yyoverflow && !defined YYSTACK_RELOCATE */
+
 
   if (yystate == YYFINAL)
     YYACCEPT;
@@ -1239,7 +1229,7 @@ yyreduce:
                                 {
 					replication_parse_result = (yyvsp[-1].node);
 				}
-#line 1243 "repl_gram.c"
+#line 1233 "repl_gram.c"
     break;
 
   case 14: /* identify_system: K_IDENTIFY_SYSTEM  */
@@ -1247,7 +1237,7 @@ yyreduce:
                                 {
 					(yyval.node) = (Node *) makeNode(IdentifySystemCmd);
 				}
-#line 1251 "repl_gram.c"
+#line 1241 "repl_gram.c"
     break;
 
   case 15: /* read_replication_slot: K_READ_REPLICATION_SLOT var_name  */
@@ -1257,7 +1247,7 @@ yyreduce:
 					n->slotname = (yyvsp[0].str);
 					(yyval.node) = (Node *) n;
 				}
-#line 1261 "repl_gram.c"
+#line 1251 "repl_gram.c"
     break;
 
   case 16: /* show: K_SHOW var_name  */
@@ -1267,19 +1257,19 @@ yyreduce:
 					n->name = (yyvsp[0].str);
 					(yyval.node) = (Node *) n;
 				}
-#line 1271 "repl_gram.c"
+#line 1261 "repl_gram.c"
     break;
 
   case 17: /* var_name: IDENT  */
 #line 152 "repl_gram.y"
                         { (yyval.str) = (yyvsp[0].str); }
-#line 1277 "repl_gram.c"
+#line 1267 "repl_gram.c"
     break;
 
   case 18: /* var_name: var_name '.' IDENT  */
 #line 154 "repl_gram.y"
                                 { (yyval.str) = psprintf("%s.%s", (yyvsp[-2].str), (yyvsp[0].str)); }
-#line 1283 "repl_gram.c"
+#line 1273 "repl_gram.c"
     break;
 
   case 19: /* base_backup: K_BASE_BACKUP '(' generic_option_list ')'  */
@@ -1289,7 +1279,7 @@ yyreduce:
 					cmd->options = (yyvsp[-1].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1293 "repl_gram.c"
+#line 1283 "repl_gram.c"
     break;
 
   case 20: /* base_backup: K_BASE_BACKUP  */
@@ -1298,7 +1288,7 @@ yyreduce:
 					BaseBackupCmd *cmd = makeNode(BaseBackupCmd);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1302 "repl_gram.c"
+#line 1292 "repl_gram.c"
     break;
 
   case 21: /* create_replication_slot: K_CREATE_REPLICATION_SLOT IDENT opt_temporary K_PHYSICAL create_slot_options  */
@@ -1312,7 +1302,7 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1316 "repl_gram.c"
+#line 1306 "repl_gram.c"
     break;
 
   case 22: /* create_replication_slot: K_CREATE_REPLICATION_SLOT IDENT opt_temporary K_LOGICAL IDENT create_slot_options  */
@@ -1327,31 +1317,31 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1331 "repl_gram.c"
+#line 1321 "repl_gram.c"
     break;
 
   case 23: /* create_slot_options: '(' generic_option_list ')'  */
 #line 201 "repl_gram.y"
                                                                         { (yyval.list) = (yyvsp[-1].list); }
-#line 1337 "repl_gram.c"
+#line 1327 "repl_gram.c"
     break;
 
   case 24: /* create_slot_options: create_slot_legacy_opt_list  */
 #line 202 "repl_gram.y"
                                                                 { (yyval.list) = (yyvsp[0].list); }
-#line 1343 "repl_gram.c"
+#line 1333 "repl_gram.c"
     break;
 
   case 25: /* create_slot_legacy_opt_list: create_slot_legacy_opt_list create_slot_legacy_opt  */
 #line 207 "repl_gram.y"
                                 { (yyval.list) = lappend((yyvsp[-1].list), (yyvsp[0].defelt)); }
-#line 1349 "repl_gram.c"
+#line 1339 "repl_gram.c"
     break;
 
   case 26: /* create_slot_legacy_opt_list: %empty  */
 #line 209 "repl_gram.y"
                                 { (yyval.list) = NIL; }
-#line 1355 "repl_gram.c"
+#line 1345 "repl_gram.c"
     break;
 
   case 27: /* create_slot_legacy_opt: K_EXPORT_SNAPSHOT  */
@@ -1360,7 +1350,7 @@ yyreduce:
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("export"), -1);
 				}
-#line 1364 "repl_gram.c"
+#line 1354 "repl_gram.c"
     break;
 
   case 28: /* create_slot_legacy_opt: K_NOEXPORT_SNAPSHOT  */
@@ -1369,7 +1359,7 @@ yyreduce:
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("nothing"), -1);
 				}
-#line 1373 "repl_gram.c"
+#line 1363 "repl_gram.c"
     break;
 
   case 29: /* create_slot_legacy_opt: K_USE_SNAPSHOT  */
@@ -1378,7 +1368,7 @@ yyreduce:
 				  (yyval.defelt) = makeDefElem("snapshot",
 								   (Node *) makeString("use"), -1);
 				}
-#line 1382 "repl_gram.c"
+#line 1372 "repl_gram.c"
     break;
 
   case 30: /* create_slot_legacy_opt: K_RESERVE_WAL  */
@@ -1387,7 +1377,7 @@ yyreduce:
 				  (yyval.defelt) = makeDefElem("reserve_wal",
 								   (Node *) makeBoolean(true), -1);
 				}
-#line 1391 "repl_gram.c"
+#line 1381 "repl_gram.c"
     break;
 
   case 31: /* create_slot_legacy_opt: K_TWO_PHASE  */
@@ -1396,7 +1386,7 @@ yyreduce:
 				  (yyval.defelt) = makeDefElem("two_phase",
 								   (Node *) makeBoolean(true), -1);
 				}
-#line 1400 "repl_gram.c"
+#line 1390 "repl_gram.c"
     break;
 
   case 32: /* drop_replication_slot: K_DROP_REPLICATION_SLOT IDENT  */
@@ -1408,7 +1398,7 @@ yyreduce:
 					cmd->wait = false;
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1412 "repl_gram.c"
+#line 1402 "repl_gram.c"
     break;
 
   case 33: /* drop_replication_slot: K_DROP_REPLICATION_SLOT IDENT K_WAIT  */
@@ -1420,7 +1410,7 @@ yyreduce:
 					cmd->wait = true;
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1424 "repl_gram.c"
+#line 1414 "repl_gram.c"
     break;
 
   case 34: /* start_replication: K_START_REPLICATION opt_slot opt_physical RECPTR opt_timeline  */
@@ -1435,7 +1425,7 @@ yyreduce:
 					cmd->timeline = (yyvsp[0].uintval);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1439 "repl_gram.c"
+#line 1429 "repl_gram.c"
     break;
 
   case 35: /* start_logical_replication: K_START_REPLICATION K_SLOT IDENT K_LOGICAL RECPTR plugin_options  */
@@ -1449,7 +1439,7 @@ yyreduce:
 					cmd->options = (yyvsp[0].list);
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1453 "repl_gram.c"
+#line 1443 "repl_gram.c"
     break;
 
   case 36: /* timeline_history: K_TIMELINE_HISTORY UCONST  */
@@ -1467,31 +1457,31 @@ yyreduce:
 
 					(yyval.node) = (Node *) cmd;
 				}
-#line 1471 "repl_gram.c"
+#line 1461 "repl_gram.c"
     break;
 
   case 39: /* opt_temporary: K_TEMPORARY  */
 #line 316 "repl_gram.y"
                                                                                 { (yyval.boolval) = true; }
-#line 1477 "repl_gram.c"
+#line 1467 "repl_gram.c"
     break;
 
   case 40: /* opt_temporary: %empty  */
 #line 317 "repl_gram.y"
                                                                         { (yyval.boolval) = false; }
-#line 1483 "repl_gram.c"
+#line 1473 "repl_gram.c"
     break;
 
   case 41: /* opt_slot: K_SLOT IDENT  */
 #line 322 "repl_gram.y"
                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1489 "repl_gram.c"
+#line 1479 "repl_gram.c"
     break;
 
   case 42: /* opt_slot: %empty  */
 #line 324 "repl_gram.y"
                                 { (yyval.str) = NULL; }
-#line 1495 "repl_gram.c"
+#line 1485 "repl_gram.c"
     break;
 
   case 43: /* opt_timeline: K_TIMELINE UCONST  */
@@ -1503,25 +1493,25 @@ yyreduce:
 								 errmsg("invalid timeline %u", (yyvsp[0].uintval))));
 					(yyval.uintval) = (yyvsp[0].uintval);
 				}
-#line 1507 "repl_gram.c"
+#line 1497 "repl_gram.c"
     break;
 
   case 44: /* opt_timeline: %empty  */
 #line 336 "repl_gram.y"
                                                                 { (yyval.uintval) = 0; }
-#line 1513 "repl_gram.c"
+#line 1503 "repl_gram.c"
     break;
 
   case 45: /* plugin_options: '(' plugin_opt_list ')'  */
 #line 341 "repl_gram.y"
                                                                 { (yyval.list) = (yyvsp[-1].list); }
-#line 1519 "repl_gram.c"
+#line 1509 "repl_gram.c"
     break;
 
   case 46: /* plugin_options: %empty  */
 #line 342 "repl_gram.y"
                                                                         { (yyval.list) = NIL; }
-#line 1525 "repl_gram.c"
+#line 1515 "repl_gram.c"
     break;
 
   case 47: /* plugin_opt_list: plugin_opt_elem  */
@@ -1529,7 +1519,7 @@ yyreduce:
                                 {
 					(yyval.list) = list_make1((yyvsp[0].defelt));
 				}
-#line 1533 "repl_gram.c"
+#line 1523 "repl_gram.c"
     break;
 
   case 48: /* plugin_opt_list: plugin_opt_list ',' plugin_opt_elem  */
@@ -1537,7 +1527,7 @@ yyreduce:
                                 {
 					(yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].defelt));
 				}
-#line 1541 "repl_gram.c"
+#line 1531 "repl_gram.c"
     break;
 
   case 49: /* plugin_opt_elem: IDENT plugin_opt_arg  */
@@ -1545,31 +1535,31 @@ yyreduce:
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (yyvsp[0].node), -1);
 				}
-#line 1549 "repl_gram.c"
+#line 1539 "repl_gram.c"
     break;
 
   case 50: /* plugin_opt_arg: SCONST  */
 #line 364 "repl_gram.y"
                                                                                 { (yyval.node) = (Node *) makeString((yyvsp[0].str)); }
-#line 1555 "repl_gram.c"
+#line 1545 "repl_gram.c"
     break;
 
   case 51: /* plugin_opt_arg: %empty  */
 #line 365 "repl_gram.y"
                                                                         { (yyval.node) = NULL; }
-#line 1561 "repl_gram.c"
+#line 1551 "repl_gram.c"
     break;
 
   case 52: /* generic_option_list: generic_option_list ',' generic_option  */
 #line 370 "repl_gram.y"
                                 { (yyval.list) = lappend((yyvsp[-2].list), (yyvsp[0].defelt)); }
-#line 1567 "repl_gram.c"
+#line 1557 "repl_gram.c"
     break;
 
   case 53: /* generic_option_list: generic_option  */
 #line 372 "repl_gram.y"
                                 { (yyval.list) = list_make1((yyvsp[0].defelt)); }
-#line 1573 "repl_gram.c"
+#line 1563 "repl_gram.c"
     break;
 
   case 54: /* generic_option: ident_or_keyword  */
@@ -1577,7 +1567,7 @@ yyreduce:
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[0].str), NULL, -1);
 				}
-#line 1581 "repl_gram.c"
+#line 1571 "repl_gram.c"
     break;
 
   case 55: /* generic_option: ident_or_keyword IDENT  */
@@ -1585,7 +1575,7 @@ yyreduce:
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeString((yyvsp[0].str)), -1);
 				}
-#line 1589 "repl_gram.c"
+#line 1579 "repl_gram.c"
     break;
 
   case 56: /* generic_option: ident_or_keyword SCONST  */
@@ -1593,7 +1583,7 @@ yyreduce:
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeString((yyvsp[0].str)), -1);
 				}
-#line 1597 "repl_gram.c"
+#line 1587 "repl_gram.c"
     break;
 
   case 57: /* generic_option: ident_or_keyword UCONST  */
@@ -1601,125 +1591,125 @@ yyreduce:
                                 {
 					(yyval.defelt) = makeDefElem((yyvsp[-1].str), (Node *) makeInteger((yyvsp[0].uintval)), -1);
 				}
-#line 1605 "repl_gram.c"
+#line 1595 "repl_gram.c"
     break;
 
   case 58: /* ident_or_keyword: IDENT  */
 #line 395 "repl_gram.y"
                                                                                 { (yyval.str) = (yyvsp[0].str); }
-#line 1611 "repl_gram.c"
+#line 1601 "repl_gram.c"
     break;
 
   case 59: /* ident_or_keyword: K_BASE_BACKUP  */
 #line 396 "repl_gram.y"
                                                                         { (yyval.str) = "base_backup"; }
-#line 1617 "repl_gram.c"
+#line 1607 "repl_gram.c"
     break;
 
   case 60: /* ident_or_keyword: K_IDENTIFY_SYSTEM  */
 #line 397 "repl_gram.y"
                                                                         { (yyval.str) = "identify_system"; }
-#line 1623 "repl_gram.c"
+#line 1613 "repl_gram.c"
     break;
 
   case 61: /* ident_or_keyword: K_SHOW  */
 #line 398 "repl_gram.y"
                                                                                 { (yyval.str) = "show"; }
-#line 1629 "repl_gram.c"
+#line 1619 "repl_gram.c"
     break;
 
   case 62: /* ident_or_keyword: K_START_REPLICATION  */
 #line 399 "repl_gram.y"
                                                                 { (yyval.str) = "start_replication"; }
-#line 1635 "repl_gram.c"
+#line 1625 "repl_gram.c"
     break;
 
   case 63: /* ident_or_keyword: K_CREATE_REPLICATION_SLOT  */
 #line 400 "repl_gram.y"
                                                         { (yyval.str) = "create_replication_slot"; }
-#line 1641 "repl_gram.c"
+#line 1631 "repl_gram.c"
     break;
 
   case 64: /* ident_or_keyword: K_DROP_REPLICATION_SLOT  */
 #line 401 "repl_gram.y"
                                                                 { (yyval.str) = "drop_replication_slot"; }
-#line 1647 "repl_gram.c"
+#line 1637 "repl_gram.c"
     break;
 
   case 65: /* ident_or_keyword: K_TIMELINE_HISTORY  */
 #line 402 "repl_gram.y"
                                                                 { (yyval.str) = "timeline_history"; }
-#line 1653 "repl_gram.c"
+#line 1643 "repl_gram.c"
     break;
 
   case 66: /* ident_or_keyword: K_WAIT  */
 #line 403 "repl_gram.y"
                                                                                 { (yyval.str) = "wait"; }
-#line 1659 "repl_gram.c"
+#line 1649 "repl_gram.c"
     break;
 
   case 67: /* ident_or_keyword: K_TIMELINE  */
 #line 404 "repl_gram.y"
                                                                         { (yyval.str) = "timeline"; }
-#line 1665 "repl_gram.c"
+#line 1655 "repl_gram.c"
     break;
 
   case 68: /* ident_or_keyword: K_PHYSICAL  */
 #line 405 "repl_gram.y"
                                                                         { (yyval.str) = "physical"; }
-#line 1671 "repl_gram.c"
+#line 1661 "repl_gram.c"
     break;
 
   case 69: /* ident_or_keyword: K_LOGICAL  */
 #line 406 "repl_gram.y"
                                                                                 { (yyval.str) = "logical"; }
-#line 1677 "repl_gram.c"
+#line 1667 "repl_gram.c"
     break;
 
   case 70: /* ident_or_keyword: K_SLOT  */
 #line 407 "repl_gram.y"
                                                                                 { (yyval.str) = "slot"; }
-#line 1683 "repl_gram.c"
+#line 1673 "repl_gram.c"
     break;
 
   case 71: /* ident_or_keyword: K_RESERVE_WAL  */
 #line 408 "repl_gram.y"
                                                                         { (yyval.str) = "reserve_wal"; }
-#line 1689 "repl_gram.c"
+#line 1679 "repl_gram.c"
     break;
 
   case 72: /* ident_or_keyword: K_TEMPORARY  */
 #line 409 "repl_gram.y"
                                                                         { (yyval.str) = "temporary"; }
-#line 1695 "repl_gram.c"
+#line 1685 "repl_gram.c"
     break;
 
   case 73: /* ident_or_keyword: K_TWO_PHASE  */
 #line 410 "repl_gram.y"
                                                                         { (yyval.str) = "two_phase"; }
-#line 1701 "repl_gram.c"
+#line 1691 "repl_gram.c"
     break;
 
   case 74: /* ident_or_keyword: K_EXPORT_SNAPSHOT  */
 #line 411 "repl_gram.y"
                                                                         { (yyval.str) = "export_snapshot"; }
-#line 1707 "repl_gram.c"
+#line 1697 "repl_gram.c"
     break;
 
   case 75: /* ident_or_keyword: K_NOEXPORT_SNAPSHOT  */
 #line 412 "repl_gram.y"
                                                                 { (yyval.str) = "noexport_snapshot"; }
-#line 1713 "repl_gram.c"
+#line 1703 "repl_gram.c"
     break;
 
   case 76: /* ident_or_keyword: K_USE_SNAPSHOT  */
 #line 413 "repl_gram.y"
                                                                         { (yyval.str) = "use_snapshot"; }
-#line 1719 "repl_gram.c"
+#line 1709 "repl_gram.c"
     break;
 
 
-#line 1723 "repl_gram.c"
+#line 1713 "repl_gram.c"
 
       default: break;
     }
@@ -1801,6 +1791,7 @@ yyerrorlab:
      label yyerrorlab therefore never appears in user code.  */
   if (0)
     YYERROR;
+  ++yynerrs;
 
   /* Do not reclaim the symbols of the rule whose action triggered
      this YYERROR.  */
@@ -1861,7 +1852,7 @@ yyerrlab1:
 `-------------------------------------*/
 yyacceptlab:
   yyresult = 0;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
 /*-----------------------------------.
@@ -1869,24 +1860,22 @@ yyacceptlab:
 `-----------------------------------*/
 yyabortlab:
   yyresult = 1;
-  goto yyreturn;
+  goto yyreturnlab;
 
 
-#if !defined yyoverflow
-/*-------------------------------------------------.
-| yyexhaustedlab -- memory exhaustion comes here.  |
-`-------------------------------------------------*/
+/*-----------------------------------------------------------.
+| yyexhaustedlab -- YYNOMEM (memory exhaustion) comes here.  |
+`-----------------------------------------------------------*/
 yyexhaustedlab:
   yyerror (YY_("memory exhausted"));
   yyresult = 2;
-  goto yyreturn;
-#endif
+  goto yyreturnlab;
 
 
-/*-------------------------------------------------------.
-| yyreturn -- parsing is finished, clean up and return.  |
-`-------------------------------------------------------*/
-yyreturn:
+/*----------------------------------------------------------.
+| yyreturnlab -- parsing is finished, clean up and return.  |
+`----------------------------------------------------------*/
+yyreturnlab:
   if (yychar != YYEMPTY)
     {
       /* Make sure we have latest lookahead translation.  See comments at

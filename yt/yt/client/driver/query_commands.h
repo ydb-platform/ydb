@@ -137,11 +137,11 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TGetDeclaredParametersInfoCommand
-    : public TTypedCommand<NApi::TGetDeclaredParametersInfoOptions>
+class TGetQueryDeclaredParametersInfoCommand
+    : public TTypedCommand<NApi::TGetQueryDeclaredParametersInfoOptions>
 {
 public:
-    REGISTER_YSON_STRUCT_LITE(TGetDeclaredParametersInfoCommand);
+    REGISTER_YSON_STRUCT_LITE(TGetQueryDeclaredParametersInfoCommand);
 
     static void Register(TRegistrar registrar);
 

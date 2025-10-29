@@ -190,18 +190,20 @@ Y_UNIT_TEST_SUITE(TQuoterServiceTest) {
         constexpr double secondsForWait = static_cast<double>(waitDuration.MicroSeconds()) / 1000000.0;
         constexpr double doubleRate = static_cast<double>(rate);
 
+        TString database;
         TString quoter;
         TString resource;
         if (resType == ESpeedTestResourceType::KesusResource) {
             CreateKesus(server);
             CreateKesusResource(server, doubleRate);
+            database = TStringBuilder() << "/" << Tests::TestDomainName;
             quoter = TStringBuilder() << "/" << Tests::TestDomainName << "/KesusQuoter";
             resource = "Res";
         }
 
         const TEvQuota::TResourceLeaf resLeaf = resType == ESpeedTestResourceType::StaticTaggedRateResource ?
             TEvQuota::TResourceLeaf(TEvQuota::TResourceLeaf::QuoterSystem, TEvQuota::TResourceLeaf::MakeTaggedRateRes(42, rate), 1) :
-            TEvQuota::TResourceLeaf(quoter, resource, 1);
+            TEvQuota::TResourceLeaf(database, quoter, resource, 1);
 
         for (size_t iteration = 0; iteration < 2; ++iteration) {
             const TInstant start = TInstant::Now();

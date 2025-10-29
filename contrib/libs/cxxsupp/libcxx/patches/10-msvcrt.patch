@@ -1,0 +1,13 @@
+diff --git a/include/cstdlib b/include/cstdlib
+index 1ecdd3a..e449d25 100644
+--- a/include/cstdlib
++++ b/include/cstdlib
+@@ -145,7 +145,7 @@ using ::wcstombs _LIBCPP_USING_IF_EXISTS;
+ using ::at_quick_exit _LIBCPP_USING_IF_EXISTS;
+ using ::quick_exit _LIBCPP_USING_IF_EXISTS;
+ #endif
+-#if _LIBCPP_STD_VER >= 17
++#if _LIBCPP_STD_VER >= 17 && !defined(_LIBCPP_MSVCRT)
+ using ::aligned_alloc _LIBCPP_USING_IF_EXISTS;
+ #endif
+ 

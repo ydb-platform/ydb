@@ -65,6 +65,5 @@ bool TArgsDechunker::Next(std::vector<arrow::Datum>& chunk, ui64& chunkLen) {
     return true;
 }
 
-
-}
-}
+} // namespace NUdf
+} // namespace NYql

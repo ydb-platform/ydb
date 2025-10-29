@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(pire_udf)
         27
         0
     )
-    
+
     SRCS(
         pire_udf.cpp
     )

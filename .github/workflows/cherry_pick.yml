@@ -20,14 +20,11 @@ on:
         description: Comma or space separated branches to cherry-pick
         required: true
 
-concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 jobs:
   create-pr:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, tiny-worker]
     steps:
       - name: checkout
         uses: actions/checkout@v4

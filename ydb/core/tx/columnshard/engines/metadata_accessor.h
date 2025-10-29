@@ -42,9 +42,11 @@ public:
         AFL_VERIFY(result);
         return *result;
     }
-    std::vector<TNameTypeInfo> GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const {
-        return GetSnapshotSchemaVerified(vSchemas, TSnapshot::Max())->GetIndexInfo().GetPrimaryKeyColumns();
-    }
+
+    std::vector<TNameTypeInfo> GetPrimaryKeyInfo(const TVersionedPresetSchemas& vSchemas) const;
+
+    const std::shared_ptr<arrow::Schema>& GetPrimaryKeyScheme(const TVersionedPresetSchemas& vSchemas) const;
+
     TString GetTableName() const;
     virtual std::shared_ptr<ISnapshotSchema> GetSnapshotSchemaOptional(
         const TVersionedPresetSchemas& vSchemas, const TSnapshot& snapshot) const = 0;

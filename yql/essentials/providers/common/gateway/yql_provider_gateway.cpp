@@ -15,7 +15,7 @@ void TOperationResult::AddIssue(const TIssue& issue) {
 }
 
 void TOperationResult::AddIssues(const TIssues& issues) {
-    for (auto& topIssue: issues) {
+    for (auto& topIssue : issues) {
         WalkThroughIssues(topIssue, false, [&](const TIssue& err, ui16 level) {
             Y_UNUSED(level);
             YQL_CLOG(NOTICE, ProviderCommon) << err;
@@ -36,5 +36,5 @@ void TOperationResult::ReportIssues(TIssueManager& issueManager) const {
     issueManager.RaiseIssues(Issues_);
 }
 
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

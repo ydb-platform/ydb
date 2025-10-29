@@ -8,8 +8,7 @@ namespace NUuid {
 static void WriteHexDigit(ui8 digit, IOutputStream& out) {
     if (digit <= 9) {
         out << char('0' + digit);
-    }
-    else {
+    } else {
         out << char('a' + digit - 10);
     }
 }
@@ -77,6 +76,5 @@ void UuidHalfsToByteString(ui64 low, ui64 hi, IOutputStream& out) {
     out.Write(buf.Bytes, 16);
 }
 
-}
-}
-
+} // namespace NUuid
+} // namespace NKikimr

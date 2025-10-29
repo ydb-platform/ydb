@@ -45,10 +45,10 @@ TDatumProvider MakeDatumProvider(const IComputationNode* node, TComputationConte
 }
 
 TComputationContext::TComputationContext(const THolderFactory& holderFactory,
-    const NUdf::IValueBuilder* builder,
-    const TComputationOptsFull& opts,
-    const TComputationMutables& mutables,
-    arrow::MemoryPool& arrowMemoryPool)
+                                         const NUdf::IValueBuilder* builder,
+                                         const TComputationOptsFull& opts,
+                                         const TComputationMutables& mutables,
+                                         arrow::MemoryPool& arrowMemoryPool)
     : TComputationContextLLVM{holderFactory, opts.Stats, std::make_unique<NUdf::TUnboxedValue[]>(mutables.CurValueIndex), builder}
     , RandomProvider(opts.RandomProvider)
     , TimeProvider(opts.TimeProvider)
@@ -65,7 +65,7 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
     std::fill_n(MutableValues.get(), mutables.CurValueIndex, NUdf::TUnboxedValue(NUdf::TUnboxedValuePod::Invalid()));
 
     for (const auto& [mutableIdx, fieldIdx, used] : mutables.WideFieldInitialize) {
-        for (ui32 i: used) {
+        for (ui32 i : used) {
             WideFields[fieldIdx + i] = &MutableValues[mutableIdx + i];
         }
     }
@@ -77,11 +77,12 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
 TComputationContext::~TComputationContext() {
 #ifndef NDEBUG
     if (RssCounter) {
-        RssLogger_->Log(RssLoggerComponent_, NUdf::ELogLevel::Info, TStringBuilder()
-            << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
-            << ", rss=" << TRusage::Get().MaxRss
-            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
-            << ", adjustor=" << UsageAdjustor);
+        RssLogger_->Log(
+            RssLoggerComponent_,
+            NUdf::ELogLevel::Info,
+            TStringBuilder() << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
+                             << ", rss=" << TRusage::Get().MaxRss << ", peakAlloc="
+                             << HolderFactory.GetPagePool().GetPeakAllocated() << ", adjustor=" << UsageAdjustor);
     }
 #endif
 }
@@ -98,8 +99,8 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 #ifndef NDEBUG
     // Print first time and then each 30 seconds
-    bool printUsage = LastPrintUsage_ == TInstant::Zero()
-        || TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage_);
+    bool printUsage = LastPrintUsage_ == TInstant::Zero() ||
+                      TInstant::Now() > TDuration::Seconds(30).ToDeadLine(LastPrintUsage_);
 #endif
 
     if (auto peakAlloc = HolderFactory.GetPagePool().GetPeakAllocated()) {
@@ -114,21 +115,23 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 #ifndef NDEBUG
     if (printUsage) {
-        RssLogger_->Log(RssLoggerComponent_, NUdf::ELogLevel::Info, TStringBuilder()
-            << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
-            << ", rss=" << rss
-            << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
-            << ", adjustor=" << UsageAdjustor);
+        RssLogger_->Log(
+            RssLoggerComponent_,
+            NUdf::ELogLevel::Info,
+            TStringBuilder() << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
+                             << ", rss=" << rss << ", peakAlloc="
+                             << HolderFactory.GetPagePool().GetPeakAllocated() << ", adjustor=" << UsageAdjustor);
         LastPrintUsage_ = TInstant::Now();
     }
 #endif
 }
 
-class TSimpleSecureParamsProvider : public NUdf::ISecureParamsProvider {
+class TSimpleSecureParamsProvider: public NUdf::ISecureParamsProvider {
 public:
     TSimpleSecureParamsProvider(const THashMap<TString, TString>& secureParams)
         : SecureParams_(secureParams)
-    {}
+    {
+    }
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override {
         auto found = SecureParams_.FindPtr(TStringBuf(key));
@@ -148,5 +151,5 @@ std::unique_ptr<NUdf::ISecureParamsProvider> MakeSimpleSecureParamsProvider(cons
     return std::make_unique<TSimpleSecureParamsProvider>(secureParams);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -13,7 +13,7 @@ namespace NYql {
 
 using namespace NNodes;
 
-class TPgDataSinkExecTransformer : public TExecTransformerBase {
+class TPgDataSinkExecTransformer: public TExecTransformerBase {
 public:
     TPgDataSinkExecTransformer(TPgState::TPtr state)
         : State_(state)

@@ -16,12 +16,12 @@ class TSimpleArrowResolver: public IArrowResolver {
 public:
     TSimpleArrowResolver(const IFunctionRegistry& functionRegistry)
         : FunctionRegistry_(functionRegistry)
-    {}
+    {
+    }
 
 private:
     EStatus LoadFunctionMetadata(const TPosition& pos, TStringBuf name, const TVector<const TTypeAnnotationNode*>& argTypes,
-        const TTypeAnnotationNode* returnType, TExprContext& ctx) const override
-    {
+                                 const TTypeAnnotationNode* returnType, TExprContext& ctx) const override {
         try {
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);
@@ -63,8 +63,7 @@ private:
     }
 
     EStatus AreTypesSupported(const TPosition& pos, const TVector<const TTypeAnnotationNode*>& types, TExprContext& ctx,
-        const TUnsupportedTypeCallback& onUnsupported = {}) const override
-    {
+                              const TUnsupportedTypeCallback& onUnsupported = {}) const override {
         try {
             TScopedAlloc alloc(__LOCATION__);
             TTypeEnvironment env(alloc);

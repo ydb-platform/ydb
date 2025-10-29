@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(yson2_udf)
         28
         0
     )
-    
+
     SRCS(
         yson2_udf.cpp
     )

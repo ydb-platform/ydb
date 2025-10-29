@@ -222,7 +222,10 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         WriteTestData(kikimr, "/Root/olapTable", 1300000, 300300000, 40000);
         WriteTestData(kikimr, "/Root/olapTable", 1400000, 300400000, 40000);
         WriteTestData(kikimr, "/Root/olapTable", 2000000, 200000000, 280000);
-        WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 440000);
+        // At least 11 writes with intersecting ranges are necessary to perform at least one tiling compaction.
+        for (int i = 0; i < 11; i++) {
+            WriteTestData(kikimr, "/Root/olapTable", 3000000, 100000000, 440000);
+        }
 
         csController->WaitActualization(TDuration::Seconds(10));
 

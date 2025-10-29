@@ -26,7 +26,7 @@ bool TPeriodicYielderGuard::TryYield() const
         return false;
     }
 
-    if (!IsContextSwitchForbidden()) {
+    if (IsContextSwitchForbidden()) {
         return false;
     }
 
@@ -36,7 +36,7 @@ bool TPeriodicYielderGuard::TryYield() const
 
 TPeriodicYielderGuard CreatePeriodicYielder(std::optional<TDuration> period)
 {
-    return {period};
+    return TPeriodicYielderGuard(period);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -25,25 +25,28 @@ namespace NYql {
 class TTransformationPipeline;
 
 namespace NCommon {
-    class TMkqlCallableCompilerBase;
-}
+class TMkqlCallableCompilerBase;
+} // namespace NCommon
 
 class TFallbackError: public yexception {
 public:
     TFallbackError(TIssuePtr issue = {})
         : Issue_(std::move(issue))
-    {}
+    {
+    }
 
     TIssuePtr GetIssue() const {
         return Issue_;
     }
+
 private:
     TIssuePtr Issue_;
 };
 
 class IDqIntegration {
 public:
-    virtual ~IDqIntegration() {}
+    virtual ~IDqIntegration() {
+    }
 
     struct TPartitionSettings {
         TMaybe<ui64> DataSizePerJob;

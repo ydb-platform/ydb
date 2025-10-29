@@ -302,6 +302,7 @@ namespace NKikimr::NBlobDepot {
         // Monitoring
 
         class TTxMonData;
+        class TTxMonS3Config;
 
         TJsonHandler JsonHandler;
 

@@ -108,4 +108,4 @@ TVector<TResult> ParseResponse(const NYT::TNode& responseNode) {
     return v;
 }
 
-}
+} // namespace NYql::NResult

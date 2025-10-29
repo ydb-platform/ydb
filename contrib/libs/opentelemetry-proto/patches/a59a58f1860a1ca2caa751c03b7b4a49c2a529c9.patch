@@ -1,0 +1,111 @@
+From a59a58f1860a1ca2caa751c03b7b4a49c2a529c9 Mon Sep 17 00:00:00 2001
+From: Alexey Alexandrov <aalexand@users.noreply.github.com>
+Date: Fri, 5 Sep 2025 12:10:17 -0700
+Subject: [PATCH] Remove aggregation temporality enum and field. (#710)
+
+---
+ CHANGELOG.md                                  |  4 ++
+ .../profiles/v1development/profiles.proto     | 72 +------------------
+ 2 files changed, 5 insertions(+), 71 deletions(-)
+
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index b9d67b09..337663e3 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,10 @@
+ 
+ The full list of changes can be found in the compare view for the respective release at <https://github.com/open-telemetry/opentelemetry-proto/releases>.
+ 
++### Removed
++
++- profiles: remove aggregation temporality enum and field. [#710](https://github.com/open-telemetry/opentelemetry-proto/pull/710)
++
+ ## 1.8.0 - 2025-09-02
+ 
+ ### Changed
+diff --git a/opentelemetry/proto/profiles/v1development/profiles.proto b/opentelemetry/proto/profiles/v1development/profiles.proto
+index dc101770..e05c847d 100644
+--- a/opentelemetry/proto/profiles/v1development/profiles.proto
++++ b/opentelemetry/proto/profiles/v1development/profiles.proto
+@@ -308,80 +308,10 @@ message Link {
+   bytes span_id = 2;
+ }
+ 
+-// Specifies the method of aggregating metric values, either DELTA (change since last report)
+-// or CUMULATIVE (total since a fixed start time).
+-enum AggregationTemporality {
+-  /* UNSPECIFIED is the default AggregationTemporality, it MUST not be used. */
+-  AGGREGATION_TEMPORALITY_UNSPECIFIED = 0;
+-
+-  /** DELTA is an AggregationTemporality for a profiler which reports
+-  changes since last report time. Successive metrics contain aggregation of
+-  values from continuous and non-overlapping intervals.
+-
+-  The values for a DELTA metric are based only on the time interval
+-  associated with one measurement cycle. There is no dependency on
+-  previous measurements like is the case for CUMULATIVE metrics.
+-
+-  For example, consider a system measuring the number of requests that
+-  it receives and reports the sum of these requests every second as a
+-  DELTA metric:
+-
+-  1. The system starts receiving at time=t_0.
+-  2. A request is received, the system measures 1 request.
+-  3. A request is received, the system measures 1 request.
+-  4. A request is received, the system measures 1 request.
+-  5. The 1 second collection cycle ends. A metric is exported for the
+-      number of requests received over the interval of time t_0 to
+-      t_0+1 with a value of 3.
+-  6. A request is received, the system measures 1 request.
+-  7. A request is received, the system measures 1 request.
+-  8. The 1 second collection cycle ends. A metric is exported for the
+-      number of requests received over the interval of time t_0+1 to
+-      t_0+2 with a value of 2. */
+-  AGGREGATION_TEMPORALITY_DELTA = 1;
+-
+-  /** CUMULATIVE is an AggregationTemporality for a profiler which
+-  reports changes since a fixed start time. This means that current values
+-  of a CUMULATIVE metric depend on all previous measurements since the
+-  start time. Because of this, the sender is required to retain this state
+-  in some form. If this state is lost or invalidated, the CUMULATIVE metric
+-  values MUST be reset and a new fixed start time following the last
+-  reported measurement time sent MUST be used.
+-
+-  For example, consider a system measuring the number of requests that
+-  it receives and reports the sum of these requests every second as a
+-  CUMULATIVE metric:
+-
+-  1. The system starts receiving at time=t_0.
+-  2. A request is received, the system measures 1 request.
+-  3. A request is received, the system measures 1 request.
+-  4. A request is received, the system measures 1 request.
+-  5. The 1 second collection cycle ends. A metric is exported for the
+-      number of requests received over the interval of time t_0 to
+-      t_0+1 with a value of 3.
+-  6. A request is received, the system measures 1 request.
+-  7. A request is received, the system measures 1 request.
+-  8. The 1 second collection cycle ends. A metric is exported for the
+-      number of requests received over the interval of time t_0 to
+-      t_0+2 with a value of 5.
+-  9. The system experiences a fault and loses state.
+-  10. The system recovers and resumes receiving at time=t_1.
+-  11. A request is received, the system measures 1 request.
+-  12. The 1 second collection cycle ends. A metric is exported for the
+-      number of requests received over the interval of time t_1 to
+-      t_1+1 with a value of 1.
+-
+-  Note: Even though, when reporting changes since last report time, using
+-  CUMULATIVE is valid, it is not recommended. */
+-  AGGREGATION_TEMPORALITY_CUMULATIVE = 2;
+-}
+-
+-// ValueType describes the type and units of a value, with an optional aggregation temporality.
++// ValueType describes the type and units of a value.
+ message ValueType {
+   int32 type_strindex = 1; // Index into ProfilesDictionary.string_table.
+   int32 unit_strindex = 2; // Index into ProfilesDictionary.string_table.
+-
+-  AggregationTemporality aggregation_temporality = 3;
+ }
+ 
+ // Each Sample records values encountered in some program context. The program

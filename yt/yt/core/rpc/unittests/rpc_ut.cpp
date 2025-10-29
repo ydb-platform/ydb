@@ -1077,6 +1077,14 @@ TYPED_TEST(TRpcTest, ConnectionLost)
         .ThrowOnError();
 }
 
+TYPED_TEST(TRpcTest, ManuallyCanceledByServer)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.ManuallyCanceledByServer();
+    auto rspOrError = req->Invoke().Get();
+    EXPECT_EQ(NYT::EErrorCode::Canceled, rspOrError.GetCode());
+}
+
 TYPED_TEST(TNotGrpcTest, ProtocolVersionMismatch)
 {
     TTestIncorrectProtocolVersionProxy proxy(this->CreateChannel());

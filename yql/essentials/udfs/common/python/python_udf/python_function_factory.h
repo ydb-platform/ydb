@@ -25,15 +25,14 @@ using namespace NPython;
 //////////////////////////////////////////////////////////////////////////////
 // TPythonFunctionFactory
 //////////////////////////////////////////////////////////////////////////////
-class TPythonFunctionFactory: public TBoxedValue
-{
+class TPythonFunctionFactory: public TBoxedValue {
 public:
     TPythonFunctionFactory(
-            const TStringRef& name,
-            const TStringRef& tag,
-            const TType* functionType,
-            ITypeInfoHelper::TPtr&& helper,
-            const NYql::NUdf::TSourcePosition& pos)
+        const TStringRef& name,
+        const TStringRef& tag,
+        const TType* functionType,
+        ITypeInfoHelper::TPtr&& helper,
+        const NYql::NUdf::TSourcePosition& pos)
         : Ctx_(new TPyContext(helper, tag, pos))
         , FunctionName_(name)
         , FunctionType_(functionType)
@@ -47,9 +46,8 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         TPyCastContext::TPtr castCtx = MakeIntrusive<TPyCastContext>(valueBuilder, Ctx_);
 
         // for get propper c-compatible null-terminating string
@@ -74,7 +72,8 @@ private:
             SetupCallableSettings(castCtx, function.Get());
         } catch (const yexception& e) {
             UdfTerminate((TStringBuilder() << Ctx_->Pos << "Failed to setup callable settings: "
-                                           << e.what()).c_str());
+                                           << e.what())
+                             .c_str());
         }
         return FromPyCallable(castCtx, FunctionType_, function.Release());
     }
@@ -92,7 +91,7 @@ private:
             cflags.cf_flags = PyCF_SOURCE_IS_UTF8;
 
             code.ResetSteal(Py_CompileStringFlags(
-                    source.data(), filename.data(), Py_file_input, &cflags));
+                source.data(), filename.data(), Py_file_input, &cflags));
         }
 
         if (code) {

@@ -39,6 +39,7 @@ class KiKiMRDistConfNodeStatusTest(object):
     n_to_select = None
     override_rings_count = 0
     override_replicas_in_ring_count = 0
+    replicas_specific_volume = 200
     metadata_section = {
         "kind": "MainConfig",
         "version": 0,
@@ -57,7 +58,8 @@ class KiKiMRDistConfNodeStatusTest(object):
                 "relax_time": 10000000,
                 "pileup_replicas": cls.pileup_replicas,
                 "override_rings_count": cls.override_rings_count,
-                "override_replicas_in_ring_count": cls.override_replicas_in_ring_count
+                "override_replicas_in_ring_count": cls.override_replicas_in_ring_count,
+                "replicas_specific_volume": cls.replicas_specific_volume,
             },
             "default_state_limit": 2,
             "update_config_interval": 2000000,
@@ -264,3 +266,17 @@ class TestKiKiMRDistConfSelfHealOverrides(KiKiMRDistConfNodeStatusTest):
         assert_eq(rg2["NToSelect"], 3)
         assert_eq(len(rg2["Ring"]), 3)
         assert_eq(len(rg2["Ring"][0]["Node"]), 2)
+
+
+class TestKiKiMRDistConfSelfHealReplicasSpecificVolume(KiKiMRDistConfNodeStatusTest):
+    erasure = Erasure.MIRROR_3_DC
+    nodes_count = 12
+    override_rings_count = 3
+    replicas_specific_volume = 4
+
+    def do_test(self, configName):
+        time.sleep(25)
+        rg2 = get_ring_group(self.do_request_config(), configName)
+        assert_eq(rg2["NToSelect"], 3)
+        assert_eq(len(rg2["Ring"]), 3)
+        assert_eq(len(rg2["Ring"][0]["Node"]), 4)

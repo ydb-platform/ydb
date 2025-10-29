@@ -171,9 +171,10 @@ std::function<void(TKqpSessionCommon*)> TKqpSessionCommon::GetSmartDeleter(std::
         switch (sessionImpl->GetState()) {
             case TKqpSessionCommon::S_STANDALONE:
             case TKqpSessionCommon::S_BROKEN:
-            case TKqpSessionCommon::S_CLOSING:
+            case TKqpSessionCommon::S_CLOSING: {
                 client->DeleteSession(sessionImpl);
                 break;
+            }
             case TKqpSessionCommon::S_IDLE:
             case TKqpSessionCommon::S_ACTIVE: {
                 if (!client->ReturnSession(sessionImpl)) {

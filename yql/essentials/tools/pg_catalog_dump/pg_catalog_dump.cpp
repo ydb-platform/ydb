@@ -1,40 +1,40 @@
 
 #include <yql/essentials/utils/backtrace/backtrace.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
+#include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/writer/json.h>
 #include <util/generic/yexception.h>
+#include <util/generic/map.h>
 
 using namespace NYql;
 using namespace NJson;
 
-int Main(int argc, const char *argv[])
+int Main(int argc, const char* argv[])
 {
     Y_UNUSED(argc);
     Y_UNUSED(argv);
-    NJsonWriter::TBuf json;
-    json.BeginObject();
-    json.WriteKey("proc");
-    json.BeginList();
+    NJsonWriter::TBuf jsonAll;
+    jsonAll.BeginObject();
 
+    TMap<ui32, TString> procs;
     NPg::EnumProc([&](ui32 oid, const NPg::TProcDesc& desc) {
         if (desc.ReturnSet || desc.Kind != NPg::EProcKind::Function) {
             return;
         }
 
+        NJsonWriter::TBuf json;
         json.BeginObject();
         json.WriteKey("oid").WriteInt(oid);
         json.WriteKey("src").WriteString(desc.Src);
         json.WriteKey("strict").WriteBool(desc.IsStrict);
         const auto& retTypeDesc = NPg::LookupType(desc.ResultType);
         json.WriteKey("ret_type").WriteString(retTypeDesc.Name);
-        json.WriteKey("ret_type_fixed").WriteBool(retTypeDesc.PassByValue &&
-            retTypeDesc.TypeLen > 0 && retTypeDesc.TypeLen <= 8);
+        json.WriteKey("ret_type_fixed").WriteBool(retTypeDesc.PassByValue && retTypeDesc.TypeLen > 0 && retTypeDesc.TypeLen <= 8);
         if (desc.VariadicType != 0) {
             const auto& varTypeDesc = NPg::LookupType(desc.VariadicType);
-            json.WriteKey("var_type").WriteString( varTypeDesc.Name);
+            json.WriteKey("var_type").WriteString(varTypeDesc.Name);
             if (varTypeDesc.Name != "any") {
-                json.WriteKey("var_type_fixed").WriteBool(varTypeDesc.PassByValue &&
-                    varTypeDesc.TypeLen > 0 && varTypeDesc.TypeLen <= 8);
+                json.WriteKey("var_type_fixed").WriteBool(varTypeDesc.PassByValue && varTypeDesc.TypeLen > 0 && varTypeDesc.TypeLen <= 8);
             }
         }
         json.WriteKey("args").BeginList();
@@ -42,22 +42,29 @@ int Main(int argc, const char *argv[])
             const auto& argTypeDesc = NPg::LookupType(a);
             json.BeginObject();
             json.WriteKey("arg_type").WriteString(argTypeDesc.Name);
-            json.WriteKey("arg_type_fixed").WriteBool(argTypeDesc.PassByValue &&
-                argTypeDesc.TypeLen > 0 && argTypeDesc.TypeLen <= 8);
+            json.WriteKey("arg_type_fixed").WriteBool(argTypeDesc.PassByValue && argTypeDesc.TypeLen > 0 && argTypeDesc.TypeLen <= 8);
             json.EndObject();
         }
         json.EndList();
         json.EndObject();
+        procs[oid] = json.Str();
     });
 
-    json.EndList();
-    json.WriteKey("aggregation");
-    json.BeginList();
+    jsonAll.WriteKey("proc");
+    jsonAll.BeginList();
+    for (const auto& [_, json] : procs) {
+        jsonAll.UnsafeWriteValue(json);
+    }
+
+    jsonAll.EndList();
+
+    TMap<ui32, TString> aggs;
     NPg::EnumAggregation([&](ui32 oid, const NPg::TAggregateDesc& desc) {
         if (desc.Kind != NPg::EAggKind::Normal) {
             return;
         }
 
+        NJsonWriter::TBuf json;
         json.BeginObject();
         json.WriteKey("agg_id").WriteInt(oid);
         json.WriteKey("name").WriteString(desc.Name);
@@ -67,8 +74,7 @@ int Main(int argc, const char *argv[])
             const auto& argTypeDesc = NPg::LookupType(a);
             json.BeginObject();
             json.WriteKey("arg_type").WriteString(argTypeDesc.Name);
-            json.WriteKey("arg_type_fixed").WriteBool(argTypeDesc.PassByValue &&
-                argTypeDesc.TypeLen > 0 && argTypeDesc.TypeLen <= 8);
+            json.WriteKey("arg_type_fixed").WriteBool(argTypeDesc.PassByValue && argTypeDesc.TypeLen > 0 && argTypeDesc.TypeLen <= 8);
             json.EndObject();
         }
 
@@ -87,40 +93,41 @@ int Main(int argc, const char *argv[])
 
         const auto& transDesc = NPg::LookupType(NPg::LookupProc(desc.TransFuncId).ResultType);
         json.WriteKey("trans_type").WriteString(transDesc.Name);
-        json.WriteKey("trans_type_fixed").WriteBool(transDesc.PassByValue &&
-            transDesc.TypeLen > 0 && transDesc.TypeLen <= 8);
+        json.WriteKey("trans_type_fixed").WriteBool(transDesc.PassByValue && transDesc.TypeLen > 0 && transDesc.TypeLen <= 8);
 
-        const auto& serializedDesc = NPg::LookupType(NPg::LookupProc(desc.SerializeFuncId ?
-            desc.SerializeFuncId : desc.TransFuncId).ResultType);
+        const auto& serializedDesc = NPg::LookupType(NPg::LookupProc(desc.SerializeFuncId ? desc.SerializeFuncId : desc.TransFuncId).ResultType);
         json.WriteKey("serialized_type").WriteString(serializedDesc.Name);
-        json.WriteKey("serialized_type_fixed").WriteBool(serializedDesc.PassByValue &&
-            serializedDesc.TypeLen > 0 && serializedDesc.TypeLen <= 8);
+        json.WriteKey("serialized_type_fixed").WriteBool(serializedDesc.PassByValue && serializedDesc.TypeLen > 0 && serializedDesc.TypeLen <= 8);
 
-        const auto& retDesc = NPg::LookupType(NPg::LookupProc(desc.FinalFuncId ?
-            desc.FinalFuncId : desc.TransFuncId).ResultType);
+        const auto& retDesc = NPg::LookupType(NPg::LookupProc(desc.FinalFuncId ? desc.FinalFuncId : desc.TransFuncId).ResultType);
         json.WriteKey("ret_type").WriteString(retDesc.Name);
-        json.WriteKey("ret_type_fixed").WriteBool(retDesc.PassByValue &&
-            retDesc.TypeLen > 0 && retDesc.TypeLen <= 8);
+        json.WriteKey("ret_type_fixed").WriteBool(retDesc.PassByValue && retDesc.TypeLen > 0 && retDesc.TypeLen <= 8);
 
         json.WriteKey("has_init_value").WriteBool(!desc.InitValue.empty());
         json.EndObject();
+        aggs[oid] = json.Str();
     });
 
-    json.EndList();
-    json.EndObject();
-    Cout << json.Str();
+    jsonAll.WriteKey("aggregation");
+    jsonAll.BeginList();
+    for (const auto& [_, json] : aggs) {
+        jsonAll.UnsafeWriteValue(json);
+    }
+
+    jsonAll.EndList();
+    jsonAll.EndObject();
+    Cout << jsonAll.Str();
 
     return 0;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 
     try {
         return Main(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }

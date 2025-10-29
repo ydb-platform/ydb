@@ -9,7 +9,6 @@
 
 #include <util/generic/ptr.h>
 
-
 namespace NYql {
 
 class IUrlListerManager: public TThrRefBase {
@@ -27,4 +26,4 @@ public:
 
 using IUrlListerManagerPtr = TIntrusivePtr<IUrlListerManager>;
 
-}
+} // namespace NYql

@@ -17,7 +17,7 @@ public:
         NYql::TExprContext& ctx) = 0;
 };
 
-TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster,
+TIntrusivePtr<IKqpQueryCompiler> CreateKqpQueryCompiler(const TString& cluster, const TString& database,
     const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, const NMiniKQL::IFunctionRegistry& funcRegistry,
     NYql::TTypeAnnotationContext& typesCtx, NYql::TKikimrConfiguration::TPtr config);
 

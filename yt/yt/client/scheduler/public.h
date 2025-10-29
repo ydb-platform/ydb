@@ -16,12 +16,6 @@ class TSpecPatch;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DEFINE_STRONG_TYPEDEF(TJobTraceId, TGuid);
-
-extern const TJobTraceId NullJobTraceId;
-
-////////////////////////////////////////////////////////////////////////////////
-
 YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
 
 extern const TAllocationId NullAllocationId;
@@ -173,6 +167,7 @@ DEFINE_ENUM(EAbortReason,
     ((SchedulingOperationDisabled)     (106))
     ((SchedulingOperationIsNotAlive)   (107))
     ((SchedulingLast)                  (199))
+    ((CookieGroupDisbanded)            (200))
 );
 
 DEFINE_ENUM_UNKNOWN_VALUE(EAbortReason, Unknown);

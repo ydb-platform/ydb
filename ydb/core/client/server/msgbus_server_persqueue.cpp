@@ -32,28 +32,6 @@ const TString& TopicPrefix(const TActorContext& ctx) {
     return topicPrefix;
 }
 
-TProcessingResult ProcessMetaCacheAllTopicsResponse(TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev) {
-    auto& res = ev->Get()->Result;
-    const TString& path = ev->Get()->Path;
-    TProcessingResult result;
-    if (!ev->Get()->Success) {
-        return TProcessingResult{
-                MSTATUS_ERROR,
-                NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                Sprintf("path '%s' has invalid/unknown root prefix, Marker# PQ14", path.c_str()),
-                true
-        };
-    }
-    if (!res) {
-        return TProcessingResult{
-                MSTATUS_ERROR,
-                NPersQueue::NErrorCode::ERROR,
-                Sprintf("path '%s' describe error, Status# no status, reason: no reason, Marker# PQ1", path.c_str()),
-                true
-        };
-    }
-    return {};
-}
 
 TProcessingResult ProcessMetaCacheSingleTopicsResponse(
         const TSchemeCacheNavigate::TEntry& entry
@@ -165,7 +143,9 @@ struct TTabletInfo {
     TVector<NKikimrPQ::TStatusResponse::TPartResult> StatusResponses;
 };
 
-TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes)
+TPersQueueBaseRequestProcessor::TPersQueueBaseRequestProcessor(
+    const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes
+)
     : RequestProto(new NKikimrClient::TPersQueueRequest(request))
     , RequestId(RequestProto->HasRequestId() ? RequestProto->GetRequestId() : "<none>")
     , PqMetaCache(pqMetaCacheId)
@@ -192,9 +172,17 @@ void TPersQueueBaseRequestProcessor::AnswerAndDie(const TActorContext& ctx) {
 void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     StartTimestamp = ctx.Now();
 
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeAllTopicsRequest");
-    bool ret = ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest());
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeAllTopicsRequest Result:" << ret);
+    if (TopicsToRequest.empty()) {
+        throw std::runtime_error("No topics in request");
+    }
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeTopicsRequest");
+    TVector<TString> topicsToRequest;
+    topicsToRequest.reserve(TopicsToRequest.size());
+    for (const auto& topic : TopicsToRequest) {
+        topicsToRequest.push_back(topic);
+    }
+    bool ret = ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest(topicsToRequest));
+    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "Send to PqMetaCache TEvDescribeTopicsRequest Result:" << ret);
 
     if (ListNodes) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -216,7 +204,6 @@ STFUNC(TPersQueueBaseRequestProcessor::StateFunc) {
     switch (ev->GetTypeRewrite()) {
         HFunc(TEvInterconnect::TEvNodesInfo, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
-        HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse, Handle);
         HFunc(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse, Handle);
         HFunc(TEvPersQueue::TEvResponse, Handle);
         CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
@@ -274,56 +261,54 @@ void TPersQueueBaseRequestProcessor::HandleTimeout(const TActorContext& ctx) {
 }
 
 
-void TPersQueueBaseRequestProcessor::GetTopicsListOrThrow(
+THashSet<TString> GetTopicsListOrThrow(
         const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests,
-        THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest
+        THashMap<TString, std::shared_ptr<THashSet<ui64>>>* partitionsToRequest
 ) {
+    THashSet<TString> ret;
     for (const auto& topicRequest : requests) {
         if (topicRequest.GetTopic().empty()) {
             throw std::runtime_error("TopicRequest must have Topic field.");
         }
-        std::shared_ptr<THashSet<ui64>> partitionsToRequestOnTopic(new THashSet<ui64>()); // nonconst
-        partitionsToRequest[topicRequest.GetTopic()] = partitionsToRequestOnTopic;
-        for (ui32 partition : topicRequest.GetPartition()) {
-            const bool inserted = partitionsToRequestOnTopic->insert(partition).second;
-            if (!inserted) {
-                TStringBuilder desc;
-                desc << "multiple partition " << partition
-                     << " in TopicRequest for topic '" << topicRequest.GetTopic() << "'";
-                throw std::runtime_error(desc);
+        if (partitionsToRequest != nullptr) {
+            std::shared_ptr<THashSet<ui64>> partitionsToRequestOnTopic(new THashSet<ui64>()); // nonconst
+            (*partitionsToRequest)[topicRequest.GetTopic()] = partitionsToRequestOnTopic;
+            for (ui32 partition : topicRequest.GetPartition()) {
+                const bool inserted = partitionsToRequestOnTopic->insert(partition).second;
+                if (!inserted) {
+                    TStringBuilder desc;
+                    desc << "multiple partition " << partition
+                        << " in TopicRequest for topic '" << topicRequest.GetTopic() << "'";
+                    throw std::runtime_error(desc);
+                }
             }
         }
-
-        const bool res = TopicsToRequest.insert(topicRequest.GetTopic()).second;
+        const bool res = ret.insert(topicRequest.GetTopic()).second;
         if (!res) {
             TStringBuilder desc;
             desc << "multiple TopicRequest for topic '" << topicRequest.GetTopic() << "'";
             throw std::runtime_error(desc);
         }
     }
-
+    return ret;
 }
 
 void TPersQueueBaseRequestProcessor::Handle(
-        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr&, const TActorContext&
+        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx
 ) {
-    Y_ABORT();
-}
-
-void TPersQueueBaseRequestProcessor::Handle(
-        NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx
-) {
-    LOG_TRACE_S(ctx, NKikimrServices::PERSQUEUE, "TPersQueueBaseRequestProcessor::Handle");
-
-    auto& path = ev->Get()->Path;
-    if (!ev->Get()->Success) {
-        return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                                    TStringBuilder() << "no path '" << path << "', Marker# PQ17");
+    TopicsConverters.reserve(ev->Get()->TopicsRequested.size());
+    Y_ABORT_UNLESS(ev->Get()->Result->ResultSet.size() == ev->Get()->TopicsRequested.size());
+    for (ui32 i = 0; i < ev->Get()->TopicsRequested.size(); ++i) {
+        if (ev->Get()->Result->ResultSet[i].PQGroupInfo) {
+            const auto& pqTabletConfig = ev->Get()->Result->ResultSet[i].PQGroupInfo->Description.GetPQTabletConfig();
+            TopicsConverters.push_back(ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(
+                    pqTabletConfig,
+                    AppData(ctx)->PQConfig.GetTestDatabaseRoot()));
+        } else {
+            TopicsConverters.push_back(nullptr);
+        }
     }
-
     TopicsDescription = std::move(ev->Get()->Result);
-    TopicsConverters = std::move(ev->Get()->Topics);
-    Y_ABORT_UNLESS(TopicsDescription->ResultSet.size() == TopicsConverters.size());
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -501,8 +486,6 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
 
 
 class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> {
-    using TEvDescribeAllTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest;
-    using TEvDescribeAllTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
@@ -589,6 +572,11 @@ public:
                     }
                     TopicInfo[d.GetTopic(i)];
                 }
+                if (TopicInfo.empty()) {
+                    ErrorReason = "no topics in GetTopicMetadata request";
+                    return;
+                }
+
             } else if (meta.HasCmdGetPartitionStatus()) {
                 if (!GetTopicsList(meta.GetCmdGetPartitionStatus().topicrequest()))
                     return;
@@ -600,6 +588,10 @@ public:
                         return;
                     }
                     TopicInfo[d.GetTopic(i)];
+                }
+                if (TopicInfo.empty()) {
+                    ErrorReason = "no topics in GetReadSessionsInfo request";
+                    return;
                 }
             }
              else
@@ -941,31 +933,22 @@ public:
     }
 
 
-    void Handle(TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
-        auto& res = ev->Get()->Result->ResultSet;
-        auto& topics = ev->Get()->Topics;
-        auto processResult = ProcessMetaCacheAllTopicsResponse(ev);
-        if (processResult.IsFatal) {
-            ErrorReason = processResult.Reason;
-            return SendReplyAndDie(CreateErrorReply(processResult.Status, processResult.ErrorCode, ctx), ctx);
-        }
+        auto& resultSet = ev->Get()->Result->ResultSet;
 
-        NoTopicsAtStart = TopicInfo.empty();
-        bool hasTopics = !NoTopicsAtStart;
-
-        Y_ABORT_UNLESS(topics.size() == res.size());
-        auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
-        for (auto i = 0u; i != res.size(); i++) {
-            auto& entry = res[i];
-            auto& converter = ev->Get()->Topics[i];
+        Y_ABORT_UNLESS(TopicInfo.size() == resultSet.size());
+        for (auto i = 0u; i != resultSet.size(); i++) {
+            auto& entry = resultSet[i];
+            auto& converter = ev->Get()->TopicsRequested[i];
             if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
                 auto& description = entry.PQGroupInfo->Description;
-                if (!hasTopics || TopicInfo.find(converter->GetClientsideName()) != TopicInfo.end()) {
-                    auto& topicInfo = TopicInfo[converter->GetClientsideName()];
-                    topicInfo.BalancerTabletId = description.GetBalancerTabletID();
-                    topicInfo.PQInfo = entry.PQGroupInfo;
-                }
+                auto converter = ev->Get()->TopicsRequested[i]->UpgradeToFullConverter(description.GetPQTabletConfig(),
+                                                                                                           AppData(ctx)->PQConfig.GetTestDatabaseRoot());
+                Y_ABORT_UNLESS(TopicInfo.contains(converter->GetClientsideName()));
+                auto& topicInfo = TopicInfo[converter->GetClientsideName()];
+                topicInfo.BalancerTabletId = description.GetBalancerTabletID();
+                topicInfo.PQInfo = entry.PQGroupInfo;
             }
         }
 
@@ -1389,8 +1372,14 @@ public:
             LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "scheduling HasDataInfoResponse in " << RequestProto.GetFetchRequest().GetWaitMs());
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
+        Y_ABORT_UNLESS(!TopicInfo.empty());
 
-        auto* request = new TEvDescribeAllTopicsRequest();
+        TVector<TString> topics;
+        topics.reserve(TopicInfo.size());
+        for (const auto& [topic, _] : TopicInfo) {
+            topics.push_back(topic);
+        }
+        auto* request = new TEvPqNewMetaCache::TEvDescribeTopicsByNameRequest(topics);
         ctx.Send(SchemeCache, request);
         ++DescribeRequests;
 
@@ -1406,7 +1395,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            HFunc(TEvDescribeAllTopicsResponse, Handle);
+            HFunc(TEvPqNewMetaCache::TEvDescribeTopicsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);
@@ -1442,6 +1431,10 @@ private:
             } else {
                 TopicInfo[topic] = std::move(topicInfo);
             }
+        }
+        if (TopicInfo.empty()) {
+            ErrorReason = "No topics in request";
+            return false;
         }
         return true;
     }

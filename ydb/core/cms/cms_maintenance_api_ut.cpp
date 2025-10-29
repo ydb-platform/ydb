@@ -371,6 +371,67 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_EQUAL(actionState.status(), ActionState::ACTION_STATUS_PERFORMED);
         UNIT_ASSERT(actionState.action().has_cordon_action());
     }
+
+    Y_UNIT_TEST(DisableCMS){
+        TCmsTestEnv env(16);
+
+        auto r1 = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r1.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r1.action_group_states(0).action_states().size(), 1);
+        const auto &a1 = r1.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a1.status(), ActionState::ACTION_STATUS_PERFORMED);
+
+        // Pending task
+        auto r2 = env.CheckMaintenanceTaskCreate("task-2", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r2.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r2.action_group_states(0).action_states().size(), 1);
+        const auto &a2 = r2.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a2.status(), ActionState::ACTION_STATUS_PENDING);
+
+        // Disable CMS
+        NKikimrCms::TCmsConfig config;
+        config.SetEnable(false);
+        env.SetCmsConfig(config);
+
+        env.CheckCompleteAction(a1.action_uid(), Ydb::StatusIds::SUCCESS);
+
+        // Requests should fail
+        env.CheckMaintenanceTaskCreate("task-3", Ydb::StatusIds::UNAVAILABLE,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            )
+        );
+        env.CheckMaintenanceTaskRefresh("task-2", Ydb::StatusIds::UNAVAILABLE);
+
+        // Enable CMS back
+        config.SetEnable(true);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        auto r3 = env.CheckMaintenanceTaskCreate("task-3", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(9), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_EQUAL(r3.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r3.action_group_states(0).action_states().size(), 1);
+        const auto &a3 = r3.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a3.status(), ActionState::ACTION_STATUS_PERFORMED);
+
+        auto r4 = env.CheckMaintenanceTaskRefresh("task-2", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(r4.action_group_states().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(r4.action_group_states(0).action_states().size(), 1);
+        const auto &a4 = r4.action_group_states(0).action_states(0);
+        UNIT_ASSERT_VALUES_EQUAL(a4.status(), ActionState::ACTION_STATUS_PERFORMED);
+    }
 }
 
 } // namespace NKikimr::NCmsTest 

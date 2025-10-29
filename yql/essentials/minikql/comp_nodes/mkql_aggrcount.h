@@ -7,5 +7,5 @@ namespace NMiniKQL {
 IComputationNode* WrapAggrCountInit(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapAggrCountUpdate(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

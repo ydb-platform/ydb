@@ -1,6 +1,6 @@
 #include "mkql_decimal_div.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h>     // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
@@ -9,25 +9,29 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalModWrapper : public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder<NYql::NDecimal::TInt128> {
+template <bool IsLeftOptional, bool IsRightOptional>
+class TDecimalModWrapper: public TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalRemainder<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalModWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TDecimalModWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Left(left)
         , Right(right)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const auto& left = Left->GetValue(compCtx);
         const auto& right = Right->GetValue(compCtx);
 
-        if (IsLeftOptional && !left)
+        if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
+        }
 
-        if (IsRightOptional && !right)
+        if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
+        }
 
         return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.GetInt128()));
     }
@@ -48,9 +52,8 @@ public:
         const auto result = PHINode::Create(valType, IsLeftOptional || IsRightOptional ? 3 : 2, "result", done);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
-            const auto test = IsLeftOptional && IsRightOptional ?
-                BinaryOperator::CreateAnd(left, right, "test", block):
-                IsLeftOptional ? left : right;
+            const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
+                                                                                                                                         : right;
 
             result->addIncoming(zero, block);
             BranchInst::Create(done, good, IsEmpty(test, block, context), block);
@@ -108,28 +111,32 @@ private:
     IComputationNode* const Right;
 };
 
-template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalModIntegralWrapper : public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
+template <bool IsLeftOptional, bool IsRightOptional, typename TRight>
+class TDecimalModIntegralWrapper: public TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalRemainder<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalModIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
     using NYql::NDecimal::TDecimalRemainder<TRight>::Divider_;
     using NYql::NDecimal::TDecimalRemainder<TRight>::Bound_;
+
 public:
     TDecimalModIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalRemainder<TRight>(precision, scale)
         , Left(left)
         , Right(right)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         auto left = Left->GetValue(compCtx);
         const auto& right = Right->GetValue(compCtx);
 
-        if (IsLeftOptional && !left)
+        if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
+        }
 
-        if (IsRightOptional && !right)
+        if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
+        }
 
         return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
@@ -151,9 +158,8 @@ public:
         const auto result = PHINode::Create(valType, IsLeftOptional || IsRightOptional ? 3 : 2, "result", done);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
-            const auto test = IsLeftOptional && IsRightOptional ?
-                BinaryOperator::CreateAnd(left, right, "test", block):
-                IsLeftOptional ? left : right;
+            const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
+                                                                                                                                         : right;
 
             result->addIncoming(zero, block);
             BranchInst::Create(done, good, IsEmpty(test, block, context), block);
@@ -161,13 +167,9 @@ public:
             block = good;
 
             const auto lv = GetterForInt128(left, block);
-            const auto cast = std::is_signed<TRight>() ?
-                static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
-                static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
+            const auto cast = std::is_signed<TRight>() ? static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)) : static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
 
-            const auto out = std::is_signed<TRight>() ?
-                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block):
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
+            const auto out = std::is_signed<TRight>() ? NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
 
             const auto nul = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, cast, zero, "check", block);
 
@@ -187,13 +189,9 @@ public:
             result->addIncoming(SetterForInt128(srem, block), block);
         } else {
             const auto lv = GetterForInt128(left, block);
-            const auto cast = std::is_signed<TRight>() ?
-                static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
-                static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
+            const auto cast = std::is_signed<TRight>() ? static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)) : static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
 
-            const auto out = std::is_signed<TRight>() ?
-                NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block):
-                CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
+            const auto out = std::is_signed<TRight>() ? NDecimal::GenOutOfBounds(cast, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block) : CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_UGE, cast, NDecimal::GenConstant(Bound_, context), "out", block);
 
             const auto nul = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, cast, zero, "check", block);
 
@@ -228,7 +226,7 @@ private:
     IComputationNode* const Right;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -245,30 +243,31 @@ IComputationNode* WrapDecimalMod(TCallable& callable, const TComputationNodeFact
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
-            if (isOptionalLeft && isOptionalRight)
+            if (isOptionalLeft && isOptionalRight) {
                 return new TDecimalModWrapper<true, true>(ctx.Mutables, left, right);
-            else if (isOptionalLeft)
+            } else if (isOptionalLeft) {
                 return new TDecimalModWrapper<true, false>(ctx.Mutables, left, right);
-            else if (isOptionalRight)
+            } else if (isOptionalRight) {
                 return new TDecimalModWrapper<false, true>(ctx.Mutables, left, right);
-            else
+            } else {
                 return new TDecimalModWrapper<false, false>(ctx.Mutables, left, right);
-#define MAKE_PRIMITIVE_TYPE_MOD(type) \
-        case NUdf::TDataType<type>::Id: \
-            if (isOptionalLeft && isOptionalRight) \
-                return new TDecimalModIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
-            else if (isOptionalLeft) \
-                return new TDecimalModIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
-            else if (isOptionalRight) \
-                return new TDecimalModIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
-            else \
-                return new TDecimalModIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-        INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MOD)
+            }
+#define MAKE_PRIMITIVE_TYPE_MOD(type)                                                                                                                       \
+    case NUdf::TDataType<type>::Id:                                                                                                                         \
+        if (isOptionalLeft && isOptionalRight)                                                                                                              \
+            return new TDecimalModIntegralWrapper<true, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);  \
+        else if (isOptionalLeft)                                                                                                                            \
+            return new TDecimalModIntegralWrapper<true, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+        else if (isOptionalRight)                                                                                                                           \
+            return new TDecimalModIntegralWrapper<false, true, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second); \
+        else                                                                                                                                                \
+            return new TDecimalModIntegralWrapper<false, false, type>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
+            INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_MOD)
 #undef MAKE_PRIMITIVE_TYPE_MOD
         default:
             Y_ABORT("Unupported type.");
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

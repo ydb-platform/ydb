@@ -29,6 +29,7 @@ using namespace NTabletFlatExecutor;
 
 namespace NBalancing {
 class TBalancer;
+class TMLPBalancer;
 }
 
 
@@ -104,6 +105,11 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr &ev, const TActorContext& ctx);
     // End balancing
 
+    // Begin kafka integration
+    void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr &ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr &ev, const TActorContext& ctx);
+    // End kafka integration
+
     TStringBuilder LogPrefix() const;
 
     TActorId GetPipeClient(const ui64 tabletId, const TActorContext&);
@@ -128,6 +134,8 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr& ev, const TActorContext& ctx);
     void Handle(TPartitionScaleRequest::TEvPartitionScaleRequestDone::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvMirrorTopicDescription::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr&);
 
     ui64 PartitionReserveSize() {
         return TopicPartitionReserveSize(TabletConfig);
@@ -188,6 +196,9 @@ private:
     friend class NBalancing::TBalancer;
     std::unique_ptr<NBalancing::TBalancer> Balancer;
 
+    friend class NBalancing::TMLPBalancer;
+    std::unique_ptr<NBalancing::TMLPBalancer> MLPBalancer;
+
     std::unique_ptr<TPartitionScaleManager> PartitionsScaleManager;
     TActorId MirrorTopicDescriberActorId;
 
@@ -205,6 +216,8 @@ private:
     std::unordered_set<ui64> PipesRequested;
 
     std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedExtendedCounters;
+    std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> AggregatedCompactionCounters;
 
     NMonitoring::TDynamicCounterPtr DynamicCounters;
     NMonitoring::TDynamicCounters::TCounterPtr ActivePartitionCountCounter;
@@ -276,64 +289,8 @@ public:
 
     TPersQueueReadBalancer(const TActorId &tablet, TTabletStorageInfo *info);
 
-    STFUNC(StateInit) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, HandleOnInit);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, HandleOnInit);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
-            default:
-                StateInitImpl(ev, SelfId());
-                break;
-        }
-    }
-
-    STFUNC(StateWork) {
-        auto ctx(ActorContext());
-        TMetricsTimeKeeper keeper(ResourceMetrics, ctx);
-
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvents::TEvWakeup, HandleWakeup);
-            HFunc(TEvPersQueue::TEvGetPartitionIdForWrite, Handle);
-            HFunc(TEvPersQueue::TEvUpdateBalancerConfig, Handle);
-            HFunc(TEvPersQueue::TEvRegisterReadSession, Handle);
-            HFunc(TEvPersQueue::TEvGetReadSessionsInfo, Handle);
-            HFunc(TEvPersQueue::TEvPartitionReleased, Handle);
-            HFunc(TEvTabletPipe::TEvServerConnected, Handle);
-            HFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientConnected, Handle);
-            HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
-            HFunc(TEvPersQueue::TEvStatusResponse, Handle);
-            HFunc(TEvPQ::TEvStatsWakeup, Handle);
-            HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
-            HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
-            HFunc(TEvPersQueue::TEvStatus, Handle);
-            HFunc(TEvPersQueue::TEvGetPartitionsLocation, Handle);
-            HFunc(TEvPQ::TEvReadingPartitionStatusRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionStartedRequest, Handle);
-            HFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest, Handle);
-            HFunc(TEvPQ::TEvWakeupReleasePartition, Handle);
-            HFunc(TEvPQ::TEvBalanceConsumer, Handle);
-            // from PQ
-            HFunc(TEvPQ::TEvPartitionScaleStatusChanged, Handle);
-            // from TPartitionScaleRequest
-            HFunc(TPartitionScaleRequest::TEvPartitionScaleRequestDone, Handle);
-            // from MirrorDescriber
-            HFunc(TEvPQ::TEvMirrorTopicDescription, Handle);
-            default:
-                HandleDefaultEvents(ev, SelfId());
-                break;
-        }
-    }
-
+    STFUNC(StateInit);
+    STFUNC(StateWork);
 };
 
 TString EncodeAnchor(const TString& value);

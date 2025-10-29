@@ -9,8 +9,7 @@ namespace NYql {
 
 template <class T>
 class TLazyInitHolder
-    : public TPointerBase<TLazyInitHolder<T>, T>
-{
+    : public TPointerBase<TLazyInitHolder<T>, T> {
 public:
     using TFactory = std::function<THolder<T>()>;
 
@@ -33,7 +32,6 @@ public:
 private:
     TFactory Factory_;
     mutable THolder<T> Value_;
-
 };
 
-} // NYql
+} // namespace NYql

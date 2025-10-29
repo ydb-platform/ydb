@@ -10,14 +10,14 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool UseRandom, bool DoFilter, bool LLVM>
+template <bool UseRandom, bool DoFilter, bool LLVM>
 void DoNestedTuplesCompressTest() {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto ui64Type   = pb.NewDataType(NUdf::TDataType<ui64>::Id);
-    const auto boolType   = pb.NewDataType(NUdf::TDataType<bool>::Id);
-    const auto utf8Type   = pb.NewDataType(NUdf::EDataSlot::Utf8);
+    const auto ui64Type = pb.NewDataType(NUdf::TDataType<ui64>::Id);
+    const auto boolType = pb.NewDataType(NUdf::TDataType<bool>::Id);
+    const auto utf8Type = pb.NewDataType(NUdf::EDataSlot::Utf8);
 
     const auto innerTupleType = pb.NewTupleType({ui64Type, boolType, utf8Type});
     const auto outerTupleType = pb.NewTupleType({ui64Type, innerTupleType, utf8Type});
@@ -57,21 +57,21 @@ void DoNestedTuplesCompressTest() {
         }
 
         const auto innerTuple = pb.NewTuple(innerTupleType, {
-            pb.NewDataLiteral<ui64>(i),
-            pb.NewDataLiteral<bool>(i % 2),
-            pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? str : std::string()),
-            });
+                                                                pb.NewDataLiteral<ui64>(i),
+                                                                pb.NewDataLiteral<bool>(i % 2),
+                                                                pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? str : std::string()),
+                                                            });
         const auto outerTuple = pb.NewTuple(outerTupleType, {
-            pb.NewDataLiteral<ui64>(i),
-            innerTuple,
-            pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? std::string() : str),
-            });
+                                                                pb.NewDataLiteral<ui64>(i),
+                                                                innerTuple,
+                                                                pb.NewDataLiteral<NUdf::EDataSlot::Utf8>((i % 2) ? std::string() : str),
+                                                            });
 
         const auto finalTuple = pb.NewTuple(finalTupleType, {
-            pb.NewDataLiteral<ui64>(i),
-            outerTuple,
-            pb.NewDataLiteral(filterValue),
-            });
+                                                                pb.NewDataLiteral<ui64>(i),
+                                                                outerTuple,
+                                                                pb.NewDataLiteral(filterValue),
+                                                            });
         items.push_back(finalTuple);
     }
 
@@ -161,7 +161,7 @@ void DoNestedTuplesCompressTest() {
     UNIT_ASSERT(!iterator.Next(item));
 }
 
-} //namespace
+} // namespace
 
 Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest) {
 Y_UNIT_TEST_LLVM(CompressBasic) {
@@ -173,11 +173,11 @@ Y_UNIT_TEST_LLVM(CompressBasic) {
     const auto tupleType = pb.NewTupleType({boolType, ui64Type, boolType});
 
     const auto data1 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(1ULL), pb.NewDataLiteral(true)});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(2ULL), pb.NewDataLiteral(false)});
+    const auto data2 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(2ULL), pb.NewDataLiteral(false)});
     const auto data3 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(3ULL), pb.NewDataLiteral(true)});
     const auto data4 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(4ULL), pb.NewDataLiteral(true)});
-    const auto data5 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(5ULL), pb.NewDataLiteral(false)});
-    const auto data6 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true),  pb.NewDataLiteral<ui64>(6ULL), pb.NewDataLiteral(true)});
+    const auto data5 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(5ULL), pb.NewDataLiteral(false)});
+    const auto data6 = pb.NewTuple(tupleType, {pb.NewDataLiteral(true), pb.NewDataLiteral<ui64>(6ULL), pb.NewDataLiteral(true)});
     const auto data7 = pb.NewTuple(tupleType, {pb.NewDataLiteral(false), pb.NewDataLiteral<ui64>(7ULL), pb.NewDataLiteral(true)});
 
     const auto list = pb.NewList(tupleType, {data1, data2, data3, data4, data5, data6, data7});
@@ -233,7 +233,7 @@ Y_UNIT_TEST_LLVM(CompressNestedTuplesWithRandomWithFilter) {
     DoNestedTuplesCompressTest<true, true, LLVM>();
 }
 
-}
+} // Y_UNIT_TEST_SUITE(TMiniKQLBlockCompressTest)
 
 } // namespace NMiniKQL
 } // namespace NKikimr

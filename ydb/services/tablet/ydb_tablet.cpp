@@ -36,7 +36,7 @@ void TGRpcYdbTabletService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         ActorSystem_->Send(proxy,                                                                       \
                             new TGrpcRequestNoOperationCall<Ydb::Tablet::NAME##Request, Ydb::Tablet::NAME##Response>    \
                                 (ctx, &CB, TRequestAuxSettings {                                                        \
-                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                   \
+                                    .RlMode = RLSWITCH(LIMIT_TYPE),                                   \
                                     .AuditMode = AUDIT_MODE,                                                            \
                                 }));                                                                                    \
                     }, &Ydb::Tablet::V1::TabletService::AsyncService::Request ## NAME,                                  \

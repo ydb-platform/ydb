@@ -129,4 +129,4 @@ void TJsonPathTypeChecker::Error(const TAstNodePtr node, const TStringBuf messag
     Issues_.back().SetCode(TIssuesIds::JSONPATH_TYPE_CHECK_ERROR, TSeverityIds::S_ERROR);
 }
 
-}
+} // namespace NYql::NJsonPath

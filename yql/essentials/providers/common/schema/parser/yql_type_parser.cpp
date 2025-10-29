@@ -12,11 +12,11 @@ void TYqlTypeYsonSaverBase::SaveTypeHeader(TStringBuf name) {
     Writer_.OnStringScalar(name);
 }
 
-#define SAVE_TYPE_IMPL(type) \
-void TYqlTypeYsonSaverBase::Save ## type() { \
-    SaveTypeHeader(#type); \
-    Writer_.OnEndList(); \
-}
+#define SAVE_TYPE_IMPL(type)                   \
+    void TYqlTypeYsonSaverBase::Save##type() { \
+        SaveTypeHeader(#type);                 \
+        Writer_.OnEndList();                   \
+    }
 
 SAVE_TYPE_IMPL(Type)
 SAVE_TYPE_IMPL(VoidType)
@@ -74,8 +74,7 @@ void TYqlTypeYsonSaverBase::SaveResourceType(const TStringBuf& tag) {
 bool ParseYson(NYT::TNode& res, const TStringBuf yson, IOutputStream& err) {
     try {
         res = NYT::NodeFromYsonString(yson);
-    }
-    catch (const yexception& e) {
+    } catch (const yexception& e) {
         err << "Failed to parse scheme from YSON: " << e.what();
         return false;
     }

@@ -16,7 +16,7 @@ namespace {
 struct TLoadSolomonMetaRequest {
     NSo::ISolomonAccessorClient::TPtr SolomonClient;
     NThreading::TFuture<NSo::TGetLabelsResponse> LabelNamesRequest;
-    NThreading::TFuture<NSo::TListMetricsResponse> ListMetricsRequest;
+    NThreading::TFuture<NSo::TListMetricsLabelsResponse> LabelValuesRequest;
 };
 
 TMaybe<TString> ExtractSetting(const TExprNode& settings, const TString& settingName) {
@@ -69,14 +69,20 @@ public:
 
                 TInstant from;
                 if (auto time = ExtractSetting(settings, "from")) {
-                    from = TInstant::ParseIso8601(*time);
+                    if (!TInstant::TryParseIso8601(*time, from)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `from`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
                 } else {
-                    from = TInstant::Now() - TDuration::Days(7);
+                    from = TInstant::Zero();
                 }
                 
                 TInstant to;
                 if (auto time = ExtractSetting(settings, "to")) {
-                    to = TInstant::ParseIso8601(*time);
+                    if (!TInstant::TryParseIso8601(*time, to)) {
+                        ctx.AddError(TIssue(ctx.GetPosition(n->Pos()), "couldn't parse `to`, use ISO8601 format, e.g. 2025-03-12T14:40:39Z"));
+                        return TStatus::Error;
+                    }
                 } else {
                     to = TInstant::Now();
                 }
@@ -96,16 +102,16 @@ public:
 
                 auto solomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
                 auto labelNamesFuture = solomonClient->GetLabelNames(selectors, from, to);
-                auto listMetricsFuture = solomonClient->ListMetrics(selectors, from, to, 30, 0);
+                auto listMetricsLabelsFuture = solomonClient->ListMetricsLabels(selectors, from, to);
 
                 LabelNamesRequests_[soReadObject.Raw()] = {
                     .SolomonClient = solomonClient,
                     .LabelNamesRequest = labelNamesFuture,
-                    .ListMetricsRequest = listMetricsFuture
+                    .LabelValuesRequest = listMetricsLabelsFuture
                 };
 
                 futures.push_back(labelNamesFuture.IgnoreResult());
-                futures.push_back(listMetricsFuture.IgnoreResult());
+                futures.push_back(listMetricsLabelsFuture.IgnoreResult());
             }
         }
 
@@ -136,10 +142,10 @@ public:
                 return TStatus::Error;
             }
 
-            auto listMetricsValue = request.ListMetricsRequest.GetValue();
-            if (listMetricsValue.Status != NSo::EStatus::STATUS_OK) {
+            auto listMetricLabelsValue = request.LabelValuesRequest.GetValue();
+            if (listMetricLabelsValue.Status != NSo::EStatus::STATUS_OK) {
                 ctx.AddError(TIssue(ctx.GetPosition(node->Pos()),
-                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricsValue.Error));
+                        TStringBuilder() << "Failed to get total metrics count, details: " << listMetricLabelsValue.Error));
                 return TStatus::Error;
             }
 
@@ -155,7 +161,7 @@ public:
                     .RequiredLabelNames()
                         .Add(labelNames)
                         .Build()
-                    .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricsValue.Result.TotalCount))
+                    .TotalMetricsCount<TCoAtom>().Build(ToString(listMetricLabelsValue.Result.TotalCount))
                 .Done().Ptr());
         }
 

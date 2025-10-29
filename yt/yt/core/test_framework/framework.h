@@ -50,7 +50,7 @@ TString GenerateRandomFileName(const char* prefix);
     class TBaseClass##_##TestName \
         : public TBaseClass \
         , public ::testing::WithParamInterface<decltype(ParamValues)::iterator::value_type> \
-    {}; \
+    { }; \
     INSTANTIATE_TEST_SUITE_P(, TBaseClass##_##TestName, ParamValues); \
     TEST_P(TBaseClass##_##TestName, Test)
 
@@ -58,11 +58,12 @@ TString GenerateRandomFileName(const char* prefix);
     class TBaseClass##_##TestName \
         : public TBaseClass \
         , public ::testing::WithParamInterface<__VA_ARGS__> \
-    {}; \
+    { }; \
     INSTANTIATE_TEST_SUITE_P(, TBaseClass##_##TestName, ParamValues); \
     TEST_P(TBaseClass##_##TestName, Test)
 
-#define TEST_PI(TBaseClass, TestName, ParamValues, ...) _TEST_PI##__VA_OPT__(_MANUAL) (TBaseClass, TestName, ParamValues __VA_OPT__(,) __VA_ARGS__)
+#define TEST_PI(TBaseClass, TestName, ParamValues, ...) \
+    _TEST_PI##__VA_OPT__(_MANUAL) (TBaseClass, TestName, ParamValues __VA_OPT__(,) __VA_ARGS__)
 
 ////////////////////////////////////////////////////////////////////////////////
 

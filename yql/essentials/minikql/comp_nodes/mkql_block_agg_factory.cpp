@@ -40,5 +40,5 @@ const IBlockAggregatorFactory& GetBlockAggregatorFactory(TStringBuf name) {
     return *it->second;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

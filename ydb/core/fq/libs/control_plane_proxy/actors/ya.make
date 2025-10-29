@@ -10,8 +10,13 @@ PEERDIR(
     contrib/libs/fmt
     library/cpp/iterator
     ydb/core/fq/libs/common
+    ydb/core/fq/libs/config
+    ydb/core/fq/libs/config/protos
+    ydb/core/fq/libs/control_plane_config
     ydb/core/fq/libs/control_plane_proxy/events
+    ydb/core/fq/libs/control_plane_proxy/utils
     ydb/core/fq/libs/control_plane_storage/events
+    ydb/core/fq/libs/rate_limiter/events
     ydb/core/fq/libs/result_formatter
     ydb/core/kqp/provider
     ydb/library/db_pool/protos

@@ -8,10 +8,10 @@
 
 namespace NKikimr::NMiniKQL {
 
-///Stores long vectors of any type (excepting pointers). Tested on int and chars.
-///The adapter places moved vectors into buffer and flushes buffer on disk when sizeLimit is reached.
-///Returns vectors in FIFO order.
-template<class T, class Alloc>
+/// Stores long vectors of any type (excepting pointers). Tested on int and chars.
+/// The adapter places moved vectors into buffer and flushes buffer on disk when sizeLimit is reached.
+/// Returns vectors in FIFO order.
+template <class T, class Alloc>
 class TVectorSpillerAdapter {
 public:
     enum class EState {
@@ -28,28 +28,28 @@ public:
     {
     }
 
-    ///Returns current stete of the adapter
+    /// Returns current stete of the adapter
     EState GetState() const {
         return State_;
     }
 
-    ///Is adapter ready to spill next vector via AddData method.
-    ///Returns false in case when there are async operations in progress.
+    /// Is adapter ready to spill next vector via AddData method.
+    /// Returns false in case when there are async operations in progress.
     bool IsAcceptingData() {
         return State_ == EState::AcceptingData;
     }
 
-    ///When data is ready ExtractVector() is expected to be called.
+    /// When data is ready ExtractVector() is expected to be called.
     bool IsDataReady() {
         return State_ == EState::DataReady;
     }
 
-    ///Adapter is ready to accept requests for vectors.
+    /// Adapter is ready to accept requests for vectors.
     bool IsAcceptingDataRequests() {
         return State_ == EState::AcceptingDataRequests;
     }
 
-    ///Adds new vector to storage. Will not launch real disk operation if case of small vectors
+    /// Adds new vector to storage. Will not launch real disk operation if case of small vectors
     ///(if inner buffer is not full).
     void AddData(std::vector<T, Alloc>&& vec) {
         MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
@@ -62,14 +62,16 @@ public:
         SaveNextPartOfVector();
     }
 
-    ///Should be used to update async operatrions statuses.
-    ///For SpillingData state it will try to spill more content of inner buffer.
-    ///ForRestoringData state it will try to load more content of requested vector.
+    /// Should be used to update async operatrions statuses.
+    /// For SpillingData state it will try to spill more content of inner buffer.
+    /// ForRestoringData state it will try to load more content of requested vector.
     void Update() {
         switch (State_) {
             case EState::SpillingData:
                 MKQL_ENSURE(WriteOperation_.has_value(), "Internal logic error");
-                if (!WriteOperation_->HasValue()) return;
+                if (!WriteOperation_->HasValue()) {
+                    return;
+                }
 
                 StoredChunks_.push(WriteOperation_->ExtractValue());
                 WriteOperation_ = std::nullopt;
@@ -87,7 +89,9 @@ public:
                 return;
             case EState::RestoringData:
                 MKQL_ENSURE(ReadOperation_.has_value(), "Internal logic error");
-                if (!ReadOperation_->HasValue()) return;
+                if (!ReadOperation_->HasValue()) {
+                    return;
+                }
                 Buffer_ = std::move(ReadOperation_->ExtractValue().value());
                 ReadOperation_ = std::nullopt;
                 StoredChunks_.pop();
@@ -99,16 +103,16 @@ public:
         }
     }
 
-    ///Get requested vector.
+    /// Get requested vector.
     std::vector<T, Alloc>&& ExtractVector() {
         StoredChunksElementsCount_.pop();
         State_ = EState::AcceptingDataRequests;
         return std::move(CurrentVector_);
     }
 
-    ///Start restoring next vector. If th eentire contents of the vector are in memory
-    ///State will be changed to DataREady without any async read operation. ExtractVector is expected
-    ///to be called immediately.
+    /// Start restoring next vector. If th eentire contents of the vector are in memory
+    /// State will be changed to DataREady without any async read operation. ExtractVector is expected
+    /// to be called immediately.
     void RequestNextVector() {
         MKQL_ENSURE(State_ == EState::AcceptingDataRequests, "Internal logic error");
         MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
@@ -120,8 +124,8 @@ public:
         LoadNextVector();
     }
 
-    ///Finalize will spill all the contents of inner buffer if any.
-    ///Is case if buffer is not ready async write operation will be started.
+    /// Finalize will spill all the contents of inner buffer if any.
+    /// Is case if buffer is not ready async write operation will be started.
     void Finalize() {
         MKQL_ENSURE(CurrentVector_.empty(), "Internal logic error");
         if (Buffer_.Empty()) {
@@ -134,12 +138,13 @@ public:
     }
 
 private:
-    class TVectorStream : public IOutputStream {
+    class TVectorStream: public IOutputStream {
     public:
         explicit TVectorStream(std::vector<T, Alloc>& vec)
             : Dst_(vec)
         {
         }
+
     private:
         virtual void DoWrite(const void* buf, size_t len) override {
             MKQL_ENSURE(len % sizeof(T) == 0, "size should always by multiple of sizeof(T)");
@@ -155,7 +160,7 @@ private:
     }
 
     void LoadNextVector() {
-        auto requestedVectorSize= StoredChunksElementsCount_.front();
+        auto requestedVectorSize = StoredChunksElementsCount_.front();
         MKQL_ENSURE(requestedVectorSize >= CurrentVector_.size(), "Internal logic error");
         size_t sizeToLoad = (requestedVectorSize - CurrentVector_.size()) * sizeof(T);
 
@@ -177,7 +182,7 @@ private:
 
     void AddDataToRope(const T* data, size_t count) {
         auto owner = std::make_shared<std::vector<T>>(data, data + count);
-        TStringBuf buf(reinterpret_cast<const char *>(owner->data()), count * sizeof(T));
+        TStringBuf buf(reinterpret_cast<const char*>(owner->data()), count * sizeof(T));
         Buffer_.Append(buf, owner);
     }
 
@@ -222,4 +227,4 @@ private:
     bool IsFinalizing_ = false;
 };
 
-}//namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

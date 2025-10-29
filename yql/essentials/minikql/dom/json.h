@@ -11,4 +11,4 @@ NUdf::TUnboxedValue TryParseJsonDom(const TStringBuf json, const NUdf::IValueBui
 
 TString SerializeJsonDom(const NUdf::TUnboxedValuePod dom, bool skipMapEntity = false, bool encodeUtf8 = false, bool writeNanAsString = false);
 
-}
+} // namespace NYql::NDom

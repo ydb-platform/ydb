@@ -20,4 +20,4 @@ THolder<TExecTransformerBase> CreatePgDataSinkExecTransformer(TPgState::TPtr sta
 
 THolder<IDqIntegration> CreatePgDqIntegration(TPgState::TPtr state);
 
-}
+} // namespace NYql

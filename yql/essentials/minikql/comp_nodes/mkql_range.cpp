@@ -47,7 +47,7 @@ TRangeTypeInfo ExtractTypes(TType* rangeType) {
     auto rangeTupleType = static_cast<TTupleType*>(result.RangeType);
     MKQL_ENSURE(rangeTupleType->GetElementsCount() == 2, "Expecting range to be of tuple type with 2 elements");
     MKQL_ENSURE(rangeTupleType->GetElementType(0)->IsSameType(*rangeTupleType->GetElementType(1)),
-        "Expecting range to be of tuple type with 2 elements of same type");
+                "Expecting range to be of tuple type with 2 elements of same type");
 
     result.BoundaryType = rangeTupleType->GetElementType(0);
     result.BoundaryCompare = MakeCompareImpl(result.BoundaryType);
@@ -55,20 +55,20 @@ TRangeTypeInfo ExtractTypes(TType* rangeType) {
     MKQL_ENSURE(result.BoundaryType->IsTuple(), "Expecting range boundary to be of tuple type");
     auto rangeBoundaryTupleType = static_cast<TTupleType*>(result.BoundaryType);
     MKQL_ENSURE(rangeBoundaryTupleType->GetElementsCount() >= 3,
-        "Expecting range boundary to be of tuple type with at least 3 elements");
+                "Expecting range boundary to be of tuple type with at least 3 elements");
 
     MKQL_ENSURE(rangeBoundaryTupleType->GetElementsCount() % 2 == 1,
-        "Expecting range boundary to be of tuple type with odd element count");
+                "Expecting range boundary to be of tuple type with odd element count");
 
     for (ui32 i = 0; i < rangeBoundaryTupleType->GetElementsCount(); ++i) {
         auto type = rangeBoundaryTupleType->GetElementType(i);
         if (i % 2 == 1) {
             auto baseType = RemoveAllOptionals(type);
             MKQL_ENSURE(type->IsOptional() && (baseType->IsData() || baseType->IsPg()),
-                "Expecting (multiple) optional of Data or Pg at odd positions of range boundary tuple");
+                        "Expecting (multiple) optional of Data or Pg at odd positions of range boundary tuple");
         } else {
             MKQL_ENSURE(type->IsData() && static_cast<TDataType*>(type)->GetSchemeType() == NUdf::TDataType<i32>::Id,
-                "Expected i32 at even positions of range boundary tuple");
+                        "Expected i32 at even positions of range boundary tuple");
         }
         result.Components.push_back(type);
         result.ComponentsCompare.push_back(MakeCompareImpl(type));
@@ -77,8 +77,8 @@ TRangeTypeInfo ExtractTypes(TType* rangeType) {
 }
 
 struct TExpandedRangeBoundary {
-    int Included = 0;          // -1 = [; 0 = (); +1 = ]
-    TUnboxedValue Value;       // AsTuple(Inf, x, Inf, y, Inf, z, ..., Included), where -1 = -inf, +1 = +inf, 0 - finite value
+    int Included = 0;    // -1 = [; 0 = (); +1 = ]
+    TUnboxedValue Value; // AsTuple(Inf, x, Inf, y, Inf, z, ..., Included), where -1 = -inf, +1 = +inf, 0 - finite value
     TUnboxedValueVector Components;
 };
 
@@ -116,14 +116,14 @@ TExpandedRangeBoundary ExpandRangeBoundary(TUnboxedValue value, bool left) {
     for (size_t i = 0; i < elementsCount - 1; i += 2) {
         i32 inf = elements[i].Get<i32>();
         MKQL_ENSURE(inf == 0 || inf == GetInfSign(hasPrefix, isIncluded, left),
-            "Invalid value for range boundary inf marker: " << inf << " at position " << i);
+                    "Invalid value for range boundary inf marker: " << inf << " at position " << i);
         MKQL_ENSURE((inf != 0) ^ bool(elements[i + 1]),
-            "Value does not match inf marker: " << inf << " at position " << i);
+                    "Value does not match inf marker: " << inf << " at position " << i);
     }
     result.Components.assign(elements, elements + elementsCount);
     result.Included = result.Components.back().Get<i32>();
     MKQL_ENSURE(!result.Included || result.Included == (left ? -1 : 1),
-        "Invalid value for range boundary last element: " << result.Included);
+                "Invalid value for range boundary last element: " << result.Included);
     return result;
 }
 
@@ -133,7 +133,6 @@ TExpandedRange ExpandRange(TUnboxedValue value) {
 
     Y_ENSURE(elements);
     Y_ENSURE(elementsCount == 2);
-
 
     TExpandedRange result;
     result.Left = ExpandRangeBoundary(elements[0], true);
@@ -162,7 +161,7 @@ size_t GetFiniteComponentsCount(const TExpandedRangeBoundary& boundary) {
     return result;
 }
 
-template<typename T>
+template <typename T>
 bool IsAdjacentNumericValues(TUnboxedValue left, TUnboxedValue right) {
     T l = left.Get<T>();
     T r = right.Get<T>();
@@ -204,22 +203,37 @@ bool CanConvertToPointRange(const TExpandedRange& range, const TRangeTypeInfo& t
     }
 
     switch (*slot) {
-        case EDataSlot::Int8:   return IsAdjacentNumericValues<i8>(left, right);
-        case EDataSlot::Uint8:  return IsAdjacentNumericValues<ui8>(left, right);
-        case EDataSlot::Int16:  return IsAdjacentNumericValues<i16>(left, right);
-        case EDataSlot::Uint16: return IsAdjacentNumericValues<ui16>(left, right);
-        case EDataSlot::Int32:  return IsAdjacentNumericValues<i32>(left, right);
-        case EDataSlot::Uint32: return IsAdjacentNumericValues<ui32>(left, right);
-        case EDataSlot::Int64:  return IsAdjacentNumericValues<i64>(left, right);
-        case EDataSlot::Uint64: return IsAdjacentNumericValues<ui64>(left, right);
+        case EDataSlot::Int8:
+            return IsAdjacentNumericValues<i8>(left, right);
+        case EDataSlot::Uint8:
+            return IsAdjacentNumericValues<ui8>(left, right);
+        case EDataSlot::Int16:
+            return IsAdjacentNumericValues<i16>(left, right);
+        case EDataSlot::Uint16:
+            return IsAdjacentNumericValues<ui16>(left, right);
+        case EDataSlot::Int32:
+            return IsAdjacentNumericValues<i32>(left, right);
+        case EDataSlot::Uint32:
+            return IsAdjacentNumericValues<ui32>(left, right);
+        case EDataSlot::Int64:
+            return IsAdjacentNumericValues<i64>(left, right);
+        case EDataSlot::Uint64:
+            return IsAdjacentNumericValues<ui64>(left, right);
 
-        case EDataSlot::Date:     return IsAdjacentNumericValues<ui16>(left, right);
-        case EDataSlot::Date32:   return IsAdjacentNumericValues<i32>(left, right);
-        case EDataSlot::Datetime: return IsAdjacentNumericValues<ui32>(left, right);
-        case EDataSlot::Timestamp: return IsAdjacentNumericValues<ui64>(left, right);
-        case EDataSlot::Datetime64: return IsAdjacentNumericValues<i64>(left, right);
-        case EDataSlot::Timestamp64: return IsAdjacentNumericValues<i64>(left, right);
-        default: break;
+        case EDataSlot::Date:
+            return IsAdjacentNumericValues<ui16>(left, right);
+        case EDataSlot::Date32:
+            return IsAdjacentNumericValues<i32>(left, right);
+        case EDataSlot::Datetime:
+            return IsAdjacentNumericValues<ui32>(left, right);
+        case EDataSlot::Timestamp:
+            return IsAdjacentNumericValues<ui64>(left, right);
+        case EDataSlot::Datetime64:
+            return IsAdjacentNumericValues<i64>(left, right);
+        case EDataSlot::Timestamp64:
+            return IsAdjacentNumericValues<i64>(left, right);
+        default:
+            break;
     }
     MKQL_ENSURE(false, "Unsupported type: " << *slot);
 }
@@ -246,7 +260,7 @@ bool RangeCanMerge(const TExpandedRange& a, const TExpandedRange& b, const TRang
     // It is assumed that a <= b here
     //       <       {         >        }
     //       a.Left  b.Left    a.Right  b.Right
-    TExpandedRange intersection = { b.Left, a.Right };
+    TExpandedRange intersection = {b.Left, a.Right};
     int cmp = typeInfo.BoundaryCompare->Compare(intersection.Left.Value, intersection.Right.Value);
     if (cmp > 0) {
         return false;
@@ -281,11 +295,13 @@ bool RangeCanMerge(const TExpandedRange& a, const TExpandedRange& b, const TRang
 class TRangeComputeBase {
 public:
     TRangeComputeBase(TComputationMutables&, TComputationNodePtrVector&& lists, std::vector<TRangeTypeInfo>&& typeInfos)
-        : Lists(std::move(lists)), TypeInfos(std::move(typeInfos))
+        : Lists(std::move(lists))
+        , TypeInfos(std::move(typeInfos))
     {
         Y_ENSURE(Lists.size() == TypeInfos.size());
         Y_ENSURE(!Lists.empty());
     }
+
 protected:
     std::vector<TUnboxedValueQueue> ExpandLists(TComputationContext& ctx) const {
         TUnboxedValueVector lists;
@@ -298,10 +314,9 @@ protected:
         for (size_t i = 0; i < lists.size(); ++i) {
             expandedLists.emplace_back();
             TThresher<false>::DoForEachItem(lists[i],
-                [&] (NUdf::TUnboxedValue&& item) {
-                    expandedLists.back().emplace_back(std::move(item));
-                }
-            );
+                                            [&](NUdf::TUnboxedValue&& item) {
+                                                expandedLists.back().emplace_back(std::move(item));
+                                            });
             NormalizeRanges(expandedLists.back(), TypeInfos[i]);
         }
 
@@ -309,7 +324,7 @@ protected:
     }
 
 private:
-    template<typename TContainer>
+    template <typename TContainer>
     static void NormalizeRanges(TContainer& ranges, const TRangeTypeInfo& typeInfo) {
         auto rangeLess = [&](const TUnboxedValuePod& a, const TUnboxedValuePod& b) {
             return typeInfo.RangeCompare->Less(a, b);
@@ -338,13 +353,15 @@ protected:
     const std::vector<TRangeTypeInfo> TypeInfos;
 };
 
-class TRangeUnionWrapper : public TMutableComputationNode<TRangeUnionWrapper>, public TRangeComputeBase {
+class TRangeUnionWrapper: public TMutableComputationNode<TRangeUnionWrapper>, public TRangeComputeBase {
     typedef TMutableComputationNode<TRangeUnionWrapper> TBaseComputation;
+
 public:
     TRangeUnionWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists, std::vector<TRangeTypeInfo>&& typeInfos)
         : TBaseComputation(mutables)
         , TRangeComputeBase(mutables, std::move(lists), std::move(typeInfos))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector mergedLists;
@@ -380,8 +397,8 @@ public:
             for (size_t i = 1; i < mergedLists.size(); ++i) {
                 auto toUnion = ExpandRange(mergedLists[i]);
                 if (RangeCanMerge(current, toUnion, TypeInfos.front())) {
-                    current = { current.Left, Max(current.Right, toUnion.Right, TypeInfos.front().BoundaryCompare.Get()) };
-                    TUnboxedValueVector newValue = { current.Left.Value, current.Right.Value };
+                    current = {current.Left, Max(current.Right, toUnion.Right, TypeInfos.front().BoundaryCompare.Get())};
+                    TUnboxedValueVector newValue = {current.Left.Value, current.Right.Value};
                     unionList.back() = ctx.HolderFactory.VectorAsArray(newValue);
                 } else {
                     unionList.emplace_back(std::move(mergedLists[i]));
@@ -403,13 +420,15 @@ private:
     }
 };
 
-class TRangeIntersectWrapper : public TMutableComputationNode<TRangeIntersectWrapper>, public TRangeComputeBase {
+class TRangeIntersectWrapper: public TMutableComputationNode<TRangeIntersectWrapper>, public TRangeComputeBase {
     typedef TMutableComputationNode<TRangeIntersectWrapper> TBaseComputation;
+
 public:
     TRangeIntersectWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists, std::vector<TRangeTypeInfo>&& typeInfos)
         : TBaseComputation(mutables)
         , TRangeComputeBase(mutables, std::move(lists), std::move(typeInfos))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValueVector mergedLists;
@@ -454,7 +473,7 @@ private:
             intersected.Left = maxRange.Left;
             intersected.Right = Min(minRange.Right, maxRange.Right, TypeInfos.front().BoundaryCompare.Get());
             if (!RangeIsEmpty(intersected, TypeInfos.front())) {
-                TUnboxedValueVector newValue = { intersected.Left.Value, intersected.Right.Value };
+                TUnboxedValueVector newValue = {intersected.Left.Value, intersected.Right.Value};
                 result.push_back(ctx.HolderFactory.VectorAsArray(newValue));
 
                 if (boundaryCmp->Less(minRange.Right.Value, maxRange.Right.Value)) {
@@ -470,14 +489,16 @@ private:
     }
 };
 
-class TRangeMultiplyWrapper : public TMutableComputationNode<TRangeMultiplyWrapper>, public TRangeComputeBase {
+class TRangeMultiplyWrapper: public TMutableComputationNode<TRangeMultiplyWrapper>, public TRangeComputeBase {
     typedef TMutableComputationNode<TRangeMultiplyWrapper> TBaseComputation;
+
 public:
     TRangeMultiplyWrapper(TComputationMutables& mutables, IComputationNode* limit, TComputationNodePtrVector&& lists, std::vector<TRangeTypeInfo>&& typeInfos)
         : TBaseComputation(mutables)
         , TRangeComputeBase(mutables, std::move(lists), std::move(typeInfos))
         , Limit(limit)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const ui64 limit = Limit->GetValue(ctx).Get<ui64>();
@@ -540,8 +561,7 @@ private:
     }
 
     bool DoMultiply(TComputationContext& ctx, ui64 limit, TUnboxedValueQueue& current, const TUnboxedValueQueue& next,
-        std::vector<ICompare*>& currentCmps, const TRangeTypeInfo& nextTypeInfo) const
-    {
+                    std::vector<ICompare*>& currentCmps, const TRangeTypeInfo& nextTypeInfo) const {
         TUnboxedValueQueue result;
         Y_ENSURE(currentCmps.size() >= 3 && currentCmps.size() % 2 == 1);
         size_t extraColumns = (nextTypeInfo.ComponentsCompare.size() - 1) / 2;
@@ -582,7 +602,7 @@ private:
         bool allEqual = true;
         for (size_t i = 0; allEqual && i < cmps.size() - 1; ++i) {
             allEqual = allEqual &&
-                cmps[i]->Compare(range.Left.Components[i], range.Right.Components[i]) == 0;
+                       cmps[i]->Compare(range.Left.Components[i], range.Right.Components[i]) == 0;
         }
 
         return allEqual;
@@ -591,12 +611,12 @@ private:
     static TUnboxedValuePod Append(TComputationContext& ctx, const TExpandedRange& first, const TExpandedRange& second) {
         auto left = Append(ctx, first.Left, second.Left);
         auto right = Append(ctx, first.Right, second.Right);
-        TUnboxedValueVector range = { left, right };
+        TUnboxedValueVector range = {left, right};
         return ctx.HolderFactory.VectorAsArray(range);
     }
 
     static TUnboxedValuePod Append(TComputationContext& ctx, const TExpandedRangeBoundary& first,
-        const TExpandedRangeBoundary& second)
+                                   const TExpandedRangeBoundary& second)
     {
         TUnboxedValueVector components(first.Components.begin(), first.Components.end() - 1);
         components.insert(components.end(), second.Components.begin(), second.Components.end());
@@ -610,7 +630,7 @@ private:
     static TUnboxedValuePod AppendInfs(TComputationContext& ctx, const TExpandedRange& range, size_t count) {
         auto left = AppendInfs(ctx, true, range.Left, count);
         auto right = AppendInfs(ctx, false, range.Right, count);
-        TUnboxedValueVector newRange = { left, right };
+        TUnboxedValueVector newRange = {left, right};
         return ctx.HolderFactory.VectorAsArray(newRange);
     }
 
@@ -637,21 +657,22 @@ private:
         TExpandedRange range;
         range.Left.Components.push_back(TUnboxedValuePod(0));
         range.Right.Components.push_back(TUnboxedValuePod(0));
-        TUnboxedValueVector result = { AppendInfs(ctx, range, columnCount) };
+        TUnboxedValueVector result = {AppendInfs(ctx, range, columnCount)};
         return ctx.HolderFactory.VectorAsArray(result);
     }
 
     IComputationNode* const Limit;
 };
 
-
-class TRangeFinalizeWrapper : public TMutableComputationNode<TRangeFinalizeWrapper>, public TRangeComputeBase {
+class TRangeFinalizeWrapper: public TMutableComputationNode<TRangeFinalizeWrapper>, public TRangeComputeBase {
     typedef TMutableComputationNode<TRangeFinalizeWrapper> TBaseComputation;
+
 public:
     TRangeFinalizeWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& lists, std::vector<TRangeTypeInfo>&& typeInfos)
         : TBaseComputation(mutables)
         , TRangeComputeBase(mutables, std::move(lists), std::move(typeInfos))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto expandedLists = ExpandLists(ctx);
@@ -671,7 +692,7 @@ public:
             auto left = ConvertFromInternal(range.Left.Components, ctx);
             auto right = ConvertFromInternal(range.Right.Components, ctx);
 
-            TUnboxedValueVector rangeVector = { left, right };
+            TUnboxedValueVector rangeVector = {left, right};
             res = res.Append(ctx.HolderFactory.VectorAsArray(rangeVector));
         }
         return ctx.HolderFactory.CreateDirectListHolder(std::move(res));
@@ -720,7 +741,7 @@ IComputationNode* WrapRange(ERangeOp func, TCallable& callable, const TComputati
         listsStart = 1;
         auto limitType = callable.GetInput(0).GetStaticType();
         MKQL_ENSURE(limitType->IsData() && static_cast<TDataType*>(limitType)->GetSchemeType() == NUdf::TDataType<ui64>::Id,
-            "Expecting Uint64 as first argument");
+                    "Expecting Uint64 as first argument");
     } else {
         MKQL_ENSURE(callable.GetInputsCount() > 0, "Expecting at least one argument");
     }
@@ -741,43 +762,44 @@ IComputationNode* WrapRange(ERangeOp func, TCallable& callable, const TComputati
     }
 
     switch (func) {
-    case RANGE_UNION:
-        return new TRangeUnionWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
-    case RANGE_INTERSECT:
-        return new TRangeIntersectWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
-    case RANGE_MULTIPLY: {
-        auto limit = LocateNode(ctx.NodeLocator, callable, 0);
-        return new TRangeMultiplyWrapper(ctx.Mutables, limit, std::move(lists), std::move(typeInfos));
-    }
-    case RANGE_FINALIZE:
-        return new TRangeFinalizeWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
-    default:
-        Y_ENSURE(!"Unknown callable");
+        case RANGE_UNION:
+            return new TRangeUnionWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
+        case RANGE_INTERSECT:
+            return new TRangeIntersectWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
+        case RANGE_MULTIPLY: {
+            auto limit = LocateNode(ctx.NodeLocator, callable, 0);
+            return new TRangeMultiplyWrapper(ctx.Mutables, limit, std::move(lists), std::move(typeInfos));
+        }
+        case RANGE_FINALIZE:
+            return new TRangeFinalizeWrapper(ctx.Mutables, std::move(lists), std::move(typeInfos));
+        default:
+            Y_ENSURE(!"Unknown callable");
     }
 }
 
-class TRangeCreateWrapper : public TMutableComputationNode<TRangeCreateWrapper> {
+class TRangeCreateWrapper: public TMutableComputationNode<TRangeCreateWrapper> {
     typedef TMutableComputationNode<TRangeCreateWrapper> TBaseComputation;
+
 public:
     TRangeCreateWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables)
         , List(list)
-    {}
+    {
+    }
 
     TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         TUnboxedValue list = List->GetValue(ctx);
 
         TDefaultListRepresentation res;
         TThresher<false>::DoForEachItem(list,
-            [&] (NUdf::TUnboxedValue&& item) {
-                auto left = ConvertToInternal(item.GetElement(0), true, ctx);
-                auto right = ConvertToInternal(item.GetElement(1), false, ctx);
+                                        [&](NUdf::TUnboxedValue&& item) {
+                                            auto left = ConvertToInternal(item.GetElement(0), true, ctx);
+                                            auto right = ConvertToInternal(item.GetElement(1), false, ctx);
 
-                TUnboxedValueVector rangeVector = { left, right };
-                auto range = ctx.HolderFactory.VectorAsArray(rangeVector);
-                res = res.Append(std::move(range));
-            }
-        );
+                                            TUnboxedValueVector rangeVector = {left, right};
+                                            auto range = ctx.HolderFactory.VectorAsArray(rangeVector);
+                                            res = res.Append(std::move(range));
+                                        });
         return ctx.HolderFactory.CreateDirectListHolder(std::move(res));
     }
 
@@ -816,7 +838,6 @@ private:
 
     IComputationNode* const List;
 };
-
 
 } // namespace
 
@@ -861,5 +882,5 @@ IComputationNode* WrapRangeFinalize(TCallable& callable, const TComputationNodeF
     return WrapRange(RANGE_FINALIZE, callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

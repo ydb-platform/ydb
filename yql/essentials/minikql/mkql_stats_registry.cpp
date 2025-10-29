@@ -5,7 +5,6 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/singleton.h>
 
-
 namespace NKikimr {
 namespace NMiniKQL {
 namespace {
@@ -64,10 +63,8 @@ public:
 
 } // namespace
 
-
 ui32 TStatKey::IdSequence_ = 0;
 TStatKey* TStatKey::KeysChain_ = nullptr;
-
 
 TStatKey::TStatKey(TStringBuf name, bool deriv)
     : Name_(name)

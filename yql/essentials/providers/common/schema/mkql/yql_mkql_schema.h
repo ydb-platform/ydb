@@ -15,8 +15,8 @@ class TType;
 class TStructType;
 class TProgramBuilder;
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr
 
 namespace NYql {
 namespace NCommon {

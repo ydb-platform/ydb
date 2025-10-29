@@ -36,7 +36,7 @@ See also [{#T}](yandex-enterprise-database.md).
 ## Docker
 
 #|
-|| Version |  Release date | Download | Changelog ||
+|| Version |  Release date | Docker `registry/image:tag` | Changelog ||
 || **v25.2** | > | > | > ||
 || v.25.2.1.10  | 21.09.25  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.10-rc` | [See list](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||

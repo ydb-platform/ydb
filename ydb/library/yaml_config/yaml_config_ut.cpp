@@ -403,7 +403,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -441,7 +450,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -486,7 +504,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -524,6 +551,16 @@ version: 12.1
 config:
   num:
     ? 0
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 allowed_labels:
   tenant:
     type: string
@@ -776,7 +813,16 @@ config:
 allowed_labels:
   tenant:
     type: string
-
+incompatibility_overrides:
+  disable_rules:
+    - builtin_branch_must_have_value
+    - builtin_configuration_version_must_have_value
+    - builtin_dynamic_must_have_value
+    - builtin_node_host_must_have_value
+    - builtin_node_id_must_have_value
+    - builtin_rev_must_have_value
+    - builtin_node_type_must_be_defined
+    - builtin_tenant_must_be_defined
 selector_config:
 - description: 1
   selector:
@@ -1801,4 +1847,124 @@ obj: {value: 2} # comment2
             UNIT_ASSERT_VALUES_EQUAL(res, exp);
         }
     }
+}
+
+Y_UNIT_TEST_SUITE(YamlConfigResolveUnique) {
+
+Y_UNIT_TEST(NotUniqueSelectors) {
+    const char* configWithNotUniqueSelectors = R"(---
+allowed_labels:
+  label1:
+    type: enum
+    values:
+      ? a
+      ? b
+  label2:
+    type: enum
+    values:
+      ? x
+      ? y
+      ? z
+  label3:
+    type: enum
+    values:
+      ? p
+      ? q
+      ? r
+config:
+  value: base
+selector_config:
+- description: "selector1"
+  selector:
+    label1: a
+  config:
+    value: config_a
+- description: "selector2"
+  selector:
+    label1: b
+  config:
+    value: config_b
+- description: "selector3"
+  selector:
+    label2: x
+  config: {}
+- description: "selector4"
+  selector:
+    label3: p
+  config: {}
+)";
+
+    auto docAll = NFyaml::TDocument::Parse(configWithNotUniqueSelectors);
+    auto resolvedAll = NYamlConfig::ResolveAll(docAll);
+
+    auto docUniq = NFyaml::TDocument::Parse(configWithNotUniqueSelectors);
+    TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+    NYamlConfig::ResolveUniqueDocs(
+        docUniq,
+        [&](NYamlConfig::TDocumentConfig&& cfg) {
+            resolvedUniq.push_back(std::move(cfg));
+        });
+
+    UNIT_ASSERT(resolvedUniq.size() < resolvedAll.Configs.size());
+}
+
+Y_UNIT_TEST(AllTestConfigs) {
+    auto testConfig = [](const char* config, const char* name) {
+        auto docAll = NFyaml::TDocument::Parse(config);
+        auto resolvedAll = NYamlConfig::ResolveAll(docAll);
+
+        auto docUniq = NFyaml::TDocument::Parse(config);
+        TVector<NYamlConfig::TDocumentConfig> resolvedUniq;
+        NYamlConfig::ResolveUniqueDocs(
+            docUniq,
+            [&](NYamlConfig::TDocumentConfig&& cfg) {
+                resolvedUniq.push_back(std::move(cfg));
+            });
+
+        auto toStr = [](const NFyaml::TNodeRef& node) {
+            TStringStream ss;
+            ss << node;
+            return ss.Str();
+        };
+
+        TSet<TString> allDocs;
+        for (auto& [_, cfg] : resolvedAll.Configs) {
+            auto doc = cfg.first.Clone();
+            for (auto it = doc.begin(); it != doc.end(); ++it) {
+                it->RemoveTag();
+            }
+            auto cleanConfig = doc.Root().Map().at("config");
+            allDocs.insert(toStr(cleanConfig));
+        }
+
+        TSet<TString> uniqDocs;
+        for (auto& cfg : resolvedUniq) {
+            uniqDocs.insert(toStr(cfg.second));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(uniqDocs.size(), resolvedUniq.size(), 
+            TString("Config: ") + name + ", ResolveUniqueDocs has duplicates");
+
+        for (const auto& s : uniqDocs) {
+            UNIT_ASSERT_C(allDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs has extra doc not in ResolveAll");
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(allDocs.size(), uniqDocs.size(), 
+            TString("Config: ") + name + ", size mismatch");
+
+        for (const auto& s : allDocs) {
+            UNIT_ASSERT_C(uniqDocs.contains(s), 
+                TString("Config: ") + name + ", ResolveUniqueDocs missing doc from ResolveAll");
+        }
+    };
+
+    testConfig(WholeConfig, "WholeConfig");
+    testConfig(UnresolvedAllConfig, "UnresolvedAllConfig");
+    testConfig(UnresolvedSimpleConfig1, "UnresolvedSimpleConfig1");
+    testConfig(UnresolvedSimpleConfig2, "UnresolvedSimpleConfig2");
+    testConfig(UnresolvedSimpleConfig3, "UnresolvedSimpleConfig3");
+    testConfig(UnresolvedSimpleConfigAppend, "UnresolvedSimpleConfigAppend");
+}
+
 }

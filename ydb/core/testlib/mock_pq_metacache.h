@@ -24,14 +24,14 @@ public:
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPqMetaCache::TEvDescribeTopicsRequest, HandleDescribeTopics);
-            HFunc(TEvPqMetaCache::TEvDescribeAllTopicsRequest, HandleDescribeAllTopics);
-        default:
-            UNIT_FAIL_NONFATAL("Unexpected event to PQ metacache: " << ev->GetTypeRewrite());
+            HFunc(TEvPqMetaCache::TEvDescribeTopicsByNameRequest, HandleDescribeTopicsByName);
+            default:
+                UNIT_FAIL_NONFATAL("Unexpected event to PQ metacache: " << ev->GetTypeRewrite());
         }
     }
 
     MOCK_METHOD(void, HandleDescribeTopics, (TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx), ());
-    MOCK_METHOD(void, HandleDescribeAllTopics, (TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx), ());
+    MOCK_METHOD(void, HandleDescribeTopicsByName, (TEvPqMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx), ());
     //MOCK_METHOD4(HandleDescribeAllTopics, void(const TString& topic, ui64 balancerTabletId, NMsgBusProxy::TEvPqMetaCache::TEvGetBalancerDescribe::TPtr& ev, const TActorContext& ctx));
 
     //
@@ -64,31 +64,28 @@ public:
             .WillOnce(Invoke(handle));
     }
 
-    void SetAllTopicsAnswer(
-            bool success = true, const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {}
+    void SetDescribeTopicsByNameAnswer(
+            const NSchemeCache::TSchemeCacheNavigate::TResultSet& resultSet = {}
     ) {
         using namespace testing;
-        auto handle = [=](TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-            auto* response = new TEvPqMetaCache::TEvDescribeAllTopicsResponse();
-            response->Success = success;
-            response->Path = "/Root/PQ/";
-            auto* result = new NSchemeCache::TSchemeCacheNavigate();
+        auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsByNameRequest::TPtr& ev, const TActorContext& ctx) {
+            auto result = std::make_shared<NSchemeCache::TSchemeCacheNavigate>();
             result->ResultSet = resultSet;
-            response->Result.reset(result);
-
+            TVector<TString> topics;
             auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
-
-            for (const auto & entry : resultSet) {
-                auto converter = entry.PQGroupInfo ? factory.MakeTopicConverter(
-                                   entry.PQGroupInfo->Description.GetPQTabletConfig()
-                            ) : nullptr;
-                response->Topics.push_back(converter);
+            TVector<NPersQueue::TDiscoveryConverterPtr> converters;
+            for (auto& entry : resultSet) {
+                auto converter = entry.PQGroupInfo
+                        ? factory.MakeTopicConverter(entry.PQGroupInfo->Description.GetPQTabletConfig())
+                        : nullptr;
+                topics.push_back(entry.Path.back());
+                converters.push_back(converter);
             }
-
-            ctx.Send(ev->Sender, std::move(response));
+            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(std::move(converters), result);
+            ctx.Send(ev->Sender, response);
         };
 
-        EXPECT_CALL(*this, HandleDescribeAllTopics(_, _))
+        EXPECT_CALL(*this, HandleDescribeTopicsByName(_, _))
             .WillOnce(Invoke(handle));
     }
 };

@@ -6,7 +6,6 @@
 #include <util/generic/maybe.h>
 #include <util/generic/stack.h>
 
-
 namespace NYql {
 namespace {
 
@@ -28,9 +27,8 @@ public:
 
 private:
     void OnCounter(
-            const TString& labelName, const TString& labelValue,
-            const TSensorCounter* counter) override
-    {
+        const TString& labelName, const TString& labelValue,
+        const TSensorCounter* counter) override {
         HasAnyCounters_ = true;
 
         auto* counterProto = GroupsProto_.top()->AddCounters();
@@ -67,9 +65,8 @@ private:
     }
 
     void OnGroupBegin(
-            const TString& labelName, const TString& labelValue,
-            const TSensorsGroup*) override
-    {
+        const TString& labelName, const TString& labelValue,
+        const TSensorsGroup*) override {
         if (labelName.empty() && labelValue.empty()) {
             // root group is alrady present
             return;
@@ -99,8 +96,8 @@ private:
 class TMetricsRegistryImpl final: public IMetricsRegistry {
 public:
     TMetricsRegistryImpl(
-            TSensorsGroupPtr sensors,
-            TMaybe<TString> userName)
+        TSensorsGroupPtr sensors,
+        TMaybe<TString> userName)
         : Sensors_(std::move(sensors))
         , UserName_(std::move(userName))
     {
@@ -110,12 +107,11 @@ public:
         const TString& labelName,
         const TString& labelValue,
         i64 value,
-        bool derivative) override
-    {
+        bool derivative) override {
         if (UserName_) {
             // per user counter
             auto userCnt = GetCounter(labelName, labelValue, UserName_.Get(),
-                derivative);
+                                      derivative);
             if (userCnt) {
                 *userCnt = value;
             }
@@ -130,10 +126,9 @@ public:
     }
 
     void IncCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            bool derivative) override
-    {
+        const TString& labelName,
+        const TString& labelValue,
+        bool derivative) override {
         // total aggregate counter
         auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
         if (totalCnt) {
@@ -151,11 +146,10 @@ public:
     }
 
     void AddCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            i64 value,
-            bool derivative) override
-    {
+        const TString& labelName,
+        const TString& labelValue,
+        i64 value,
+        bool derivative) override {
         // total aggregate counter
         auto totalCnt = GetCounter(labelName, labelValue, nullptr, derivative);
         if (totalCnt) {
@@ -209,10 +203,10 @@ public:
 
 private:
     TSensorCounterPtr GetCounter(
-            const TString& labelName,
-            const TString& labelValue,
-            const TString* userName,
-            bool derivative)
+        const TString& labelName,
+        const TString& labelValue,
+        const TString* userName,
+        bool derivative)
     {
         static const TString USER("user");
         static const TString USER_ABSOLUTE("user_absolute");
@@ -220,14 +214,14 @@ private:
 
         const TString& userGroup = derivative ? USER : USER_ABSOLUTE;
         return Sensors_
-                ->GetSubgroup(userGroup, userName ? *userName : TOTAL)
-                ->GetNamedCounter(labelName, labelValue, derivative);
+            ->GetSubgroup(userGroup, userName ? *userName : TOTAL)
+            ->GetNamedCounter(labelName, labelValue, derivative);
     }
 
     void MergeFromGroupProto(
-            TSensorsGroup* group, const NProto::TCounterGroup& groupProto, bool asIs)
+        TSensorsGroup* group, const NProto::TCounterGroup& groupProto, bool asIs)
     {
-        for (const auto& counterProto: groupProto.GetCounters()) {
+        for (const auto& counterProto : groupProto.GetCounters()) {
             const auto& label = counterProto.GetLabel();
 
             if (!counterProto.GetBucket().empty()) {
@@ -253,8 +247,8 @@ private:
                 Histograms_[histogram]->Collect(*histSnapshot);
             } else {
                 auto counter = group->GetNamedCounter(
-                            label.GetName(), label.GetValue(),
-                            counterProto.GetDerivative());
+                    label.GetName(), label.GetValue(),
+                    counterProto.GetDerivative());
                 if (asIs) {
                     *counter = counterProto.GetValue();
                 } else {
@@ -263,10 +257,10 @@ private:
             }
         }
 
-        for (const auto& subGroupProto: groupProto.GetGroups()) {
+        for (const auto& subGroupProto : groupProto.GetGroups()) {
             const auto& label = subGroupProto.GetLabel();
             auto subGroup = group->GetSubgroup(
-                        label.GetName(), label.GetValue());
+                label.GetName(), label.GetValue());
             MergeFromGroupProto(subGroup.Get(), subGroupProto, asIs);
         }
     }
@@ -279,7 +273,6 @@ private:
 };
 
 } // namespace
-
 
 IMetricsRegistryPtr CreateMetricsRegistry(TSensorsGroupPtr sensors) {
     return new TMetricsRegistryImpl(std::move(sensors), Nothing());

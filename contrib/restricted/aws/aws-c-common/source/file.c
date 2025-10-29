@@ -10,6 +10,7 @@
 #include <aws/common/string.h>
 
 #include <errno.h>
+#include <inttypes.h>
 
 /* For "special files", the OS often lies about size.
  * For example, on Amazon Linux 2:
@@ -20,6 +21,8 @@
  * This is the min/max step size for growth. */
 #define MIN_BUFFER_GROWTH_READING_FILES 32
 #define MAX_BUFFER_GROWTH_READING_FILES 4096
+
+AWS_STATIC_STRING_FROM_LITERAL(s_readonly_bytes_mode, "rb");
 
 FILE *aws_fopen(const char *file_path, const char *mode) {
     if (!file_path || strlen(file_path) == 0) {
@@ -267,4 +270,51 @@ const struct aws_directory_entry *aws_directory_entry_iterator_get_value(
 
     struct directory_entry_value *value = AWS_CONTAINER_OF(node, struct directory_entry_value, node);
     return &value->entry;
+}
+
+int aws_file_path_read_from_offset(
+    const struct aws_string *file_path,
+    uint64_t offset,
+    size_t max_read_length,
+    struct aws_byte_buf *output_buf,
+    size_t *out_actual_read) {
+
+    int rt_code = AWS_OP_ERR;
+    size_t available_len = aws_sub_size_saturating(output_buf->capacity, output_buf->len);
+    size_t length = aws_min_size(available_len, max_read_length);
+    if (length == 0) {
+        return AWS_OP_SUCCESS; /* Nothing to do. */
+    }
+    FILE *file_stream = aws_fopen_safe(file_path, s_readonly_bytes_mode);
+    if (file_stream == NULL) {
+        AWS_LOGF_ERROR(AWS_LS_COMMON_GENERAL, "Failed to open file %s", aws_string_c_str(file_path));
+        return AWS_OP_ERR;
+    }
+
+    /* seek to the right position and then read */
+    if (aws_fseek(file_stream, (int64_t)offset, SEEK_SET)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_COMMON_GENERAL,
+            "Failed to seek to position %" PRIu64 " in file %s",
+            offset,
+            aws_string_c_str(file_path));
+        goto cleanup;
+    }
+
+    size_t actually_read = fread(output_buf->buffer + output_buf->len, 1, length, file_stream);
+    if (actually_read == 0 && ferror(file_stream)) {
+        AWS_LOGF_ERROR(
+            AWS_LS_COMMON_GENERAL, "Failed to read %zu bytes from file %s", length, aws_string_c_str(file_path));
+        aws_raise_error(aws_translate_and_raise_io_error(errno));
+        goto cleanup;
+    }
+    /* If we cannot fill the length ask for, which means we hit the EOF. */
+    *out_actual_read = actually_read;
+    output_buf->len += actually_read;
+    rt_code = AWS_OP_SUCCESS;
+cleanup:
+    if (file_stream != NULL) {
+        fclose(file_stream);
+    }
+    return rt_code;
 }

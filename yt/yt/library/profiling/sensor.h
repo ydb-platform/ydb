@@ -315,6 +315,8 @@ public:
 
     bool IsEnabled() const;
 
+    const TTagSet& GetTags() const;
+
     TProfiler WithPrefix(const std::string& prefix) const;
 
     //! Tag settings control local aggregates.

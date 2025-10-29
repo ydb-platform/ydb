@@ -50,6 +50,7 @@ public:
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetTraceBaggage);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, CustomMetadata);
     DEFINE_RPC_PROXY_METHOD(NTestRpc, GetChannelFailureError);
+    DEFINE_RPC_PROXY_METHOD(NTestRpc, ManuallyCanceledByServer);
 };
 
 ////////////////////////////////////////////////////////////////////////////////

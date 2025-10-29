@@ -1,12 +1,32 @@
 pluginManagement {
-    val bucketUsername: String by settings
-    val bucketPassword: String by settings
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
     repositories {
         maven {
+            name = "bucket"
             url = uri("https://bucket.yandex-team.ru/v1/maven/gradle")
             credentials {
-                username = "$bucketUsername"
-                password = "$bucketPassword"
+                username = bucketUsername
+                password = bucketPassword
+            }
+        }
+    }
+}
+
+dependencyResolutionManagement {
+    val bucketUsername = settings.providers.gradleProperty("bucketUsername")
+        .orElse(settings.providers.environmentVariable("BUCKET_USERNAME")).get()
+    val bucketPassword = settings.providers.gradleProperty("bucketPassword")
+        .orElse(settings.providers.environmentVariable("BUCKET_PASSWORD")).get()
+    repositories {
+        maven {
+            name = "bucket"
+            url = uri("https://bucket.yandex-team.ru/v1/maven/central")
+            credentials {
+                username = bucketUsername
+                password = bucketPassword
             }
         }
     }

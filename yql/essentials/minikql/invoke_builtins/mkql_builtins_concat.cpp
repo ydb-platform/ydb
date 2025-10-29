@@ -1,4 +1,4 @@
-#include "mkql_builtins_impl.h"  // Y_IGNORE  // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE  // Y_IGNORE
 #include <yql/essentials/minikql/mkql_string_util.h>
 
 namespace NKikimr {
@@ -16,22 +16,31 @@ struct TConcat {
 #ifndef MKQL_DISABLE_CODEGEN
     static Value* Generate(Value* left, Value* right, const TCodegenContext& ctx, BasicBlock*& block)
     {
-        return CallBinaryUnboxedValueFunction<&ConcatStrings>(Type::getInt128Ty(ctx.Codegen.GetContext()), left, right, ctx.Codegen, block);
+        return CallBinaryUnboxedValueFunction<&ConcatStrings>(
+            Type::getInt128Ty(ctx.Codegen.GetContext()),
+            left,
+            right,
+            ctx.Codegen,
+            block);
     }
 #endif
 };
 
-template<typename TType>
+template <typename TType>
 using TAggrConcat = TConcat<TType, TType, TType>;
 
-}
+} // namespace
 
 void RegisterConcat(IBuiltinFunctionRegistry& registry) {
     const auto name = "Concat";
-    RegisterFunctionBinOpt<NUdf::TDataType<char*>, NUdf::TDataType<char*>, NUdf::TDataType<char*>, TConcat, TBinaryArgsOpt>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>, TConcat, TBinaryArgsOpt>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>, NUdf::TDataType<char*>, TConcat, TBinaryArgsOpt>(registry, name);
-    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TUtf8>, TConcat, TBinaryArgsOpt>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<char*>, NUdf::TDataType<char*>, NUdf::TDataType<char*>,
+                           TConcat, TBinaryArgsOpt>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<char*>, NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>,
+                           TConcat, TBinaryArgsOpt>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<char*>, NUdf::TDataType<char*>,
+                           TConcat, TBinaryArgsOpt>(registry, name);
+    RegisterFunctionBinOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TUtf8>,
+                           TConcat, TBinaryArgsOpt>(registry, name);
 
     const auto aggrName = "AggrConcat";
     RegisterAggregateFunction<NUdf::TDataType<char*>, TAggrConcat, TBinaryArgsSameOpt>(registry, aggrName);

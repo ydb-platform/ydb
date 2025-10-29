@@ -182,51 +182,6 @@ void TIcebergTestData::ExecuteCreateHadoopExternalDataSource(const std::shared_p
     ExecuteQuery(kikimr, CreateQuery(hadoopCatalog));
 }
 
-class TStaticCredentialsProvider : public NYdb::ICredentialsProvider {
-public:
-    TStaticCredentialsProvider(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::string GetAuthInfo() const override {
-        return YqlToken_;
-    }
-
-    bool IsValid() const override {
-        return true;
-    }
-
-private:
-    std::string YqlToken_;
-};
-
-class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
-public:
-    TStaticCredentialsProviderFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return std::make_shared<TStaticCredentialsProvider>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
-
-class TStaticSecuredCredentialsFactory : public NYql::ISecuredServiceAccountCredentialsFactory {
-public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {}
-
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
-    }
-
-private:
-    TString YqlToken_;
-};
 
 TIcebergTestData CreateIcebergBasic(const TString& dataSourceName, const TString& database, const TString& userName, const TString& password){
     return TIcebergTestData({TIcebergTestData::EAuthType::AuthBasic, userName, password}, dataSourceName, database, false);
@@ -238,10 +193,6 @@ TIcebergTestData CreateIcebergToken(const TString& dataSourceName, const TString
 
 TIcebergTestData CreateIcebergSa(const TString& dataSourceName, const TString& database, const TString& token) {
     return TIcebergTestData({TIcebergTestData::EAuthType::AuthSa,VALUE_IAM, token}, dataSourceName, database, false);
-}
-
-std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialProvider(const TString& token) {
-    return std::make_shared<TStaticSecuredCredentialsFactory>(token);
 }
 
 } // NTestUtils

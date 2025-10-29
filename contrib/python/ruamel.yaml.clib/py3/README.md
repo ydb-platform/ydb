@@ -6,23 +6,23 @@
 <table class="docutils">
   <tr>
     <td>version</td>
-    <td>0.2.12</td>
+    <td>0.2.14</td>
   </tr>
   <tr>
     <td>updated</td>
-    <td>2024-10-20</td>
+    <td>2025-09-22</td>
   </tr>
   <tr>
     <td>documentation</td>
-    <td><https://yaml.dev/doc/ruamel.yaml.clib></td>
+    <td><a href="https://yaml.dev/doc/ruamel.yaml.clib">https://yaml.dev/doc/ruamel.yaml.clib</a></td>
   </tr>
   <tr>
     <td>repository</td>
-    <td><https://sourceforge.net/projects/ruamel-yaml-clib/></td>
+    <td><a href="https://sourceforge.net/projects/ruamel-yaml-clib/">https://sourceforge.net/projects/ruamel-yaml-clib/</a></td>
   </tr>
   <tr>
     <td>pypi</td>
-    <td><https://pypi.org/project/ruamel.yaml.clib/></td>
+    <td><a href="https://pypi.org/project/ruamel.yaml.clib/">https://pypi.org/project/ruamel.yaml.clib/</a></td>
   </tr>
 </table>
 

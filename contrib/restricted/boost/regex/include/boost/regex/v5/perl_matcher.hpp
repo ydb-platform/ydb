@@ -386,7 +386,7 @@ public:
          m_independent(false), next_count(&rep_obj), rep_obj(&next_count)
       , m_recursions(0)
    {
-      construct_init(e, f);
+      construct_init(e, f); /* NOLINT(clang-analyzer-optin.cplusplus.UninitializedObject) */
    }
 
    bool match();

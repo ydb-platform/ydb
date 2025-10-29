@@ -157,32 +157,38 @@ bool CheckValue(TReader& reader);
 bool CheckDict(TReader& reader) {
     for (;;) {
         const auto& evKey = reader.NextEvent();
-        if (evKey.Type() == EEventType::EndMap)
+        if (evKey.Type() == EEventType::EndMap) {
             return true;
+        }
 
-        if (evKey.Type() != EEventType::Key)
+        if (evKey.Type() != EEventType::Key) {
             return false;
+        }
 
-        if (CheckValue(reader))
+        if (CheckValue(reader)) {
             continue;
-        else
+        } else {
             return false;
+        }
     }
 }
 
 bool CheckAttributes(TReader& reader) {
     for (;;) {
         const auto& evKey = reader.NextEvent();
-        if (evKey.Type() == EEventType::EndAttributes)
+        if (evKey.Type() == EEventType::EndAttributes) {
             break;
+        }
 
-        if (evKey.Type() != EEventType::Key)
+        if (evKey.Type() != EEventType::Key) {
             return false;
+        }
 
-        if (CheckValue(reader))
+        if (CheckValue(reader)) {
             continue;
-        else
+        } else {
             return false;
+        }
     }
 
     return CheckValue(reader);
@@ -193,20 +199,23 @@ bool CheckList(TReader& reader) {
         const auto& ev = reader.NextEvent();
         switch (ev.Type()) {
             case EEventType::BeginList:
-                if (CheckList(reader))
+                if (CheckList(reader)) {
                     break;
-                else
+                } else {
                     return false;
+                }
             case EEventType::BeginMap:
-                if (CheckDict(reader))
+                if (CheckDict(reader)) {
                     break;
-                else
+                } else {
                     return false;
+                }
             case EEventType::BeginAttributes:
-                if (CheckAttributes(reader))
+                if (CheckAttributes(reader)) {
                     break;
-                else
+                } else {
                     return false;
+                }
             case EEventType::Scalar:
                 break;
             case EEventType::EndList:
@@ -221,20 +230,23 @@ bool CheckValue(TReader& reader) {
     const auto& ev = reader.NextEvent();
     switch (ev.Type()) {
         case EEventType::BeginList:
-            if (CheckList(reader))
+            if (CheckList(reader)) {
                 break;
-            else
+            } else {
                 return false;
+            }
         case EEventType::BeginMap:
-            if (CheckDict(reader))
+            if (CheckDict(reader)) {
                 break;
-            else
+            } else {
                 return false;
+            }
         case EEventType::BeginAttributes:
-            if (CheckAttributes(reader))
+            if (CheckAttributes(reader)) {
                 break;
-            else
+            } else {
                 return false;
+            }
         case EEventType::Scalar:
             break;
         default:
@@ -273,8 +285,9 @@ void WriteValue(TWriter& writer, const TUnboxedValue& x) {
                     }
                 } else {
                     const auto it = x.GetListIterator();
-                    for (TUnboxedValue v; it.Next(v); WriteValue(writer, v))
+                    for (TUnboxedValue v; it.Next(v); WriteValue(writer, v)) {
                         continue;
+                    }
                 }
             }
             writer.EndList();
@@ -300,8 +313,7 @@ void WriteValue(TWriter& writer, const TUnboxedValue& x) {
 
             writer.EndAttributes();
             WriteValue(writer, x.GetVariantItem());
-        }
-        break;
+        } break;
     }
 }
 
@@ -311,7 +323,7 @@ void SerializeYsonDomImpl(const NUdf::TUnboxedValue& dom, TWriter& writer) {
     writer.EndStream();
 }
 
-}
+} // namespace
 
 NUdf::TUnboxedValue TryParseYsonDom(const TStringBuf yson, const NUdf::IValueBuilder* valueBuilder) {
     auto reader = TReader(NInput::FromMemory(yson), EStreamType::Node);
@@ -326,10 +338,12 @@ NUdf::TUnboxedValue TryParseYsonDom(const TStringBuf yson, const NUdf::IValueBui
 bool IsValidYson(const TStringBuf yson) try {
     auto reader = TReader(NInput::FromMemory(yson), EStreamType::Node);
     const auto& begin = reader.NextEvent();
-    if (begin.Type() != EEventType::BeginStream)
+    if (begin.Type() != EEventType::BeginStream) {
         return false;
-    if (!CheckValue(reader))
+    }
+    if (!CheckValue(reader)) {
         return false;
+    }
     const auto& end = reader.NextEvent();
     return end.Type() == EEventType::EndStream;
 } catch (const NException::TBadStream&) {
@@ -357,4 +371,4 @@ TString SerializeYsonDomToPrettyText(const NUdf::TUnboxedValue& dom) {
     return result;
 }
 
-}
+} // namespace NYql::NDom

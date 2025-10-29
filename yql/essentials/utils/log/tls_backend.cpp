@@ -2,19 +2,18 @@
 
 #include <util/system/tls.h>
 
-
 namespace NYql {
 namespace NLog {
 namespace {
 
 Y_POD_STATIC_THREAD(TLogBackend*) CurrentBackend;
 
-} // namspace
+} // namespace
 
 TLogBackend* SetLogBackendForCurrentThread(TLogBackend* backend) {
-   TLogBackend* prev = *(&CurrentBackend);
-   *(&CurrentBackend) = backend;
-   return prev;
+    TLogBackend* prev = *(&CurrentBackend);
+    *(&CurrentBackend) = backend;
+    return prev;
 }
 
 void TTlsLogBackend::WriteData(const TLogRecord& rec) {
@@ -45,5 +44,5 @@ ELogPriority TTlsLogBackend::FiltrationLevel() const {
     return LOG_MAX_PRIORITY;
 }
 
-} // namspace NLog
-} // namspace NYql
+} // namespace NLog
+} // namespace NYql

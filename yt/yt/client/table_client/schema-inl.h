@@ -206,36 +206,4 @@ inline bool TTableSchemaEquals::operator() (const TTableSchemaPtr& lhs, const TT
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline size_t TCellTaggedTableSchemaHash::operator() (const TCellTaggedTableSchema& cellTaggedSchema) const
-{
-    return MultiHash(cellTaggedSchema.TableSchema, cellTaggedSchema.CellTag);
-}
-
-inline size_t TCellTaggedTableSchemaHash::operator() (const TCellTaggedTableSchemaPtr& cellTaggedSchemaPtr) const
-{
-    YT_ASSERT(cellTaggedSchemaPtr.TableSchema);
-    return MultiHash(*cellTaggedSchemaPtr.TableSchema, cellTaggedSchemaPtr.CellTag);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchema& lhs, const TCellTaggedTableSchema& rhs) const
-{
-    return lhs.TableSchema == rhs.TableSchema && lhs.CellTag == rhs.CellTag;
-}
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchemaPtr& rhs) const
-{
-    YT_ASSERT(lhs.TableSchema && rhs.TableSchema);
-    return *lhs.TableSchema == *rhs.TableSchema && lhs.CellTag == rhs.CellTag;
-}
-
-inline bool TCellTaggedTableSchemaEquals::operator() (const TCellTaggedTableSchemaPtr& lhs, const TCellTaggedTableSchema& rhs) const
-{
-    YT_ASSERT(lhs.TableSchema);
-    return *lhs.TableSchema == rhs.TableSchema && lhs.CellTag == rhs.CellTag;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NTableClient

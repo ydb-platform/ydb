@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/services/services.pb.h>
 
 #include "sock_impl.h"
@@ -22,7 +23,7 @@ enum EErrorAction {
     Abort
 };
 
-using TConnectionCreator = std::function<NActors::IActor* (const TActorId& listenerActorId,
+using TConnectionCreator = std::function<NActors::IActor* (const NActors::TActorId& listenerActorId,
                                                            TIntrusivePtr<TSocketDescriptor> socket,
                                                            TNetworkConfig::TSocketAddressType address)>;
 

@@ -11,11 +11,19 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TFetchingScript;
 class IDataSource;
 
-enum class EPortionCommitStatus {
-    Unknown,
-    Committed,
-    OwnUncommitted,
-    UncommittedByAnotherTx
+struct TPortionStateAtScanStart {
+    bool Committed;
+    /*
+    Conflicting portions are written portions (not compacted) which are:
+    - uncommitted portions of concurrent transactions (concurrent to the given scan)
+    - committed portions that have the commit snapshot greater than the request snapshot
+    */
+    bool Conflicting;
+    TSnapshot MaxRecordSnapshot;
+
+    bool IsMyUncommitted() const {
+        return !Committed && !Conflicting;
+    }
 };
 
 class TSpecialReadContext {
@@ -61,7 +69,7 @@ public:
         return ReadMetadata;
     }
 
-    EPortionCommitStatus GetPortionCommitStatus(const TPortionInfo& portionInfo) const;
+    TPortionStateAtScanStart GetPortionStateAtScanStart(const TPortionInfo& portionInfo) const;
 
     template <class T>
     std::shared_ptr<T> GetReadMetadataVerifiedAs() const {

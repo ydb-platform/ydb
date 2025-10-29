@@ -16,7 +16,8 @@ class TUnwrapWrapper: public TBinaryCodegeneratorNode<TUnwrapWrapper> {
 public:
     TUnwrapWrapper(IComputationNode* optional, IComputationNode* message, const NUdf::TSourcePosition& pos, EValueRepresentation kind)
         : TBaseComputation(optional, message, kind)
-        , Pos(pos) {
+        , Pos(pos)
+    {
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {

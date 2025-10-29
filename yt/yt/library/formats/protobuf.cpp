@@ -342,11 +342,23 @@ void ValidateSimpleType(
             case ESimpleLogicalValueType::Int16:
             case ESimpleLogicalValueType::Int32:
             case ESimpleLogicalValueType::Int64:
+            case ESimpleLogicalValueType::Timestamp64:
+            case ESimpleLogicalValueType::Date32:
+            case ESimpleLogicalValueType::Datetime64:
+            case ESimpleLogicalValueType::TzTimestamp64:
+            case ESimpleLogicalValueType::TzDate32:
+            case ESimpleLogicalValueType::TzDatetime64:
                 return EKind::SignedInteger;
             case ESimpleLogicalValueType::Uint8:
             case ESimpleLogicalValueType::Uint16:
             case ESimpleLogicalValueType::Uint32:
             case ESimpleLogicalValueType::Uint64:
+            case ESimpleLogicalValueType::Timestamp:
+            case ESimpleLogicalValueType::Date:
+            case ESimpleLogicalValueType::Datetime:
+            case ESimpleLogicalValueType::TzTimestamp:
+            case ESimpleLogicalValueType::TzDate:
+            case ESimpleLogicalValueType::TzDatetime:
                 return EKind::UnsignedInteger;
             default:
                 return EKind::Other;

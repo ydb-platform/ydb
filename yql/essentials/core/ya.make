@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     yql_aggregate_expander.cpp
     yql_callable_transform.cpp
@@ -30,6 +32,7 @@ SRCS(
     yql_join.h
     yql_library_compiler.cpp
     yql_linear_checker.cpp
+    yql_layers_helpers.cpp
     yql_opt_hopping.cpp
     yql_opt_match_recognize.cpp
     yql_opt_match_recognize.h
@@ -77,6 +80,7 @@ PEERDIR(
     yql/essentials/core/credentials
     yql/essentials/core/url_lister/interface
     yql/essentials/core/url_preprocessing/interface
+    yql/essentials/core/layers
     yql/essentials/minikql
     yql/essentials/minikql/jsonpath/parser
     yql/essentials/core/minsketch
@@ -113,6 +117,7 @@ RECURSE(
     file_storage
     issue
     langver
+    layers
     minsketch
     pg_ext
     pg_settings

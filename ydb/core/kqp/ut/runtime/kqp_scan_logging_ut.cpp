@@ -77,7 +77,7 @@ Y_UNIT_TEST_TWIN(WideCombine, EnabledLogs) {
         select count(t.Key) from `/Root/KeyValue` as t group by t.Value
     )";
 
-    RunTestForQuery(query, "[WideCombine]", EnabledLogs);
+    RunTestForQuery(query, "[DqHashCombine]", EnabledLogs);
 }
 
 Y_UNIT_TEST_TWIN(GraceJoin, EnabledLogs) {

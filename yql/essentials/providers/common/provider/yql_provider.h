@@ -16,14 +16,14 @@
 #include <utility>
 
 namespace NYson {
-    class TYsonWriter;
-}
+class TYsonWriter;
+} // namespace NYson
 
 namespace NKikimr {
-    namespace NMiniKQL {
-        class IFunctionRegistry;
-    }
-}
+namespace NMiniKQL {
+class IFunctionRegistry;
+} // namespace NMiniKQL
+} // namespace NKikimr
 
 namespace NYql {
 
@@ -56,7 +56,9 @@ struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCallable> PgFilter;
 
     TWriteTableSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other) {}
+        : Other(other)
+    {
+    }
 };
 
 struct TWriteSequenceSettings {
@@ -68,7 +70,9 @@ struct TWriteSequenceSettings {
     NNodes::TCoNameValueTupleList Other;
 
     TWriteSequenceSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other) {}
+        : Other(other)
+    {
+    }
 };
 
 struct TWriteTopicSettings {
@@ -82,8 +86,8 @@ struct TWriteTopicSettings {
 
     TWriteTopicSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
-    {}
-
+    {
+    }
 };
 
 struct TWriteReplicationSettings {
@@ -94,7 +98,8 @@ struct TWriteReplicationSettings {
 
     TWriteReplicationSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
-    {}
+    {
+    }
 };
 
 struct TWriteTransferSettings {
@@ -107,7 +112,8 @@ struct TWriteTransferSettings {
 
     TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
-    {}
+    {
+    }
 };
 
 struct TDatabaseSettings {
@@ -115,7 +121,9 @@ struct TDatabaseSettings {
     NNodes::TCoNameValueTupleList Other;
 
     TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other) {}
+        : Other(other)
+    {
+    }
 };
 
 struct TWriteRoleSettings {
@@ -125,7 +133,9 @@ struct TWriteRoleSettings {
     NNodes::TCoNameValueTupleList Other;
 
     TWriteRoleSettings(const NNodes::TCoNameValueTupleList& other)
-        : Other(other) {}
+        : Other(other)
+    {
+    }
 };
 
 struct TWritePermissionSettings {
@@ -136,7 +146,9 @@ struct TWritePermissionSettings {
     TWritePermissionSettings(NNodes::TMaybeNode<NNodes::TCoAtomList>&& permissions, NNodes::TMaybeNode<NNodes::TCoAtomList>&& paths, NNodes::TMaybeNode<NNodes::TCoAtomList>&& roleNames)
         : Permissions(std::move(permissions))
         , Paths(std::move(paths))
-        , RoleNames(std::move(roleNames)) {}
+        , RoleNames(std::move(roleNames))
+    {
+    }
 };
 
 struct TWriteObjectSettings {
@@ -151,15 +163,16 @@ struct TWriteObjectSettings {
     }
 };
 
-struct TCommitSettings
-{
+struct TCommitSettings {
     TPositionHandle Pos;
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Epoch;
     NNodes::TCoNameValueTupleList Other;
 
     TCommitSettings(NNodes::TCoNameValueTupleList other)
-        : Other(other) {}
+        : Other(other)
+    {
+    }
 
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx) const;
 
@@ -168,14 +181,15 @@ struct TCommitSettings
     bool EnsureOtherEmpty(TExprContext& ctx);
 };
 
-struct TPgObjectSettings
-{
+struct TPgObjectSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> IfExists;
 
     TPgObjectSettings(NNodes::TMaybeNode<NNodes::TCoAtom>&& mode, NNodes::TMaybeNode<NNodes::TCoAtom>&& ifExists)
         : Mode(std::move(mode))
-        , IfExists(std::move(ifExists)) {}
+        , IfExists(std::move(ifExists))
+    {
+    }
 };
 
 const TStructExprType* BuildCommonTableListType(TExprContext& ctx);
@@ -213,8 +227,7 @@ TVector<TString> GetStructFields(const TTypeAnnotationNode* type);
 
 void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStatistics& stats, NYson::TYsonWriter& writer);
 
-TString TransformerStatsToYson(const IGraphTransformer::TStatistics& stats, NYson::EYsonFormat format
-    = NYson::EYsonFormat::Pretty);
+TString TransformerStatsToYson(const IGraphTransformer::TStatistics& stats, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
 
 void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type);
 
@@ -252,8 +265,7 @@ bool ValidateTimestampFormatName(std::string_view formatName, TExprContext& ctx)
 bool TransformPgSetItemOption(
     const NNodes::TCoPgSelect& pgSelect,
     TStringBuf optionName,
-    std::function<void(const NNodes::TExprBase&)> lambda
-);
+    std::function<void(const NNodes::TExprBase&)> lambda);
 
 TExprNode::TPtr GetSetItemOption(const NNodes::TCoPgSelect& pgSelect, TStringBuf optionName);
 

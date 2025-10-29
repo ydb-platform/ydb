@@ -35,11 +35,25 @@ def get_tail_message() -> str:
     logins = get_alert_logins()
     return f"📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)\n\nFYI: {logins}"
 
+def get_blacklisted_run_ids(blacklist_param: str = None) -> set:
+    """
+    Gets the set of blacklisted run IDs from command line parameter.
+    
+    Args:
+        blacklist_param: Space-separated list of run IDs from command line (optional)
+    
+    Returns:
+        Set of run IDs to exclude from monitoring
+    """
+    if not blacklist_param:
+        return set()
+    
+    # Split by any whitespace and convert to set of strings
+    run_ids = blacklist_param.split()
+    return set(run_ids)
+
 # Constants
 TAIL_MESSAGE = get_tail_message()
-
-# Filtering settings
-MAX_AGE_DAYS = 3  # Maximum job age in days (excludes GitHub bugs)
 
 # Message sending settings
 SEND_WHEN_ALL_GOOD = False  # Whether to send a message when all jobs are working fine
@@ -208,44 +222,30 @@ def format_time_ago(created_at: datetime) -> str:
         days = total_seconds / 86400
         return f"{days:.1f}d"
 
-def filter_old_jobs(workflow_runs: List[Dict[str, Any]], max_age_days: int = None) -> List[Dict[str, Any]]:
+def filter_blacklisted_jobs(workflow_runs: List[Dict[str, Any]], blacklisted_ids: set) -> List[Dict[str, Any]]:
     """
-    Filters jobs older than max_age_days (excludes GitHub bugs).
+    Filters jobs that are in the blacklist.
     
     Args:
         workflow_runs: List of workflow runs in queue
-        max_age_days: Maximum age in days (defaults to MAX_AGE_DAYS)
+        blacklisted_ids: Set of run IDs to exclude from monitoring
     
     Returns:
         Filtered list of workflow runs
     """
-    if max_age_days is None:
-        max_age_days = MAX_AGE_DAYS
-    current_time = datetime.now(timezone.utc)
-    max_age_seconds = max_age_days * 24 * 3600
+    if not blacklisted_ids:
+        return workflow_runs
+    
     filtered_runs = []
-    excluded_count = 0
     
     for run in workflow_runs:
-        created_at_str = run.get('created_at')
-        if created_at_str:
-            try:
-                created_at = datetime.fromisoformat(created_at_str.replace('Z', '+00:00'))
-                time_diff = current_time - created_at
-                
-                if time_diff.total_seconds() <= max_age_seconds:
-                    filtered_runs.append(run)
-                else:
-                    excluded_count += 1
-            except ValueError:
-                # If can't parse time, include in report
-                filtered_runs.append(run)
-        else:
-            # If no creation time, include in report
+        run_id = str(run.get('id', ''))
+        if run_id not in blacklisted_ids:
             filtered_runs.append(run)
     
+    excluded_count = len(workflow_runs) - len(filtered_runs)
     if excluded_count > 0:
-        print(f"⚠️ Excluded {excluded_count} jobs older than {max_age_days} days (likely GitHub bugs)")
+        print(f"⚠️ Excluded {excluded_count} jobs from blacklist: {', '.join(sorted(blacklisted_ids))}")
     
     return filtered_runs
 
@@ -368,7 +368,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
         workflow_info: Information about workflows
         stuck_jobs: List of stuck jobs
         total_queued: Total number of jobs in queue
-        excluded_count: Number of excluded jobs (older than MAX_AGE_DAYS days)
+        excluded_count: Number of excluded jobs (from blacklist)
     
     Returns:
         List of 2 messages for Telegram
@@ -404,7 +404,7 @@ def format_telegram_messages(workflow_info: Dict[str, Dict[str, Any]], stuck_job
     message1_parts.append(f"• Stuck: {total_stuck} jobs")
     
     if excluded_count > 0:
-        message1_parts.append(f"• Excluded (>{MAX_AGE_DAYS}d): {excluded_count} jobs")
+        message1_parts.append(f"• Excluded (blacklist): {excluded_count} jobs")
     message1_parts.append("")
     
     # Summary by workflow types
@@ -631,6 +631,8 @@ def main():
                        help='Send message even when all jobs are working normally')
     parser.add_argument('--notify-on-api-errors', action='store_true',
                        help='Send notifications to Telegram on API errors')
+    parser.add_argument('--blacklist', 
+                       help='Space-separated list of run IDs to exclude from monitoring')
     
     args = parser.parse_args()
     
@@ -724,13 +726,16 @@ def main():
             print(f"📤 Queue is empty - sending nothing")
         return
     
-    # Filter old jobs (older than MAX_AGE_DAYS days)
-    filtered_runs = filter_old_jobs(queued_runs)
+    # Get blacklisted run IDs from command line parameter
+    blacklisted_ids = get_blacklisted_run_ids(args.blacklist)
+    
+    # Filter blacklisted jobs
+    filtered_runs = filter_blacklisted_jobs(queued_runs, blacklisted_ids)
     excluded_count = len(queued_runs) - len(filtered_runs)
-    print(f"📊 After filtering: {len(filtered_runs)} workflow runs (excluded jobs older than {MAX_AGE_DAYS} days)")
+    print(f"📊 After filtering: {len(filtered_runs)} workflow runs (excluded {excluded_count} blacklisted jobs)")
     
     if not filtered_runs:
-        print("✅ No current workflow runs in queue")
+        print("✅ No current workflow runs in queue after filtering")
         # Send message that queue is empty
         message = "✅ *GITHUB ACTIONS MONITORING*\n\nQueue is empty - all jobs are working normally! 🎉"
         

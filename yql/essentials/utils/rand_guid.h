@@ -23,8 +23,8 @@ private:
     }
 
 private:
-    std::aligned_storage<sizeof(TMersenne<ui64>) ,alignof(TMersenne<ui64>)>::type Rnd_;
+    std::aligned_storage<sizeof(TMersenne<ui64>), alignof(TMersenne<ui64>)>::type Rnd_;
 
     static TAtomic Counter;
 };
-}
+} // namespace NYql

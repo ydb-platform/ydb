@@ -10,5 +10,5 @@ IComputationNode* WrapUnpickle(TCallable& callable, const TComputationNodeFactor
 IComputationNode* WrapAscending(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapDescending(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

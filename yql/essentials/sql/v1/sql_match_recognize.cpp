@@ -7,9 +7,12 @@
 
 namespace NSQLTranslationV1 {
 
-TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(TContext& ctx, NSQLTranslation::ESqlMode mode) : TSqlTranslation(ctx, mode) {}
+TSqlMatchRecognizeClause::TSqlMatchRecognizeClause(TContext& ctx, NSQLTranslation::ESqlMode mode)
+    : TSqlTranslation(ctx, mode)
+{
+}
 
-TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause &matchRecognizeClause) {
+TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Generated::TRule_row_pattern_recognition_clause& matchRecognizeClause) {
     auto pos = GetPos(matchRecognizeClause.GetToken1());
     if (!Ctx_.FeatureR010) {
         Ctx_.Error(pos, TIssuesIds::CORE) << "Unexpected MATCH_RECOGNIZE";
@@ -20,14 +23,12 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         pos,
         matchRecognizeClause.HasBlock3()
             ? std::addressof(matchRecognizeClause.GetBlock3().GetRule_window_partition_clause1())
-            : nullptr
-    );
+            : nullptr);
 
     auto sortSpecs = ParseOrderBy(
         matchRecognizeClause.HasBlock4()
             ? std::addressof(matchRecognizeClause.GetBlock4().GetRule_order_by_clause1())
-            : nullptr
-    );
+            : nullptr);
     if (!sortSpecs) {
         return {};
     }
@@ -35,15 +36,13 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
     auto measures = ParseMeasures(
         matchRecognizeClause.HasBlock5()
             ? std::addressof(matchRecognizeClause.GetBlock5().GetRule_row_pattern_measures1().GetRule_row_pattern_measure_list2())
-            : nullptr
-    );
+            : nullptr);
 
     auto rowsPerMatch = ParseRowsPerMatch(
         pos,
         matchRecognizeClause.HasBlock6()
             ? std::addressof(matchRecognizeClause.GetBlock6().GetRule_row_pattern_rows_per_match1())
-            : nullptr
-    );
+            : nullptr);
     if (!rowsPerMatch) {
         return {};
     }
@@ -67,8 +66,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         pos,
         commonSyntax.HasBlock1()
             ? std::addressof(commonSyntax.GetBlock1().GetRule_row_pattern_skip_to3())
-            : nullptr
-    );
+            : nullptr);
     if (!skipTo) {
         return {};
     }
@@ -77,14 +75,13 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         pos,
         commonSyntax.HasBlock7()
             ? std::addressof(commonSyntax.GetBlock7().GetRule_row_pattern_subset_clause1())
-            : nullptr
-    );
+            : nullptr);
     if (!subset) {
         return {};
     }
 
     auto definitions = ParseDefinitions(commonSyntax.GetRule_row_pattern_definition_list9());
-    for (const auto& [callable, name]: definitions) {
+    for (const auto& [callable, name] : definitions) {
         if (!PatternVarNames_.contains(name)) {
             Ctx_.Error(callable->GetPos()) << "ROW PATTERN VARIABLE " << name << " is defined, but not mentioned in the PATTERN";
             return {};
@@ -102,8 +99,7 @@ TMatchRecognizeBuilderPtr TSqlMatchRecognizeClause::CreateBuilder(const NSQLv1Ge
         std::move(pattern),
         std::move(PatternVars_),
         std::move(*subset),
-        std::move(definitions)
-    );
+        std::move(definitions));
 }
 
 std::tuple<TNodePtr, TNodePtr> TSqlMatchRecognizeClause::ParsePartitionBy(TPosition pos, const TRule_window_partition_clause* node) {
@@ -130,8 +126,7 @@ std::tuple<TNodePtr, TNodePtr> TSqlMatchRecognizeClause::ParsePartitionBy(TPosit
     }();
     return {
         BuildLambda(pos, BuildList(pos, {BuildAtom(pos, "row")}), BuildQuote(pos, std::move(partitionKeySelector))),
-        BuildQuote(pos, std::move(partitionColumns))
-    };
+        BuildQuote(pos, std::move(partitionColumns))};
 }
 
 TMaybe<TVector<TSortSpecificationPtr>> TSqlMatchRecognizeClause::ParseOrderBy(const TRule_order_by_clause* node) {
@@ -160,7 +155,7 @@ TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseMeasures(const TRule_row_
         return {};
     }
     TVector<TNamedFunction> result{ParseOneMeasure(node->GetRule_row_pattern_measure_definition1())};
-    for (const auto& m: node->GetBlock2()) {
+    for (const auto& m : node->GetBlock2()) {
         result.push_back(ParseOneMeasure(m.GetRule_row_pattern_measure_definition2()));
     }
     return result;
@@ -172,18 +167,18 @@ TNodePtr TSqlMatchRecognizeClause::ParseRowsPerMatch(TPosition pos, const TRule_
             return NYql::NMatchRecognize::ERowsPerMatch::OneRow;
         }
         switch (node->GetAltCase()) {
-        case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch1: {
-            const auto& rowsPerMatch = node->GetAlt_row_pattern_rows_per_match1();
-            pos = GetPos(rowsPerMatch.GetToken1());
-            return NYql::NMatchRecognize::ERowsPerMatch::OneRow;
-        }
-        case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch2: {
-            const auto& rowsPerMatch = node->GetAlt_row_pattern_rows_per_match2();
-            pos = GetPos(rowsPerMatch.GetToken1());
-            return NYql::NMatchRecognize::ERowsPerMatch::AllRows;
-        }
-        case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch1: {
+                const auto& rowsPerMatch = node->GetAlt_row_pattern_rows_per_match1();
+                pos = GetPos(rowsPerMatch.GetToken1());
+                return NYql::NMatchRecognize::ERowsPerMatch::OneRow;
+            }
+            case TRule_row_pattern_rows_per_match::kAltRowPatternRowsPerMatch2: {
+                const auto& rowsPerMatch = node->GetAlt_row_pattern_rows_per_match2();
+                pos = GetPos(rowsPerMatch.GetToken1());
+                return NYql::NMatchRecognize::ERowsPerMatch::AllRows;
+            }
+            case TRule_row_pattern_rows_per_match::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }();
     return BuildQuotedAtom(pos, "RowsPerMatch_" + ToString(result));
@@ -197,67 +192,65 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
             return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""};
         }
         switch (node->GetAltCase()) {
-        case TRule_row_pattern_skip_to::kAltRowPatternSkipTo1: {
-            const auto& skipTo = node->GetAlt_row_pattern_skip_to1();
-            skipToPos = GetPos(skipTo.GetToken1());
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""};
-        }
-        case TRule_row_pattern_skip_to::kAltRowPatternSkipTo2: {
-            const auto& skipTo = node->GetAlt_row_pattern_skip_to2();
-            skipToPos = GetPos(skipTo.GetToken1());
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""};
-        }
-        case TRule_row_pattern_skip_to::kAltRowPatternSkipTo3: {
-            const auto& skipTo = node->GetAlt_row_pattern_skip_to3();
-            skipToPos = GetPos(skipTo.GetToken1());
-            const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-            auto var = identifier.GetToken1().GetValue();
-            varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames_.contains(var)) {
-                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO FIRST";
-                return {};
+            case TRule_row_pattern_skip_to::kAltRowPatternSkipTo1: {
+                const auto& skipTo = node->GetAlt_row_pattern_skip_to1();
+                skipToPos = GetPos(skipTo.GetToken1());
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::NextRow, ""};
             }
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst, std::move(var)};
-        }
-        case TRule_row_pattern_skip_to::kAltRowPatternSkipTo4: {
-            const auto& skipTo = node->GetAlt_row_pattern_skip_to4();
-            skipToPos = GetPos(skipTo.GetToken1());
-            const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-            auto var = identifier.GetToken1().GetValue();
-            varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames_.contains(var)) {
-                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO LAST";
-                return {};
+            case TRule_row_pattern_skip_to::kAltRowPatternSkipTo2: {
+                const auto& skipTo = node->GetAlt_row_pattern_skip_to2();
+                skipToPos = GetPos(skipTo.GetToken1());
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::PastLastRow, ""};
             }
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast, std::move(var)};
-        }
-        case TRule_row_pattern_skip_to::kAltRowPatternSkipTo5: {
-            const auto& skipTo = node->GetAlt_row_pattern_skip_to5();
-            skipToPos = GetPos(skipTo.GetToken1());
-            const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-            auto var = identifier.GetToken1().GetValue();
-            varPos = GetPos(identifier.GetToken1());
-            if (!PatternVarNames_.contains(var)) {
-                Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO";
-                return {};
+            case TRule_row_pattern_skip_to::kAltRowPatternSkipTo3: {
+                const auto& skipTo = node->GetAlt_row_pattern_skip_to3();
+                skipToPos = GetPos(skipTo.GetToken1());
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                auto var = identifier.GetToken1().GetValue();
+                varPos = GetPos(identifier.GetToken1());
+                if (!PatternVarNames_.contains(var)) {
+                    Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO FIRST";
+                    return {};
+                }
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToFirst, std::move(var)};
             }
-            return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::To, std::move(var)};
-        }
-        case TRule_row_pattern_skip_to::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            case TRule_row_pattern_skip_to::kAltRowPatternSkipTo4: {
+                const auto& skipTo = node->GetAlt_row_pattern_skip_to4();
+                skipToPos = GetPos(skipTo.GetToken1());
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name4().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                auto var = identifier.GetToken1().GetValue();
+                varPos = GetPos(identifier.GetToken1());
+                if (!PatternVarNames_.contains(var)) {
+                    Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO LAST";
+                    return {};
+                }
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::ToLast, std::move(var)};
+            }
+            case TRule_row_pattern_skip_to::kAltRowPatternSkipTo5: {
+                const auto& skipTo = node->GetAlt_row_pattern_skip_to5();
+                skipToPos = GetPos(skipTo.GetToken1());
+                const auto& identifier = skipTo.GetRule_row_pattern_skip_to_variable_name3().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                auto var = identifier.GetToken1().GetValue();
+                varPos = GetPos(identifier.GetToken1());
+                if (!PatternVarNames_.contains(var)) {
+                    Ctx_.Error(varPos) << "Unknown pattern variable in AFTER MATCH SKIP TO";
+                    return {};
+                }
+                return NYql::NMatchRecognize::TAfterMatchSkipTo{NYql::NMatchRecognize::EAfterMatchSkipTo::To, std::move(var)};
+            }
+            case TRule_row_pattern_skip_to::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }();
     if (!result) {
         return {};
     }
-    return BuildTuple(pos, {
-        BuildQuotedAtom(skipToPos, "AfterMatchSkip_" + ToString(result->To)),
-        BuildQuotedAtom(varPos, std::move(result->Var))
-    });
+    return BuildTuple(pos, {BuildQuotedAtom(skipToPos, "AfterMatchSkip_" + ToString(result->To)),
+                            BuildQuotedAtom(varPos, std::move(result->Var))});
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPatternFactor(TPosition pos, TNodePtr primary, std::tuple<ui64, ui64, bool, bool, bool> quantifier) {
-    return std::apply([&](const auto& ...args) {
+    return std::apply([&](const auto&... args) {
         return BuildTuple(pos, {std::move(primary), BuildQuotedAtom(pos, ToString(args))...});
     }, quantifier);
 }
@@ -270,72 +263,71 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
     auto primary = [&]() -> TNodePtr {
         const auto& primaryAlt = node.GetRule_row_pattern_primary1();
         switch (primaryAlt.GetAltCase()) {
-        case TRule_row_pattern_primary::kAltRowPatternPrimary1: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary1();
-            const auto& identifier = primary.GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
-            const auto varName = Id(identifier, *this);
-            const auto var = BuildQuotedAtom(GetPos(identifier.GetToken1()), varName);
-            if (PatternVarNames_.insert(varName).second) {
-                PatternVars_->Add(var);
-            }
-            return var;
-        }
-        case TRule_row_pattern_primary::kAltRowPatternPrimary2: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary2();
-            const auto& token = primary.GetToken1();
-            const auto varName = token.GetValue();
-            const auto var = BuildQuotedAtom(GetPos(token), varName);
-            if (PatternVarNames_.insert(varName).second) {
-                PatternVars_->Add(var);
-            }
-            return var;
-        }
-        case TRule_row_pattern_primary::kAltRowPatternPrimary3: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary3();
-            const auto& token = primary.GetToken1();
-            const auto varName = token.GetValue();
-            const auto var = BuildQuotedAtom(GetPos(token), varName);
-            if (PatternVarNames_.insert(varName).second) {
-                PatternVars_->Add(var);
-            }
-            return var;
-        }
-        case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary4();
-            return ParsePattern(pos, primary.GetBlock2().GetRule_row_pattern1(), nestingLevel + 1, output);
-        }
-        case TRule_row_pattern_primary::kAltRowPatternPrimary5: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary5();
-            output = false;
-            return ParsePattern(pos, primary.GetRule_row_pattern3(), nestingLevel + 1, output);
-        }
-        case TRule_row_pattern_primary::kAltRowPatternPrimary6: {
-            const auto& primary = primaryAlt.GetAlt_row_pattern_primary6();
-            std::vector<TNodePtr> items{
-                ParsePattern(pos, primary.GetRule_row_pattern_permute1().GetRule_row_pattern3(), nestingLevel + 1, output)
-            };
-            for (const auto& p: primary.GetRule_row_pattern_permute1().GetBlock4()) {
-                items.push_back(ParsePattern(pos, p.GetRule_row_pattern2(), nestingLevel + 1, output));
-            }
-            if (items.size() > MaxPermutedItems) {
-                Ctx_.Error(GetPos(primary.GetRule_row_pattern_permute1().GetToken1())) << "Too many items in permute";
-                return {};
-            }
-            std::vector<size_t> indexes(items.size());
-            Iota(indexes.begin(), indexes.end(), 0);
-            std::vector<TNodePtr> result;
-            do {
-                std::vector<TNodePtr> term;
-                term.reserve(items.size());
-                for (auto index : indexes) {
-                    term.push_back(BuildPatternFactor(pos, items[index], std::tuple{1, 1, true, output, false}));
+            case TRule_row_pattern_primary::kAltRowPatternPrimary1: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary1();
+                const auto& identifier = primary.GetRule_row_pattern_primary_variable_name1().GetRule_row_pattern_variable_name1().GetRule_identifier1();
+                const auto varName = Id(identifier, *this);
+                const auto var = BuildQuotedAtom(GetPos(identifier.GetToken1()), varName);
+                if (PatternVarNames_.insert(varName).second) {
+                    PatternVars_->Add(var);
                 }
-                result.push_back(BuildPatternTerm(pos, std::move(term)));
-            } while (std::next_permutation(indexes.begin(), indexes.end()));
-            return BuildPattern(pos, std::move(result));
-        }
-        case TRule_row_pattern_primary::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+                return var;
+            }
+            case TRule_row_pattern_primary::kAltRowPatternPrimary2: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary2();
+                const auto& token = primary.GetToken1();
+                const auto varName = token.GetValue();
+                const auto var = BuildQuotedAtom(GetPos(token), varName);
+                if (PatternVarNames_.insert(varName).second) {
+                    PatternVars_->Add(var);
+                }
+                return var;
+            }
+            case TRule_row_pattern_primary::kAltRowPatternPrimary3: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary3();
+                const auto& token = primary.GetToken1();
+                const auto varName = token.GetValue();
+                const auto var = BuildQuotedAtom(GetPos(token), varName);
+                if (PatternVarNames_.insert(varName).second) {
+                    PatternVars_->Add(var);
+                }
+                return var;
+            }
+            case TRule_row_pattern_primary::kAltRowPatternPrimary4: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary4();
+                return ParsePattern(pos, primary.GetBlock2().GetRule_row_pattern1(), nestingLevel + 1, output);
+            }
+            case TRule_row_pattern_primary::kAltRowPatternPrimary5: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary5();
+                output = false;
+                return ParsePattern(pos, primary.GetRule_row_pattern3(), nestingLevel + 1, output);
+            }
+            case TRule_row_pattern_primary::kAltRowPatternPrimary6: {
+                const auto& primary = primaryAlt.GetAlt_row_pattern_primary6();
+                std::vector<TNodePtr> items{
+                    ParsePattern(pos, primary.GetRule_row_pattern_permute1().GetRule_row_pattern3(), nestingLevel + 1, output)};
+                for (const auto& p : primary.GetRule_row_pattern_permute1().GetBlock4()) {
+                    items.push_back(ParsePattern(pos, p.GetRule_row_pattern2(), nestingLevel + 1, output));
+                }
+                if (items.size() > MaxPermutedItems) {
+                    Ctx_.Error(GetPos(primary.GetRule_row_pattern_permute1().GetToken1())) << "Too many items in permute";
+                    return {};
+                }
+                std::vector<size_t> indexes(items.size());
+                Iota(indexes.begin(), indexes.end(), 0);
+                std::vector<TNodePtr> result;
+                do {
+                    std::vector<TNodePtr> term;
+                    term.reserve(items.size());
+                    for (auto index : indexes) {
+                        term.push_back(BuildPatternFactor(pos, items[index], std::tuple{1, 1, true, output, false}));
+                    }
+                    result.push_back(BuildPatternTerm(pos, std::move(term)));
+                } while (std::next_permutation(indexes.begin(), indexes.end()));
+                return BuildPattern(pos, std::move(result));
+            }
+            case TRule_row_pattern_primary::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }();
     if (!primary) {
@@ -349,44 +341,43 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
         }
         const auto& quantifierAlt = node.GetBlock2().GetRule_row_pattern_quantifier1();
         switch (quantifierAlt.GetAltCase()) {
-        case TRule_row_pattern_quantifier::kAltRowPatternQuantifier1: { // *
-            const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier1();
-            pos = GetPos(quantifier.GetToken1());
-            return std::tuple{static_cast<ui64>(0), static_cast<ui64>(Max()), !quantifier.HasBlock2(), output, false};
-        }
-        case TRule_row_pattern_quantifier::kAltRowPatternQuantifier2: { // +
-            const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier2();
-            pos = GetPos(quantifier.GetToken1());
-            return std::tuple{static_cast<ui64>(1), static_cast<ui64>(Max()), !quantifier.HasBlock2(), output, false};
-        }
-        case TRule_row_pattern_quantifier::kAltRowPatternQuantifier3: { // ?
-            const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier3();
-            pos = GetPos(quantifier.GetToken1());
-            return std::tuple{static_cast<ui64>(0), static_cast<ui64>(1), !quantifier.HasBlock2(), output, false};
-        }
-        case TRule_row_pattern_quantifier::kAltRowPatternQuantifier4: { // {n?, m?}
-            const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier4();
-            pos = GetPos(quantifier.GetToken1());
-            return std::tuple{
-                quantifier.HasBlock2()
-                    ? FromString(quantifier.GetBlock2().GetRule_integer1().GetToken1().GetValue())
-                    : static_cast<ui64>(0),
-                quantifier.HasBlock4()
-                    ? FromString(quantifier.GetBlock4().GetRule_integer1().GetToken1().GetValue())
-                    : static_cast<ui64>(Max()),
-                !quantifier.HasBlock6(),
-                output,
-                false
-            };
-        }
-        case TRule_row_pattern_quantifier::kAltRowPatternQuantifier5: { // {n}
-            const auto quantifier = quantifierAlt.GetAlt_row_pattern_quantifier5();
-            pos = GetPos(quantifier.GetToken1());
-            const auto quantity = static_cast<ui64>(FromString(quantifier.GetRule_integer2().GetToken1().GetValue()));
-            return std::tuple{quantity, quantity, true, output, false};
-        }
-        case TRule_row_pattern_quantifier::ALT_NOT_SET:
-            Y_ABORT("You should change implementation according to grammar changes");
+            case TRule_row_pattern_quantifier::kAltRowPatternQuantifier1: { // *
+                const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier1();
+                pos = GetPos(quantifier.GetToken1());
+                return std::tuple{static_cast<ui64>(0), static_cast<ui64>(Max()), !quantifier.HasBlock2(), output, false};
+            }
+            case TRule_row_pattern_quantifier::kAltRowPatternQuantifier2: { // +
+                const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier2();
+                pos = GetPos(quantifier.GetToken1());
+                return std::tuple{static_cast<ui64>(1), static_cast<ui64>(Max()), !quantifier.HasBlock2(), output, false};
+            }
+            case TRule_row_pattern_quantifier::kAltRowPatternQuantifier3: { // ?
+                const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier3();
+                pos = GetPos(quantifier.GetToken1());
+                return std::tuple{static_cast<ui64>(0), static_cast<ui64>(1), !quantifier.HasBlock2(), output, false};
+            }
+            case TRule_row_pattern_quantifier::kAltRowPatternQuantifier4: { // {n?, m?}
+                const auto& quantifier = quantifierAlt.GetAlt_row_pattern_quantifier4();
+                pos = GetPos(quantifier.GetToken1());
+                return std::tuple{
+                    quantifier.HasBlock2()
+                        ? FromString(quantifier.GetBlock2().GetRule_integer1().GetToken1().GetValue())
+                        : static_cast<ui64>(0),
+                    quantifier.HasBlock4()
+                        ? FromString(quantifier.GetBlock4().GetRule_integer1().GetToken1().GetValue())
+                        : static_cast<ui64>(Max()),
+                    !quantifier.HasBlock6(),
+                    output,
+                    false};
+            }
+            case TRule_row_pattern_quantifier::kAltRowPatternQuantifier5: { // {n}
+                const auto quantifier = quantifierAlt.GetAlt_row_pattern_quantifier5();
+                pos = GetPos(quantifier.GetToken1());
+                const auto quantity = static_cast<ui64>(FromString(quantifier.GetRule_integer2().GetToken1().GetValue()));
+                return std::tuple{quantity, quantity, true, output, false};
+            }
+            case TRule_row_pattern_quantifier::ALT_NOT_SET:
+                Y_UNREACHABLE();
         }
     }();
     return BuildPatternFactor(pos, std::move(primary), std::move(quantifier));
@@ -406,7 +397,7 @@ TNodePtr TSqlMatchRecognizeClause::BuildPatternTerm(TPosition pos, std::vector<T
 TNodePtr TSqlMatchRecognizeClause::ParsePatternTerm(TPosition pos, const TRule_row_pattern_term& node, size_t nestingLevel, bool output) {
     std::vector<TNodePtr> result;
     result.reserve(node.GetBlock1().size());
-    for (const auto& factor: node.GetBlock1()) {
+    for (const auto& factor : node.GetBlock1()) {
         result.push_back(ParsePatternFactor(pos, factor.GetRule_row_pattern_factor1(), nestingLevel, output));
     }
     return BuildPatternTerm(pos, std::move(result));
@@ -414,7 +405,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternTerm(TPosition pos, const TRule_r
 
 TNodePtr TSqlMatchRecognizeClause::BuildPattern(TPosition pos, std::vector<TNodePtr> pattern) {
     const auto result = BuildList(pos, {BuildAtom(pos, "MatchRecognizePattern")});
-    for (auto& term: pattern) {
+    for (auto& term : pattern) {
         if (!term) {
             return {};
         }
@@ -427,7 +418,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePattern(TPosition pos, const TRule_row_p
     std::vector<TNodePtr> result;
     result.reserve(1 + node.GetBlock2().size());
     result.push_back(ParsePatternTerm(pos, node.GetRule_row_pattern_term1(), nestingLevel, output));
-    for (const auto& term: node.GetBlock2()) {
+    for (const auto& term : node.GetBlock2()) {
         result.push_back(ParsePatternTerm(pos, term.GetRule_row_pattern_term2(), nestingLevel, output));
     }
     return BuildPattern(pos, std::move(result));
@@ -458,7 +449,7 @@ TNamedFunction TSqlMatchRecognizeClause::ParseOneDefinition(const TRule_row_patt
 
 TVector<TNamedFunction> TSqlMatchRecognizeClause::ParseDefinitions(const TRule_row_pattern_definition_list& node) {
     TVector<TNamedFunction> result{ParseOneDefinition(node.GetRule_row_pattern_definition1())};
-    for (const auto& d: node.GetBlock2()) {
+    for (const auto& d : node.GetBlock2()) {
         result.push_back(ParseOneDefinition(d.GetRule_row_pattern_definition2()));
     }
     return result;

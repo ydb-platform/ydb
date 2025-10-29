@@ -110,7 +110,7 @@ def _produce_sanitizer_report(node_errors: list[NodeErrors]) -> str:
 
     for node_error in node_errors:
         host = node_error.node.host
-        if host not in reported_hosts:
+        if host not in reported_hosts and node_error.sanitizer_output is not None:
             html += f'<details style="margin-bottom: 15px"><summary style="display: list-item">Sanitizer output at {host}</summary>'
             html += f'<code>{node_error.sanitizer_output.replace('\n', '<br/>')}</code></details>'
             reported_hosts.add(host)

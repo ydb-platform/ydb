@@ -78,8 +78,6 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
     try {
         if (opCtx.UpdatedConfig != MainYamlConfig || YamlDropped) {
             auto tree = NFyaml::TDocument::Parse(opCtx.UpdatedConfig);
-            auto resolved = NYamlConfig::ResolveAll(tree);
-
             if (ClusterName != opCtx.Cluster) {
                 ythrow yexception() << "ClusterName mismatch"
                     << " expected " << ClusterName
@@ -95,17 +93,19 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownFieldsCollector = new NYamlConfig::TBasicUnknownFieldsCollector;
 
             std::vector<TString> errors;
-            for (auto& [_, config] : resolved.Configs) {
-                auto cfg = NYamlConfig::YamlToProto(
-                    config.second,
-                    true,
-                    true,
-                    unknownFieldsCollector);
-                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                if (result == NKikimr::NConfig::EValidationResult::Error) {
-                    ythrow yexception() << errors.front();
-                }
-            }
+            NYamlConfig::ResolveUniqueDocs(
+                tree,
+                [&](NYamlConfig::TDocumentConfig&& config) {
+                    auto cfg = NYamlConfig::YamlToProto(
+                        config.second,
+                        true,
+                        true,
+                        unknownFieldsCollector);
+                    NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
+                    if (result == NKikimr::NConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
+                });
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 
@@ -177,25 +177,25 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
 
             auto tree = NFyaml::TDocument::Parse(MainYamlConfig);
             NYamlConfig::AppendDatabaseConfig(tree, databaseTree);
-            auto resolved = NYamlConfig::ResolveAll(tree);
-
             errors.clear();
 
             auto* csk = AppData()->ConfigSwissKnife;
 
-            for (auto& [_, config] : resolved.Configs) {
-                auto cfg = NYamlConfig::YamlToProto(
-                    config.second,
-                    true,
-                    true,
-                    unknownFieldsCollector);
-                if (csk) {
-                    auto result = csk->ValidateConfig(cfg, errors);
-                    if (result == NYamlConfig::EValidationResult::Error) {
-                        ythrow yexception() << errors.front();
+            NYamlConfig::ResolveUniqueDocs(
+                tree,
+                [&](NYamlConfig::TDocumentConfig&& config) {
+                    auto cfg = NYamlConfig::YamlToProto(
+                        config.second,
+                        true,
+                        true,
+                        unknownFieldsCollector);
+                    if (csk) {
+                        auto result = csk->ValidateConfig(cfg, errors);
+                        if (result == NYamlConfig::EValidationResult::Error) {
+                            ythrow yexception() << errors.front();
+                        }
                     }
-                }
-            }
+                });
 
             const auto& deprecatedPaths = NKikimrConfig::TAppConfig::GetReservedChildrenPaths();
 

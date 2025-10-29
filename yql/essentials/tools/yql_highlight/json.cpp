@@ -9,14 +9,14 @@
 
 namespace NSQLHighlight {
 
-    void Print(IOutputStream& out, const NJson::TJsonValue& json) {
-        NJson::TJsonWriterConfig config = {
-            .SortKeys = true,
-        };
+void Print(IOutputStream& out, const NJson::TJsonValue& json) {
+    NJson::TJsonWriterConfig config = {
+        .SortKeys = true,
+    };
 
-        TStringStream output;
-        NJson::WriteJson(&output, &json, config);
-        YQL_ENSURE(NJson::PrettifyJson(output.Str(), out));
-    }
+    TStringStream output;
+    NJson::WriteJson(&output, &json, config);
+    YQL_ENSURE(NJson::PrettifyJson(output.Str(), out));
+}
 
 } // namespace NSQLHighlight

@@ -1,6 +1,5 @@
 #include "file_storage_decorator.h"
 
-
 namespace NYql {
 
 TFileStorageDecorator::TFileStorageDecorator(TFileStoragePtr fs)
@@ -44,4 +43,4 @@ const TFileStorageConfig& TFileStorageDecorator::GetConfig() const {
     return Inner_->GetConfig();
 }
 
-} // NYql
+} // namespace NYql

@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-template<class T>
+template <class T>
 class TSafeCircularBuffer {
 public:
     TSafeCircularBuffer(TMaybe<size_t> size, T emptyValue, size_t initSize = 0)
@@ -52,7 +52,7 @@ public:
             // Circular buffer not have elements for pop, no elements, no problem
         } else {
             Buffer[Head] = EmptyValue;
-            Head = RealIndex(Head+1);
+            Head = RealIndex(Head + 1);
             Count--;
         }
         MutationCount++;
@@ -105,5 +105,5 @@ private:
     ui64 MutationCount = 0;
 };
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

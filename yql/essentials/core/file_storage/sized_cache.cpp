@@ -93,6 +93,4 @@ void TSizedCache::Remove(TCache::TIterator it) {
     obj->Dismiss();
 }
 
-} // NYql
-
-
+} // namespace NYql

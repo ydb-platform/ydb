@@ -1,0 +1,77 @@
+diff --git a/src/core/lib/gprpp/posix/thd.cc b/src/core/lib/gprpp/posix/thd.cc
+index 2751b22..23598df 100644
+--- a/src/core/lib/gprpp/posix/thd.cc
++++ b/src/core/lib/gprpp/posix/thd.cc
+@@ -19,6 +19,7 @@
+ // Posix implementation for gpr threads.
+ 
+ #include <grpc/support/port_platform.h>
++#include <util/system/thread.h>
+ 
+ #include <util/generic/string.h>
+ #include <util/string/cast.h>
+@@ -118,19 +118,7 @@
+           thd_arg arg = *static_cast<thd_arg*>(v);
+           free(v);
+           if (arg.name != nullptr) {
+-#if GPR_APPLE_PTHREAD_NAME
+-            // Apple supports 64 characters, and will
+-            // truncate if it's longer.
+-            pthread_setname_np(arg.name);
+-#elif GPR_LINUX_PTHREAD_NAME
+-            // Linux supports 16 characters max, and will
+-            // error if it's longer.
+-            char buf[16];
+-            size_t buf_len = GPR_ARRAY_SIZE(buf) - 1;
+-            strncpy(buf, arg.name, buf_len);
+-            buf[buf_len] = '\0';
+-            pthread_setname_np(pthread_self(), buf);
+-#endif  // GPR_APPLE_PTHREAD_NAME
++            TThread::SetCurrentThreadName(arg.name);
+           }
+ 
+           gpr_mu_lock(&arg.thread->mu_);
+diff --git a/src/core/lib/iomgr/executor.cc b/src/core/lib/iomgr/executor.cc
+index 2ad8972..26bfae0 100644
+--- a/src/core/lib/iomgr/executor.cc
++++ b/src/core/lib/iomgr/executor.cc
+@@ -95,6 +95,8 @@ grpc_closure_scheduler
+                              {{default_enqueue_short, default_enqueue_long},
+                               {resolver_enqueue_short, resolver_enqueue_long}};
+ 
++size_t threads_limit_ = 0;
++
+ }  // namespace
+ 
+ TraceFlag executor_trace(false, "executor");
+@@ -94,6 +94,15 @@ Executor::Executor(const char* name) : name_(name) {
+   adding_thread_lock_ = GPR_SPINLOCK_STATIC_INITIALIZER;
+   gpr_atm_rel_store(&num_threads_, 0);
+   max_threads_ = std::max(1u, 2 * gpr_cpu_num_cores());
++  if (threads_limit_) {
++    max_threads_ = std::min(max_threads_, threads_limit_);
++  }
++}
++
++size_t Executor::SetThreadsLimit(size_t count) {
++  size_t prev = threads_limit_;
++  threads_limit_ = count;
++  return prev;
+ }
+
+ void Executor::Init() { SetThreading(true); }
+diff --git a/src/core/lib/iomgr/executor.h b/src/core/lib/iomgr/executor.h
+index 9e47227..40d4817 100644
+--- a/src/core/lib/iomgr/executor.h
++++ b/src/core/lib/iomgr/executor.h
+@@ -105,6 +105,9 @@ class Executor {
+   // Return if the DEFAULT executor is threaded
+   static bool IsThreadedDefault();
+ 
++  // Set the maximum numbers of executor treads
++  static size_t SetThreadsLimit(size_t count);
++
+  private:
+   static size_t RunClosures(const char* executor_name, grpc_closure_list list);
+   static void ThreadMain(void* arg);
+

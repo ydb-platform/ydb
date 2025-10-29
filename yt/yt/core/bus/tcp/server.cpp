@@ -521,7 +521,9 @@ private:
             auto secondsToExpiry = GetTimeToExpiry(cert);
 
             CertChainToExpiry_->Update(secondsToExpiry);
-        } catch (...) {
+        } catch (const std::exception& ex) {
+            const auto& Logger = BusLogger();
+            YT_LOG_WARNING(ex, "Failed to update cert sensors");
         }
     }
 

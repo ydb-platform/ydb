@@ -114,15 +114,15 @@ struct TTM64Storage {
             ui32 second = local ? 0 : Second;
             if (!builder.MakeTzDatetime64(Year, Month, Day, hour, minute, second, datetime, TimezoneId)) {
                 ythrow yexception() << "Error in MakeTzDatetime64 tzId "
-                    << TimezoneId << " " << Year << "-" << Month << "-" << Day
-                    << "T" << hour << ":" << minute << ":" << second;
+                                    << TimezoneId << " " << Year << "-" << Month << "-" << Day
+                                    << "T" << hour << ":" << minute << ":" << second;
             }
             return datetime / 86400u;
         } else {
             i32 date;
             if (!builder.MakeTzDate32(Year, Month, Day, date, TimezoneId)) {
                 ythrow yexception() << "Error in MakeTzDate32 tzId "
-                    << TimezoneId << " " << Year << "-" << Month << "-" << Day;
+                                    << TimezoneId << " " << Year << "-" << Month << "-" << Day;
             }
             return date;
         }
@@ -132,7 +132,7 @@ struct TTM64Storage {
         i64 datetime;
         if (!builder.MakeTzDatetime64(Year, Month, Day, Hour, Minute, Second, datetime, TimezoneId)) {
             ythrow yexception() << "Error in MakeTzDatetime64 tzId " << TimezoneId
-                << " " << Year << "-" << Month << "-" << Day << "T" << Hour << ":" << Minute << ":" << Second;
+                                << " " << Year << "-" << Month << "-" << Day << "T" << Hour << ":" << Minute << ":" << Second;
         }
         return datetime;
     }
@@ -182,4 +182,4 @@ struct TTM64Storage {
     }
 };
 
-}
+} // namespace NYql::DateTime

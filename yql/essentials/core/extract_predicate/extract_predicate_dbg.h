@@ -8,4 +8,4 @@ namespace NYql {
 // Expands callable ComputeRangeFor (use for debug purposes)
 THolder<IGraphTransformer> MakeExpandRangeComputeForTransformer(const TIntrusivePtr<TTypeAnnotationContext>& types);
 
-}
+} // namespace NYql

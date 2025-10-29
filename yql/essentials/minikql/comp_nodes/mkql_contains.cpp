@@ -1,5 +1,5 @@
 #include "mkql_contains.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -7,8 +7,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TContainsWrapper : public TMutableCodegeneratorNode<TContainsWrapper> {
+class TContainsWrapper: public TMutableCodegeneratorNode<TContainsWrapper> {
     typedef TMutableCodegeneratorNode<TContainsWrapper> TBaseComputation;
+
 public:
     TContainsWrapper(TComputationMutables& mutables, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -28,15 +29,14 @@ public:
 
         const auto dict = GetNodeValue(Dict, ctx, block);
 
-        const auto keyp = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(valueType, 0U, "key", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(valueType, 0U, "key", block);
+        const auto keyp = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "key", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "key", block);
         GetNodeValue(keyp, Key, ctx, block);
         const auto cont = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Contains>(Type::getInt1Ty(context), dict, ctx.Codegen, block, keyp);
 
         ValueUnRef(Key->GetRepresentation(), keyp, ctx, block);
-        if (Dict->IsTemporaryValue())
+        if (Dict->IsTemporaryValue()) {
             CleanupBoxed(dict, ctx, block);
+        }
         return MakeBoolean(cont, context, block);
     }
 #endif
@@ -50,7 +50,7 @@ private:
     IComputationNode* const Key;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapContains(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -60,5 +60,5 @@ IComputationNode* WrapContains(TCallable& callable, const TComputationNodeFactor
     return new TContainsWrapper(ctx.Mutables, dict, key);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

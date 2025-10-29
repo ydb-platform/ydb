@@ -13,15 +13,15 @@ void TUrlPreprocessing::Configure(bool restrictedUser, const TGatewaysConfig& cf
     try {
         if (cfg.HasFs()) {
             const auto fsCfg = cfg.GetFs();
-            for (auto& s: fsCfg.GetCustomSchemes()) {
+            for (auto& s : fsCfg.GetCustomSchemes()) {
                 Mapper_.AddMapping(s.GetPattern(), s.GetTargetUrl());
             }
             if (restrictedUser) {
-                for (auto& a: fsCfg.GetExternalAllowedUrls()) {
+                for (auto& a : fsCfg.GetExternalAllowedUrls()) {
                     AllowedUrls_.Add(a.GetPattern(), a.GetAlias());
                 }
             } else {
-                for (auto& a: fsCfg.GetAllowedUrls()) {
+                for (auto& a : fsCfg.GetAllowedUrls()) {
                     AllowedUrls_.Add(a.GetPattern(), a.GetAlias());
                 }
             }
@@ -53,4 +53,4 @@ std::pair<TString, TString> TUrlPreprocessing::Preprocess(const TString& url) {
     return {convertedUrl, alias};
 }
 
-} // NYql
+} // namespace NYql

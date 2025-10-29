@@ -50,11 +50,12 @@ private:
     size_t Size_ = 0;
 };
 
-class TChunkedBufferOutput : public IOutputStream {
+class TChunkedBufferOutput: public IOutputStream {
 public:
     explicit TChunkedBufferOutput(TChunkedBuffer& dst);
+
 private:
-    virtual void DoWrite(const void *buf, size_t len) override;
+    virtual void DoWrite(const void* buf, size_t len) override;
 
     TChunkedBuffer& Dst_;
 };
@@ -62,4 +63,4 @@ private:
 TChunkedBuffer CopyData(const TChunkedBuffer& src);
 TChunkedBuffer CopyData(TChunkedBuffer&& src);
 
-}
+} // namespace NYql

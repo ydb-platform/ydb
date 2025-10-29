@@ -17,7 +17,7 @@ TMirrorDescriber::TMirrorDescriber(
     TString topicName,
     const NKikimrPQ::TMirrorPartitionConfig& config
 )
-    : TBaseActor(tabletId, readBalancerActorId, NKikimrServices::PQ_MIRROR_DESCRIBER)
+    : TBaseTabletActor(tabletId, readBalancerActorId, NKikimrServices::PQ_MIRROR_DESCRIBER)
     , TopicName(std::move(topicName))
     , Config(config)
 {

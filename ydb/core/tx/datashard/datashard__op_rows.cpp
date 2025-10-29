@@ -1,5 +1,6 @@
 #include "datashard_impl.h"
 #include "datashard_direct_transaction.h"
+#include "datashard_txs.h"
 
 namespace NKikimr {
 namespace NDataShard {
@@ -112,48 +113,90 @@ public:
     TTxType GetTxType() const override { return TXTYPE_ERASE_ROWS; }
 };
 
-static void OutOfSpace(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
+static void OutOfSpace(TEvDataShard::TEvUploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
 }
 
-static void DiskSpaceExhausted(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
+static void DiskSpaceExhausted(TEvDataShard::TEvUploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
 }
 
-static void WrongShardState(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+static void WrongShardState(TEvDataShard::TEvUploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
 }
 
-static void Replicated(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::READONLY);
+static void Replicated(TEvDataShard::TEvUploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::READONLY);
 }
 
-static void Overloaded(NKikimrTxDataShard::TEvUploadRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
+static void Overloaded(TEvDataShard::TEvUploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
 }
 
 ECumulativeCounters OverloadedCounter(TEvDataShard::TEvUploadRowsRequest::TPtr&) {
     return COUNTER_BULK_UPSERT_OVERLOADED;
 }
 
-static void WrongShardState(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvUploadRowsRequest::TPtr&, ERejectReasons) {
+    // not a S3 upload rows
+    return false;
 }
 
-static void Replicated(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::EXEC_ERROR);
+static void OutOfSpace(TEvDataShard::TEvS3UploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::OUT_OF_SPACE);
 }
 
-static void Overloaded(NKikimrTxDataShard::TEvEraseRowsResponse& response) {
-    response.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::SHARD_OVERLOADED);
+static void DiskSpaceExhausted(TEvDataShard::TEvS3UploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::DISK_SPACE_EXHAUSTED);
+}
+
+static void WrongShardState(TEvDataShard::TEvS3UploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::WRONG_SHARD_STATE);
+}
+
+static void Replicated(TEvDataShard::TEvS3UploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::READONLY);
+}
+
+static void Overloaded(TEvDataShard::TEvS3UploadRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TError::SHARD_IS_BLOCKED);
+}
+
+ECumulativeCounters OverloadedCounter(TEvDataShard::TEvS3UploadRowsRequest::TPtr&) {
+    return COUNTER_BULK_UPSERT_OVERLOADED;
+}
+
+static bool TryDelayS3UploadRows(TDataShard* self, TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, ERejectReasons rejectReasons) {
+    if (rejectReasons == ERejectReasons::OverloadByProbability) {
+        self->DelayS3UploadRows(ev);
+        return true;
+    }
+    return false;
+}
+
+static void WrongShardState(TEvDataShard::TEvEraseRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::WRONG_SHARD_STATE);
+}
+
+static void Replicated(TEvDataShard::TEvEraseRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::EXEC_ERROR);
+}
+
+static void Overloaded(TEvDataShard::TEvEraseRowsResponse& response) {
+    response.Record.SetStatus(NKikimrTxDataShard::TEvEraseRowsResponse::SHARD_OVERLOADED);
 }
 
 ECumulativeCounters OverloadedCounter(TEvDataShard::TEvEraseRowsRequest::TPtr&) {
     return COUNTER_ERASE_ROWS_OVERLOADED;
 }
 
+static bool TryDelayS3UploadRows(TDataShard*, TEvDataShard::TEvEraseRowsRequest::TPtr&, ERejectReasons) {
+    // not a S3 upload rows
+    return false;
+}
+
 template <typename TEvResponse>
-using TSetStatusFunc = void(*)(typename TEvResponse::ProtoRecordType&);
+using TSetStatusFunc = void(*)(TEvResponse&);
 
 template <typename TEvResponse, typename TEvRequest>
 static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
@@ -166,7 +209,7 @@ static void Reject(TDataShard* self, TEvRequest& ev, const TString& txDesc,
         << ", error# " << rejectDescription);
 
     auto response = MakeHolder<TEvResponse>();
-    setStatusFunc(response->Record);
+    setStatusFunc(*response);
     response->Record.SetTabletID(self->TabletID());
     response->Record.SetErrorDescription(rejectDescription);
 
@@ -191,6 +234,13 @@ static bool MaybeReject(TDataShard* self, TEvRequest& ev, const TActorContext& c
     NKikimrTxDataShard::TEvProposeTransactionResult::EStatus rejectStatus;
     if (self->CheckDataTxReject(txDesc, ctx, rejectStatus, rejectReasons, rejectDescription)) {
         self->IncCounter(OverloadedCounter(ev));
+
+        // FIXME: it seems that s3 upload should work via TUploadRowsInternal
+        // this will deduplicate code and support overload subscribed
+        if (TryDelayS3UploadRows(self, ev, rejectReasons)) {
+            return true;
+        }
+
         Reject<TEvResponse, TEvRequest>(self, ev, txDesc, rejectReasons, rejectDescription, &WrongShardState, ctx, logThrottlerType);
         return true;
     }
@@ -229,6 +279,16 @@ void TDataShard::Handle(TEvDataShard::TEvUploadRowsRequest::TPtr& ev, const TAct
     
     if (!MaybeReject<TEvDataShard::TEvUploadRowsResponse, true>(this, ev, ctx, "bulk upsert", TDataShard::ELogThrottlerType::UploadRows_Reject)) {
         Executor()->Execute(new TTxUploadRows(this, ev), ctx);
+    }
+}
+
+void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx) {
+    if (ShouldDelayOperation(ev)) {
+        return;
+    }
+
+    if (!MaybeReject<TEvDataShard::TEvS3UploadRowsResponse, true>(this, ev, ctx, "s3 bulk upsert", TDataShard::ELogThrottlerType::S3UploadRows_Reject)) {
+        Executor()->Execute(new TTxS3UploadRows(this, ev), ctx);
     }
 }
 

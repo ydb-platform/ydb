@@ -325,6 +325,12 @@ bool TProfiler<UseWeakPtr>::IsEnabled() const
 }
 
 template <bool UseWeakPtr>
+const TTagSet& TProfiler<UseWeakPtr>::GetTags() const
+{
+    return Tags_;
+}
+
+template <bool UseWeakPtr>
 TProfiler<UseWeakPtr> TProfiler<UseWeakPtr>::WithPrefix(const std::string& prefix) const
 {
     if (!Enabled_) {

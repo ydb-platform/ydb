@@ -6,176 +6,175 @@
 
 namespace NSQLTranslationV1 {
 
-    namespace {
+namespace {
 
-        TMaybe<TStringBuf> Match(TStringBuf prefix, const RE2& regex) {
-            re2::StringPiece input(prefix.data(), prefix.size());
-            if (RE2::Consume(&input, regex)) {
-                return TStringBuf(prefix.data(), input.data());
-            }
-            return Nothing();
+TMaybe<TStringBuf> Match(TStringBuf prefix, const RE2& regex) {
+    re2::StringPiece input(prefix.data(), prefix.size());
+    if (RE2::Consume(&input, regex)) {
+        return TStringBuf(prefix.data(), input.data());
+    }
+    return Nothing();
+}
+
+} // namespace
+
+class TGenericLexer: public IGenericLexer {
+private:
+    static constexpr TStringBuf Utf8BOM = "\xEF\xBB\xBF";
+
+public:
+    explicit TGenericLexer(TGenericLexerGrammar grammar)
+        : Grammar_(std::move(grammar))
+    {
+    }
+
+    virtual bool Tokenize(
+        TStringBuf text,
+        const TTokenCallback& onNext,
+        size_t maxErrors) const override {
+        Y_ENSURE(0 < maxErrors);
+        size_t errors = 0;
+
+        size_t pos = 0;
+        if (text.StartsWith(Utf8BOM)) {
+            pos += Utf8BOM.size();
         }
 
-    } // namespace
+        while (pos < text.size() && errors < maxErrors) {
+            TGenericToken next = Match(TStringBuf(text, pos));
 
-    class TGenericLexer: public IGenericLexer {
-    private:
-        static constexpr TStringBuf Utf8BOM = "\xEF\xBB\xBF";
+            size_t skipped = next.Begin;
+            next.Begin = skipped + pos;
 
-    public:
-        explicit TGenericLexer(TGenericLexerGrammar grammar)
-            : Grammar_(std::move(grammar))
-        {
+            const size_t matchPos = pos;
+            while (pos < matchPos + skipped) {
+                TGenericToken prev = Match(TStringBuf(text, pos, skipped));
+                prev.Begin = pos;
+                pos += prev.Content.size();
+                onNext(std::move(prev));
+            }
+
+            pos += next.Content.size();
+
+            if (next.Name == TGenericToken::Error) {
+                errors += 1;
+            }
+
+            onNext(std::move(next));
         }
 
-        virtual bool Tokenize(
-            TStringBuf text,
-            const TTokenCallback& onNext,
-            size_t maxErrors) const override {
-            Y_ENSURE(0 < maxErrors);
-            size_t errors = 0;
-
-            size_t pos = 0;
-            if (text.StartsWith(Utf8BOM)) {
-                pos += Utf8BOM.size();
-            }
-
-            while (pos < text.size() && errors < maxErrors) {
-                TMaybe<TGenericToken> prev;
-                TGenericToken next = Match(TStringBuf(text, pos));
-
-                size_t skipped = next.Begin;
-                next.Begin = skipped + pos;
-
-                if (skipped != 0) {
-                    prev = Match(TStringBuf(text, pos, skipped));
-                    prev->Begin = pos;
-                }
-
-                pos += skipped + next.Content.size();
-
-                if (next.Name == TGenericToken::Error) {
-                    errors += 1;
-                }
-
-                if (prev) {
-                    onNext(std::move(*prev));
-                }
-                onNext(std::move(next));
-            }
-
-            if (errors == maxErrors) {
-                return false;
-            }
-
-            onNext(TGenericToken{
-                .Name = "EOF",
-                .Content = "<EOF>",
-                .Begin = pos,
-            });
-
-            return errors == 0;
+        if (errors == maxErrors) {
+            return false;
         }
 
-    private:
-        TGenericToken Match(TStringBuf prefix) const {
-            TMaybe<TGenericToken> max;
-            Match(prefix, [&](TGenericToken&& token) {
-                if (max.Empty() || max->Content.size() < token.Content.size()) {
-                    max = std::move(token);
-                }
-            });
+        onNext(TGenericToken{
+            .Name = "EOF",
+            .Content = "<EOF>",
+            .Begin = pos,
+        });
 
-            if (max) {
-                return *max;
+        return errors == 0;
+    }
+
+private:
+    TGenericToken Match(TStringBuf prefix) const {
+        TMaybe<TGenericToken> max;
+        Match(prefix, [&](TGenericToken&& token) {
+            if (max.Empty() || (max->Begin + max->Content.size()) < (token.Begin + token.Content.size())) {
+                max = std::move(token);
             }
+        });
 
-            return {
-                .Name = TGenericToken::Error,
-                .Content = prefix.substr(0, 1),
+        if (max) {
+            return *max;
+        }
+
+        return {
+            .Name = TGenericToken::Error,
+            .Content = prefix.substr(0, 1),
+        };
+    }
+
+    void Match(TStringBuf prefix, auto onMatch) const {
+        for (const auto& matcher : Grammar_) {
+            if (auto token = matcher(prefix)) {
+                onMatch(std::move(*token));
+            }
+        }
+    }
+
+    TGenericLexerGrammar Grammar_;
+};
+
+TTokenMatcher Compile(TString name, const TRegexPattern& regex) {
+    RE2::Options options;
+    options.set_case_sensitive(!regex.IsCaseInsensitive);
+
+    return [beforeRe = MakeAtomicShared<RE2>(regex.Before, options),
+            bodyRe = MakeAtomicShared<RE2>(regex.Body, options),
+            afterRe = MakeAtomicShared<RE2>(regex.After, options),
+            name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
+        TMaybe<TStringBuf> before, body, after;
+        if ((before = Match(prefix, *beforeRe)) &&
+            (body = Match(prefix.Tail(before->size()), *bodyRe)) &&
+            (after = Match(prefix.Tail(before->size() + body->size()), *afterRe))) {
+            return TGenericToken{
+                .Name = name,
+                .Content = *body,
+                .Begin = before->size(),
             };
         }
-
-        void Match(TStringBuf prefix, auto onMatch) const {
-            for (const auto& matcher : Grammar_) {
-                if (auto token = matcher(prefix)) {
-                    onMatch(std::move(*token));
-                }
-            }
-        }
-
-        TGenericLexerGrammar Grammar_;
+        return Nothing();
     };
+}
 
-    TTokenMatcher Compile(TString name, const TRegexPattern& regex) {
-        RE2::Options options;
-        options.set_case_sensitive(!regex.IsCaseInsensitive);
+TRegexPattern Merged(TVector<TRegexPattern> patterns) {
+    Y_ENSURE(!patterns.empty());
 
-        return [beforeRe = MakeAtomicShared<RE2>(regex.Before, options),
-                bodyRe = MakeAtomicShared<RE2>(regex.Body, options),
-                afterRe = MakeAtomicShared<RE2>(regex.After, options),
-                name = std::move(name)](TStringBuf prefix) -> TMaybe<TGenericToken> {
-            TMaybe<TStringBuf> before, body, after;
-            if ((before = Match(prefix, *beforeRe)) &&
-                (body = Match(prefix.Tail(before->size()), *bodyRe)) &&
-                (after = Match(prefix.Tail(before->size() + body->size()), *afterRe))) {
-                return TGenericToken{
-                    .Name = name,
-                    .Content = *body,
-                    .Begin = before->size(),
-                };
-            }
-            return Nothing();
-        };
-    }
+    const TRegexPattern& sample = patterns.back();
+    Y_ENSURE(AllOf(patterns, [&](const TRegexPattern& pattern) {
+        return std::tie(pattern.After, pattern.Before, pattern.IsCaseInsensitive) ==
+               std::tie(sample.After, sample.Before, sample.IsCaseInsensitive);
+    }));
 
-    TRegexPattern Merged(TVector<TRegexPattern> patterns) {
-        Y_ENSURE(!patterns.empty());
+    Sort(patterns, [](const TRegexPattern& lhs, const TRegexPattern& rhs) {
+        const auto lhs_length = lhs.Body.length();
+        const auto rhs_length = rhs.Body.length();
 
-        const TRegexPattern& sample = patterns.back();
-        Y_ENSURE(AllOf(patterns, [&](const TRegexPattern& pattern) {
-            return std::tie(pattern.After, pattern.Before, pattern.IsCaseInsensitive) ==
-                   std::tie(sample.After, sample.Before, sample.IsCaseInsensitive);
-        }));
+        // Note: do not compare After and Before here as they are equal.
+        return std::tie(lhs_length, lhs.Body) > std::tie(rhs_length, rhs.Body);
+    });
 
-        Sort(patterns, [](const TRegexPattern& lhs, const TRegexPattern& rhs) {
-            const auto lhs_length = lhs.Body.length();
-            const auto rhs_length = rhs.Body.length();
-
-            // Note: do not compare After and Before here as they are equal.
-            return std::tie(lhs_length, lhs.Body) > std::tie(rhs_length, rhs.Body);
-        });
-
-        TStringBuilder body;
-        for (const auto& pattern : patterns) {
-            TString regex = pattern.Body;
-            if (pattern.Body.Contains('|')) {
-                regex.prepend('(');
-                regex.append(')');
-            }
-            body << regex << "|";
+    TStringBuilder body;
+    for (const auto& pattern : patterns) {
+        TString regex = pattern.Body;
+        if (pattern.Body.Contains('|')) {
+            regex.prepend('(');
+            regex.append(')');
         }
-        Y_ENSURE(body.back() == '|');
-        body.pop_back();
-
-        return TRegexPattern{
-            .Body = std::move(body),
-            .After = sample.After,
-            .Before = sample.Before,
-            .IsCaseInsensitive = sample.IsCaseInsensitive,
-        };
+        body << regex << "|";
     }
+    Y_ENSURE(body.back() == '|');
+    body.pop_back();
 
-    IGenericLexer::TPtr MakeGenericLexer(TGenericLexerGrammar grammar) {
-        return IGenericLexer::TPtr(new TGenericLexer(std::move(grammar)));
-    }
+    return TRegexPattern{
+        .Body = std::move(body),
+        .After = sample.After,
+        .Before = sample.Before,
+        .IsCaseInsensitive = sample.IsCaseInsensitive,
+    };
+}
 
-    TVector<TGenericToken> Tokenize(IGenericLexer::TPtr& lexer, TStringBuf text) {
-        TVector<TGenericToken> tokens;
-        lexer->Tokenize(text, [&](TGenericToken&& token) {
-            tokens.emplace_back(std::move(token));
-        });
-        return tokens;
-    }
+IGenericLexer::TPtr MakeGenericLexer(TGenericLexerGrammar grammar) {
+    return IGenericLexer::TPtr(new TGenericLexer(std::move(grammar)));
+}
+
+TVector<TGenericToken> Tokenize(IGenericLexer::TPtr& lexer, TStringBuf text) {
+    TVector<TGenericToken> tokens;
+    lexer->Tokenize(text, [&](TGenericToken&& token) {
+        tokens.emplace_back(std::move(token));
+    });
+    return tokens;
+}
 
 } // namespace NSQLTranslationV1

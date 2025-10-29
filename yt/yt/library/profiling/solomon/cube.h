@@ -125,6 +125,7 @@ public:
 
     // Each projection from `extraProjections` added to each inner projection of this cube.
     void DumpCube(NProto::TCube* cube, const std::vector<TTagIdList>& extraProjections) const;
+    void DumpCube(NProto::TCube* cube, const TTagIdList& extraTagIds = {}) const;
 
 private:
     const int WindowSize_;
@@ -135,6 +136,17 @@ private:
 
     THashMap<TTagIdList, TProjection> Projections_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TGaugeCube = TCube<double>;
+using TCounterCube = TCube<i64>;
+using TTimeCounterCube = TCube<TDuration>;
+using TSummaryCube = TCube<TSummarySnapshot<double>>;
+using TTimerCube = TCube<TSummarySnapshot<TDuration>>;
+using TTimeHistogramCube = TCube<TTimeHistogramSnapshot>;
+using TGaugeHistogramCube = TCube<TGaugeHistogramSnapshot>;
+using TRateHistogramCube = TCube<TRateHistogramSnapshot>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

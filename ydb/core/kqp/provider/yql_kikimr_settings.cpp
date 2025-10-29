@@ -230,4 +230,8 @@ bool TKikimrConfiguration::GetEnableParallelUnionAllConnectionsForExtend() const
 bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
     return ((GetOptionalFlagValue(OptEnableOlapPushdownAggregate.Get()) == EOptionalFlag::Enabled) || EnableOlapPushdownAggregate);
 }
+
+bool TKikimrConfiguration::GetUseDqHashCombine() const {
+    return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
+}
 }

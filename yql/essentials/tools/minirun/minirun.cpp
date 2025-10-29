@@ -32,13 +32,12 @@ public:
     }
 };
 
-} // NYql
+} // namespace NYql
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
     try {
         return NYql::TMiniRunTool().Main(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }

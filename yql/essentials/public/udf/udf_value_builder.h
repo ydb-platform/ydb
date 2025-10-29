@@ -27,8 +27,7 @@ struct TDictFlags {
     };
 };
 
-class IDictValueBuilder
-{
+class IDictValueBuilder {
 public:
     using TPtr = TUniquePtr<IDictValueBuilder>;
 
@@ -63,8 +62,7 @@ UDF_ASSERT_TYPE_SIZE(IListValueBuilder, 8);
 ///////////////////////////////////////////////////////////////////////////////
 // IDateBuilder
 ///////////////////////////////////////////////////////////////////////////////
-class IDateBuilder1
-{
+class IDateBuilder1 {
 public:
     virtual ~IDateBuilder1() = default;
 
@@ -72,31 +70,30 @@ public:
     virtual bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const = 0;
 
     virtual bool MakeDatetime(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second, ui32& value,
-        ui16 timezoneId = 0) const = 0;
+                              ui16 timezoneId = 0) const = 0;
     virtual bool SplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui16 timezoneId = 0) const = 0;
+                               ui16 timezoneId = 0) const = 0;
 
     // deprecated
     virtual bool EnrichDate(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek) const = 0;
 
     // in minutes
     virtual bool GetTimezoneShift(ui32 year, ui32 month, ui32 day, ui32 hour, ui32 minute, ui32 second,
-        ui16 timezoneId, i32& value) const = 0;
+                                  ui16 timezoneId, i32& value) const = 0;
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT < UDF_ABI_COMPATIBILITY_VERSION(2, 23)
     virtual void Unused7() const = 0;
     virtual void Unused8() const = 0;
 #else
     virtual bool FullSplitDate(ui16 value, ui32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                               ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
     virtual bool FullSplitDatetime(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                                   ui32& dayOfYear, ui32& weekOfYear, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
 #endif
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 7)
-class IDateBuilder2: public IDateBuilder1
-{
+class IDateBuilder2: public IDateBuilder1 {
 public:
     virtual bool FindTimezoneName(ui32 id, TStringRef& name) const = 0;
     virtual bool FindTimezoneId(const TStringRef& name, ui32& id) const = 0;
@@ -104,29 +101,27 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 24)
-class IDateBuilder3: public IDateBuilder2
-{
+class IDateBuilder3: public IDateBuilder2 {
 public:
     virtual bool EnrichDate2(ui16 date, ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek) const = 0;
     virtual bool FullSplitDate2(ui16 value, ui32& year, ui32& month, ui32& day,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                                ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
     virtual bool FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
-        ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                                    ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
 };
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 40)
-class IDateBuilder4: public IDateBuilder3
-{
+class IDateBuilder4: public IDateBuilder3 {
 public:
     virtual bool SplitTzDate32(i32 date, i32& year, ui32& month, ui32& day,
-            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                               ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
     virtual bool SplitTzDatetime64(i64 datetime, i32& year, ui32& month, ui32& day,
-            ui32& hour, ui32& minute, ui32& second,
-            ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
+                                   ui32& hour, ui32& minute, ui32& second,
+                                   ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const = 0;
     virtual bool MakeTzDate32(i32 year, ui32 month, ui32 day, i32& date, ui16 timezoneId = 0) const = 0;
     virtual bool MakeTzDatetime64(i32 year, ui32 month, ui32 day,
-            ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const = 0;
+                                  ui32 hour, ui32 minute, ui32 second, i64& datetime, ui16 timezoneId = 0) const = 0;
 };
 #endif
 
@@ -177,8 +172,7 @@ public:
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 31)
-class IPgBuilder2: public IPgBuilder1
-{
+class IPgBuilder2: public IPgBuilder1 {
 public:
     virtual TStringRef AsCStringBuffer(const TUnboxedValue& value) const = 0;
     virtual TStringRef AsTextBuffer(const TUnboxedValue& value) const = 0;
@@ -186,8 +180,7 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 33)
-class IPgBuilder3: public IPgBuilder2
-{
+class IPgBuilder3: public IPgBuilder2 {
 public:
     virtual TUnboxedValue MakeCString(const char* value) const = 0;
     virtual TUnboxedValue MakeText(const char* value) const = 0;
@@ -195,8 +188,7 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 35)
-class IPgBuilder4: public IPgBuilder3
-{
+class IPgBuilder4: public IPgBuilder3 {
 public:
     virtual TStringRef AsFixedStringBuffer(const TUnboxedValue& value, ui32 length) const = 0;
 };
@@ -229,8 +221,7 @@ UDF_ASSERT_TYPE_SIZE(IPgBuilder, 8);
 ///////////////////////////////////////////////////////////////////////////////
 // IValueBuilder
 ///////////////////////////////////////////////////////////////////////////////
-class IValueBuilder1
-{
+class IValueBuilder1 {
 public:
     virtual ~IValueBuilder1() = default;
 
@@ -263,7 +254,9 @@ public:
 
     virtual TUnboxedValue NewVariant(ui32 index, TUnboxedValue&& value) const = 0;
 
-    inline TUnboxedValue NewEmptyList() const { return NewList(nullptr, 0); }
+    inline TUnboxedValue NewEmptyList() const {
+        return NewList(nullptr, 0);
+    }
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 1)
@@ -385,8 +378,13 @@ private:
     std::array<TUnboxedValue, 2U> Cached_;
     std::array<TUnboxedValue*, 2U> CachedItems_;
     ui8 CacheIndex_ = 0U;
+
 public:
-    TPlainArrayCache(ui32 size): Size_(size) { Clear(); }
+    TPlainArrayCache(ui32 size)
+        : Size_(size)
+    {
+        Clear();
+    }
 
     TPlainArrayCache(TPlainArrayCache&&) = delete;
     TPlainArrayCache(const TPlainArrayCache&) = delete;

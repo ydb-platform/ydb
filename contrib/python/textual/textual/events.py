@@ -16,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Type, TypeVar
+from typing_extensions import Self
 
 import rich.repr
 from rich.style import Style
@@ -115,6 +116,7 @@ class Resize(Event, bubble=False):
         size: Size,
         virtual_size: Size,
         container_size: Size | None = None,
+        pixel_size: Size | None = None,
     ) -> None:
         self.size = size
         """The new size of the Widget."""
@@ -122,15 +124,33 @@ class Resize(Event, bubble=False):
         """The virtual size (scrollable size) of the Widget."""
         self.container_size = size if container_size is None else container_size
         """The size of the Widget's container widget."""
+        self.pixel_size = pixel_size
+        """Size of terminal window in pixels if known, or `None` if not known."""
         super().__init__()
+
+    @classmethod
+    def from_dimensions(
+        cls, cells: tuple[int, int], pixels: tuple[int, int] | None
+    ) -> Resize:
+        """Construct from basic dimensions.
+
+        Args:
+            cells: tuple of (<width>, <height>) in cells.
+            pixels: tuple of (<width>, <height>) in pixels if known, or `None` if not known.
+
+        """
+        size = Size(*cells)
+        pixel_size = Size(*pixels) if pixels is not None else None
+        return Resize(size, size, size, pixel_size)
 
     def can_replace(self, message: "Message") -> bool:
         return isinstance(message, Resize)
 
     def __rich_repr__(self) -> rich.repr.Result:
         yield "size", self.size
-        yield "virtual_size", self.virtual_size
+        yield "virtual_size", self.virtual_size, self.size
         yield "container_size", self.container_size, self.size
+        yield "pixel_size", self.pixel_size, None
 
 
 class Compose(Event, bubble=False, verbose=True):
@@ -308,6 +328,7 @@ class MouseEvent(InputEvent, bubble=True):
     - [ ] Verbose
 
     Args:
+        widget: The widget under the mouse.
         x: The relative x coordinate.
         y: The relative y coordinate.
         delta_x: Change in x since the last message.
@@ -322,6 +343,7 @@ class MouseEvent(InputEvent, bubble=True):
     """
 
     __slots__ = [
+        "widget",
         "x",
         "y",
         "delta_x",
@@ -337,6 +359,7 @@ class MouseEvent(InputEvent, bubble=True):
 
     def __init__(
         self,
+        widget: Widget | None,
         x: int,
         y: int,
         delta_x: int,
@@ -350,6 +373,8 @@ class MouseEvent(InputEvent, bubble=True):
         style: Style | None = None,
     ) -> None:
         super().__init__()
+        self.widget: Widget | None = widget
+        """The widget under the mouse at the time of a click."""
         self.x = x
         """The relative x coordinate."""
         self.y = y
@@ -373,8 +398,11 @@ class MouseEvent(InputEvent, bubble=True):
         self._style = style or Style()
 
     @classmethod
-    def from_event(cls: Type[MouseEventT], event: MouseEvent) -> MouseEventT:
+    def from_event(
+        cls: Type[MouseEventT], widget: Widget, event: MouseEvent
+    ) -> MouseEventT:
         new_event = cls(
+            widget,
             event.x,
             event.y,
             event.delta_x,
@@ -390,6 +418,7 @@ class MouseEvent(InputEvent, bubble=True):
         return new_event
 
     def __rich_repr__(self) -> rich.repr.Result:
+        yield self.widget
         yield "x", self.x
         yield "y", self.y
         yield "delta_x", self.delta_x, 0
@@ -402,6 +431,10 @@ class MouseEvent(InputEvent, bubble=True):
         yield "shift", self.shift, False
         yield "meta", self.meta, False
         yield "ctrl", self.ctrl, False
+
+    @property
+    def control(self) -> Widget | None:
+        return self.widget
 
     @property
     def offset(self) -> Offset:
@@ -459,6 +492,7 @@ class MouseEvent(InputEvent, bubble=True):
 
     def _apply_offset(self, x: int, y: int) -> MouseEvent:
         return self.__class__(
+            self.widget,
             x=self.x + x,
             y=self.y + y,
             delta_x=self.delta_x,
@@ -523,7 +557,87 @@ class Click(MouseEvent, bubble=True):
 
     - [X] Bubbles
     - [ ] Verbose
+
+    Args:
+        chain: The number of clicks in the chain. 2 is a double click, 3 is a triple click, etc.
     """
+
+    def __init__(
+        self,
+        widget: Widget | None,
+        x: int,
+        y: int,
+        delta_x: int,
+        delta_y: int,
+        button: int,
+        shift: bool,
+        meta: bool,
+        ctrl: bool,
+        screen_x: int | None = None,
+        screen_y: int | None = None,
+        style: Style | None = None,
+        chain: int = 1,
+    ) -> None:
+        super().__init__(
+            widget,
+            x,
+            y,
+            delta_x,
+            delta_y,
+            button,
+            shift,
+            meta,
+            ctrl,
+            screen_x,
+            screen_y,
+            style,
+        )
+        self.chain = chain
+
+    @classmethod
+    def from_event(
+        cls: Type[Self],
+        widget: Widget,
+        event: MouseEvent,
+        chain: int = 1,
+    ) -> Self:
+        new_event = cls(
+            widget,
+            event.x,
+            event.y,
+            event.delta_x,
+            event.delta_y,
+            event.button,
+            event.shift,
+            event.meta,
+            event.ctrl,
+            event.screen_x,
+            event.screen_y,
+            event._style,
+            chain=chain,
+        )
+        return new_event
+
+    def _apply_offset(self, x: int, y: int) -> Self:
+        return self.__class__(
+            self.widget,
+            x=self.x + x,
+            y=self.y + y,
+            delta_x=self.delta_x,
+            delta_y=self.delta_y,
+            button=self.button,
+            shift=self.shift,
+            meta=self.meta,
+            ctrl=self.ctrl,
+            screen_x=self.screen_x,
+            screen_y=self.screen_y,
+            style=self.style,
+            chain=self.chain,
+        )
+
+    def __rich_repr__(self) -> rich.repr.Result:
+        yield from super().__rich_repr__()
+        yield "chain", self.chain
 
 
 @rich.repr.auto
@@ -534,7 +648,7 @@ class Timer(Event, bubble=False, verbose=True):
     - [X] Verbose
     """
 
-    __slots__ = ["time", "count", "callback"]
+    __slots__ = ["timer", "time", "count", "callback"]
 
     def __init__(
         self,

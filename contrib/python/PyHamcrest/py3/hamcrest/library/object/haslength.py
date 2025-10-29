@@ -1,34 +1,36 @@
+from collections.abc import Sized
+from typing import Union
+
 from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.description import Description
 from hamcrest.core.helpers.hasmethod import hasmethod
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher
+from hamcrest.core.matcher import Matcher
 
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
 
 
-class HasLength(BaseMatcher):
-
-    def __init__(self, len_matcher):
+class HasLength(BaseMatcher[Sized]):
+    def __init__(self, len_matcher: Matcher[int]) -> None:
         self.len_matcher = len_matcher
 
-    def _matches(self, item):
-        if not hasmethod(item, '__len__'):
+    def _matches(self, item: Sized) -> bool:
+        if not hasmethod(item, "__len__"):
             return False
         return self.len_matcher.matches(len(item))
 
-    def describe_mismatch(self, item, mismatch_description):
+    def describe_mismatch(self, item: Sized, mismatch_description: Description) -> None:
         super(HasLength, self).describe_mismatch(item, mismatch_description)
-        if hasmethod(item, '__len__'):
-            mismatch_description.append_text(' with length of ')    \
-                                .append_description_of(len(item))
+        if hasmethod(item, "__len__"):
+            mismatch_description.append_text(" with length of ").append_description_of(len(item))
 
-    def describe_to(self, description):
-        description.append_text('an object with length of ')    \
-                    .append_description_of(self.len_matcher)
+    def describe_to(self, description: Description) -> None:
+        description.append_text("an object with length of ").append_description_of(self.len_matcher)
 
 
-def has_length(match):
+def has_length(match: Union[int, Matcher[int]]) -> Matcher[Sized]:
     """Matches if ``len(item)`` satisfies a given matcher.
 
     :param match: The matcher to satisfy, or an expected value for

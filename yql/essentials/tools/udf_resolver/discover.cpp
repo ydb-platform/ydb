@@ -37,10 +37,10 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
         if (inserted) {
             THashSet<TString> modules;
             functionRegistry.LoadUdfs(import.GetPath(),
-                                {},
-                                NUdf::IRegistrator::TFlags::TypesOnly,
-                                import.GetCustomUdfPrefix(),
-                                &modules);
+                                      {},
+                                      NUdf::IRegistrator::TFlags::TypesOnly,
+                                      import.GetCustomUdfPrefix(),
+                                      &modules);
             FillImportResultModules(modules, *importRes);
             it->second = modules;
         } else {
@@ -67,7 +67,7 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
                 auto status = functionRegistry.FindFunctionTypeInfo(NYql::UnknownLangVersion, env, typeInfoHelper,
-                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
+                                                                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
                     udfRes->SetError("Failed to resolve signature, error: " + status.GetError());
@@ -106,7 +106,7 @@ void Print(const NYql::TResolveResult& result, IOutputStream& out, bool printAsP
 }
 
 void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool printAsProto,
-    NYql::NUdf::ELogLevel logLevel) {
+                     NYql::NUdf::ELogLevel logLevel) {
     NYql::TResolve inMsg;
     inMsg.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
     for (auto& path : udfPaths) {
@@ -123,7 +123,7 @@ void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool 
     Print(result, out, printAsProto);
 }
 
-}
+} // namespace
 
 void DiscoverInDir(const TString& dir, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
     TVector<TString> udfPaths;
@@ -132,7 +132,7 @@ void DiscoverInDir(const TString& dir, IOutputStream& out, bool printAsProto, NY
 }
 
 void DiscoverInFile(const TString& filePath, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
-    DiscoverInFiles({ filePath }, out, printAsProto, logLevel);
+    DiscoverInFiles({filePath}, out, printAsProto, logLevel);
 }
 
 void Discover(IInputStream& in, IOutputStream& out, bool printAsProto) {
@@ -154,4 +154,4 @@ void FillImportResultModules(const THashSet<TString>& modules, NYql::TImportResu
         importRes.AddModules(m);
     }
 }
-}
+} // namespace NUdfResolver

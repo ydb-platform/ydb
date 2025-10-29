@@ -41,5 +41,13 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         lookup_windows.go
         user.go
     )
+ELSEIF (OS_ANDROID AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_ANDROID AND ARCH_ARM64 AND NOT RACE AND NOT CGO_ENABLED)
+    SRCS(
+        listgroups_stub.go
+        lookup.go
+        lookup_android.go
+        lookup_stubs.go
+        user.go
+    )
 ENDIF()
 END()

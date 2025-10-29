@@ -1884,6 +1884,8 @@ private:
 
         auto solomonState = MakeIntrusive<TSolomonState>();
 
+        solomonState->SupportRtmrMode = false;
+        solomonState->WriteThroughDqIntegration = true;
         solomonState->Types = TypesCtx.Get();
         solomonState->Gateway = FederatedQuerySetup->SolomonGateway;
         solomonState->CredentialsFactory = FederatedQuerySetup->CredentialsFactory;
@@ -1907,7 +1909,7 @@ private:
         state->DbResolver = FederatedQuerySetup->DatabaseAsyncResolver;
         state->FunctionRegistry = FuncRegistry;
         state->Configuration->Init(FederatedQuerySetup->PqGatewayConfig, TypesCtx, state->DbResolver, state->DatabaseIds);
-        state->Gateway = FederatedQuerySetup->PqGateway;;
+        state->Gateway = FederatedQuerySetup->PqGateway;
         state->DqIntegration = NYql::CreatePqDqIntegration(state);
         state->Gateway->OpenSession(sessionId, "username");
 
@@ -1962,6 +1964,7 @@ private:
             if (FederatedQuerySetup->PqGateway) {
                 InitPqProvider();
             }
+            TypesCtx->StreamLookupJoin = true;
         }
 
         InitPgProvider();

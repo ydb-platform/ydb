@@ -18,6 +18,7 @@ struct TBuildSnapshotOptions
     NHydra::TCellId CellId;
     bool SetReadOnly = false;
     bool WaitForSnapshotCompletion = true;
+    bool EnableAutomatonReadOnlyBarrier = true;
 };
 
 struct TBuildMasterSnapshotsOptions
@@ -25,6 +26,7 @@ struct TBuildMasterSnapshotsOptions
 {
     bool SetReadOnly = false;
     bool WaitForSnapshotCompletion = true;
+    bool EnableAutomatonReadOnlyBarrier = true;
     bool Retry = true;
 };
 

@@ -4,7 +4,6 @@
 #include <util/stream/output.h>
 #include <util/string/hex.h>
 
-
 namespace NYql {
 
 static char HexDigit(char c)
@@ -15,19 +14,38 @@ static char HexDigit(char c)
 static void EscapedPrintChar(ui8 c, IOutputStream* out)
 {
     switch (c) {
-        case '\\': out->Write("\\\\", 2); break;
-        case '"' : out->Write("\\\"", 2); break;
-        case '\t': out->Write("\\t", 2); break;
-        case '\n': out->Write("\\n", 2); break;
-        case '\r': out->Write("\\r", 2); break;
-        case '\b': out->Write("\\b", 2); break;
-        case '\f': out->Write("\\f", 2); break;
-        case '\a': out->Write("\\a", 2); break;
-        case '\v': out->Write("\\v", 2); break;
+        case '\\':
+            out->Write("\\\\", 2);
+            break;
+        case '"':
+            out->Write("\\\"", 2);
+            break;
+        case '\t':
+            out->Write("\\t", 2);
+            break;
+        case '\n':
+            out->Write("\\n", 2);
+            break;
+        case '\r':
+            out->Write("\\r", 2);
+            break;
+        case '\b':
+            out->Write("\\b", 2);
+            break;
+        case '\f':
+            out->Write("\\f", 2);
+            break;
+        case '\a':
+            out->Write("\\a", 2);
+            break;
+        case '\v':
+            out->Write("\\v", 2);
+            break;
         default: {
-            if (isprint(c)) out->Write(static_cast<char>(c));
-            else {
-                char buf[4] = { "\\x" };
+            if (isprint(c)) {
+                out->Write(static_cast<char>(c));
+            } else {
+                char buf[4] = {"\\x"};
                 buf[2] = HexDigit((c & 0xf0) >> 4);
                 buf[3] = HexDigit((c & 0x0f));
                 out->Write(buf, 4);
@@ -70,7 +88,9 @@ static void EscapedPrintUnicode(wchar32 rune, IOutputStream* out)
 static bool TryParseOctal(const char*& p, const char* e, int maxlen, wchar32* value)
 {
     while (maxlen-- && p != e) {
-        if (*value > 255) return false;
+        if (*value > 255) {
+            return false;
+        }
 
         char ch = *p++;
         if (ch >= '0' && ch <= '7') {
@@ -152,7 +172,7 @@ void EscapeArbitraryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 }
 
 EUnescapeResult UnescapeArbitraryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
+    TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
 {
     const char *p = atom.begin(),
                *e = atom.end();
@@ -169,14 +189,31 @@ EUnescapeResult UnescapeArbitraryAtom(
 
             char next = *p++;
             switch (next) {
-                case 't': current = '\t'; break;
-                case 'n': current = '\n'; break;
-                case 'r': current = '\r'; break;
-                case 'b': current = '\b'; break;
-                case 'f': current = '\f'; break;
-                case 'a': current = '\a'; break;
-                case 'v': current = '\v'; break;
-                case '0': case '1': case '2': case '3': {
+                case 't':
+                    current = '\t';
+                    break;
+                case 'n':
+                    current = '\n';
+                    break;
+                case 'r':
+                    current = '\r';
+                    break;
+                case 'b':
+                    current = '\b';
+                    break;
+                case 'f':
+                    current = '\f';
+                    break;
+                case 'a':
+                    current = '\a';
+                    break;
+                case 'v':
+                    current = '\v';
+                    break;
+                case '0':
+                case '1':
+                case '2':
+                case '3': {
                     wchar32 value = (next - '0');
                     if (!TryParseOctal(p, e, 2, &value)) {
                         *readBytes = p - atom.begin();
@@ -240,14 +277,14 @@ EUnescapeResult UnescapeArbitraryAtom(
 
 void EscapeBinaryAtom(TStringBuf atom, char quoteChar, IOutputStream* out)
 {
-    char prefix[] = { 'x', quoteChar };
+    char prefix[] = {'x', quoteChar};
     out->Write(prefix, 2);
     out->Write(HexEncode(atom.data(), atom.size()));
     out->Write(quoteChar);
 }
 
 EUnescapeResult UnescapeBinaryAtom(
-        TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
+    TStringBuf atom, char endChar, IOutputStream* out, size_t* readBytes)
 {
     const char *p = atom.begin(),
                *e = atom.end();
@@ -272,4 +309,4 @@ EUnescapeResult UnescapeBinaryAtom(
     return EUnescapeResult::INVALID_END;
 }
 
-} // namspace NYql
+} // namespace NYql

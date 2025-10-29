@@ -1,11 +1,20 @@
 import pytest
 import math
 
+from decimal import Decimal
 from datetime import datetime, timedelta
 from ydb.tests.library.compatibility.fixtures import RestartToAnotherVersionFixture
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.datashard.lib.create_table import create_table_sql_request
-from ydb.tests.datashard.lib.types_of_variables import pk_types, non_pk_types, cleanup_type_name, format_sql_value, types_not_supported_yet_in_columnshard
+from ydb.tests.datashard.lib.types_of_variables import (
+    pk_types,
+    non_pk_types,
+    cleanup_type_name,
+    format_sql_value,
+    types_not_supported_yet_in_columnshard,
+    non_comparable_types,
+    primitive_type,
+)
 
 
 class TestDataType(RestartToAnotherVersionFixture):
@@ -47,6 +56,7 @@ class TestDataType(RestartToAnotherVersionFixture):
             extra_feature_flags={
                 "enable_parameterized_decimal": True,
                 "enable_table_datetime64": True,
+                "enable_columnshard_bool": True,
             },
             column_shard_config={
                 "disabled_on_scheme_shard": False,
@@ -159,11 +169,99 @@ class TestDataType(RestartToAnotherVersionFixture):
             for query in querys:
                 session_pool.execute_with_retries(query)
 
+    def create_typed_value(self, type_name, value):
+        if "Decimal" in type_name:
+            prec, scale = type_name.replace("Decimal(", "").replace(")", "").split(",")
+            return ydb.TypedValue(Decimal(value), ydb.DecimalType(int(prec), int(scale)))
+        if type_name == "String" or type_name == "Yson":
+            return ydb.TypedValue(value.encode(), primitive_type[type_name])
+        if type_name == "DyNumber":
+            return ydb.TypedValue(str(value), primitive_type[type_name])
+        if type_name == "Datetime64" or type_name == "Datetime":
+            return ydb.TypedValue(int(value.timestamp()), primitive_type[type_name])
+        return ydb.TypedValue(value, primitive_type[type_name])
+
+    def parametrized_write_data(self):
+        queries_with_parameters = []
+
+        for i in range(self.count_table):
+            query = f"""
+                {";".join([f"DECLARE $pk_{cleanup_type_name(name)} AS {name}" for name in self.pk_types[i].keys()])};
+                {";".join([f"DECLARE $col_{cleanup_type_name(name)} AS {name}" for name in self.all_types.keys()])};
+
+                UPSERT INTO {self.table_names[i]} (
+                    {", ".join([f"pk_{cleanup_type_name(name)}" for name in self.pk_types[i].keys()])},
+                    {", ".join([f"col_{cleanup_type_name(name)}" for name in self.all_types.keys()])}
+                )
+                VALUES (
+                    {", ".join([f"$pk_{cleanup_type_name(name)}" for name in self.pk_types[i].keys()])},
+                    {", ".join([f"$col_{cleanup_type_name(name)}" for name in self.all_types.keys()])}
+                );
+            """
+
+            for row in range(1, self.count_rows + 1):
+                parameters = {}
+                for type_name, lamb in self.pk_types[i].items():
+                    parameters[f"$pk_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
+                for type_name, lamb in self.all_types.items():
+                    parameters[f"$col_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
+                queries_with_parameters.append((query, parameters))
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query, parameters in queries_with_parameters:
+                session_pool.execute_with_retries(query, parameters)
+
+    def parametrized_check_table(self):
+        queries_with_parameters = []
+        comparable_types = [(type_name, lamb) for type_name, lamb in self.all_types.items() if type_name not in non_comparable_types]
+
+        for i in range(self.count_table):
+            query = f"""
+                {";".join([f"DECLARE $pk_{cleanup_type_name(name)} AS {name}" for name in self.pk_types[i].keys()])};
+                {";".join([f"DECLARE $col_{cleanup_type_name(name)} AS {name}" for name, _ in comparable_types])};
+
+                SELECT * FROM {self.table_names[i]} WHERE 
+                {" AND ".join([f"pk_{cleanup_type_name(name)} = $pk_{cleanup_type_name(name)}" for name in self.pk_types[i].keys()])}
+                {" AND " if len(comparable_types) > 0 else ""}
+                {" AND ".join([f"col_{cleanup_type_name(name)} = $col_{cleanup_type_name(name)}" for name, _ in comparable_types])}
+            """
+
+            for row in range(1, self.count_rows + 1):
+                parameters = {}
+                for type_name, lamb in self.pk_types[i].items():
+                    parameters[f"$pk_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
+                for type_name, lamb in comparable_types:
+                    parameters[f"$col_{cleanup_type_name(type_name)}"] = self.create_typed_value(type_name, lamb(row))
+                queries_with_parameters.append((query, parameters))
+
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for query_index, (query, parameters) in enumerate(queries_with_parameters):
+                table_index = query_index // self.count_rows
+                row_num = (query_index % self.count_rows) + 1
+
+                result_rows = []
+
+                result_sets = session_pool.execute_with_retries(query, parameters)
+                for result_set in result_sets:
+                    for row in result_set.rows:
+                        result_rows.append(row)
+
+                assert len(result_rows) == 1
+
+                for row in result_rows:
+                    for prefix in self.columns[table_index].keys():
+                        for type_name in self.columns[table_index][prefix]:
+                            self.assert_type(type_name, row_num, row[f"{prefix}{cleanup_type_name(type_name)}"])
+
     @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
     def test_data_type(self):
         if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
             if (min(self.versions) < (25, 1)):
-                pytest.skip("Decimal types are not supported in columnshard in this version")
+                types_not_supported_yet_in_columnshard.add("Decimal")
+
+        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (26, 1)):
+                types_not_supported_yet_in_columnshard.add("Bool")
 
         self.create_table()
 
@@ -175,3 +273,24 @@ class TestDataType(RestartToAnotherVersionFixture):
         self.check_table()
         self.write_data()
         self.check_table()
+
+    @pytest.mark.parametrize("store_type", ["ROW", "COLUMN"], indirect=True)
+    def test_parametrized_data_type(self):
+        if any("Decimal" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (25, 1)):
+                types_not_supported_yet_in_columnshard.add("Decimal")
+
+        if any("Bool" in type_name for type_name in self.all_types.keys()) and self.store_type == "COLUMN":
+            if (min(self.versions) < (26, 1)):
+                types_not_supported_yet_in_columnshard.add("Bool")
+
+        self.create_table()
+
+        self.parametrized_write_data()
+        self.parametrized_check_table()
+
+        self.change_cluster_version()
+
+        self.parametrized_check_table()
+        self.parametrized_write_data()
+        self.parametrized_check_table()

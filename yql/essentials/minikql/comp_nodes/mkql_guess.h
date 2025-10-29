@@ -6,5 +6,5 @@ namespace NMiniKQL {
 
 IComputationNode* WrapGuess(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

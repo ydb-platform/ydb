@@ -7,7 +7,6 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 
-
 #include <google/protobuf/arena.h>
 #include <util/string/subst.h>
 #include <util/string/join.h>
@@ -65,8 +64,8 @@ struct TSetup {
     NSQLFormat::ISqlFormatter::TPtr Formatter;
 };
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
-    #include "sql_format_ut.h"
-}
+#include "sql_format_ut.h"
+} // Y_UNIT_TEST_SUITE(CheckSqlFormatter)

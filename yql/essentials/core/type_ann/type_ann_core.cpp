@@ -3298,6 +3298,76 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        bool hasOptionals = false;
+        bool hasBinary = false;
+        for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+            if (IsNull(*input->Child(i))) {
+                output = input->ChildPtr(i);
+                return IGraphTransformer::TStatus::Repeat;
+            }
+
+            bool isOptional;
+            const TDataExprType* dataType ;
+            if (!EnsureDataOrOptionalOfData(*input->Child(i), isOptional, dataType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (dataType->GetSlot() != EDataSlot::String && dataType->GetSlot() != EDataSlot::Utf8) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(i)->Pos()),
+                    TStringBuilder() << "Expected (optional) String or Utf8, but got: " << *input->Child(i)->GetTypeAnn()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            hasOptionals = hasOptionals || isOptional;
+            hasBinary = hasBinary || (dataType->GetSlot() == EDataSlot::String);
+        }
+
+        const TTypeAnnotationNode* retType = ctx.Expr.MakeType<TDataExprType>(hasBinary ? EDataSlot::String : EDataSlot::Utf8);
+        if (hasOptionals) {
+            retType = ctx.Expr.MakeType<TOptionalExprType>(retType);
+        }
+
+        input->SetTypeAnn(retType);
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus NullIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "NullIf function is not available before version 2025.04"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        // clang-format off
+        output = ctx.Expr.Builder(input->Pos())
+            .Callable("If")
+                .Callable(0, "==")
+                    .Add(0, input->HeadPtr())
+                    .Add(1, input->TailPtr())
+                .Seal()
+                .Callable(1, "Null")
+                .Seal()
+                .Add(2, input->HeadPtr())
+            .Seal()
+            .Build();
+        // clang-format on
+
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
     IGraphTransformer::TStatus SubstringWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -6999,7 +7069,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         auto param = input->HeadPtr();
         const auto type = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        const ui32 idx = IsSameAnnotation(*param->GetTypeAnn(), *type) ? 2 : 3;
+        const ui32 idx = param->GetTypeAnn() && IsSameAnnotation(*param->GetTypeAnn(), *type) ? 2 : 3;
         const auto selected = input->Child(idx);
 
         if (!EnsureLambda(*selected, ctx.Expr)) {
@@ -7810,8 +7880,9 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     if (!EnsureTupleSize(*child, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
-                } else if (settingName == "cpu" || settingName == "extraMem" ||
-                    settingName == "minLang" || settingName == "maxLang") {
+                } else if (settingName == "cpu" || settingName == "extraMem"
+                           || settingName == "minLang" || settingName == "maxLang")
+                {
                     if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -7844,6 +7915,36 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "UDF '" << name << "' is not available after version " << str));
                             return IGraphTransformer::TStatus::Error;
+                        }
+                    }
+                } else if (settingName == "layers") {
+                    if (!EnsureTupleMinSize(*child, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!child->Child(1)->IsAtom()) { // not rewrited yet
+                        auto expected = ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
+                        auto mustListString = child->Child(1)->GetTypeAnn();
+                        if (mustListString != expected) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                TStringBuilder() << "Expected List<String> as list of layers, type diff: " << GetTypeDiff(*mustListString, *expected)
+                            ));
+                        }
+                        if (!child->Child(1)->IsCallable("AsList")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                "Expected list (AsList callable) of strings in Layers udf's annotation"
+                            ));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (const auto& nameStr: child->Child(1)->Children()) {
+                            if (!nameStr->IsCallable("String")) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameStr->Pos()),
+                                    "Expected string as a layer name"
+                                ));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            if (!EnsureAtom(*nameStr->Child(0), ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
                         }
                     }
                 } else {
@@ -7991,6 +8092,16 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
                                 if (auto setting = GetSetting(*settings, "extraMem")) {
                                     parent.Add(settingIndex++, setting);
+                                }
+
+                                if (auto setting = GetSetting(*settings, "layers"); setting && setting->Child(1)->ChildrenSize() > 0) {
+                                    auto sett = parent.List(settingIndex++)
+                                        .Atom(0, "layers");
+                                    size_t idx = 1;
+                                    for (const auto& nameStr: setting->Child(1)->Children()) {
+                                        sett.Atom(idx++, nameStr->Child(0)->Content());
+                                    }
+                                    sett.Seal();
                                 }
                             }
 
@@ -8152,8 +8263,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             if (!EnsureTuple(*input->Child(4), ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-
-            for (auto setting: input->Child(4)->Children()) {
+            for (size_t i = 0; i < input->Child(4)->ChildrenSize(); ++i) {
+                auto setting = input->Child(4)->Child(i);
                 if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -8179,6 +8290,43 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                         ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameNode->Pos()), TStringBuilder()
                             << "Bad " << TString{nameNode->Content()}.Quote() << " setting value: " << setting->Child(1)->Content()));
                         return IGraphTransformer::TStatus::Error;
+                    }
+                }
+                else if (nameNode->Content() == "layers") {
+                    if (!EnsureTupleMinSize(*setting, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!setting->Child(1)->IsAtom()) { // not rewrited yet
+                        if (!setting->Child(1)->IsCallable("AsList")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                "Expected list (AsList callable) of strings in Layers udf's annotation"
+                            ));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                        for (const auto& nameStr: setting->Child(1)->Children()) {
+                            if (!nameStr->IsCallable("String")) {
+                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(nameStr->Pos()),
+                                    "Expected string as a layer name"
+                                ));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            if (!EnsureAtom(*nameStr->Child(0), ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                        }
+                        auto sett = ctx.Expr.Builder(setting->Pos())
+                            .List()
+                                .Do([&setting](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                    parent.Atom(0, "layers");
+                                    size_t idx = 1;
+                                    for (const auto& nameStr: setting->Child(1)->Children()) {
+                                        parent.Atom(idx++, nameStr->Child(0)->Content());
+                                    }
+                                    return parent;
+                                })
+                            .Seal().Build();
+                        output = ctx.Expr.ChangeChild(*input, 4, ctx.Expr.ChangeChild(*input->Child(4), i, std::move(sett)));
+                        return IGraphTransformer::TStatus::Repeat;
                     }
                 }
                 else {
@@ -8603,6 +8751,197 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus BuildSimplePgCall(TPositionHandle pos, TStringBuf name,
+        const TExprNodeList& args, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "SimplePg functions are not available before version 2025.04"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (name == "now") {
+            if (args.size() != 0) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 0 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("Apply")
+                    .Callable(0, "Udf")
+                        .Atom(0, "DateTime2.MakeTimestamp")
+                    .Seal()
+                    .Callable(1, "Apply")
+                        .Callable(0, "Udf")
+                            .Atom(0, "DateTime2.ParseIso8601")
+                        .Seal()
+                        .Callable(1, "FromPg")
+                            .Callable(0, "PgCast")
+                                .Callable(0, "PgCall")
+                                    .Atom(0, "now")
+                                    .List(1)
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "PgType")
+                                    .Atom(0, "text")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "to_date") {
+            if (args.size() != 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("SafeCast")
+                    .Callable(0, "FromPg")
+                        .Callable(0, "PgCast")
+                            .Callable(0, "PgCall")
+                                .Atom(0, "to_date")
+                                .List(1)
+                                .Seal()
+                                .Callable(2, "SafeCast")
+                                    .Add(0, args[0])
+                                    .Callable(1, "DataType")
+                                        .Atom(0, "Utf8")
+                                    .Seal()
+                                .Seal()
+                                .Callable(3, "SafeCast")
+                                    .Add(0, args[1])
+                                    .Callable(1, "DataType")
+                                        .Atom(0, "Utf8")
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "PgType")
+                                .Atom(0, "text")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "DataType")
+                        .Atom(0, "Date32")
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "round") {
+            if (args.size() < 1 || args.size() > 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 1 or 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCast")
+                        .Callable(0, "PgCall")
+                            .Atom(0,"round")
+                            .List(1)
+                            .Seal()
+                            .Callable(2, "PgCast")
+                                .Add(0, args[0])
+                                .Callable(1, "PgType")
+                                    .Atom(0, "numeric")
+                                .Seal()
+                            .Seal()
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                if (args.size() == 2) {
+                                    parent.Add(3,  args[1]);
+                                }
+
+                                return parent;
+                            })
+                        .Seal()
+                        .Callable(1, "PgType")
+                            .Atom(0, "float8")
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "date_trunc" || name == "date_part") {
+            if (args.size() != 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0, name)
+                        .List(1)
+                        .Seal()
+                        .Callable(2, "SafeCast")
+                            .Add(0, args[0])
+                            .Callable(1, "DataType")
+                                .Atom(0, "Utf8")
+                            .Seal()
+                        .Seal()
+                        .Add(3, args[1])
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "floor" || name == "ceil") {
+            if (args.size() != 1) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 1 argument"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0, name)
+                        .List(1)
+                        .Seal()
+                        .Add(2, args[0])
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (name == "to_char") {
+            if (args.size() != 2) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), "Expected 2 arguments"));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            // clang-format off
+            output = ctx.Expr.Builder(pos)
+                .Callable("FromPg")
+                    .Callable(0, "PgCall")
+                        .Atom(0, "to_char")
+                        .List(1)
+                        .Seal()
+                        .Add(2, args[0])
+                        .Callable(3, "SafeCast")
+                            .Add(0, args[1])
+                            .Callable(1, "DataType")
+                                .Atom(0, "Utf8")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            // clang-format on
+            return IGraphTransformer::TStatus::Repeat;
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(pos), TStringBuilder() << "Unknown SimplePg function: " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
     IGraphTransformer::TStatus SqlCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -8620,7 +8959,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         auto udfName = input->ChildPtr(0);
-
         if (!EnsureTupleMinSize(*input->Child(1), 1, ctx.Expr) || !EnsureTupleMaxSize(*input->Child(1), 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -8674,6 +9012,10 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         TExprNode::TPtr options;
         if (input->ChildrenSize() > 5) {
             options = input->Child(5);
+        }
+
+        if (udfName->Content().StartsWith("SimplePg.")) {
+            return BuildSimplePgCall(input->Pos(), udfName->Content().substr(9), positionalArgs, output, ctx);
         }
 
         TExprNode::TPtr udf = ctx.Expr.Builder(input->Pos())
@@ -12934,6 +13276,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithWorld"] = &WithWorldWrapper;
         Functions["Concat"] = &ConcatWrapper;
         Functions["AggrConcat"] = &AggrConcatWrapper;
+        ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;
         ExtFunctions["Find"] = &FindWrapper;
         ExtFunctions["RFind"] = &FindWrapper;
@@ -12944,6 +13287,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["StringContains"] = &WithWrapper;
         Functions["StringContainsIgnoreCase"] = &WithWrapper;
         ExtFunctions["ByteAt"] = &ByteAtWrapper;
+        ExtFunctions["NullIf"] = &NullIfWrapper;
         Functions["ListIf"] = &ListIfWrapper;
         ExtFunctions["AsList"] = &AsListWrapper<false>;
         ExtFunctions["AsListMayWarn"] = &AsListWrapper<false>;
@@ -13624,6 +13968,11 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["PgIterate"] = &OrderFromFirst;
         ColumnOrderFunctions["PgIterateAll"] = &OrderFromFirst;
+
+        ColumnOrderFunctions["YqlSetItem"] = &OrderForPgSetItem;
+        ColumnOrderFunctions["YqlIterate"] = &OrderFromFirst;
+        ColumnOrderFunctions["YqlIterateAll"] = &OrderFromFirst;
+
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;
 
         ColumnOrderFunctions["SqlProject"] = ColumnOrderFunctions["OrderedSqlProject"] = &OrderForSqlProject;
@@ -13641,6 +13990,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             ColumnOrderFunctions["Filter"] = ColumnOrderFunctions["OrderedFilter"] = &OrderFromFirst;
         ColumnOrderFunctions["AssumeSorted"] = ColumnOrderFunctions["Unordered"] =
             ColumnOrderFunctions["UnorderedSubquery"] = ColumnOrderFunctions["AssumeUniq"] = &OrderFromFirst;
+
+        ExtFunctions["YqlSelect"] = &PgSelectWrapper;
+        ExtFunctions["YqlSetItem"] = &PgSetItemWrapper;
+        ExtFunctions["YqlResultItem"] = &PgResultItemWrapper;
+        ExtFunctions["YqlValuesList"] = &PgValuesListWrapper;
+        Functions["YqlColumnRef"] = &PgColumnRefWrapper;
+        Functions["YqlStar"] = &PgStarWrapper;
+        Functions["YqlWhere"] = &PgWhereWrapper;
+        Functions["YqlSort"] = &PgSortWrapper;
 
         for (ui32 i = 0; i < NKikimr::NUdf::DataSlotCount; ++i) {
             auto name = TString(NKikimr::NUdf::GetDataTypeInfo((EDataSlot)i).Name);

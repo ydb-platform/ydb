@@ -365,69 +365,63 @@ ETableType GetTableTypeFromString(const TStringBuf& tableType) {
 
 
 template<typename TEnumType>
-static std::shared_ptr<THashMap<TString, TEnumType>> MakeEnumMapping(
+static THashMap<TString, TEnumType> MakeEnumMapping(
         const google::protobuf::EnumDescriptor* descriptor, const TString& prefix
 ) {
-    auto result = std::make_shared<THashMap<TString, TEnumType>>();
+    auto result = THashMap<TString, TEnumType>();
     for (auto i = 0; i < descriptor->value_count(); i++) {
         TString name = to_lower(descriptor->value(i)->name());
         TStringBuf nameBuf(name);
         if (!prefix.empty()) {
             nameBuf.SkipPrefix(prefix);
-            result->insert(std::make_pair(
+            result.insert(std::make_pair(
                     TString(nameBuf),
                     static_cast<TEnumType>(descriptor->value(i)->number())
             ));
         }
-        result->insert(std::make_pair(
+        result.insert(std::make_pair(
                 name, static_cast<TEnumType>(descriptor->value(i)->number())
         ));
     }
     return result;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> GetCodecsMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::Codec>> codecsMapping;
-    if (codecsMapping == nullptr) {
-        codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
-    }
+static const THashMap<TString, Ydb::Topic::Codec>& GetCodecsMapping() {
+    static const THashMap<TString, Ydb::Topic::Codec> codecsMapping = MakeEnumMapping<Ydb::Topic::Codec>(Ydb::Topic::Codec_descriptor(), "codec_");
     return codecsMapping;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> GetAutoPartitioningStrategiesMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>> strategiesMapping;
-    if (!strategiesMapping) {
-        strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
+static const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy>& GetAutoPartitioningStrategiesMapping() {
+    static const THashMap<TString, Ydb::Topic::AutoPartitioningStrategy> strategiesMapping = []() {
+        auto strategiesMapping = MakeEnumMapping<Ydb::Topic::AutoPartitioningStrategy>(
             Ydb::Topic::AutoPartitioningStrategy_descriptor(), "auto_partitioning_strategy_");
 
         const TString prefix = "scale_";
-        for (const auto& [key, value] : *strategiesMapping) {
+        for (const auto& [key, value] : strategiesMapping) {
             if (key.StartsWith(prefix)) {
                 TString newKey = key;
                 newKey.erase(0, prefix.length());
 
-                Y_ABORT_UNLESS(strategiesMapping->find(newKey) == strategiesMapping->end());
-                (*strategiesMapping)[newKey] = value;
+                Y_ABORT_UNLESS(!strategiesMapping.contains(newKey));
+                strategiesMapping[newKey] = value;
             }
         }
-    }
+        return strategiesMapping;
+    }();
     return strategiesMapping;
 }
 
-static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> GetMeteringModesMapping() {
-    static std::shared_ptr<THashMap<TString, Ydb::Topic::MeteringMode>> metModesMapping;
-    if (metModesMapping == nullptr) {
-        metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
-                Ydb::Topic::MeteringMode_descriptor(), "metering_mode_"
-        );
-    }
+static const THashMap<TString, Ydb::Topic::MeteringMode>& GetMeteringModesMapping() {
+    static const THashMap<TString, Ydb::Topic::MeteringMode> metModesMapping = MakeEnumMapping<Ydb::Topic::MeteringMode>(
+        Ydb::Topic::MeteringMode_descriptor(), "metering_mode_");
+
     return metModesMapping;
 }
 
 bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::MeteringMode& result) {
-    auto mapping = GetMeteringModesMapping();
+    const auto& mapping = GetMeteringModesMapping();
     auto normMode = to_lower(meteringMode);
-    auto iter = mapping->find(normMode);
+    auto iter = mapping.find(normMode);
     if (iter.IsEnd()) {
         return false;
     } else {
@@ -437,9 +431,9 @@ bool GetTopicMeteringModeFromString(const TString& meteringMode, Ydb::Topic::Met
 }
 
 bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::Topic::AutoPartitioningStrategy& result) {
-    auto mapping = GetAutoPartitioningStrategiesMapping();
+    const auto& mapping = GetAutoPartitioningStrategiesMapping();
     auto normStrategy = to_lower(strategy);
-    auto iter = mapping->find(normStrategy);
+    auto iter = mapping.find(normStrategy);
     if (iter.IsEnd()) {
         return false;
     } else {
@@ -451,10 +445,10 @@ bool GetTopicAutoPartitioningStrategyFromString(const TString& strategy, Ydb::To
 TVector<Ydb::Topic::Codec> GetTopicCodecsFromString(const TStringBuf& codecsStr) {
     const TVector<TString> codecsList = StringSplitter(codecsStr).Split(',').SkipEmpty();
     TVector<Ydb::Topic::Codec> result;
-    auto mapping = GetCodecsMapping();
+    const auto& mapping = GetCodecsMapping();
     for (const auto& codec : codecsList) {
         auto normCodec = to_lower(Strip(codec));
-        auto iter = mapping->find(normCodec);
+        auto iter = mapping.find(normCodec);
         if (iter.IsEnd()) {
             return {};
         } else {

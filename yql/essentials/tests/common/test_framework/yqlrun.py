@@ -323,6 +323,7 @@ class YQLRun(object):
         if proc_result.exit_code != 0 and check_error:
             with open(err_file, 'r') as f:
                 err_file_text = f.read()
+            yql_utils.skip_on_ubsan_known_failure(err_file_text)
             assert 0, \
                 'Command\n%(command)s\n finished with exit code %(code)d, stderr:\n\n%(stderr)s\n\nerror file:\n%(err_file)s' % {
                     'command': cmd,

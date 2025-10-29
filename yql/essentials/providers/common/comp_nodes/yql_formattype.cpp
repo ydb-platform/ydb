@@ -7,13 +7,15 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TFormatTypeWrapper : public TMutableComputationNode<TFormatTypeWrapper> {
+class TFormatTypeWrapper: public TMutableComputationNode<TFormatTypeWrapper> {
     typedef TMutableComputationNode<TFormatTypeWrapper> TBaseComputation;
+
 public:
     TFormatTypeWrapper(TComputationMutables& mutables, IComputationNode* handle)
         : TBaseComputation(mutables)
         , Handle_(handle)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto handle = Handle_->GetValue(ctx);
@@ -36,5 +38,5 @@ IComputationNode* WrapFormatType(TCallable& callable, const TComputationNodeFact
     return new TFormatTypeWrapper(ctx.Mutables, handle);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

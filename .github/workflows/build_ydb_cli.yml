@@ -138,6 +138,20 @@ jobs:
 
           git add ydb/apps/ydb/CHANGELOG.md
 
+      - name: Create CLI version file
+        run: |
+          NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+          echo "$NEW_VERSION" > cli_version.txt
+          echo "Created cli_version.txt with version: $NEW_VERSION"
+
+      - name: Upload CLI version artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-version
+          path: cli_version.txt
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Commit changes
         run: |
           git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
@@ -430,4 +444,3 @@ jobs:
         run: |
           # Delete the branch
           git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"
-

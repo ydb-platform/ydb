@@ -3185,19 +3185,11 @@ struct TGetJobTraceOptions
 
     ///
     /// @brief Search for traces with time >= `FromTime`.
-    FLUENT_FIELD_OPTION(i64, FromTime);
+    FLUENT_FIELD_OPTION(TInstant, FromTime);
 
     ///
     /// @brief Search for traces with time <= `ToTime`.
-    FLUENT_FIELD_OPTION(i64, ToTime);
-
-    ///
-    /// @brief Search for traces with event index >= `FromEventIndex`.
-    FLUENT_FIELD_OPTION(i64, FromEventIndex);
-
-    ///
-    /// @brief Search for traces with event index >= `ToEventIndex`.
-    FLUENT_FIELD_OPTION(i64, ToEventIndex);
+    FLUENT_FIELD_OPTION(TInstant, ToTime);
 };
 
 ///
@@ -3221,8 +3213,8 @@ struct TJobTraceEvent
     i64 EventIndex = 0;
 
     ///
-    /// @brief Raw evenr in json format.
-    TString Event;
+    /// @brief Raw event in json format.
+    std::string Event;
 
     ///
     /// @brief Time of the event.

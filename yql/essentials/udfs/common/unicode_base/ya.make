@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(unicode_udf)
         37
         0
     )
-    
+
     SRCS(
         unicode_base.cpp
     )

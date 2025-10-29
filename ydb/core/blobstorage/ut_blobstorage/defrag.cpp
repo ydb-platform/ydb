@@ -87,11 +87,13 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
             env.Sim(TDuration::Seconds(10));
             continue;
         }
+        ui32 numTotalBlobs = 0;
         for (const auto& [_, numBlobs] : chunkToBlobs) {
-            if (numBlobs == targetNumChunks && chunkToBlobs.size() == 1) {
-                return nullptr; // all done
-            }
-            UNIT_ASSERT_VALUES_EQUAL(numBlobs, 1);
+            numTotalBlobs += numBlobs;
+        }
+        UNIT_ASSERT_VALUES_EQUAL(numTotalBlobs, targetNumChunks);
+        if (chunkToBlobs.size() != targetNumChunks) {
+            return nullptr; // some huge slots were already defragmented
         }
         break;
     }
@@ -101,190 +103,201 @@ static TIntrusivePtr<TBlobStorageGroupInfo> PrepareEnv(TEnvironmentSetup& env, T
 
 Y_UNIT_TEST_SUITE(Defragmentation) {
     Y_UNIT_TEST(DoesItWork) {
-        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 1,
-            .Erasure = TBlobStorageGroupType::ErasureNone,
-        });
+        for (;;) {
+            TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
+            });
 
-        TVector<TLogoBlobID> keep;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
-        if (!info) {
-            return;
-        }
-        const ui32 orderNum = 0;
-        const TActorId& actorId = info->GetActorId(orderNum);
-
-        // defrag
-        {
-            env.Sim(TDuration::Minutes(6)); // time enough to start defragmentation automatically
-            auto factory = []{ return std::unique_ptr<IEventBase>(TEvCompactVDisk::Create(EHullDbType::LogoBlobs)); };
-            env.SyncQueryFactory<TEvCompactVDiskResult>(actorId, factory, true);
-        }
-
-        // check layout again
-        {
-            std::map<ui32, ui32> chunkToBlobs;
-            auto res = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult, TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
-            for (const auto& item : res->Layout) {
-                using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
-                if (item.Database == T::EDatabase::LogoBlobs && item.RecordType == T::ERecordType::HugeBlob) {
-                    ++chunkToBlobs[item.Location.ChunkIdx];
-                }
+            TVector<TLogoBlobID> keep;
+            TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+            if (!info) {
+                continue;
             }
-            UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 9 + 1); // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
+            const ui32 orderNum = 0;
+            const TActorId& actorId = info->GetActorId(orderNum);
+
+            // defrag
+            {
+                env.Sim(TDuration::Minutes(6)); // time enough to start defragmentation automatically
+                auto factory = []{ return std::unique_ptr<IEventBase>(TEvCompactVDisk::Create(EHullDbType::LogoBlobs)); };
+                env.SyncQueryFactory<TEvCompactVDiskResult>(actorId, factory, true);
+            }
+
+            // check layout again
+            {
+                std::map<ui32, ui32> chunkToBlobs;
+                auto res = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult, TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
+                for (const auto& item : res->Layout) {
+                    using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+                    if (item.Database == T::EDatabase::LogoBlobs && item.RecordType == T::ERecordType::HugeBlob) {
+                        ++chunkToBlobs[item.Location.ChunkIdx];
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL(chunkToBlobs.size(), 9 + 1); // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
+            }
+
+            return;
         }
     }
 
     Y_UNIT_TEST(DefragCompactionRace) {
-        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 1,
-            .Erasure = TBlobStorageGroupType::ErasureNone,
-        });
-
-        TVector<TLogoBlobID> keep;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
-        if (!info) {
-            return;
-        }
-        const ui32 orderNum = 0;
-        const TActorId& actorId = info->GetActorId(orderNum);
-
-        // set up filtering function to catch TEvPut events from defrag rewriter
-        ui32 caughtPutNodeId;
-        std::unique_ptr<IEventHandle> caughtPut;
-        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->Type == TEvBlobStorage::EvVPut) {
-                UNIT_ASSERT(!caughtPut);
-                caughtPutNodeId = nodeId;
-                caughtPut = std::move(ev);
-                return false;
-            }
-            return true;
-        };
-
-        while (!caughtPut) {
-            env.Sim(TDuration::Minutes(1));
-        }
-
-        // issue collect garbage command
-        {
-            const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
-            env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 2, 0, false, 0, 0,
-                    nullptr, new TVector<TLogoBlobID>(keep), TInstant::Max(), true));
+        for (;;) {
+            TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+                .NodeCount = 1,
+                .Erasure = TBlobStorageGroupType::ErasureNone,
             });
-            const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-        }
 
-        // trigger compaction
-        auto factory = []{ return std::unique_ptr<IEventBase>(TEvCompactVDisk::Create(EHullDbType::LogoBlobs)); };
-        env.SyncQueryFactory<TEvCompactVDiskResult>(actorId, factory, true);
+            TVector<TLogoBlobID> keep;
+            TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+            if (!info) {
+                continue;
+            }
+            const ui32 orderNum = 0;
+            const TActorId& actorId = info->GetActorId(orderNum);
 
-        // ensure empty layout
-        {
-            auto res = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult, TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
-            for (const auto& item : res->Layout) {
-                using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
-                if (item.Database == T::EDatabase::LogoBlobs && item.RecordType == T::ERecordType::HugeBlob) {
-                    UNIT_ASSERT(false);
+            // set up filtering function to catch TEvPut events from defrag rewriter
+            ui32 caughtPutNodeId;
+            std::unique_ptr<IEventHandle> caughtPut;
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->Type == TEvBlobStorage::EvVPut) {
+                    UNIT_ASSERT(!caughtPut);
+                    caughtPutNodeId = nodeId;
+                    caughtPut = std::move(ev);
+                    return false;
+                }
+                return true;
+            };
+
+            while (!caughtPut) {
+                env.Sim(TDuration::Minutes(1));
+            }
+
+            // issue collect garbage command
+            {
+                const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
+                env.Runtime->WrapInActorContext(sender, [&] {
+                    SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 2, 0, false, 0, 0,
+                        nullptr, new TVector<TLogoBlobID>(keep), TInstant::Max(), true));
+                });
+                const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            }
+
+            // trigger compaction
+            auto factory = []{ return std::unique_ptr<IEventBase>(TEvCompactVDisk::Create(EHullDbType::LogoBlobs)); };
+            env.SyncQueryFactory<TEvCompactVDiskResult>(actorId, factory, true);
+
+            // ensure empty layout
+            {
+                auto res = env.SyncQuery<TEvBlobStorage::TEvCaptureVDiskLayoutResult, TEvBlobStorage::TEvCaptureVDiskLayout>(actorId);
+                for (const auto& item : res->Layout) {
+                    using T = TEvBlobStorage::TEvCaptureVDiskLayoutResult;
+                    if (item.Database == T::EDatabase::LogoBlobs && item.RecordType == T::ERecordType::HugeBlob) {
+                        UNIT_ASSERT(false);
+                    }
                 }
             }
-        }
 
-        // issue some blob metadata
-        {
-            const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
-            env.Runtime->WrapInActorContext(sender, [&] {
-                SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 3, 0, false, 0, 0,
-                    new TVector<TLogoBlobID>(keep), nullptr, TInstant::Max(), true));
-            });
-            const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
-            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
-        }
-
-        // resume defrag
-        env.Runtime->Send(caughtPut.release(), caughtPutNodeId);
-        ui32 putCounter = 0;
-        env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
-            if (ev->Type == TEvBlobStorage::EvVPut) {
-                ++putCounter;
+            // issue some blob metadata
+            {
+                const TActorId& sender = env.Runtime->AllocateEdgeActor(1);
+                env.Runtime->WrapInActorContext(sender, [&] {
+                    SendToBSProxy(sender, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(1, 1, 3, 0, false, 0, 0,
+                        new TVector<TLogoBlobID>(keep), nullptr, TInstant::Max(), true));
+                });
+                const auto& res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvCollectGarbageResult>(sender);
+                UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
             }
-            return true;
-        };
-        env.Sim(TDuration::Minutes(5));
-        UNIT_ASSERT_VALUES_EQUAL(putCounter, 1);
+
+            // resume defrag
+            env.Runtime->Send(caughtPut.release(), caughtPutNodeId);
+            ui32 putCounter = 0;
+            env.Runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+                if (ev->Type == TEvBlobStorage::EvVPut) {
+                    ++putCounter;
+                }
+                return true;
+            };
+            env.Sim(TDuration::Minutes(5));
+            UNIT_ASSERT_VALUES_EQUAL(putCounter, 1);
+
+            return;
+        }
     }
 
     void TestReadErrorHandlingBase(std::function<NPDisk::TEvChunkReadResult*(const NPDisk::TEvChunkReadResult*)> messChunkReadResult) {
-        TEnvironmentSetup env(TEnvironmentSetup::TSettings{
-            .NodeCount = 8,
-            .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
-        });
+        for (;;) {
+            TEnvironmentSetup env(TEnvironmentSetup::TSettings{
+                .NodeCount = 8,
+                .Erasure = TBlobStorageGroupType::ErasureMirror3of4,
+            });
 
-        TVector<TLogoBlobID> keep;
-        TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
-        if (!info) {
+            TVector<TLogoBlobID> keep;
+            TIntrusivePtr<TBlobStorageGroupInfo> info = PrepareEnv(env, &keep);
+            if (!info) {
+                continue;
+            }
+
+            std::optional<TActorId> rewriterActorId;
+            TAutoPtr<NPDisk::TEvChunkReadResult> readMsg;
+            bool caughtRestore = false;
+            bool caughtDone = false;
+            ui32 rewrittenRecs = 0;
+            ui32 rewrittenBytes = 0;
+            env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+                Y_UNUSED(nodeId);
+                switch(ev->Type) {
+                    case TEvBlobStorage::EvChunkReadResult:
+                        if (!rewriterActorId.has_value() && IsDefragRewriter(env.Runtime->GetActor(ev->Recipient))) {
+                            rewriterActorId = ev->Recipient;
+
+                            readMsg = ev->Release<NPDisk::TEvChunkReadResult>();
+                            env.Runtime->Send(
+                                new IEventHandle(
+                                    *rewriterActorId,
+                                    ev->Sender,
+                                    messChunkReadResult(readMsg.Get())),
+                                ev->Sender.NodeId());
+
+                            return false;
+                        }
+                        return true;
+                    case TEvBlobStorage::EvDefragRewritten:
+                        {
+                            caughtDone = true;
+
+                            const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
+                            rewrittenRecs += msg->RewrittenRecs;
+                            rewrittenBytes += msg->RewrittenBytes;
+                        }
+                        return true;
+                    case TEvBlobStorage::EvRestoreCorruptedBlob:
+                        if (rewriterActorId == ev->Sender) {
+                            UNIT_ASSERT_VALUES_EQUAL(caughtRestore, false);
+                            caughtRestore = true;
+
+                            const TEvRestoreCorruptedBlob* msg = ev->Get<TEvRestoreCorruptedBlob>();
+                            UNIT_ASSERT_VALUES_EQUAL(msg->WriteRestoredParts, true);
+                            UNIT_ASSERT_VALUES_EQUAL(msg->ReportNonrestoredParts, false);
+                            UNIT_ASSERT_VALUES_EQUAL(msg->Items.size(), 1);
+                            const TEvRecoverBlob::TItem& item = msg->Items[0];
+                            UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.ChunkIdx, readMsg->ChunkIdx);
+                            UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Offset, readMsg->Offset);
+                            UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Size, readMsg->Data.Size());
+                        }
+                    default:
+                        return true;
+                }
+            };
+            env.Sim(TDuration::Minutes(10));
+            UNIT_ASSERT_VALUES_EQUAL(caughtDone, true);
+            UNIT_ASSERT_VALUES_EQUAL(caughtRestore, true);
+            UNIT_ASSERT_VALUES_EQUAL(rewrittenRecs, 20 - (9 + 1));  // // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
+            UNIT_ASSERT(rewrittenBytes == 5778432 /*AddHeader=false*/ || rewrittenBytes == 5778487);
+
             return;
         }
-
-        std::optional<TActorId> rewriterActorId;
-        TAutoPtr<NPDisk::TEvChunkReadResult> readMsg;
-        bool caughtRestore = false;
-        bool caughtDone = false;
-        ui32 rewrittenRecs = 0;
-        ui32 rewrittenBytes = 0;
-        env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
-            Y_UNUSED(nodeId);
-            switch(ev->Type) {
-                case TEvBlobStorage::EvChunkReadResult:
-                    if (!rewriterActorId.has_value() && IsDefragRewriter(env.Runtime->GetActor(ev->Recipient))) {
-                        rewriterActorId = ev->Recipient;
-
-                        readMsg = ev->Release<NPDisk::TEvChunkReadResult>();
-                        env.Runtime->Send(
-                            new IEventHandle(
-                                *rewriterActorId,
-                                ev->Sender,
-                                messChunkReadResult(readMsg.Get())),
-                            ev->Sender.NodeId());
-
-                        return false;
-                    }
-                    return true;
-                case TEvBlobStorage::EvDefragRewritten:
-                    {
-                        caughtDone = true;
-
-                        const TEvDefragRewritten* msg = ev->Get<TEvDefragRewritten>();
-                        rewrittenRecs += msg->RewrittenRecs;
-                        rewrittenBytes += msg->RewrittenBytes;
-                    }
-                    return true;
-                case TEvBlobStorage::EvRestoreCorruptedBlob:
-                    if (rewriterActorId == ev->Sender) {
-                        UNIT_ASSERT_VALUES_EQUAL(caughtRestore, false);
-                        caughtRestore = true;
-
-                        const TEvRestoreCorruptedBlob* msg = ev->Get<TEvRestoreCorruptedBlob>();
-                        UNIT_ASSERT_VALUES_EQUAL(msg->WriteRestoredParts, true);
-                        UNIT_ASSERT_VALUES_EQUAL(msg->ReportNonrestoredParts, false);
-                        UNIT_ASSERT_VALUES_EQUAL(msg->Items.size(), 1);
-                        const TEvRecoverBlob::TItem& item = msg->Items[0];
-                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.ChunkIdx, readMsg->ChunkIdx);
-                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Offset, readMsg->Offset);
-                        UNIT_ASSERT_VALUES_EQUAL(item.CorruptedPart.Size, readMsg->Data.Size());
-                    }
-                default:
-                    return true;
-            }
-        };
-        env.Sim(TDuration::Minutes(10));
-        UNIT_ASSERT_VALUES_EQUAL(caughtDone, true);
-        UNIT_ASSERT_VALUES_EQUAL(caughtRestore, true);
-        UNIT_ASSERT_VALUES_EQUAL(rewrittenRecs, 20 - (9 + 1));  // // defragmentation stopping if number of can be freed chunks is 9 + 1 chunk really used
-        UNIT_ASSERT(rewrittenBytes == 5778432 /*AddHeader=false*/ || rewrittenBytes == 5778487);
-
     }
 
     Y_UNIT_TEST(CorruptedReadHandling) {

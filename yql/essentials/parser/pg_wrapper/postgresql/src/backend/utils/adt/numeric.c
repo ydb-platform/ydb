@@ -250,6 +250,13 @@ struct NumericData
 	 | ((n)->choice.n_short.n_header & NUMERIC_SHORT_WEIGHT_MASK)) \
 	: ((n)->choice.n_long.n_weight))
 
+/*
+ * Maximum weight of a stored Numeric value (based on the use of int16 for the
+ * weight in NumericLong).  Note that intermediate values held in NumericVar
+ * and NumericSumAccum variables may have much larger weights.
+ */
+#define NUMERIC_WEIGHT_MAX			PG_INT16_MAX
+
 /* ----------
  * NumericVar is the format we use for arithmetic.  The digit-array part
  * is the same as the NumericData storage format, but the header is more
@@ -1544,10 +1551,15 @@ numeric_round(PG_FUNCTION_ARGS)
 		PG_RETURN_NUMERIC(duplicate_numeric(num));
 
 	/*
-	 * Limit the scale value to avoid possible overflow in calculations
+	 * Limit the scale value to avoid possible overflow in calculations.
+	 *
+	 * These limits are based on the maximum number of digits a Numeric value
+	 * can have before and after the decimal point, but we must allow for one
+	 * extra digit before the decimal point, in case the most significant
+	 * digit rounds up; we must check if that causes Numeric overflow.
 	 */
-	scale = Max(scale, -NUMERIC_MAX_RESULT_SCALE);
-	scale = Min(scale, NUMERIC_MAX_RESULT_SCALE);
+	scale = Max(scale, -(NUMERIC_WEIGHT_MAX + 1) * DEC_DIGITS - 1);
+	scale = Min(scale, NUMERIC_DSCALE_MAX);
 
 	/*
 	 * Unpack the argument and round it at the proper digit position
@@ -1593,10 +1605,13 @@ numeric_trunc(PG_FUNCTION_ARGS)
 		PG_RETURN_NUMERIC(duplicate_numeric(num));
 
 	/*
-	 * Limit the scale value to avoid possible overflow in calculations
+	 * Limit the scale value to avoid possible overflow in calculations.
+	 *
+	 * These limits are based on the maximum number of digits a Numeric value
+	 * can have before and after the decimal point.
 	 */
-	scale = Max(scale, -NUMERIC_MAX_RESULT_SCALE);
-	scale = Min(scale, NUMERIC_MAX_RESULT_SCALE);
+	scale = Max(scale, -(NUMERIC_WEIGHT_MAX + 1) * DEC_DIGITS);
+	scale = Min(scale, NUMERIC_DSCALE_MAX);
 
 	/*
 	 * Unpack the argument and truncate it at the proper digit position
@@ -1820,9 +1835,10 @@ generate_series_step_numeric(PG_FUNCTION_ARGS)
  * in the histogram. width_bucket() returns an integer indicating the
  * bucket number that 'operand' belongs to in an equiwidth histogram
  * with the specified characteristics. An operand smaller than the
- * lower bound is assigned to bucket 0. An operand greater than the
- * upper bound is assigned to an additional bucket (with number
- * count+1). We don't allow "NaN" for any of the numeric arguments.
+ * lower bound is assigned to bucket 0. An operand greater than or equal
+ * to the upper bound is assigned to an additional bucket (with number
+ * count+1). We don't allow "NaN" for any of the numeric inputs, and we
+ * don't allow either of the histogram bounds to be +/- infinity.
  */
 Datum
 width_bucket_numeric(PG_FUNCTION_ARGS)
@@ -7206,7 +7222,7 @@ set_var_from_non_decimal_integer_str(const char *str, const char *cp, int sign,
 					add_var(dest, &tmp_var, dest);
 
 					/* Result will overflow if weight overflows int16 */
-					if (dest->weight > SHRT_MAX)
+					if (dest->weight > NUMERIC_WEIGHT_MAX)
 						goto out_of_range;
 
 					/* Begin a new group */
@@ -7243,7 +7259,7 @@ set_var_from_non_decimal_integer_str(const char *str, const char *cp, int sign,
 					add_var(dest, &tmp_var, dest);
 
 					/* Result will overflow if weight overflows int16 */
-					if (dest->weight > SHRT_MAX)
+					if (dest->weight > NUMERIC_WEIGHT_MAX)
 						goto out_of_range;
 
 					/* Begin a new group */
@@ -7280,7 +7296,7 @@ set_var_from_non_decimal_integer_str(const char *str, const char *cp, int sign,
 					add_var(dest, &tmp_var, dest);
 
 					/* Result will overflow if weight overflows int16 */
-					if (dest->weight > SHRT_MAX)
+					if (dest->weight > NUMERIC_WEIGHT_MAX)
 						goto out_of_range;
 
 					/* Begin a new group */
@@ -7316,7 +7332,7 @@ set_var_from_non_decimal_integer_str(const char *str, const char *cp, int sign,
 	int64_to_numericvar(tmp, &tmp_var);
 	add_var(dest, &tmp_var, dest);
 
-	if (dest->weight > SHRT_MAX)
+	if (dest->weight > NUMERIC_WEIGHT_MAX)
 		goto out_of_range;
 
 	dest->sign = sign;
@@ -10955,7 +10971,8 @@ power_var(const NumericVar *base, const NumericVar *exp, NumericVar *result)
 	/*
 	 * Set the scale for the low-precision calculation, computing ln(base) to
 	 * around 8 significant digits.  Note that ln_dweight may be as small as
-	 * -SHRT_MAX, so the scale may exceed NUMERIC_MAX_DISPLAY_SCALE here.
+	 * -NUMERIC_DSCALE_MAX, so the scale may exceed NUMERIC_MAX_DISPLAY_SCALE
+	 * here.
 	 */
 	local_rscale = 8 - ln_dweight;
 	local_rscale = Max(local_rscale, NUMERIC_MIN_DISPLAY_SCALE);
@@ -11063,7 +11080,7 @@ power_var_int(const NumericVar *base, int exp, int exp_dscale,
 		f = 0;					/* result is 0 or 1 (weight 0), or error */
 
 	/* overflow/underflow tests with fuzz factors */
-	if (f > (SHRT_MAX + 1) * DEC_DIGITS)
+	if (f > (NUMERIC_WEIGHT_MAX + 1) * DEC_DIGITS)
 		ereport(ERROR,
 				(errcode(ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE),
 				 errmsg("value overflows numeric format")));
@@ -11194,7 +11211,8 @@ power_var_int(const NumericVar *base, int exp, int exp_dscale,
 		 * int16, the final result is guaranteed to overflow (or underflow, if
 		 * exp < 0), so we can give up before wasting too many cycles.
 		 */
-		if (base_prod.weight > SHRT_MAX || result->weight > SHRT_MAX)
+		if (base_prod.weight > NUMERIC_WEIGHT_MAX ||
+			result->weight > NUMERIC_WEIGHT_MAX)
 		{
 			/* overflow, unless neg, in which case result should be 0 */
 			if (!neg)

@@ -203,7 +203,7 @@ namespace NKikimr::NPersQueueTests {
                 } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
                     e->Confirm();
                     return {};
-                } else if (auto* e = std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
+                } else if (std::get_if<NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
                     return {};
                 } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                     return {};
@@ -380,7 +380,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -498,7 +498,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -645,7 +645,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -778,7 +778,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -903,7 +903,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,
@@ -1038,7 +1038,7 @@ namespace NKikimr::NPersQueueTests {
                 /*ui64 writeSpeed =*/writeSpeed,
                 /*TString user =*/"",
                 /*ui64 readSpeed =*/readSpeed,
-                /*TVector<TString> rr =*/{},
+                /*TVector<TString> rr =*/{"some_user"},
                 /*TVector<TString> important =*/{},
                 /*std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom =*/{},
                 /*ui64 sourceIdMaxCount =*/6000000,

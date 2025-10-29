@@ -558,7 +558,11 @@ class LoadSuiteBase:
             raise Exception(result.warning_message)
 
     @classmethod
-    def setup_class(cls) -> None:
+    def perform_verification(cls) -> None:
+        """
+        Выполняет _Verification проверку кластера.
+        Может быть переопределена в наследниках для изменения момента выполнения.
+        """
         cls._setup_start_time = time()
         result = YdbCliHelper.WorkloadRunResult()
         result.iterations[0] = YdbCliHelper.Iteration()
@@ -577,6 +581,11 @@ class LoadSuiteBase:
         first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         result.start_time = max(cls._setup_start_time - 600, first_node_start_time)
         cls.process_query_result(result, query_name, True)
+
+    @classmethod
+    def setup_class(cls) -> None:
+        # Выполняем _Verification в setup_class по умолчанию (для обратной совместимости)
+        cls.perform_verification()
 
     @classmethod
     def teardown_class(cls) -> None:

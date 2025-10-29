@@ -441,6 +441,7 @@ message TCmsConfig {
             optional bool PileupReplicas = 7 [default = false];
             optional uint32 OverrideReplicasInRingCount = 8 [default = 0];
             optional uint32 OverrideRingsCount = 9 [default = 0];
+            optional uint32 ReplicasSpecificVolume = 10 [default = 200]; // 1 additional replica in ring per ReplicasSpecificVolume nodes in cluster
         }
 
         message TStateLimit {
@@ -513,6 +514,7 @@ message TCmsConfig {
     optional uint64 InfoCollectionTimeout = 6 [default = 15000000];
     optional TLogConfig LogConfig = 7;
     optional TSentinelConfig SentinelConfig = 8;
+    optional bool Enable = 9 [default = true];
 }
 
 message TPDiskID {

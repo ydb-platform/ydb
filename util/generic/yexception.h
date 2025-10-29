@@ -156,8 +156,8 @@ private:
 #define ythrow throw __LOCATION__ +
 
 namespace NPrivate {
-    /// Encapsulates data for one of the most common case in which
-    /// exception message consists of single constant string
+    /// Encapsulates data for the most common case when
+    /// an exception message consists of a single constant string
     struct TSimpleExceptionMessage {
         TSourceLocation Location;
         TStringBuf Message;
@@ -217,8 +217,8 @@ TString FormatExc(const std::exception& exception);
     do {                                                                                                                \
         if (Y_UNLIKELY(!(CONDITION))) {                                                                                 \
             /* use variable to guarantee evaluation at compile time */                                                  \
-            static constexpr const ::NPrivate::TSimpleExceptionMessage simpleExceptionMessage{__LOCATION__, (MESSAGE)}; \
-            THROW_FUNCTION(simpleExceptionMessage);                                                                     \
+            static constexpr const ::NPrivate::TSimpleExceptionMessage SimpleExceptionMessage{__LOCATION__, (MESSAGE)}; \
+            THROW_FUNCTION(SimpleExceptionMessage);                                                                     \
         }                                                                                                               \
     } while (false)
 

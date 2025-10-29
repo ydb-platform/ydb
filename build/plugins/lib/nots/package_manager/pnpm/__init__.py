@@ -1,8 +1,8 @@
 from . import constants
-from .lockfile import PnpmLockfile
-from .package_manager import PnpmPackageManager
+from .pnpm_lockfile import PnpmLockfile
+from .pnpm_package_manager import PnpmPackageManager
 from .utils import build_ws_config_path, build_lockfile_path
-from .workspace import PnpmWorkspace
+from .pnpm_workspace import PnpmWorkspace
 
 
 __all__ = [

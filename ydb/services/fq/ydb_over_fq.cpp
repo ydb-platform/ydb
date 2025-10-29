@@ -4,7 +4,7 @@
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/ydb_over_fq/service.h>
-#include <ydb/library/protobuf_printer/security_printer.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -19,57 +19,46 @@ void TGRpcYdbOverFqService::InitService(grpc::ServerCompletionQueue *cq, NYdbGrp
     SetupIncomingRequests(std::move(logger));
 }
 
-void TGrpcTableOverFqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
-#if defined(ADD_REQUEST) or defined (ADD_REQUEST_IMPL)
-#error ADD_REQUEST or ADD_REQUEST_IMPL macro already defined
+#ifdef SETUP_YDB_FQ_METHOD
+#error SETUP_YDB_FQ_METHOD macro already defined
 #endif
-#define ADD_REQUEST_IMPL(NAME, REQ, RESP, CALL) \
-MakeIntrusive<TGRpcRequest<REQ, RESP, TGrpcTableOverFqService, TSecurityTextFormatPrinter<REQ>, TSecurityTextFormatPrinter<RESP>>>( \
-    this, &Service_, CQ_, \
-    [this](NYdbGrpc::IRequestContextBase *ctx) { \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-        auto op_call = new CALL<REQ, RESP>( \
-            ctx, NYdbOverFq::Get##NAME##Executor(GRpcRequestProxyId_)); \
-        ActorSystem_->Send(GRpcRequestProxyId_, op_call); \
-    }, \
-    &Ydb::Table::V1::TableService::AsyncService::Request##NAME, \
-    #NAME, logger, getCounterBlock("ydb_over_fq", #NAME)) \
-    ->Run();
 
-#define ADD_REQUEST(NAME) ADD_REQUEST_IMPL(NAME, Ydb::Table::NAME##Request, Ydb::Table::NAME##Response, TGrpcRequestOperationCall)
-#define ADD_STREAM_REQUEST(NAME, REQ, RESP) ADD_REQUEST_IMPL(NAME, REQ, RESP, TGrpcRequestNoOperationCall)
+#define SETUP_YDB_FQ_METHOD(methodName, inputType, outputType, rlMode, requestType, auditMode, operationCallClass) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                          \
+        inputType,                                                  \
+        outputType,                                                 \
+        NYdbOverFq::Get##methodName##Executor(GRpcRequestProxyId_), \
+        rlMode,                                                     \
+        requestType,                                                \
+        YDB_API_DEFAULT_COUNTER_BLOCK(ydb_over_fq, methodName),     \
+        auditMode,                                                  \
+        COMMON,                                                     \
+        operationCallClass,                                         \
+        GRpcRequestProxyId_,                                        \
+        CQ_,                                                        \
+        nullptr,                                                    \
+        nullptr)
 
-    ADD_REQUEST(ExecuteDataQuery)
-    ADD_REQUEST(ExplainDataQuery)
-    ADD_REQUEST(CreateSession)
-    ADD_REQUEST(DeleteSession)
-    ADD_REQUEST(KeepAlive)
-    ADD_REQUEST(DescribeTable)
-    ADD_STREAM_REQUEST(StreamExecuteScanQuery, Ydb::Table::ExecuteScanQueryRequest, Ydb::Table::ExecuteScanQueryPartialResponse)
+void TGrpcTableOverFqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Table;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#undef ADD_REQUEST
+    SETUP_YDB_FQ_METHOD(ExecuteDataQuery, ExecuteDataQueryRequest, ExecuteDataQueryResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(ExplainDataQuery, ExplainDataQueryRequest, ExplainDataQueryResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(CreateSession, CreateSessionRequest, CreateSessionResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(DeleteSession, DeleteSessionRequest, DeleteSessionResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(KeepAlive, KeepAliveRequest, KeepAliveResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(DescribeTable, DescribeTableRequest, DescribeTableResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
+    SETUP_YDB_FQ_METHOD(StreamExecuteScanQuery, ExecuteScanQueryRequest, ExecuteScanQueryPartialResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestNoOperationCall);
 }
 
 void TGrpcSchemeOverFqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Scheme;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#define ADD_REQUEST(NAME) \
-MakeIntrusive<TGRpcRequest<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response, TGrpcSchemeOverFqService, TSecurityTextFormatPrinter<Ydb::Scheme::NAME##Request>, TSecurityTextFormatPrinter<Ydb::Scheme::NAME##Response>>>( \
-    this, &Service_, CQ_, \
-    [this](NYdbGrpc::IRequestContextBase *ctx) { \
-        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-        auto op_call = new TGrpcRequestOperationCall<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response>( \
-            ctx, NYdbOverFq::Get##NAME##Executor(GRpcRequestProxyId_)); \
-        ActorSystem_->Send(GRpcRequestProxyId_, op_call); \
-    }, \
-    &Ydb::Scheme::V1::SchemeService::AsyncService::Request##NAME, \
-    #NAME, logger, getCounterBlock("ydb_over_fq", #NAME)) \
-    ->Run();
-
-    ADD_REQUEST(ListDirectory)
-
-#undef ADD_REQUEST
+    SETUP_YDB_FQ_METHOD(ListDirectory, ListDirectoryRequest, ListDirectoryResponse, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), TGrpcRequestOperationCall);
 }
+
+#undef SETUP_YDB_FQ_METHOD
 
 } // namespace NKikimr::NGRpcService

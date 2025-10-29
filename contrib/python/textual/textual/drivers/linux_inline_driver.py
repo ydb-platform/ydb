@@ -155,12 +155,12 @@ class LinuxInlineDriver(Driver):
                         if isinstance(event, events.CursorPosition):
                             self.cursor_origin = (event.x, event.y)
                         else:
-                            self.process_event(event)
+                            self.process_message(event)
             for event in tick():
                 if isinstance(event, events.CursorPosition):
                     self.cursor_origin = (event.x, event.y)
                 else:
-                    self.process_event(event)
+                    self.process_message(event)
 
         try:
             while not self.exit_event.is_set():
@@ -208,10 +208,7 @@ class LinuxInlineDriver(Driver):
 
         self.write("\x1b[?25l")  # Hide cursor
         self.write("\033[?1004h")  # Enable FocusIn/FocusOut.
-
         self.write("\x1b[>1u")  # https://sw.kovidgoyal.net/kitty/keyboard-protocol/
-        # Disambiguate escape codes https://sw.kovidgoyal.net/kitty/keyboard-protocol/#progressive-enhancement
-        self.write("\x1b[=1;u")
         self.flush()
 
         self._enable_mouse_support()

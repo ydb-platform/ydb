@@ -26,7 +26,29 @@ TQuery::TQuery(const TQueryId& id, const TDelayParams* delayParams, const TStati
 
 NSnapshot::TQuery* TQuery::TakeSnapshot() {
     auto* newQuery = new NSnapshot::TQuery(std::get<TQueryId>(GetId()), shared_from_this());
-    newQuery->Demand = Demand.load();
+
+    // Take the average of original demand and actual demand, but keep at least 1 if original demand not zero.
+    const auto demand = Demand.load();
+    newQuery->Demand = (demand + ActualDemand.load()) >> 1;
+    if (newQuery->Demand == 0 && demand > 0) {
+        newQuery->Demand = 1;
+    }
+    ActualDemand = 0;
+
+    // Update previous burst values and pass difference to new snapshot - to calculate adjusted satisfaction
+    const auto burstUsage = BurstUsage.load();
+    const auto burstUsageResume = BurstUsageResume.load();
+    const auto burstUsageExtra = BurstUsageExtra.load();
+    const auto burstThrottle = BurstThrottle.load();
+    newQuery->BurstUsage += burstUsage - PrevBurstUsage;
+    newQuery->BurstUsage += burstUsageResume - PrevBurstUsageResume;
+    newQuery->BurstUsage += burstUsageExtra - PrevBurstUsageExtra;
+    newQuery->BurstThrottle = burstThrottle - PrevBurstThrottle;
+    PrevBurstUsage = burstUsage;
+    PrevBurstUsageResume = burstUsageResume;
+    PrevBurstUsageExtra = burstUsageExtra;
+    PrevBurstThrottle = burstThrottle;
+
     newQuery->Usage = Usage.load();
     return newQuery;
 }
@@ -58,6 +80,12 @@ ui32 TQuery::ResumeTasks(ui32 count) {
     }
 
     return run;
+}
+
+void TQuery::UpdateActualDemand() {
+    auto demand = Usage + Throttle + 1;
+    auto actualDemand = ActualDemand.load();
+    while (actualDemand < demand && !ActualDemand.compare_exchange_weak(actualDemand, demand)) {}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -94,6 +122,8 @@ TPool::TPool(const TPoolId& id, const TIntrusivePtr<TKqpCounters>& counters, con
 
     Counters->Delay = group->GetHistogram("Delay",
         NMonitoring::ExplicitHistogram({10, 10e2, 10e3, 10e4, 10e5, 10e6, 10e7}), true); // TODO: make from MinDelay to MaxDelay.
+
+    Counters->AdjustedSatisfaction = group->GetCounter("AdjustedSatisfaction", true); // snapshot
 }
 
 NSnapshot::TPool* TPool::TakeSnapshot() {

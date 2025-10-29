@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from importlib.metadata import version
 
@@ -64,18 +66,27 @@ A modern Python API from the developer of [Rich](https://github.com/Textualize/r
 
 ```python
 # Start building!
-import textual
+from textual import App, ComposeResult
+from textual.widgets import Label
+
+class MyApp(App):
+    def compose(self) -> ComposeResult:
+        yield Label("Hello, World!")
+
+MyApp().run()
 ```
 
-Well documented, typed, and intuitive.
-Textual's API is accessible to Python developers of all skill levels.
+* Intuitive, batteries-included, API.
+* Well documented: See the [tutorial](https://textual.textualize.io/tutorial/), [guide](https://textual.textualize.io/guide/app/), and [reference](https://textual.textualize.io/reference/). 
+* Fully typed, with modern type annotations.
+* Accessible to Python developers of all skill levels.
 
 **Hint:** press **C** to view the code for this page.
 
 ## Built on Rich
 
-With over 1.5 *billion* downloads, Rich is the most popular terminal library out there.
-Textual builds on Rich to add interactivity, and is compatible with Rich renderables.
+With over 1.6 *billion* downloads, Rich is the most popular terminal library out there.
+Textual builds on Rich to add interactivity, and is fully-compatible with Rich renderables.
 
 ## Re-usable widgets
 
@@ -111,6 +122,8 @@ Textual has [amazing docs](https://textual.textualize.io/)!
 """
 
 DEPLOY_MD = """\
+Textual apps have extremely low system requirements, and will run on virtually any OS and hardware; locally or remotely via SSH.
+
 There are a number of ways to deploy and share Textual apps.
 
 ## As a Python library
@@ -140,10 +153,10 @@ class StarCount(Vertical):
         layout: horizontal;
         background: $boost;
         padding: 0 1;
-        color: $warning;
+        color: $text-warning;
         #stars { align: center top; }
         #forks { align: right top; }
-        Label { text-style: bold; }
+        Label { text-style: bold; color: $foreground; }
         LoadingIndicator { background: transparent !important; }
         Digits { width: auto; margin-right: 1; }
         Label { margin-right: 1; }
@@ -229,6 +242,7 @@ class HomeScreen(PageScreen):
             Markdown {
                 margin-right: 1;
                 padding-right: 1;
+                background: transparent;
             }
         }
     }

@@ -32,7 +32,7 @@ TIssue MakeError(const TJsonPathItem& item, TIssueCode code, const TStringBuf me
     return MakeError(item.Pos, code, message);
 }
 
-}
+} // namespace
 
 TResult::TResult(TJsonNodes&& nodes)
     : Result_(std::move(nodes))
@@ -408,8 +408,7 @@ TResult TExecutor::UnaryArithmeticOp(const TJsonPathItem& item) {
         if (!operand.IsNumber()) {
             return MakeError(
                 operandItem, TIssuesIds::JSONPATH_INVALID_UNARY_OPERATION_ARGUMENT_TYPE,
-                TStringBuilder() << "Unsupported type for unary operations"
-            );
+                TStringBuilder() << "Unsupported type for unary operations");
         }
 
         if (item.Type == EJsonPathItemType::UnaryPlus) {
@@ -433,8 +432,7 @@ TMaybe<TIssue> TExecutor::EnsureBinaryArithmeticOpArgument(TPosition pos, const 
     if (!value.IsNumber()) {
         return MakeError(
             pos, TIssuesIds::JSONPATH_INVALID_BINARY_OPERATION_ARGUMENT_TYPE,
-            TStringBuilder() << "Unsupported type for binary operations"
-        );
+            TStringBuilder() << "Unsupported type for binary operations");
     }
 
     result = value.GetNumber();
@@ -1060,5 +1058,4 @@ TJsonNodes TExecutor::OptionalArrayWrapNodes(const TJsonNodes& input) {
     return result;
 }
 
-}
-
+} // namespace NYql::NJsonPath

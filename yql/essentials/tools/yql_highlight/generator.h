@@ -7,16 +7,16 @@
 
 namespace NSQLHighlight {
 
-    class IGenerator: public TThrRefBase {
-    public:
-        using TPtr = TIntrusivePtr<IGenerator>;
+class IGenerator: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IGenerator>;
 
-        virtual void Write(IOutputStream& out, const THighlighting& highlighting, bool ansi) = 0;
-        virtual void Write(const TFsPath& path, const THighlighting& highlighting, bool ansi) = 0;
-    };
+    virtual void Write(IOutputStream& out, const THighlighting& highlighting, bool ansi) = 0;
+    virtual void Write(const TFsPath& path, const THighlighting& highlighting, bool ansi) = 0;
+};
 
-    using TGeneratorFunction = std::function<void(IOutputStream&, const THighlighting&, bool)>;
+using TGeneratorFunction = std::function<void(IOutputStream&, const THighlighting&, bool)>;
 
-    IGenerator::TPtr MakeOnlyFileGenerator(TGeneratorFunction function);
+IGenerator::TPtr MakeOnlyFileGenerator(TGeneratorFunction function);
 
 } // namespace NSQLHighlight

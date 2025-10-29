@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-class TJsonPathCommonTest : public TJsonPathTestBase {
+class TJsonPathCommonTest: public TJsonPathTestBase {
 public:
     TJsonPathCommonTest()
         : TJsonPathTestBase()
@@ -12,39 +12,39 @@ public:
     }
 
     UNIT_TEST_SUITE(TJsonPathCommonTest);
-        UNIT_TEST(TestPrimary);
-        UNIT_TEST(TestMemberAccess);
-        UNIT_TEST(TestWildcardMemberAccess);
-        UNIT_TEST(TestArrayAccess);
-        UNIT_TEST(TestLastArrayIndex);
-        UNIT_TEST(TestLastArrayIndexInvalid);
-        UNIT_TEST(TestNonIntegerArrayIndex);
-        UNIT_TEST(TestWildcardArrayAccess);
-        UNIT_TEST(TestUnaryOperations);
-        UNIT_TEST(TestUnaryOperationsErrors);
-        UNIT_TEST(TestBinaryArithmeticOperations);
-        UNIT_TEST(TestBinaryArithmeticOperationsErrors);
-        UNIT_TEST(TestParseErrors);
-        UNIT_TEST(TestVariables);
-        UNIT_TEST(TestDivisionByZero);
-        UNIT_TEST(TestInfinityResult);
-        UNIT_TEST(TestLogicalOperations);
-        UNIT_TEST(TestCompareOperations);
-        UNIT_TEST(TestFilter);
-        UNIT_TEST(TestFilterInvalid);
-        UNIT_TEST(TestNumericMethods);
-        UNIT_TEST(TestNumericMethodsErrors);
-        UNIT_TEST(TestDoubleMethod);
-        UNIT_TEST(TestDoubleMethodErrors);
-        UNIT_TEST(TestTypeMethod);
-        UNIT_TEST(TestSizeMethod);
-        UNIT_TEST(TestKeyValueMethod);
-        UNIT_TEST(TestKeyValueMethodErrors);
-        UNIT_TEST(TestStartsWithPredicate);
-        UNIT_TEST(TestStartsWithPredicateErrors);
-        UNIT_TEST(TestExistsPredicate);
-        UNIT_TEST(TestIsUnknownPredicate);
-        UNIT_TEST(TestLikeRegexPredicate);
+    UNIT_TEST(TestPrimary);
+    UNIT_TEST(TestMemberAccess);
+    UNIT_TEST(TestWildcardMemberAccess);
+    UNIT_TEST(TestArrayAccess);
+    UNIT_TEST(TestLastArrayIndex);
+    UNIT_TEST(TestLastArrayIndexInvalid);
+    UNIT_TEST(TestNonIntegerArrayIndex);
+    UNIT_TEST(TestWildcardArrayAccess);
+    UNIT_TEST(TestUnaryOperations);
+    UNIT_TEST(TestUnaryOperationsErrors);
+    UNIT_TEST(TestBinaryArithmeticOperations);
+    UNIT_TEST(TestBinaryArithmeticOperationsErrors);
+    UNIT_TEST(TestParseErrors);
+    UNIT_TEST(TestVariables);
+    UNIT_TEST(TestDivisionByZero);
+    UNIT_TEST(TestInfinityResult);
+    UNIT_TEST(TestLogicalOperations);
+    UNIT_TEST(TestCompareOperations);
+    UNIT_TEST(TestFilter);
+    UNIT_TEST(TestFilterInvalid);
+    UNIT_TEST(TestNumericMethods);
+    UNIT_TEST(TestNumericMethodsErrors);
+    UNIT_TEST(TestDoubleMethod);
+    UNIT_TEST(TestDoubleMethodErrors);
+    UNIT_TEST(TestTypeMethod);
+    UNIT_TEST(TestSizeMethod);
+    UNIT_TEST(TestKeyValueMethod);
+    UNIT_TEST(TestKeyValueMethodErrors);
+    UNIT_TEST(TestStartsWithPredicate);
+    UNIT_TEST(TestStartsWithPredicateErrors);
+    UNIT_TEST(TestExistsPredicate);
+    UNIT_TEST(TestIsUnknownPredicate);
+    UNIT_TEST(TestLikeRegexPredicate);
     UNIT_TEST_SUITE_END();
 
     void TestPrimary() {
@@ -141,19 +141,25 @@ public:
             {R"({
                 "first": 12,
                 "second": 72
-            })", "$.*", {"12", "72"}},
+            })",
+             "$.*",
+             {"12", "72"}},
             {R"({
                 "friends": {
                     "Nik": {"age": 18},
                     "Kate": {"age": 72}
                 }
-            })", "$.friends.*.age", {"72", "18"}},
+            })",
+             "$.friends.*.age",
+             {"72", "18"}},
             {R"({
                 "friends": {
                     "Nik": {"age": 18},
                     "Kate": {"age": 72}
                 }
-            })", "$.*.*.*", {"72", "18"}},
+            })",
+             "$.*.*.*",
+             {"72", "18"}},
             {R"({})", "$.*.key", {}},
         };
 
@@ -176,7 +182,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[1 to 3, 0].age", {"72", "50", "60", "18"}},
+            })",
+             "$.friends[1 to 3, 0].age",
+             {"72", "50", "60", "18"}},
             {R"({
                 "range": {
                     "from": 1,
@@ -188,7 +196,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[$.range.from to $.range.to].age", {"72", "50"}},
+            })",
+             "$.friends[$.range.from to $.range.to].age",
+             {"72", "50"}},
             {R"({
                 "range": {
                     "from": [1, 3, 4],
@@ -200,7 +210,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[$.range.from[1] to $.range.to.key3].age", {"60"}},
+            })",
+             "$.friends[$.range.from[1] to $.range.to.key3].age",
+             {"60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -219,7 +231,9 @@ public:
             {R"([
                 [1, 2, 3, 4],
                 [5, 6, 7, 8]
-            ])", "$[*][last]", {"4", "8"}},
+            ])",
+             "$[*][last]",
+             {"4", "8"}},
             {R"({
                 "ranges": [
                     {"from": 1, "to": 3},
@@ -231,7 +245,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age", {"60", "18", "72", "50", "60"}},
+            })",
+             "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
+             {"60", "18", "72", "50", "60"}},
             {R"({
                 "ranges": [
                     {"from": 1.23, "to": 3.75},
@@ -243,7 +259,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age", {"60", "18", "72", "50", "60"}},
+            })",
+             "$.friends[last, $.ranges[last].from to $.ranges[last].to, 2 to last].age",
+             {"60", "18", "72", "50", "60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -273,7 +291,8 @@ public:
                     "to": {"key1": 1, "key2": 2, "key3": 3}
                 },
                 "friends": [1, 2, 3]
-            })", "$.friends[$.range.from[*] to $.range.to.*]", C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX)},
+            })",
+             "$.friends[$.range.from[*] to $.range.to.*]", C(TIssuesIds::JSONPATH_INVALID_ARRAY_INDEX)},
         };
 
         for (const auto& testCase : testCases) {
@@ -294,7 +313,9 @@ public:
                     {"name": "Foma", "age": 50},
                     {"name": "Jora", "age": 60}
                 ]
-            })", "$.friends[*].age", {"18", "72", "50", "60"}},
+            })",
+             "$.friends[*].age",
+             {"18", "72", "50", "60"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -316,28 +337,36 @@ public:
                     "to": -2
                 },
                 "array": [1, 2, 3, 4]
-            })", "$.array[-$.range.from to -$.range.to]", {"2", "3"}},
+            })",
+             "$.array[-$.range.from to -$.range.to]",
+             {"2", "3"}},
             {R"({
                 "range": {
                     "from": 1,
                     "to": -2
                 },
                 "array": [1, 2, 3, 4]
-            })", "$.array[+$.range.from to -$.range.to]", {"2", "3"}},
+            })",
+             "$.array[+$.range.from to -$.range.to]",
+             {"2", "3"}},
             {R"({
                 "range": {
                     "from": -1,
                     "to": 2
                 },
                 "array": [1, 2, 3, 4]
-            })", "$.array[-$.range.from to +$.range.to]", {"2", "3"}},
+            })",
+             "$.array[-$.range.from to +$.range.to]",
+             {"2", "3"}},
             {R"({
                 "range": {
                     "from": 1,
                     "to": 2
                 },
                 "array": [1, 2, 3, 4]
-            })", "$.array[+$.range.from to +$.range.to]", {"2", "3"}},
+            })",
+             "$.array[+$.range.from to +$.range.to]",
+             {"2", "3"}},
             {R"([1, 2, 3])", "-$[*]", {"-1", "-2", "-3"}},
             {"30000000000000000000000000", "-$", {"-3e+25"}},
         };
@@ -620,23 +649,33 @@ public:
             {R"({
                 "left": [1],
                 "right": [4, 5, 6]
-            })", "$.left[*] < $.right[*]", {"true"}},
+            })",
+             "$.left[*] < $.right[*]",
+             {"true"}},
             {R"({
                 "left": [4, 5, 6],
                 "right": [1]
-            })", "$.left[*] < $.right[*]", {"false"}},
+            })",
+             "$.left[*] < $.right[*]",
+             {"false"}},
             {R"({
                 "left": [1, 2, 3],
                 "right": [4, 5, 6]
-            })", "$.left[*] < $.right[*]", {"true"}},
+            })",
+             "$.left[*] < $.right[*]",
+             {"true"}},
             {R"({
                 "left": [10, 30, 40],
                 "right": [1, 2, 15]
-            })", "$.left[*] < $.right[*]", {"true"}},
+            })",
+             "$.left[*] < $.right[*]",
+             {"true"}},
             {R"({
                 "left": [10, 30, 40],
                 "right": [1, 2, 3]
-            })", "$.left[*] < $.right[*]", {"false"}},
+            })",
+             "$.left[*] < $.right[*]",
+             {"false"}},
 
             // Check incomparable types
             {"1", "1 < true", {"null"}},
@@ -648,13 +687,17 @@ public:
                 "invalid_index": {
                     "key": 1
                 }
-            })", "$.array[$.invalid_index] < 3", {"null"}},
+            })",
+             "$.array[$.invalid_index] < 3",
+             {"null"}},
             {R"({
                 "array": [1, 2, 3, 4, 5],
                 "invalid_index": {
                     "key": 1
                 }
-            })", "5 >= $.array[$.invalid_index]", {"null"}},
+            })",
+             "5 >= $.array[$.invalid_index]",
+             {"null"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -672,31 +715,41 @@ public:
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
-            ])", "$[*] ? (@.age >= 18)", {R"({"age":18})", R"({"age":25})", R"({"age":50})"}},
+            ])",
+             "$[*] ? (@.age >= 18)",
+             {R"({"age":18})", R"({"age":25})", R"({"age":50})"}},
             {R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
-            ])", "$[*] ? (@.age >= 18) ? (@.age <= 30)", {R"({"age":18})", R"({"age":25})"}},
+            ])",
+             "$[*] ? (@.age >= 18) ? (@.age <= 30)",
+             {R"({"age":18})", R"({"age":25})"}},
             {R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
-            ])", "$[*] ? (@.age >= 18) ? (@.age <= 30) . age", {"18", "25"}},
+            ])",
+             "$[*] ? (@.age >= 18) ? (@.age <= 30) . age",
+             {"18", "25"}},
             {R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
-            ])", "$[*] ? (@.age >= 18 && @.age <= 30) . age", {"18", "25"}},
+            ])",
+             "$[*] ? (@.age >= 18 && @.age <= 30) . age",
+             {"18", "25"}},
             {R"([
                 {"age": 18},
                 {"age": 25},
                 {"age": 50},
                 {"age": 5}
-            ])", "$[*] ? (@.age >= 18 || @.age <= 30) . age", {"18", "25", "50", "5"}},
+            ])",
+             "$[*] ? (@.age >= 18 || @.age <= 30) . age",
+             {"18", "25", "50", "5"}},
             {R"([
                 {
                     "id": 1,
@@ -722,7 +775,9 @@ public:
                     "days_till_doom": 30,
                     "age_estimation": 2
                 }
-            ])", "$[*] ? (@.is_valid == true && @.days_till_doom > 10 && 2 * @.age_estimation <= 12).id", {"4"}},
+            ])",
+             "$[*] ? (@.is_valid == true && @.days_till_doom > 10 && 2 * @.age_estimation <= 12).id",
+             {"4"}},
         };
 
         for (const auto& testCase : testCases) {
@@ -779,11 +834,25 @@ public:
                 "123", "123.4", "0.567", "1234e-1", "567e-3", "123.4e-1",
                 "123e3", "123e+3", "1.23e+1", "1.23e1",
                 "12e0", "12.3e0", "0", "0.0", "0.0e0"
-            ])", "$[*].double()", {
-                "123", "123.4", "0.567", "123.4", "0.567", "12.34",
-                "123000", "123000", "12.3", "12.3",
-                "12", "12.3", "0", "0", "0",
-            }},
+            ])",
+             "$[*].double()",
+             {
+                 "123",
+                 "123.4",
+                 "0.567",
+                 "123.4",
+                 "0.567",
+                 "12.34",
+                 "123000",
+                 "123000",
+                 "12.3",
+                 "12.3",
+                 "12",
+                 "12.3",
+                 "0",
+                 "0",
+                 "0",
+             }},
             {R"("-123.45e1")", "$.double().abs().floor()", {"1234"}},
         };
 
@@ -859,16 +928,20 @@ public:
                 "one": 1,
                 "two": 2,
                 "three": 3
-            })", "$.keyvalue()", {
-                R"({"name":"one","value":1})",
-                R"({"name":"three","value":3})",
-                R"({"name":"two","value":2})",
-            }},
+            })",
+             "$.keyvalue()",
+             {
+                 R"({"name":"one","value":1})",
+                 R"({"name":"three","value":3})",
+                 R"({"name":"two","value":2})",
+             }},
             {R"({
                 "one": "string",
                 "two": [1, 2, 3, 4],
                 "three": [4, 5]
-            })", R"($.keyvalue() ? (@.value.type() == "array" && @.value.size() > 2).name)", {"\"two\""}},
+            })",
+             R"($.keyvalue() ? (@.value.type() == "array" && @.value.size() > 2).name)",
+             {"\"two\""}},
         };
 
         for (const auto& testCase : testCases) {
@@ -922,7 +995,9 @@ public:
         const TVector<TMultiOutputTestCase> testCases = {
             {R"({
                 "key": 123
-            })", "exists ($.key)", {"true"}},
+            })",
+             "exists ($.key)",
+             {"true"}},
             {"\"string\"", "exists ($ * 2)", {"null"}},
             {R"(["some string", 2])", "$[*] ? (exists (@ * 2))", {"2"}},
         };

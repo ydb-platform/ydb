@@ -337,6 +337,11 @@ public:
     void Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext& ctx);
     void ProcessPendingStats(const TActorContext& ctx);
 
+    void Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TActorContext& ctx);
+    void Notify(const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
+    void Notify(const TActorId subscriber, const TString& consumer, NKikimrPQ::TEvBalancingSubscribeNotify::EStatus status, const TActorContext& ctx);
+
     void RenderApp(NApp::TNavigationBar&) const;
 
 private:
@@ -358,6 +363,15 @@ private:
         bool Commited;
     };
     std::unordered_map<ui32, std::vector<TData>> PendingUpdates;
+
+    struct TSubscription {
+        TActorId Sender;
+        TString Consumer;
+    };
+    // Pipe -> Information
+    std::unordered_map<TActorId, std::vector<TSubscription>> Subscriptions;
+    ui64 NotifyCookie = 0;
+
 };
 
 }

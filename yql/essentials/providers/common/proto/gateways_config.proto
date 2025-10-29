@@ -524,6 +524,7 @@ message TYqlCoreConfig {
     repeated TCoreAttr Flags = 1;
     optional TActivationPercentage QPlayerActivation = 2;
     optional uint32 QPlayerRobotPercentage = 3 [default = 0];
+    optional TActivationPercentage QPlayerFullCaptureActivation = 4;
 }
 
 /////////////////////////////// Sql Core ///////////////////////////////

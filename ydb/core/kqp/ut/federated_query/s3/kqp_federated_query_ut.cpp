@@ -2165,9 +2165,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        ui32 source1_id = 0;
+        ui32 source1_id_and_join = 0;
         ui32 source2_id = 0;
-        ui32 join_id = 0;
         ui32 limit_id = 0;
         auto queryClient = kikimr->GetQueryClient();
 
@@ -2193,15 +2192,13 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             UNIT_ASSERT(queryResult.GetStats()->GetPlan());
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 4);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
 
-            source1_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            join_id    = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
-            limit_id   = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            source1_id_and_join = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            source2_id = plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
+            limit_id = plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["PhysicalStageId"].GetIntegerSafe();
         }
 
         {
@@ -2211,17 +2208,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id}, "tasks": 1 }},
+                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 1 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 1 }},
-                        {{ "tx": 0, "stage": {join_id}, "tasks": 1 }},
                         {{ "tx": 0, "stage": {limit_id}, "tasks": 1 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id"_a = source1_id,
+                "source1_id_and_join"_a = source1_id_and_join,
                 "source2_id"_a = source2_id,
-                "join_id"_a = join_id,
                 "limit_id"_a = limit_id,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
@@ -2237,7 +2232,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             NJson::TJsonValue plan;
             UNIT_ASSERT(NJson::ReadJsonTree(*queryResult.GetStats()->GetPlan(), &plan));
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
@@ -2249,17 +2243,15 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
                     pragma s3.UseRuntimeListing = "false";
                     pragma ydb.CostBasedOptimizationLevel = "1";
                     pragma ydb.OverridePlanner = @@ [
-                        {{ "tx": 0, "stage": {source1_id}, "tasks": 10 }},
+                        {{ "tx": 0, "stage": {source1_id_and_join}, "tasks": 10 }},
                         {{ "tx": 0, "stage": {source2_id}, "tasks": 10 }},
-                        {{ "tx": 0, "stage": {join_id}, "tasks": 10 }},
                         {{ "tx": 0, "stage": {limit_id}, "tasks": 10 }}
                     ] @@;
 
                     SELECT SUM(t1.bar + t2.bar) as sum FROM `{table1}` as t1 JOIN /*+grace()*/ `{table2}`as t2 ON t1.foo = t2.foo
                 )",
-                "source1_id"_a = source1_id,
+                "source1_id_and_join"_a = source1_id_and_join,
                 "source2_id"_a = source2_id,
-                "join_id"_a = join_id,
                 "limit_id"_a = limit_id,
                 "table1"_a = root + table1,
                 "table2"_a = root + table2);
@@ -2277,9 +2269,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             // only 2 files => sources stay with 2 tasks
             // join scales to 10 tasks
             // limit ignores hint and keeps being in the only task
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][1]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
             UNIT_ASSERT_VALUES_EQUAL(plan["Plan"]["Plans"][0]["Plans"][0]["Stats"]["Tasks"].GetIntegerSafe(), 1);
         }
     }
@@ -3046,6 +3037,113 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unsupported. Failed to load metadata for table: /Root/testSource.[/] (external source factory is doesn't set), please contact internal support");
+        }
+    }
+
+    void CheckAccessDenied(std::shared_ptr<TKikimrRunner> kikimr, const TString& userSID, const NOperationId::TOperationId& opId, const TString& error) {
+        auto db = kikimr->GetQueryClient(userSID ? TClientSettings().AuthToken(userSID) : TClientSettings());
+        NOperation::TOperationClient client(
+            kikimr->GetDriver(),
+            userSID ? TCommonClientSettings().AuthToken(userSID) : TCommonClientSettings()
+        );
+
+        {
+            const auto result = client.Get<TScriptExecutionOperation>(opId).ExtractValueSync();
+            const auto& status = result.Status();
+            const auto& issues = status.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::UNAUTHORIZED, issues.ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), error);
+        }
+
+        {
+            const auto result = client.List<TScriptExecutionOperation>().ExtractValueSync();
+            const auto& issues = result.GetIssues();
+
+            if (userSID) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, issues.ToOneLineString());
+                UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, issues.ToOneLineString());
+                UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), error);
+            }
+        }
+
+        {
+            const auto result = db.FetchScriptResults(opId, 0).ExtractValueSync();
+            const auto& issues = result.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, issues.ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), error);
+        }
+
+        {
+            const auto result = client.Cancel(opId).ExtractValueSync();
+            const auto& issues = result.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, issues.ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), error);
+        }
+
+        {
+            const auto result = client.Forget(opId).ExtractValueSync();
+            const auto& issues = result.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, issues.ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(issues.ToString(), error);
+        }
+    }
+
+    Y_UNIT_TEST(TestSecureScriptExecutions) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableFeatureFlags()->SetEnableSecureScriptExecutions(true);
+
+        auto kikimr = std::make_shared<TKikimrRunner>(NKqp::TKikimrSettings(appConfig)
+            .SetEnableSecureScriptExecutions(true)
+            .SetInitFederatedQuerySetupFactory(true));
+
+        constexpr char aToken[] = "A@" BUILTIN_ACL_DOMAIN;
+        auto userA = kikimr->GetQueryClient(TClientSettings().AuthToken(aToken));
+        NOperation::TOperationClient clientA(kikimr->GetDriver(), TCommonClientSettings().AuthToken(aToken));
+
+        // Create sample operation
+        NOperationId::TOperationId opId;
+        {
+            const auto createdOp = userA.ExecuteScript("SELECT 42").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createdOp.Status().GetStatus(), EStatus::SUCCESS, createdOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT(!createdOp.Metadata().ExecutionId.empty());
+            opId = createdOp.Id();
+
+            const auto readyOp = WaitScriptExecutionOperation(opId, kikimr->GetDriver(), aToken);
+            UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Status().GetStatus(), EStatus::SUCCESS, readyOp.Status().GetIssues().ToOneLineString());
+            UNIT_ASSERT_VALUES_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+
+            auto results = userA.FetchScriptResults(opId, 0).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToOneLineString());
+            TResultSetParser resultSet(results.ExtractResultSet());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+            UNIT_ASSERT(resultSet.TryNextRow());
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser(0).GetInt32(), 42);
+
+            const auto listResult = clientA.List<TScriptExecutionOperation>(/* pageSize */ 10).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(listResult.GetStatus(), EStatus::SUCCESS, listResult.GetIssues().ToOneLineString());
+            const auto& listedOps = listResult.GetList();
+            UNIT_ASSERT_VALUES_EQUAL(listedOps.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(listedOps[0].Metadata().ExecStatus, EExecStatus::Completed);
+
+            const auto cancelResult = clientA.Cancel(opId).ExtractValueSync();
+            const auto& cancelIssues = cancelResult.GetIssues();
+            UNIT_ASSERT_VALUES_EQUAL_C(cancelResult.GetStatus(), EStatus::PRECONDITION_FAILED, cancelIssues.ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(cancelIssues.ToString(), "Script execution operation is already finished");
+        }
+
+        // Test operations from client B
+        CheckAccessDenied(kikimr, "B@" BUILTIN_ACL_DOMAIN, opId, "User is not owner of script execution operation");
+
+        // Test operations from client without token
+        CheckAccessDenied(kikimr, "", opId, "Access to script execution operations without user token is not allowed");
+
+        // Forget operation from client A
+        {
+            const auto result = clientA.Forget(opId).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
     }
 }

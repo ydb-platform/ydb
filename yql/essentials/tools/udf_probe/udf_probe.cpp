@@ -10,7 +10,7 @@ void ListModules(const TString& dir) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
     auto funcRegistry = CreateFunctionRegistry(nullptr, IBuiltinFunctionRegistry::TPtr(), false, udfPaths,
-        NUdf::IRegistrator::TFlags::TypesOnly);
+                                               NUdf::IRegistrator::TFlags::TypesOnly);
 
     for (auto& m : funcRegistry->GetAllModuleNames()) {
         auto path = *funcRegistry->FindUdfPath(m);
@@ -18,7 +18,7 @@ void ListModules(const TString& dir) {
     }
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
     try {
         if (argc != 2) {
             Cerr << "Expected directory path\n";

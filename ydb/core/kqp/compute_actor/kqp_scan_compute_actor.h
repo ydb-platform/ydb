@@ -65,6 +65,10 @@ private:
     const EBlockTrackingMode BlockTrackingMode;
 
 public:
+    ~TKqpScanComputeActor() override {
+        DoTerminateImpl();
+    }
+
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }

@@ -18,13 +18,14 @@ bool InitFeatures(TContext& ctx, ISource* src, const std::map<TString, TDeferred
     return true;
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)
     : Scoped_(scoped)
     , ServiceId(Scoped_->CurrService)
     , Cluster(Scoped_->CurrCluster)
-{}
+{
+}
 
 INode::TPtr TObjectProcessorImpl::BuildKeys() const {
     auto keys = Y("Key");
@@ -38,7 +39,8 @@ TObjectProcessorImpl::TObjectProcessorImpl(TPosition pos, const TString& objectI
     , TObjectOperatorContext(context)
     , ObjectId_(objectId)
     , TypeId_(typeId)
-{}
+{
+}
 
 bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     Scoped_->UseCluster(ServiceId, Cluster);
@@ -46,10 +48,9 @@ bool TObjectProcessorImpl::DoInit(TContext& ctx, ISource* src) {
     auto keys = BuildKeys();
 
     Add("block", Q(Y(
-        Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, ServiceId), Scoped_->WrapCluster(Cluster, ctx))),
-        Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
-        Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world"))
-    )));
+                     Y("let", "sink", Y("DataSink", BuildQuotedAtom(Pos_, ServiceId), Scoped_->WrapCluster(Cluster, ctx))),
+                     Y("let", "world", Y(TString(WriteName), "world", "sink", keys, Y("Void"), Q(options))),
+                     Y("return", ctx.PragmaAutoCommit ? Y(TString(CommitName), "world", "sink") : AstNode("world")))));
     return TAstListNode::DoInit(ctx, src);
 }
 
@@ -58,10 +59,11 @@ TObjectProcessorImpl::TPtr TObjectProcessorImpl::DoClone() const {
 }
 
 TObjectProcessorWithFeatures::TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-    TFeatureMap&& features)
+                                                           TFeatureMap&& features)
     : TBase(pos, objectId, typeId, context)
     , Features_(std::move(features))
-{}
+{
+}
 
 INode::TPtr TObjectProcessorWithFeatures::FillFeatures(INode::TPtr options) const {
     if (!Features_.empty()) {
@@ -102,22 +104,24 @@ INode::TPtr TCreateObject::BuildOptions() const {
 }
 
 TCreateObject::TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-    TFeatureMap&& features, bool existingOk, bool replaceIfExists)
+                             TFeatureMap&& features, bool existingOk, bool replaceIfExists)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , ExistingOk_(existingOk)
     , ReplaceIfExists_(replaceIfExists)
-{}
+{
+}
 
 INode::TPtr TUpsertObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q("upsertObject"))));
 }
 
 TAlterObject::TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-    TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk)
+                           TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , FeaturesToReset_(std::move(featuresToReset))
     , MissingOk_(missingOk)
-{}
+{
+}
 
 INode::TPtr TAlterObject::FillFeatures(INode::TPtr options) const {
     options = TBase::FillFeatures(options);
@@ -137,13 +141,14 @@ INode::TPtr TAlterObject::BuildOptions() const {
 }
 
 TDropObject::TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-    TFeatureMap&& features, bool missingOk)
+                         TFeatureMap&& features, bool missingOk)
     : TBase(pos, objectId, typeId, context, std::move(features))
     , MissingOk_(missingOk)
-{}
+{
+}
 
 INode::TPtr TDropObject::BuildOptions() const {
     return Y(Q(Y(Q("mode"), Q(MissingOk_ ? "dropObjectIfExists" : "dropObject"))));
 }
 
-}  // NSQLTranslationV1
+} // namespace NSQLTranslationV1

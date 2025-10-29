@@ -1,10 +1,10 @@
 #include "mkql_todict.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_list_adapter.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
-#include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_llvm_base.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/presort.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
@@ -36,8 +36,8 @@ public:
     virtual ~ISetAccumulatorFactory() = default;
     virtual bool IsSorted() const = 0;
     virtual std::unique_ptr<ISetAccumulator> Create(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
-        ui64 itemsCountHint) const = 0;
+                                                    const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
+                                                    ui64 itemsCountHint) const = 0;
 };
 
 class IMapAccumulator {
@@ -52,38 +52,38 @@ public:
     virtual ~IMapAccumulatorFactory() = default;
     virtual bool IsSorted() const = 0;
     virtual std::unique_ptr<IMapAccumulator> Create(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint) const = 0;
+                                                    const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint) const = 0;
 };
 
 template <typename T>
-class TSetAccumulatorFactory : public ISetAccumulatorFactory {
+class TSetAccumulatorFactory: public ISetAccumulatorFactory {
 public:
     bool IsSorted() const final {
         return T::IsSorted;
     }
 
     std::unique_ptr<ISetAccumulator> Create(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
-        ui64 itemsCountHint) const {
+                                            const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
+                                            ui64 itemsCountHint) const {
         return std::make_unique<T>(keyType, keyTypes, isTuple, encoded, compare, equate, hash, ctx, itemsCountHint);
     }
 };
 
 template <typename T>
-class TMapAccumulatorFactory : public IMapAccumulatorFactory {
+class TMapAccumulatorFactory: public IMapAccumulatorFactory {
 public:
     bool IsSorted() const final {
         return T::IsSorted;
     }
 
     std::unique_ptr<IMapAccumulator> Create(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
-        ui64 itemsCountHint) const {
+                                            const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx,
+                                            ui64 itemsCountHint) const {
         return std::make_unique<T>(keyType, payloadType, keyTypes, isTuple, encoded, compare, equate, hash, ctx, itemsCountHint);
     }
 };
 
-class THashedMultiMapAccumulator : public IMapAccumulator {
+class THashedMultiMapAccumulator: public IMapAccumulator {
     using TMapType = TValuesDictHashMap;
 
     TComputationContext& Ctx;
@@ -100,8 +100,13 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
+                               const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyType(keyType)
+        , KeyTypes(keyTypes)
+        , IsTuple(isTuple)
+        , Hash(hash)
+        , Equate(equate)
         , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
     {
         Y_UNUSED(compare);
@@ -113,8 +118,7 @@ public:
         Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
@@ -126,8 +130,7 @@ public:
         it->second.Push(std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const auto filler = [this](TValuesDictHashMap& targetMap) {
             targetMap = std::move(Map);
         };
@@ -136,7 +139,7 @@ public:
     }
 };
 
-class THashedMapAccumulator : public IMapAccumulator {
+class THashedMapAccumulator: public IMapAccumulator {
     using TMapType = TValuesDictHashMap;
 
     TComputationContext& Ctx;
@@ -153,8 +156,13 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Hash(hash), Equate(equate)
+                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyType(keyType)
+        , KeyTypes(keyTypes)
+        , IsTuple(isTuple)
+        , Hash(hash)
+        , Equate(equate)
         , Map(0, TValueHasher(KeyTypes, isTuple, hash), TValueEqual(KeyTypes, isTuple, equate))
     {
         Y_UNUSED(compare);
@@ -166,8 +174,7 @@ public:
         Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
@@ -175,8 +182,7 @@ public:
         Map.emplace(std::move(key), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const auto filler = [this](TMapType& targetMap) {
             targetMap = std::move(Map);
         };
@@ -185,8 +191,8 @@ public:
     }
 };
 
-template<typename T, bool OptionalKey>
-class THashedSingleFixedMultiMapAccumulator : public IMapAccumulator {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedMultiMapAccumulator: public IMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedMap<T>;
 
     TComputationContext& Ctx;
@@ -194,12 +200,16 @@ class THashedSingleFixedMultiMapAccumulator : public IMapAccumulator {
     TMapType Map;
     TUnboxedValueVector NullPayloads;
     NUdf::TUnboxedValue CurrentEmptyVectorForInsert;
+
 public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedMultiMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyTypes(keyTypes), Map(0, TMyHash<T>(), TMyEquals<T>()) {
+                                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyTypes(keyTypes)
+        , Map(0, TMyHash<T>(), TMyEquals<T>())
+    {
         Y_UNUSED(keyType);
         Y_UNUSED(payloadType);
         Y_UNUSED(isTuple);
@@ -234,8 +244,8 @@ public:
     }
 };
 
-template<typename T, bool OptionalKey>
-class THashedSingleFixedMapAccumulator : public IMapAccumulator {
+template <typename T, bool OptionalKey>
+class THashedSingleFixedMapAccumulator: public IMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedMap<T>;
 
     TComputationContext& Ctx;
@@ -246,8 +256,9 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Map(0, TMyHash<T>(), TMyEquals<T>())
+                                     const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Map(0, TMyHash<T>(), TMyEquals<T>())
     {
         Y_UNUSED(keyType);
         Y_UNUSED(payloadType);
@@ -260,8 +271,7 @@ public:
         Map.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if constexpr (OptionalKey) {
             if (!key) {
                 NullPayload.emplace(std::move(payload));
@@ -271,13 +281,12 @@ public:
         Map.emplace(key.Get<T>(), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedSingleFixedMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayload));
     }
 };
 
-class THashedSetAccumulator : public ISetAccumulator {
+class THashedSetAccumulator: public ISetAccumulator {
     using TSetType = TValuesDictHashSet;
 
     TComputationContext& Ctx;
@@ -293,9 +302,15 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Set(0, TValueHasher(KeyTypes, isTuple, hash),
-        TValueEqual(KeyTypes, isTuple, equate)), Hash(hash), Equate(equate)
+                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyType(keyType)
+        , KeyTypes(keyTypes)
+        , IsTuple(isTuple)
+        , Set(0, TValueHasher(KeyTypes, isTuple, hash),
+              TValueEqual(KeyTypes, isTuple, equate))
+        , Hash(hash)
+        , Equate(equate)
     {
         Y_UNUSED(compare);
         if (encoded) {
@@ -305,8 +320,7 @@ public:
         Set.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) final
-    {
+    void Add(NUdf::TUnboxedValue&& key) final {
         if (Packer) {
             key = MakeString(Packer->Pack(key));
         }
@@ -314,8 +328,7 @@ public:
         Set.emplace(std::move(key));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const auto filler = [this](TSetType& targetSet) {
             targetSet = std::move(Set);
         };
@@ -325,7 +338,7 @@ public:
 };
 
 template <typename T, bool OptionalKey>
-class THashedSingleFixedSetAccumulator : public ISetAccumulator{
+class THashedSingleFixedSetAccumulator: public ISetAccumulator {
     using TSetType = TValuesDictHashSingleFixedSet<T>;
 
     TComputationContext& Ctx;
@@ -336,8 +349,9 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Set(0, TMyHash<T>(), TMyEquals<T>())
+                                     const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Set(0, TMyHash<T>(), TMyEquals<T>())
     {
         Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
@@ -349,8 +363,7 @@ public:
         Set.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) final
-    {
+    void Add(NUdf::TUnboxedValue&& key) final {
         if constexpr (OptionalKey) {
             if (!key) {
                 HasNull = true;
@@ -360,14 +373,13 @@ public:
         Set.emplace(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedSingleFixedSetHolder<T, OptionalKey>(std::move(Set), HasNull);
     }
 };
 
 template <typename T, bool OptionalKey>
-class THashedSingleFixedCompactSetAccumulator : public ISetAccumulator {
+class THashedSingleFixedCompactSetAccumulator: public ISetAccumulator {
     using TSetType = TValuesDictHashSingleFixedCompactSet<T>;
 
     TComputationContext& Ctx;
@@ -379,8 +391,10 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
+                                            const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
     {
         Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
@@ -392,8 +406,7 @@ public:
         Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) final
-    {
+    void Add(NUdf::TUnboxedValue&& key) final {
         if constexpr (OptionalKey) {
             if (!key) {
                 HasNull = true;
@@ -403,28 +416,30 @@ public:
         Set.Insert(key.Get<T>());
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactSetHolder<T, OptionalKey>(std::move(Set), HasNull);
     }
 };
 
-class THashedCompactSetAccumulator : public ISetAccumulator {
+class THashedCompactSetAccumulator: public ISetAccumulator {
     using TSetType = TValuesDictHashCompactSet;
 
     TComputationContext& Ctx;
     TPagedArena Pool;
     TSetType Set;
-    TType *KeyType;
+    TType* KeyType;
     std::shared_ptr<TValuePacker> KeyPacker;
 
 public:
     static constexpr bool IsSorted = false;
 
     THashedCompactSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR, TSmallValueHash(), TSmallValueEqual())
-        , KeyType(keyType), KeyPacker(std::make_shared<TValuePacker>(true, keyType))
+                                 const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Set(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR, TSmallValueHash(), TSmallValueEqual())
+        , KeyType(keyType)
+        , KeyPacker(std::make_shared<TValuePacker>(true, keyType))
     {
         Y_UNUSED(keyTypes);
         Y_UNUSED(isTuple);
@@ -435,13 +450,11 @@ public:
         Set.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) final
-    {
+    void Add(NUdf::TUnboxedValue&& key) final {
         Set.Insert(AddSmallValue(Pool, KeyPacker->Pack(key)));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedCompactSetHolder(std::move(Set), std::move(Pool), KeyType, &Ctx);
     }
 };
@@ -450,7 +463,7 @@ template <bool Multi>
 class THashedCompactMapAccumulator;
 
 template <>
-class THashedCompactMapAccumulator<false> : public IMapAccumulator {
+class THashedCompactMapAccumulator<false>: public IMapAccumulator {
     using TMapType = TValuesDictHashCompactMap;
 
     TComputationContext& Ctx;
@@ -463,9 +476,12 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
-        , KeyType(keyType), PayloadType(payloadType)
+                                 const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
+        , KeyType(keyType)
+        , PayloadType(payloadType)
         , KeyPacker(std::make_shared<TValuePacker>(true, keyType))
         , PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
     {
@@ -478,19 +494,17 @@ public:
         Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         Map.InsertNew(AddSmallValue(Pool, KeyPacker->Pack(key)), AddSmallValue(Pool, PayloadPacker->Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedCompactMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx);
     }
 };
 
 template <>
-class THashedCompactMapAccumulator<true> : public IMapAccumulator {
+class THashedCompactMapAccumulator<true>: public IMapAccumulator {
     using TMapType = TValuesDictHashCompactMultiMap;
 
     TComputationContext& Ctx;
@@ -503,9 +517,12 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
-        , KeyType(keyType), PayloadType(payloadType)
+                                 const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
+        , KeyType(keyType)
+        , PayloadType(payloadType)
         , KeyPacker(std::make_shared<TValuePacker>(true, keyType))
         , PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
     {
@@ -518,13 +535,11 @@ public:
         Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         Map.Insert(AddSmallValue(Pool, KeyPacker->Pack(key)), AddSmallValue(Pool, PayloadPacker->Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedCompactMultiMapHolder(std::move(Map), std::move(Pool), KeyType, PayloadType, &Ctx);
     }
 };
@@ -533,7 +548,7 @@ template <typename T, bool OptionalKey, bool Multi>
 class THashedSingleFixedCompactMapAccumulator;
 
 template <typename T, bool OptionalKey>
-class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, false> : public IMapAccumulator {
+class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, false>: public IMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedCompactMap<T>;
 
     TComputationContext& Ctx;
@@ -547,9 +562,12 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
-        , PayloadType(payloadType), PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
+                                            const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
+        , PayloadType(payloadType)
+        , PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
     {
         Y_UNUSED(keyType);
         Y_UNUSED(keyTypes);
@@ -561,8 +579,7 @@ public:
         Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if constexpr (OptionalKey) {
             if (!key) {
                 NullPayload = AddSmallValue(Pool, PayloadPacker->Pack(payload));
@@ -572,14 +589,13 @@ public:
         Map.InsertNew(key.Get<T>(), AddSmallValue(Pool, PayloadPacker->Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayload), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
 template <typename T, bool OptionalKey>
-class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, true> : public IMapAccumulator {
+class THashedSingleFixedCompactMapAccumulator<T, OptionalKey, true>: public IMapAccumulator {
     using TMapType = TValuesDictHashSingleFixedCompactMultiMap<T>;
 
     TComputationContext& Ctx;
@@ -593,9 +609,12 @@ public:
     static constexpr bool IsSorted = false;
 
     THashedSingleFixedCompactMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), Pool(&Ctx.HolderFactory.GetPagePool()), Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
-        , PayloadType(payloadType), PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
+                                            const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , Pool(&Ctx.HolderFactory.GetPagePool())
+        , Map(Ctx.HolderFactory.GetPagePool(), itemsCountHint / COMPACT_HASH_MAX_LOAD_FACTOR)
+        , PayloadType(payloadType)
+        , PayloadPacker(std::make_shared<TValuePacker>(false, payloadType))
     {
         Y_UNUSED(keyTypes);
         Y_UNUSED(keyType);
@@ -607,8 +626,7 @@ public:
         Map.SetMaxLoadFactor(COMPACT_HASH_MAX_LOAD_FACTOR);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if constexpr (OptionalKey) {
             if (!key) {
                 NullPayloads.push_back(AddSmallValue(Pool, PayloadPacker->Pack(payload)));
@@ -618,13 +636,12 @@ public:
         Map.Insert(key.Get<T>(), AddSmallValue(Pool, PayloadPacker->Pack(payload)));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         return Ctx.HolderFactory.CreateDirectHashedSingleFixedCompactMultiMapHolder<T, OptionalKey>(std::move(Map), std::move(NullPayloads), std::move(Pool), PayloadType, &Ctx);
     }
 };
 
-class TSortedSetAccumulator : public ISetAccumulator {
+class TSortedSetAccumulator: public ISetAccumulator {
     TComputationContext& Ctx;
     TType* KeyType;
     const TKeyTypes& KeyTypes;
@@ -639,8 +656,13 @@ public:
     static constexpr bool IsSorted = true;
 
     TSortedSetAccumulator(TType* keyType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Compare(compare), Equate(equate)
+                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyType(keyType)
+        , KeyTypes(keyTypes)
+        , IsTuple(isTuple)
+        , Compare(compare)
+        , Equate(equate)
     {
         Y_UNUSED(hash);
         if (encoded) {
@@ -650,8 +672,7 @@ public:
         Items.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key) final
-    {
+    void Add(NUdf::TUnboxedValue&& key) final {
         if (Packer) {
             key = MakeString(Packer->Encode(key, false));
         }
@@ -659,8 +680,7 @@ public:
         Items.emplace_back(std::move(key));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const TSortedSetFiller filler = [this](TUnboxedValueVector& values) {
             std::stable_sort(Items.begin(), Items.end(), TValueLess(KeyTypes, IsTuple, Compare));
             Items.erase(std::unique(Items.begin(), Items.end(), TValueEqual(KeyTypes, IsTuple, Equate)), Items.end());
@@ -668,15 +688,15 @@ public:
         };
 
         return Ctx.HolderFactory.CreateDirectSortedSetHolder(filler, KeyTypes, IsTuple,
-            EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr, Compare, Equate);
+                                                             EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr, Compare, Equate);
     }
 };
 
-template<bool IsMulti>
+template <bool IsMulti>
 class TSortedMapAccumulator;
 
-template<>
-class TSortedMapAccumulator<false> : public IMapAccumulator {
+template <>
+class TSortedMapAccumulator<false>: public IMapAccumulator {
     TComputationContext& Ctx;
     TType* KeyType;
     const TKeyTypes& KeyTypes;
@@ -691,7 +711,7 @@ public:
     static constexpr bool IsSorted = true;
 
     TSortedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-    const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
         : Ctx(ctx)
         , KeyType(keyType)
         , KeyTypes(keyTypes)
@@ -708,8 +728,7 @@ public:
         Items.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer) {
             key = MakeString(Packer->Encode(key, false));
         }
@@ -717,19 +736,18 @@ public:
         Items.emplace_back(std::move(key), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) {
             values = std::move(Items);
         };
 
         return Ctx.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes, IsTuple, EDictSortMode::RequiresSorting,
-            true, Packer ? KeyType : nullptr, Compare, Equate);
+                                                              true, Packer ? KeyType : nullptr, Compare, Equate);
     }
 };
 
-template<>
-class TSortedMapAccumulator<true> : public IMapAccumulator {
+template <>
+class TSortedMapAccumulator<true>: public IMapAccumulator {
     TComputationContext& Ctx;
     TType* KeyType;
     const TKeyTypes& KeyTypes;
@@ -743,8 +761,13 @@ public:
     static constexpr bool IsSorted = true;
 
     TSortedMapAccumulator(TType* keyType, TType* payloadType, const TKeyTypes& keyTypes, bool isTuple, bool encoded,
-        const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
-        : Ctx(ctx), KeyType(keyType), KeyTypes(keyTypes), IsTuple(isTuple), Compare(compare), Equate(equate)
+                          const NUdf::ICompare* compare, const NUdf::IEquate* equate, const NUdf::IHash* hash, TComputationContext& ctx, ui64 itemsCountHint)
+        : Ctx(ctx)
+        , KeyType(keyType)
+        , KeyTypes(keyTypes)
+        , IsTuple(isTuple)
+        , Compare(compare)
+        , Equate(equate)
     {
         Y_UNUSED(hash);
         if (encoded) {
@@ -755,8 +778,7 @@ public:
         Items.reserve(itemsCountHint);
     }
 
-    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final
-    {
+    void Add(NUdf::TUnboxedValue&& key, NUdf::TUnboxedValue&& payload) final {
         if (Packer) {
             key = MakeString(Packer->Encode(key, false));
         }
@@ -764,8 +786,7 @@ public:
         Items.emplace_back(std::move(key), std::move(payload));
     }
 
-    NUdf::TUnboxedValue Build() final
-    {
+    NUdf::TUnboxedValue Build() final {
         const TSortedDictFiller filler = [this](TKeyPayloadPairVector& values) {
             std::stable_sort(Items.begin(), Items.end(), TKeyPayloadPairLess(KeyTypes, IsTuple, Compare));
 
@@ -778,12 +799,11 @@ public:
                 for (auto it = Items.begin() + 1; it != Items.end(); ++it) {
                     if (eqPredicate(lastKey, it->first)) {
                         currentList = currentList.Append(std::move(it->second));
-                    }
-                    else {
+                    } else {
                         auto payload = Ctx.HolderFactory.CreateDirectListHolder(std::move(currentList));
                         groups.emplace_back(std::move(lastKey), std::move(payload));
                         currentList = TDefaultListRepresentation(std::move(it->second));
-                        lastKey =  std::move(it->first);
+                        lastKey = std::move(it->first);
                     }
                 }
 
@@ -795,23 +815,26 @@ public:
         };
 
         return Ctx.HolderFactory.CreateDirectSortedDictHolder(filler, KeyTypes, IsTuple,
-            EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr, Compare, Equate);
+                                                              EDictSortMode::SortedUniqueAscending, true, Packer ? KeyType : nullptr, Compare, Equate);
     }
 };
 
-class TSetWrapper : public TMutableComputationNode<TSetWrapper> {
+class TSetWrapper: public TMutableComputationNode<TSetWrapper> {
     typedef TMutableComputationNode<TSetWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item,
-            IComputationNode* const key, std::unique_ptr<ISetAccumulator>&& setAccum, TComputationContext& ctx)
+                     IComputationNode* const key, std::unique_ptr<ISetAccumulator>&& setAccum, TComputationContext& ctx)
             : TComputationValue<TStreamValue>(memInfo)
             , Input(std::move(input))
             , Item(item)
             , Key(key)
             , SetAccum(std::move(setAccum))
-            , Ctx(ctx) {}
+            , Ctx(ctx)
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -848,7 +871,7 @@ public:
     };
 
     TSetWrapper(TComputationMutables& mutables, TType* keyType, IComputationNode* list, IComputationExternalNode* item,
-        IComputationNode* key, ui64 itemsCountHint, bool isStream, std::unique_ptr<ISetAccumulatorFactory> factory)
+                IComputationNode* key, ui64 itemsCountHint, bool isStream, std::unique_ptr<ISetAccumulatorFactory> factory)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , KeyType(keyType)
         , List(list)
@@ -868,28 +891,28 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key,
-                Factory->Create(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
-                    ctx, ItemsCountHint), ctx);
+                                                          Factory->Create(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
+                                                                          ctx, ItemsCountHint), ctx);
         }
 
         const auto& list = List->GetValue(ctx);
         auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
-            if (const auto size = list.GetListLength())
+            if (const auto size = list.GetListLength()) {
                 itemsCountHint = size;
-            else
+            } else {
                 return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
         }
 
         auto acc = Factory->Create(KeyType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
-            ctx, itemsCountHint);
+                                   ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
-            [this, &acc, &ctx] (NUdf::TUnboxedValue&& item) {
-                Item->SetValue(ctx, std::move(item));
-                acc->Add(Key->GetValue(ctx));
-            }
-        );
+                                        [this, &acc, &ctx](NUdf::TUnboxedValue&& item) {
+                                            Item->SetValue(ctx, std::move(item));
+                                            acc->Add(Key->GetValue(ctx));
+                                        });
 
         return acc->Build().Release();
     }
@@ -924,12 +947,14 @@ class TLLVMFieldsStructureStateWithAccum: public TLLVMBase {
 private:
     using TBase = TLLVMBase;
     llvm::PointerType* StructPtrType;
+
 protected:
     using TBase::Context;
+
 public:
     std::vector<llvm::Type*> GetFieldsArray() {
         std::vector<llvm::Type*> result = TBase::GetFields();
-        result.emplace_back(StructPtrType); //accumulator
+        result.emplace_back(StructPtrType); // accumulator
         return result;
     }
 
@@ -939,19 +964,25 @@ public:
 
     TLLVMFieldsStructureStateWithAccum(llvm::LLVMContext& context)
         : TBase(context)
-        , StructPtrType(PointerType::getUnqual(StructType::get(context))) {
+        , StructPtrType(PointerType::getUnqual(StructType::get(context)))
+    {
     }
 };
 #endif
 
-class TSqueezeSetFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper> {
+class TSqueezeSetFlowWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetFlowWrapper>;
+
 public:
-    class TState : public TComputationValue<TState> {
+    class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, std::unique_ptr<ISetAccumulator>&& setAccum)
-            : TBase(memInfo), SetAccum(std::move(setAccum)) {}
+            : TBase(memInfo)
+            , SetAccum(std::move(setAccum))
+        {
+        }
 
         NUdf::TUnboxedValuePod Build() {
             return SetAccum->Build().Release();
@@ -966,8 +997,8 @@ public:
     };
 
     TSqueezeSetFlowWrapper(TComputationMutables& mutables, TType* keyType,
-        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, ui64 itemsCountHint,
-        std::unique_ptr<ISetAccumulatorFactory> factory)
+                           IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, ui64 itemsCountHint,
+                           std::unique_ptr<ISetAccumulatorFactory> factory)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , Flow(flow)
@@ -1093,7 +1124,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(Factory->Create(KeyType, KeyTypes, IsTuple, Encoded,
-            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
+                                                                 Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1119,14 +1150,19 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-class TSqueezeSetWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper> {
+class TSqueezeSetWideWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeSetWideWrapper>;
+
 public:
-    class TState : public TComputationValue<TState> {
+    class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, std::unique_ptr<ISetAccumulator>&& setAccum)
-            : TBase(memInfo), SetAccum(std::move(setAccum)) {}
+            : TBase(memInfo)
+            , SetAccum(std::move(setAccum))
+        {
+        }
 
         NUdf::TUnboxedValuePod Build() {
             return SetAccum->Build().Release();
@@ -1141,8 +1177,8 @@ public:
     };
 
     TSqueezeSetWideWrapper(TComputationMutables& mutables, TType* keyType,
-        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key,
-        ui64 itemsCountHint, std::unique_ptr<ISetAccumulatorFactory> factory)
+                           IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key,
+                           ui64 itemsCountHint, std::unique_ptr<ISetAccumulatorFactory> factory)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , Flow(flow)
@@ -1169,9 +1205,11 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
+                }
+            }
 
             switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
@@ -1232,7 +1270,7 @@ public:
 
         block = more;
 
-         const auto getres = GetNodeValues(Flow, ctx, block);
+        const auto getres = GetNodeValues(Flow, ctx, block);
 
         result->addIncoming(GetYield(context), block);
 
@@ -1243,9 +1281,11 @@ public:
         block = plus;
 
         if (!PasstroughKey) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                }
+            }
         }
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
@@ -1280,7 +1320,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(Factory->Create(KeyType, KeyTypes, IsTuple, Encoded,
-            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
+                                                                 Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1310,20 +1350,23 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-class TMapWrapper : public TMutableComputationNode<TMapWrapper> {
+class TMapWrapper: public TMutableComputationNode<TMapWrapper> {
     typedef TMutableComputationNode<TMapWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         TStreamValue(TMemoryUsageInfo* memInfo, NUdf::TUnboxedValue&& input, IComputationExternalNode* const item,
-            IComputationNode* const key, IComputationNode* const payload, std::unique_ptr<IMapAccumulator>&& mapAccum, TComputationContext& ctx)
+                     IComputationNode* const key, IComputationNode* const payload, std::unique_ptr<IMapAccumulator>&& mapAccum, TComputationContext& ctx)
             : TComputationValue<TStreamValue>(memInfo)
             , Input(std::move(input))
             , Item(item)
             , Key(key)
             , Payload(payload)
             , MapAccum(std::move(mapAccum))
-            , Ctx(ctx) {}
+            , Ctx(ctx)
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -1361,7 +1404,7 @@ public:
     };
 
     TMapWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType, IComputationNode* list, IComputationExternalNode* item,
-        IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint, bool isStream, std::unique_ptr<IMapAccumulatorFactory> factory)
+                IComputationNode* key, IComputationNode* payload, ui64 itemsCountHint, bool isStream, std::unique_ptr<IMapAccumulatorFactory> factory)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , KeyType(keyType)
         , PayloadType(payloadType)
@@ -1383,29 +1426,29 @@ public:
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         if (IsStream) {
             return ctx.HolderFactory.Create<TStreamValue>(List->GetValue(ctx), Item, Key, Payload,
-                Factory->Create(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
-                    ctx, ItemsCountHint), ctx);
+                                                          Factory->Create(KeyType, PayloadType, KeyTypes, IsTuple, Encoded, Compare.Get(), Equate.Get(), Hash.Get(),
+                                                                          ctx, ItemsCountHint), ctx);
         }
 
         const auto& list = List->GetValue(ctx);
 
         auto itemsCountHint = ItemsCountHint;
         if (list.HasFastListLength()) {
-            if (const auto size = list.GetListLength())
+            if (const auto size = list.GetListLength()) {
                 itemsCountHint = size;
-            else
+            } else {
                 return ctx.HolderFactory.GetEmptyContainerLazy();
+            }
         }
 
         auto acc = Factory->Create(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            Compare.Get(), Equate.Get(), Hash.Get(), ctx, itemsCountHint);
+                                   Compare.Get(), Equate.Get(), Hash.Get(), ctx, itemsCountHint);
 
         TThresher<false>::DoForEachItem(list,
-            [this, &acc, &ctx] (NUdf::TUnboxedValue&& item) {
-                Item->SetValue(ctx, std::move(item));
-                acc->Add(Key->GetValue(ctx), Payload->GetValue(ctx));
-            }
-        );
+                                        [this, &acc, &ctx](NUdf::TUnboxedValue&& item) {
+                                            Item->SetValue(ctx, std::move(item));
+                                            acc->Add(Key->GetValue(ctx), Payload->GetValue(ctx));
+                                        });
 
         return acc->Build().Release();
     }
@@ -1437,14 +1480,19 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-class TSqueezeMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper> {
+class TSqueezeMapFlowWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapFlowWrapper>;
+
 public:
-    class TState : public TComputationValue<TState> {
+    class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, std::unique_ptr<IMapAccumulator>&& mapAccum)
-            : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
+            : TBase(memInfo)
+            , MapAccum(std::move(mapAccum))
+        {
+        }
 
         NUdf::TUnboxedValuePod Build() {
             return MapAccum->Build().Release();
@@ -1459,8 +1507,8 @@ public:
     };
 
     TSqueezeMapFlowWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType,
-        IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, IComputationNode* payload,
-        ui64 itemsCountHint, std::unique_ptr<IMapAccumulatorFactory> factory)
+                           IComputationNode* flow, IComputationExternalNode* item, IComputationNode* key, IComputationNode* payload,
+                           ui64 itemsCountHint, std::unique_ptr<IMapAccumulatorFactory> factory)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , PayloadType(payloadType)
@@ -1589,7 +1637,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(Factory->Create(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
+                                                                 Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1618,14 +1666,19 @@ private:
     NUdf::IHash::TPtr Hash;
 };
 
-class TSqueezeMapWideWrapper : public TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper> {
+class TSqueezeMapWideWrapper: public TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper> {
     using TBase = TStatefulFlowCodegeneratorNode<TSqueezeMapWideWrapper>;
+
 public:
-    class TState : public TComputationValue<TState> {
+    class TState: public TComputationValue<TState> {
         using TBase = TComputationValue<TState>;
+
     public:
         TState(TMemoryUsageInfo* memInfo, std::unique_ptr<IMapAccumulator>&& mapAccum)
-            : TBase(memInfo), MapAccum(std::move(mapAccum)) {}
+            : TBase(memInfo)
+            , MapAccum(std::move(mapAccum))
+        {
+        }
 
         NUdf::TUnboxedValuePod Build() {
             return MapAccum->Build().Release();
@@ -1640,8 +1693,8 @@ public:
     };
 
     TSqueezeMapWideWrapper(TComputationMutables& mutables, TType* keyType, TType* payloadType,
-        IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, IComputationNode* payload,
-        ui64 itemsCountHint, std::unique_ptr<IMapAccumulatorFactory> factory)
+                           IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* key, IComputationNode* payload,
+                           ui64 itemsCountHint, std::unique_ptr<IMapAccumulatorFactory> factory)
         : TBase(mutables, flow, EValueRepresentation::Boxed, EValueRepresentation::Any)
         , KeyType(keyType)
         , PayloadType(payloadType)
@@ -1671,9 +1724,11 @@ public:
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U) {
                     fields[i] = &Items[i]->RefValue(ctx);
+                }
+            }
 
             switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
@@ -1745,9 +1800,11 @@ public:
         block = plus;
 
         if (!(PasstroughKey && PasstroughPayload)) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Items[i]->GetDependencesCount() > 0U) {
                     EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+                }
+            }
         }
 
         const auto key = PasstroughKey ? getres.second[*PasstroughKey](ctx, block) : GetNodeValue(Key, ctx, block);
@@ -1784,7 +1841,7 @@ public:
 private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         state = ctx.HolderFactory.Create<TState>(Factory->Create(KeyType, PayloadType, KeyTypes, IsTuple, Encoded,
-            Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
+                                                                 Compare.Get(), Equate.Get(), Hash.Get(), ctx, ItemsCountHint));
     }
 
     void RegisterDependencies() const final {
@@ -1794,7 +1851,6 @@ private:
             this->DependsOn(flow, Payload);
         }
     }
-
 
     TType* const KeyType;
     TType* PayloadType;
@@ -1834,7 +1890,7 @@ IComputationNode* WrapToSet(TCallable& callable, const TNodeLocator& nodeLocator
         const auto width = callable.GetInputsCount() - 6U;
         TComputationExternalNodePtrVector args(width, nullptr);
         auto index = 0U;
-        std::generate_n(args.begin(), width, [&](){ return LocateExternalNode(nodeLocator, callable, ++index); });
+        std::generate_n(args.begin(), width, [&]() { return LocateExternalNode(nodeLocator, callable, ++index); });
 
         return new TSqueezeSetWideWrapper(mutables, keyType, wide, std::move(args), keySelector, itemsCountHint, std::move(factory));
     }
@@ -1871,7 +1927,7 @@ IComputationNode* WrapToMap(TCallable& callable, const TNodeLocator& nodeLocator
         const auto width = callable.GetInputsCount() - 6U;
         TComputationExternalNodePtrVector args(width, nullptr);
         auto index = 0U;
-        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(nodeLocator, callable, ++index); });
+        std::generate(args.begin(), args.end(), [&]() { return LocateExternalNode(nodeLocator, callable, ++index); });
 
         return new TSqueezeMapWideWrapper(mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint, std::move(factory));
     }
@@ -1910,24 +1966,24 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
     const auto itemsCountHint = AS_VALUE(TDataLiteral, callable.GetInput(callable.GetInputsCount() - 1U))->AsValue().Get<ui64>();
 
     const auto flow = LocateNode(ctx.NodeLocator, callable, 0U);
-    const auto keySelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -5U);
-    const auto payloadSelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() -4U);
+    const auto keySelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() - 5U);
+    const auto payloadSelector = LocateNode(ctx.NodeLocator, callable, callable.GetInputsCount() - 4U);
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         const auto width = callable.GetInputsCount() - 6U;
         TComputationExternalNodePtrVector args(width, nullptr);
         auto index = 0U;
-        std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(args.begin(), args.end(), [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
         if (!isMulti && payloadType->IsVoid()) {
             return new TSqueezeSetWideWrapper(ctx.Mutables, keyType, wide, std::move(args), keySelector, itemsCountHint,
-                std::make_unique<TSetAccumulatorFactory<TSortedSetAccumulator>>());
+                                              std::make_unique<TSetAccumulatorFactory<TSortedSetAccumulator>>());
         } else if (isMulti) {
             return new TSqueezeMapWideWrapper(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint,
-                std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<true>>>());
+                                              std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<true>>>());
         } else {
             return new TSqueezeMapWideWrapper(ctx.Mutables, keyType, payloadType, wide, std::move(args), keySelector, payloadSelector, itemsCountHint,
-                std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<false>>>());
+                                              std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<false>>>());
         }
     }
 
@@ -1936,43 +1992,43 @@ IComputationNode* WrapToSortedDictInternal(TCallable& callable, const TComputati
         auto factory = std::make_unique<TSetAccumulatorFactory<TSortedSetAccumulator>>();
         if (type->IsList()) {
             return new TSetWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint,
-                false, std::move(factory));
+                                   false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeSetFlowWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector,
-                itemsCountHint, std::move(factory));
+                                              itemsCountHint, std::move(factory));
         }
         if (type->IsStream()) {
             return new TSetWrapper(ctx.Mutables, keyType, flow, itemArg, keySelector, itemsCountHint,
-                true, std::move(factory));
+                                   true, std::move(factory));
         }
     } else if (isMulti) {
         auto factory = std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<true>>>();
         if (type->IsList()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                false, std::move(factory));
+                                   false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeMapFlowWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector,
-                itemsCountHint, std::move(factory));
+                                              itemsCountHint, std::move(factory));
         }
         if (type->IsStream()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                true, std::move(factory));
+                                   true, std::move(factory));
         }
     } else {
         auto factory = std::make_unique<TMapAccumulatorFactory<TSortedMapAccumulator<false>>>();
         if (type->IsList()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                false, std::move(factory));
+                                   false, std::move(factory));
         }
         if (type->IsFlow()) {
             return new TSqueezeMapFlowWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector,
-                itemsCountHint, std::move(factory));
+                                              itemsCountHint, std::move(factory));
         }
         if (type->IsStream()) {
             return new TMapWrapper(ctx.Mutables, keyType, payloadType, flow, itemArg, keySelector, payloadSelector, itemsCountHint,
-                true, std::move(factory));
+                                   true, std::move(factory));
         }
     }
 
@@ -2005,15 +2061,15 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     if (!multi && payloadType->IsVoid()) {
         if (isCompact) {
             if (unwrappedKeyType->IsData()) {
-#define USE_HASHED_SINGLE_FIXED_COMPACT_SET(xType, xLayoutType) \
-                case NUdf::TDataType<xType>::Id: \
-                    if (isOptional) { \
-                        return WrapToSet< \
-                            THashedSingleFixedCompactSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    } else { \
-                        return WrapToSet< \
-                            THashedSingleFixedCompactSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    }
+#define USE_HASHED_SINGLE_FIXED_COMPACT_SET(xType, xLayoutType)                                                        \
+    case NUdf::TDataType<xType>::Id:                                                                                   \
+        if (isOptional) {                                                                                              \
+            return WrapToSet<                                                                                          \
+                THashedSingleFixedCompactSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables);  \
+        } else {                                                                                                       \
+            return WrapToSet<                                                                                          \
+                THashedSingleFixedCompactSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+        }
 
                 switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                     KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_COMPACT_SET)
@@ -2025,15 +2081,15 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
         }
 
         if (unwrappedKeyType->IsData()) {
-#define USE_HASHED_SINGLE_FIXED_SET(xType, xLayoutType) \
-            case NUdf::TDataType<xType>::Id: \
-                if (isOptional) { \
-                    return WrapToSet< \
-                        THashedSingleFixedSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-               } else { \
-                   return WrapToSet< \
-                       THashedSingleFixedSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-               }
+#define USE_HASHED_SINGLE_FIXED_SET(xType, xLayoutType)                                                         \
+    case NUdf::TDataType<xType>::Id:                                                                            \
+        if (isOptional) {                                                                                       \
+            return WrapToSet<                                                                                   \
+                THashedSingleFixedSetAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables);  \
+        } else {                                                                                                \
+            return WrapToSet<                                                                                   \
+                THashedSingleFixedSetAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+        }
 
             switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                 KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_SET)
@@ -2045,25 +2101,25 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
 
     if (isCompact) {
         if (unwrappedKeyType->IsData()) {
-#define USE_HASHED_SINGLE_FIXED_COMPACT_MAP(xType, xLayoutType) \
-                case NUdf::TDataType<xType>::Id: \
-                    if (multi) { \
-                        if (isOptional) { \
-                            return WrapToMap< \
-                                THashedSingleFixedCompactMapAccumulator<xLayoutType, true, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                        } else { \
-                            return WrapToMap< \
-                                THashedSingleFixedCompactMapAccumulator<xLayoutType, false, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                        } \
-                    } else { \
-                        if (isOptional) { \
-                            return WrapToMap< \
-                                THashedSingleFixedCompactMapAccumulator<xLayoutType, true, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                        } else { \
-                            return WrapToMap< \
-                                THashedSingleFixedCompactMapAccumulator<xLayoutType, false, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                        } \
-                    }
+#define USE_HASHED_SINGLE_FIXED_COMPACT_MAP(xType, xLayoutType)                                                                   \
+    case NUdf::TDataType<xType>::Id:                                                                                              \
+        if (multi) {                                                                                                              \
+            if (isOptional) {                                                                                                     \
+                return WrapToMap<                                                                                                 \
+                    THashedSingleFixedCompactMapAccumulator<xLayoutType, true, true>>(callable, ctx.NodeLocator, ctx.Mutables);   \
+            } else {                                                                                                              \
+                return WrapToMap<                                                                                                 \
+                    THashedSingleFixedCompactMapAccumulator<xLayoutType, false, true>>(callable, ctx.NodeLocator, ctx.Mutables);  \
+            }                                                                                                                     \
+        } else {                                                                                                                  \
+            if (isOptional) {                                                                                                     \
+                return WrapToMap<                                                                                                 \
+                    THashedSingleFixedCompactMapAccumulator<xLayoutType, true, false>>(callable, ctx.NodeLocator, ctx.Mutables);  \
+            } else {                                                                                                              \
+                return WrapToMap<                                                                                                 \
+                    THashedSingleFixedCompactMapAccumulator<xLayoutType, false, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+            }                                                                                                                     \
+        }
 
             switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
                 KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_COMPACT_MAP)
@@ -2079,25 +2135,25 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     }
 
     if (unwrappedKeyType->IsData()) {
-#define USE_HASHED_SINGLE_FIXED_MAP(xType, xLayoutType) \
-            case NUdf::TDataType<xType>::Id: \
-                if (multi) { \
-                    if (isOptional) { \
-                        return WrapToMap< \
-                            THashedSingleFixedMultiMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    } else { \
-                        return WrapToMap< \
-                            THashedSingleFixedMultiMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    } \
-                } else { \
-                    if (isOptional) { \
-                        return WrapToMap< \
-                            THashedSingleFixedMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    } else { \
-                        return WrapToMap< \
-                            THashedSingleFixedMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
-                    } \
-                }
+#define USE_HASHED_SINGLE_FIXED_MAP(xType, xLayoutType)                                                                  \
+    case NUdf::TDataType<xType>::Id:                                                                                     \
+        if (multi) {                                                                                                     \
+            if (isOptional) {                                                                                            \
+                return WrapToMap<                                                                                        \
+                    THashedSingleFixedMultiMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables);  \
+            } else {                                                                                                     \
+                return WrapToMap<                                                                                        \
+                    THashedSingleFixedMultiMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables); \
+            }                                                                                                            \
+        } else {                                                                                                         \
+            if (isOptional) {                                                                                            \
+                return WrapToMap<                                                                                        \
+                    THashedSingleFixedMapAccumulator<xLayoutType, true>>(callable, ctx.NodeLocator, ctx.Mutables);       \
+            } else {                                                                                                     \
+                return WrapToMap<                                                                                        \
+                    THashedSingleFixedMapAccumulator<xLayoutType, false>>(callable, ctx.NodeLocator, ctx.Mutables);      \
+            }                                                                                                            \
+        }
 
         switch (AS_TYPE(TDataType, unwrappedKeyType)->GetSchemeType()) {
             KNOWN_FIXED_VALUE_TYPES(USE_HASHED_SINGLE_FIXED_MAP)
@@ -2112,7 +2168,7 @@ IComputationNode* WrapToHashedDictInternal(TCallable& callable, const TComputati
     }
 }
 
-}
+} // namespace
 
 IComputationNode* WrapToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapToSortedDictInternal(callable, ctx, true);
@@ -2130,5 +2186,5 @@ IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputatio
     return WrapToHashedDictInternal(callable, ctx, false);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

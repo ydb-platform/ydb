@@ -27,8 +27,7 @@ const char* SetBackTraceCallbackName = "SetBackTraceCallback";
 //////////////////////////////////////////////////////////////////////////////
 // TMutableFunctionRegistry
 //////////////////////////////////////////////////////////////////////////////
-class TMutableFunctionRegistry: public IMutableFunctionRegistry
-{
+class TMutableFunctionRegistry: public IMutableFunctionRegistry {
     struct TUdfModule {
         TString LibraryPath;
         std::shared_ptr<NUdf::IUdfModule> Impl;
@@ -48,12 +47,12 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
     class TUdfModuleLoader: public NUdf::IRegistrator {
     public:
         TUdfModuleLoader(
-                TUdfModulesMap& modulesMap,
-                THashSet<TString>* newModules,
-                const TString& libraryPath,
-                const TUdfModuleRemappings& remappings,
-                ui32 abiVersion,
-                const TString& customUdfPrefix = {})
+            TUdfModulesMap& modulesMap,
+            THashSet<TString>* newModules,
+            const TString& libraryPath,
+            const TUdfModuleRemappings& remappings,
+            ui32 abiVersion,
+            const TString& customUdfPrefix = {})
             : ModulesMap_(modulesMap)
             , NewModules_(newModules)
             , LibraryPath_(libraryPath)
@@ -64,9 +63,8 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
         }
 
         void AddModule(
-                const NUdf::TStringRef& name,
-                NUdf::TUniquePtr<NUdf::IUdfModule> module) override
-        {
+            const NUdf::TStringRef& name,
+            NUdf::TUniquePtr<NUdf::IUdfModule> module) override {
             Y_DEBUG_ABORT_UNLESS(module, "Module is empty");
 
             if (!HasError()) {
@@ -75,27 +73,30 @@ class TMutableFunctionRegistry: public IMutableFunctionRegistry
                 m.Impl.reset(module.Release());
 
                 auto it = Remappings_.find(name);
-                const TString& newName = CustomUdfPrefix_
-                        + ((it == Remappings_.end())
-                        ? TString(name)
-                        : it->second);
+                const TString& newName = CustomUdfPrefix_ + ((it == Remappings_.end())
+                                                                 ? TString(name)
+                                                                 : it->second);
 
-                auto i = ModulesMap_.insert({ newName, std::move(m) });
+                auto i = ModulesMap_.insert({newName, std::move(m)});
                 if (!i.second) {
                     TUdfModule* oldModule = ModulesMap_.FindPtr(newName);
                     Y_DEBUG_ABORT_UNLESS(oldModule != nullptr);
                     Error_ = (TStringBuilder()
-                             << "UDF module duplication: name " << TStringBuf(name)
-                             << ", already loaded from " << oldModule->LibraryPath
-                             << ", trying to load from " << LibraryPath_);
+                              << "UDF module duplication: name " << TStringBuf(name)
+                              << ", already loaded from " << oldModule->LibraryPath
+                              << ", trying to load from " << LibraryPath_);
                 } else if (NewModules_) {
                     NewModules_->insert(newName);
                 }
             }
         }
 
-        const TString& GetError() const { return Error_; }
-        bool HasError() const { return !Error_.empty(); }
+        const TString& GetError() const {
+            return Error_;
+        }
+        bool HasError() const {
+            return !Error_.empty();
+        }
 
     private:
         TUdfModulesMap& ModulesMap_;
@@ -128,12 +129,11 @@ public:
     }
 
     void LoadUdfs(
-            const TString& libraryPath,
-            const TUdfModuleRemappings& remmapings,
-            ui32 flags = 0,
-            const TString& customUdfPrefix = {},
-            THashSet<TString>* modules = nullptr) override
-    {
+        const TString& libraryPath,
+        const TUdfModuleRemappings& remmapings,
+        ui32 flags = 0,
+        const TString& customUdfPrefix = {},
+        THashSet<TString>* modules = nullptr) override {
         TUdfLibraryPtr lib;
 
         auto libIt = LoadedLibraries_.find(libraryPath);
@@ -155,7 +155,7 @@ public:
 
             // (1) check ABI version
             auto abiVersionFunc = reinterpret_cast<NUdf::TAbiVersionFunctionPtr>(
-                        lib->Lib.SymOptional(AbiVersionFuncName));
+                lib->Lib.SymOptional(AbiVersionFuncName));
             if (!abiVersionFunc) {
                 return;
             }
@@ -163,11 +163,11 @@ public:
             ui32 version = abiVersionFunc();
             Y_ENSURE(NUdf::IsAbiCompatible(version) && version >= NUdf::MakeAbiVersion(2, 8, 0),
                      "Non compatible ABI version of UDF library " << libraryPath
-                     << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100)
-                     << ", got " << NUdf::AbiVersionToStr(version)
-                     << "; try to re-compile library using "
-                     << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
-                     << " " << UDF_ABI_VERSION_MINOR << " 0) macro in ya.make");
+                                                                  << ", expected up to " << NUdf::AbiVersionToStr(NUdf::CurrentCompatibilityAbiVersion() * 100)
+                                                                  << ", got " << NUdf::AbiVersionToStr(version)
+                                                                  << "; try to re-compile library using "
+                                                                  << "YQL_ABI_VERSION(" << UDF_ABI_VERSION_MAJOR
+                                                                  << " " << UDF_ABI_VERSION_MINOR << " 0) macro in ya.make");
             lib->AbiVersion = version;
             if (version < NUdf::MakeAbiVersion(2, 8, 0)) {
                 SupportsSizedAllocators_ = false;
@@ -185,14 +185,14 @@ public:
                 }
             }
 
-            libIt = LoadedLibraries_.insert({ libraryPath, lib }).first;
+            libIt = LoadedLibraries_.insert({libraryPath, lib}).first;
         } else {
             lib = libIt->second;
         }
 
         // (2) ensure that Register() func is present
         auto registerFunc = reinterpret_cast<NUdf::TRegisterFunctionPtr>(
-                    lib->Lib.Sym(RegisterFuncName));
+            lib->Lib.Sym(RegisterFuncName));
 
         // (3) do load
         THashSet<TString> newModules;
@@ -211,20 +211,19 @@ public:
     }
 
     void AddModule(
-            const TStringBuf& libraryPath,
-            const TStringBuf& moduleName,
-            NUdf::TUniquePtr<NUdf::IUdfModule> module) override
-    {
+        const TStringBuf& libraryPath,
+        const TStringBuf& moduleName,
+        NUdf::TUniquePtr<NUdf::IUdfModule> module) override {
         TString libraryPathStr(libraryPath);
-        auto inserted = LoadedLibraries_.insert({ libraryPathStr, nullptr });
+        auto inserted = LoadedLibraries_.insert({libraryPathStr, nullptr});
         if (!inserted.second) {
             return;
         }
 
         TUdfModuleRemappings remappings;
         TUdfModuleLoader loader(
-                    UdfModules_, nullptr, libraryPathStr,
-                    remappings, NUdf::CurrentAbiVersion());
+            UdfModules_, nullptr, libraryPathStr,
+            remappings, NUdf::CurrentAbiVersion());
         loader.AddModule(moduleName, std::move(module));
 
         Y_ENSURE(!loader.HasError(), loader.GetError());
@@ -250,43 +249,41 @@ public:
         const NUdf::TSourcePosition& pos,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
-        TFunctionTypeInfo* funcInfo) const override
-    {
+        TFunctionTypeInfo* funcInfo) const override {
         TStringBuf moduleName, funcName;
         if (name.TrySplit(MODULE_NAME_DELIMITER, moduleName, funcName)) {
             auto it = UdfModules_.find(moduleName);
             if (it != UdfModules_.end()) {
                 TFunctionTypeInfoBuilder typeInfoBuilder(langver, env, typeInfoHelper, moduleName,
-                    (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos,
-                    secureParamsProvider, logProvider);
+                                                         (flags & NUdf::IUdfModule::TFlags::TypesOnly) ? nullptr : countersProvider, pos,
+                                                         secureParamsProvider, logProvider);
                 const auto& module = *it->second.Impl;
                 module.BuildFunctionTypeInfo(
                     funcName, userType, typeConfig, flags, typeInfoBuilder);
 
                 if (typeInfoBuilder.HasError()) {
                     return TStatus::Error()
-                            << "Module: " << moduleName
-                            << ", function: " << funcName
-                            << ", error: " << typeInfoBuilder.GetError();
+                           << "Module: " << moduleName
+                           << ", function: " << funcName
+                           << ", error: " << typeInfoBuilder.GetError();
                 }
 
                 try {
                     typeInfoBuilder.Build(funcInfo);
-                }
-                catch (yexception& e) {
+                } catch (yexception& e) {
                     return TStatus::Error()
-                        << "Module: " << moduleName
-                        << ", function: " << funcName
-                        << ", error: " << e.what();
+                           << "Module: " << moduleName
+                           << ", function: " << funcName
+                           << ", error: " << e.what();
                 }
 
                 if ((flags & NUdf::IRegistrator::TFlags::TypesOnly) &&
                     !funcInfo->FunctionType)
                 {
                     return TStatus::Error()
-                            << "Module: " << moduleName
-                            << ", function: " << funcName
-                            << ", function not found";
+                           << "Module: " << moduleName
+                           << ", function: " << funcName
+                           << ", function not found";
                 }
 
                 if (funcInfo->ModuleIRUniqID) {
@@ -297,12 +294,12 @@ public:
             }
 
             return TStatus::Error()
-                    << "Module " << moduleName << " is not registered";
+                   << "Module " << moduleName << " is not registered";
         }
 
         return TStatus::Error()
-                << "Function name must be in <module>.<func_name> scheme. "
-                << "But get " << name;
+               << "Function name must be in <module>.<func_name> scheme. "
+               << "But get " << name;
     }
 
     TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const override {
@@ -324,7 +321,7 @@ public:
     THashSet<TString> GetAllModuleNames() const override {
         THashSet<TString> names;
         names.reserve(UdfModules_.size());
-        for (const auto& module: UdfModules_) {
+        for (const auto& module : UdfModules_) {
             names.insert(module.first);
         }
         return names;
@@ -333,11 +330,12 @@ public:
     TFunctionsMap GetModuleFunctions(const TStringBuf& moduleName) const override {
         struct TFunctionNamesSink: public NUdf::IFunctionNamesSink {
             TFunctionsMap Functions;
-            class TFuncDescriptor : public NUdf::IFunctionDescriptor {
+            class TFuncDescriptor: public NUdf::IFunctionDescriptor {
             public:
                 TFuncDescriptor(TFunctionProperties& properties)
                     : Properties_(properties)
-                {}
+                {
+                }
 
             private:
                 void SetTypeAwareness() final {
@@ -353,10 +351,10 @@ public:
             }
         } sink;
 
-
         const auto it = UdfModules_.find(moduleName);
-        if (UdfModules_.cend() == it)
+        if (UdfModules_.cend() == it) {
             return TFunctionsMap();
+        }
         it->second.Impl->GetAllFunctions(sink);
         return sink.Functions;
     }
@@ -397,8 +395,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TBuiltinsWrapper
 //////////////////////////////////////////////////////////////////////////////
-class TBuiltinsWrapper: public IFunctionRegistry
-{
+class TBuiltinsWrapper: public IFunctionRegistry {
 public:
     TBuiltinsWrapper(IBuiltinFunctionRegistry::TPtr&& builtins)
         : Builtins_(std::move(builtins))
@@ -424,8 +421,7 @@ public:
         const NUdf::TSourcePosition& pos,
         const NUdf::ISecureParamsProvider* secureParamsProvider,
         const NUdf::ILogProvider* logProvider,
-        TFunctionTypeInfo* funcInfo) const override
-    {
+        TFunctionTypeInfo* funcInfo) const override {
         Y_UNUSED(langver);
         Y_UNUSED(env);
         Y_UNUSED(typeInfoHelper);
@@ -442,9 +438,8 @@ public:
     }
 
     TMaybe<TString> FindUdfPath(
-            const TStringBuf& /* moduleName */) const override
-    {
-        return{};
+        const TStringBuf& /* moduleName */) const override {
+        return {};
     }
 
     bool IsLoadedUdfModule(const TStringBuf& /* moduleName */) const override {
@@ -560,7 +555,7 @@ TIntrusivePtr<IFunctionRegistry> CreateFunctionRegistry(
     // system UDFs loaded with default names
     TUdfModuleRemappings remappings;
     THashSet<TString> usedUdfPaths;
-    for (const TString& udfPath: udfsPaths) {
+    for (const TString& udfPath : udfsPaths) {
         if (usedUdfPaths.insert(udfPath).second) {
             registry->LoadUdfs(udfPath, remappings, flags);
         }
@@ -577,4 +572,4 @@ void FillStaticModules(IMutableFunctionRegistry& registry) {
 }
 
 } // namespace NMiniKQL
-} // namespace NKiki
+} // namespace NKikimr

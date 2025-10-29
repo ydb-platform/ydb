@@ -33,7 +33,8 @@ public:
         : TSqlTranslation(ctx, mode)
         , GroupSetContext_(groupSetContext ? groupSetContext : TGroupByClauseCtx::TPtr(new TGroupByClauseCtx()))
         , CompactGroupBy_(false)
-    {}
+    {
+    }
 
     bool Build(const TRule_group_by_clause& node);
     bool ParseList(const TRule_grouping_element_list& groupingListNode, EGroupByFeatures featureContext);

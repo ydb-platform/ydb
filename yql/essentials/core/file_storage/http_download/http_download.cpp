@@ -20,7 +20,6 @@
 #include <util/system/file.h>
 #include <util/system/env.h>
 
-
 namespace NYql {
 
 class THttpDownloader: public TDownloadConfig<THttpDownloader, THttpDownloaderConfig>, public NYql::NFS::IDownloader {
@@ -40,19 +39,18 @@ public:
             TDuration::MilliSeconds(cfg.GetMaxDelayMs()),
             cfg.GetMaxRetries(),
             TDuration::MilliSeconds(cfg.GetMaxTotalDelayTimeMs()),
-            cfg.GetScale()
-        );
+            cfg.GetScale());
         Redirects_ = cfg.GetMaxRedirects();
         SocketTimeoutMs = cfg.GetSocketTimeoutMs();
     }
 
     bool Accept(const THttpURL& url) final {
         switch (url.GetScheme()) {
-        case NUri::TScheme::SchemeHTTP:
-        case NUri::TScheme::SchemeHTTPS:
-            return true;
-        default:
-            break;
+            case NUri::TScheme::SchemeHTTP:
+            case NUri::TScheme::SchemeHTTPS:
+                return true;
+            default:
+                break;
         }
         return false;
     }
@@ -60,12 +58,12 @@ public:
     std::tuple<NYql::NFS::TDataProvider, TString, TString> Download(const THttpURL& url, const TString& token, const TString& oldEtag, const TString& oldLastModified) final {
         TFetchResultPtr fr1 = FetchWithETagAndLastModified(url, token, oldEtag, oldLastModified, SocketTimeoutMs, Redirects_, Policy_);
         switch (fr1->GetRetCode()) {
-        case HTTP_NOT_MODIFIED:
-            return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
-        case HTTP_OK:
-            break;
-        default:
-            ythrow yexception() << "Url " << url.PrintS() << " cannot be accessed, code: " << fr1->GetRetCode();
+            case HTTP_NOT_MODIFIED:
+                return std::make_tuple(NYql::NFS::TDataProvider{}, TString{}, TString{});
+            case HTTP_OK:
+                break;
+            default:
+                ythrow yexception() << "Url " << url.PrintS() << " cannot be accessed, code: " << fr1->GetRetCode();
         }
 
         auto pair = ExtractETagAndLastModified(*fr1);
@@ -169,4 +167,4 @@ NYql::NFS::IDownloaderPtr MakeHttpDownloader(const TFileStorageConfig& config) {
     return MakeIntrusive<THttpDownloader>(config);
 }
 
-} // NYql
+} // namespace NYql

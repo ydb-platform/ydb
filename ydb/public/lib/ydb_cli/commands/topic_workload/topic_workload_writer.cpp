@@ -156,9 +156,6 @@ void TTopicWorkloadWriterWorker::Process(TInstant endTime) {
 
 std::shared_ptr<TTopicWorkloadWriterProducer> TTopicWorkloadWriterWorker::CreateProducer(ui64 partitionId) {
     auto clock = NUnifiedAgent::TClock();
-    if (!clock.Configured()) {
-        clock.Configure();
-    }
     auto producerId = TGUID::CreateTimebased().AsGuidString();
 
     auto producer = std::make_shared<TTopicWorkloadWriterProducer>(

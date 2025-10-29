@@ -46,6 +46,7 @@ The subdirectories are:
 * Install java 17 or higher
 * Install maven 3.9.9 or higher
 * Install cmake 3.12 or higher
+* Install meson 1.3.0 or higher (Optional)
 
 To build a release version with debug information:
 

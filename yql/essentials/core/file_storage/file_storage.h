@@ -48,4 +48,4 @@ inline TFileStoragePtr CreateAsyncFileStorage(const TFileStorageConfig& params, 
 void LoadFsConfigFromFile(TStringBuf path, TFileStorageConfig& params);
 void LoadFsConfigFromResource(TStringBuf path, TFileStorageConfig& params);
 
-} // NYql
+} // namespace NYql

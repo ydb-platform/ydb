@@ -93,6 +93,15 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvMLPReadRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
+    void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
+
+    template<typename TEventHandle>
+    bool ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev);
+    void ProcessMLPQueue();
+
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx) override;
     bool OnRenderAppHtmlPageTx(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext& ctx);
     bool OnSendReadSetToYourself(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -247,6 +256,14 @@ private:
 
     TVector<TAutoPtr<TEvPersQueue::TEvHasDataInfo>> HasDataRequests;
     TVector<std::pair<TAutoPtr<TEvPersQueue::TEvUpdateConfig>, TActorId> > UpdateConfigRequests;
+
+    using TMLPRequest = std::variant<
+        TEvPQ::TEvMLPReadRequest::TPtr,
+        TEvPQ::TEvMLPCommitRequest::TPtr,
+        TEvPQ::TEvMLPUnlockRequest::TPtr,
+        TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr
+    >;
+    TDeque<TMLPRequest> MLPRequests;
 
 public:
     struct TPipeInfo {
@@ -583,7 +600,7 @@ private:
     bool AllSupportivePartitionsHaveBeenDeleted(const TMaybe<TWriteId>& writeId) const;
     void DeleteWriteId(const TMaybe<TWriteId>& writeId);
 
-    void UpdateReadRuleGenerations(NKikimrPQ::TPQTabletConfig& cfg) const;
+    void UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg);
 
     void ResendEvReadSetToReceivers(const TActorContext& ctx);
     void ResendEvReadSetToReceiversForState(const TActorContext& ctx, NKikimrPQ::TTransaction::EState state);
@@ -603,6 +620,7 @@ private:
 
     void ResendSplitMergeRequests(const TActorContext& ctx);
 
+    void Handle(TEvPQ::TEvForceCompaction::TPtr& ev, const TActorContext& ctx);
 
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> SamplingControl;
     NWilson::TSpan WriteTxsSpan;

@@ -14,6 +14,7 @@ namespace NKikimr::NTxProxy {
 using TUploadTypes = TVector<std::pair<TString, Ydb::Type>>;
 
 IActor* CreateUploadColumnsInternal(const TActorId& sender,
+                                    const TString& database,
                                     const TString& table,
                                     std::shared_ptr<TUploadTypes> types,
                                     std::shared_ptr<arrow::RecordBatch> data,

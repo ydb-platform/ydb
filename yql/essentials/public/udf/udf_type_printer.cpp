@@ -6,12 +6,11 @@
 namespace NYql {
 namespace NUdf {
 
-class TTypePrinter1 : private TStubTypeVisitor
-{
+class TTypePrinter1: private TStubTypeVisitor {
 public:
     TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type, ui16 compatibilityVersion);
 
-    void Out(IOutputStream &o) const;
+    void Out(IOutputStream& o) const;
 
 protected:
     void OnDataType(TDataTypeId typeId) final;
@@ -40,7 +39,7 @@ protected:
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-class TTypePrinter2 : public TTypePrinter1 {
+class TTypePrinter2: public TTypePrinter1 {
 public:
     using TTypePrinter1::TTypePrinter1;
 
@@ -52,7 +51,7 @@ protected:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
-class TTypePrinter3 : public TTypePrinter2 {
+class TTypePrinter3: public TTypePrinter2 {
 public:
     using TTypePrinter2::TTypePrinter2;
 
@@ -64,7 +63,7 @@ protected:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
-class TTypePrinter4 : public TTypePrinter3 {
+class TTypePrinter4: public TTypePrinter3 {
 public:
     using TTypePrinter3::TTypePrinter3;
 
@@ -76,7 +75,7 @@ protected:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-class TTypePrinter5 : public TTypePrinter4 {
+class TTypePrinter5: public TTypePrinter4 {
 public:
     TTypePrinter5(const ITypeInfoHelper2& typeHelper, const TType* type, ui16 compatibilityVersion);
 
@@ -94,7 +93,7 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-class TTypePrinter6 : public TTypePrinter5 {
+class TTypePrinter6: public TTypePrinter5 {
 public:
     using TTypePrinter5::TTypePrinter5;
 
@@ -109,7 +108,7 @@ private:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
-class TTypePrinter7 : public TTypePrinter6 {
+class TTypePrinter7: public TTypePrinter6 {
 public:
     using TTypePrinter6::TTypePrinter6;
 
@@ -125,10 +124,13 @@ private:
 
 TTypePrinter1::TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type, ui16 compatibilityVersion)
     : TStubTypeVisitor(compatibilityVersion)
-    , TypeHelper1_(typeHelper), Type_(type), Output_(nullptr)
-{}
+    , TypeHelper1_(typeHelper)
+    , Type_(type)
+    , Output_(nullptr)
+{
+}
 
-void TTypePrinter1::Out(IOutputStream &o) const {
+void TTypePrinter1::Out(IOutputStream& o) const {
     Output_ = &o;
     Y_DEFER {
         Output_ = nullptr;
@@ -138,12 +140,23 @@ void TTypePrinter1::Out(IOutputStream &o) const {
 
 void TTypePrinter1::OutImpl(const TType* type) const {
     switch (TypeHelper1_.GetTypeKind(type)) {
-        case ETypeKind::Null: *Output_ << "Null"; break;
-        case ETypeKind::Void: *Output_ << "Void"; break;
-        case ETypeKind::EmptyList: *Output_ << "EmptyList"; break;
-        case ETypeKind::EmptyDict: *Output_ << "EmptyDict"; break;
-        case ETypeKind::Unknown: *Output_ << "Unknown"; break;
-        default: TypeHelper1_.VisitType(type, const_cast<TTypePrinter1*>(this));
+        case ETypeKind::Null:
+            *Output_ << "Null";
+            break;
+        case ETypeKind::Void:
+            *Output_ << "Void";
+            break;
+        case ETypeKind::EmptyList:
+            *Output_ << "EmptyList";
+            break;
+        case ETypeKind::EmptyDict:
+            *Output_ << "EmptyDict";
+            break;
+        case ETypeKind::Unknown:
+            *Output_ << "Unknown";
+            break;
+        default:
+            TypeHelper1_.VisitType(type, const_cast<TTypePrinter1*>(this));
     }
 }
 
@@ -161,8 +174,9 @@ void TTypePrinter1::OutStructPayload(ui32 membersCount, TStringRef* membersNames
     for (ui32 i = 0U; i < membersCount; ++i) {
         *Output_ << "'" << std::string_view(membersNames[i]) << "':";
         OutImpl(membersTypes[i]);
-        if (i < membersCount - 1U)
+        if (i < membersCount - 1U) {
             *Output_ << ',';
+        }
     }
 }
 
@@ -186,8 +200,9 @@ void TTypePrinter1::OnTuple(ui32 elementsCount, const TType** elementsTypes) {
 void TTypePrinter1::OutTuplePayload(ui32 elementsCount, const TType** elementsTypes) {
     for (ui32 i = 0U; i < elementsCount; ++i) {
         OutImpl(elementsTypes[i]);
-        if (i < elementsCount - 1U)
+        if (i < elementsCount - 1U) {
             *Output_ << ',';
+        }
     }
 }
 
@@ -209,20 +224,24 @@ void TTypePrinter1::OnDict(const TType* keyType, const TType* valueType) {
 void TTypePrinter1::OnCallable(const TType* returnType, ui32 argsCount, const TType** argsTypes, ui32 optionalArgsCount, const ICallablePayload* payload) {
     *Output_ << "Callable<(";
     for (ui32 i = 0U; i < argsCount; ++i) {
-        if (optionalArgsCount && i == argsCount -  optionalArgsCount)
+        if (optionalArgsCount && i == argsCount - optionalArgsCount) {
             *Output_ << '[';
+        }
         if (payload) {
             const std::string_view name = payload->GetArgumentName(i);
-            if (!name.empty())
+            if (!name.empty()) {
                 *Output_ << "'" << name << "':";
+            }
         }
         OutImpl(argsTypes[i]);
         if (payload) {
-            if (ICallablePayload::TArgumentFlags::AutoMap == payload->GetArgumentFlags(i))
+            if (ICallablePayload::TArgumentFlags::AutoMap == payload->GetArgumentFlags(i)) {
                 *Output_ << "{Flags:AutoMap}";
+            }
         }
-        if (i < argsCount - 1U)
+        if (i < argsCount - 1U) {
             *Output_ << ',';
+        }
     }
     *Output_ << (optionalArgsCount ? "])->" : ")->");
     OutImpl(returnType);
@@ -231,29 +250,29 @@ void TTypePrinter1::OnCallable(const TType* returnType, ui32 argsCount, const TT
 
 void TTypePrinter1::OnVariant(const TType* underlyingType) {
     switch (TypeHelper1_.GetTypeKind(underlyingType)) {
-    case ETypeKind::Struct: {
-        TStructTypeInspector s(TypeHelper1_, underlyingType);
-        const bool isEnum = std::all_of(s.GetMemberTypes(), s.GetMemberTypes() + s.GetMembersCount(), [this](auto memberType) {
-            return TypeHelper1_.GetTypeKind(memberType) == ETypeKind::Void;
-        });
+        case ETypeKind::Struct: {
+            TStructTypeInspector s(TypeHelper1_, underlyingType);
+            const bool isEnum = std::all_of(s.GetMemberTypes(), s.GetMemberTypes() + s.GetMembersCount(), [this](auto memberType) {
+                return TypeHelper1_.GetTypeKind(memberType) == ETypeKind::Void;
+            });
 
-        if (isEnum) {
-            *Output_ << "Enum<";
-            OutEnumValues(s.GetMembersCount(), s.GetMemberNames());
-        } else {
-            *Output_ << "Variant<";
-            OutStructPayload(s.GetMembersCount(), s.GetMemberNames(), s.GetMemberTypes());
+            if (isEnum) {
+                *Output_ << "Enum<";
+                OutEnumValues(s.GetMembersCount(), s.GetMemberNames());
+            } else {
+                *Output_ << "Variant<";
+                OutStructPayload(s.GetMembersCount(), s.GetMemberNames(), s.GetMemberTypes());
+            }
+            break;
         }
-        break;
-    }
-    case ETypeKind::Tuple: {
-        TTupleTypeInspector s(TypeHelper1_, underlyingType);
-        *Output_ << "Variant<";
-        OutTuplePayload(s.GetElementsCount(), s.GetElementTypes());
-        break;
-    }
-    default:
-        Y_ABORT_UNLESS(false, "Unexpected underlying type in Variant");
+        case ETypeKind::Tuple: {
+            TTupleTypeInspector s(TypeHelper1_, underlyingType);
+            *Output_ << "Variant<";
+            OutTuplePayload(s.GetElementsCount(), s.GetElementTypes());
+            break;
+        }
+        default:
+            Y_ABORT_UNLESS(false, "Unexpected underlying type in Variant");
     }
     *Output_ << '>';
 }
@@ -261,8 +280,9 @@ void TTypePrinter1::OnVariant(const TType* underlyingType) {
 void TTypePrinter1::OutEnumValues(ui32 membersCount, TStringRef* membersNames) {
     for (ui32 i = 0U; i < membersCount; ++i) {
         *Output_ << "'" << std::string_view(membersNames[i]) << '\'';
-        if (i < membersCount - 1U)
+        if (i < membersCount - 1U) {
             *Output_ << ',';
+        }
     }
 }
 
@@ -289,7 +309,8 @@ void TTypePrinter1::OnTaggedImpl(const TType* baseType, TStringRef tag) {
 TTypePrinter5::TTypePrinter5(const ITypeInfoHelper2& typeHelper, const TType* type, ui16 compatibilityVersion)
     : TTypePrinter4(typeHelper, type, compatibilityVersion)
     , TypeHelper2_(typeHelper)
-{}
+{
+}
 
 void TTypePrinter5::OnPgImpl(ui32 typeId) {
     auto* description = TypeHelper2_.FindPgTypeDescription(typeId);
@@ -317,10 +338,10 @@ void TTypePrinter7::OnLinearImpl(const TType* itemType, bool isDynamic) {
     *Output_ << '>';
 }
 
-void TTypePrinter::Out(IOutputStream &o) const {
+void TTypePrinter::Out(IOutputStream& o) const {
     TTypePrinter7 p(TypeHelper_, Type_, UDF_ABI_COMPATIBILITY_VERSION(2, 44));
     p.Out(o);
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

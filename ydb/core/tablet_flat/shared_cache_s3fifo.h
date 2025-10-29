@@ -122,15 +122,11 @@ public:
             ? MainQueue 
             : SmallQueue;
 
-        Push(queue, page);
-        TPageTraits::SetFrequency(page, 0);
+        return Insert(queue, page);
+    }
 
-        TIntrusiveList<TPage> evictedList;
-        while (TPage* evictedPage = EvictOneIfFull()) {
-            evictedList.PushBack(evictedPage);
-        }
-
-        return evictedList;
+    TIntrusiveList<TPage> InsertUntouched(TPage* page) Y_WARN_UNUSED_RESULT {
+        return Insert(SmallQueue, page);
     }
 
     void Erase(TPage* page) {
@@ -154,6 +150,15 @@ public:
     // WARN: does not evict items
     void UpdateLimit(ui64 limit) {
         Limit = limit;
+    }
+
+    TIntrusiveList<TPage> EnsureLimits() Y_WARN_UNUSED_RESULT {
+        TIntrusiveList<TPage> evictedList;
+        while (TPage* evictedPage = EvictOneIfFull()) {
+            evictedList.PushBack(evictedPage);
+        }
+
+        return evictedList;
     }
 
     ui64 GetLimit() const {
@@ -192,6 +197,13 @@ public:
     }
 
 private:
+    TIntrusiveList<TPage> Insert(TQueue& queue, TPage* page) Y_WARN_UNUSED_RESULT {
+        Push(queue, page);
+        TPageTraits::SetFrequency(page, 0);
+
+        return EnsureLimits();
+    }
+
     TPage* EvictOneIfFull() {
         ui32 mainQueueReinserts = 0;
 

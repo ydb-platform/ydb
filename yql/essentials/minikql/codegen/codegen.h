@@ -7,11 +7,11 @@
 class IOutputStream;
 
 namespace llvm {
-    class Module;
-    class Function;
-    class LLVMContext;
-    class ExecutionEngine;
-}
+class Module;
+class Function;
+class LLVMContext;
+class ExecutionEngine;
+} // namespace llvm
 
 namespace NYql {
 namespace NCodegen {
@@ -71,5 +71,5 @@ public:
     static bool IsCodegenAvailable();
 };
 
-}
-}
+} // namespace NCodegen
+} // namespace NYql

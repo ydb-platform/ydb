@@ -125,6 +125,7 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
     args.UserSID = "username";
     args.GroupSIDs = GroupSIDs;
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+    userToken->SaveSerializationInfo();
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
         "Send TEvAuthorizeTicketResult success");
     Send(ev->Sender, new TEvTicketParser::TEvAuthorizeTicketResult(ev->Get()->Ticket, userToken));

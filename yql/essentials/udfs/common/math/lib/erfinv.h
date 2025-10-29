@@ -4,4 +4,4 @@ namespace NMathUdf {
 
 double ErfInv(double x);
 
-}
+} // namespace NMathUdf

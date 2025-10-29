@@ -127,6 +127,7 @@ struct TAlterTableOptions
     std::optional<NTabletClient::TTableReplicaId> UpstreamReplicaId;
     std::optional<NTableClient::ETableSchemaModification> SchemaModification;
     std::optional<NChaosClient::TReplicationProgress> ReplicationProgress;
+    std::optional<NTransactionClient::TTimestamp> ClipTimestamp;
 };
 
 struct TTrimTableOptions
@@ -322,6 +323,8 @@ struct TPartitionTablesOptions
 
     //! Whether to return cookies that can be fed to CreateTablePartitionReader.
     bool EnableCookies = false;
+
+    bool OmitInaccessibleRows = false;
 };
 
 struct TReadTablePartitionOptions

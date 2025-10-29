@@ -20,7 +20,8 @@ public:
     TBlockAsContainerExec(const TVector<TType*>& argTypes, const std::shared_ptr<arrow::DataType>& returnArrowType)
         : ArgTypes(argTypes)
         , ReturnArrowType(returnArrowType)
-    {}
+    {
+    }
 
     arrow::Status Exec(arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) const {
         bool allScalars = true;
@@ -44,7 +45,7 @@ public:
             return arrow::Status::OK();
         }
 
-        auto newArrayData = arrow::ArrayData::Make(ReturnArrowType, length, { nullptr }, 0, 0);
+        auto newArrayData = arrow::ArrayData::Make(ReturnArrowType, length, {nullptr}, 0, 0);
         MKQL_ENSURE(ArgTypes.size() == batch.values.size(), "Mismatch batch columns");
         for (ui32 i = 0; i < batch.values.size(); ++i) {
             const auto& datum = batch.values[i];
@@ -71,9 +72,9 @@ std::shared_ptr<arrow::compute::ScalarKernel> MakeBlockAsContainerKernel(const T
     MKQL_ENSURE(ConvertArrowType(AS_TYPE(TBlockType, resultType)->GetItemType(), returnArrowType), "Unsupported arrow type");
     auto exec = std::make_shared<TBlockAsContainerExec>(argTypes, returnArrowType);
     auto kernel = std::make_shared<arrow::compute::ScalarKernel>(ConvertToInputTypes(argTypes), ConvertToOutputType(resultType),
-        [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        return exec->Exec(ctx, batch, res);
-    });
+                                                                 [exec](arrow::compute::KernelContext* ctx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+                                                                     return exec->Exec(ctx, batch, res);
+                                                                 });
 
     kernel->null_handling = arrow::compute::NullHandling::COMPUTED_NO_PREALLOCATE;
     return kernel;

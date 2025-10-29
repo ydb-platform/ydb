@@ -1,6 +1,6 @@
 #include "mkql_reduce.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,14 +8,15 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsStream>
-class TReduceWrapper : public TMutableCodegeneratorRootNode<TReduceWrapper<IsStream>> {
+template <bool IsStream>
+class TReduceWrapper: public TMutableCodegeneratorRootNode<TReduceWrapper<IsStream>> {
     typedef TMutableCodegeneratorRootNode<TReduceWrapper<IsStream>> TBaseComputation;
+
 public:
     TReduceWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* list, IComputationExternalNode* item, IComputationExternalNode* state1,
-        IComputationNode* newState1, IComputationNode* newState2,
-        IComputationNode* initialState1, IComputationExternalNode* itemState2, IComputationExternalNode* state3,
-        IComputationNode* newState3, IComputationNode* initialState3)
+                   IComputationNode* newState1, IComputationNode* newState2,
+                   IComputationNode* initialState1, IComputationExternalNode* itemState2, IComputationExternalNode* state3,
+                   IComputationNode* newState3, IComputationNode* initialState3)
         : TBaseComputation(mutables, kind)
         , List(list)
         , Item(item)
@@ -35,11 +36,10 @@ public:
         State3->SetValue(compCtx, InitialState3->GetValue(compCtx));
 
         TThresher<IsStream>::DoForEachItem(List->GetValue(compCtx),
-            [this, &compCtx] (NUdf::TUnboxedValue&& item) {
-                Item->SetValue(compCtx, std::move(item));
-                State1->SetValue(compCtx, NewState1->GetValue(compCtx));
-            }
-        );
+                                           [this, &compCtx](NUdf::TUnboxedValue&& item) {
+                                               Item->SetValue(compCtx, std::move(item));
+                                               State1->SetValue(compCtx, NewState1->GetValue(compCtx));
+                                           });
 
         ItemState2->SetValue(compCtx, NewState2->GetValue(compCtx));
         return NewState3->GetValue(compCtx).Release();
@@ -47,7 +47,7 @@ public:
 
 #ifndef MKQL_DISABLE_CODEGEN
     Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
-        auto &context = ctx.Codegen.GetContext();
+        auto& context = ctx.Codegen.GetContext();
 
         const auto codegenItem = dynamic_cast<ICodegeneratorExternalNode*>(Item);
         const auto codegenState1 = dynamic_cast<ICodegeneratorExternalNode*>(State1);
@@ -71,9 +71,7 @@ public:
 
         const auto list = GetNodeValue(List, ctx, block);
 
-        const auto itemPtr = *this->Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(valueType, 0U, "item_ptr", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(valueType, 0U, "item_ptr", block);
+        const auto itemPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "item_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "item_ptr", block);
         new StoreInst(ConstantInt::get(valueType, 0), itemPtr, block);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -101,9 +99,7 @@ public:
 
             block = done;
         } else {
-            const auto iterPtr = *this->Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(valueType, 0U, "iter_ptr", block);
+            const auto iterPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(valueType, 0U, "iter_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(valueType, 0U, "iter_ptr", block);
             CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListIterator>(iterPtr, list, ctx.Codegen, block);
             const auto iter = new LoadInst(valueType, iterPtr, "iter", block);
 
@@ -163,7 +159,7 @@ private:
     IComputationNode* const InitialState3;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapReduce(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 10, "Expected 10 args");
@@ -181,12 +177,12 @@ IComputationNode* WrapReduce(TCallable& callable, const TComputationNodeFactoryC
     const auto kind = GetValueRepresentation(callable.GetType()->GetReturnType());
     if (callable.GetInput(0).GetStaticType()->IsStream()) {
         return new TReduceWrapper<true>(ctx.Mutables, kind, list, itemArg, state1NodeArg, newState1, newState2,
-            initialState1, itemState2Arg, state3NodeArg, newState3, initialState3);
+                                        initialState1, itemState2Arg, state3NodeArg, newState3, initialState3);
     } else {
         return new TReduceWrapper<false>(ctx.Mutables, kind, list, itemArg, state1NodeArg, newState1, newState2,
-            initialState1, itemState2Arg, state3NodeArg, newState3, initialState3);
+                                         initialState1, itemState2Arg, state3NodeArg, newState3, initialState3);
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -1,5 +1,6 @@
 #include "yql_yt_transform.h"
 
+#include <yt/yql/providers/yt/lib/dump_helpers/yql_yt_dump_helpers.h>
 #include <yt/yql/providers/yt/lib/skiff/yql_skiff_schema.h>
 #include <yt/yql/providers/yt/common/yql_names.h>
 #include <yt/yql/providers/yt/common/yql_configuration.h>
@@ -36,7 +37,7 @@ using namespace NKikimr::NMiniKQL;
 using namespace NYT;
 using namespace NNodes;
 
-TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSettings::TConstPtr settings, const TString& optLLVM,
+TGatewayTransformer::TGatewayTransformer(TExecContextBase& execCtx, TYtSettings::TConstPtr settings, const TString& optLLVM,
     TUdfModulesTable udfModules, IUdfResolver::TPtr udfResolver, TTransactionCache::TEntry::TPtr entry,
     TProgramBuilder& builder, TTempFiles& tmpFiles, TMaybe<ui32> publicId)
     : ExecCtx_(execCtx)
@@ -58,7 +59,7 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
     , RemoteFiles_(std::make_shared<TVector<NYT::TRichYPath>>())
     , LocalFiles_(std::make_shared<TVector<std::pair<TString, TLocalFileInfo>>>())
     , DeferredUdfFiles_(std::make_shared<TVector<std::pair<TString, TLocalFileInfo>>>())
-
+    , HasFilesToDump_(std::make_shared<bool>(false))
 {
     if (optLLVM != "OFF") {
         *UsedMem_ = 128_MB;
@@ -537,7 +538,7 @@ TTransactionCache::TEntry::TPtr TGatewayTransformer::GetEntry() {
 }
 
 void TGatewayTransformer::AddFile(TString alias,
-            const TUserFiles::TFileInfo& fileInfo, const TString& udfPrefix) {
+            TUserFiles::TFileInfo fileInfo, const TString& udfPrefix) {
     if (alias.StartsWith('/')) {
         alias = alias.substr(1);
     }
@@ -545,8 +546,37 @@ void TGatewayTransformer::AddFile(TString alias,
         alias = alias.substr(TStringBuf("home/").length());
     }
 
+    auto& qContext = ExecCtx_.Session_->QContext_;
+    auto& fullCapture = ExecCtx_.Session_->FullCapture_;
+
+    if (qContext.CanRead() && qContext.CaptureMode() == EQPlayerCaptureMode::Full) {
+        auto dumpPath = GetDumpPath(alias, ExecCtx_.Cluster_, YtGateway_FileDumpPath, qContext);
+        YQL_ENSURE(dumpPath.Defined(), "Missing replay data");
+
+        YQL_CLOG(INFO, ProviderYt) << "Substituting file " << alias << " with dump " << *dumpPath << " on cluster " << ExecCtx_.Cluster_;
+        fileInfo.RemotePath = *dumpPath;
+        fileInfo.Path = nullptr;
+    }
+
     TString basename;
     if (fileInfo.Path) {
+        auto processLocalFileForDump = [&qContext, &fullCapture, this](const TString& alias, const TString& localPath) {
+            if (!fullCapture) {
+                return;
+            }
+            try {
+                auto basename = TFsPath(localPath).GetName();
+                auto dumpPath = MakeDumpPath(basename, ExecCtx_.Cluster_, ExecCtx_.Session_->OperationOptions_, Settings_);
+                auto dumpKey = MakeDumpKey(alias, ExecCtx_.Cluster_);
+                ExecCtx_.JobFilesDumpPaths.emplace(basename, dumpPath);
+                qContext.GetWriter()->Put({ YtGateway_FileDumpPath, dumpKey }, dumpPath).GetValueSync();
+                YQL_CLOG(INFO, ProviderYt) << "Local file " << alias << " (" << basename << ") dump is " << dumpPath << " on cluster " << ExecCtx_.Cluster_;
+                *HasFilesToDump_ = true;
+            } catch (const std::exception& e) {
+                fullCapture->ReportError(e);
+            }
+        };
+
         // Pass only unique files to YT
         auto insertRes = UniqFiles_->insert({fileInfo.Path->GetMd5(), fileInfo.Path->GetPath()});
         TString filePath;
@@ -565,6 +595,9 @@ void TGatewayTransformer::AddFile(TString alias,
         basename = TFsPath(filePath).GetName();
         if (alias && alias != basename) {
             JobFileAliases_->insert({alias, basename});
+            processLocalFileForDump(alias, filePath);
+        } else {
+            processLocalFileForDump(basename, filePath);
         }
 
     } else {
@@ -579,6 +612,18 @@ void TGatewayTransformer::AddFile(TString alias,
         }
         auto insertRes = UniqFiles_->insert({alias, remoteFile.Path_});
         if (insertRes.second) {
+            if (fullCapture) {
+                try {
+                    auto dumpPath = MakeDumpPath(alias, ExecCtx_.Cluster_, ExecCtx_.Session_->OperationOptions_, Settings_);
+                    auto dumpKey = MakeDumpKey(alias, ExecCtx_.Cluster_);
+                    ExecCtx_.JobFilesDumpPaths.emplace(alias, dumpPath);
+                    qContext.GetWriter()->Put({ YtGateway_FileDumpPath, dumpKey }, dumpPath).GetValueSync();
+                    YQL_CLOG(INFO, ProviderYt) << "Remote file " << alias << " (" << remoteFile.Path_ << ") dump is " << dumpPath << " on cluster " << ExecCtx_.Cluster_;
+                    *HasFilesToDump_ = true;
+                } catch (const std::exception& e) {
+                    fullCapture->ReportError(e);
+                }
+            }
             RemoteFiles_->push_back(remoteFile.Executable(true).BypassArtifactCache(fileInfo.BypassArtifactCache));
             if (fileInfo.RemoteMemoryFactor > 0.) {
                 *UsedMem_ += fileInfo.RemoteMemoryFactor * GetUncompressedFileSize(GetTx(), remoteFile.Path_).GetOrElse(ui64(1) << 10);

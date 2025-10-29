@@ -203,6 +203,14 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     return it;
 }
 
+template <class TContainer, class... TArgs>
+auto TryEmplaceOrCrash(TContainer&& container, TArgs&&... args)
+{
+    auto [it, emplaced] = container.try_emplace(std::forward<TArgs>(args)...);
+    YT_VERIFY(emplaced);
+    return it;
+}
+
 template <class TMap, class TKey>
 auto EmplaceDefault(TMap&& map, TKey&& key)
 {

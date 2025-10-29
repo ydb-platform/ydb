@@ -70,22 +70,23 @@ void TGRpcLocalDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logg
 #error macro already defined
 #endif
 
-#define ADD_REQUEST(NAME, CB, REQUEST_TYPE) \
-    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcLocalDiscoveryService>>   \
-        (this, &Service_, CQ_,                                                                                \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                      \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
-                    new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings {                                                       \
-                            .RlMode = TRateLimiterMode::Rps,                                                  \
-                            .RequestType = NJaegerTracing::ERequestType::DISCOVERY_##REQUEST_TYPE,            \
-                        }));                                                                                  \
-            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
+#define ADD_REQUEST(NAME, CB, REQUEST_TYPE, AUDIT_MODE)                                                          \
+    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcLocalDiscoveryService>> \
+        (this, &Service_, CQ_,                                                                                   \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));           \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
+                    new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>           \
+                        (ctx, CB, TRequestAuxSettings {                                                          \
+                            .RlMode = TRateLimiterMode::Rps,                                                     \
+                            .AuditMode = AUDIT_MODE,                                                             \
+                            .RequestType = NJaegerTracing::ERequestType::DISCOVERY_##REQUEST_TYPE,               \
+                        }));                                                                                     \
+            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                             \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
-    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, WHOAMI)
-    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, NODEREGISTRATION)
+    ADD_REQUEST(WhoAmI, &DoWhoAmIRequest, WHOAMI, TAuditMode::NonModifying())
+    ADD_REQUEST(NodeRegistration, &DoNodeRegistrationRequest, NODEREGISTRATION, TAuditMode::Modifying(TAuditMode::TLogClassConfig::NodeRegistration))
 #undef ADD_REQUEST
 
 using namespace std::placeholders;
@@ -94,22 +95,23 @@ using namespace std::placeholders;
 #error macro already defined
 #endif
 
-#define ADD_METHOD(NAME, METHOD, REQUEST_TYPE) \
-    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcLocalDiscoveryService>>   \
-        (this, &Service_, CQ_,                                                                                \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                      \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
-                TFuncCallback cb = std::bind(&TGRpcLocalDiscoveryService::METHOD, this, _1, _2);              \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
-                    new TGrpcRequestFunctionCall<Discovery::NAME##Request, Discovery::NAME##Response>         \
-                        (ctx, cb, TRequestAuxSettings {                                                       \
-                            .RlMode = TRateLimiterMode::Rps,                                                  \
-                            .RequestType = NJaegerTracing::ERequestType::DISCOVERY_##REQUEST_TYPE,            \
-                        }));                                                                                  \
-            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
+#define ADD_METHOD(NAME, METHOD, REQUEST_TYPE, AUDIT_MODE)                                                       \
+    MakeIntrusive<TGRpcRequest<Discovery::NAME##Request, Discovery::NAME##Response, TGRpcLocalDiscoveryService>> \
+        (this, &Service_, CQ_,                                                                                   \
+            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                         \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));           \
+                TFuncCallback cb = std::bind(&TGRpcLocalDiscoveryService::METHOD, this, _1, _2);                 \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
+                    new TGrpcRequestFunctionCall<Discovery::NAME##Request, Discovery::NAME##Response>            \
+                        (ctx, cb, TRequestAuxSettings {                                                          \
+                            .RlMode = TRateLimiterMode::Rps,                                                     \
+                            .AuditMode = AUDIT_MODE,                                                             \
+                            .RequestType = NJaegerTracing::ERequestType::DISCOVERY_##REQUEST_TYPE,               \
+                        }));                                                                                     \
+            }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                             \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 
-    ADD_METHOD(ListEndpoints, DoListEndpointsRequest, LISTENDPOINTS)
+    ADD_METHOD(ListEndpoints, DoListEndpointsRequest, LISTENDPOINTS, TAuditMode::NonModifying())
 #undef ADD_METHOD
 
 }

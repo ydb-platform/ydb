@@ -43,19 +43,7 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
 
 ## Examples
 
-{% list tabs %}
-
-- Creating a row-oriented table with a single row
-
-    ```yql
-    CREATE TABLE my_table (
-        PRIMARY KEY (key)
-    ) AS SELECT 
-        1 AS key,
-        "test" AS value;
-    ```
-
-- Creating a column-oriented table from the query results
+* Creating a column-oriented table from the query results
 
     ```yql
     CREATE TABLE my_table (
@@ -69,5 +57,3 @@ If `SELECT` returns two or more rows with the same primary key value, after the 
         String::Contains(value, "test") AS has_test
     FROM other_table;
     ```
-
-{% endlist %}

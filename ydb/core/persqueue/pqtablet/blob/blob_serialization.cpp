@@ -79,118 +79,6 @@ ui32 BlobSize(const TClientBlob& blob) {
     return size;
 }
 
-void Serialize(const TClientBlob& blob, TBuffer& res) {
-    const ui32 totalSize = BlobSize(blob);
-    const ui32 expectedSize = res.Size() + totalSize;
-
-    TMessageFlags flags = InitFlags(blob);
-
-    res.Reserve(res.Size() + totalSize);
-
-    res.Append((const char*)&totalSize, sizeof(ui32));
-    res.Append((const char*)&blob.SeqNo, sizeof(ui64));
-    res.Append((const char*)&flags.V, sizeof(char));
-
-    if (flags.F.HasPartData) {
-        res.Append((const char*)&(blob.PartData->PartNo), sizeof(ui16));
-        res.Append((const char*)&(blob.PartData->TotalParts), sizeof(ui16));
-        res.Append((const char*)&(blob.PartData->TotalSize), sizeof(ui32));
-    }
-
-    if (flags.F.HasKinesisData) {
-        ui8 partitionKeySize = blob.PartitionKey.size();
-        res.Append((const char*)&(partitionKeySize), sizeof(ui8));
-        res.Append(blob.PartitionKey.data(), blob.PartitionKey.size());
-
-        ui8 hashKeySize = blob.ExplicitHashKey.size();
-        res.Append((const char*)&(hashKeySize), sizeof(ui8));
-        res.Append(blob.ExplicitHashKey.data(), blob.ExplicitHashKey.size());
-    }
-
-    ui64 writeTimestampMs = blob.WriteTimestamp.MilliSeconds();
-    res.Append((const char*)&writeTimestampMs, sizeof(ui64));
-
-    ui64 createTimestampMs = blob.CreateTimestamp.MilliSeconds();
-    res.Append((const char*)&createTimestampMs, sizeof(ui64));
-
-    if (flags.F.HasUncompressedSize) {
-        res.Append((const char*)&(blob.UncompressedSize), sizeof(ui32));
-    }
-
-    ui16 sz = blob.SourceId.size();
-    res.Append((const char*)&sz, sizeof(ui16));
-    res.Append(blob.SourceId.data(), blob.SourceId.size());
-    res.Append(blob.Data.data(), blob.Data.size());
-
-    AFL_ENSURE(res.Size() == expectedSize);
-}
-
-TClientBlob DeserializeClientBlob(const char* data, ui32 size) {
-    AFL_ENSURE(size > TClientBlob::OVERHEAD);
-    ui32 totalSize = ReadUnaligned<ui32>(data);
-    AFL_ENSURE(size >= totalSize);
-    const char *end = data + totalSize;
-    data += sizeof(ui32);
-
-    ui64 seqNo = ReadUnaligned<ui64>(data);
-    data += sizeof(ui64);
-
-    TMessageFlags flags(ReadUnaligned<ui8>(data));
-    ++data;
-
-    TMaybe<TPartData> partData;
-    if (flags.F.HasPartData) {
-        ui16 partNo = ReadUnaligned<ui16>(data);
-        data += sizeof(ui16);
-        ui16 totalParts = ReadUnaligned<ui16>(data);
-        data += sizeof(ui16);
-        ui32 totalSize = ReadUnaligned<ui32>(data);
-        data += sizeof(ui32);
-        partData = TPartData{partNo, totalParts, totalSize};
-    }
-
-    TString partitionKey;
-    TString explicitHashKey;
-    if (flags.F.HasKinesisData) {
-        ui8 keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        partitionKey = TString(data, keySize == 0 ? 256 : keySize);
-        data += partitionKey.size();
-        keySize = ReadUnaligned<ui8>(data);
-        data += sizeof(ui8);
-        explicitHashKey = TString(data, keySize);
-        data += explicitHashKey.size();
-    }
-
-    TInstant writeTimestamp;
-    if (flags.F.HasWriteTimestamp) {
-        writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
-        data += sizeof(ui64);
-    }
-    TInstant createTimestamp;
-    if (flags.F.HasCreateTimestamp) {
-        createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
-        data += sizeof(ui64);
-    }
-    ui32 uncompressedSize = 0;
-    if (flags.F.HasUncompressedSize) {
-        uncompressedSize = ReadUnaligned<ui32>(data);
-        data += sizeof(ui32);
-    }
-
-    AFL_ENSURE(data < end);
-    ui16 sz = ReadUnaligned<ui16>(data);
-    data += sizeof(ui16);
-    AFL_ENSURE(data + sz < end);
-    TString sourceId(data, sz);
-    data += sz;
-
-    AFL_ENSURE(data < end)("size", size)("SeqNo", seqNo)("SourceId", sourceId);
-
-    TString dt(data, end - data);
-
-    return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData, writeTimestamp, createTimestamp, uncompressedSize, std::move(partitionKey), std::move(explicitHashKey));
-}
 
 template<NKikimrPQ::TBatchHeader::EPayloadFormat Type>
 struct TBatchSerializer {
@@ -594,7 +482,7 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::EUncompressed>::Unpack(TVector<
     AFL_ENSURE(shift == Batch.PackedData.size());
 }
 
-}
+} // namespace
 
 //
 // TClientBlob
@@ -678,4 +566,118 @@ void TBatch::UnpackTo(TVector<TClientBlob> *blobs) const
     };
 }
 
+void Serialize(const TClientBlob& blob, TBuffer& res) {
+    const ui32 totalSize = BlobSize(blob);
+    const ui32 expectedSize = res.Size() + totalSize;
+
+    TMessageFlags flags = InitFlags(blob);
+
+    res.Reserve(res.Size() + totalSize);
+
+    res.Append((const char*)&totalSize, sizeof(ui32));
+    res.Append((const char*)&blob.SeqNo, sizeof(ui64));
+    res.Append((const char*)&flags.V, sizeof(char));
+
+    if (flags.F.HasPartData) {
+            res.Append((const char*)&(blob.PartData->PartNo), sizeof(ui16));
+            res.Append((const char*)&(blob.PartData->TotalParts),
+                       sizeof(ui16));
+            res.Append((const char*)&(blob.PartData->TotalSize), sizeof(ui32));
+    }
+
+    if (flags.F.HasKinesisData) {
+            ui8 partitionKeySize = blob.PartitionKey.size();
+            res.Append((const char*)&(partitionKeySize), sizeof(ui8));
+            res.Append(blob.PartitionKey.data(), blob.PartitionKey.size());
+
+            ui8 hashKeySize = blob.ExplicitHashKey.size();
+            res.Append((const char *)&(hashKeySize), sizeof(ui8));
+            res.Append(blob.ExplicitHashKey.data(),
+                       blob.ExplicitHashKey.size());
+    }
+
+    ui64 writeTimestampMs = blob.WriteTimestamp.MilliSeconds();
+    res.Append((const char*)&writeTimestampMs, sizeof(ui64));
+
+    ui64 createTimestampMs = blob.CreateTimestamp.MilliSeconds();
+    res.Append((const char*)&createTimestampMs, sizeof(ui64));
+
+    if (flags.F.HasUncompressedSize) {
+            res.Append((const char*)&(blob.UncompressedSize), sizeof(ui32));
+    }
+
+    ui16 sz = blob.SourceId.size();
+    res.Append((const char*)&sz, sizeof(ui16));
+    res.Append(blob.SourceId.data(), blob.SourceId.size());
+    res.Append(blob.Data.data(), blob.Data.size());
+
+    AFL_ENSURE(res.Size() == expectedSize);
 }
+
+TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
+    AFL_ENSURE(size > TClientBlob::OVERHEAD);
+    ui32 totalSize = ReadUnaligned<ui32>(data);
+    AFL_ENSURE(size >= totalSize);
+    const char *end = data + totalSize;
+    data += sizeof(ui32);
+
+    ui64 seqNo = ReadUnaligned<ui64>(data);
+    data += sizeof(ui64);
+
+    TMessageFlags flags(ReadUnaligned<ui8>(data));
+    ++data;
+
+    TMaybe<TPartData> partData;
+    if (flags.F.HasPartData) {
+            ui16 partNo = ReadUnaligned<ui16>(data);
+            data += sizeof(ui16);
+            ui16 totalParts = ReadUnaligned<ui16>(data);
+            data += sizeof(ui16);
+            ui32 totalSize = ReadUnaligned<ui32>(data);
+            data += sizeof(ui32);
+            partData = TPartData{partNo, totalParts, totalSize};
+    }
+
+    TString partitionKey;
+    TString explicitHashKey;
+    if (flags.F.HasKinesisData) {
+            ui8 keySize = ReadUnaligned<ui8>(data);
+            data += sizeof(ui8);
+            partitionKey = TString(data, keySize == 0 ? 256 : keySize);
+            data += partitionKey.size();
+            keySize = ReadUnaligned<ui8>(data);
+            data += sizeof(ui8);
+            explicitHashKey = TString(data, keySize);
+            data += explicitHashKey.size();
+    }
+
+    TInstant writeTimestamp;
+    if (flags.F.HasWriteTimestamp) {
+            writeTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
+            data += sizeof(ui64);
+    }
+    TInstant createTimestamp;
+    if (flags.F.HasCreateTimestamp) {
+            createTimestamp = TInstant::MilliSeconds(ReadUnaligned<ui64>(data));
+            data += sizeof(ui64);
+    }
+    ui32 uncompressedSize = 0;
+    if (flags.F.HasUncompressedSize) {
+            uncompressedSize = ReadUnaligned<ui32>(data);
+            data += sizeof(ui32);
+    }
+
+    AFL_ENSURE(data < end);
+    ui16 sz = ReadUnaligned<ui16>(data);
+    data += sizeof(ui16);
+    AFL_ENSURE(data + sz <= end);
+    TString sourceId(data, sz);
+    data += sz;
+
+    TString dt = (data != end) ? TString(data, end - data) : TString{};
+
+    return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData,
+                       writeTimestamp, createTimestamp, uncompressedSize,
+                       std::move(partitionKey), std::move(explicitHashKey));
+}
+} //NKikimr :: NPQ

@@ -1,6 +1,7 @@
 #include "ydb_service_export.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/lib/ydb_cli/common/exclude_item.h>
 #include <ydb/public/lib/ydb_cli/common/normalize_path.h>
 #include <ydb/public/lib/ydb_cli/common/print_operation.h>
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
@@ -58,27 +59,15 @@ namespace {
     }
 
     template <typename TSettings>
-    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusions, const TFilterOp& filter = FilterTables) {
-        auto isExclusion = [&exclusions](const char* str) -> bool {
-            for (const auto& pattern : exclusions) {
-                if (pattern.Match(str)) {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
+    void ExpandItems(NScheme::TSchemeClient& client, TSettings& settings, const TVector<TRegExMatch>& exclusionPatterns, const TFilterOp& filter = FilterTables) {
         auto items(std::move(settings.Item_));
         for (const auto& item : items) {
             for (const auto& [src, dst] : ExpandItem(client, item.Src, item.Dst, filter)) {
-                if (isExclusion(src.c_str())) {
-                    continue;
-                }
-
                 settings.AppendItem({src, dst});
             }
         }
+
+        ExcludeItems(settings, exclusionPatterns);
     }
 
 } // anonymous namespace

@@ -22,7 +22,7 @@ void TGRpcViewService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 new TGrpcRequestOperationCall<DescribeViewRequest,
                                               DescribeViewResponse>(
                     ctx, &DoDescribeView,
-                    TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}
+                    TRequestAuxSettings{RLSWITCH(Rps), nullptr}
                 )
             );
         },

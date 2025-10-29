@@ -71,7 +71,7 @@ inline TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetEntriesForCluster
     static const auto permissions = NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({
         "ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"
     });
-    static const std::vector<TString> allowedAttributes = {"cloud_id", "folder_id"};
+    static const std::vector<TString> allowedAttributes = {"folder_id"};
     TVector<std::pair<TString, TString>> attributes;
     for (const auto& attr : rootAttributes) {
         if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.first) != allowedAttributes.end()) {
@@ -128,7 +128,9 @@ public:
 
     void ProcessCommonAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, const TVector<std::pair<TString, TString>>& rootAttributes) {
         TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries;
-        static std::vector<TString> allowedAttributes = {"cloud_id", "folder_id", "service_account_id", "database_id"};
+        // cloud_id is not checked. Access Service has information about cloud in which the folder is located
+        // In order to check cloud_id need change config in Access Service. Request to IAM service
+        static std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
         TVector<std::pair<TString, TString>> attributes;
         attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
         for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {

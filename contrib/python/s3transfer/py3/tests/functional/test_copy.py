@@ -84,7 +84,6 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
         expected_create_mpu_params=None,
         expected_complete_mpu_params=None,
     ):
-
         # Add all responses needed to do the copy of the object.
         # Should account for both ranged and nonranged downloads.
         stubbed_responses = self.create_stubbed_responses()[1:]
@@ -97,9 +96,9 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
 
         # Add the expected create multipart upload params.
         if expected_create_mpu_params:
-            stubbed_responses[0][
-                'expected_params'
-            ] = expected_create_mpu_params
+            stubbed_responses[0]['expected_params'] = (
+                expected_create_mpu_params
+            )
 
         # Add any expected copy parameters.
         if expected_copy_params:
@@ -111,9 +110,9 @@ class BaseCopyTest(BaseGeneralInterfaceTest):
 
         # Add the expected complete multipart upload params.
         if expected_complete_mpu_params:
-            stubbed_responses[-1][
-                'expected_params'
-            ] = expected_complete_mpu_params
+            stubbed_responses[-1]['expected_params'] = (
+                expected_complete_mpu_params
+            )
 
         # Add the responses to the stubber.
         for stubbed_response in stubbed_responses:
@@ -397,7 +396,7 @@ class TestMultipartCopy(BaseCopyTest):
             if extra_expected_params:
                 if 'ChecksumAlgorithm' in extra_expected_params:
                     name = extra_expected_params['ChecksumAlgorithm']
-                    checksum_member = 'Checksum%s' % name.upper()
+                    checksum_member = f'Checksum{name.upper()}'
                     response = upload_part_response['service_response']
                     response['CopyPartResult'][checksum_member] = 'sum%s==' % (
                         i + 1
@@ -497,7 +496,6 @@ class TestMultipartCopy(BaseCopyTest):
     def _add_params_to_expected_params(
         self, add_copy_kwargs, operation_types, new_params
     ):
-
         expected_params_to_update = []
         for operation_type in operation_types:
             add_copy_kwargs_key = 'expected_' + operation_type + '_params'

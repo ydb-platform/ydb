@@ -27,39 +27,27 @@ class FooterKey(Widget):
     FooterKey {
         width: auto;
         height: 1;
-        background: $panel;
-        color: $text-muted;
+        background: $footer-item-background;
         .footer-key--key {
-            color: $secondary;
-            background: $panel;
+            color: $footer-key-foreground;
+            background: $footer-key-background;
             text-style: bold;
             padding: 0 1;
         }
 
         .footer-key--description {
             padding: 0 1 0 0;
-        }
-
-        &:light .footer-key--key {
-            color: $primary;
+            color: $footer-description-foreground;
+            background: $footer-description-background;
         }
 
         &:hover {
-            background: $panel-darken-2;
-            color: $text;
-            .footer-key--key {
-                background: $panel-darken-2;
-            }
+            color: $footer-key-foreground;
+            background: $block-hover-background;
         }
 
         &.-disabled {
-            text-style: dim;
-            background: $panel;
-            &:hover {
-                .footer-key--key {
-                    background: $panel;
-                }
-            }
+            text-style: dim;            
         }
 
         &.-compact {
@@ -136,8 +124,8 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
     Footer {
         layout: grid;
         grid-columns: auto;
-        background: $panel;
-        color: $text;
+        color: $footer-foreground;
+        background: $footer-background;
         dock: bottom;
         height: 1;
         scrollbar-size: 0 0;
@@ -150,7 +138,7 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
             border-left: vkey $foreground 20%;                            
         }
 
-        &.-ansi-colors {           
+        &:ansi {           
             background: ansi_default;            
             .footer-key--key {
                 background: ansi_default;
@@ -214,9 +202,10 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
     def compose(self) -> ComposeResult:
         if not self._bindings_ready:
             return
+        active_bindings = self.screen.active_bindings
         bindings = [
             (binding, enabled, tooltip)
-            for (_, binding, enabled, tooltip) in self.screen.active_bindings.values()
+            for (_, binding, enabled, tooltip) in active_bindings.values()
             if binding.show
         ]
         action_to_bindings: defaultdict[str, list[tuple[Binding, bool, str]]]
@@ -236,20 +225,22 @@ class Footer(ScrollableContainer, can_focus=False, can_focus_children=False):
                 tooltip=tooltip,
             ).data_bind(Footer.compact)
         if self.show_command_palette and self.app.ENABLE_COMMAND_PALETTE:
-            for key, binding in self.app._bindings:
-                if binding.action in (
-                    "app.command_palette",
-                    "command_palette",
-                ):
-                    yield FooterKey(
-                        key,
-                        self.app.get_key_display(binding),
-                        binding.description,
-                        binding.action,
-                        classes="-command-palette",
-                        tooltip=binding.tooltip or binding.description,
-                    )
-                    break
+            try:
+                _node, binding, enabled, tooltip = active_bindings[
+                    self.app.COMMAND_PALETTE_BINDING
+                ]
+            except KeyError:
+                pass
+            else:
+                yield FooterKey(
+                    binding.key,
+                    self.app.get_key_display(binding),
+                    binding.description,
+                    binding.action,
+                    classes="-command-palette",
+                    disabled=not enabled,
+                    tooltip=binding.tooltip or binding.description,
+                )
 
     async def bindings_changed(self, screen: Screen) -> None:
         self._bindings_ready = True

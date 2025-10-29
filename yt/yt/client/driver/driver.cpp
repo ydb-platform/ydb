@@ -8,6 +8,7 @@
 #include "config.h"
 #include "cypress_commands.h"
 #include "distributed_table_commands.h"
+#include "distributed_file_commands.h"
 #include "etc_commands.h"
 #include "file_commands.h"
 #include "flow_commands.h"
@@ -305,7 +306,7 @@ public:
         REGISTER_ALL(TGetJobInputCommand,                  "get_job_input",                   Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobInputPathsCommand,             "get_job_input_paths",             Null,       Structured, false, true );
         REGISTER_ALL(TGetJobStderrCommand,                 "get_job_stderr",                  Null,       Binary,     false, true );
-        REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Structured, false, true );
+        REGISTER_ALL(TGetJobTraceCommand,                  "get_job_trace",                   Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobFailContextCommand,            "get_job_fail_context",            Null,       Binary,     false, true );
         REGISTER_ALL(TGetJobSpecCommand,                   "get_job_spec",                    Null,       Structured, false, true );
         REGISTER_ALL(TListOperationEventsCommand,          "list_operation_events",           Null,       Structured, false, false);
@@ -386,7 +387,7 @@ public:
         REGISTER    (TReadQueryResultCommand,              "read_query_result",               Null,       Tabular,    false, true , ApiVersion4);
         REGISTER    (TAlterQueryCommand,                   "alter_query",                     Null,       Tabular,    true,  false, ApiVersion4);
         REGISTER    (TGetQueryTrackerInfoCommand,          "get_query_tracker_info",          Null,       Structured, false, false, ApiVersion4);
-        REGISTER    (TGetDeclaredParametersInfoCommand,    "get_declared_parameters_info",    Null,       Structured, false, false, ApiVersion4);
+        REGISTER    (TGetQueryDeclaredParametersInfoCommand, "get_query_declared_parameters_info",    Null,       Structured, false, false, ApiVersion4);
 
         REGISTER_ALL(TGetBundleConfigCommand,              "get_bundle_config",               Null,       Structured, false, false);
         REGISTER_ALL(TSetBundleConfigCommand,              "set_bundle_config",               Structured, Null,       true,  false);
@@ -412,6 +413,11 @@ public:
         REGISTER    (TPingDistributedWriteSessionCommand,  "ping_distributed_write_session",  Null,       Null,       true,  false, ApiVersion4);
         REGISTER    (TFinishDistributedWriteSessionCommand, "finish_distributed_write_session", Null,     Null,       true,  false, ApiVersion4);
         REGISTER    (TWriteTableFragmentCommand,           "write_table_fragment",            Tabular,    Structured, true,   true, ApiVersion4);
+
+        REGISTER    (TStartDistributedWriteFileSessionCommand, "start_distributed_write_file_session",Null,Structured,true,  false, ApiVersion4);
+        REGISTER    (TPingDistributedWriteFileSessionCommand,  "ping_distributed_write_file_session",Null, Null,      true,  false, ApiVersion4);
+        REGISTER    (TFinishDistributedWriteFileSessionCommand, "finish_distributed_write_file_session",Null,Null,    true,  false, ApiVersion4);
+        REGISTER    (TWriteFileFragmentCommand,            "write_file_fragment",             Binary,     Structured, true,   true, ApiVersion4);
 
         if (Config_->EnableInternalCommands) {
             REGISTER_ALL(TReadHunksCommand,                 "read_hunks",                             Null,       Structured, false, true );

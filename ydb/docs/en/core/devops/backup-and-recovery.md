@@ -38,6 +38,12 @@ The speed of backup and recovery operations to/from S3-compatible storage is con
 
 {% endnote %}
 
+{% note info %}
+
+When running the export operation, a directory named `export_*` is created in the root directory, where `*` is the numeric part of the export ID. This directory stores tables with a consistent snapshot of exported data as of the export start time. After a successful backup, the `export_*` directory and its contents are removed.
+
+{% endnote %}
+
 {% include [_includes/backup_and_recovery/cli_overlay.md](_includes/backup_and_recovery/cli_overlay.md) %}
 
 {% include [_includes/backup_and_recovery/others_overlay.md](_includes/backup_and_recovery/others_overlay.md) %}

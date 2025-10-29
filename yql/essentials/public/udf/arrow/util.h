@@ -2,6 +2,8 @@
 
 #include "defs.h"
 
+#include <arrow/array/array_base.h>
+#include <arrow/array/array_nested.h>
 #include <arrow/compute/api.h>
 #include <arrow/datum.h>
 #include <arrow/memory_pool.h>
@@ -41,9 +43,6 @@ std::shared_ptr<arrow::ArrayData> DeepSlice(const std::shared_ptr<arrow::ArrayDa
 /// \brief Chops first len items of `data` as new ArrayData object
 std::shared_ptr<arrow::ArrayData> Chop(std::shared_ptr<arrow::ArrayData>& data, size_t len);
 
-/// \brief Unwrap array (decrease optional level)
-std::shared_ptr<arrow::ArrayData> Unwrap(const arrow::ArrayData& data, bool isNestedOptional);
-
 void ForEachArrayData(const arrow::Datum& datum, const std::function<void(const std::shared_ptr<arrow::ArrayData>&)>& func);
 arrow::Datum MakeArray(const TVector<std::shared_ptr<arrow::ArrayData>>& chunks);
 
@@ -55,7 +54,7 @@ ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
 ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
-class TResizeableBuffer : public arrow::ResizableBuffer {
+class TResizeableBuffer: public arrow::ResizableBuffer {
 public:
     explicit TResizeableBuffer(arrow::MemoryPool* pool)
         : ResizableBuffer(nullptr, 0, arrow::CPUDevice::memory_manager(pool))
@@ -111,7 +110,7 @@ private:
     arrow::MemoryPool* Pool_;
 };
 
-template<typename TBuffer = TResizeableBuffer>
+template <typename TBuffer = TResizeableBuffer>
 std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity, arrow::MemoryPool* pool, bool zeroPad = false) {
     std::unique_ptr<TBuffer> result = std::make_unique<TBuffer>(pool);
     ARROW_OK(result->Reserve(capacity));
@@ -122,12 +121,15 @@ std::unique_ptr<arrow::ResizableBuffer> AllocateResizableBuffer(size_t capacity,
 }
 
 /// \brief owning buffer that calls destructors
-template<typename T>
-class TResizableManagedBuffer final : public TResizeableBuffer {
+template <typename T>
+class TResizableManagedBuffer final: public TResizeableBuffer {
     static_assert(!std::is_trivially_destructible_v<T>);
+
 public:
     explicit TResizableManagedBuffer(arrow::MemoryPool* pool)
-        : TResizeableBuffer(pool) {}
+        : TResizeableBuffer(pool)
+    {
+    }
 
     ~TResizableManagedBuffer() override {
         for (int64_t i = 0; i < size_; i += sizeof(T)) {
@@ -141,11 +143,12 @@ public:
 // 1) with UnsafeAdvance() method
 // 2) shrinkToFit = false
 // 3) doesn't zero pad buffer
-template<typename T>
+template <typename T>
 class TTypedBufferBuilder {
     static_assert(!std::is_same_v<T, bool>);
 
     using TArrowBuffer = std::conditional_t<std::is_trivially_destructible_v<T>, TResizeableBuffer, TResizableManagedBuffer<T>>;
+
 public:
     explicit TTypedBufferBuilder(arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage = {})
         : MinFillPercentage_(minFillPercentage)
@@ -215,14 +218,15 @@ public:
     inline std::shared_ptr<arrow::Buffer> Finish() {
         int64_t newSize = Len_ * sizeof(T);
         bool shrinkToFit = MinFillPercentage_
-            ? newSize <= Buffer_->capacity() * *MinFillPercentage_ / 100
-            : false;
+                               ? newSize <= Buffer_->capacity() * *MinFillPercentage_ / 100
+                               : false;
         ARROW_OK(Buffer_->Resize(newSize, shrinkToFit));
         std::shared_ptr<arrow::ResizableBuffer> result;
         std::swap(result, Buffer_);
         Len_ = 0;
         return result;
     }
+
 private:
     const TMaybe<ui8> MinFillPercentage_;
     arrow::MemoryPool* const Pool_;
@@ -262,10 +266,34 @@ inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, 
     TOptionalTypeInspector typeOptOpt(typeInfoHelper, type);
     if (typeOptOpt) {
         return true;
-    } else if (TPgTypeInspector(typeInfoHelper, type) ||  IsSingularType(typeInfoHelper, type)) {
+    } else if (TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type)) {
         return true;
     }
     return false;
+}
+
+inline std::shared_ptr<arrow::DataType> MakeSingularType(bool isNull) {
+    if (isNull) {
+        return arrow::null();
+    } else {
+        return std::make_shared<arrow::StructType>(std::vector<std::shared_ptr<arrow::Field>>{});
+    }
+}
+
+inline std::shared_ptr<arrow::ArrayData> MakeSingularArray(bool isNull, i64 length) {
+    if (isNull) {
+        return arrow::NullArray(length).data();
+    } else {
+        return arrow::StructArray(MakeSingularType(/*isNull=*/false), length, /*children=*/{}, nullptr, /*null_count=*/0).data();
+    }
+}
+
+inline std::shared_ptr<arrow::Scalar> MakeSingularScalar(bool isNull) {
+    if (isNull) {
+        return arrow::MakeNullScalar(MakeSingularType(/*isNull=*/true));
+    } else {
+        return std::make_shared<arrow::StructScalar>(std::vector<std::shared_ptr<arrow::Scalar>>{}, MakeSingularType(/*isNull=*/false));
+    }
 }
 
 } // namespace NUdf

@@ -7,5 +7,5 @@ namespace NMiniKQL {
 
 NYql::TPosition ExtractPosition(TCallable& callable);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

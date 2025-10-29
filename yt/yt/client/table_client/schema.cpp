@@ -2545,22 +2545,6 @@ void FromProto(NTableClient::TColumnFilter* columnFilter, const TColumnFilter& p
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TCellTaggedTableSchema::TCellTaggedTableSchema(TTableSchema tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{ }
-
-////////////////////////////////////////////////////////////////////////////////
-
-TCellTaggedTableSchemaPtr::TCellTaggedTableSchemaPtr(TTableSchemaPtr tableSchema, TCellTag cellTag)
-    : TableSchema(std::move(tableSchema))
-    , CellTag(cellTag)
-{
-    YT_VERIFY(TableSchema);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 } // namespace NYT::NTableClient
 
 size_t THash<NYT::NTableClient::TColumnStableName>::operator()(const NYT::NTableClient::TColumnStableName& stableName) const

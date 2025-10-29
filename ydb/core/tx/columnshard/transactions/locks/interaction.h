@@ -414,7 +414,7 @@ public:
         return result;
     }
 
-    THashSet<ui64> GetAffectedTxIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
+    THashSet<ui64> GetAffectedLockIds(const TInternalPathId pathId, const std::shared_ptr<arrow::RecordBatch>& batch) const {
         auto it = ReadIntervalsByPathId.find(pathId);
         if (it == ReadIntervalsByPathId.end()) {
             return {};
@@ -422,29 +422,29 @@ public:
         return it->second.GetAffectedTxIds(batch);
     }
 
-    void AddInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void AddInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto& intervals = ReadIntervalsByPathId[pathId];
         auto itFrom = intervals.InsertPoint(from);
         auto itTo = intervals.InsertPoint(to);
-        itFrom->second.AddStart(txId, from.IsIncluded());
+        itFrom->second.AddStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.AddIntervalTx(txId);
+            it->second.AddIntervalTx(lockId);
         }
-        itTo->second.AddFinish(txId, to.IsIncluded());
+        itTo->second.AddFinish(lockId, to.IsIncluded());
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "add_interval")("interactions_info", DebugJson().GetStringRobust());
     }
 
-    void RemoveInterval(const ui64 txId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
+    void RemoveInterval(const ui64 lockId, const TInternalPathId pathId, const TIntervalPoint& from, const TIntervalPoint& to) {
         auto itIntervals = ReadIntervalsByPathId.find(pathId);
         AFL_VERIFY(itIntervals != ReadIntervalsByPathId.end())("path_id", pathId);
         auto& intervals = itIntervals->second;
         auto itFrom = intervals.GetPointIterator(from);
         auto itTo = intervals.GetPointIterator(to);
-        itFrom->second.RemoveStart(txId, from.IsIncluded());
+        itFrom->second.RemoveStart(lockId, from.IsIncluded());
         for (auto it = itFrom; it != itTo; ++it) {
-            it->second.RemoveIntervalTx(txId);
+            it->second.RemoveIntervalTx(lockId);
         }
-        itTo->second.RemoveFinish(txId, to.IsIncluded());
+        itTo->second.RemoveFinish(lockId, to.IsIncluded());
         for (auto&& it = itFrom; it != itTo;) {
             if (it->second.IsEmpty()) {
                 it = intervals.Erase(it);

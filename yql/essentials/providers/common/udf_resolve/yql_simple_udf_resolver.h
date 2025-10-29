@@ -14,9 +14,9 @@ IUdfResolver::TPtr CreateSimpleUdfResolver(
     const TFileStoragePtr& fileStorage = {}, bool useFakeMD5 = false);
 
 bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
-    const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
-    NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-    TExprContext& ctx, NUdf::ELogLevel logLevel);
+                           const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+                           NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
+                           TExprContext& ctx, NUdf::ELogLevel logLevel);
 
 } // namespace NCommon
 } // namespace NYql

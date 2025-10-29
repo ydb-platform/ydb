@@ -5,7 +5,7 @@ YQL_UDF_CONTRIB(url_udf)
         37
         0
     )
-    
+
     SRCS(
         url_base.cpp
     )

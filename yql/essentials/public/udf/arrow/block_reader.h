@@ -8,11 +8,12 @@
 #include <arrow/datum.h>
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
+#include <yql/essentials/public/udf/udf_value_utils.h>
 
 namespace NYql {
 namespace NUdf {
 
-class IBlockReader : private TNonCopyable {
+class IBlockReader: private TNonCopyable {
 public:
     virtual ~IBlockReader() = default;
     // result will reference to Array/Scalar internals and will be valid until next call to GetItem/GetScalarItem
@@ -34,7 +35,7 @@ struct TBlockItemSerializeProps {
     bool IsFixed = true;      // true if each block item takes fixed size
 };
 
-class TBlockReaderBase : public IBlockReader {
+class TBlockReaderBase: public IBlockReader {
 public:
     ui64 GetSliceDataWeight(const arrow::ArrayData& data, int64_t offset, int64_t length) const final {
         Y_ENSURE(0 <= offset && offset < data.length);
@@ -54,8 +55,8 @@ protected:
     }
 };
 
-template<typename T, bool Nullable, typename TDerived>
-class TFixedSizeBlockReaderBase : public TBlockReaderBase {
+template <typename T, bool Nullable, typename TDerived>
+class TFixedSizeBlockReaderBase: public TBlockReaderBase {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -75,14 +76,14 @@ public:
             }
         }
 
-        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
             auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
-            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            T value;
+            memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             return static_cast<TDerived*>(this)->MakeBlockItem(value);
         } else {
             return static_cast<TDerived*>(this)->MakeBlockItem(
-                *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data())
-            );
+                *static_cast<const T*>(checked_cast<const PrimitiveScalarBase&>(scalar).data()));
         }
     }
 
@@ -126,9 +127,10 @@ public:
             out.PushChar(1);
         }
 
-        if constexpr(std::is_same_v<T, NYql::NDecimal::TInt128>) {
+        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128>) {
             auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
-            T value; memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
+            T value;
+            memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));
             out.PushNumber(value);
         } else {
             out.PushNumber(*static_cast<const T*>(arrow::internal::checked_cast<const arrow::internal::PrimitiveScalarBase&>(scalar).data()));
@@ -145,16 +147,16 @@ private:
     }
 };
 
-template<typename T, bool Nullable>
-class TFixedSizeBlockReader : public TFixedSizeBlockReaderBase<T, Nullable, TFixedSizeBlockReader<T, Nullable>> {
+template <typename T, bool Nullable>
+class TFixedSizeBlockReader: public TFixedSizeBlockReaderBase<T, Nullable, TFixedSizeBlockReader<T, Nullable>> {
 public:
     TBlockItem MakeBlockItem(const T& item) const {
         return TBlockItem(item);
     }
 };
 
-template<bool Nullable>
-class TResourceBlockReader : public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
+template <bool Nullable>
+class TResourceBlockReader: public TFixedSizeBlockReaderBase<TUnboxedValuePod, Nullable, TResourceBlockReader<Nullable>> {
 public:
     TBlockItem MakeBlockItem(const TUnboxedValuePod& pod) const {
         TBlockItem item;
@@ -163,8 +165,8 @@ public:
     }
 };
 
-template<typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
-class TStringBlockReader final : public TBlockReaderBase {
+template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal = NKikimr::NUdf::EDataSlot::String>
+class TStringBlockReader final: public TBlockReaderBase {
 public:
     using TOffset = typename TStringType::offset_type;
 
@@ -258,8 +260,8 @@ private:
     }
 };
 
-template<bool Nullable, typename TDerived>
-class TTupleBlockReaderBase : public TBlockReaderBase {
+template <bool Nullable, typename TDerived>
+class TTupleBlockReaderBase: public TBlockReaderBase {
 public:
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if constexpr (Nullable) {
@@ -337,13 +339,14 @@ public:
     }
 };
 
-template<bool Nullable>
-class TTupleBlockReader final : public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
+template <bool Nullable>
+class TTupleBlockReader final: public TTupleBlockReaderBase<Nullable, TTupleBlockReader<Nullable>> {
 public:
     TTupleBlockReader(TVector<std::unique_ptr<IBlockReader>>&& children)
         : Children_(std::move(children))
         , Items_(Children_.size())
-    {}
+    {
+    }
 
     TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
         for (ui32 i = 0; i < Children_.size(); ++i) {
@@ -423,13 +426,13 @@ private:
     TVector<TBlockItem> Items_;
 };
 
-template<typename TTzDate, bool Nullable>
-class TTzDateBlockReader final : public TTupleBlockReaderBase<Nullable, TTzDateBlockReader<TTzDate, Nullable>> {
+template <typename TTzDate, bool Nullable>
+class TTzDateBlockReader final: public TTupleBlockReaderBase<Nullable, TTzDateBlockReader<TTzDate, Nullable>> {
 public:
     TBlockItem GetChildrenItems(const arrow::ArrayData& data, size_t index) {
         Y_DEBUG_ABORT_UNLESS(data.child_data.size() == 2);
 
-        TBlockItem item {DateReader_.GetItem(*data.child_data[0], index)};
+        TBlockItem item{DateReader_.GetItem(*data.child_data[0], index)};
         item.SetTimezoneId(TimezoneReader_.GetItem(*data.child_data[1], index).Get<ui16>());
         return item;
     }
@@ -437,7 +440,7 @@ public:
     TBlockItem GetChildrenScalarItems(const arrow::StructScalar& structScalar) {
         Y_DEBUG_ABORT_UNLESS(structScalar.value.size() == 2);
 
-        TBlockItem item {DateReader_.GetScalarItem(*structScalar.value[0])};
+        TBlockItem item{DateReader_.GetScalarItem(*structScalar.value[0])};
         item.SetTimezoneId(TimezoneReader_.GetScalarItem(*structScalar.value[1]).Get<ui16>());
         return item;
     }
@@ -487,13 +490,17 @@ public:
     }
 
 private:
-    TFixedSizeBlockReader<typename TDataType<TTzDate>::TLayout, /* Nullable */false> DateReader_;
-    TFixedSizeBlockReader<ui16, /* Nullable */false> TimezoneReader_;
+    TFixedSizeBlockReader<typename TDataType<TTzDate>::TLayout, /* Nullable */ false> DateReader_;
+    TFixedSizeBlockReader<ui16, /* Nullable */ false> TimezoneReader_;
 };
 
-// NOTE: For any singular type we use arrow::null() data type.
+// NOTE: For null singular type we use arrow::null() data type.
 // This data type DOES NOT support bit mask so for optional type
 // we have to use |TExternalOptional| wrapper.
+//
+// For non-null singular types we use arrow::Struct({}).
+// We do not allow using bitmask too to be consistent with arrow::null().
+template <bool IsNull>
 class TSingularTypeBlockReader: public TBlockReaderBase {
 public:
     TSingularTypeBlockReader() = default;
@@ -502,12 +509,12 @@ public:
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
         Y_UNUSED(data, index);
-        return TBlockItem::Zero();
+        return CreateSingularBlockItem<IsNull>();
     }
 
     TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
         Y_UNUSED(scalar);
-        return TBlockItem::Zero();
+        return CreateSingularBlockItem<IsNull>();
     }
 
     ui64 GetDataWeight(const arrow::ArrayData& data) const override {
@@ -538,11 +545,12 @@ public:
     }
 };
 
-class TExternalOptionalBlockReader final : public TBlockReaderBase {
+class TExternalOptionalBlockReader final: public TBlockReaderBase {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
         : Inner_(std::move(inner))
-    {}
+    {
+    }
 
     TBlockItem GetItem(const arrow::ArrayData& data, size_t index) final {
         if (IsNull(data, index)) {
@@ -612,11 +620,12 @@ struct TReaderTraits {
     template <typename TStringType, bool Nullable, NKikimr::NUdf::EDataSlot TOriginal>
     using TStrings = TStringBlockReader<TStringType, Nullable, TOriginal>;
     using TExtOptional = TExternalOptionalBlockReader;
-    template<bool Nullable>
+    template <bool Nullable>
     using TResource = TResourceBlockReader<Nullable>;
-    template<typename TTzDate, bool Nullable>
+    template <typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
-    using TSingularType = TSingularTypeBlockReader;
+    template <bool IsNull>
+    using TSingularType = TSingularTypeBlockReader<IsNull>;
 
     constexpr static bool PassType = false;
 
@@ -637,11 +646,12 @@ struct TReaderTraits {
         }
     }
 
+    template <bool IsNull>
     static std::unique_ptr<TResult> MakeSingular() {
-        return std::make_unique<TSingularType>();
+        return std::make_unique<TSingularType<IsNull>>();
     }
 
-    template<typename TTzDate>
+    template <typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         if (isOptional) {
             return std::make_unique<TTzDateReader<TTzDate, true>>();
@@ -698,8 +708,7 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
             props.IsFixed = false;
         } else if (dataTypeInfo.Features & TzDateType) {
             *props.MaxSize += dataTypeInfo.FixedSize + sizeof(TTimezoneId);
-        }
-        else {
+        } else {
             *props.MaxSize += dataTypeInfo.FixedSize;
         }
         return;
@@ -725,5 +734,5 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
     Y_ENSURE(false, "Unsupported type");
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

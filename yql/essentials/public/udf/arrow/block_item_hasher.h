@@ -21,7 +21,7 @@ public:
 UDF_ASSERT_TYPE_SIZE(IBlockItemHasher, 8);
 
 template <typename TDerived, bool Nullable>
-class TBlockItemHasherBase : public IBlockItemHasher {
+class TBlockItemHasherBase: public IBlockItemHasher {
 public:
     const TDerived* Derived() const {
         return static_cast<const TDerived*>(this);
@@ -42,7 +42,7 @@ public:
 };
 
 template <typename T, bool Nullable>
-class TFixedSizeBlockItemHasher : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<T, Nullable>, Nullable> {
+class TFixedSizeBlockItemHasher: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<T, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         return GetValueHash<TDataType<T>::Slot>(NUdf::TUnboxedValuePod(value.As<T>()));
@@ -50,7 +50,7 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable> : public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>, Nullable> {
+class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(value.GetInt128()));
@@ -58,25 +58,25 @@ public:
 };
 
 template <typename T, bool Nullable>
-class TTzDateBlockItemHasher : public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
+class TTzDateBlockItemHasher: public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         using TLayout = typename TDataType<T>::TLayout;
-        TUnboxedValuePod uv {value.Get<TLayout>()};
+        TUnboxedValuePod uv{value.Get<TLayout>()};
         uv.SetTimezoneId(value.GetTimezoneId());
         return GetValueHash<TDataType<T>::Slot>(uv);
     }
 };
 
 template <typename TStringType, bool Nullable>
-class TStringBlockItemHasher : public TBlockItemHasherBase<TStringBlockItemHasher<TStringType, Nullable>, Nullable> {
+class TStringBlockItemHasher: public TBlockItemHasherBase<TStringBlockItemHasher<TStringType, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         return GetStringHash(value.AsStringRef());
     }
 };
 
-class TSingularTypeBlockItemHaser : public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {
+class TSingularTypeBlockItemHaser: public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {
 public:
     ui64 DoHash(TBlockItem value) const {
         Y_UNUSED(value);
@@ -85,11 +85,12 @@ public:
 };
 
 template <bool Nullable>
-class TTupleBlockItemHasher : public TBlockItemHasherBase<TTupleBlockItemHasher<Nullable>, Nullable> {
+class TTupleBlockItemHasher: public TBlockItemHasherBase<TTupleBlockItemHasher<Nullable>, Nullable> {
 public:
     TTupleBlockItemHasher(TVector<std::unique_ptr<IBlockItemHasher>>&& children)
         : Children_(std::move(children))
-    {}
+    {
+    }
 
     ui64 DoHash(TBlockItem value) const {
         // keep hash computation in sync with
@@ -106,11 +107,12 @@ private:
     const TVector<std::unique_ptr<IBlockItemHasher>> Children_;
 };
 
-class TExternalOptionalBlockItemHasher : public TBlockItemHasherBase<TExternalOptionalBlockItemHasher, true> {
+class TExternalOptionalBlockItemHasher: public TBlockItemHasherBase<TExternalOptionalBlockItemHasher, true> {
 public:
     TExternalOptionalBlockItemHasher(std::unique_ptr<IBlockItemHasher>&& inner)
         : Inner_(std::move(inner))
-    {}
+    {
+    }
 
     ui64 DoHash(TBlockItem value) const {
         return Inner_->Hash(value.GetOptionalValue());
@@ -120,4 +122,4 @@ private:
     const std::unique_ptr<IBlockItemHasher> Inner_;
 };
 
-}
+} // namespace NYql::NUdf

@@ -12,7 +12,7 @@ using namespace NYql::NDom;
 using namespace NKikimr;
 
 constexpr char yson[] =
-R"(
+    R"(
 {
     "Fullname" = [
         {
@@ -1974,101 +1974,101 @@ R"(
 constexpr auto Steps = 10000U;
 
 Y_UNIT_TEST_SUITE(TYsonTests) {
-    Y_UNIT_TEST(TestValidate) {
+Y_UNIT_TEST(TestValidate) {
+    UNIT_ASSERT(IsValidYson(yson));
+
+    UNIT_ASSERT(!IsValidYson("[123}"));
+    UNIT_ASSERT(!IsValidYson("[123];[456]"));
+    UNIT_ASSERT(!IsValidYson(R"({"c" = "scm"])"));
+    UNIT_ASSERT(!IsValidYson(""));
+    UNIT_ASSERT(!IsValidYson(R"({"c";})"));
+    UNIT_ASSERT(!IsValidYson(R"({# = "scm"})"));
+    UNIT_ASSERT(!IsValidYson(R"({'one'= 1})"));
+}
+
+Y_UNIT_TEST(TestPerfValidate) {
+    const auto t = TInstant::Now();
+    for (auto i = 0U; i < Steps; ++i) {
         UNIT_ASSERT(IsValidYson(yson));
-
-        UNIT_ASSERT(!IsValidYson("[123}"));
-        UNIT_ASSERT(!IsValidYson("[123];[456]"));
-        UNIT_ASSERT(!IsValidYson(R"({"c" = "scm"])"));
-        UNIT_ASSERT(!IsValidYson(""));
-        UNIT_ASSERT(!IsValidYson(R"({"c";})"));
-        UNIT_ASSERT(!IsValidYson(R"({# = "scm"})"));
-        UNIT_ASSERT(!IsValidYson(R"({'one'= 1})"));
     }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
 
-    Y_UNIT_TEST(TestPerfValidate) {
-        const auto t = TInstant::Now();
-        for (auto i = 0U; i < Steps; ++i) {
-            UNIT_ASSERT(IsValidYson(yson));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
+Y_UNIT_TEST(TestPerfParse) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+
+    std::array<NUdf::TUnboxedValue, Steps> v;
+
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = TryParseYsonDom(yson, &builder));
     }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
 
-    Y_UNIT_TEST(TestPerfParse) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+Y_UNIT_TEST(TestPerfSerialize) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
-        std::array<NUdf::TUnboxedValue, Steps> v;
+    const auto dom = TryParseYsonDom(yson, &builder);
+    std::array<NUdf::TUnboxedValue, Steps> v;
 
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = TryParseYsonDom(yson, &builder));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToBinary(dom)));
     }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
 
-    Y_UNIT_TEST(TestPerfSerialize) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+Y_UNIT_TEST(TestPerfSerializeText) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
-        const auto dom = TryParseYsonDom(yson, &builder);
-        std::array<NUdf::TUnboxedValue, Steps> v;
+    const auto dom = TryParseYsonDom(yson, &builder);
+    std::array<NUdf::TUnboxedValue, Steps> v;
 
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToBinary(dom)));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToText(dom)));
     }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
 
-    Y_UNIT_TEST(TestPerfSerializeText) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+Y_UNIT_TEST(TestPerfSerializePrettyText) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
-        const auto dom = TryParseYsonDom(yson, &builder);
-        std::array<NUdf::TUnboxedValue, Steps> v;
+    const auto dom = TryParseYsonDom(yson, &builder);
+    std::array<NUdf::TUnboxedValue, Steps> v;
 
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToText(dom)));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
+    const auto t = TInstant::Now();
+    for (auto& i : v) {
+        UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToPrettyText(dom)));
     }
+    const auto time = TInstant::Now() - t;
+    Cerr << "Time is " << time << Endl;
+}
 
-    Y_UNIT_TEST(TestPerfSerializePrettyText) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
+Y_UNIT_TEST(TestSerializeJsonNanInf) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TMemoryUsageInfo memInfo("Memory");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
+    NMiniKQL::TDefaultValueBuilder builder(holderFactory);
 
-        const auto dom = TryParseYsonDom(yson, &builder);
-        std::array<NUdf::TUnboxedValue, Steps> v;
-
-        const auto t = TInstant::Now();
-        for (auto& i : v) {
-            UNIT_ASSERT(i = builder.NewString(SerializeYsonDomToPrettyText(dom)));
-        }
-        const auto time = TInstant::Now() - t;
-        Cerr << "Time is " << time << Endl;
-    }
-
-    Y_UNIT_TEST(TestSerializeJsonNanInf) {
-        NMiniKQL::TScopedAlloc alloc(__LOCATION__);
-        NMiniKQL::TMemoryUsageInfo memInfo("Memory");
-        NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, nullptr);
-        NMiniKQL::TDefaultValueBuilder builder(holderFactory);
-
-        constexpr char yson[] =
+    constexpr char yson[] =
         R"(
         {
             "Nan" = %nan;
@@ -2077,11 +2077,11 @@ Y_UNIT_TEST_SUITE(TYsonTests) {
         }
         )";
 
-        TString expected(R"({"Inf":"inf","Nan":"nan","NegInf":"-inf"})");
+    TString expected(R"({"Inf":"inf","Nan":"nan","NegInf":"-inf"})");
 
-        const auto dom =  TryParseYsonDom(yson, &builder);
-        TString res = SerializeJsonDom(dom, false, true, true);
+    const auto dom = TryParseYsonDom(yson, &builder);
+    TString res = SerializeJsonDom(dom, false, true, true);
 
-        UNIT_ASSERT_EQUAL(expected, res);
-    }
+    UNIT_ASSERT_EQUAL(expected, res);
 }
+} // Y_UNIT_TEST_SUITE(TYsonTests)

@@ -42,6 +42,16 @@ void Combine(
     const TVector<std::pair<TString, TSet<TLabel>>>& labels,
     size_t offset);
 
+void CombineWithRules(
+    TVector<TVector<TLabel>>& labelCombinations,
+    TVector<TLabel>& combination,
+    const TVector<std::pair<TString, TSet<TLabel>>>& labels,
+    const TIncompatibilityRules& rules,
+    size_t offset,
+    size_t& prunedCount);
+
 TSelector ParseSelector(const NFyaml::TNodeRef& selectors);
+
+TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root);
 
 } // namespace NKikimr::NYamlConfig

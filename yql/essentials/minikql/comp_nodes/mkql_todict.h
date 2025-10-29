@@ -10,5 +10,5 @@ IComputationNode* WrapToHashedDict(TCallable& callable, const TComputationNodeFa
 IComputationNode* WrapSqueezeToSortedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapSqueezeToHashedDict(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

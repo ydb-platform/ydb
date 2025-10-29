@@ -7,5 +7,6 @@ namespace Aws::S3 {
 namespace NKikimr::NWrappers {
 
 bool ShouldRetry(const Aws::S3::S3Error& error);
+bool ShouldBackoff(const Aws::S3::S3Error& error);
 
 }

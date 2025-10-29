@@ -8,5 +8,5 @@ namespace NMiniKQL {
 template <NYql::TExprNode::EType Type>
 IComputationNode* WrapMakeCode(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -120,7 +120,7 @@ class TestCaseBuilder:
 
             statements = list(self.split_out_file(splitted_stmts, outdata, logger))
             logger.debug("Matching sql statements to .out file lines")
-            for (s_sql, s_out) in statements:
+            for s_sql, s_out in statements:
                 stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
                 only_out_stmts[stmt] += 1
                 logger.debug(
@@ -144,7 +144,9 @@ class TestCaseBuilder:
 
                     for init_script in init_scripts:
                         logger.debug("Running init script %s '%s'", self.config.runner, init_script)
-                        with open(init_script, 'rb') as f, open(init_out_name, 'wb') as fout, open(init_err_name, 'wb') as ferr:
+                        with open(init_script, 'rb') as f, open(init_out_name, 'wb') as fout, open(
+                            init_err_name, 'wb'
+                        ) as ferr:
                             pi = subprocess.run(runner_args, stdin=f, stdout=fout, stderr=ferr)
 
                         if pi.returncode != 0:
@@ -164,7 +166,7 @@ class TestCaseBuilder:
 
                     real_statements = list(self.split_out_file(splitted_stmts, out, logger))
                     logger.debug("Matching sql statements to pgrun's output")
-                    for (s_sql, s_out) in real_statements:
+                    for s_sql, s_out in real_statements:
                         stmt = '\n'.join(str(sql_line) for sql_line in s_sql)
                         logger.debug(
                             "<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n%s\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n%s\n============================",
@@ -178,21 +180,31 @@ class TestCaseBuilder:
                                 del only_out_stmts[stmt]
                         else:
                             only_pgrun_stmts[stmt] += 1
-                reserrfile = reserrfile_base if outfile_idx == 0 else reserrfile_base.with_suffix(reserrfile_base.suffix + ".{0}".format(outfile_idx))
+                reserrfile = (
+                    reserrfile_base
+                    if outfile_idx == 0
+                    else reserrfile_base.with_suffix(reserrfile_base.suffix + ".{0}".format(outfile_idx))
+                )
                 shutil.move(test_err_name, reserrfile)
 
             if only_pgrun_stmts:
-                logger.info("Statements in pgrun output, but not in out file:\n%s",
-                            "\n--------------------------------\n".join(stmt for stmt in only_pgrun_stmts))
+                logger.info(
+                    "Statements in pgrun output, but not in out file:\n%s",
+                    "\n--------------------------------\n".join(stmt for stmt in only_pgrun_stmts),
+                )
             if only_out_stmts:
-                logger.info("Statements in out file, but not in pgrun output:\n%s",
-                            "\n--------------------------------\n".join(stmt for stmt in only_out_stmts))
+                logger.info(
+                    "Statements in out file, but not in pgrun output:\n%s",
+                    "\n--------------------------------\n".join(stmt for stmt in only_out_stmts),
+                )
 
             stmts_run = 0
             stmts = []
             outs = []
-            assert len(statements) == len(real_statements), f"Incorrect statements split in {test_name}. Statements in out-file: {len(statements)}, statements in pgrun output: {len(real_statements)}"
-            for ((l_sql, out), (r_sql, res)) in zip(statements, real_statements):
+            assert len(statements) == len(
+                real_statements
+            ), f"Incorrect statements split in {test_name}. Statements in out-file: {len(statements)}, statements in pgrun output: {len(real_statements)}"
+            for (l_sql, out), (r_sql, res) in zip(statements, real_statements):
                 if l_sql != r_sql:
                     logger.warning("out SQL <> pgrun SQL:\n  <: %s\n  >: %s", l_sql, r_sql)
                     break
@@ -478,7 +490,7 @@ def patch_cases(cases, patches, patchdir):
     default=INIT_SCRIPTS_CFG,
     required=False,
     multiple=False,
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True, path_type=Path)
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True, path_type=Path),
 )
 @click.option(
     "--initscriptsdir",
@@ -486,7 +498,7 @@ def patch_cases(cases, patches, patchdir):
     default=INIT_SCRIPTS_DIR,
     required=False,
     multiple=False,
-    type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=Path)
+    type=click.Path(exists=True, file_okay=False, resolve_path=True, path_type=Path),
 )
 @click.option("--skip", "-s", help="Comma-separated list of testsuits to skip", multiple=False, type=click.STRING)
 @click.option("--runner", help="Test runner", default=RUNNER, required=False, multiple=False, type=click.STRING)
@@ -514,7 +526,22 @@ def patch_cases(cases, patches, patchdir):
 )
 @click.option("--debug/--no-debug", help="Logs verbosity", default=False, required=False)
 @click.version_option(version=svn_version(), prog_name=PROGRAM_NAME)
-def cli(cases, srcdir, dstdir, patchdir, udf, initscriptscfg, initscriptsdir, skip, runner, splitter, report, parallel, logfile, debug):
+def cli(
+    cases,
+    srcdir,
+    dstdir,
+    patchdir,
+    udf,
+    initscriptscfg,
+    initscriptsdir,
+    skip,
+    runner,
+    splitter,
+    report,
+    parallel,
+    logfile,
+    debug,
+):
     setup_logging(logfile, debug)
 
     if udf:
@@ -553,7 +580,11 @@ def cli(cases, srcdir, dstdir, patchdir, udf, initscriptscfg, initscriptsdir, sk
         builder = TestCaseBuilder(config)
         if config.parallel:
             with Pool() as pool:
-                results = list(pool.imap_unordered(builder.build, [(test_case, init_scripts.get(test_case.stem) or []) for test_case in cases]))
+                results = list(
+                    pool.imap_unordered(
+                        builder.build, [(test_case, init_scripts.get(test_case.stem) or []) for test_case in cases]
+                    )
+                )
         else:
             results = [builder.build(c) for c in cases]
 

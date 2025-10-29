@@ -10,7 +10,8 @@ struct ISpiller {
     using TMemoryReportCallback = std::function<void(ui64)>;
     using TKey = ui64;
 
-    virtual ~ISpiller(){}
+    virtual ~ISpiller() {
+    }
     virtual NThreading::TFuture<TKey> Put(NYql::TChunkedBuffer&& blob) = 0;
 
     ///\return
@@ -18,8 +19,8 @@ struct ISpiller {
     ///  TFuture
     virtual NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Get(TKey key) = 0;
     virtual NThreading::TFuture<void> Delete(TKey) = 0;
-    ///Get + Delete
-    ///Stored value may be moved to future
+    /// Get + Delete
+    /// Stored value may be moved to future
     virtual NThreading::TFuture<std::optional<NYql::TChunkedBuffer>> Extract(TKey key) = 0;
 
     /// This set of functions is used to report memory allocated for spilling.
@@ -33,4 +34,4 @@ struct ISpiller {
     virtual void ReportFree(ui64 bytes) = 0;
 };
 
-}//namespace NKikimr::NMiniKQL
+} // namespace NKikimr::NMiniKQL

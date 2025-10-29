@@ -6,7 +6,6 @@
 
 #include <utility>
 
-
 namespace NYql {
 namespace NLog {
 
@@ -63,5 +62,5 @@ private:
     TLogBackend* PrevBacked_;
 };
 
-} // namspace NLog
-} // namspace NYql
+} // namespace NLog
+} // namespace NYql

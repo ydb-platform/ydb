@@ -50,7 +50,8 @@ class Selection(Generic[SelectionType], Option):
             disabled: The initial enabled/disabled state. Enabled by default.
         """
         if isinstance(prompt, str):
-            prompt = Text.from_markup(prompt)
+            prompt = Text.from_markup(prompt, overflow="ellipsis")
+        prompt.no_wrap = True
         super().__init__(prompt.split()[0], id, disabled)
         self._value: SelectionType = value
         """The value associated with the selection."""
@@ -96,62 +97,27 @@ class SelectionList(Generic[SelectionType], OptionList):
     DEFAULT_CSS = """
     SelectionList {
         height: auto;
-    }
+        
+        & > .selection-list--button {
+            color: $panel-darken-2;
+            background: $panel;
+        }
 
-    SelectionList:light:focus > .selection-list--button-selected {
-        color: $primary;
-    }
+        & > .selection-list--button-highlighted {
+            color: $panel-darken-2;
+            background: $panel;
+        }
 
-    SelectionList:light > .selection-list--button-selected-highlighted {
-        color: $primary;
-    }
+        & > .selection-list--button-selected {
+            color: $text-success;
+            background: $panel;
+        }
 
-    SelectionList:light:focus > .selection-list--button-selected-highlighted {
-        color: $primary;
-    }
+        & > .selection-list--button-selected-highlighted {
+            color: $text-success;
+            background: $panel;
+        }
 
-    SelectionList > .selection-list--button {
-        text-style: bold;
-        background: $foreground 15%;
-    }
-
-    SelectionList:focus > .selection-list--button {
-        text-style: bold;
-        background: $foreground 25%;
-    }
-
-    SelectionList > .selection-list--button-highlighted {
-        text-style: bold;
-        background: $foreground 15%;
-    }
-
-    SelectionList:focus > .selection-list--button-highlighted {
-        text-style: bold;
-        background: $foreground 25%;
-    }
-
-    SelectionList > .selection-list--button-selected {
-        text-style: bold;
-        color: $success;
-        background: $foreground 15%;
-    }
-
-    SelectionList:focus > .selection-list--button-selected {
-        text-style: bold;
-        color: $success;
-        background: $foreground 25%;
-    }
-
-    SelectionList > .selection-list--button-selected-highlighted {
-        text-style: bold;
-        color: $success;
-        background: $foreground 15%;
-    }
-
-    SelectionList:focus > .selection-list--button-selected-highlighted {
-        text-style: bold;
-        color: $success;
-        background: $foreground 25%;
     }
     """
 
@@ -576,10 +542,10 @@ class SelectionList(Generic[SelectionType], OptionList):
 
         # If the button is in the unselected state, we're going to do a bit
         # of a switcharound to make it look like it's a "cutout".
-        if selection.value not in self._selected:
-            button_style += Style.from_color(
-                self.background_colors[1].rich_color, button_style.bgcolor
-            )
+        # if selection.value not in self._selected:
+        #     button_style += Style.from_color(
+        #         self.background_colors[1].rich_color, button_style.bgcolor
+        #     )
 
         # Build the style for the side characters. Note that this is
         # sensitive to the type of character used, so pay attention to

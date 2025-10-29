@@ -34,5 +34,5 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> TInputBufArrowInputStream::Read(in
     return outBuffer;
 }
 
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

@@ -18,7 +18,7 @@ public:
     virtual TString Finalize() = 0;
 
     virtual TChecksumState GetState() const = 0;
-    virtual void Continue(const TChecksumState& state) = 0;
+    virtual void SetState(const TChecksumState& state) = 0;
 };
 
 IChecksum* CreateChecksum();

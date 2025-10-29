@@ -656,6 +656,7 @@ void TSolomonExporter::DoHandleShard(
             options.SensorFilter = [&] (const std::string& sensorName) {
                 return Config_->MatchShard(sensorName) == Config_->Shards[*name];
             };
+            options.StripSensorsNamePrefix |= Config_->Shards[*name]->StripSensorsNamePrefix;
         } else {
             options.SensorFilter = [this] (const std::string& sensorName) {
                 return FilterDefaultGrid(sensorName);

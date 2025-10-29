@@ -472,6 +472,7 @@ namespace NKikimr::NStorage {
             , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig = {}
             , ui32 overrideReplicasInRingCount = 0
             , ui32 overrideRingsCount = 0
+            , ui32 replicasSpecificVolume = 200
         );
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

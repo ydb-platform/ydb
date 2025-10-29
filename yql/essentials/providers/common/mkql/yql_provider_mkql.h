@@ -21,7 +21,7 @@ struct TMkqlBuildContext {
     TMemoizedNodesMap Memoization;
     TMemoizedTypesMap TypeMemoizationHolder;
     TMemoizedTypesMap* TypeMemoization;
-    TMkqlBuildContext *const ParentCtx = nullptr;
+    TMkqlBuildContext* const ParentCtx = nullptr;
     const size_t Level = 0ULL;
     const ui64 LambdaId = 0ULL;
     NKikimr::NMiniKQL::TRuntimeNode Parameters;
@@ -33,7 +33,8 @@ struct TMkqlBuildContext {
         , Memoization(std::move(args))
         , TypeMemoization(typeMemoization ? typeMemoization : &TypeMemoizationHolder)
         , LambdaId(lambdaId)
-    {}
+    {
+    }
 
     TMkqlBuildContext(TMkqlBuildContext& parent, TArgumentsMap&& args, ui64 lambdaId)
         : MkqlCompiler(parent.MkqlCompiler)
@@ -45,24 +46,26 @@ struct TMkqlBuildContext {
         , Level(parent.Level + 1U)
         , LambdaId(lambdaId)
         , Parameters(parent.Parameters)
-    {}
+    {
+    }
 
     NKikimr::NMiniKQL::TType* BuildType(const TExprNode& owner, const TTypeAnnotationNode& annotation) {
         return NYql::NCommon::BuildType(owner, annotation, ProgramBuilder, *TypeMemoization);
     }
 };
 
-class IMkqlCallableCompiler : public TThrRefBase {
+class IMkqlCallableCompiler: public TThrRefBase {
 public:
     typedef std::function<NKikimr::NMiniKQL::TRuntimeNode(const TExprNode&, TMkqlBuildContext&)> TCompiler;
     virtual bool HasCallable(const std::string_view& name) const = 0;
     virtual TCompiler FindCallable(const std::string_view& name) const = 0;
     virtual TCompiler GetCallable(const std::string_view& name) const = 0;
 
-    virtual ~IMkqlCallableCompiler() {}
+    virtual ~IMkqlCallableCompiler() {
+    }
 };
 
-class TMkqlCallableCompilerBase : public IMkqlCallableCompiler {
+class TMkqlCallableCompilerBase: public IMkqlCallableCompiler {
 public:
     bool HasCallable(const std::string_view& name) const override;
     TCompiler FindCallable(const std::string_view& name) const override;
@@ -85,7 +88,7 @@ protected:
     void AddSimpleCallables(const std::initializer_list<std::pair<std::string_view, NKikimr::NMiniKQL::TProgramBuilder::NarrowFunctionMethod>>& callables);
 };
 
-class TMkqlCommonCallableCompiler : public TMkqlCallableCompilerBase {
+class TMkqlCommonCallableCompiler: public TMkqlCallableCompilerBase {
 public:
     bool HasCallable(const std::string_view& name) const override;
     TCompiler FindCallable(const std::string_view& name) const override;
@@ -95,7 +98,7 @@ public:
     void OverrideCallable(const std::string_view& name, TCompiler compiler) override;
 
 private:
-    class TShared : public TMkqlCallableCompilerBase {
+    class TShared: public TMkqlCallableCompilerBase {
     public:
         TShared();
     };

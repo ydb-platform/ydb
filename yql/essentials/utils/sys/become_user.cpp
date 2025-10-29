@@ -1,29 +1,29 @@
 #include "become_user.h"
 
 #ifdef _linux_
-#include <yql/essentials/utils/sys/linux_version.h>
+    #include <yql/essentials/utils/sys/linux_version.h>
 
-#include <util/generic/yexception.h>
-#include <util/system/user.h>
+    #include <util/generic/yexception.h>
+    #include <util/system/user.h>
 
-#include <memory>
-#include <vector>
-#include <errno.h>
+    #include <memory>
+    #include <vector>
+    #include <errno.h>
 
-#include <grp.h>
-#include <pwd.h>
-#include <unistd.h>
+    #include <grp.h>
+    #include <pwd.h>
+    #include <unistd.h>
 
-#include <sys/prctl.h>
-#include <contrib/libs/libcap/include/sys/capability.h>
-#include <contrib/libs/libcap/include/sys/securebits.h>
+    #include <sys/prctl.h>
+    #include <contrib/libs/libcap/include/sys/capability.h>
+    #include <contrib/libs/libcap/include/sys/securebits.h>
 
-// strange, but sometimes we have to specify values manually
-#define PR_CAP_AMBIENT 47
-#define PR_CAP_AMBIENT_IS_SET 1
-#define PR_CAP_AMBIENT_RAISE 2
-#define PR_CAP_AMBIENT_LOWER 3
-#define PR_CAP_AMBIENT_CLEAR_ALL 4
+    // strange, but sometimes we have to specify values manually
+    #define PR_CAP_AMBIENT 47
+    #define PR_CAP_AMBIENT_IS_SET 1
+    #define PR_CAP_AMBIENT_RAISE 2
+    #define PR_CAP_AMBIENT_LOWER 3
+    #define PR_CAP_AMBIENT_CLEAR_ALL 4
 
 namespace NYql {
 
@@ -90,7 +90,7 @@ void EnsureCapFlagsVectorCannotBeRaised(const std::vector<cap_value_t>& flags) {
     for (auto f : flags) {
         try {
             // one-by-one
-            SetCapFlagsVector({ f });
+            SetCapFlagsVector({f});
         } catch (const TSystemError&) {
             continue;
         }
@@ -141,14 +141,14 @@ void DoBecomeUser(const char* username, const char* groupname) {
     }
 }
 
-}
+} // namespace
 
 void BecomeUser(const TString& username, const TString& groupname) {
     DoBecomeUser(username.data(), groupname.data());
 }
 
 void TurnOnBecomeUserAmbientCaps() {
-    SetCapFlagsVector({ CAP_SETUID, CAP_SETGID, CAP_SETPCAP, CAP_KILL });
+    SetCapFlagsVector({CAP_SETUID, CAP_SETGID, CAP_SETPCAP, CAP_KILL});
     if (prctl(PR_SET_SECUREBITS, SECBIT_NO_SETUID_FIXUP | SECBIT_NO_SETUID_FIXUP_LOCKED, 0, 0, 0) == -1) {
         ythrow TSystemError() << "can't set secure bits for a process";
     }
@@ -157,7 +157,7 @@ void TurnOnBecomeUserAmbientCaps() {
 void TurnOffBecomeUserAbility() {
     ClearAmbientCapFlags();
     SetCapFlagsVector({});
-    EnsureCapFlagsVectorCannotBeRaised({ CAP_SETUID, CAP_SETGID, CAP_SETPCAP, CAP_KILL });
+    EnsureCapFlagsVectorCannotBeRaised({CAP_SETUID, CAP_SETGID, CAP_SETPCAP, CAP_KILL});
 
     // ensure we cannot get root access back
     if (setuid(0) != -1) {
@@ -183,6 +183,6 @@ void SendSignalOnParentThreadExit(int signo)
     }
 }
 
-}
+} // namespace NYql
 
 #endif

@@ -100,6 +100,7 @@ private:
     void TraverseNext() {
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
 
+        schemeCacheRequest->DatabaseName = Database;
         schemeCacheRequest->UserToken = UserToken;
         schemeCacheRequest->ResultSet.resize(PathsToTraverse.size());
 

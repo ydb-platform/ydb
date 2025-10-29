@@ -7,9 +7,9 @@ namespace NYql {
 const char IssueMapResource[] = "yql_issue.txt";
 
 static_assert(DEFAULT_ERROR == TIssuesIds::DEFAULT_ERROR,
-    "value of particular and common error mismatched for \"DEFAULT_ERROR\"");
+              "value of particular and common error mismatched for \"DEFAULT_ERROR\"");
 static_assert(UNEXPECTED_ERROR == TIssuesIds::UNEXPECTED,
-    "value of particular and common error mismatched for \"UNEXPECTED_ERROR\"");
+              "value of particular and common error mismatched for \"UNEXPECTED_ERROR\"");
 
 void CheckFatalIssues(TIssues& issues) {
     bool isFatal = false;
@@ -46,12 +46,12 @@ void CheckFatalIssues(TIssues& issues) {
         TIssue result;
         result.SetMessage(
             TStringBuilder()
-                << "An abnormal situation found, so consider opening a bug report to YQL (st/YQLSUPPORT),"
-                << " because more detailed information is only available in server side logs and/or "
-                << "coredumps.");
+            << "An abnormal situation found, so consider opening a bug report to YQL (st/YQLSUPPORT),"
+            << " because more detailed information is only available in server side logs and/or "
+            << "coredumps.");
         result.SetCode(TIssuesIds::UNEXPECTED, TSeverityIds::S_FATAL);
         issues.AddIssue(result);
     }
 }
 
-}
+} // namespace NYql

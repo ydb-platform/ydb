@@ -761,6 +761,15 @@
             ]
         },
         {
+            "Name": "TFulltextAnalyze",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
+            "Children": [
+                {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
@@ -844,6 +853,15 @@
             ]
         },
         {
+            "Name": "TKqpOpUnionAll",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpUnionAll"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TKqpOpLimit",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpLimit"},
@@ -853,13 +871,61 @@
             ]
         },
         {
+            "Name": "TKqpOpSortElement",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpSortElement"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Direction", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "NullsFirst", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Lambda", "Type": "TCoLambda"}
+            ]
+        }, 
+        {
+            "Name": "TKqpOpSortList",
+            "ListBase" : "TKqpOpSortElement"
+        },
+        {
+            "Name": "TKqpOpSort",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpSort"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "SortExpressions", "Type": "TKqpOpSortList"}
+            ]
+        },
+        {
             "Name": "TKqpOpRoot",
             "Base": "TCallable",
             "Match" : {"Type": "Callable", "Name": "KqpOpRoot"},
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TKqpOpAggregationTraits",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "AggregationFunctionResultType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOpAggregationTraitsList",
+            "ListBase" : "TKqpOpAggregationTraits"
+        },
+        {
+            "Name": "TKqpOpAggregate",
+            "Base": "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpAggregate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "AggregationTraitsList", "Type": "TKqpOpAggregationTraitsList"},
+                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"}
+            ]
         }
-
     ]
 }

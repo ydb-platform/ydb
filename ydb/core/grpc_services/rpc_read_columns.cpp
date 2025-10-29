@@ -154,6 +154,8 @@ private:
             WaitingResolveReply = true;
         } else {
             TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+            request->DatabaseName = Request->GetDatabaseName().GetOrElse("");
+
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
             entry.Path = std::move(path);
             if (entry.Path.empty()) {
@@ -325,13 +327,13 @@ private:
                 *sysViewInfo->MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
             }
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
+                Request->GetDatabaseName().GetOrElse({}),
+                sysViewInfo,
                 entry.TableId,
                 JoinPath(entry.Path),
-                sysViewInfo,
                 range,
                 columns,
                 Request->GetInternalToken(),
-                Request->GetDatabaseName().GetOrElse({}),
                 false);
 
             if (!tableScanActor) {

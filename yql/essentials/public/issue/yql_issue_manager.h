@@ -27,7 +27,7 @@ public:
     void Reset(const TIssues& issues);
     void Reset();
 
-    void AddWarningRule(const TWarningRule &rule);
+    void AddWarningRule(const TWarningRule& rule);
     void SetWarningToErrorTreatMessage(const TString& msg);
 
     void SetIssueCountLimit(size_t limit) {
@@ -63,6 +63,7 @@ private:
 
 class TIssueScopeGuard: private TNonCopyable {
     TIssueManager& Manager_;
+
 public:
     TIssueScopeGuard(TIssueManager& manager, std::function<TIssuePtr()> fn)
         : Manager_(manager)
@@ -80,4 +81,4 @@ public:
     }
 };
 
-}
+} // namespace NYql

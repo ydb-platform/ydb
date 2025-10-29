@@ -1,13 +1,12 @@
 #pragma once
 
-#include "mkql_builtins_impl.h"  // Y_IGNORE // Y_IGNORE
+#include "mkql_builtins_impl.h" // Y_IGNORE // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
 
-
 template <typename TLeft, typename TRight, class TImpl>
-struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
+struct TCompareArithmeticBinary: public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
     }
@@ -33,12 +32,16 @@ struct TCompareArithmeticBinary : public TArithmeticConstraintsBinary<TLeft, TRi
 };
 
 template <typename TLeft, typename TRight, class TImpl>
-struct TCompareArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
+struct TCompareArithmeticBinaryWithTimezone: public TArithmeticConstraintsBinary<TLeft, TRight, bool> {
     static_assert(std::is_same<TLeft, TRight>::value, "Must be same type.");
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto l = left.template Get<TLeft>();
         const auto r = right.template Get<TRight>();
-        return NUdf::TUnboxedValuePod(l == r ? TImpl::DoTz(left.GetTimezoneId(), right.GetTimezoneId()) : TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
+        if (l == r) {
+            return NUdf::TUnboxedValuePod(TImpl::DoTz(left.GetTimezoneId(), right.GetTimezoneId()));
+        } else {
+            return NUdf::TUnboxedValuePod(TImpl::Do(left.template Get<TLeft>(), right.template Get<TRight>()));
+        }
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
@@ -50,7 +53,9 @@ struct TCompareArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinar
         const auto equals = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, rhs, "equals", block);
         const auto ltz = GetterForTimezone(context, left, block);
         const auto rtz = GetterForTimezone(context, right, block);
-        const auto result = SelectInst::Create(equals, TImpl::GenTz(ltz, rtz, ctx, block), TImpl::Gen(lhs, rhs, ctx, block), "result", block);
+        const auto result = SelectInst::Create(equals,
+                                               TImpl::GenTz(ltz, rtz, ctx, block),
+                                               TImpl::Gen(lhs, rhs, ctx, block), "result", block);
         const auto wide = MakeBoolean(result, context, block);
         return wide;
     }
@@ -58,7 +63,7 @@ struct TCompareArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinar
 };
 
 template <typename TType, class TImpl>
-struct TSelectArithmeticBinaryCopyTimezone : public TArithmeticConstraintsBinary<TType, TType, bool> {
+struct TSelectArithmeticBinaryCopyTimezone: public TArithmeticConstraintsBinary<TType, TType, bool> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         return TImpl::Do(left.template Get<TType>(), right.template Get<TType>()) ? left : right;
     }
@@ -75,7 +80,7 @@ struct TSelectArithmeticBinaryCopyTimezone : public TArithmeticConstraintsBinary
 };
 
 template <typename TType, class TImpl>
-struct TSelectArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinary<TType, TType, bool> {
+struct TSelectArithmeticBinaryWithTimezone: public TArithmeticConstraintsBinary<TType, TType, bool> {
     static NUdf::TUnboxedValuePod Execute(const NUdf::TUnboxedValuePod& left, const NUdf::TUnboxedValuePod& right) {
         const auto l = left.template Get<TType>();
         const auto r = right.template Get<TType>();
@@ -92,28 +97,31 @@ struct TSelectArithmeticBinaryWithTimezone : public TArithmeticConstraintsBinary
         const auto equals = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, lhs, rhs, "equals", block);
         const auto ltz = GetterForTimezone(context, left, block);
         const auto rtz = GetterForTimezone(context, right, block);
-        const auto choise = SelectInst::Create(equals, TImpl::GenTz(ltz, rtz, ctx, block), TImpl::Gen(lhs, rhs, ctx, block), "choise", block);
+        const auto choise = SelectInst::Create(equals,
+                                               TImpl::GenTz(ltz, rtz, ctx, block),
+                                               TImpl::Gen(lhs, rhs, ctx, block),
+                                               "choise",
+                                               block);
         const auto result = SelectInst::Create(choise, left, right, "result", block);
         return result;
     }
 #endif
 };
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 int CompareCustoms(NUdf::TUnboxedValuePod lhs, NUdf::TUnboxedValuePod rhs) {
     const TStringBuf lhsBuf = lhs.AsStringRef();
     const TStringBuf rhsBuf = rhs.AsStringRef();
     return lhsBuf.compare(rhsBuf);
 }
 
-template<NUdf::EDataSlot Slot>
+template <NUdf::EDataSlot Slot>
 int CompareCustomsWithCleanup(NUdf::TUnboxedValuePod left, NUdf::TUnboxedValuePod right) {
     const auto c = CompareCustoms<Slot>(left, right);
     left.DeleteUnreferenced();
     right.DeleteUnreferenced();
     return c;
 }
-
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
 struct TCompareArgsOpt {
@@ -122,83 +130,100 @@ struct TCompareArgsOpt {
 
 template <typename TInput1, typename TInput2, bool IsLeftOptional, bool IsRightOptional, bool IsResultOptional>
 const TFunctionParamMetadata TCompareArgsOpt<TInput1, TInput2, IsLeftOptional, IsRightOptional, IsResultOptional>::Value[4] = {
-    { NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0 },
-    { 0, 0 }
-};
+    {NUdf::TDataType<bool>::Id, IsResultOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+    {TInput1::Id, IsLeftOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+    {TInput2::Id, IsRightOptional ? TFunctionParamMetadata::FlagIsNullable : 0},
+    {0, 0}};
 
 template <
     typename TInput1, typename TInput2,
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>, TArgs<TInput1, TInput2, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>, TArgs<TInput1, TInput2, false, true, true>, TBinaryWrap<false, true>>(registry, name);
-    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>, TArgs<TInput1, TInput2, true, false, true>, TBinaryWrap<true, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>, TArgs<TInput1, TInput2, true, true, true>, TBinaryWrap<true, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>,
+                         TArgs<TInput1, TInput2, false, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>,
+                         TArgs<TInput1, TInput2, false, true, true>, TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>,
+                         TArgs<TInput1, TInput2, true, false, true>, TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, false>,
+                         TArgs<TInput1, TInput2, true, true, true>, TBinaryWrap<true, true>>(registry, name);
 }
 
 template <
     typename TInput,
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TInput::TLayout, true>, TArgs<TInput, TInput, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TInput::TLayout, true>, TArgs<TInput, TInput, true, true, false>, TAggrCompareWrap>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TInput::TLayout, true>,
+                         TArgs<TInput, TInput, false, false, false>, TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<typename TInput::TLayout, typename TInput::TLayout, true>,
+                         TArgs<TInput, TInput, true, true, false>, TAggrCompareWrap>(registry, name);
 }
 
 template <
     typename TType1, typename TType2,
     class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareCustomOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, false, true, true>, TBinaryWrap<false, true>>(registry, name);
-    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, true, false, true>, TBinaryWrap<true, false>>(registry, name);
-    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, true, true, true>, TBinaryWrap<true, true>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, false, false, false>,
+                         TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, false, true, true>,
+                         TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, true, false, true>,
+                         TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc, TArgs<TType1, TType2, true, true, true>,
+                         TBinaryWrap<true, true>>(registry, name);
 }
 
 template <
     typename TType1, typename TType2,
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterComparePolyOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc<TType1, TType2, false>, TArgs<TType1, TType2, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<TType1, TType2, false>, TArgs<TType1, TType2, false, true, true>, TBinaryWrap<false, true>>(registry, name);
-    RegisterFunctionImpl<TFunc<TType1, TType2, false>, TArgs<TType1, TType2, true, false, true>, TBinaryWrap<true, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<TType1, TType2, false>, TArgs<TType1, TType2, true, true, true>, TBinaryWrap<true, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType1, TType2, false>,
+                         TArgs<TType1, TType2, false, false, false>,
+                         TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType1, TType2, false>,
+                         TArgs<TType1, TType2, false, true, true>,
+                         TBinaryWrap<false, true>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType1, TType2, false>,
+                         TArgs<TType1, TType2, true, false, true>,
+                         TBinaryWrap<true, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TType1, TType2, false>,
+                         TArgs<TType1, TType2, true, true, true>,
+                         TBinaryWrap<true, true>>(registry, name);
 }
-
 
 template <
     typename TType,
     class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareCustomOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc, TArgs<TType, TType, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc, TArgs<TType, TType, true, true, false>, TAggrCompareWrap>(registry, name);
+    RegisterFunctionImpl<TFunc,
+                         TArgs<TType, TType, false, false, false>,
+                         TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc,
+                         TArgs<TType, TType, true, true, false>,
+                         TAggrCompareWrap>(registry, name);
 }
 
 template <
     typename TInput,
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrComparePolyOpt(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
-    RegisterFunctionImpl<TFunc<TInput, TInput, true>, TArgs<TInput, TInput, false, false, false>, TBinaryWrap<false, false>>(registry, name);
-    RegisterFunctionImpl<TFunc<TInput, TInput, true>, TArgs<TInput, TInput, true, true, false>, TAggrCompareWrap>(registry, name);
+    RegisterFunctionImpl<TFunc<TInput, TInput, true>,
+                         TArgs<TInput, TInput, false, false, false>,
+                         TBinaryWrap<false, false>>(registry, name);
+    RegisterFunctionImpl<TFunc<TInput, TInput, true>,
+                         TArgs<TInput, TInput, true, true, false>,
+                         TAggrCompareWrap>(registry, name);
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareUnsigned(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<ui8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
@@ -222,9 +247,8 @@ void RegisterCompareUnsigned(IBuiltinFunctionRegistry& registry, const std::stri
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareSigned(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
@@ -248,9 +272,8 @@ void RegisterCompareSigned(IBuiltinFunctionRegistry& registry, const std::string
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareSignedAndUnsigned(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui8>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<ui16>, TFunc, TArgs>(registry, name);
@@ -274,9 +297,8 @@ void RegisterCompareSignedAndUnsigned(IBuiltinFunctionRegistry& registry, const 
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareUnsignedAndSigned(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i8>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<ui8>, NUdf::TDataType<i16>, TFunc, TArgs>(registry, name);
@@ -300,9 +322,8 @@ void RegisterCompareUnsignedAndSigned(IBuiltinFunctionRegistry& registry, const 
 }
 
 template <
-    template<typename, typename, bool>  class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareReal(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<float>, TFunc, TArgs>(registry, name);
     RegisterCompareOpt<NUdf::TDataType<i8>, NUdf::TDataType<double>, TFunc, TArgs>(registry, name);
@@ -352,17 +373,15 @@ void RegisterCompareReal(IBuiltinFunctionRegistry& registry, const std::string_v
 }
 
 template <
-    template<typename, typename, bool>  class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareBool(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareOpt<NUdf::TDataType<bool>, NUdf::TDataType<bool>, TFunc, TArgs>(registry, name);
 }
 
 template <
-    template<typename, typename, bool>  class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareIntegral(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareSigned<TFunc, TArgs>(registry, name);
     RegisterCompareUnsigned<TFunc, TArgs>(registry, name);
@@ -371,9 +390,8 @@ void RegisterCompareIntegral(IBuiltinFunctionRegistry& registry, const std::stri
 }
 
 template <
-    template<typename, typename, bool>  class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterComparePrimitive(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareBool<TFunc, TArgs>(registry, name);
     RegisterCompareReal<TFunc, TArgs>(registry, name);
@@ -381,9 +399,8 @@ void RegisterComparePrimitive(IBuiltinFunctionRegistry& registry, const std::str
 }
 
 template <
-    template<typename, typename, bool>  class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrComparePrimitive(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrCompareOpt<NUdf::TDataType<bool>, TFunc, TArgs>(registry, name);
 
@@ -404,9 +421,8 @@ void RegisterAggrComparePrimitive(IBuiltinFunctionRegistry& registry, const std:
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
@@ -452,9 +468,8 @@ void RegisterCompareDatetime(IBuiltinFunctionRegistry& registry, const std::stri
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
@@ -521,7 +536,7 @@ void RegisterCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::s
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);    
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
@@ -540,7 +555,7 @@ void RegisterCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::s
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
-    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);    
+    RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDate32>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzDatetime64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
     RegisterComparePolyOpt<NUdf::TDataType<NUdf::TTzTimestamp64>, NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
@@ -579,9 +594,8 @@ void RegisterCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::s
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDate>, TFunc, TArgs>(registry, name);
     RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDatetime>, TFunc, TArgs>(registry, name);
@@ -590,9 +604,8 @@ void RegisterAggrCompareDatetime(IBuiltinFunctionRegistry& registry, const std::
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareTzDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDate>, TFunc, TArgs>(registry, name);
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDatetime>, TFunc, TArgs>(registry, name);
@@ -600,9 +613,8 @@ void RegisterAggrCompareTzDatetime(IBuiltinFunctionRegistry& registry, const std
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareBigDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDate32>, TFunc, TArgs>(registry, name);
     RegisterAggrComparePolyOpt<NUdf::TDataType<NUdf::TDatetime64>, TFunc, TArgs>(registry, name);
@@ -611,9 +623,8 @@ void RegisterAggrCompareBigDatetime(IBuiltinFunctionRegistry& registry, const st
 }
 
 template <
-    template<typename, typename, bool> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <typename, typename, bool> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareBigTzDatetime(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDate32>, TFunc, TArgs>(registry, name);
     RegisterAggrCompareOpt<NUdf::TDataType<NUdf::TTzDatetime64>, TFunc, TArgs>(registry, name);
@@ -621,10 +632,9 @@ void RegisterAggrCompareBigTzDatetime(IBuiltinFunctionRegistry& registry, const 
 }
 
 template <
-    template<NUdf::EDataSlot> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs,
-    bool WithSpecial = true
->
+    template <NUdf::EDataSlot> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs,
+    bool WithSpecial = true>
 void RegisterCompareStrings(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterCompareCustomOpt<NUdf::TDataType<char*>, NUdf::TDataType<char*>, TFunc<NUdf::EDataSlot::String>, TArgs>(registry, name);
     RegisterCompareCustomOpt<NUdf::TDataType<NUdf::TUtf8>, NUdf::TDataType<NUdf::TUtf8>, TFunc<NUdf::EDataSlot::Utf8>, TArgs>(registry, name);
@@ -637,9 +647,8 @@ void RegisterCompareStrings(IBuiltinFunctionRegistry& registry, const std::strin
 }
 
 template <
-    template<NUdf::EDataSlot> class TFunc,
-    template<typename, typename, bool, bool, bool> class TArgs
->
+    template <NUdf::EDataSlot> class TFunc,
+    template <typename, typename, bool, bool, bool> class TArgs>
 void RegisterAggrCompareStrings(IBuiltinFunctionRegistry& registry, const std::string_view& name) {
     RegisterAggrCompareCustomOpt<NUdf::TDataType<char*>, TFunc<NUdf::EDataSlot::String>, TArgs>(registry, name);
     RegisterAggrCompareCustomOpt<NUdf::TDataType<NUdf::TUtf8>, TFunc<NUdf::EDataSlot::Utf8>, TArgs>(registry, name);
@@ -660,5 +669,5 @@ void RegisterGreater(TKernelFamilyMap& kernelFamilyMap);
 void RegisterGreaterOrEqual(IBuiltinFunctionRegistry& registry);
 void RegisterGreaterOrEqual(TKernelFamilyMap& kernelFamilyMap);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

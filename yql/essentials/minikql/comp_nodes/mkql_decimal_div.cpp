@@ -1,6 +1,6 @@
 #include "mkql_decimal_div.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h> // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h>     // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 
@@ -17,26 +17,30 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsLeftOptional, bool IsRightOptional>
-class TDecimalDivWrapper : public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128> {
+template <bool IsLeftOptional, bool IsRightOptional>
+class TDecimalDivWrapper: public TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>>, NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128> {
     typedef TMutableCodegeneratorNode<TDecimalDivWrapper<IsLeftOptional, IsRightOptional>> TBaseComputation;
+
 public:
     TDecimalDivWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , NYql::NDecimal::TDecimalDivisor<NYql::NDecimal::TInt128>(precision, scale)
         , Left(left)
         , Right(right)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const auto& left = Left->GetValue(compCtx);
         const auto& right = Right->GetValue(compCtx);
 
-        if (IsLeftOptional && !left)
+        if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
+        }
 
-        if (IsRightOptional && !right)
+        if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
+        }
 
         return NUdf::TUnboxedValuePod(Do(left.GetInt128(), right.GetInt128()));
     }
@@ -50,16 +54,15 @@ public:
         const auto name = "DecimalMulAndDivNormalMultiplier";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalMulAndDivNormalMultiplier));
         const auto fnType =
-            FunctionType::get(valType, { valType, valType, valType }, false);
+            FunctionType::get(valType, {valType, valType, valType}, false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
-            const auto test = IsLeftOptional && IsRightOptional ?
-                BinaryOperator::CreateAnd(left, right, "test", block):
-                IsLeftOptional ? left : right;
+            const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
+                                                                                                                                         : right;
 
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -71,7 +74,7 @@ public:
 
             block = good;
 
-            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block) }, "mul_and_div", block);
+            const auto muldiv = CallInst::Create(func, {GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block)}, "mul_and_div", block);
 
             const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
@@ -87,7 +90,7 @@ public:
             block = done;
             return result;
         } else {
-            const auto muldiv = CallInst::Create(func, { GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block) }, "mul_and_div", block);
+            const auto muldiv = CallInst::Create(func, {GetterForInt128(left, block), NDecimal::GenConstant(Divider_, context), GetterForInt128(right, block)}, "mul_and_div", block);
 
             const auto ok = NDecimal::GenInBounds(muldiv, NDecimal::GenConstant(-Bound_, context), NDecimal::GenConstant(+Bound_, context), block);
             const auto nan = NDecimal::GenIsNonComparable(muldiv, context, block);
@@ -112,25 +115,29 @@ private:
     IComputationNode* const Right;
 };
 
-template<bool IsLeftOptional, bool IsRightOptional, typename TRight>
-class TDecimalDivIntegralWrapper : public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor<TRight> {
+template <bool IsLeftOptional, bool IsRightOptional, typename TRight>
+class TDecimalDivIntegralWrapper: public TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>>, NYql::NDecimal::TDecimalDivisor<TRight> {
     typedef TMutableCodegeneratorNode<TDecimalDivIntegralWrapper<IsLeftOptional, IsRightOptional, TRight>> TBaseComputation;
+
 public:
     TDecimalDivIntegralWrapper(TComputationMutables& mutables, IComputationNode* left, IComputationNode* right)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
         , Left(left)
         , Right(right)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& compCtx) const {
         const auto& left = Left->GetValue(compCtx);
         const auto& right = Right->GetValue(compCtx);
 
-        if (IsLeftOptional && !left)
+        if (IsLeftOptional && !left) {
             return NUdf::TUnboxedValuePod();
+        }
 
-        if (IsRightOptional && !right)
+        if (IsRightOptional && !right) {
             return NUdf::TUnboxedValuePod();
+        }
 
         return NUdf::TUnboxedValuePod(this->Do(left.GetInt128(), right.Get<TRight>()));
     }
@@ -144,16 +151,15 @@ public:
         const auto name = "DecimalDiv";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalDiv));
         const auto fnType =
-            FunctionType::get(valType, { valType, valType }, false);
+            FunctionType::get(valType, {valType, valType}, false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto left = GetNodeValue(Left, ctx, block);
         const auto right = GetNodeValue(Right, ctx, block);
 
         if constexpr (IsLeftOptional || IsRightOptional) {
-            const auto test = IsLeftOptional && IsRightOptional ?
-                BinaryOperator::CreateAnd(left, right, "test", block):
-                IsLeftOptional ? left : right;
+            const auto test = IsLeftOptional && IsRightOptional ? BinaryOperator::CreateAnd(left, right, "test", block) : IsLeftOptional ? left
+                                                                                                                                         : right;
 
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
             const auto good = BasicBlock::Create(context, "good", ctx.Func);
@@ -165,9 +171,7 @@ public:
 
             block = good;
 
-            const auto cast = std::is_signed<TRight>() ?
-                static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
-                static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
+            const auto cast = std::is_signed<TRight>() ? static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)) : static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
 
             const auto div = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
             result->addIncoming(SetterForInt128(div, block), block);
@@ -176,9 +180,7 @@ public:
             block = done;
             return result;
         } else {
-            const auto cast = std::is_signed<TRight>() ?
-                static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)):
-                static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
+            const auto cast = std::is_signed<TRight>() ? static_cast<CastInst*>(new SExtInst(GetterFor<TRight>(right, context, block), valType, "sext", block)) : static_cast<CastInst*>(new ZExtInst(GetterFor<TRight>(right, context, block), valType, "zext", block));
             const auto div = CallInst::Create(func, {GetterForInt128(left, block), cast}, "div", block);
             return SetterForInt128(div, block);
         }
@@ -194,7 +196,7 @@ private:
     IComputationNode* const Right;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -211,30 +213,31 @@ IComputationNode* WrapDecimalDiv(TCallable& callable, const TComputationNodeFact
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             MKQL_ENSURE(static_cast<TDataDecimalType*>(rightType)->IsSameType(*leftType), "Operands type mismatch");
 
-            if (isOptionalLeft && isOptionalRight)
+            if (isOptionalLeft && isOptionalRight) {
                 return new TDecimalDivWrapper<true, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            else if (isOptionalLeft)
+            } else if (isOptionalLeft) {
                 return new TDecimalDivWrapper<true, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            else if (isOptionalRight)
+            } else if (isOptionalRight) {
                 return new TDecimalDivWrapper<false, true>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-            else
+            } else {
                 return new TDecimalDivWrapper<false, false>(ctx.Mutables, left, right, leftType->GetParams().first, leftType->GetParams().second);
-#define MAKE_PRIMITIVE_TYPE_DIV(type) \
-        case NUdf::TDataType<type>::Id: \
-            if (isOptionalLeft && isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right); \
-            else if (isOptionalLeft) \
-                return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right); \
-            else if (isOptionalRight) \
-                return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right); \
-            else \
-                return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right);
-        INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_DIV)
+            }
+#define MAKE_PRIMITIVE_TYPE_DIV(type)                                                            \
+    case NUdf::TDataType<type>::Id:                                                              \
+        if (isOptionalLeft && isOptionalRight)                                                   \
+            return new TDecimalDivIntegralWrapper<true, true, type>(ctx.Mutables, left, right);  \
+        else if (isOptionalLeft)                                                                 \
+            return new TDecimalDivIntegralWrapper<true, false, type>(ctx.Mutables, left, right); \
+        else if (isOptionalRight)                                                                \
+            return new TDecimalDivIntegralWrapper<false, true, type>(ctx.Mutables, left, right); \
+        else                                                                                     \
+            return new TDecimalDivIntegralWrapper<false, false, type>(ctx.Mutables, left, right);
+            INTEGRAL_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_DIV)
 #undef MAKE_PRIMITIVE_TYPE_DIV
         default:
             Y_ABORT("Unupported type.");
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -5,7 +5,6 @@ Style guide for the util folder is a stricter version of
 (mostly in terms of ambiguity resolution).
 
  * all {} must be in K&R style
- * &, * tied closer to a type, not to variable
  * every .h file must be accompanied with corresponding .cpp to avoid a leakage and check that it is self contained
  * prohibited to use `printf`-like functions
 
@@ -44,7 +43,7 @@ to send a graceful ping into [Igni et ferro](https://wiki.yandex-team.ru/ignietf
 Certain exceptions apply. The following trivial changes do not need to be reviewed:
 
 * grammar and misspelling fixes,
-* renaming of an internal variable to match the styleguide.
+* making the code compliant with the style guide.
 
 Whenever a breaking change happens to accidentally land into trunk, reverting it does not need to be reviewed.
 

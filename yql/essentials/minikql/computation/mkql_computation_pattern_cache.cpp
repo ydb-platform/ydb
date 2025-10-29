@@ -4,18 +4,18 @@
 
 namespace NKikimr::NMiniKQL {
 
-class TComputationPatternLRUCache::TLRUPatternCacheImpl
-{
+class TComputationPatternLRUCache::TLRUPatternCacheImpl {
 public:
     TLRUPatternCacheImpl(size_t maxPatternsSize,
-        size_t maxPatternsSizeBytes,
-        size_t maxCompiledPatternsSize,
-        size_t maxCompiledPatternsSizeBytes)
+                         size_t maxPatternsSizeBytes,
+                         size_t maxCompiledPatternsSize,
+                         size_t maxCompiledPatternsSizeBytes)
         : MaxPatternsSize_(maxPatternsSize)
         , MaxPatternsSizeBytes_(maxPatternsSizeBytes)
         , MaxCompiledPatternsSize_(maxCompiledPatternsSize)
         , MaxCompiledPatternsSizeBytes_(maxCompiledPatternsSizeBytes)
-    {}
+    {
+    }
 
     size_t PatternsSize() const {
         return SerializedProgramToPatternCacheHolder_.size();
@@ -46,8 +46,8 @@ public:
 
     void Insert(const TString& serializedProgram, TPatternCacheEntryPtr entry) {
         auto [it, inserted] = SerializedProgramToPatternCacheHolder_.emplace(std::piecewise_construct,
-            std::forward_as_tuple(serializedProgram),
-            std::forward_as_tuple(serializedProgram, entry));
+                                                                             std::forward_as_tuple(serializedProgram),
+                                                                             std::forward_as_tuple(serializedProgram, entry));
 
         if (!inserted) {
             RemoveEntryFromLists(&it->second);
@@ -103,25 +103,28 @@ public:
         CurrentPatternsCompiledCodeSizeInBytes_ = 0;
 
         SerializedProgramToPatternCacheHolder_.clear();
-        for (auto & holder : LruPatternList_) {
+        for (auto& holder : LruPatternList_) {
             holder.Entry->IsInCache.store(false);
         }
 
         LruPatternList_.Clear();
         LruCompiledPatternList_.Clear();
     }
+
 private:
     struct TPatternLRUListTag {};
     struct TCompiledPatternLRUListTag {};
 
     /** Cache holder is used to store serialized program and pattern cache entry in intrusive LRU lists.
-      * Most recently accessed items are in back of the lists, least recently accessed items are in front of the lists.
-      */
-    struct TPatternCacheHolder : public TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>, TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag> {
+     * Most recently accessed items are in back of the lists, least recently accessed items are in front of the lists.
+     */
+    struct TPatternCacheHolder: public TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>,
+                                TIntrusiveListItem<TPatternCacheHolder, TCompiledPatternLRUListTag> {
         TPatternCacheHolder(TString serializedProgram, std::shared_ptr<TPatternCacheEntry> entry)
             : SerializedProgram(std::move(serializedProgram))
             , Entry(std::move(entry))
-        {}
+        {
+        }
 
         bool LinkedInPatternLRUList() const {
             return !TIntrusiveListItem<TPatternCacheHolder, TPatternLRUListTag>::Empty();
@@ -173,20 +176,22 @@ private:
 
     void ClearIfNeeded() {
         /// Remove from pattern LRU list and compiled pattern LRU list
-        while (SerializedProgramToPatternCacheHolder_.size() > MaxPatternsSize_ || CurrentPatternsSizeBytes_ > MaxPatternsSizeBytes_) {
+        while (SerializedProgramToPatternCacheHolder_.size() > MaxPatternsSize_ ||
+               CurrentPatternsSizeBytes_ > MaxPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruPatternList_.Front();
             RemoveEntryFromLists(holder);
             SerializedProgramToPatternCacheHolder_.erase(holder->SerializedProgram);
         }
 
         /// Only remove from compiled pattern LRU list
-        while (CurrentCompiledPatternsSize_ > MaxCompiledPatternsSize_ || CurrentPatternsCompiledCodeSizeInBytes_ > MaxCompiledPatternsSizeBytes_) {
+        while (CurrentCompiledPatternsSize_ > MaxCompiledPatternsSize_ ||
+               CurrentPatternsCompiledCodeSizeInBytes_ > MaxCompiledPatternsSizeBytes_) {
             TPatternCacheHolder* holder = LruCompiledPatternList_.PopFront();
 
             Y_ASSERT(CurrentCompiledPatternsSize_ > 0);
             --CurrentCompiledPatternsSize_;
 
-            auto & pattern = holder->Entry->Pattern;
+            auto& pattern = holder->Entry->Pattern;
             size_t patternCompiledSize = pattern->CompiledCodeSize();
             Y_ASSERT(patternCompiledSize <= CurrentPatternsCompiledCodeSizeInBytes_);
             CurrentPatternsCompiledCodeSizeInBytes_ -= patternCompiledSize;
@@ -210,8 +215,11 @@ private:
     TIntrusiveList<TPatternCacheHolder, TCompiledPatternLRUListTag> LruCompiledPatternList_;
 };
 
-TComputationPatternLRUCache::TComputationPatternLRUCache(const TComputationPatternLRUCache::Config& configuration, NMonitoring::TDynamicCounterPtr counters)
-    : Cache_(std::make_unique<TLRUPatternCacheImpl>(CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
+TComputationPatternLRUCache::TComputationPatternLRUCache(
+    const TComputationPatternLRUCache::Config& configuration,
+    NMonitoring::TDynamicCounterPtr counters)
+    : Cache_(std::make_unique<TLRUPatternCacheImpl>(
+          CacheMaxElementsSize, configuration.MaxSizeBytes, CacheMaxElementsSize, configuration.MaxCompiledSizeBytes))
     , Configuration_(configuration)
     , Hits_(counters->GetCounter("PatternCache/Hits", true))
     , HitsCompiled_(counters->GetCounter("PatternCache/HitsCompiled", true))
@@ -238,8 +246,9 @@ TPatternCacheEntryPtr TComputationPatternLRUCache::Find(const TString& serialize
     if (auto it = Cache_->Find(serializedProgram)) {
         ++*Hits_;
 
-        if (it->Pattern->IsCompiled())
+        if (it->Pattern->IsCompiled()) {
             ++*HitsCompiled_;
+        }
 
         return it;
     }
@@ -256,7 +265,10 @@ TPatternCacheEntryFuture TComputationPatternLRUCache::FindOrSubscribe(const TStr
         return NThreading::MakeFuture<TPatternCacheEntryPtr>(it);
     }
 
-    auto [notifyIt, isNew] = Notify_.emplace(std::piecewise_construct, std::forward_as_tuple(serializedProgram), std::forward_as_tuple());
+    auto [notifyIt, isNew] = Notify_.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(serializedProgram),
+        std::forward_as_tuple());
     if (isNew) {
         ++*Misses_;
         // First future is empty - so the subscriber can initiate the entry creation.

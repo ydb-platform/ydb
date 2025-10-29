@@ -7,55 +7,54 @@
 
 #include <google/protobuf/descriptor.h>
 
-
 namespace NYql {
-    namespace NPureCalc {
-        enum class EEnumPolicy {
-            Int32,
-            String,
-            YTFlagDefaultInt32,
-            YTFlagDefaultString
-        };
+namespace NPureCalc {
+enum class EEnumPolicy {
+    Int32,
+    String,
+    YTFlagDefaultInt32,
+    YTFlagDefaultString
+};
 
-        enum class EEnumFormatType {
-            Int32,
-            String
-        };
+enum class EEnumFormatType {
+    Int32,
+    String
+};
 
-        /**
-         * Options that customize building of struct type from protobuf descriptor.
-         */
-        struct TProtoSchemaOptions {
-        public:
-            EEnumPolicy EnumPolicy;
-            bool ListIsOptional;
-            bool EnableRecursiveRenaming;
-            THashMap<TString, TString> FieldRenames;
+/**
+ * Options that customize building of struct type from protobuf descriptor.
+ */
+struct TProtoSchemaOptions {
+public:
+    EEnumPolicy EnumPolicy;
+    bool ListIsOptional;
+    bool EnableRecursiveRenaming;
+    THashMap<TString, TString> FieldRenames;
 
-        public:
-            TProtoSchemaOptions();
+public:
+    TProtoSchemaOptions();
 
-        public:
-            TProtoSchemaOptions& SetEnumPolicy(EEnumPolicy);
+public:
+    TProtoSchemaOptions& SetEnumPolicy(EEnumPolicy);
 
-            TProtoSchemaOptions& SetListIsOptional(bool);
+    TProtoSchemaOptions& SetListIsOptional(bool);
 
-            TProtoSchemaOptions& SetEnableRecursiveRenaming(bool);
+    TProtoSchemaOptions& SetEnableRecursiveRenaming(bool);
 
-            TProtoSchemaOptions& SetFieldRenames(THashMap<TString, TString>);
-        };
+    TProtoSchemaOptions& SetFieldRenames(THashMap<TString, TString>);
+};
 
-        EEnumFormatType EnumFormatType(const google::protobuf::FieldDescriptor& enumField, EEnumPolicy enumPolicy);
+EEnumFormatType EnumFormatType(const google::protobuf::FieldDescriptor& enumField, EEnumPolicy enumPolicy);
 
-        /**
-         * Build struct type from a protobuf descriptor. The returned yson can be loaded into a struct annotation node
-         * using the ParseTypeFromYson function.
-         */
-        NYT::TNode MakeSchemaFromProto(const google::protobuf::Descriptor&, const TProtoSchemaOptions& = {});
+/**
+ * Build struct type from a protobuf descriptor. The returned yson can be loaded into a struct annotation node
+ * using the ParseTypeFromYson function.
+ */
+NYT::TNode MakeSchemaFromProto(const google::protobuf::Descriptor&, const TProtoSchemaOptions& = {});
 
-        /**
-         * Build variant over tuple type from protobuf descriptors.
-         */
-        NYT::TNode MakeVariantSchemaFromProtos(const TVector<const google::protobuf::Descriptor*>&, const TProtoSchemaOptions& = {});
-    }
-}
+/**
+ * Build variant over tuple type from protobuf descriptors.
+ */
+NYT::TNode MakeVariantSchemaFromProtos(const TVector<const google::protobuf::Descriptor*>&, const TProtoSchemaOptions& = {});
+} // namespace NPureCalc
+} // namespace NYql

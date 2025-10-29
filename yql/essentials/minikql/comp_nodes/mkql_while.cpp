@@ -1,6 +1,6 @@
 #include "mkql_while.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -9,12 +9,17 @@ namespace NMiniKQL {
 namespace {
 
 template <bool SkipOrTake, bool Inclusive>
-class TWhileFlowWrapper : public TStatefulFlowCodegeneratorNode<TWhileFlowWrapper<SkipOrTake, Inclusive>> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TWhileFlowWrapper<SkipOrTake, Inclusive>>;
+class TWhileFlowWrapper: public TStatefulFlowCodegeneratorNode<TWhileFlowWrapper<SkipOrTake, Inclusive>> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TWhileFlowWrapper<SkipOrTake, Inclusive>>;
+
 public:
-     TWhileFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded), Flow(flow), Item(item), Predicate(predicate)
-    {}
+    TWhileFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, IComputationNode* predicate)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Item(item)
+        , Predicate(predicate)
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.HasValue() && state.Get<bool>()) {
@@ -22,19 +27,22 @@ public:
         }
 
         if constexpr (SkipOrTake) {
-            do if (auto item = Flow->GetValue(ctx); item.IsSpecial())
-                return item;
-            else
-                Item->SetValue(ctx, std::move(item));
-            while (Predicate->GetValue(ctx).template Get<bool>());
+            do {
+                if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
+                    return item;
+                } else {
+                    Item->SetValue(ctx, std::move(item));
+                }
+            } while (Predicate->GetValue(ctx).template Get<bool>());
 
             state = NUdf::TUnboxedValuePod(true);
             return Inclusive ? Flow->GetValue(ctx) : Item->GetValue(ctx);
         } else {
-            if (auto item = Flow->GetValue(ctx); item.IsSpecial())
+            if (auto item = Flow->GetValue(ctx); item.IsSpecial()) {
                 return item;
-            else
+            } else {
                 Item->SetValue(ctx, std::move(item));
+            }
 
             if (Predicate->GetValue(ctx).template Get<bool>()) {
                 return Item->GetValue(ctx);
@@ -86,9 +94,7 @@ public:
 
         block = stop;
         new StoreInst(GetTrue(context), statePtr, block);
-        const auto last = Inclusive ?
-                (SkipOrTake ? GetNodeValue(Flow, ctx, block) : item):
-                (SkipOrTake ? item : GetFinish(context));
+        const auto last = Inclusive ? (SkipOrTake ? GetNodeValue(Flow, ctx, block) : item) : (SkipOrTake ? item : GetFinish(context));
         result->addIncoming(last, block);
         BranchInst::Create(done, block);
 
@@ -117,9 +123,9 @@ private:
 template <bool SkipOrTake, bool Inclusive, bool IsStream>
 class TBaseWhileWrapper {
 protected:
-    class TListValue : public TCustomListValue {
+    class TListValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, IComputationNode* predicate)
                 : TComputationValue<TIterator>(memInfo)
@@ -127,7 +133,8 @@ protected:
                 , Iter(std::move(iter))
                 , Item(item)
                 , Predicate(predicate)
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
@@ -178,7 +185,8 @@ protected:
             , List(list)
             , Item(item)
             , Predicate(predicate)
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const override {
@@ -191,7 +199,7 @@ protected:
         IComputationNode* const Predicate;
     };
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -267,31 +275,29 @@ protected:
     };
 
 #ifndef MKQL_DISABLE_CODEGEN
-    class TStreamCodegenWhileValue : public TStreamCodegenStatefulValueT<> {
+    class TStreamCodegenWhileValue: public TStreamCodegenStatefulValueT<> {
     public:
         TStreamCodegenWhileValue(TMemoryUsageInfo* memInfo, TFetchPtr fetch, TComputationContext* ctx, NUdf::TUnboxedValue&& stream)
             : TStreamCodegenStatefulValueT(memInfo, fetch, ctx, std::move(stream))
-        {}
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
-            return State ?
-                (SkipOrTake ? Stream.Fetch(result) : NUdf::EFetchStatus::Finish):
-                TStreamCodegenStatefulValueT::Fetch(result);
+            return State ? (SkipOrTake ? Stream.Fetch(result) : NUdf::EFetchStatus::Finish) : TStreamCodegenStatefulValueT::Fetch(result);
         }
     };
 
-    class TCodegenIteratorWhile : public TCodegenStatefulIterator<> {
+    class TCodegenIteratorWhile: public TCodegenStatefulIterator<> {
     public:
         TCodegenIteratorWhile(TMemoryUsageInfo* memInfo, TNextPtr next, TComputationContext* ctx, NUdf::TUnboxedValue&& iterator, const NUdf::TUnboxedValue& init)
             : TCodegenStatefulIterator(memInfo, next, ctx, std::move(iterator), init)
-        {}
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& value) final {
-            return State ?
-                (SkipOrTake ? Iterator.Next(value) : false):
-                TCodegenStatefulIterator::Next(value);
+            return State ? (SkipOrTake ? Iterator.Next(value) : false) : TCodegenStatefulIterator::Next(value);
         }
     };
 
@@ -299,8 +305,11 @@ protected:
 #endif
 
     TBaseWhileWrapper(IComputationNode* list, IComputationExternalNode* item, IComputationNode* predicate)
-        : List(list), Item(item), Predicate(predicate)
-    {}
+        : List(list)
+        , Item(item)
+        , Predicate(predicate)
+    {
+    }
 
 #ifndef MKQL_DISABLE_CODEGEN
     Function* GenerateFilter(NYql::NCodegen::ICodegen& codegen, const TString& name) const {
@@ -311,8 +320,9 @@ protected:
 
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto containerType = static_cast<Type*>(valueType);
@@ -349,12 +359,9 @@ protected:
         }
 
         const auto itemPtr = codegenItem->CreateRefValue(ctx, block);
-        const auto status = IsStream ?
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr):
-            CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
+        const auto status = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, itemPtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, itemPtr);
 
-        const auto icmp = IsStream ?
-            CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
+        const auto icmp = IsStream ? CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, status, ConstantInt::get(statusType, static_cast<ui32>(NUdf::EFetchStatus::Ok)), "cond", block) : status;
 
         BranchInst::Create(good, done, icmp, block);
         block = good;
@@ -371,9 +378,7 @@ protected:
 
         if constexpr (SkipOrTake) {
             if constexpr (Inclusive) {
-                const auto last = IsStream ?
-                    CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, valuePtr):
-                    CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, valuePtr);
+                const auto last = IsStream ? CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Fetch>(statusType, container, codegen, block, valuePtr) : CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Next>(statusType, container, codegen, block, valuePtr);
                 ReturnInst::Create(context, last, block);
             } else {
                 BranchInst::Create(pass, block);
@@ -411,19 +416,23 @@ protected:
 };
 
 template <bool SkipOrTake, bool Inclusive>
-class TStreamWhileWrapper : public TCustomValueCodegeneratorNode<TStreamWhileWrapper<SkipOrTake, Inclusive>>,
-    private TBaseWhileWrapper<SkipOrTake, Inclusive, true> {
+class TStreamWhileWrapper: public TCustomValueCodegeneratorNode<TStreamWhileWrapper<SkipOrTake, Inclusive>>,
+                           private TBaseWhileWrapper<SkipOrTake, Inclusive, true> {
     typedef TBaseWhileWrapper<SkipOrTake, Inclusive, true> TBaseWrapper;
     typedef TCustomValueCodegeneratorNode<TStreamWhileWrapper<SkipOrTake, Inclusive>> TBaseComputation;
+
 public:
     TStreamWhileWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* item, IComputationNode* predicate)
-        : TBaseComputation(mutables), TBaseWrapper(list, item, predicate)
-    {}
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, item, predicate)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
 #ifndef MKQL_DISABLE_CODEGEN
-        if (ctx.ExecuteLLVM && this->Filter)
+        if (ctx.ExecuteLLVM && this->Filter) {
             return ctx.HolderFactory.Create<typename TBaseWrapper::TStreamCodegenWhileValue>(this->Filter, &ctx, this->List->GetValue(ctx));
+        }
 #endif
         return ctx.HolderFactory.Create<typename TBaseWrapper::TStreamValue>(ctx, this->List->GetValue(ctx), this->Item, this->Predicate);
     }
@@ -441,21 +450,25 @@ private:
     }
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
-        if (this->FilterFunc)
+        if (this->FilterFunc) {
             this->Filter = reinterpret_cast<typename TBaseWrapper::TFilterPtr>(codegen.GetPointerToFunction(this->FilterFunc));
+        }
     }
 #endif
 };
 
 template <bool SkipOrTake, bool Inclusive>
-class TListWhileWrapper : public TBothWaysCodegeneratorNode<TListWhileWrapper<SkipOrTake, Inclusive>>,
-    private TBaseWhileWrapper<SkipOrTake, Inclusive, false> {
+class TListWhileWrapper: public TBothWaysCodegeneratorNode<TListWhileWrapper<SkipOrTake, Inclusive>>,
+                         private TBaseWhileWrapper<SkipOrTake, Inclusive, false> {
     typedef TBaseWhileWrapper<SkipOrTake, Inclusive, false> TBaseWrapper;
     typedef TBothWaysCodegeneratorNode<TListWhileWrapper<SkipOrTake, Inclusive>> TBaseComputation;
+
 public:
     TListWhileWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* item, IComputationNode* predicate)
-        : TBaseComputation(mutables), TBaseWrapper(list, item, predicate)
-    {}
+        : TBaseComputation(mutables)
+        , TBaseWrapper(list, item, predicate)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = this->List->GetValue(ctx);
@@ -468,8 +481,9 @@ public:
 
             for (auto e = elements; todo > init; --todo) {
                 this->Item->SetValue(ctx, NUdf::TUnboxedValue(*e++));
-                if (!this->Predicate->GetValue(ctx).template Get<bool>())
+                if (!this->Predicate->GetValue(ctx).template Get<bool>()) {
                     break;
+                }
             }
 
             if (init && todo) {
@@ -564,9 +578,7 @@ public:
             block = make;
 
             const auto itemsType = PointerType::getUnqual(list->getType());
-            const auto itemsPtr = *this->Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(itemsType, 0U, "items_ptr", block);
+            const auto itemsPtr = *this->Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
             const auto array = GenNewArray(ctx, copy, itemsPtr, block);
             const auto items = new LoadInst(itemsType, itemsPtr, "items", block);
             const auto from = SkipOrTake ? GetElementPtrInst::CreateInBounds(list->getType(), elements, {pass}, "from", block) : elements;
@@ -609,7 +621,7 @@ public:
             const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListWhileWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
+            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
             const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
             const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
             out->addIncoming(value, block);
@@ -636,8 +648,9 @@ private:
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListWhileWrapper<SkipOrTake, Inclusive>>::FinalizeFunctions(codegen);
-        if (this->FilterFunc)
+        if (this->FilterFunc) {
             this->Filter = reinterpret_cast<typename TBaseWrapper::TFilterPtr>(codegen.GetPointerToFunction(this->FilterFunc));
+        }
     }
 #endif
 };
@@ -664,7 +677,7 @@ IComputationNode* WrapFilterWhile(TCallable& callable, const TComputationNodeFac
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-}
+} // namespace
 
 IComputationNode* WrapTakeWhile(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapFilterWhile<false, false>(callable, ctx);
@@ -682,5 +695,5 @@ IComputationNode* WrapSkipWhileInclusive(TCallable& callable, const TComputation
     return WrapFilterWhile<true, true>(callable, ctx);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -6,6 +6,6 @@
 
 namespace NSQLComplete {
 
-    INameService::TPtr MakeBindingNameService(TVector<TString> names);
+INameService::TPtr MakeBindingNameService(TVector<TString> names);
 
 } // namespace NSQLComplete

@@ -139,4 +139,4 @@ static_assert(sizeof(TMeta) == sizeof(ui32));
  */
 using TBinaryJson = TBuffer;
 
-}
+} // namespace NKikimr::NBinaryJson

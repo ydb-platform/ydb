@@ -33,7 +33,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const TString& /*topicPath*/,
         const TString& /*endpoint*/,
         const TString& /*database*/,
-        const NKikimrConfig::TSharedReadingConfig& /*config*/,
+        const TRowDispatcherSettings& /*config*/,
         const NKikimr::NMiniKQL::IFunctionRegistry* /*functionRegistry*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         NActors::TActorId /*compileServiceActorId*/,
@@ -76,10 +76,10 @@ public:
         TAutoPtr<TAppPrepare> app = new TAppPrepare();
         Runtime.Initialize(app->Unwrap());
         Runtime.SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_TRACE);
-        NKikimrConfig::TSharedReadingConfig config;
+        NConfig::TRowDispatcherConfig config;
         config.SetEnabled(true);
         config.SetSendStatusPeriodSec(1);
-        NKikimrConfig::TSharedReadingConfig::TCoordinatorConfig& coordinatorConfig = *config.MutableCoordinator();
+        auto& coordinatorConfig = *config.MutableCoordinator();
         coordinatorConfig.SetCoordinationNodePath("RowDispatcher");
         auto& database = *coordinatorConfig.MutableDatabase();
         database.SetEndpoint("YDB_ENDPOINT");

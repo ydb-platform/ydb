@@ -29,11 +29,10 @@ std::string CalculateDiff(const TString& oldAst, const TString& newAst) {
     return ss.str();
 }
 
-
 const int DIFF_LINES_LIMIT = 16;
 
 void DumpSmallNodes(const TExprNode* rootOne, const TExprNode* rootTwo) {
-    const auto isDumpSmall = [] (const TString& dump) {
+    const auto isDumpSmall = [](const TString& dump) {
         return std::count(dump.begin(), dump.end(), '\n') < DIFF_LINES_LIMIT;
     };
     const auto rootOneDump = rootOne->Dump();
@@ -45,10 +44,11 @@ void DumpSmallNodes(const TExprNode* rootOne, const TExprNode* rootTwo) {
         return;
     }
 
-    Cerr << rootOneDump << '\n' << rootTwoDump;
+    Cerr << rootOneDump << '\n'
+         << rootTwoDump;
 }
 
-int Main(int argc, const char *argv[])
+int Main(int argc, const char* argv[])
 {
     if (argc != 3) {
         PrintProgramSvnVersion();
@@ -103,17 +103,20 @@ int Main(int argc, const char *argv[])
         if (rootOne->Type() != rootTwo->Type()) {
             Cerr << "Node in " << fileOne << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "] type is " << rootOne->Type() << Endl;
             Cerr << "Node in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "] type is " << rootTwo->Type() << Endl;
-            Cerr << "\nFile diff:\n" << diff;
+            Cerr << "\nFile diff:\n"
+                 << diff;
         } else if (rootOne->ChildrenSize() != rootTwo->ChildrenSize()) {
             Cerr << "Node '" << rootOne->Content() << "' in " << fileOne << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "] has " << rootOne->ChildrenSize() << " children." << Endl;
             Cerr << "Node '" << rootTwo->Content() << "' in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "] has " << rootTwo->ChildrenSize() << " children." << Endl;
             DumpSmallNodes(rootOne, rootTwo);
-            Cerr << "\nFile diff:\n" << diff;
+            Cerr << "\nFile diff:\n"
+                 << diff;
         } else {
             Cerr << "Node in " << fileOne << " at [" << rootOnePos.Row << ":" << rootOnePos.Column << "]:";
             Cerr << "Node in " << fileTwo << " at [" << rootTwoPos.Row << ":" << rootTwoPos.Column << "]:";
             DumpSmallNodes(rootOne, rootTwo);
-            Cerr << "\nFile diff:\n" << diff;
+            Cerr << "\nFile diff:\n"
+                 << diff;
         }
         return 5;
     }
@@ -121,14 +124,13 @@ int Main(int argc, const char *argv[])
     return 0;
 }
 
-int main(int argc, const char *argv[]) {
+int main(int argc, const char* argv[]) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
 
     try {
         return Main(argc, argv);
-    }
-    catch (...) {
+    } catch (...) {
         Cerr << CurrentExceptionMessage() << Endl;
         return 1;
     }

@@ -19,6 +19,7 @@ struct TReadAnswer {
     ui64 Size = 0;
     THolder<IEventBase> Event;
     bool IsInternal = false;
+    TActorId ReplyTo;
 };
 
 struct TReadInfo {
@@ -28,7 +29,7 @@ struct TReadInfo {
     ui16 PartNo;
     ui32 Count;
     ui32 Size;
-    ui64 Destination;
+    ui64 Destination; // It is cookie!!!
     TInstant Timestamp;
     ui64 ReadTimestampMs;
     TDuration WaitQuotaTime;
@@ -40,6 +41,7 @@ struct TReadInfo {
     ui64 CachedOffset; //offset of head can be bigger than last databody offset
     TVector<TClientBlob> Cached; //records from head
     TActorId PipeClient;
+    TActorId ReplyTo;
 
     ui64 SizeEstimate = 0;
     ui64 RealReadOffset = 0;
@@ -64,7 +66,8 @@ struct TReadInfo {
         TDuration waitQuotaTime,
         const bool isExternalRead,
         const TActorId& pipeClient,
-        bool isInternal
+        bool isInternal,
+        const TActorId& replyTo
     )
         : User(user)
         , ClientDC(clientDC)
@@ -80,6 +83,7 @@ struct TReadInfo {
         , IsSubscription(false)
         , CachedOffset(0)
         , PipeClient(pipeClient)
+        , ReplyTo(replyTo)
         , LastOffset(lastOffset)
         , IsInternal(isInternal)
     {}

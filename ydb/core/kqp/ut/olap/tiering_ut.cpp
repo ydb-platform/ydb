@@ -13,6 +13,8 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
+
 #include <library/cpp/testing/hook/hook.h>
 
 namespace NKikimr::NKqp {
@@ -58,6 +60,11 @@ public:
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardBool(true);
+        featureFlags.SetEnableColumnStore(true);
+        runnerSettings.SetFeatureFlags(featureFlags);
         TestHelper.emplace(runnerSettings);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
@@ -457,11 +464,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         putController->WaitActualization(TDuration::Seconds(5));
         Sleep(TDuration::Seconds(5));
 
-        UNIT_ASSERT_C(putController->GetAbortedWrites() > 20,
-            "Expected load spike, but only " << putController->GetAbortedWrites() << " PutObject requests recorded");   // comment after fix
-        // UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
-        //               "Expected load spike, but was "
-        //               << putController->GetAbortedWrites() << " PutObject requests recorded"); // uncomment after fix
+        UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
+                      "Expected reduced load, but was "
+                      << putController->GetAbortedWrites() << " PutObject requests recorded");
     }
 
     Y_UNIT_TEST(ReconfigureTier) {
@@ -508,6 +513,136 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
+    }
+
+    Y_UNIT_TEST(TieringForIndexes) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MAX,
+                    FEATURES=`{"inherit_portion_storage" : true, "column_name" : "level"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_ngramm_uid"
+            )";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            for (auto& row: rows) {
+                UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), DEFAULT_TIER_PATH);
+            }
+        }
+
+        ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
+    }
+
+    Y_UNIT_TEST(TieringBoolToS3) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        TVector<NKikimr::NKqp::TTestHelper::TColumnSchema> schema = {
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("ts").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("flag").SetType(NScheme::NTypeIds::Bool),
+        };
+
+        NKikimr::NKqp::TTestHelper::TColumnTable col;
+        col.SetName(DEFAULT_TABLE_PATH).SetPrimaryKey({"ts", "id"}).SetSharding({"ts"}).SetSchema(schema);
+        testHelper.CreateTable(col);
+
+        {
+            arrow::Int64Builder id;
+            auto tsType = arrow::timestamp(arrow::TimeUnit::MICRO);
+            arrow::TimestampBuilder ts(tsType, arrow::default_memory_pool());
+            arrow::UInt8Builder flag;
+
+            const i64 tsMicros = (TInstant::Now() - TDuration::Days(365)).MicroSeconds();
+            Y_ABORT_UNLESS(id.Append(1).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(1).ok());
+
+            Y_ABORT_UNLESS(id.Append(2).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(0).ok());
+
+            Y_ABORT_UNLESS(id.Append(3).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(1).ok());
+
+            Y_ABORT_UNLESS(id.Append(4).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(0).ok());
+
+            std::shared_ptr<arrow::Array> idArr;
+            Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+
+            std::shared_ptr<arrow::Array> tsArr;
+            Y_ABORT_UNLESS(ts.Finish(&tsArr).ok());
+
+            std::shared_ptr<arrow::Array> fArr;
+            Y_ABORT_UNLESS(flag.Finish(&fArr).ok());
+
+            auto aSchema = arrow::schema({
+                arrow::field("id", arrow::int64(), /*nullable=*/ false),
+                arrow::field("ts", tsType, /*nullable*/ false),
+                arrow::field("flag", arrow::uint8())
+            });
+
+            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, tsArr, fArr });
+            testHelper.BulkUpsert(col, batch);
+        }
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, "ts");
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto selectQuery = TStringBuilder();
+            selectQuery << R"(
+                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
+                FROM `)" << DEFAULT_TABLE_PATH << R"(/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName)";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
+        }
+
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << DEFAULT_TABLE_PATH << "`");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetUint64(rows[0].at("cnt")), 0);
+        }
     }
 }
 

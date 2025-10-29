@@ -1,5 +1,7 @@
 UNITTEST_FOR(yql/essentials/sql/v0)
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     sql_ut.cpp
 )

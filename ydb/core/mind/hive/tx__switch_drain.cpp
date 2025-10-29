@@ -11,7 +11,7 @@ class TTxSwitchDrainOn : public TTransactionBase<THive> {
     TActorId Initiator;
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     ui64 SeqNo;
-    bool ShouldStartDrain = true;
+    bool StartingDrain = true;
     ui64 Cookie;
 
 public:
@@ -32,11 +32,11 @@ public:
         if (node != nullptr) {
             if (!(node->Drain) && (Self->BalancerNodes.count(NodeId) != 0 || (SeqNo != 0 && SeqNo <= node->DrainSeqNo))) {
                 Status = NKikimrProto::ALREADY;
-                ShouldStartDrain = false;
+                StartingDrain = false;
             } else {
                 Status = NKikimrProto::OK;
                 if (node->Drain) {
-                    ShouldStartDrain = false;
+                    StartingDrain = false;
                 }
                 node->Drain = true;
                 node->DrainInitiators.emplace_back(Initiator);
@@ -60,27 +60,22 @@ public:
                         }
                     }
                 }
+                Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
+                node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
             }
         } else {
             Status = NKikimrProto::ERROR;
-            ShouldStartDrain = false;
+            StartingDrain = false;
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
         BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
-        if (ShouldStartDrain) {
-            auto* node = Self->FindNode(NodeId);
-            if (node) {
-                Y_DEBUG_ABORT_UNLESS(node->DrainActor == nullptr);
-                node->DrainActor = Self->StartHiveDrain(NodeId, std::move(Settings));
-            }
-            if (Initiator) {
+        if (Initiator) {
+            if (StartingDrain) {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeAck(SeqNo), 0, Cookie);
-            }
-        } else {
-            if (Initiator) {
+            } else {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeResult(Status), 0, Cookie);
             }
         }

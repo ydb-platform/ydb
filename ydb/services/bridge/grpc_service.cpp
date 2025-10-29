@@ -4,34 +4,39 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/service_bridge.h>
 #include <ydb/core/jaeger_tracing/request_discriminator.h>
-#include "ydb/library/grpc/server/grpc_method_setup.h"
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr::NGRpcService {
 
 TBridgeGRpcService::TBridgeGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
-    : ActorSystem(actorSystem)
-    , Counters(std::move(counters))
-    , GRpcRequestProxyId(grpcRequestProxyId)
+    : ActorSystem_(actorSystem)
+    , Counters_(std::move(counters))
+    , GRpcRequestProxyId_(grpcRequestProxyId)
 {
 }
 
 TBridgeGRpcService::~TBridgeGRpcService() = default;
 
 void TBridgeGRpcService::InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) {
-    CQ = cq;
+    CQ_ = cq;
     SetupIncomingRequests(std::move(logger));
 }
 
 void TBridgeGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    using namespace Ydb::Bridge;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-    #define SETUP_BRIDGE_METHOD(methodName, method, rlMode, requestType, auditModeFlags) \
-        SETUP_METHOD(methodName, method, rlMode, requestType, Bridge, config, auditModeFlags)
+#ifdef SETUP_BRIDGE_METHOD
+#error SETUP_BRIDGE_METHOD macro already defined
+#endif
 
-    SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, Rps, BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
-    SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, Rps, BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+#define SETUP_BRIDGE_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, bridge, auditMode)
 
-    #undef SETUP_BRIDGE_METHOD
+    SETUP_BRIDGE_METHOD(GetClusterState, DoGetClusterState, RLMODE(Rps), BRIDGE_GETCLUSTERSTATE, TAuditMode::NonModifying());
+    SETUP_BRIDGE_METHOD(UpdateClusterState, DoUpdateClusterState, RLMODE(Rps), BRIDGE_UPDATECLUSTERSTATE, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ClusterAdmin));
+
+#undef SETUP_BRIDGE_METHOD
 }
 
 } // namespace NKikimr::NGRpcService

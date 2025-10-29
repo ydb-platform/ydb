@@ -198,8 +198,8 @@ public:
                 }
             } else {
                 ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-                    .Database = Database,
                     .Ticket = SecurityToken,
+                    .Database = Database,
                     .PeerName = PeerName,
                     .Entries = Entries
                 }));

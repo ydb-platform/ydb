@@ -492,6 +492,7 @@ init_execution_state(List *queryTree_list,
 				stmt->utilityStmt = queryTree->utilityStmt;
 				stmt->stmt_location = queryTree->stmt_location;
 				stmt->stmt_len = queryTree->stmt_len;
+				stmt->queryId = queryTree->queryId;
 			}
 			else
 				stmt = pg_plan_query(queryTree,
@@ -1983,6 +1984,12 @@ tlist_coercion_finished:
 		rtr = makeNode(RangeTblRef);
 		rtr->rtindex = 1;
 		newquery->jointree = makeFromExpr(list_make1(rtr), NULL);
+
+		/*
+		 * Make sure the new query is marked as having row security if the
+		 * original one does.
+		 */
+		newquery->hasRowSecurity = parse->hasRowSecurity;
 
 		/* Replace original query in the correct element of the query list */
 		lfirst(parse_cell) = newquery;

@@ -10,6 +10,7 @@ namespace NYql::NCommon {
 
 namespace {
 
+const TString UdfResolver_GetSystemModulePath = "UdfResolver_GetSystemModulePath";
 const TString UdfResolver_LoadMetadata = "UdfResolver_LoadMetadata";
 const TString UdfResolver_ContainsModule = "UdfResolver_ContainsModule";
 
@@ -22,23 +23,30 @@ TString MakeHash(const TString& str) {
     return TString((const char*)hash, sizeof(hash));
 }
 
-class TResolver : public IUdfResolver {
+class TResolver: public IUdfResolver {
 public:
     TResolver(IUdfResolver::TPtr inner, const TQContext& qContext)
         : Inner_(inner)
         , QContext_(qContext)
-    {}
+    {
+    }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const final {
         if (QContext_.CanRead()) {
-            return MakeMaybe<TFilePathWithMd5>("", "");
+            auto res = QContext_.GetReader()->Get({UdfResolver_GetSystemModulePath, TString(moduleName)}).GetValueSync();
+            return MakeMaybe<TFilePathWithMd5>(res ? res->Value : "", "");
         }
 
-        return Inner_->GetSystemModulePath(moduleName);
+        auto res = Inner_->GetSystemModulePath(moduleName);
+        if (res && QContext_.CanWrite()) {
+            QContext_.GetWriter()->Put({UdfResolver_GetSystemModulePath, TString(moduleName)}, res->Path).GetValueSync();
+        }
+
+        return res;
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
+                      const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const final {
         if (QContext_.CanRead()) {
             for (auto& f : functions) {
                 auto key = MakeKey(f);
@@ -94,8 +102,7 @@ public:
 
 private:
     TString MakeKey(const TFunction* f) const {
-        auto node = NYT::TNode()
-                ("Name", NYT::TNode(f->Name));
+        auto node = NYT::TNode()("Name", NYT::TNode(f->Name));
         if (f->TypeConfig) {
             node("TypeConfig", NYT::TNode(f->TypeConfig));
         }
@@ -108,9 +115,7 @@ private:
     }
 
     TString SaveValue(const TFunction* f) const {
-        auto node = NYT::TNode()
-            ("NormalizedName", f->NormalizedName)
-            ("CallableType", TypeToYsonNode(f->CallableType));
+        auto node = NYT::TNode()("NormalizedName", f->NormalizedName)("CallableType", TypeToYsonNode(f->CallableType));
         if (f->NormalizedUserType && f->NormalizedUserType->GetKind() != ETypeAnnotationKind::Void) {
             node("NormalizedUserType", TypeToYsonNode(f->NormalizedUserType));
         }
@@ -136,7 +141,7 @@ private:
             node("Messages", list);
         }
 
-        return NYT::NodeToYsonString(node,NYT::NYson::EYsonFormat::Binary);
+        return NYT::NodeToYsonString(node, NYT::NYson::EYsonFormat::Binary);
     }
 
     void LoadValue(TFunction* f, const TString& value, TExprContext& ctx) const {
@@ -176,10 +181,10 @@ private:
     const TQContext QContext_;
 };
 
-}
+} // namespace
 
 IUdfResolver::TPtr WrapUdfResolverWithQContext(IUdfResolver::TPtr inner, const TQContext& qContext) {
     return new TResolver(inner, qContext);
 }
 
-}
+} // namespace NYql::NCommon

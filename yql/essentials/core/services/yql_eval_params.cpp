@@ -15,9 +15,8 @@ using namespace NKikimr::NMiniKQL;
 namespace {
 
 bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes,
-    const NYT::TNode& paramData, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
-    THashMap<TStringBuf, TExprNode::TPtr>& paramValues) {
-
+                                 const NYT::TNode& paramData, TExprContext& ctx, const IFunctionRegistry& functionRegistry,
+                                 THashMap<TStringBuf, TExprNode::TPtr>& paramValues) {
     if (!paramData.IsMap()) {
         ctx.AddError(TIssue({}, TStringBuilder() << "ParamData is not a map"));
         return false;
@@ -69,8 +68,7 @@ bool BuildParameterValuesAsNodes(const THashMap<TStringBuf, const TTypeAnnotatio
 }
 
 bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext& types,
-    TExprContext& ctx, THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes) {
-
+                           TExprContext& ctx, THashMap<TStringBuf, const TTypeAnnotationNode*>& paramTypes) {
     auto callableTransformer = CreateExtCallableTypeAnnotationTransformer(types);
     auto typeTransformer = CreateTypeAnnotationTransformer(callableTransformer, types);
     TVector<TTransformStage> transformers;
@@ -81,7 +79,7 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
     TExprNode::TPtr output = input;
-    auto status1 = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
+    auto status1 = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (!node->IsCallable("Parameter")) {
             return node;
         }
@@ -104,7 +102,7 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
             type = param->GetTypeAnn();
         } else if (!IsSameAnnotation(*type, *param->GetTypeAnn())) {
             ctx.AddError(TIssue(ctx.GetPosition(param->Pos()), TStringBuilder() << "Mismatch of types: " << *type << " != " << *param->GetTypeAnn()
-                << " for parameter: " << name));
+                                                                                << " for parameter: " << name));
             return nullptr;
         }
 
@@ -114,11 +112,10 @@ bool ExtractParameterTypes(const TExprNode::TPtr& input, TTypeAnnotationContext&
     return status1.Level == IGraphTransformer::TStatus::Ok;
 }
 
-}
+} // namespace
 
 bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationContext& types,
-    TExprContext& ctx, NYT::TNode& paramsMetaMap) {
-
+                                 TExprContext& ctx, NYT::TNode& paramsMetaMap) {
     THashMap<TStringBuf, const TTypeAnnotationNode*> params;
     if (!ExtractParameterTypes(input, types, ctx, params)) {
         return false;
@@ -131,7 +128,7 @@ bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationCo
 }
 
 IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-    TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry) {
+                                              TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry) {
     output = input;
     if (ctx.Step.IsDone(TExprStep::Params)) {
         return IGraphTransformer::TStatus::Ok;
@@ -157,7 +154,7 @@ IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExp
     // inject param values into graph
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
-    auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx)->TExprNode::TPtr {
+    auto status = OptimizeExpr(output, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (!node->IsCallable("Parameter")) {
             return node;
         }

@@ -19,8 +19,9 @@ THashType HashList(const NUdf::TUnboxedValuePod x) {
             }
         } else {
             const auto it = x.GetListIterator();
-            for (TUnboxedValue v; it.Next(v); hash = CombineHashes(hash, HashDom(v)))
+            for (TUnboxedValue v; it.Next(v); hash = CombineHashes(hash, HashDom(v))) {
                 continue;
+            }
         }
     }
     return hash;
@@ -47,17 +48,20 @@ bool EquateLists(const NUdf::TUnboxedValuePod x, const NUdf::TUnboxedValuePod y)
                 return false;
             }
             for (ui32 i = 0U; i < size; ++i) {
-                if (!EquateDoms(ex[i], ey[i]))
+                if (!EquateDoms(ex[i], ey[i])) {
                     return false;
+                }
             }
         } else {
             const auto itx = x.GetListIterator();
             const auto ity = y.GetListIterator();
             for (TUnboxedValue vx, vy; itx.Next(vx);) {
-                if (!ity.Next(vy))
+                if (!ity.Next(vy)) {
                     return false;
-                if (!EquateDoms(vx, vy))
+                }
+                if (!EquateDoms(vx, vy)) {
                     return false;
+                }
             }
         }
         return true;
@@ -72,32 +76,35 @@ bool EquateDicts(const NUdf::TUnboxedValuePod x, const NUdf::TUnboxedValuePod y)
             return false;
         }
 
-        const auto xr =  static_cast<const TPair*>(x.GetResource());
-        const auto yr =  static_cast<const TPair*>(y.GetResource());
+        const auto xr = static_cast<const TPair*>(x.GetResource());
+        const auto yr = static_cast<const TPair*>(y.GetResource());
         // clone dict as attrnode
         if (xr && yr) {
             for (ui32 i = 0U; i < size; ++i) {
-                if (!EquateStrings(xr[i].first, yr[i].first))
+                if (!EquateStrings(xr[i].first, yr[i].first)) {
                     return false;
-                if (!EquateDoms(xr[i].second, yr[i].second))
+                }
+                if (!EquateDoms(xr[i].second, yr[i].second)) {
                     return false;
+                }
             }
         } else {
             const auto it = x.GetDictIterator();
             for (TUnboxedValue k, v; it.NextPair(k, v);) {
-                if (auto l = y.Lookup(k))
-                    if (EquateDoms(v, l.GetOptionalValue()))
+                if (auto l = y.Lookup(k)) {
+                    if (EquateDoms(v, l.GetOptionalValue())) {
                         continue;
+                    }
+                }
                 return false;
             }
-
         }
         return true;
     }
     return x.IsBoxed() == y.IsBoxed();
 }
 
-}
+} // namespace
 
 THashType HashDom(const NUdf::TUnboxedValuePod x) {
     switch (const auto type = GetNodeType(x); type) {
@@ -148,4 +155,4 @@ bool EquateDoms(const NUdf::TUnboxedValuePod x, const NUdf::TUnboxedValuePod y) 
     return false;
 }
 
-}
+} // namespace NYql::NDom

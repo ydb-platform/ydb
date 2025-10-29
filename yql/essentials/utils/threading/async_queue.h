@@ -48,4 +48,4 @@ private:
     THolder<IThreadPool> MtpQueue_;
 };
 
-} // NYql
+} // namespace NYql

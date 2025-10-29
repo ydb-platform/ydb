@@ -302,6 +302,8 @@ TVector<TSerializedPointOrRange> BuildFullRange(const TVector<NScheme::TTypeInfo
 TVector<TSerializedPointOrRange> FillRangesFromParameter(const TVector<NScheme::TTypeInfo>& keyColumnTypes,
     const NKqpProto::TKqpPhyParamValue& rangesParam, const TStageInfo& stageInfo, const NMiniKQL::TTypeEnvironment& typeEnv)
 {
+    Y_ASSERT(stageInfo.Meta.Tx.Params);
+
     auto guard = typeEnv.BindAllocator();
     TString paramName = rangesParam.GetParamName();
     auto [_, value] = stageInfo.Meta.Tx.Params->GetParameterUnboxedValue(paramName);
@@ -695,14 +697,6 @@ THashMap<ui64, TShardInfo> PrunePartitions(const NKqpProto::TKqpPhyTableOperatio
             break;
     }
 }
-
-
-namespace {
-
-using namespace NMiniKQL;
-
-} // namespace
-
 
 template <typename TEffect>
 THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TEffect& effect,

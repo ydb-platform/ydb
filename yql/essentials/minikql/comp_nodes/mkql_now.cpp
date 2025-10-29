@@ -7,8 +7,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TNowWrapper : public TMutableComputationNode<TNowWrapper> {
+class TNowWrapper: public TMutableComputationNode<TNowWrapper> {
     typedef TMutableComputationNode<TNowWrapper> TBaseComputation;
+
 public:
     TNowWrapper(TComputationMutables& mutables, TComputationNodePtrVector&& dependentNodes)
         : TBaseComputation(mutables)
@@ -28,7 +29,7 @@ private:
     const TComputationNodePtrVector DependentNodes;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapNow(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     TComputationNodePtrVector dependentNodes(callable.GetInputsCount());
@@ -39,5 +40,5 @@ IComputationNode* WrapNow(TCallable& callable, const TComputationNodeFactoryCont
     return new TNowWrapper(ctx.Mutables, std::move(dependentNodes));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

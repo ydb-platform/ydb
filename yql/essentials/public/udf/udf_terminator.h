@@ -3,9 +3,9 @@
 
 namespace NYql {
 namespace NUdf {
-    class TBoxedValue;
-}
-}
+class TBoxedValue;
+} // namespace NUdf
+} // namespace NYql
 
 extern "C" [[noreturn]] void UdfTerminate(const char* message);
 extern "C" void UdfRegisterObject(::NYql::NUdf::TBoxedValue* object);

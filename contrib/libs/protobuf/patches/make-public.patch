@@ -1,0 +1,42 @@
+--- contrib/libs/protobuf/src/google/protobuf/text_format.h	(d7393489b80ddf99e790c8ca67a83547f368a584)
++++ contrib/libs/protobuf/src/google/protobuf/text_format.h	(working tree)
+@@ -390,6 +390,9 @@ class PROTOBUF_EXPORT TextFormat {
+       truncate_string_field_longer_than_ = truncate_string_field_longer_than;
+     }
+ 
++    // Sets whether strings will be redacted and thus unparsable.
++    void SetRedactDebugString(bool redact) { redact_debug_string_ = redact; }
++
+     // Register a custom field-specific FastFieldValuePrinter for fields
+     // with a particular FieldDescriptor.
+     // Returns "true" if the registration succeeded, or "false", if there is
+@@ -428,9 +431,6 @@ class PROTOBUF_EXPORT TextFormat {
+     // Sets whether silent markers will be inserted.
+     void SetInsertSilentMarker(bool v) { insert_silent_marker_ = v; }
+ 
+-    // Sets whether strings will be redacted and thus unparsable.
+-    void SetRedactDebugString(bool redact) { redact_debug_string_ = redact; }
+-
+     // Sets whether the output string should be made non-deterministic.
+     // This discourages equality checks based on serialized string comparisons.
+     void SetRandomizeDebugString(bool randomize) {
+commit 2af2e12781ce9e25eaec38a58038ecf5cc6abce9 (HEAD -> pr-10480338)
+author: thegeorg
+date: 2025-10-28T12:54:28+03:00
+
+    Revert patch from libcxx
+
+--- contrib/libs/protobuf/src/google/protobuf/descriptor.h	(a8f36dafe33d9aeb3373994ac062329b259c996c)
++++ contrib/libs/protobuf/src/google/protobuf/descriptor.h	(2af2e12781ce9e25eaec38a58038ecf5cc6abce9)
+@@ -913,9 +913,11 @@ class PROTOBUF_EXPORT FieldDescriptor : private internal::SymbolBase {
+   // types of CPPTYPE_STRING will be surrounded by quotes and CEscaped.
+   TProtoStringType DefaultValueAsString(bool quote_string_type) const;
+ 
++public:
+   // Helper function that returns the field type name for DebugString.
+   TProtoStringType FieldTypeNameDebugString() const;
+ 
++private:
+   // Walks up the descriptor tree to generate the source location path
+   // to this descriptor from the file root.
+   void GetLocationPath(std::vector<int>* output) const;

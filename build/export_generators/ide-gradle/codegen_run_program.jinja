@@ -1,5 +1,4 @@
 {%- if current_target.custom_runs|length -%}
-{%-     set current_target_object_indexes = current_target_object_indexes + current_target.custom_runs|map(attribute='_object_index') -%}
 {%-     for custom_run in current_target.custom_runs %}
 
 val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ varprefix }}{{ custom_run['_object_index'] }}") {
@@ -8,26 +7,14 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ 
 
 {#- Ignore default CWD to export_root -#}
 {%-        if custom_run.cwd and custom_run.cwd != export_root %}
-    workingDir({{ PatchRoots(custom_run.cwd) }})
+    workingDir({{ PatchRoots(custom_run.cwd, false, custom_run['_object_index']) }})
 {%-        else %}
-    workingDir(layout.buildDirectory)
+    workingDir({{ PatchRoots(codegenBindir, false, custom_run['_object_index']) }})
 {%-        endif %}
 
     commandLine("bash", "-c", listOf(
-{%-        for arg in custom_run.command -%}
-{%-            if custom_run.depends|select("eq", arg)|length or custom_run.depends|select("in", arg)|length %}
-        {{ PatchRoots(arg, true) }}
-{%-            elif custom_run.outputs|select("eq", arg)|length or custom_run.outputs|select("in", arg)|length %}
-{%-                if proto_template -%}
-        {#- generated proto put to prepared proto dir #}
-        {{ PatchGeneratedProto(arg) }}
-{%-                else %}
-        {{ PatchRoots(arg, false, true) }}
-{%-                endif -%}
-{%-            else %}
-        {{ PatchRoots(arg) }}
-{%-            endif -%}
-{%-            if not loop.last %}, {% endif -%}
+{%-        for arg in custom_run.command %}
+        {{ PatchArg(arg, custom_run['_object_index'], custom_run.depends, custom_run.outputs) }},
 {%-        endfor %}
     ).joinToString(" "))
 
@@ -36,13 +23,12 @@ val {{ varprefix }}{{ custom_run['_object_index'] }} = tasks.register<Exec>("{{ 
     inputs.files({{ PatchRoots(depend, true) }})
 {%-            endfor %}
 {%         endif -%}
-
 {%-        if custom_run.outputs|length -%}
 {%-            for out in custom_run.outputs|unique %}
 {%-                if proto_template %}
-    outputs.files({{ PatchGeneratedProto(out) }})
+    outputs.files({{ PatchGeneratedProto(out, false, custom_run['_object_index']) }})
 {%-                else %}
-    outputs.files({{ PatchRoots(out, false, true) }})
+    outputs.files({{ PatchRoots(out, false, custom_run['_object_index']) }})
 {%-                endif %}
 {%             endfor -%}
 {%-        endif -%}

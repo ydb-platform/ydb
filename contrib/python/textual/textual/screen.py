@@ -147,10 +147,9 @@ class Screen(Generic[ScreenResultType], Widget):
 
     DEFAULT_CSS = """
     Screen {
-    
         layout: vertical;
         overflow-y: auto;
-        background: $surface;        
+        background: $background;        
         
         &:inline {
             height: auto;
@@ -262,10 +261,11 @@ class Screen(Generic[ScreenResultType], Widget):
         )
         """The signal that is published when the screen's layout is refreshed."""
 
-        self._bindings_updated = False
-        """Indicates that a binding update was requested."""
         self.bindings_updated_signal: Signal[Screen] = Signal(self, "bindings_updated")
         """A signal published when the bindings have been updated"""
+
+        self._css_update_count = -1
+        """Track updates to CSS."""
 
     @property
     def is_modal(self) -> bool:
@@ -313,8 +313,7 @@ class Screen(Generic[ScreenResultType], Widget):
 
     def refresh_bindings(self) -> None:
         """Call to request a refresh of bindings."""
-        self._bindings_updated = True
-        self.check_idle()
+        self.bindings_updated_signal.publish(self)
 
     def _watch_maximized(
         self, previously_maximized: Widget | None, maximized: Widget | None
@@ -560,6 +559,10 @@ class Screen(Generic[ScreenResultType], Widget):
         except NoWidget:
             return None
 
+        if widget.has_class("-textual-system") or widget.loading:
+            # Clicking Textual system widgets should not focus anything
+            return None
+
         for node in widget.ancestors_with_self:
             if isinstance(node, Widget) and node.focusable:
                 return node
@@ -659,8 +662,6 @@ class Screen(Generic[ScreenResultType], Widget):
                 the CSS selectors given in the argument.
         """
 
-        # TODO: This shouldn't be required
-        self._compositor._full_map_invalidated = True
         if not isinstance(selector, str):
             selector = selector.__name__
         selector_set = parse_selectors(selector)
@@ -744,12 +745,15 @@ class Screen(Generic[ScreenResultType], Widget):
         """
         return self._move_focus(-1, selector)
 
-    def maximize(self, widget: Widget, container: bool = True) -> None:
+    def maximize(self, widget: Widget, container: bool = True) -> bool:
         """Maximize a widget, so it fills the screen.
 
         Args:
             widget: Widget to maximize.
             container: If one of the widgets ancestors is a maximizeable widget, maximize that instead.
+
+        Returns:
+            `True` if the widget was maximized, otherwise `False`.
         """
         if widget.allow_maximize:
             if container:
@@ -759,9 +763,11 @@ class Screen(Generic[ScreenResultType], Widget):
                         break
                     if maximize_widget.allow_maximize:
                         self.maximized = maximize_widget
-                        return
+                        return True
 
             self.maximized = widget
+            return True
+        return False
 
     def minimize(self) -> None:
         """Restore any maximized widget to normal state."""
@@ -779,6 +785,10 @@ class Screen(Generic[ScreenResultType], Widget):
     def action_minimize(self) -> None:
         """Action to minimize the currently maximized widget."""
         self.minimize()
+
+    def action_blur(self) -> None:
+        """Action to remove focus (if set)."""
+        self.set_focus(None)
 
     def _reset_focus(
         self, widget: Widget, avoiding: list[Widget] | None = None
@@ -904,7 +914,7 @@ class Screen(Generic[ScreenResultType], Widget):
                 self.log.debug(widget, "was focused")
 
         self._update_focus_styles(focused, blurred)
-        self.refresh_bindings()
+        self.call_after_refresh(self.refresh_bindings)
 
     def _extend_compose(self, widgets: list[Widget]) -> None:
         """Insert Textual's own internal widgets.
@@ -925,32 +935,22 @@ class Screen(Generic[ScreenResultType], Widget):
         self.screen_layout_refresh_signal.subscribe(
             self, self._maybe_clear_tooltip, immediate=True
         )
-        self.refresh_bindings()
-        # Send this signal so we don't get an initial frame with no bindings in the footer
-        self.bindings_updated_signal.publish(self)
 
     async def _on_idle(self, event: events.Idle) -> None:
         # Check for any widgets marked as 'dirty' (needs a repaint)
         event.prevent_default()
+        if not self.app._batch_count and self.is_current:
+            if (
+                self._layout_required
+                or self._scroll_required
+                or self._repaint_required
+                or self._recompose_required
+                or self._dirty_widgets
+            ):
+                self._update_timer.resume()
+                return
 
-        try:
-            if not self.app._batch_count and self.is_current:
-                if (
-                    self._layout_required
-                    or self._scroll_required
-                    or self._repaint_required
-                    or self._recompose_required
-                    or self._dirty_widgets
-                ):
-                    self._update_timer.resume()
-                    return
-
-            await self._invoke_and_clear_callbacks()
-        finally:
-            if self._bindings_updated:
-                self._bindings_updated = False
-                if self.is_attached and not self.app._exit:
-                    self.app.call_later(self.bindings_updated_signal.publish, self)
+        await self._invoke_and_clear_callbacks()
 
     def _compositor_refresh(self) -> None:
         """Perform a compositor refresh."""
@@ -1333,7 +1333,7 @@ class Screen(Generic[ScreenResultType], Widget):
             if widget is self:
                 self.post_message(event)
             else:
-                mouse_event = self._translate_mouse_move_event(event, region)
+                mouse_event = self._translate_mouse_move_event(event, widget, region)
                 mouse_event._set_forwarded()
                 widget._forward_event(mouse_event)
 
@@ -1358,13 +1358,14 @@ class Screen(Generic[ScreenResultType], Widget):
 
     @staticmethod
     def _translate_mouse_move_event(
-        event: events.MouseMove, region: Region
+        event: events.MouseMove, widget: Widget, region: Region
     ) -> events.MouseMove:
         """
         Returns a mouse move event whose relative coordinates are translated to
         the origin of the specified region.
         """
         return events.MouseMove(
+            widget,
             event.x - region.x,
             event.y - region.y,
             event.delta_x,
@@ -1405,6 +1406,8 @@ class Screen(Generic[ScreenResultType], Widget):
                     if focusable_widget:
                         self.set_focus(focusable_widget, scroll_visible=False)
                 event.style = self.get_style_at(event.screen_x, event.screen_y)
+                if widget.loading:
+                    return
                 if widget is self:
                     event._set_forwarded()
                     self.post_message(event)

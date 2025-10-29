@@ -6,4 +6,4 @@ namespace NYql {
 
 TString BuildTablePath(TStringBuf prefixPath, TStringBuf path);
 
-}
+} // namespace NYql

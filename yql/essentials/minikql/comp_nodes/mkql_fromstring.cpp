@@ -1,7 +1,7 @@
 #include "mkql_fromstring.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins_decimal.h> // Y_IGNORE
@@ -42,8 +42,9 @@ void ThrowConvertError(NYql::NUdf::TStringRef data, TStringBuf type) {
 }
 
 template <bool IsStrict, bool IsOptional>
-class TDecimalFromStringWrapper : public TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> {
+class TDecimalFromStringWrapper: public TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TDecimalFromStringWrapper<IsStrict, IsOptional>> TBaseComputation;
+
 public:
     TDecimalFromStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -82,7 +83,7 @@ public:
         const auto name = "DecimalFromString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalFromString));
         const auto fnType =
-            FunctionType::get(valType, { valType, psType, psType }, false);
+            FunctionType::get(valType, {valType, psType, psType}, false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -106,10 +107,11 @@ public:
             block = call;
         }
 
-        const auto decimal = CallInst::Create(func, { value, precision, scale }, "from_string", block);
+        const auto decimal = CallInst::Create(func, {value, precision, scale}, "from_string", block);
 
-        if (Data->IsTemporaryValue())
+        if (Data->IsTemporaryValue()) {
             ValueCleanup(Data->GetRepresentation(), value, ctx, block);
+        }
 
         const auto test = NDecimal::GenIsError(decimal, context, block);
         BranchInst::Create(fail, good, test, block);
@@ -120,7 +122,7 @@ public:
                 const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TDecimalFromStringWrapper::Throw>());
                 const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {valType, psType, psType}, false);
                 const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-                CallInst::Create(doFuncType, doFuncPtr, { value, precision, scale }, "", block);
+                CallInst::Create(doFuncType, doFuncPtr, {value, precision, scale}, "", block);
                 new UnreachableInst(context, block);
             } else {
                 phi->addIncoming(zero, block);
@@ -156,14 +158,16 @@ private:
 };
 
 template <bool IsStrict, bool IsOptional>
-class TFromStringWrapper : public TMutableCodegeneratorNode<TFromStringWrapper<IsStrict, IsOptional>> {
+class TFromStringWrapper: public TMutableCodegeneratorNode<TFromStringWrapper<IsStrict, IsOptional>> {
     typedef TMutableCodegeneratorNode<TFromStringWrapper<IsStrict, IsOptional>> TBaseComputation;
+
 public:
     TFromStringWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
         : TBaseComputation(mutables, GetValueRepresentation(schemeType))
         , Data(data)
         , SchemeType(NUdf::GetDataSlot(schemeType))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         const auto& data = Data->GetValue(ctx);
@@ -192,7 +196,7 @@ public:
         const auto name = "DataFromString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DataFromString));
         const auto fnType =
-            FunctionType::get(valType, { valType, slotType }, false);
+            FunctionType::get(valType, {valType, slotType}, false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
@@ -212,10 +216,11 @@ public:
             block = call;
         }
 
-        Value* data = CallInst::Create(func, { value, slot }, "from_string", block);
+        Value* data = CallInst::Create(func, {value, slot}, "from_string", block);
 
-        if (Data->IsTemporaryValue())
+        if (Data->IsTemporaryValue()) {
             ValueCleanup(Data->GetRepresentation(), value, ctx, block);
+        }
 
         if constexpr (IsOptional) {
             phi->addIncoming(data, block);
@@ -229,7 +234,7 @@ public:
             const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TFromStringWrapper::Throw>());
             const auto doFuncType = FunctionType::get(Type::getVoidTy(context), {valType, slotType}, false);
             const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(doFuncType), "thrower", block);
-            CallInst::Create(doFuncType, doFuncPtr, { value, slot }, "", block);
+            CallInst::Create(doFuncType, doFuncPtr, {value, slot}, "", block);
             new UnreachableInst(context, block);
         } else if constexpr (IsOptional) {
             BranchInst::Create(last, block);
@@ -255,7 +260,7 @@ private:
     const NUdf::EDataSlot SchemeType;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapFromString(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2, "Expected 2 args");
@@ -320,5 +325,5 @@ IComputationNode* WrapStrictFromString(TCallable& callable, const TComputationNo
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

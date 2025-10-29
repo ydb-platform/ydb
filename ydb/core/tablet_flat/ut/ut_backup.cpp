@@ -3,6 +3,8 @@
 
 #include <ydb/core/testlib/actors/block_events.h>
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/json/writer/json_value.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NTabletFlatExecutor::NBackup {
@@ -11,17 +13,11 @@ struct TSchema : NIceDb::Schema {
     struct Data : Table<1> {
         struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
         struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
+        struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
+        struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
 
         using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value>;
-    };
-
-    struct BinaryData : Table<2> {
-        struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
-        struct Value : Column<2, NScheme::NTypeIds::String> { };
-
-        using TKey = TableKey<Key>;
-        using TColumns = TableColumns<Key, Value>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue>;
     };
 
     struct CompositePKData : Table<3> {
@@ -33,16 +29,42 @@ struct TSchema : NIceDb::Schema {
         using TColumns = TableColumns<Key, SubKey, Value>;
     };
 
-    using TTables = SchemaTables<Data, BinaryData, CompositePKData>;
+    using TTables = SchemaTables<Data, CompositePKData>;
 }; // TSchema
 
+struct TNewColumnSchema : NIceDb::Schema {
+    struct Data : Table<1> {
+        struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
+        struct Value : Column<2, NScheme::NTypeIds::Uint32> { };
+        struct BinaryValue : Column<3, NScheme::NTypeIds::String> { };
+        struct DefaultValue : Column<4, NScheme::NTypeIds::Uint32> { static constexpr ui32 Default = 42; };
+
+        struct NewColumn : Column<5, NScheme::NTypeIds::Uint32> { };
+
+        using TKey = TableKey<Key>;
+        using TColumns = TableColumns<Key, Value, BinaryValue, DefaultValue, NewColumn>;
+    };
+
+    struct CompositePKData : Table<3> {
+        struct Key : Column<1, NScheme::NTypeIds::Uint64> { };
+        struct SubKey : Column<2, NScheme::NTypeIds::Uint64> { };
+        struct Value : Column<3, NScheme::NTypeIds::Uint32> { };
+
+        using TKey = TableKey<Key, SubKey>;
+        using TColumns = TableColumns<Key, SubKey, Value>;
+    };
+
+    using TTables = SchemaTables<Data, CompositePKData>;
+}; // TNewColumnSchema
+
+template<typename T>
 struct TTxInitSchema : public ITransaction {
     const TActorId Owner;
 
     TTxInitSchema(TActorId owner) : Owner(owner) {}
 
     bool Execute(TTransactionContext &txc, const TActorContext &) override {
-        NIceDb::TNiceDb(txc.DB).Materialize<TSchema>();
+        NIceDb::TNiceDb(txc.DB).Materialize<T>();
 
         return true;
     }
@@ -52,12 +74,32 @@ struct TTxInitSchema : public ITransaction {
     }
 }; // TTxInitSchema
 
-struct TTxWriteDataRow : public ITransaction {
+struct TTxInitSchemaWithMigration : public ITransaction {
+    const TActorId Owner;
+
+    TTxInitSchemaWithMigration(TActorId owner) : Owner(owner) {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Materialize<TSchema>();
+        db.Table<TSchema::Data>().Key(1)
+            .Update<TSchema::Data::Value>(42);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+    }
+}; // TTxInitSchemaWithMigration
+
+struct TTxWriteValue : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
     const ui32 Value;
 
-    TTxWriteDataRow(TActorId owner, ui64 key, ui32 value)
+    TTxWriteValue(TActorId owner, ui64 key, ui32 value)
         : Owner(owner)
         , Key(key)
         , Value(value)
@@ -75,15 +117,15 @@ struct TTxWriteDataRow : public ITransaction {
     void Complete(const TActorContext &ctx) override {
         ctx.Send(Owner, new NFake::TEvResult);
     }
-}; // TTxWriteDataRow
+}; // TTxWriteValue
 
-struct TTxWriteDataRange : public ITransaction {
+struct TTxWriteRange : public ITransaction {
     const TActorId Owner;
     const ui64 KeyStart;
     const ui64 KeyEnd;
     const ui32 Value;
 
-    TTxWriteDataRange(TActorId owner, ui64 keyStart, ui64 keyEnd, ui32 value)
+    TTxWriteRange(TActorId owner, ui64 keyStart, ui64 keyEnd, ui32 value)
         : Owner(owner)
         , KeyStart(keyStart)
         , KeyEnd(keyEnd)
@@ -104,14 +146,14 @@ struct TTxWriteDataRange : public ITransaction {
     void Complete(const TActorContext &ctx) override {
         ctx.Send(Owner, new NFake::TEvResult);
     }
-}; // TTxWriteDataRange
+}; // TTxWriteRange
 
-struct TTxWriteBinaryDataRow : public ITransaction {
+struct TTxWriteBinaryValue : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
     const TString Value;
 
-    TTxWriteBinaryDataRow(TActorId owner, ui64 key, const TString& value)
+    TTxWriteBinaryValue(TActorId owner, ui64 key, const TString& value)
         : Owner(owner)
         , Key(key)
         , Value(value)
@@ -120,8 +162,8 @@ struct TTxWriteBinaryDataRow : public ITransaction {
     bool Execute(TTransactionContext &txc, const TActorContext &) override {
         NIceDb::TNiceDb db(txc.DB);
 
-        db.Table<TSchema::BinaryData>().Key(Key)
-            .Update<TSchema::BinaryData::Value>(Value);
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::BinaryValue>(Value);
 
         return true;
     }
@@ -129,15 +171,15 @@ struct TTxWriteBinaryDataRow : public ITransaction {
     void Complete(const TActorContext &ctx) override {
         ctx.Send(Owner, new NFake::TEvResult);
     }
-}; // TTxWriteBinaryDataRow
+}; // TTxWriteBinaryValue
 
-struct TTxWriteCompositePKDataRow : public ITransaction {
+struct TTxWriteCompositePK : public ITransaction {
     const TActorId Owner;
     const ui64 Key;
     const ui64 SubKey;
     const ui32 Value;
 
-    TTxWriteCompositePKDataRow(TActorId owner, ui64 key, ui64 subKey, ui32 value)
+    TTxWriteCompositePK(TActorId owner, ui64 key, ui64 subKey, ui32 value)
         : Owner(owner)
         , Key(key)
         , SubKey(subKey)
@@ -156,7 +198,140 @@ struct TTxWriteCompositePKDataRow : public ITransaction {
     void Complete(const TActorContext &ctx) override {
         ctx.Send(Owner, new NFake::TEvResult);
     }
-}; // TTxWriteCompositePKDataRow
+}; // TTxWriteCompositePK
+
+struct TTxEraseRow : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+
+    TTxEraseRow(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key).Delete();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxEraseRow
+
+struct TxWriteDefaultValue : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const std::optional<ui32> Value;
+
+    TxWriteDefaultValue(TActorId owner, ui64 key, std::optional<ui32> value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (Value) {
+            db.Table<TSchema::Data>().Key(Key)
+                .Update<TSchema::Data::DefaultValue>(*Value);
+        } else {
+            db.Table<TSchema::Data>().Key(Key)
+                .UpdateToNull<TSchema::Data::DefaultValue>();
+        }
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TxWriteDefaultValue
+
+struct TxWriteTwoColumns : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+    const TString BinaryValue;
+
+    TxWriteTwoColumns(TActorId owner, ui64 key, ui32 value, const TString& binaryValue)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+        , BinaryValue(binaryValue)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key)
+            .Update<TSchema::Data::Value, TSchema::Data::BinaryValue>(Value, BinaryValue);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TxWriteTwoColumns
+
+struct TTxReplaceRow : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TTxReplaceRow(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        txc.DB.Update(
+            TSchema::Data::TableId,
+            NTable::ERowOp::Reset,
+            { NScheme::TUint64::TInstance(Key) },
+            { NIceDb::TUpdateOp(TSchema::Data::Value::ColumnId, NTable::ECellOp::Set, NScheme::TUint32::TInstance(Value)) }
+        );
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxReplaceRow
+
+struct TxWriteNewColumn : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+    const ui32 Value;
+
+    TxWriteNewColumn(TActorId owner, ui64 key, ui32 value)
+        : Owner(owner)
+        , Key(key)
+        , Value(value)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TNewColumnSchema::Data>().Key(Key)
+            .Update<TNewColumnSchema::Data::NewColumn>(Value);
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TxWriteNewColumn
 
 struct TEnv : public TMyEnvBase {
     TEnv()
@@ -166,27 +341,63 @@ struct TEnv : public TMyEnvBase {
         Env.GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath(Env.GetTempDir());
     }
 
+    template<typename T = TSchema>
     void InitSchema() {
-        SendSync(new NFake::TEvExecute{ new TTxInitSchema(Edge) });
+        SendSync(new NFake::TEvExecute{ new TTxInitSchema<T>(Edge) });
     }
 
-    void WriteRow(ui64 key, ui32 value) {
-        SendAsync(new NFake::TEvExecute{ new TTxWriteDataRow(Edge, key, value) });
+    void InitSchemaWithMigration() {
+        SendSync(new NFake::TEvExecute{ new TTxInitSchemaWithMigration(Edge) });
+    }
+
+    void WriteValue(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteValue(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void EraseRow(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxEraseRow(Edge, key) });
         WaitFor<NFake::TEvResult>();
     }
 
     void WriteRange(ui64 keyStart, ui64 keyEnd, ui32 value) {
-        SendAsync(new NFake::TEvExecute{ new TTxWriteDataRange(Edge, keyStart, keyEnd, value) });
+        SendAsync(new NFake::TEvExecute{ new TTxWriteRange(Edge, keyStart, keyEnd, value) });
         WaitFor<NFake::TEvResult>();
     }
 
-    void WriteBinaryRow(ui64 key, const TString& value) {
-        SendAsync(new NFake::TEvExecute{ new TTxWriteBinaryDataRow(Edge, key, value) });
+    void WriteBinaryValue(ui64 key, const TString& value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteBinaryValue(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
     }
 
-    void WriteCompositePKRow(ui64 key, ui64 subKey, ui32 value) {
-        SendAsync(new NFake::TEvExecute{ new TTxWriteCompositePKDataRow(Edge, key, subKey, value) });
+    void WriteCompositePK(ui64 key, ui64 subKey, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteCompositePK(Edge, key, subKey, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteDefaultValue(ui64 key, std::optional<ui32> value) {
+        SendAsync(new NFake::TEvExecute{ new TxWriteDefaultValue(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteTwoColumns(ui64 key, ui32 value, const TString& binaryValue) {
+        SendAsync(new NFake::TEvExecute{ new TxWriteTwoColumns(Edge, key, value, binaryValue) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void ReplaceRow(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TTxReplaceRow(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WaitChangelogFlush() {
+        Cerr << "...waiting changelog flush" << Endl;
+        Env.AdvanceCurrentTime(TDuration::Seconds(5));
+        Env.SimulateSleep(TDuration::Seconds(1));
+    }
+
+    void WriteNewColumn(ui64 key, ui32 value) {
+        SendAsync(new NFake::TEvExecute{ new TxWriteNewColumn(Edge, key, value) });
         WaitFor<NFake::TEvResult>();
     }
 
@@ -197,30 +408,18 @@ Y_UNIT_TEST_SUITE(Backup) {
         | ui32(NFake::TDummy::EFlg::Comp)
         | ui32(NFake::TDummy::EFlg::Vac);
 
-    Y_UNIT_TEST(FileStructure) {
+    Y_UNIT_TEST(GenerationDirs) {
         TEnv env;
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
-        auto dummyDir = TFsPath(env->GetTempDir()).Child("dummy");
-        UNIT_ASSERT_C(dummyDir.Exists(), "Tablet type dir isn't created");
-
-        auto tabletIdDir = dummyDir.Child(ToString(env.Tablet));
-        UNIT_ASSERT_C(tabletIdDir.Exists(), "Tablet ID dir isn't created");
-
-        TVector<TFsPath> genDirs;
-        tabletIdDir.List(genDirs);
-
-        UNIT_ASSERT_C(!genDirs.empty(), "Tablet generation dir isn't created");
-    }
-
-    Y_UNIT_TEST(FileStructureAfterRestarts) {
-        TEnv env;
-
-        env.FireDummyTablet(TestTabletFlags);
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
+        Cerr << "...restarting tablet again" << Endl;
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
@@ -233,27 +432,33 @@ Y_UNIT_TEST_SUITE(Backup) {
         TVector<TFsPath> genDirs;
         tabletIdDir.List(genDirs);
 
-        UNIT_ASSERT_C(genDirs.size() == 2, "Every restart must create new generation dir");
+        UNIT_ASSERT_C(genDirs.size() == 3, "Every restart must create new generation dir");
     }
 
     Y_UNIT_TEST(SnapshotIOError) {
         TEnv env;
 
-        env->GetAppData().SystemTabletBackupConfig.MutableFilesystem()->SetPath("/dev/null");
+        TFsPath(env->GetTempDir()).Child("dummy").MkDir(S_IRUSR);
         env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
 
+        Cerr << "...waiting tablet death" << Endl;
         env.WaitForGone(); // crash on IO error
     }
 
-    Y_UNIT_TEST(SnapshotEmptyData) {
+    Y_UNIT_TEST(EmptyData) {
         TEnv env;
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
         env.InitSchema();
 
+        Cerr << "...restarting tablet" << Endl;
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
@@ -268,7 +473,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return a.Basename() < b.Basename();
         });
 
-        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        auto snapshotDir = genDirs.back().Child("snapshot");
         UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
 
         TVector<TFsPath> tables;
@@ -278,26 +483,53 @@ Y_UNIT_TEST_SUITE(Backup) {
             return path.Basename() == "schema.json";
         });
 
-        UNIT_ASSERT(tables.size() == 3);
+        UNIT_ASSERT(tables.size() == 2);
 
         for (const auto& table : tables) {
             TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT(content.empty());
         }
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        TString content = TFileInput(changelog).ReadAll();
+        UNIT_ASSERT(content.empty());
     }
 
     Y_UNIT_TEST(SnapshotData) {
         TEnv env;
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
         env.InitSchema();
 
-        env.WriteRow(1, 10);
-        env.WriteRow(2, 11);
-        env.WriteBinaryRow(3, "abcdef");
-        env.WriteCompositePKRow(4, 5, 100);
+        Cerr << "...writing two columns" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteBinaryValue(1, "abcdef");
 
+        Cerr << "...writing two columns simultaneously" << Endl;
+        env.WriteTwoColumns(2, 20, "abcdef");
+
+        Cerr << "...erasing row" << Endl;
+        env.WriteValue(3, 30);
+        env.EraseRow(3);
+
+        Cerr << "...replacing row" << Endl;
+        env.WriteDefaultValue(4, 40);
+        env.ReplaceRow(4, 40);
+
+        Cerr << "...writing different values in one column" << Endl;
+        env.WriteValue(5, 10);
+        env.WriteValue(5, 50);
+
+        Cerr << "...writing composite primary key" << Endl;
+        env.WriteCompositePK(1, 2, 10);
+
+        Cerr << "...restarting tablet" << Endl;
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
@@ -312,7 +544,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return a.Basename() < b.Basename();
         });
 
-        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        auto snapshotDir = genDirs.back().Child("snapshot");
         UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
 
         TVector<TFsPath> tables;
@@ -322,7 +554,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return path.Basename() == "schema.json";
         });
 
-        UNIT_ASSERT(tables.size() == 3);
+        UNIT_ASSERT(tables.size() == 2);
 
         {
             auto table = snapshotDir.Child("Data.json");
@@ -330,35 +562,35 @@ Y_UNIT_TEST_SUITE(Backup) {
             TString content = TFileInput(table).ReadAll();
             UNIT_ASSERT_VALUES_EQUAL(
                 content,
-                "{\"Key\":1,\"Value\":10}\n"
-                "{\"Key\":2,\"Value\":11}\n"
+                R"({"Key":1,"Value":10,"BinaryValue":"YWJjZGVm","DefaultValue":null})""\n"
+                R"({"Key":2,"Value":20,"BinaryValue":"YWJjZGVm","DefaultValue":null})""\n"
+                R"({"Key":4,"Value":40,"BinaryValue":null,"DefaultValue":null})""\n"
+                R"({"Key":5,"Value":50,"BinaryValue":null,"DefaultValue":null})""\n"
             );
-        }
-
-        {
-            auto table = snapshotDir.Child("BinaryData.json");
-            UNIT_ASSERT_C(table.Exists(), "BinaryData table isn't created");
-            TString content = TFileInput(table).ReadAll();
-            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":3,\"Value\":\"YWJjZGVm\"}\n");
         }
 
         {
             auto table = snapshotDir.Child("CompositePKData.json");
             UNIT_ASSERT_C(table.Exists(), "CompositePKData table isn't created");
             TString content = TFileInput(table).ReadAll();
-            UNIT_ASSERT_VALUES_EQUAL(content, "{\"Key\":4,\"SubKey\":5,\"Value\":100}\n");
+            UNIT_ASSERT_VALUES_EQUAL(content, R"({"Key":1,"SubKey":2,"Value":10})""\n");
         }
     }
 
     Y_UNIT_TEST(SnapshotLargeData) {
         TEnv env;
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
         env.InitSchema();
 
+        Cerr << "...writing large data" << Endl;
         env.WriteRange(0, 1'000'000, 42); // 1 million rows
 
+        Cerr << "...restarting tablet" << Endl;
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
@@ -373,7 +605,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return a.Basename() < b.Basename();
         });
 
-        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        auto snapshotDir = genDirs.back().Child("snapshot");
         UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
 
         auto table = snapshotDir.Child("Data.json");
@@ -387,10 +619,14 @@ Y_UNIT_TEST_SUITE(Backup) {
     Y_UNIT_TEST(SnapshotSchema) {
         TEnv env;
 
+        Cerr << "...starting tablet" << Endl;
         env.FireDummyTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
         env.InitSchema();
 
+        Cerr << "...restarting tablet" << Endl;
         env.RestartTablet(TestTabletFlags);
         env.WaitFor<NFake::TEvSnapshotBackedUp>();
 
@@ -405,7 +641,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             return a.Basename() < b.Basename();
         });
 
-        auto snapshotDir = genDirs.rbegin()->Child("snapshot");
+        auto snapshotDir = genDirs.back().Child("snapshot");
         UNIT_ASSERT_C(snapshotDir.Exists(), "Snapshot dir isn't created");
 
         TVector<TFsPath> schemaFiles;
@@ -422,8 +658,290 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         TString content = TFileInput(schema).ReadAll();
         UNIT_ASSERT_C(content.Contains("\"table_name\":\"Data\""), "Data table isn't in schema");
-        UNIT_ASSERT_C(content.Contains("\"table_name\":\"BinaryData\""), "BinaryData table isn't in schema");
         UNIT_ASSERT_C(content.Contains("\"table_name\":\"CompositePKData\""), "CompositePKData table isn't in schema");
+    }
+
+    Y_UNIT_TEST(ChangelogData) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing two columns" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteBinaryValue(1, "abcdef");
+
+        Cerr << "...writing two columns simultaneously" << Endl;
+        env.WriteTwoColumns(2, 20, "abcdef");
+
+        Cerr << "...erasing row" << Endl;
+        env.WriteValue(3, 30);
+        env.EraseRow(3);
+
+        Cerr << "...replacing row" << Endl;
+        env.WriteDefaultValue(4, 40);
+        env.ReplaceRow(4, 40);
+
+        Cerr << "...writing different values in one column" << Endl;
+        env.WriteValue(5, 10);
+        env.WriteValue(5, 50);
+
+        Cerr << "...writing composite primary key" << Endl;
+        env.WriteCompositePK(1, 2, 10);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        env.WaitChangelogFlush();
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        TString content = TFileInput(changelog).ReadAll();
+        UNIT_ASSERT_VALUES_EQUAL(
+            content,
+            R"({"step":4,"data_changes":[{"table":"Data","op":"upsert","Key":1,"Value":10}]})""\n"
+            R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"BinaryValue":"YWJjZGVm"}]})""\n"
+
+            R"({"step":6,"data_changes":[{"table":"Data","op":"upsert","Key":2,"Value":20,"BinaryValue":"YWJjZGVm"}]})""\n"
+
+            R"({"step":7,"data_changes":[{"table":"Data","op":"upsert","Key":3,"Value":30}]})""\n"
+            R"({"step":8,"data_changes":[{"table":"Data","op":"erase","Key":3}]})""\n"
+
+            R"({"step":9,"data_changes":[{"table":"Data","op":"upsert","Key":4,"DefaultValue":40}]})""\n"
+            R"({"step":10,"data_changes":[{"table":"Data","op":"replace","Key":4,"Value":40}]})""\n"
+
+            R"({"step":11,"data_changes":[{"table":"Data","op":"upsert","Key":5,"Value":10}]})""\n"
+            R"({"step":12,"data_changes":[{"table":"Data","op":"upsert","Key":5,"Value":50}]})""\n"
+
+            R"({"step":13,"data_changes":[{"table":"CompositePKData","op":"upsert","Key":1,"SubKey":2,"Value":10}]})""\n"
+        );
+    }
+
+    Y_UNIT_TEST(ChangelogLargeData) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing large data in one commit" << Endl;
+        env.WriteRange(0, 1'000'000, 42); // 1 million rows
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        env.WaitChangelogFlush();
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        TString content = TFileInput(changelog).ReadAll();
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(content, &json);
+
+        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(json["data_changes"].GetArray().size(), 1'000'000);
+    }
+
+    Y_UNIT_TEST(ChangelogManyCommits) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...writing data in many commits" << Endl;
+        TString data(1'000, 'a'); // make commit large enough
+        for (int i = 0; i < 1'000; ++i) {
+            env.WriteBinaryValue(i, data);
+        }
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        env.WaitChangelogFlush();
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        TString content = TFileInput(changelog).ReadAll();
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty();
+        UNIT_ASSERT_VALUES_EQUAL(lines.Count(), 1'000);
+    }
+
+    Y_UNIT_TEST(ChangelogSchema) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString content = TFileInput(changelog).ReadAll();
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(content, &json);
+
+        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
+        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(!json.Has("data_changes"), "Unexpected data changes in changelog");
+    }
+
+    Y_UNIT_TEST(ChangelogSchemaAndData) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema with migration" << Endl;
+        env.InitSchemaWithMigration();
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString content = TFileInput(changelog).ReadAll();
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(content, &json);
+
+        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 2);
+        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(json.Has("data_changes"), "Data changes must be in changelog");
+    }
+
+    Y_UNIT_TEST(ChangelogSchemaNewColumn) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema<TSchema>();
+
+        Cerr << "...writing data" << Endl;
+        env.WriteValue(1, 10);
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema with new column" << Endl;
+        env.InitSchema<TNewColumnSchema>();
+
+        Cerr << "...writing data to new column" << Endl;
+        env.WriteNewColumn(1, 20);
+
+        auto tabletIdDir = TFsPath(env->GetTempDir())
+            .Child("dummy")
+            .Child(ToString(env.Tablet));
+
+        TVector<TFsPath> genDirs;
+        tabletIdDir.List(genDirs);
+
+        std::sort(genDirs.begin(), genDirs.end(), [](const TFsPath& a, const TFsPath& b) {
+            return a.Basename() < b.Basename();
+        });
+
+        auto changelog = genDirs.back().Child("changelog.json");
+        UNIT_ASSERT_C(changelog.Exists(), "Changelog file isn't created");
+
+        env.WaitChangelogFlush();
+
+        TString content = TFileInput(changelog).ReadAll();
+        auto lines = StringSplitter(content).Split('\n').SkipEmpty().ToList<TString>();
+
+        Cerr << content << Endl;
+
+        UNIT_ASSERT_VALUES_EQUAL(lines.size(), 2);
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(lines[0], &json);
+        UNIT_ASSERT_VALUES_EQUAL(json["step"].GetInteger(), 4);
+        UNIT_ASSERT_C(json.Has("schema_changes"), "Schema changes must be in changelog");
+        UNIT_ASSERT_C(!json.Has("data_changes"), "Unexpected data changes in changelog");
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            lines[1],
+            R"({"step":5,"data_changes":[{"table":"Data","op":"upsert","Key":1,"NewColumn":20}]})"
+        );
     }
 }
 

@@ -8,13 +8,15 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-class TSerializeTypeHandleWrapper : public TMutableComputationNode<TSerializeTypeHandleWrapper> {
+class TSerializeTypeHandleWrapper: public TMutableComputationNode<TSerializeTypeHandleWrapper> {
     typedef TMutableComputationNode<TSerializeTypeHandleWrapper> TBaseComputation;
+
 public:
     TSerializeTypeHandleWrapper(TComputationMutables& mutables, IComputationNode* handle)
         : TBaseComputation(mutables)
         , Handle_(handle)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
         auto handle = Handle_->GetValue(ctx);
@@ -37,5 +39,5 @@ IComputationNode* WrapSerializeTypeHandle(TCallable& callable, const TComputatio
     return new TSerializeTypeHandleWrapper(ctx.Mutables, handle);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

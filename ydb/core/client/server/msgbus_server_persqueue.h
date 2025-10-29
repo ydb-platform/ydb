@@ -25,7 +25,6 @@ struct TProcessingResult {
     bool IsFatal = false;
 };
 
-TProcessingResult ProcessMetaCacheAllTopicsResponse(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& response);
 TProcessingResult ProcessMetaCacheSingleTopicsResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
 
 // Worker actor creation
@@ -51,6 +50,9 @@ template <>
 inline ui64 GetTabletId<TEvTabletPipe::TEvClientConnected>(const TEvTabletPipe::TEvClientConnected* ev) {
     return ev->TabletId;
 }
+
+THashSet<TString> GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests,
+                                       THashMap<TString, std::shared_ptr<THashSet<ui64>>>* partitionsToRequest);
 
 // Base class for PQ requests. It requests EvGetNode and creates worker actors for concrete topics.
 // Than it starts merge over children responses.
@@ -112,6 +114,9 @@ public:
     }
 
 protected:
+    using TopicRequestsExctratorFunc = std::function<::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>(
+                                           std::shared_ptr<const NKikimrClient::TPersQueueRequest>&)>;
+
     TPersQueueBaseRequestProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& pqMetaCacheId, bool listNodes);
 
     ~TPersQueueBaseRequestProcessor();
@@ -135,14 +140,12 @@ protected:
 
     virtual bool ReadyForAnswer(const TActorContext& ctx);
     void AnswerAndDie(const TActorContext& ctx);
-    void GetTopicsListOrThrow(const ::google::protobuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& requests, THashMap<TString, std::shared_ptr<THashSet<ui64>>>& partitionsToRequest);
 
     virtual STFUNC(StateFunc);
 
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvGetNodesMappingResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
-    void Handle(NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
     void HandleTimeout(const TActorContext& ctx);
 

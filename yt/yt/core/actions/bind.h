@@ -8,9 +8,9 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// This file defines a set of argument wrappers that can be used specify
+// This file defines a set of argument and functor wrappers that can be used specify
 // the reference counting and reference semantics of arguments that are bound
-// by the #Bind() function in "bind.h".
+// by the #BIND macro in "bind.h".
 //
 ////////////////////////////////////////////////////////////////////////////////
 //
@@ -18,7 +18,7 @@ namespace NYT {
 //
 // The wrapper functions are #Unretained(), #Owned(), #Passed() and #ConstRef().
 //
-// #Unretained() allows #Bind() to bind a non-reference counted class,
+// #Unretained() allows #BIND to bind a non-reference counted class,
 // and to disable reference counting on arguments that are reference counted
 // objects.
 //
@@ -38,18 +38,20 @@ namespace NYT {
 //
 // EXAMPLE OF Unretained()
 //
-//   class TFoo {
-//     public:
+//   class TFoo
+//      : public TRefCounted
+//   {
+//   public:
 //       void Bar() { Cout << "Hello!" << Endl; }
 //   };
 //
 //   // Somewhere else.
 //   TFoo foo;
-//   TClosure cb = Bind(&TFoo::Bar, Unretained(&foo));
+//   auto cb = BIND(&TFoo::Bar, Unretained(&foo));
 //   cb(); // Prints "Hello!".
 //
 // Without the #Unretained() wrapper on |&foo|, the above call would fail
-// to compile because |TFoo| does not support the Ref() and Unref() methods.
+// to compile because |TFoo| is ref-counted.
 //
 //
 // EXAMPLE OF Owned()
@@ -57,7 +59,7 @@ namespace NYT {
 //   void Foo(int* arg) { Cout << *arg << Endl; }
 //
 //   int* px = new int(17);
-//   TClosure cb = Bind(&Foo, Owned(px));
+//   auto cb = BIND(&Foo, Owned(px));
 //
 //   cb(); // Prints "17"
 //   cb(); // Prints "17"
@@ -75,18 +77,18 @@ namespace NYT {
 //
 //   void TakesOwnership(TIntrusivePtr<TFoo> arg) { ... }
 //   TIntrusivePtr<TFoo> CreateFoo() { return New<TFoo>(); }
-//   TIntrusivePtr<TFoo> foo = New<TFoo>();
+//   auto foo = New<TFoo>();
 //
 //   // |cb| is given ownership of the |TFoo| instance. |foo| is now NULL.
 //   // You may also use std::move(foo), but its more verbose.
-//   TClosure cb = Bind(&TakesOwnership, Passed(&foo));
+//   auto cb = BIND(&TakesOwnership, Passed(&foo));
 //
 //   // Operator() was never called so |cb| still owns the instance and deletes
 //   // it on #Reset().
 //   cb.Reset();
 //
 //   // |cb| is given a new |TFoo| created by |CreateFoo()|.
-//   TClosure cb = Bind(&TakesOwnership, Passed(CreateFoo()));
+//   auto cb = BIND(&TakesOwnership, Passed(CreateFoo()));
 //
 //   // |arg| in TakesOwnership() is given ownership of |TFoo|.
 //   // |cb| no longer owns |TFoo| and, if reset, would not delete anything.
@@ -99,8 +101,8 @@ namespace NYT {
 //   void Foo(int arg) { Cout << arg << Endl; }
 //
 //   int n = 1;
-//   TClosure noRef = Bind(&Foo, n);
-//   TClosure hasRef = Bind(&Foo, ConstRef(n));
+//   auto noRef = BIND(&Foo, n);
+//   auto hasRef = BIND(&Foo, ConstRef(n));
 //
 //   noRef();  // Prints "1"
 //   hasRef(); // Prints "1"
@@ -112,21 +114,75 @@ namespace NYT {
 // |n| must outlive all its bound callbacks.
 //
 ////////////////////////////////////////////////////////////////////////////////
+//
+// FUNCTOR WRAPPERS
+//
+// #IgnoreResult() makes the functor silently drop its resulting value
+// upon a call.
+//
+// #ThrowOnDestoyred() enables binding non-void returning instance methods to
+// weak this pointers. If the object becomes expired at the time of the call,
+// the invocation will throw an exception.
+//
+//
+// EXAMPLE OF IgnoreResult()
+//
+//   int Foo(int arg) { Cout << arg << Endl; return arg; }
+//
+//   auto cb = BIND(&IgnoreResult(Foo), 42);
+//   cb(); // Prints "42" but returns nothing.
+//
+//
+// EXAMPLE OF ThrowOnDestroyed()
+//
+//   class TFoo
+//      : public TRefCounted
+//   {
+//   public:
+//       int Bar() { Cout << "Hello!" << Endl; return 42; }
+//   };
+//
+//   auto foo = New<TFoo>();
+//   auto cb = BIND(ThrowOnDestroyed(&TFoo::Bar), MakeWeak(foo));
+//   foo.Reset();
+//   auto res = cb(); // Throws.
+//
+// Note that the above code will not compile without #ThrowOnDestroyed() since
+// |TFoo::Bar| has non-void return type.
+//
+// To compare:
+//
+//   class TFoo
+//      : public TRefCounted
+//   {
+//   public:
+//       void Bar() { Cout << "Hello!" << Endl; }
+//   };
+//
+//   auto foo = New<TFoo>();
+//   auto cb = BIND(&TFoo::Bar, MakeWeak(foo));
+//   foo.Reset();
+//   cb(); // Does nothing since foo is destroyed.
+//
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
-static auto Unretained(T* x);
+auto Unretained(T* x);
 
 template <class T>
-static auto Owned(T* x);
+auto Owned(T* x);
 
 template <class T>
-static auto Passed(T&& x);
+auto Passed(T&& x);
 
 template <class T>
-static auto ConstRef(const T& x);
+auto ConstRef(const T& x);
 
 template <class T>
-static auto IgnoreResult(const T& x);
+auto IgnoreResult(const T& x);
+
+template <class T>
+auto ThrowOnDestroyed(const T& x);
 
 ////////////////////////////////////////////////////////////////////////////////
 

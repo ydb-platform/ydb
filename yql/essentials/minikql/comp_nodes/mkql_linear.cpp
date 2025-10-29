@@ -9,18 +9,20 @@ using namespace NYql::NUdf;
 
 namespace {
 
-class TToDynamicLinearWrapper : public TMutableComputationNode<TToDynamicLinearWrapper> {
+class TToDynamicLinearWrapper: public TMutableComputationNode<TToDynamicLinearWrapper> {
     using TSelf = TToDynamicLinearWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
-    class TValue : public TComputationValue<TValue> {
+    class TValue: public TComputationValue<TValue> {
     public:
         TValue(TMemoryUsageInfo* memInfo, TUnboxedValue&& value)
             : TComputationValue(memInfo)
             , Value_(std::move(value))
             , Consumed_(false)
-        {}
+        {
+        }
 
     private:
         bool Next(NUdf::TUnboxedValue& result) override {
@@ -56,10 +58,11 @@ private:
     IComputationNode* const Source_;
 };
 
-class TFromDynamicLinearWrapper : public TMutableComputationNode<TFromDynamicLinearWrapper> {
+class TFromDynamicLinearWrapper: public TMutableComputationNode<TFromDynamicLinearWrapper> {
     using TSelf = TFromDynamicLinearWrapper;
     using TBase = TMutableComputationNode<TSelf>;
     typedef TBase TBaseComputation;
+
 public:
     TFromDynamicLinearWrapper(TComputationMutables& mutables, IComputationNode* source, const TSourcePosition& pos)
         : TBaseComputation(mutables)
@@ -106,5 +109,5 @@ IComputationNode* WrapFromDynamicLinear(TCallable& callable, const TComputationN
     return new TFromDynamicLinearWrapper(ctx.Mutables, source, NUdf::TSourcePosition(row, column, file));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

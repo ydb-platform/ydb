@@ -208,7 +208,7 @@ public:
         : TOptimizeTransformerBase(&ctx, NYql::NLog::EComponent::ProviderKqp, {})
     {
 #define HNDL(name) "KqpPeepholeNewOperator-"#name, Hndl(&TKqpPeepholeNewOperatorTransformer::name)
-        if (config->UseDqHashCombine.Get().GetOrElse(false)) {
+        if (config->GetUseDqHashCombine()) {
             AddHandler(0, &TCoWideCombiner::Match, HNDL(RewriteWideCombinerToDqHashCombiner));
         }
 #undef HNDL

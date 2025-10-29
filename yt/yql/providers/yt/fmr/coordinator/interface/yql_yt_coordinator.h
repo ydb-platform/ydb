@@ -54,9 +54,17 @@ struct TDeleteOperationResponse {
     EOperationStatus Status;
 };
 
+struct TDropTablesRequest {
+    std::vector<TString> TableIds;
+};
+
+struct TDropTablesResponse {
+};
+
 struct TGetFmrTableInfoRequest {
     TString TableId;
 };
+
 
 struct TGetFmrTableInfoResponse {
     TTableStats TableStats;
@@ -78,6 +86,8 @@ public:
     virtual NThreading::TFuture<TGetOperationResponse> GetOperation(const TGetOperationRequest& request) = 0;
 
     virtual NThreading::TFuture<TDeleteOperationResponse> DeleteOperation(const TDeleteOperationRequest& request) = 0;
+
+    virtual NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) = 0;
 
     virtual NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) = 0;
 

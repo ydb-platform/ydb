@@ -19,9 +19,8 @@ namespace NYql {
  * Cost-based optimizer. Currently we only support RelOptimizerNode - a node that
  * is an input relation to the equi-join, and JoinOptimizerNode - an inner join
  * that connects two sets of relations.
-*/
-enum EOptimizerNodeKind: ui32
-{
+ */
+enum EOptimizerNodeKind: ui32 {
     RelNodeType,
     JoinNodeType
 };
@@ -30,21 +29,26 @@ enum EOptimizerNodeKind: ui32
  * BaseOptimizerNode is a base class for the internal optimizer nodes
  * It records a pointer to statistics and records the current cost of the
  * operator tree, rooted at this node
-*/
+ */
 struct IBaseOptimizerNode {
     EOptimizerNodeKind Kind;
     TOptimizerStatistics Stats;
 
-    IBaseOptimizerNode(EOptimizerNodeKind k) : Kind(k) {}
-    IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s) :
-        Kind(k), Stats(std::move(s)) {}
+    IBaseOptimizerNode(EOptimizerNodeKind k)
+        : Kind(k)
+    {
+    }
+    IBaseOptimizerNode(EOptimizerNodeKind k, TOptimizerStatistics s)
+        : Kind(k)
+        , Stats(std::move(s))
+    {
+    }
 
-    virtual TVector<TString> Labels()=0;
-    virtual void Print(std::stringstream& stream, int ntabs=0)=0;
+    virtual TVector<TString> Labels() = 0;
+    virtual void Print(std::stringstream& stream, int ntabs = 0) = 0;
 };
 
-enum EJoinKind: ui32
-{
+enum EJoinKind: ui32 {
     InnerJoin,
     LeftJoin,
     RightJoin,
@@ -61,7 +65,7 @@ EJoinKind ConvertToJoinKind(const TString& joinString);
 TString ConvertToJoinString(const EJoinKind kind);
 
 struct TCardinalityHints {
-    enum ECardOperation : ui32 {
+    enum ECardOperation: ui32 {
         Add,
         Subtract,
         Multiply,
@@ -117,14 +121,18 @@ struct TJoinAlgoHints {
 
 struct TJoinOrderHints {
     struct ITreeNode {
-        enum _ : ui32 {
+        enum _: ui32 {
             Relation,
             Join
         };
 
         virtual TVector<TString> Labels() = 0;
-        bool IsRelation() { return Type == Relation; }
-        bool IsJoin() { return Type == Join; }
+        bool IsRelation() {
+            return Type == Relation;
+        }
+        bool IsJoin() {
+            return Type == Join;
+        }
         virtual ~ITreeNode() = default;
 
         ui32 Type;
@@ -156,7 +164,9 @@ struct TJoinOrderHints {
             this->Type = ITreeNode::Relation;
         }
 
-        TVector<TString> Labels() override { return {Label}; }
+        TVector<TString> Labels() override {
+            return {Label};
+        }
 
         TString Label;
     };
@@ -196,7 +206,7 @@ struct TOptimizerHints {
  * This is a temporary structure for KQP provider
  * We will soon be supporting multiple providers and we will need to design
  * some interfaces to pass provider-specific context to the optimizer
-*/
+ */
 struct IProviderContext {
     virtual ~IProviderContext() = default;
 
@@ -205,8 +215,7 @@ struct IProviderContext {
         const TOptimizerStatistics& rightStats,
         const double outputRows,
         const double outputByteSize,
-        EJoinAlgoType joinAlgo
-    ) const = 0;
+        EJoinAlgoType joinAlgo) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
@@ -215,8 +224,7 @@ struct IProviderContext {
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr
-    ) const = 0;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStatsV1(
         const TOptimizerStatistics& leftStats,
@@ -227,8 +235,7 @@ struct IProviderContext {
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
-        bool shuffleRightSide
-    ) const = 0;
+        bool shuffleRightSide) const = 0;
 
     virtual TOptimizerStatistics ComputeJoinStatsV2(
         const TOptimizerStatistics& leftStats,
@@ -240,32 +247,30 @@ struct IProviderContext {
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
         bool shuffleRightSide,
-        TCardinalityHints::TCardinalityHint* maybeBytesHint
-    ) const = 0;
+        TCardinalityHints::TCardinalityHint* maybeBytesHint) const = 0;
 
     virtual bool IsJoinApplicable(const std::shared_ptr<IBaseOptimizerNode>& left,
-        const std::shared_ptr<IBaseOptimizerNode>& right,
-        const TVector<NDq::TJoinColumn>& leftJoinKeys,
-        const TVector<NDq::TJoinColumn>& rightJoinKeys,
-        EJoinAlgoType joinAlgo,
-        EJoinKind joinKind
-    ) = 0;
+                                  const std::shared_ptr<IBaseOptimizerNode>& right,
+                                  const TVector<NDq::TJoinColumn>& leftJoinKeys,
+                                  const TVector<NDq::TJoinColumn>& rightJoinKeys,
+                                  EJoinAlgoType joinAlgo,
+                                  EJoinKind joinKind) = 0;
 };
 
 /**
  * Default provider context with default cost and stats computation.
-*/
+ */
 
-struct TBaseProviderContext : public IProviderContext {
-    TBaseProviderContext() {}
+struct TBaseProviderContext: public IProviderContext {
+    TBaseProviderContext() {
+    }
 
     double ComputeJoinCost(
         const TOptimizerStatistics& leftStats,
         const TOptimizerStatistics& rightStats,
         const double outputRows,
         const double outputByteSize,
-        EJoinAlgoType joinAlgo
-    ) const override;
+        EJoinAlgoType joinAlgo) const override;
 
     bool IsJoinApplicable(
         const std::shared_ptr<IBaseOptimizerNode>& leftStats,
@@ -273,8 +278,7 @@ struct TBaseProviderContext : public IProviderContext {
         const TVector<NDq::TJoinColumn>& leftJoinKeys,
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
-        EJoinKind joinKind
-    ) override;
+        EJoinKind joinKind) override;
 
     TOptimizerStatistics ComputeJoinStats(
         const TOptimizerStatistics& leftStats,
@@ -283,8 +287,7 @@ struct TBaseProviderContext : public IProviderContext {
         const TVector<NDq::TJoinColumn>& rightJoinKeys,
         EJoinAlgoType joinAlgo,
         EJoinKind joinKind,
-        TCardinalityHints::TCardinalityHint* maybeHint = nullptr
-    ) const override;
+        TCardinalityHints::TCardinalityHint* maybeHint = nullptr) const override;
 
     TOptimizerStatistics ComputeJoinStatsV1(
         const TOptimizerStatistics& leftStats,
@@ -295,8 +298,7 @@ struct TBaseProviderContext : public IProviderContext {
         EJoinKind joinKind,
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
-        bool shuffleRightSide
-    ) const override;
+        bool shuffleRightSide) const override;
 
     TOptimizerStatistics ComputeJoinStatsV2(
         const TOptimizerStatistics& leftStats,
@@ -308,8 +310,7 @@ struct TBaseProviderContext : public IProviderContext {
         TCardinalityHints::TCardinalityHint* maybeHint,
         bool shuffleLeftSide,
         bool shuffleRightSide,
-        TCardinalityHints::TCardinalityHint* maybeBytesHint
-    ) const override;
+        TCardinalityHints::TCardinalityHint* maybeBytesHint) const override;
 
     static const TBaseProviderContext& Instance();
 };
@@ -317,17 +318,21 @@ struct TBaseProviderContext : public IProviderContext {
 /**
  * RelOptimizerNode adds a label to base class
  * This is the label assinged to the input by equi-Join
-*/
-struct TRelOptimizerNode : public IBaseOptimizerNode {
+ */
+struct TRelOptimizerNode: public IBaseOptimizerNode {
     TString Label;
 
-    TRelOptimizerNode(TString label, TOptimizerStatistics stats) :
-        IBaseOptimizerNode(RelNodeType, std::move(stats)), Label(label) { }
+    TRelOptimizerNode(TString label, TOptimizerStatistics stats)
+        : IBaseOptimizerNode(RelNodeType, std::move(stats))
+        , Label(label)
+    {
+    }
 
-    virtual ~TRelOptimizerNode() {}
+    virtual ~TRelOptimizerNode() {
+    }
 
     virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs=0);
+    virtual void Print(std::stringstream& stream, int ntabs = 0);
 };
 
 /**
@@ -335,8 +340,8 @@ struct TRelOptimizerNode : public IBaseOptimizerNode {
  * as well as the set of join conditions.
  * It also has methods to compute the statistics and cost of a join,
  * based on pre-computed costs and statistics of the children.
-*/
-struct TJoinOptimizerNode : public IBaseOptimizerNode {
+ */
+struct TJoinOptimizerNode: public IBaseOptimizerNode {
     std::shared_ptr<IBaseOptimizerNode> LeftArg;
     std::shared_ptr<IBaseOptimizerNode> RightArg;
     TVector<NDq::TJoinColumn> LeftJoinKeys;
@@ -350,35 +355,37 @@ struct TJoinOptimizerNode : public IBaseOptimizerNode {
     bool IsReorderable;
 
     TJoinOptimizerNode(const std::shared_ptr<IBaseOptimizerNode>& left,
-        const std::shared_ptr<IBaseOptimizerNode>& right,
-        TVector<NDq::TJoinColumn> leftKeys,
-        TVector<NDq::TJoinColumn> rightKeys,
-        const EJoinKind joinType,
-        const EJoinAlgoType joinAlgo,
-        bool leftAny,
-        bool rightAny,
-        bool nonReorderable = false
-    );
-    virtual ~TJoinOptimizerNode() {}
+                       const std::shared_ptr<IBaseOptimizerNode>& right,
+                       TVector<NDq::TJoinColumn> leftKeys,
+                       TVector<NDq::TJoinColumn> rightKeys,
+                       const EJoinKind joinType,
+                       const EJoinAlgoType joinAlgo,
+                       bool leftAny,
+                       bool rightAny,
+                       bool nonReorderable = false);
+    virtual ~TJoinOptimizerNode() {
+    }
     virtual TVector<TString> Labels();
-    virtual void Print(std::stringstream& stream, int ntabs=0);
+    virtual void Print(std::stringstream& stream, int ntabs = 0);
 };
 
 struct IOptimizerNew {
     using TPtr = std::shared_ptr<IOptimizerNew>;
     IProviderContext& Pctx;
 
-    IOptimizerNew(IProviderContext& ctx) : Pctx(ctx) {}
+    IOptimizerNew(IProviderContext& ctx)
+        : Pctx(ctx)
+    {
+    }
     virtual ~IOptimizerNew() = default;
     virtual std::shared_ptr<TJoinOptimizerNode> JoinSearch(
         const std::shared_ptr<TJoinOptimizerNode>& joinTree,
-        const TOptimizerHints& hints = {}
-    ) = 0;
+        const TOptimizerHints& hints = {}) = 0;
 };
 
 struct TExprContext;
 
-class IOptimizerFactory : private TNonCopyable {
+class IOptimizerFactory: private TNonCopyable {
 public:
     using TPtr = std::shared_ptr<IOptimizerFactory>;
     using TLogger = std::function<void(const TString&)>;
@@ -391,7 +398,7 @@ public:
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerNative(IProviderContext& pctx, TExprContext& ctx, const TNativeSettings& settings) const = 0;
 
     struct TPGSettings {
-        TLogger Logger = [](const TString&){};
+        TLogger Logger = [](const TString&) {};
     };
     virtual IOptimizerNew::TPtr MakeJoinCostBasedOptimizerPG(IProviderContext& pctx, TExprContext& ctx, const TPGSettings& settings) const = 0;
 };

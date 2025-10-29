@@ -61,7 +61,7 @@ public:
     {
     }
 
-    template<typename T>
+    template <typename T>
     TTextWalker& Advance(const T& buf) {
         for (char c : buf) {
             Advance(c);
@@ -108,6 +108,7 @@ using TIssuePtr = TIntrusivePtr<TIssue>;
 class TIssue: public TThrRefBase {
     TVector<TIntrusivePtr<TIssue>> Children_;
     TString Message_;
+
 public:
     TPosition Position;
     TPosition EndPosition;
@@ -135,7 +136,7 @@ public:
     }
 
     inline TRange Range() const {
-        return{ Position, EndPosition };
+        return {Position, EndPosition};
     }
 
     template <typename T>
@@ -148,16 +149,14 @@ public:
     }
 
     inline bool operator==(const TIssue& other) const {
-        return Position == other.Position && Message_ == other.Message_
-            && IssueCode == other.IssueCode;
+        return Position == other.Position && Message_ == other.Message_ && IssueCode == other.IssueCode;
     }
 
     ui64 Hash() const noexcept {
         return CombineHashes(
             CombineHashes(
                 (size_t)CombineHashes(IntHash(Position.Row), IntHash(Position.Column)),
-                ComputeHash(Position.File)
-            ),
+                ComputeHash(Position.File)),
             (size_t)CombineHashes((size_t)IntHash(static_cast<int>(IssueCode)), ComputeHash(Message_)));
     }
 
@@ -247,7 +246,8 @@ public:
         return *this;
     }
 
-    inline TIssues(TIssues&& rhs) : Issues_(std::move(rhs.Issues_))
+    inline TIssues(TIssues&& rhs)
+        : Issues_(std::move(rhs.Issues_))
     {
     }
 
@@ -256,7 +256,8 @@ public:
         return *this;
     }
 
-    template <typename ... Args> void AddIssue(Args&& ... args) {
+    template <typename... Args>
+    void AddIssue(Args&&... args) {
         Issues_.emplace_back(std::forward<Args>(args)...);
     }
 
@@ -267,7 +268,7 @@ public:
 
     inline void AddIssues(const TPosition& pos, const TIssues& errors) {
         Issues_.reserve(Issues_.size() + errors.Size());
-        for (const auto& e: errors) {
+        for (const auto& e : errors) {
             TIssue& issue = Issues_.emplace_back();
             *issue.MutableMessage() = e.GetMessage(); // No need to sanitize message, it has already been sanitized.
             issue.Position = pos;
@@ -305,10 +306,10 @@ public:
 
     void PrintTo(IOutputStream& out, bool oneLine = false) const;
     void PrintWithProgramTo(
-            IOutputStream& out,
-            const TString& programFilename,
-            const TString& programText,
-            bool colorize = true) const;
+        IOutputStream& out,
+        const TString& programFilename,
+        const TString& programText,
+        bool colorize = true) const;
 
     inline TString ToString(bool oneLine = false) const {
         TStringStream out;
@@ -332,12 +333,14 @@ private:
     TVector<TIssue> Issues_;
 };
 
-class TErrorException : public yexception {
+class TErrorException: public yexception {
     const TIssueCode Code_;
+
 public:
     explicit TErrorException(TIssueCode code)
         : Code_(code)
-    {}
+    {
+    }
     TIssueCode GetCode() const {
         return Code_;
     }

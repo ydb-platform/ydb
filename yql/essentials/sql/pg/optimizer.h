@@ -44,4 +44,3 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno);
 List* MakeRelOptInfoList(const IOptimizer::TInput& input);
 
 } // namespace NYql
-

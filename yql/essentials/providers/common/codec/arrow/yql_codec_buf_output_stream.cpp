@@ -19,5 +19,5 @@ arrow::Status TOutputBufArrowOutputStream::Flush() {
     return arrow::Status::OK();
 }
 
-} // NCommon
-} // NYql
+} // namespace NCommon
+} // namespace NYql

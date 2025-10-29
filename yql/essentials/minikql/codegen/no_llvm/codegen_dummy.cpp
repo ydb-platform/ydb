@@ -21,5 +21,5 @@ bool ICodegen::IsCodegenAvailable() {
     return false;
 }
 
-}
-}
+} // namespace NCodegen
+} // namespace NYql

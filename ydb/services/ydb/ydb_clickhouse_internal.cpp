@@ -39,7 +39,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NYdbGrpc::TLoggerP
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), \
         GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.ClickhouseInternal_##NAME.MaxInFlight))->Run();

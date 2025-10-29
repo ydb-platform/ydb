@@ -9,81 +9,80 @@
 #include <yql/essentials/types/binary_json/write.h>
 
 namespace NJson2Udf {
-    using namespace NKikimr;
-    using namespace NUdf;
-    using namespace NYql;
-    using namespace NDom;
-    using namespace NBinaryJson;
+using namespace NKikimr;
+using namespace NUdf;
+using namespace NYql;
+using namespace NDom;
+using namespace NBinaryJson;
 
-    template <EDataSlot ResultType>
-    class TSerialize : public TBoxedValue {
-    public:
-        TSerialize(TSourcePosition pos)
-            : Pos_(pos)
-        {
+template <EDataSlot ResultType>
+class TSerialize: public TBoxedValue {
+public:
+    TSerialize(TSourcePosition pos)
+        : Pos_(pos)
+    {
+    }
+
+    static const TStringRef& Name();
+
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly) {
+        Y_UNUSED(userType);
+        if (name != Name()) {
+            return false;
         }
 
-        static const TStringRef& Name();
+        TType* resultType = nullptr;
+        if constexpr (ResultType == EDataSlot::Json) {
+            resultType = builder.SimpleType<TJson>();
+        } else {
+            resultType = builder.SimpleType<TJsonDocument>();
+        }
 
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly) {
-            Y_UNUSED(userType);
-            if (name != Name()) {
-                return false;
-            }
+        builder.Args()
+            ->Add<TAutoMap<TJsonNodeResource>>()
+            .Done()
+            .Returns(resultType);
 
-            TType* resultType = nullptr;
+        if (!typesOnly) {
+            builder.Implementation(new TSerialize(builder.GetSourcePosition()));
+        }
+        return true;
+    }
+
+private:
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const final {
+        try {
+            const TUnboxedValue& jsonDom = args[0];
+
             if constexpr (ResultType == EDataSlot::Json) {
-                resultType = builder.SimpleType<TJson>();
+                return valueBuilder->NewString(SerializeJsonDom(jsonDom));
             } else {
-                resultType = builder.SimpleType<TJsonDocument>();
+                const auto binaryJson = SerializeToBinaryJson(jsonDom);
+                return valueBuilder->NewString(TStringBuf(binaryJson.Data(), binaryJson.Size()));
             }
-
-            builder.Args()
-                ->Add<TAutoMap<TJsonNodeResource>>()
-                .Done()
-                .Returns(resultType);
-
-            if (!typesOnly) {
-                builder.Implementation(new TSerialize(builder.GetSourcePosition()));
-            }
-            return true;
+        } catch (const std::exception& e) {
+            UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
         }
-
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const final {
-            try {
-                const TUnboxedValue& jsonDom = args[0];
-
-                if constexpr (ResultType == EDataSlot::Json) {
-                    return valueBuilder->NewString(SerializeJsonDom(jsonDom));
-                } else {
-                    const auto binaryJson = SerializeToBinaryJson(jsonDom);
-                    return valueBuilder->NewString(TStringBuf(binaryJson.Data(), binaryJson.Size()));
-                }
-            } catch (const std::exception& e) {
-                UdfTerminate((TStringBuilder() << Pos_ << " " << e.what()).c_str());
-            }
-        }
-
-        TSourcePosition Pos_;
-    };
-
-    template <>
-    const TStringRef& TSerialize<EDataSlot::Json>::Name() {
-        static auto name = TStringRef::Of("Serialize");
-        return name;
     }
 
-    template <>
-    const TStringRef& TSerialize<EDataSlot::JsonDocument>::Name() {
-        static auto name = TStringRef::Of("SerializeToJsonDocument");
-        return name;
-    }
+    TSourcePosition Pos_;
+};
+
+template <>
+const TStringRef& TSerialize<EDataSlot::Json>::Name() {
+    static auto name = TStringRef::Of("Serialize");
+    return name;
 }
 
+template <>
+const TStringRef& TSerialize<EDataSlot::JsonDocument>::Name() {
+    static auto name = TStringRef::Of("SerializeToJsonDocument");
+    return name;
+}
+} // namespace NJson2Udf

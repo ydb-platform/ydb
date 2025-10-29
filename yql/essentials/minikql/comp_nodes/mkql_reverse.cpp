@@ -1,6 +1,6 @@
 #include "mkql_reverse.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -8,8 +8,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TReverseWrapper : public TMutableCodegeneratorNode<TReverseWrapper> {
+class TReverseWrapper: public TMutableCodegeneratorNode<TReverseWrapper> {
     typedef TMutableCodegeneratorNode<TReverseWrapper> TBaseComputation;
+
 public:
     TReverseWrapper(TComputationMutables& mutables, IComputationNode* list)
         : TBaseComputation(mutables, list->GetRepresentation())
@@ -52,7 +53,7 @@ private:
     IComputationNode* const List;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapReverse(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -60,5 +61,5 @@ IComputationNode* WrapReverse(TCallable& callable, const TComputationNodeFactory
     return new TReverseWrapper(ctx.Mutables, LocateNode(ctx.NodeLocator, callable, 0));
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

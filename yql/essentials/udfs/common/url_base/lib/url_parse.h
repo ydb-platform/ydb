@@ -16,44 +16,44 @@
 #define FIELD_INDEXES(name) ui32 name;
 
 namespace NUrlUdf {
-    using namespace NUri;
-    using namespace NKikimr;
-    using namespace NUdf;
+using namespace NUri;
+using namespace NKikimr;
+using namespace NUdf;
 
-    struct TUrlParseIndexes {
-        ui32 ParseError;
-        FIELD_MAP(FIELD_INDEXES)
-    };
+struct TUrlParseIndexes {
+    ui32 ParseError;
+    FIELD_MAP(FIELD_INDEXES)
+};
 
-    class TParse: public TBoxedValue {
-    public:
-        TParse(const TUrlParseIndexes& UrlParseIndexes)
-            : UrlParseIndexes_(UrlParseIndexes)
-            , ParseFlags_(TUri::FeaturesRecommended)
-        {
-        }
+class TParse: public TBoxedValue {
+public:
+    TParse(const TUrlParseIndexes& UrlParseIndexes)
+        : UrlParseIndexes_(UrlParseIndexes)
+        , ParseFlags_(TUri::FeaturesRecommended)
+    {
+    }
 
-        static const TStringRef& Name() {
-            static auto nameRef = TStringRef("Parse");
-            return nameRef;
-        }
+    static const TStringRef& Name() {
+        static auto nameRef = TStringRef("Parse");
+        return nameRef;
+    }
 
-    private:
-        TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override;
+private:
+    TUnboxedValue Run(
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override;
 
-    public:
-        static bool DeclareSignature(
-            const TStringRef& name,
-            TType* userType,
-            IFunctionTypeInfoBuilder& builder,
-            bool typesOnly);
+public:
+    static bool DeclareSignature(
+        const TStringRef& name,
+        TType* userType,
+        IFunctionTypeInfoBuilder& builder,
+        bool typesOnly);
 
-    private:
-        const TUrlParseIndexes UrlParseIndexes_;
-        const NUri::TParseFlags ParseFlags_;
+private:
+    const TUrlParseIndexes UrlParseIndexes_;
+    const NUri::TParseFlags ParseFlags_;
 
-        static constexpr ui32 FieldsCount = sizeof(TUrlParseIndexes) / sizeof(ui32);
-    };
-}
+    static constexpr ui32 FieldsCount = sizeof(TUrlParseIndexes) / sizeof(ui32);
+};
+} // namespace NUrlUdf

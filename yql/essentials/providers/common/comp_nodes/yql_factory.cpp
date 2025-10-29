@@ -75,8 +75,9 @@ TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex) {
     return [exprCtxMutableIndex](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
         const auto& map = Singleton<TYqlCallableComputationNodeBuilderFuncMapFiller>()->Map;
         auto it = map.find(callable.GetType()->GetName());
-        if (it == map.end())
+        if (it == map.end()) {
             return nullptr;
+        }
 
         return it->second(callable, ctx, exprCtxMutableIndex);
     };
@@ -84,14 +85,13 @@ TComputationNodeFactory GetYqlFactory(ui32 exprCtxMutableIndex) {
 
 TComputationNodeFactory GetYqlFactory() {
     TComputationNodeFactory yqlFactory;
-    return [yqlFactory]
-        (TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
-            if (!yqlFactory) {
-                yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++);
-            }
-            return yqlFactory(callable, ctx);
-        };
+    return [yqlFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) mutable -> IComputationNode* {
+        if (!yqlFactory) {
+            yqlFactory = GetYqlFactory(ctx.Mutables.CurValueIndex++);
+        }
+        return yqlFactory(callable, ctx);
+    };
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

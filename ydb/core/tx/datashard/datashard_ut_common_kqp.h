@@ -259,13 +259,21 @@ namespace NKqpHelpers {
             std::move(request), database, /* token */ "", runtime.GetActorSystem(0));
     }
 
-    inline TString KqpSchemeExec(TTestActorRuntime& runtime, const TString& query) {
-        TString sessionId = CreateSessionRPC(runtime);
-        auto response = AwaitResponse(runtime, SendRequest(runtime, MakeSchemeRequestRPC(query, sessionId)));
+    inline auto KqpSchemeExecSend(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        TString sessionId = CreateSessionRPC(runtime, database);
+        return SendRequest(runtime, MakeSchemeRequestRPC(query, sessionId), database);
+    }
+
+    inline TString KqpSchemeExecWait(TTestActorRuntime& runtime, NThreading::TFuture<Ydb::Table::ExecuteSchemeQueryResponse> future) {
+        auto response = AwaitResponse(runtime, std::move(future));
         if (response.operation().status() != Ydb::StatusIds::SUCCESS) {
             return TStringBuilder() << "ERROR: " << response.operation().status();
         }
         return "SUCCESS";
+    }
+
+    inline TString KqpSchemeExec(TTestActorRuntime& runtime, const TString& query, const TString& database = {}) {
+        return KqpSchemeExecWait(runtime, KqpSchemeExecSend(runtime, query, database));
     }
 
 } // namespace NKqpHelpers

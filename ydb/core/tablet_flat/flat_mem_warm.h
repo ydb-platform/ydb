@@ -253,8 +253,14 @@ namespace NMem {
                 while (next) {
                     TRowVersion nextVersion = next->RowVersion;
                     if (nextVersion.Step == Max<ui64>()) {
+                        if (next->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            next = next->Next;
+                            continue;
+                        }
                         auto* commitVersion = committed.Find(nextVersion.TxId);
                         if (!commitVersion) {
+                            // Skip uncommitted updates
                             next = next->Next;
                             continue;
                         }
@@ -273,8 +279,14 @@ namespace NMem {
                 while (next) {
                     TRowVersion nextVersion = next->RowVersion;
                     if (nextVersion.Step == Max<ui64>()) {
+                        if (next->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            next = next->Next;
+                            continue;
+                        }
                         auto* commitVersion = committed.Find(nextVersion.TxId);
                         if (!commitVersion) {
+                            // Skip uncommitted updates
                             next = next->Next;
                             continue;
                         }
@@ -289,8 +301,13 @@ namespace NMem {
                 // See which tags we need to merge from earlier row versions
                 while (mergeFrom && rop == ERowOp::Upsert) {
                     if (mergeFrom->RowVersion.Step == Max<ui64>()) {
+                        if (mergeFrom->Rop == ERowOp::Absent) {
+                            // Skip lock only updates
+                            mergeFrom = mergeFrom->Next;
+                            continue;
+                        }
                         if (!committed.Find(mergeFrom->RowVersion.TxId)) {
-                            // this item is not committed, skip
+                            // Skip uncommitted updates
                             mergeFrom = mergeFrom->Next;
                             continue;
                         }
@@ -342,6 +359,7 @@ namespace NMem {
             update->RowVersion = rowVersion;
             update->Items = mergedSize;
             update->Rop = rop;
+            update->Lock = ELockMode::None;
 
             ui32 dstIndex = 0;
 
@@ -421,6 +439,50 @@ namespace NMem {
                 MinRowVersion = Min(MinRowVersion, rowVersion);
                 MaxRowVersion = Max(MaxRowVersion, rowVersion);
             }
+        }
+
+        void LockRow(ELockMode mode, TRawVals key_, ui64 txId)
+        {
+            const TCelled key(key_, *Scheme->Keys, true);
+            const NMem::TTreeValue* const current = Tree.Find(NMem::TCandidate{ key.Cells });
+            const NMem::TUpdate* next = current ? current->GetFirst() : nullptr;
+
+            while (next && next->Rop == ERowOp::Absent) {
+                // New lock replaces older locks, avoid keeping them around
+                next = next->Next;
+            }
+
+            auto *update = NewUpdate(0);
+
+            update->Next = next;
+            update->RowVersion = TRowVersion(Max<ui64>(), txId);
+            update->Items = 0;
+            update->Rop = ERowOp::Absent;
+            update->Lock = mode;
+
+            if (current) {
+                Tree.UpdateUnsafe()->Chain = update;
+            } else {
+                Tree.EmplaceUnsafe(NewKey(key.Cells), update);
+                ++RowCount;
+            }
+
+            ++OpsCount;
+
+            // Note: lock only deltas don't affect min/max row version
+            // But we still have to update them because they may result in deltas on compaction
+            MinRowVersion = TRowVersion::Min();
+            MaxRowVersion = TRowVersion::Max();
+
+            if (RollbackState) {
+                auto it = TxIdStats.find(txId);
+                if (it != TxIdStats.end()) {
+                    UndoBuffer.push_back(TUndoOpUpdateTxIdStats{ txId, it->second });
+                } else {
+                    UndoBuffer.push_back(TUndoOpEraseTxIdStats{ txId });
+                }
+            }
+            ++TxIdStats[txId].OpsCount;
         }
 
         size_t GetUsedMem() const noexcept

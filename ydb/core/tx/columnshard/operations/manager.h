@@ -72,7 +72,7 @@ private:
     YDB_READONLY_DEF(std::vector<NOlap::NTxInteractions::TTxEventContainer>, Events);
     std::shared_ptr<TLockSharingInfo> SharingInfo;
 
-    YDB_READONLY_DEF(THashSet<ui64>, BrokeOnCommit);
+    YDB_READONLY_DEF(THashSet<ui64>, BreakOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, NotifyOnCommit);
     YDB_READONLY_DEF(THashSet<ui64>, Committed);
     YDB_READONLY_DEF(TPositiveControlInteger, OperationsInProgress);
@@ -146,16 +146,18 @@ public:
         return Committed.contains(lockId);
     }
 
-    void AddNotifyCommit(const ui64 lockId) {
-        AFL_VERIFY(NotifyOnCommit.erase(lockId));
+    /*
+    Let the given `TLockFeatures` know that the transaction with `lockId` has committed
+    */
+    void NotifyAboutCommit(const ui64 lockId) {
         Committed.emplace(lockId);
     }
 
-    void AddBrokeOnCommit(const THashSet<ui64>& lockIds) {
-        BrokeOnCommit.insert(lockIds.begin(), lockIds.end());
+    void AddBreakOnCommit(const THashSet<ui64>& lockIds) {
+        BreakOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
-    void AddNotificationsOnCommit(const THashSet<ui64>& lockIds) {
+    void AddNotifyOnCommit(const THashSet<ui64>& lockIds) {
         NotifyOnCommit.insert(lockIds.begin(), lockIds.end());
     }
 
@@ -181,9 +183,9 @@ class TOperationsManager {
 
 public:
 
-    void StopWriting() {
+    void StopWriting(const TString& errorMessage) {
         for (auto&& i : Operations) {
-            i.second->StopWriting();
+            i.second->StopWriting(errorMessage);
         }
     }
 
@@ -235,6 +237,9 @@ public:
     void AbortTransactionOnComplete(TColumnShard& owner, const ui64 txId);
     void AbortLockOnExecute(TColumnShard& owner, const ui64 lockId, NTabletFlatExecutor::TTransactionContext& txc);
     void AbortLockOnComplete(TColumnShard& owner, const ui64 lockId);
+
+    void BreakConflictingTxs(const TLockFeatures& lock);
+    void BreakConflictingTxs(const ui64 txId);
 
     std::optional<ui64> GetLockForTx(const ui64 txId) const;
     std::optional<ui64> GetLockForTxOptional(const ui64 txId) const {

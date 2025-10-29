@@ -2,10 +2,10 @@
 
 namespace NSQLComplete {
 
-    THashSet<TString> TFolderEntry::KnownTypes = {
-        TFolderEntry::Folder,
-        TFolderEntry::Table,
-    };
+THashSet<TString> TFolderEntry::KnownTypes = {
+    TFolderEntry::Folder,
+    TFolderEntry::Table,
+};
 
 } // namespace NSQLComplete
 

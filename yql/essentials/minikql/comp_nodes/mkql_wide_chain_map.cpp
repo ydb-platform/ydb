@@ -1,6 +1,6 @@
 #include "mkql_wide_chain_map.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_custom_list.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
@@ -12,14 +12,15 @@ using NYql::EnsureDynamicCast;
 
 namespace {
 
-class TWideChain1MapWrapper : public TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper>;
+class TWideChain1MapWrapper: public TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper>;
+
 public:
-     TWideChain1MapWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
-            TComputationExternalNodePtrVector&& inputs,
-            TComputationNodePtrVector&& initItems,
-            TComputationExternalNodePtrVector&& outputs,
-            TComputationNodePtrVector&& updateItems)
+    TWideChain1MapWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
+                          TComputationExternalNodePtrVector&& inputs,
+                          TComputationNodePtrVector&& initItems,
+                          TComputationExternalNodePtrVector&& outputs,
+                          TComputationNodePtrVector&& updateItems)
         : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
         , Flow(flow)
         , Inputs(std::move(inputs))
@@ -34,9 +35,10 @@ public:
         , UpdateOnOutputs(GetPasstroughtMapOneToOne(UpdateItems, Outputs))
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Inputs.size()))
         , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + Outputs.size()))
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             state = NUdf::TUnboxedValuePod();
             return CalculateFirst(ctx, output);
@@ -60,9 +62,11 @@ public:
         BranchInst::Create(done, good, special, block);
 
         block = good;
-        for (auto i = 0U; i < Inputs.size(); ++i)
-            if (Inputs[i]->GetDependencesCount() > 0U || !InputsOnInit[i] || !InputsOnUpdate[i])
+        for (auto i = 0U; i < Inputs.size(); ++i) {
+            if (Inputs[i]->GetDependencesCount() > 0U || !InputsOnInit[i] || !InputsOnUpdate[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Inputs[i])->CreateSetValue(ctx, block, getres.second[i](ctx, block));
+            }
+        }
 
         const auto init = BasicBlock::Create(context, "init", ctx.Func);
         const auto next = BasicBlock::Create(context, "next", ctx.Func);
@@ -93,9 +97,11 @@ public:
             }
         }
 
-        for (auto i = 0U; i < outputs.size(); ++i)
-            if (const auto out = outputs[i])
+        for (auto i = 0U; i < outputs.size(); ++i) {
+            if (const auto out = outputs[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Outputs[i])->CreateSetValue(ctx, block, out);
+            }
+        }
 
         BranchInst::Create(done, block);
 
@@ -104,12 +110,12 @@ public:
         ICodegeneratorInlineWideNode::TGettersList result;
         result.reserve(Outputs.size());
         for (auto i = 0U; i < Outputs.size(); ++i) {
-            if (const auto& one = InitOnInputs[i], two = UpdateOnInputs[i]; one && two && *one == *two)
+            if (const auto &one = InitOnInputs[i], two = UpdateOnInputs[i]; one && two && *one == *two) {
                 result.emplace_back(getres.second[*two]);
-            else if (Outputs[i]->GetDependencesCount() > 0 || OutputsOnUpdate[i])
-                result.emplace_back([output = Outputs[i]] (const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(output, ctx, block); });
-            else
-                result.emplace_back([this, i, source = getres.second, flagPtr, flagType] (const TCodegenContext& ctx, BasicBlock*& block) {
+            } else if (Outputs[i]->GetDependencesCount() > 0 || OutputsOnUpdate[i]) {
+                result.emplace_back([output = Outputs[i]](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(output, ctx, block); });
+            } else {
+                result.emplace_back([this, i, source = getres.second, flagPtr, flagType](const TCodegenContext& ctx, BasicBlock*& block) {
                     auto& context = ctx.Codegen.GetContext();
 
                     const auto init = BasicBlock::Create(context, "init", ctx.Func);
@@ -122,28 +128,31 @@ public:
                     BranchInst::Create(init, next, flag, block);
 
                     block = init;
-                    if (const auto& map = InitOnInputs[i])
+                    if (const auto& map = InitOnInputs[i]) {
                         result->addIncoming(source[*map](ctx, block), block);
-                    else
+                    } else {
                         result->addIncoming(GetNodeValue(InitItems[i], ctx, block), block);
+                    }
                     BranchInst::Create(done, block);
 
                     block = next;
-                    if (const auto& map = UpdateOnInputs[i])
+                    if (const auto& map = UpdateOnInputs[i]) {
                         result->addIncoming(source[*map](ctx, block), block);
-                    else
+                    } else {
                         result->addIncoming(GetNodeValue(UpdateItems[i], ctx, block), block);
+                    }
                     BranchInst::Create(done, block);
 
                     block = done;
                     return result;
                 });
+            }
         };
         return {getres.first, std::move(result)};
     }
 #endif
 private:
-    EFetchResult CalculateFirst(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult CalculateFirst(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
@@ -163,8 +172,9 @@ private:
             fields[i] = nullptr;
         }
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
+        }
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
@@ -176,13 +186,14 @@ private:
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i])
+                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
                     *out = Outputs[i]->GetValue(ctx);
-                else {
+                } else {
                     if (const auto& map = InitOnInputs[i]) {
                         if (const auto from = *map; !Inputs[from]->GetDependencesCount()) {
-                            if (const auto first = *InputsOnInit[from]; first != i)
+                            if (const auto first = *InputsOnInit[from]; first != i) {
                                 *out = *output[first];
+                            }
                             continue;
                         }
                     }
@@ -195,7 +206,7 @@ private:
         return EFetchResult::One;
     }
 
-    EFetchResult CalculateOther(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult CalculateOther(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
@@ -212,8 +223,9 @@ private:
             fields[i] = nullptr;
         }
 
-        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result) {
             return result;
+        }
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
@@ -233,13 +245,14 @@ private:
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (const auto out = output[i]) {
-                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i])
+                if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
                     *out = Outputs[i]->GetValue(ctx);
-                else {
+                } else {
                     if (const auto& map = UpdateOnInputs[i]) {
                         if (const auto from = *map; !Inputs[from]->GetDependencesCount()) {
-                            if (const auto first = *InputsOnUpdate[from]; first != i)
+                            if (const auto first = *InputsOnUpdate[from]; first != i) {
                                 *out = *output[first];
+                            }
                             continue;
                         }
                     }
@@ -274,7 +287,7 @@ private:
     const ui32 TempStateIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapWideChain1Map(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 0U, "Expected argument.");
@@ -286,17 +299,17 @@ IComputationNode* WrapWideChain1Map(TCallable& callable, const TComputationNodeF
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         TComputationNodePtrVector initOutput(outputWidth, nullptr), updateOutput(outputWidth, nullptr);
         auto index = inputWidth;
-        std::generate(initOutput.begin(), initOutput.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(initOutput.begin(), initOutput.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
         index += outputWidth;
-        std::generate(updateOutput.begin(), updateOutput.end(), [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(updateOutput.begin(), updateOutput.end(), [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
         TComputationExternalNodePtrVector inputs(inputWidth, nullptr), outputs(outputWidth, nullptr);
         index = 0U;
-        std::generate(inputs.begin(), inputs.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(inputs.begin(), inputs.end(), [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
         index += outputWidth;
-        std::generate(outputs.begin(), outputs.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+        std::generate(outputs.begin(), outputs.end(), [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
         return new TWideChain1MapWrapper(ctx.Mutables, wide, std::move(inputs), std::move(initOutput), std::move(outputs), std::move(updateOutput));
     }
@@ -304,5 +317,5 @@ IComputationNode* WrapWideChain1Map(TCallable& callable, const TComputationNodeF
     THROW yexception() << "Expected wide flow.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

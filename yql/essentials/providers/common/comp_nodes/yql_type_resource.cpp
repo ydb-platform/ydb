@@ -31,5 +31,5 @@ NYql::TExprNode::TPtr GetYqlCode(const NUdf::TUnboxedValue& value) {
     return dynamic_cast<TYqlCodeResource*>(value.AsBoxed().Get())->Get()->second;
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

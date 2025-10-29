@@ -8,5 +8,5 @@ IComputationNode* WrapBlockDecimalMul(TCallable& callable, const TComputationNod
 IComputationNode* WrapBlockDecimalDiv(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapBlockDecimalMod(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

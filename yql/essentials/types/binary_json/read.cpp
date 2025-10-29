@@ -152,13 +152,11 @@ TBinaryJsonReader::TBinaryJsonReader(TStringBuf buffer)
     Y_ENSURE(
         Header_.Version == CURRENT_VERSION,
         TStringBuilder() << "Version in BinaryJson `" << static_cast<ui64>(Header_.Version) << "` "
-        << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`"
-    );
+                         << "does not match current version `" << static_cast<ui64>(CURRENT_VERSION) << "`");
 
     Y_ENSURE(
         Header_.StringOffset < Buffer_.size(),
-        "StringOffset must be inside buffer"
-    );
+        "StringOffset must be inside buffer");
 
     // Tree starts right after Header
     TreeStart_ = sizeof(Header_);
@@ -324,7 +322,7 @@ void ReadContainerToJson(const TContainerCursor& cursor, TJsonWriter& writer) {
     }
 }
 
-}
+} // namespace
 
 TString SerializeToJson(const TBinaryJson& binaryJson) {
     return SerializeToJson(TStringBuf(binaryJson.Data(), binaryJson.Size()));
@@ -575,7 +573,7 @@ private:
     TStringBuf Buffer_;
 };
 
-}
+} // namespace
 
 TMaybe<TStringBuf> IsValidBinaryJsonWithError(TStringBuf buffer) {
     return TBinaryJsonValidator(buffer).ValidateWithError();
@@ -585,4 +583,4 @@ bool IsValidBinaryJson(TStringBuf buffer) {
     return !IsValidBinaryJsonWithError(buffer).Defined();
 }
 
-}
+} // namespace NKikimr::NBinaryJson

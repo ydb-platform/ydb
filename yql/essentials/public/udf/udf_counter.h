@@ -10,7 +10,8 @@ class TCounter {
 public:
     TCounter(i64* ptr = nullptr)
         : Ptr_(ptr)
-    {}
+    {
+    }
 
     void Inc() {
         if (Ptr_) {
@@ -69,7 +70,8 @@ public:
     TScopedProbe(IScopedProbeHost* host = nullptr, void* cookie = nullptr)
         : Host_(host ? host : &NullHost_)
         , Cookie_(cookie)
-    {}
+    {
+    }
 
     void Acquire() {
         Host_->Acquire(Cookie_);
@@ -80,7 +82,7 @@ public:
     }
 
 private:
-    class TNullHost : public IScopedProbeHost {
+    class TNullHost: public IScopedProbeHost {
     public:
         void Acquire(void* cookie) override {
             Y_UNUSED(cookie);
@@ -109,5 +111,5 @@ public:
 
 UDF_ASSERT_TYPE_SIZE(ICountersProvider, 8);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

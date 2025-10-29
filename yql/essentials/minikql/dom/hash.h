@@ -9,5 +9,4 @@ NUdf::THashType HashDom(const NUdf::TUnboxedValuePod value);
 
 bool EquateDoms(const NUdf::TUnboxedValuePod lhs, const NUdf::TUnboxedValuePod rhs);
 
-}
-
+} // namespace NYql::NDom

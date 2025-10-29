@@ -8,4 +8,4 @@ class TFileStorageConfig;
 
 NYql::NFS::IDownloaderPtr MakeHttpDownloader(const TFileStorageConfig& config);
 
-} // NYql
+} // namespace NYql

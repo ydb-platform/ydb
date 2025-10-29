@@ -16,6 +16,7 @@
 #include <util/generic/map.h>
 
 using namespace NMVP::NOIDC;
+using namespace NActors;
 
 namespace {
 

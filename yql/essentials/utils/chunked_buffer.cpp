@@ -114,4 +114,4 @@ TChunkedBuffer CopyData(TChunkedBuffer&& src) {
     return result;
 }
 
-}
+} // namespace NYql

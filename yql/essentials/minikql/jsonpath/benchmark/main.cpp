@@ -62,14 +62,13 @@ TString GenerateRandomJson() {
 
 const size_t MAX_PARSE_ERRORS = 100;
 
-#define PREPARE() \
+#define PREPARE()                                                                                       \
     TIntrusivePtr<IFunctionRegistry> FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry())); \
-    TScopedAlloc Alloc(__LOCATION__); \
-    TTypeEnvironment Env(Alloc); \
-    TMemoryUsageInfo MemInfo("Memory"); \
-    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get()); \
-    TDefaultValueBuilder ValueBuilder(HolderFactory); \
-
+    TScopedAlloc Alloc(__LOCATION__);                                                                   \
+    TTypeEnvironment Env(Alloc);                                                                        \
+    TMemoryUsageInfo MemInfo("Memory");                                                                 \
+    THolderFactory HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get());                         \
+    TDefaultValueBuilder ValueBuilder(HolderFactory);
 
 Y_CPU_BENCHMARK(JsonPath, iface) {
     PREPARE()

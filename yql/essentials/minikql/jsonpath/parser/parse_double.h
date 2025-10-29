@@ -1,3 +1,5 @@
+#pragma once
+
 #include <util/generic/string.h>
 
 namespace NYql::NJsonPath {
@@ -7,5 +9,4 @@ namespace NYql::NJsonPath {
 // On double overflow returns INF double value (can be checked using `std::isinf`).
 double ParseDouble(const TStringBuf literal);
 
-}
-
+} // namespace NYql::NJsonPath

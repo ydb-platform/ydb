@@ -5,7 +5,6 @@
 
 #include <utility>
 
-
 namespace NYql {
 
 struct IUrlPreprocessing: public TThrRefBase {
@@ -15,4 +14,4 @@ public:
     virtual std::pair<TString, TString> Preprocess(const TString& url) = 0;
 };
 
-}
+} // namespace NYql

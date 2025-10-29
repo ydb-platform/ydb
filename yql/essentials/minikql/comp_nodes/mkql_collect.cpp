@@ -1,18 +1,21 @@
 #include "mkql_collect.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
 
-class TCollectFlowWrapper : public TMutableCodegeneratorRootNode<TCollectFlowWrapper> {
-using TBaseComputation = TMutableCodegeneratorRootNode<TCollectFlowWrapper>;
+class TCollectFlowWrapper: public TMutableCodegeneratorRootNode<TCollectFlowWrapper> {
+    using TBaseComputation = TMutableCodegeneratorRootNode<TCollectFlowWrapper>;
+
 public:
     TCollectFlowWrapper(TComputationMutables& mutables, IComputationNode* flow)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), Flow(flow)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Flow(flow)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         for (NUdf::TUnboxedValue list = ctx.HolderFactory.GetEmptyContainerLazy();;) {
@@ -93,12 +96,15 @@ private:
 };
 
 template <bool IsList>
-class TCollectWrapper : public TMutableCodegeneratorNode<TCollectWrapper<IsList>> {
+class TCollectWrapper: public TMutableCodegeneratorNode<TCollectWrapper<IsList>> {
     typedef TMutableCodegeneratorNode<TCollectWrapper<IsList>> TBaseComputation;
+
 public:
     TCollectWrapper(TComputationMutables& mutables, IComputationNode* seq)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), Seq(seq)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , Seq(seq)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto seq = Seq->GetValue(ctx);
@@ -157,7 +163,7 @@ private:
     IComputationNode* const Seq;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapCollect(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -175,5 +181,5 @@ IComputationNode* WrapCollect(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected flow, list or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

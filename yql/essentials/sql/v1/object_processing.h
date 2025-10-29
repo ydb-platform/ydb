@@ -55,7 +55,7 @@ public:
     bool DoInit(TContext& ctx, ISource* src) override;
 
     TObjectProcessorWithFeatures(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-        TFeatureMap&& features);
+                                 TFeatureMap&& features);
 };
 
 class TCreateObject final: public TObjectProcessorWithFeatures {
@@ -69,7 +69,7 @@ protected:
 
 public:
     TCreateObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-        TFeatureMap&& features, bool existingOk, bool replaceIfExists);
+                  TFeatureMap&& features, bool existingOk, bool replaceIfExists);
 };
 
 class TUpsertObject final: public TObjectProcessorWithFeatures {
@@ -95,7 +95,7 @@ protected:
 
 public:
     TAlterObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-        TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk);
+                 TFeatureMap&& features, std::set<TString>&& featuresToReset, bool missingOk);
 };
 
 class TDropObject final: public TObjectProcessorWithFeatures {
@@ -108,7 +108,7 @@ protected:
 
 public:
     TDropObject(TPosition pos, const TString& objectId, const TString& typeId, const TObjectOperatorContext& context,
-        TFeatureMap&& features, bool missingOk);
+                TFeatureMap&& features, bool missingOk);
 };
 
-}  // NSQLTranslationV1
+} // namespace NSQLTranslationV1

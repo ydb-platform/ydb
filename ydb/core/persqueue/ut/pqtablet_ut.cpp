@@ -1145,7 +1145,7 @@ void TPQTabletFixture::StartPQCalcPredicateObserver(size_t& received)
     received = 0;
 
     auto observer = [&received](TAutoPtr<IEventHandle>& event) {
-        if (auto* msg = event->CastAsLocal<TEvPQ::TEvTxCalcPredicate>()) {
+        if (event->CastAsLocal<TEvPQ::TEvTxCalcPredicate>()) {
             ++received;
         }
 

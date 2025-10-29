@@ -92,3 +92,5 @@ ya test ydb/core
 ```
 
 Для запуска medium и large тестов добавьте опции `-tt` и `-ttt` к вызову `ya test` соответственно.
+
+{% include [career](./_includes/career.md) %}

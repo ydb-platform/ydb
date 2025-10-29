@@ -88,7 +88,7 @@ TPersQueueGetPartitionOffsetsProcessor::TPersQueueGetPartitionOffsetsProcessor(
 )
     : TPersQueueBaseRequestProcessor(request, metaCacheId, false)
 {
-    GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionOffsets().GetTopicRequest(), PartitionsToRequest);
+    TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionOffsets().GetTopicRequest(), &PartitionsToRequest);
 }
 
 THolder<IActor> TPersQueueGetPartitionOffsetsProcessor::CreateTopicSubactor(
@@ -201,7 +201,7 @@ void TPersQueueGetPartitionOffsetsTopicWorker::Answer(const TActorContext& ctx, 
 TPersQueueGetPartitionStatusProcessor::TPersQueueGetPartitionStatusProcessor(const NKikimrClient::TPersQueueRequest& request, const TActorId& schemeCache)
     : TPersQueueBaseRequestProcessor(request, schemeCache, false)
 {
-    GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetTopicRequest(), PartitionsToRequest);
+    TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionStatus().GetTopicRequest(), &PartitionsToRequest);
 }
 
 THolder<IActor> TPersQueueGetPartitionStatusProcessor::CreateTopicSubactor(
@@ -320,7 +320,7 @@ TPersQueueGetPartitionLocationsProcessor::TPersQueueGetPartitionLocationsProcess
 )
     : TPersQueueBaseRequestProcessor(request, schemeCache, true)
 {
-    GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionLocations().GetTopicRequest(), PartitionsToRequest);
+    TopicsToRequest = GetTopicsListOrThrow(RequestProto->GetMetaRequest().GetCmdGetPartitionLocations().GetTopicRequest(), &PartitionsToRequest);
 }
 
 THolder<IActor> TPersQueueGetPartitionLocationsProcessor::CreateTopicSubactor(

@@ -387,6 +387,13 @@ private:
                     State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
                 }
             }
+            else if (auto maybeCreate = TMaybeNode<TYtCreateTable>(node)) {
+                auto cluster = TString{maybeCreate.Cast().DataSink().Cluster().Value()};
+                auto table = maybeCreate.Cast().Table();
+                if (auto epoch = TEpochInfo::Parse(table.Epoch().Ref()).GetOrElse(0)) {
+                    State_->EpochDependencies[epoch].emplace(cluster, table.Name().Value());
+                }
+            }
             else if (auto maybeScheme = TMaybeNode<TYtReadTableScheme>(node)) {
                 auto cluster = TString{maybeScheme.Cast().DataSource().Cluster().Value()};
                 auto table = maybeScheme.Cast().Table();

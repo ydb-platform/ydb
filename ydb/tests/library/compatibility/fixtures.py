@@ -109,9 +109,9 @@ class RestartToAnotherVersionFixture:
         extra_feature_flags = copy.copy(extra_feature_flags)
         extra_feature_flags["suppress_compatibility_check"] = True
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             **kwargs,
         )
@@ -175,9 +175,16 @@ class MixedClusterFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
+        all_versions_numbered = all(
+            # +inf == current will be float, all other versions are int
+            isinstance(item, int)
+            for tpl in self.versions
+            for item in tpl
+        )
         self.config = KikimrConfigGenerator(
             erasure=Erasure.MIRROR_3_DC,
             binary_paths=self.all_binary_paths,
+            suppress_version_check=not all_versions_numbered,
             **kwargs,
         )
 
@@ -262,9 +269,9 @@ class RollingUpgradeAndDowngradeFixture:
         # By default draining is not enabled to faster tests
         extra_feature_flags["enable_drain_on_shutdown"] = True
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[0]],
-            use_in_memory_pdisks=False,
+            use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
             **kwargs,
         )

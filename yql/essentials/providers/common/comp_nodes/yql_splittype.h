@@ -8,5 +8,5 @@ namespace NMiniKQL {
 template <NYql::ETypeAnnotationKind Kind>
 IComputationNode* WrapSplitType(TCallable& callable, const TComputationNodeFactoryContext& ctx, ui32 exprCtxMutableIndex);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

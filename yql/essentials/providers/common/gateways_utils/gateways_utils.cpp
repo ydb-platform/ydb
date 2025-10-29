@@ -8,23 +8,23 @@ void GetClusterMappingFromGateways(const NYql::TGatewaysConfig& gateways, THashM
     clusterMapping["information_schema"] = PgProviderName;
     if (gateways.HasYt()) {
         AddClusters(gateways.GetYt().GetClusterMapping(),
-            TString{YtProviderName},
-            &clusterMapping);
+                    TString{YtProviderName},
+                    &clusterMapping);
     }
     if (gateways.HasClickHouse()) {
         AddClusters(gateways.GetClickHouse().GetClusterMapping(),
-            TString{ClickHouseProviderName},
-            &clusterMapping);
+                    TString{ClickHouseProviderName},
+                    &clusterMapping);
     }
     if (gateways.HasS3()) {
         AddClusters(gateways.GetS3().GetClusterMapping(),
-            TString{S3ProviderName},
-            &clusterMapping);
+                    TString{S3ProviderName},
+                    &clusterMapping);
     }
     if (gateways.HasYdb() && !gateways.HasKikimr()) {
         AddClusters(gateways.GetYdb().GetClusterMapping(),
-            TString{YdbProviderName},
-            &clusterMapping);
+                    TString{YdbProviderName},
+                    &clusterMapping);
     }
 }
 
@@ -35,4 +35,4 @@ THashSet<TString> ExtractSqlFlags(const TGatewaysConfig& gateways) {
     }
     return flags;
 }
-}
+} // namespace NYql

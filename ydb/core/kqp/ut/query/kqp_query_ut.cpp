@@ -74,6 +74,146 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT_VALUES_EQUAL(counters.RecompileRequestGet()->Val(), 1);
     }
 
+    Y_UNIT_TEST_TWIN(DecimalOutOfPrecisionBulk, EnableParameterizedDecimal) {
+        TKikimrSettings serverSettings;
+        serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
+        serverSettings.WithSampleTables = false;
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto ddlResult = client.ExecuteQuery(R"(
+                CREATE TABLE DecTest (
+                    Key Int32 NOT NULL,
+                    Value Decimal(22, 9) NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(ddlResult.IsSuccess(), ddlResult.GetIssues().ToString());
+        }
+
+        // 10000000000000 in Decimal(35, 9), invalid for Decimal(22, 9)
+        Ydb::Value value;
+        value.set_low_128(1864712049423024128);
+        value.set_high_128(542);
+        auto invalidValue = TDecimalValue(value, NYdb::TDecimalType(22, 9));
+
+        {
+            auto db = kikimr.GetTableClient();
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            NYdb::TValueBuilder rows;
+            rows.BeginList();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(1)
+                .AddMember("Value").Decimal(TDecimalValue("10", 22, 9))
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(2)
+                .AddMember("Value").Decimal(invalidValue)
+                .EndStruct();
+            rows.AddListItem()
+                .BeginStruct()
+                .AddMember("Key").Int32(3)
+                .AddMember("Value").Decimal(TDecimalValue("10000000000000", 22, 9))
+                .EndStruct();
+            rows.EndList();
+
+            auto resultUpsert = db.BulkUpsert("/Root/DecTest", rows.Build()).GetValueSync();
+            // TODO: Plan A, upsert should fail as provided value is invalid for given type.
+            UNIT_ASSERT_C(!resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+            auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+            // TODO: Plan B, value for key 2 should be inf, as provided value is out of range
+            // for given type.
+            CompareYson(R"([])", tableYson);
+        }
+    }
+
+    Y_UNIT_TEST_QUAD(DecimalOutOfPrecision, UseOltpSink, EnableParameterizedDecimal) {
+        TKikimrSettings serverSettings;
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseOltpSink);
+        serverSettings.FeatureFlags.SetEnableParameterizedDecimal(EnableParameterizedDecimal);
+        serverSettings.WithSampleTables = false;
+
+        TKikimrRunner kikimr(serverSettings);
+        auto client = kikimr.GetQueryClient();
+
+        {
+            auto ddlResult = client.ExecuteQuery(Sprintf(R"(
+                CREATE TABLE DecTest (
+                    Key Int32 NOT NULL,
+                    Value Decimal(22, 9),
+                   %s
+                    PRIMARY KEY (Key)
+                );
+            )", EnableParameterizedDecimal ? " ValueLarge Decimal(35, 9), " : ""), NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(ddlResult.IsSuccess(), ddlResult.GetIssues().ToString());
+        }
+
+        // 10000000000000 in Decimal(35, 9), invalid for Decimal(22, 9)
+        Ydb::Value value;
+        value.set_low_128(1864712049423024128);
+        value.set_high_128(542);
+        auto invalidValue = TDecimalValue(value, NYdb::TDecimalType(22, 9));
+
+        auto validValue = TDecimalValue(value, NYdb::TDecimalType(35, 9));
+
+        {
+            auto params = TParamsBuilder()
+                .AddParam("$value").Decimal(invalidValue).Build()
+                .Build();
+
+            auto writeResult = client.ExecuteQuery(R"(
+                UPSERT INTO DecTest (Key, Value) VALUES
+                    (1, CAST(10 AS Decimal(22,9))),
+                    (2, $value),
+                    (3, $value - CAST(1 AS Decimal(22,9)));
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+            // TODO: Plan A, query should fail as provided value is invalid for given type.
+            UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+            UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::BAD_REQUEST, writeResult.GetIssues().ToString());
+
+            // TODO: Plan B, value for key 2 should be inf, as provided value is out of range
+            // for given type.
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+            CompareYson(R"([])", tableYson);
+
+            if (EnableParameterizedDecimal)
+            {
+                auto paramsValid = TParamsBuilder()
+                    .AddParam("$value").Decimal(validValue).Build()
+                    .Build();
+                auto writeResult = client.ExecuteQuery(R"(
+                    UPSERT INTO DecTest (Key, ValueLarge) VALUES
+                        (2, $value);
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), paramsValid).ExtractValueSync();
+
+                // TODO: Plan A, query should fail as provided value is invalid for given type.
+                UNIT_ASSERT_C(writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::SUCCESS, writeResult.GetIssues().ToString());
+
+                auto tableYson = ReadTableToYson(session, "/Root/DecTest");
+                CompareYson(R"([[[2];#;["10000000000000"]]])", tableYson);
+            }
+
+            if (EnableParameterizedDecimal)
+            {
+                auto writeResult = client.ExecuteQuery(R"(
+                    UPSERT INTO DecTest (Key, Value) SELECT Key, ValueLarge as Value FROM DecTest;
+                )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+                // TODO: Plan A, query should fail as provided value is invalid for given type.
+                UNIT_ASSERT_C(!writeResult.IsSuccess(), writeResult.GetIssues().ToString());
+                UNIT_ASSERT_EQUAL_C(writeResult.GetStatus(), EStatus::GENERIC_ERROR, writeResult.GetIssues().ToString());
+            }
+        }
+    }
+
     Y_UNIT_TEST(QueryCache) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

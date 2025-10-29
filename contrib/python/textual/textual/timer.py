@@ -85,12 +85,7 @@ class Timer:
         self._task = create_task(self._run_timer(), name=self.name)
 
     def stop(self) -> None:
-        """Stop the timer.
-
-        Returns:
-            A Task object. Await this to wait until the timer has completed.
-
-        """
+        """Stop the timer."""
         if self._task is None:
             return
 
@@ -177,6 +172,11 @@ class Timer:
 
     async def _tick(self, *, next_timer: float, count: int) -> None:
         """Triggers the Timer's action: either call its callback, or sends an event to its target"""
+
+        app = active_app.get()
+        if app._exit:
+            return
+
         if self._callback is not None:
             try:
                 await invoke(self._callback)
@@ -185,7 +185,6 @@ class Timer:
                 # Re-raise CancelledErrors that would be caught by the following exception block in Python 3.7
                 raise
             except Exception as error:
-                app = active_app.get()
                 app._handle_exception(error)
         else:
             event = events.Timer(

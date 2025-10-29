@@ -5,4 +5,4 @@ namespace NSQLTranslationPG {
 
 TString NormalizeName(TStringBuf name);
 
-}
+} // namespace NSQLTranslationPG

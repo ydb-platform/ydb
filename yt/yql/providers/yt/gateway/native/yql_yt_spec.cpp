@@ -85,7 +85,8 @@ void FillSpec(NYT::TNode& spec,
     double extraCpu,
     const TMaybe<double>& secondExtraCpu,
     EYtOpProps opProps,
-    const TSet<TString>& addSecTags)
+    const TSet<TString>& addSecTags,
+    const TVector<TString>& layerPaths)
 {
     auto& cluster = execCtx.Cluster_;
 
@@ -482,6 +483,10 @@ void FillSpec(NYT::TNode& spec,
         spec["user_file_columnar_statistics"]["enabled"] = settings->TableContentColumnarStatistics.Get(cluster).GetOrElse(true);
     }
 
+    if (layerPaths.size() && settings->LayerPaths.Get(cluster)) {
+        throw yexception() << "Can't use both pragma Layer and yt.LayerPaths";
+    }
+
     if (auto val = settings->LayerPaths.Get(cluster)) {
         if (opProps.HasFlags(EYtOpProp::WithMapper)) {
             NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
@@ -493,6 +498,21 @@ void FillSpec(NYT::TNode& spec,
             NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
             for (auto& path: *val) {
                 layersNode.Add(NYT::AddPathPrefix(path, NYT::TConfig::Get()->Prefix));
+            }
+        }
+    }
+
+    if (layerPaths.size()) {
+        if (opProps.HasFlags(EYtOpProp::WithMapper)) {
+            NYT::TNode& layersNode = spec["mapper"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
+            }
+        }
+        if (opProps.HasFlags(EYtOpProp::WithReducer)) {
+            NYT::TNode& layersNode = spec["reducer"]["layer_paths"];
+            for (auto& path: layerPaths) {
+                layersNode.Add(path); // already snapshoted files, no prefix needed
             }
         }
     }
@@ -538,6 +558,10 @@ void FillSpec(NYT::TNode& spec,
             secTagsNode.Add(tag);
         }
         spec["additional_security_tags"] = std::move(secTagsNode);
+    }
+
+    if (auto val = settings->ValidatePool.Get(cluster)) {
+        spec["require_specified_pools_existence"] = *val;
     }
 }
 

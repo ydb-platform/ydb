@@ -23,4 +23,4 @@ void DumpCaps(const TString& title);
 // subscribe child process on receiving signal on parent process death (particularly on parent thread exit)
 void SendSignalOnParentThreadExit(int signo);
 
-}
+} // namespace NYql

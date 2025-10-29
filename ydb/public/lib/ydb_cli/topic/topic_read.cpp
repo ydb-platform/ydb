@@ -370,7 +370,6 @@ namespace NYdb::NConsoleClient {
                 return EXIT_FAILURE;
             }
 
-
             if (future.HasValue()) {
                 // TODO(shmel1k@): throttling?
                 // TODO(shmel1k@): think about limiting size of events
@@ -392,7 +391,7 @@ namespace NYdb::NConsoleClient {
             }
 
             if (PartitionsBeingRead_ == 0) {
-                    return EXIT_SUCCESS;
+                return EXIT_SUCCESS;
             }
         }
         return EXIT_SUCCESS;

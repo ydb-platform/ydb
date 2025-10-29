@@ -15,7 +15,7 @@ def exec(command: str):
     rc = os.system(command)
     if rc != 0:
         print(f'failed, return code {rc}')
-        exit(rc)
+        exit(1)
 
 
 def log(msg: str):

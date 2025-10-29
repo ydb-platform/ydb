@@ -327,7 +327,7 @@ public:
 
 public:
     NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
-        auto url = BuildGetLabelsUrl(selectors, from, to);
+        auto [url, body] = BuildGetLabelsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -337,7 +337,8 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(url)
+            std::move(url),
+            std::move(body)
         );
 
         return resultPromise.GetFuture();
@@ -546,7 +547,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const TSelectors& selectors, TInstant from, TInstant to) const {
+    std::tuple<TString, TString> BuildGetLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -556,12 +557,15 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("names");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
+        NJsonWriter::TBuf w;
+        w.BeginObject()
+            .UnsafeWriteKey("projectId").WriteString(GetProjectId())
+            .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+            .UnsafeWriteKey("from").WriteString(from.ToString())
+            .UnsafeWriteKey("to").WriteString(to.ToString())
+        .EndObject();
 
-        return builder.Build();
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildListMetricsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -573,13 +577,16 @@ private:
         builder.AddPathComponent(Settings.GetProject());
         builder.AddPathComponent("sensors");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
+        NJsonWriter::TBuf w;
+        w.BeginObject()
+            .UnsafeWriteKey("projectId").WriteString(GetProjectId())
+            .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+            .UnsafeWriteKey("from").WriteString(from.ToString())
+            .UnsafeWriteKey("to").WriteString(to.ToString())
+            .UnsafeWriteKey("pageSize").WriteLongLong(MaxListingPageSize)
+        .EndObject();
 
-        return { builder.Build(), "" };
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildListMetricsLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
@@ -592,13 +599,16 @@ private:
         builder.AddPathComponent("sensors");
         builder.AddPathComponent("labels");
 
-        builder.AddUrlParam("projectId", GetProjectId());
-        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("from", from.ToString());
-        builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("limit", "100000");
+        NJsonWriter::TBuf w;
+        w.BeginObject()
+            .UnsafeWriteKey("projectId").WriteString(GetProjectId())
+            .UnsafeWriteKey("selectors").WriteString(BuildSelectorsProgram(selectors))
+            .UnsafeWriteKey("from").WriteString(from.ToString())
+            .UnsafeWriteKey("to").WriteString(to.ToString())
+            .UnsafeWriteKey("limit").WriteLongLong(100000)
+        .EndObject();
 
-        return { builder.Build(), "" };
+        return { builder.Build(), w.Str() };
     }
 
     std::tuple<TString, TString> BuildGetPointsCountHttpParams(const TString& program, TInstant from, TInstant to) const {

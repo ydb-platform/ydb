@@ -33,7 +33,7 @@
     ["PRAGMA Warning('*')", "KKKKKK#_#OOOOOOO#P#SSS#P"]
   ],
   "Hint": [
-    ["INSERT INTO t WITH TRUNCATE", "KKKKKK#_#KKKK#_#I#_#KKKK#_#OOOOOOOO"]
+    ["INSERT INTO t WITH TRUNCATE", "KKKKKK#_#KKKK#_#I#_#KKKK#_#KKKKKKKK"]
   ],
   "Comment": [
     ["- select", "P#_#KKKKKK"],

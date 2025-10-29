@@ -320,13 +320,20 @@ auto CalcFulltextImplTableDescImpl(
     const auto& baseTable,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns = indexDataColumns;
     for (const auto & keyColumn: tableColumns.Keys) {
         indexColumns.insert(keyColumn);
     }
+
+    TColumnTypes baseColumnTypes;
+    TString error;
+    Y_ENSURE(ExtractTypes(baseTable, baseColumnTypes, error), error);
+    Y_ENSURE(indexDesc.GetSettings().columns().size() == 1);
+    auto textColumnInfo = baseColumnTypes.at(indexDesc.GetSettings().columns().at(0).column());
 
     NKikimrSchemeOp::TTableDescription implTableDesc;
     implTableDesc.SetName(NTableIndex::ImplTable);
@@ -335,7 +342,7 @@ auto CalcFulltextImplTableDescImpl(
         auto tokenColumn = implTableDesc.AddColumns();
         tokenColumn->SetName(NFulltext::TokenColumn);
         tokenColumn->SetType(NFulltext::TokenTypeName);
-        tokenColumn->SetTypeId(NSchemeShard::TokenTypeId);
+        tokenColumn->SetTypeId(textColumnInfo.GetTypeId());
         tokenColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NFulltext::TokenColumn);
@@ -456,18 +463,20 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+    return CalcFulltextImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const THashSet<TString>& indexDataColumns,
-    const NKikimrSchemeOp::TTableDescription& indexTableDesc)
+    const NKikimrSchemeOp::TTableDescription& indexTableDesc,
+    const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc)
 {
-    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc);
+    return CalcFulltextImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexDataColumns, indexTableDesc, indexDesc);
 }
 
 bool ExtractTypes(const NKikimrSchemeOp::TTableDescription& baseTableDescr, TColumnTypes& columnTypes, TString& explain) {

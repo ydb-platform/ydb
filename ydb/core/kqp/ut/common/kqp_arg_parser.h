@@ -113,7 +113,6 @@ public:
 
     template <typename TValue>
     auto GetArg(std::string key) {
-        Cout << key << " " << Values_[key] << "\n";
         return ParseRangedValue<TValue>(Values_[key]);
     }
 

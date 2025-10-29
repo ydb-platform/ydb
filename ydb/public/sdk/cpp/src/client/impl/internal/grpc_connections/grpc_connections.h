@@ -20,7 +20,7 @@ namespace NYdb::inline Dev {
 
 constexpr TDeadline::Duration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = std::chrono::seconds(10);
 constexpr TDeadline::Duration INITIAL_DEFERRED_CALL_DELAY = std::chrono::milliseconds(10); // The delay before first deferred service call
-constexpr TDeadline::Duration GET_ENDPOINTS_TIMEOUT = std::chrono::milliseconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
+constexpr TDeadline::Duration GET_ENDPOINTS_TIMEOUT = std::chrono::seconds(10); // Time wait for ListEndpoints request, after this time we pass error to client
 
 using NYdbGrpc::TCallMeta;
 using NYdbGrpc::IQueueClientContextPtr;
@@ -330,7 +330,7 @@ public:
         TDeferredOperationCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
-        TDeadline::Duration deferredTimeout,
+        TDeadline::Duration delay,
         const TRpcRequestSettings& requestSettings,
         bool poll = false,
         std::shared_ptr<IQueueClientContext> context = nullptr)
@@ -341,7 +341,7 @@ public:
             return;
         }
 
-        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, deferredTimeout, deadline = requestSettings.Deadline, poll, context]
+        auto responseCb = [this, userResponseCb = std::move(userResponseCb), dbState, delay, deadline = requestSettings.Deadline, poll, context]
             (TResponse* response, TPlainStatus status) mutable
         {
             if (response) {
@@ -352,7 +352,7 @@ public:
                         std::move(userResponseCb),
                         this,
                         std::move(context),
-                        deferredTimeout,
+                        delay,
                         deadline,
                         dbState,
                         status.Endpoint);
@@ -410,7 +410,7 @@ public:
         TDeferredResultCb&& userResponseCb,
         TSimpleRpc<TService, TRequest, TResponse> rpc,
         TDbDriverStatePtr dbState,
-        TDeadline::Duration deferredTimeout,
+        TDeadline::Duration delay,
         const TRpcRequestSettings& requestSettings,
         std::shared_ptr<IQueueClientContext> context = nullptr)
     {
@@ -428,7 +428,7 @@ public:
             operationCb,
             rpc,
             dbState,
-            deferredTimeout,
+            delay,
             requestSettings,
             true, // poll
             context);

@@ -27,16 +27,17 @@ TDeferredAction::TDeferredAction(const std::string& operationId,
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
         TDeadline::Duration delay,
-        TDeadline deadline,
+        TDeadline globalDeadline,
         TDbDriverStatePtr dbState,
         const std::string& endpoint)
     : TAlarmActionBase(std::move(userCb), connection, std::move(context))
     , NextDelay_(std::min(delay * 2, MAX_DEFERRED_CALL_DELAY))
+    , GlobalDeadline_(globalDeadline)
     , DbDriverState_(dbState)
     , OperationId_(operationId)
     , Endpoint_(endpoint)
 {
-    Deadline_ = std::min(deadline, TDeadline::AfterDuration(delay));
+    Deadline_ = std::min(GlobalDeadline_, TDeadline::AfterDuration(delay));
 }
 
 void TDeferredAction::OnAlarm() {
@@ -47,7 +48,7 @@ void TDeferredAction::OnAlarm() {
 
     TRpcRequestSettings settings;
     settings.PreferredEndpoint = TEndpointKey(Endpoint_, 0);
-    settings.Deadline = Deadline_;
+    settings.Deadline = GlobalDeadline_;
 
     Connection_->RunDeferred<Ydb::Operation::V1::OperationService, Ydb::Operations::GetOperationRequest, Ydb::Operations::GetOperationResponse>(
         std::move(getOperationRequest),
@@ -58,7 +59,7 @@ void TDeferredAction::OnAlarm() {
         settings,
         true,
         std::move(Context_));
-    }
+}
 
 void TDeferredAction::OnError() {
     Y_ABORT_UNLESS(Connection_);

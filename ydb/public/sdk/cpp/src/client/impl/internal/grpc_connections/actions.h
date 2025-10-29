@@ -201,7 +201,7 @@ public:
         TGRpcConnectionsImpl* connection,
         std::shared_ptr<IQueueClientContext> context,
         TDeadline::Duration delay,
-        TDeadline deadline,
+        TDeadline globalDeadline,
         TDbDriverStatePtr dbState,
         const std::string& endpoint);
 
@@ -210,6 +210,8 @@ public:
 
 private:
     TDeadline::Duration NextDelay_;
+    TDeadline GlobalDeadline_;
+
     TDbDriverStatePtr DbDriverState_;
     const std::string OperationId_;
     const std::string Endpoint_;

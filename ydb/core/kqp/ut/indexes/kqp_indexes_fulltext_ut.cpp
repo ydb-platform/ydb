@@ -1734,13 +1734,13 @@ Y_UNIT_TEST(Select) {
     { // Select by two tokens using OR
         TString query = R"sql(
             SELECT DISTINCT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
-            WHERE __ydb_token IN ("foxes", "dogs")
+            WHERE __ydb_token IN ("foxes", "animals")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
-            [[200u]];
+            [[100u]];
             [[400u]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -1751,12 +1751,12 @@ Y_UNIT_TEST(Select) {
             WHERE __ydb_token = "dogs"
             INTERSECT
             SELECT Key FROM `/Root/Texts/fulltext_idx/indexImplTable`
-            WHERE __ydb_token = "foxes"
+            WHERE __ydb_token = "chase"
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
-            [[400u]]
+            [[200u]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }
@@ -1802,13 +1802,13 @@ Y_UNIT_TEST(SelectCovered) {
     { // Select by two tokens using OR
         TString query = R"sql(
             SELECT DISTINCT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
-            WHERE __ydb_token IN ("foxes", "dogs")
+            WHERE __ydb_token IN ("foxes", "animals")
             ORDER BY Key
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
-            [[200u];["dogs data"]];
+            [[100u];["cats data"]];
             [[400u];["foxes data"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
@@ -1819,12 +1819,12 @@ Y_UNIT_TEST(SelectCovered) {
             WHERE __ydb_token = "dogs"
             INTERSECT
             SELECT Key, Data FROM `/Root/Texts/fulltext_idx/indexImplTable`
-            WHERE __ydb_token = "foxes"
+            WHERE __ydb_token = "chase"
         )sql";
         auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
-            [[400u];["foxes data"]]
+            [[200u];["dogs data"]]
         ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
     }
 }

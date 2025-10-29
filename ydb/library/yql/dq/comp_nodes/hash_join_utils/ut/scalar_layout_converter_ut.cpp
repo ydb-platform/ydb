@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
@@ -378,4 +379,3 @@ Y_UNIT_TEST_SUITE(TScalarLayoutConverterTest) {
         }
     }
 }
-

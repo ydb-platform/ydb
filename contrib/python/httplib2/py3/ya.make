@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(0.22.0)
+VERSION(0.31.0)
 
 LICENSE(MIT)
 
@@ -20,7 +20,6 @@ PY_SRCS(
     httplib2/certs.py
     httplib2/error.py
     httplib2/iri2uri.py
-    httplib2/socks.py
 )
 
 RESOURCE_FILES(

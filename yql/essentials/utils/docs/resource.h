@@ -6,14 +6,14 @@
 
 namespace NYql::NDocs {
 
-    struct TResourceFilter {
-        TString BaseDirectorySuffix;
-        TString CutSuffix;
-    };
+struct TResourceFilter {
+    TString BaseDirectorySuffix;
+    TString CutSuffix;
+};
 
-    using TResourcesByRelativePath = THashMap<TString, TString>;
+using TResourcesByRelativePath = THashMap<TString, TString>;
 
-    // Useful when YaTool ALL_RESOURCE_FILES macro is used.
-    TResourcesByRelativePath FindResources(const TResourceFilter& filter);
+// Useful when YaTool ALL_RESOURCE_FILES macro is used.
+TResourcesByRelativePath FindResources(const TResourceFilter& filter);
 
 } // namespace NYql::NDocs

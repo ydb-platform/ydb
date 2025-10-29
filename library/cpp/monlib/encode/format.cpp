@@ -97,6 +97,21 @@ namespace NMonitoring {
         return CompressionFromHeader(value);
     }
 
+    ECompression FastestCompressionFromAcceptEncodingHeader(TStringBuf value) {
+        if (value.empty()) {
+            return ECompression::UNKNOWN;
+        }
+
+        for (const auto& it : StringSplitter(value).Split(',').SkipEmpty()) {
+            TStringBuf token = StripString(it.Token());
+            if (AsciiEqualsIgnoreCase(token, NFormatContentEncoding::LZ4)) {
+                return ECompression::LZ4;
+            }
+        }
+
+        return CompressionFromAcceptEncodingHeader(value);
+    }
+
     TStringBuf ContentEncodingByCompression(ECompression compression) {
         switch (compression) {
             case ECompression::IDENTITY:

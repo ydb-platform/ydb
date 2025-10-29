@@ -122,7 +122,8 @@ class Platform(object):
 
         self.is_xtensa_hifi4 = self.arch == 'xtensa_hifi4'
         self.is_xtensa_hifi5 = self.arch == 'xtensa_hifi5'
-        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5
+        self.is_xtensa_esp32s3 = self.arch == 'xtensa_esp32s3'
+        self.is_xtensa = self.is_xtensa_hifi4 or self.is_xtensa_hifi5 or self.is_xtensa_esp32s3
 
         self.armv6_float_abi = 'hard'
 
@@ -244,6 +245,7 @@ class Platform(object):
             (self.is_riscv32, 'ARCH_RISCV32'),
             (self.is_xtensa_hifi4, 'ARCH_XTENSA_HIFI4'),
             (self.is_xtensa_hifi5, 'ARCH_XTENSA_HIFI5'),
+            (self.is_xtensa_esp32s3, 'ARCH_XTENSA_ESP32S3'),
             (self.is_xtensa, 'ARCH_XTENSA'),
             (self.is_nds32, 'ARCH_NDS32'),
             (self.is_tc32, 'ARCH_TC32'),
@@ -498,6 +500,53 @@ def select_multiple(selectors):
     for enabled, value in selectors:
         if enabled:
             yield value
+
+
+def get_target_triple(target):
+    target_triple = select(
+        default=None,
+        selectors=[
+            (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
+
+            (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
+            (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
+            (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
+            (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
+            (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
+
+            (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
+            (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
+
+            (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
+            (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
+            (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
+            (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
+            (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
+
+            (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
+
+            (target.is_android and target.is_x86, 'i686-linux-android'),
+            (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
+            (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
+            (target.is_android and target.is_armv8, 'aarch64-linux-android'),
+
+            (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
+            (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
+
+            (target.is_windows and target.is_x86_64, 'x86_64-pc-win32'),
+        ],
+    )
+
+    if target.is_android:
+        # Android NDK allows specification of API level in target triple, e.g.:
+        # armv7a-linux-androideabi16, aarch64-linux-android21
+        target_triple += str(target.android_api)
+
+    return target_triple
 
 
 def unique(it):
@@ -1010,10 +1059,6 @@ class ToolchainOptions(object):
         # 'match_root' at this point contains real name for references via toolchain
         self.name_marker = '$(%s)' % self.params.get('match_root', self._name.upper())
 
-        self.arch_opt = self.params.get('arch_opt', [])
-        self.triplet_opt = self.params.get('triplet_opt', {})
-        self.target_opt = self.params.get('target_opt', [])
-
         # default C++ standard is set here, some older toolchains might need to redefine it in ya.conf.json
         self.cxx_std = self.params.get('cxx_std', 'c++20')
 
@@ -1161,7 +1206,7 @@ class GnuToolchain(Toolchain):
         host = build.host
         target = build.target
 
-        self.c_flags_platform = list(tc.target_opt)
+        self.c_flags_platform = []
 
         self.default_os_sdk_root = get_os_sdk(target)
 
@@ -1180,6 +1225,8 @@ class GnuToolchain(Toolchain):
                     '$MACOS_SDK_RESOURCE_GLOBAL/usr/bin',
                     '$GO_FAKE_XCRUN_RESOURCE_GLOBAL',
                 ])
+            elif target.is_android:
+                self.env_go['PATH'] = ['{}/llvm-toolchain/bin'.format(self.tc.name_marker), '/usr/bin']
 
         self.swift_flags_platform = []
         self.swift_lib_path = None
@@ -1205,55 +1252,15 @@ class GnuToolchain(Toolchain):
             ])
 
         if self.tc.is_clang:
-            target_triple = self.tc.triplet_opt.get(target.arch, None)
-            if not target_triple:
-                target_triple = select(default=None, selectors=[
-                    (target.is_freebsd and target.is_x86_64, 'x86_64-freebsd-unknown'),
-
-                    (target.is_linux and target.is_x86_64, 'x86_64-linux-gnu'),
-                    (target.is_linux and target.is_armv8, 'aarch64-linux-gnu'),
-                    (target.is_linux and target.is_armv6 and target.armv6_float_abi == 'hard', 'armv6-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'hard', 'armv7-linux-gnueabihf'),
-                    (target.is_linux and target.is_armv7 and target.armv7_float_abi == 'softfp', 'armv7-linux-gnueabi'),
-                    (target.is_linux and target.is_powerpc, 'powerpc64le-linux-gnu'),
-
-                    (target.is_iossim and target.is_x86_64, 'x86_64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_x86, 'i386-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (target.is_iossim and target.is_armv8, 'arm64-apple-ios{}-simulator'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv8, 'arm64-apple-ios{}'.format(IOS_VERSION_MIN)),
-                    (not target.is_iossim and target.is_ios and target.is_armv7, 'armv7-apple-ios{}'.format(IOS_VERSION_MIN)),
-
-                    (target.is_apple and target.is_x86, 'i386-apple-darwin14'),
-                    (target.is_apple and target.is_x86_64, 'x86_64-apple-darwin14'),
-                    (target.is_apple and target.is_macos_arm64, 'arm64-apple-macos11'),
-                    (target.is_apple and target.is_armv7, 'armv7-apple-darwin14'),
-                    (target.is_apple and target.is_armv8, 'arm64-apple-darwin14'),
-
-                    (target.is_yocto and target.is_armv7, 'arm-poky-linux-gnueabi'),
-
-                    (target.is_android and target.is_x86, 'i686-linux-android'),
-                    (target.is_android and target.is_x86_64, 'x86_64-linux-android'),
-                    (target.is_android and target.is_armv7, 'armv7a-linux-androideabi'),
-                    (target.is_android and target.is_armv8, 'aarch64-linux-android'),
-
-                    (target.is_emscripten and target.is_wasm32, 'wasm32-unknown-emscripten'),
-                    (target.is_emscripten and target.is_wasm64, 'wasm64-unknown-emscripten'),
-                ])
-
-            if target.is_android:
-                # Android NDK allows specification of API level in target triple, e.g.:
-                # armv7a-linux-androideabi16, aarch64-linux-android21
-                target_triple += str(target.android_api)
-
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
             if target_triple:
                 self.c_flags_platform.append('--target={}'.format(target_triple))
 
         if self.tc.isystem:
             for root in list(self.tc.isystem):
                 self.c_flags_platform.extend(['-isystem', root])
-
-        if target.is_android:
-            self.c_flags_platform.extend(['-isystem', '{}/sources/cxx-stl/llvm-libc++abi/include'.format(self.tc.name_marker)])
 
         if target.is_cortex_a9:
             self.c_flags_platform.append('-mcpu=cortex-a9')
@@ -1289,11 +1296,6 @@ class GnuToolchain(Toolchain):
             # Enable ARM Thumb2 variable-length instruction encoding
             # to reduce code size
             self.c_flags_platform.append('-mthumb')
-
-        if target.is_arm or target.is_powerpc:
-            # On linux, ARM and PPC default to unsigned char
-            # However, Arcadia requires char to be signed
-            self.c_flags_platform.append('-fsigned-char')
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
@@ -1432,9 +1434,19 @@ class GnuCompiler(Compiler):
         self.target = self.build.target
         self.tc = tc
 
+        self.debug_info_flags = [
+            '-g'
+        ]
+        if self.tc.is_clang and self.tc.version_at_least(14):
+            # DTCC-1231: Clang 14 has switched to DWARFv5 by defaulg
+            self.debug_info_flags.append('-fdebug-default-version=4')
+        if self.tc.is_clang and self.target.is_linux:
+            self.debug_info_flags.append('-ggnu-pubnames')
+            if self.build.is_release:
+                # Clang's more accurate debug info for sampling-PGO purposes. PGO only makes sense in release builds
+                self.debug_info_flags.append('-fdebug-info-for-profiling')
+
         self.c_foptions = [
-            # Enable C++ exceptions (and allow them to be throw through pure C code)
-            '-fexceptions',
             # Enable standard-conforming behavior and generate duplicate symbol error in case of duplicated global constants.
             # See: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85678#c0
             '-fno-common',
@@ -1443,6 +1455,32 @@ class GnuCompiler(Compiler):
             '-ffunction-sections',
             '-fdata-sections'
         ]
+
+        if self.target.is_arm or self.target.is_powerpc:
+            self.c_foptions += [
+                # On linux, ARM and PPC default to unsigned char
+                # However, Arcadia requires char to be signed
+                '-fsigned-char',
+            ]
+
+        if self.tc.is_clang and self.tc.version_at_least(14):
+            self.c_foptions += [
+                # Explicitly enable sized deallocations though they were enabled in clang-19 / -std=c++14.
+                # See: https://releases.llvm.org/19.1.0/tools/clang/docs/ReleaseNotes.html
+                '-fsized-deallocation',
+            ]
+
+        if is_positive('NO_CXX_EXCEPTIONS'):
+            self.c_foptions.append('-fno-exceptions')
+        else:
+            # Enable C++ exceptions (and allow them to be throw through pure C code)
+            self.c_foptions.append('-fexceptions')
+
+        if is_positive('NO_CXX_RTTI'):
+            self.c_foptions.append('-fno-rtti')
+        else:
+            # RTTI is enabled by default
+            pass
 
         if self.tc.is_clang and self.target.is_linux:
             # Use .init_array instead of .ctors (default for old clang versions)
@@ -1453,17 +1491,13 @@ class GnuCompiler(Compiler):
             self.c_foptions.append('-mlongcalls')
 
         if self.tc.is_clang:
-            self.c_foptions += [
-                # Set up output colorization
-                '-fcolor-diagnostics',
-                # Enable aligned allocation
-                '-faligned-allocation',
-            ]
+            # Set up output colorization
+            self.c_foptions.append('-fcolor-diagnostics')
+            if not is_positive('NO_CXX_ALIGNED_ALLOCATION') and self.tc.version_at_least(4):
+                # Enable aligned allocation, unless explicitly disabled
+                self.c_foptions.append('-faligned-allocation')
         elif self.tc.is_gcc:
-            if self.target.is_xtensa or self.target.is_tc32:
-                # Xtensa and tc32 toolchains does not support this flag
-                pass
-            else:
+            if self.tc.version_at_least(4, 9):
                 self.c_foptions += [
                     # Set up output colorization
                     '-fdiagnostics-color=always',
@@ -1513,7 +1547,7 @@ class GnuCompiler(Compiler):
             self.c_defines.append('-D_YNDX_LIBUNWIND_ENABLE_EXCEPTION_BACKTRACE')
 
         self.c_flags = ['$CL_DEBUG_INFO', '$CL_DEBUG_INFO_DISABLE_CACHE__NO_UID__']
-        self.c_flags += self.tc.arch_opt + ['-pipe']
+        self.c_flags += ['-pipe']
 
         self.sfdl_flags = ['-E', '-C', '-x', 'c++']
 
@@ -1559,12 +1593,8 @@ class GnuCompiler(Compiler):
             ]
 
         elif self.tc.is_gcc:
-            if self.target.is_xtensa:
-                # Xtensa toolchain does not support this flags
-                pass
-            else:
-                self.c_foptions.append('-fno-delete-null-pointer-checks')
-                self.c_foptions.append('-fabi-version=8')
+            self.c_foptions.append('-fno-delete-null-pointer-checks')
+            self.c_foptions.append('-fabi-version=8')
 
     def configure_build_type(self):
         if self.build.is_valgrind:
@@ -1604,6 +1634,7 @@ class GnuCompiler(Compiler):
 
         emit('C_COMPILER', '"{}"'.format(self.tc.c_compiler))
         emit('OPTIMIZE', self.optimize)
+        emit('_DEBUG_INFO_FLAGS', self.debug_info_flags)
         emit('_C_FLAGS', self.c_flags)
         emit('_C_FOPTIONS', self.c_foptions)
         emit('_STD_CXX_VERSION', preset('USER_STD_CXX_VERSION') or self.tc.cxx_std)
@@ -1931,6 +1962,10 @@ class MSVCCompiler(MSVC, Compiler):
 
         target = self.build.target
 
+        # Not supported/tested for MSVC
+        assert not is_positive('NO_CXX_EXCEPTIONS')
+        assert not is_positive('NO_CXX_RTTI')
+
         warns_enabled = [
             4018,  # 'expression' : signed/unsigned mismatch
             4265,  # 'class' : class has virtual functions, but destructor is not virtual
@@ -2023,7 +2058,6 @@ class MSVCCompiler(MSVC, Compiler):
             # enable standard conforming mode
             '/permissive-'
         ]
-        flags += self.tc.arch_opt
 
         c_warnings = [
             "/WX",
@@ -2033,7 +2067,15 @@ class MSVCCompiler(MSVC, Compiler):
         c_warnings += ['/wd{}'.format(code) for code in warns_disabled]
         cxx_warnings = []
 
+        c_flags_platform = []
+
         if self.tc.use_clang:
+            # gcc does not support multiple targets within the same compiler build,
+            # hence this logic is only relevant for clang
+            target_triple = get_target_triple(target)
+            if target_triple:
+                c_flags_platform.append('--target={}'.format(target_triple))
+
             if not self.tc.is_system_cxx:
                 flags += [
                     # Allow <windows.h> to be included via <Windows.h> in case-sensitive file-systems.
@@ -2080,6 +2122,10 @@ class MSVCCompiler(MSVC, Compiler):
                 '-Wno-invalid-offsetof',
                 '-Wno-undefined-var-template',
                 '-Wno-vla-cxx-extension',  # https://github.com/llvm/llvm-project/issues/62836
+                '-Wno-deprecated-literal-operator',
+                '-Wno-explicit-specialization-storage-class',
+                '-Wno-missing-template-arg-list-after-template-kw',
+                '-Wno-nontrivial-memcall',
             ]
 
         defines.append('/D_WIN32_WINNT={0}'.format(WINDOWS_VERSION_MIN))
@@ -2108,6 +2154,7 @@ class MSVCCompiler(MSVC, Compiler):
         emit('C_COMPILER_UNQUOTED', '"{}"'.format(self.tc.c_compiler))
         emit('MASM_COMPILER_UNQUOTED', '"{}"'.format(self.tc.masm_compiler))
         emit('MASM_COMPILER_OLD_UNQUOTED', self.tc.masm_compiler)
+        emit('C_FLAGS_PLATFORM', c_flags_platform)
         append('C_DEFINES', defines)
         append('C_WARNING_OPTS', c_warnings)
         emit('_CXX_DEFINES', cxx_defines)
@@ -2403,7 +2450,7 @@ class Cuda(object):
             mtime = ' --mtime ${tool:"tools/mtime0"} '
             custom_pid = '--custom-pid ${tool:"tools/custom_pid"} '
         if not self.cuda_use_clang.value:
-            cmd = '$YMAKE_PYTHON ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
+            cmd = '$YMAKE_PYTHON3 ${input:"build/scripts/compile_cuda.py"}' + mtime + custom_pid + '$NVCC $NVCC_STD $NVCC_FLAGS -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} --cflags $C_FLAGS_PLATFORM $CXXFLAGS $NVCC_STD $SRCFLAGS ${hide;input:"build/platform/cuda/cuda_runtime_include.h"} $NVCC_ENV $CUDA_HOST_COMPILER_ENV ${hide;kv:"p CC"} ${hide;kv:"pc light-green"}'  # noqa E501
         else:
             cmd = '$CXX_COMPILER --cuda-path=$CUDA_ROOT $C_FLAGS_PLATFORM -c ${input:SRC} -o ${output;suf=${OBJ_SUF}${NVCC_OBJ_EXT}:SRC} ${pre=-I:_C__INCLUDE} $CXXFLAGS $SRCFLAGS $TOOLCHAIN_ENV ${hide;kv:"p CU"} ${hide;kv:"pc green"}'  # noqa E501
 
@@ -2424,7 +2471,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8', '12.9', '13.0'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2556,7 +2603,7 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0', '8.9.7', '9.0.0', '9.12.0')
 
     def auto_cudnn_version(self):
         return '9.0.0'

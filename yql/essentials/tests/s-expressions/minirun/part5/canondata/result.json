@@ -352,6 +352,20 @@
             "uri": "https://{canondata_backend}/1936842/0e8399ea57053215a346dc8ce52f4206386c19fb/resource.tar.gz#test.test_InMem-CompareStruct2-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[InMem-ExtractMembersOverPartitionsByKyes-default.txt-Debug]": [
+        {
+            "checksum": "d2b4c78b235e2873373ae3d82987b842",
+            "size": 1372,
+            "uri": "https://{canondata_backend}/1600758/098090b2fdd96c8505b3c52b52768447f489d79e/resource.tar.gz#test.test_InMem-ExtractMembersOverPartitionsByKyes-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[InMem-ExtractMembersOverPartitionsByKyes-default.txt-Results]": [
+        {
+            "checksum": "486117c929f3e77513590f8dec8cbb9c",
+            "size": 837,
+            "uri": "https://{canondata_backend}/1600758/098090b2fdd96c8505b3c52b52768447f489d79e/resource.tar.gz#test.test_InMem-ExtractMembersOverPartitionsByKyes-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[InMem-Fold-default.txt-Debug]": [
         {
             "checksum": "3cf721a14fa47fd67c1967d58d82a7c2",

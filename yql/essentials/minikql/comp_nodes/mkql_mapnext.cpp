@@ -6,15 +6,16 @@ namespace NMiniKQL {
 
 namespace {
 
-struct TState : public TComputationValue<TState> {
+struct TState: public TComputationValue<TState> {
     using TComputationValue::TComputationValue;
 
     std::optional<NUdf::TUnboxedValue> Prev;
     bool Finish = false;
 };
 
-class TFlowMapNextWrapper : public TStatefulFlowComputationNode<TFlowMapNextWrapper> {
+class TFlowMapNextWrapper: public TStatefulFlowComputationNode<TFlowMapNextWrapper> {
     typedef TStatefulFlowComputationNode<TFlowMapNextWrapper> TBaseComputation;
+
 public:
     TFlowMapNextWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow,
                         IComputationExternalNode* item, IComputationExternalNode* nextItem, IComputationNode* newItem)
@@ -23,7 +24,8 @@ public:
         , Item(item)
         , NextItem(nextItem)
         , NewItem(newItem)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValue DoCalculate(NUdf::TUnboxedValue& stateValue, TComputationContext& ctx) const {
         if (!stateValue.HasValue()) {
@@ -83,8 +85,9 @@ private:
     IComputationNode* const NewItem;
 };
 
-class TStreamMapNextWrapper : public TMutableComputationNode<TStreamMapNextWrapper> {
+class TStreamMapNextWrapper: public TMutableComputationNode<TStreamMapNextWrapper> {
     typedef TMutableComputationNode<TStreamMapNextWrapper> TBaseComputation;
+
 public:
     TStreamMapNextWrapper(TComputationMutables& mutables, IComputationNode* stream,
                           IComputationExternalNode* item, IComputationExternalNode* nextItem, IComputationNode* newItem)
@@ -94,7 +97,8 @@ public:
         , NextItem(nextItem)
         , NewItem(newItem)
         , StateIndex(mutables.CurValueIndex++)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Stream->GetValue(ctx), Item, NextItem, NewItem, StateIndex);
@@ -108,7 +112,7 @@ private:
         DependsOn(NewItem);
     }
 
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -137,7 +141,8 @@ private:
             return NUdf::TUnboxedValuePod::Zero();
         }
 
-        void Load(const NUdf::TStringRef&) final {}
+        void Load(const NUdf::TStringRef&) final {
+        }
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             auto& state = GetState();
@@ -202,7 +207,7 @@ private:
     const ui32 StateIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapMapNext(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args, got " << callable.GetInputsCount());
@@ -222,5 +227,5 @@ IComputationNode* WrapMapNext(TCallable& callable, const TComputationNodeFactory
     THROW yexception() << "Expected flow or stream.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

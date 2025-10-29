@@ -792,7 +792,8 @@ THolder<NSchemeCache::TSchemeCacheNavigate> TViewerPipeClient::SchemeCacheNaviga
     THolder<NSchemeCache::TSchemeCacheNavigate> request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
     entry.RedirectRequired = false;
     entry.ShowPrivatePath = true;
-    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
+    if (entry.Operation == NSchemeCache::TSchemeCacheNavigate::OpUnknown)
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(std::move(entry));
     return request;
 }
@@ -802,6 +803,10 @@ void TViewerPipeClient::RequestSchemeCacheNavigate(const TString& path) {
     entry.Path = SplitPath(path);
 
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -810,6 +815,10 @@ void TViewerPipeClient::RequestSchemeCacheNavigate(const TPathId& pathId) {
     entry.TableId.PathId = pathId;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     SendRequest(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -821,6 +830,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path", path);
@@ -837,6 +850,10 @@ TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResu
     entry.ShowPrivatePath = true;
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     request->ResultSet.emplace_back(entry);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()), 0 /*flags*/, cookie);
     if (response.Span) {
         response.Span.Attribute("path_id", pathId.ToString());
@@ -858,16 +875,19 @@ TViewerPipeClient::TRequestResponse<NSchemeShard::TEvSchemeShard::TEvDescribeSch
 }
 
 TViewerPipeClient::TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult> TViewerPipeClient::MakeRequestSchemeCacheNavigateWithToken(
-        const TString& path, bool showPrivate, ui32 access, ui64 cookie
+        const TString& path, ui32 access, ui64 cookie
 ) {
     NSchemeCache::TSchemeCacheNavigate::TEntry entry;
     entry.Path = SplitPath(path);
-    entry.ShowPrivatePath = showPrivate;
     entry.Access = access;
+    entry.SyncVersion = true;
+    entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpList;
     auto request = SchemeCacheNavigateRequestBuilder(std::move(entry));
 
-    if (!Event->Get()->UserToken.empty())
-         request->UserToken = new NACLib::TUserToken(Event->Get()->UserToken);
+    auto tokenObj = GetRequest().GetUserTokenObject();
+    if (tokenObj) {
+        request->UserToken = new NACLib::TUserToken(tokenObj);
+    }
 
     auto response = MakeRequest<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
             MakeSchemeCacheID(),
@@ -938,6 +958,19 @@ std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(const TEvStateSto
 
 std::vector<TNodeId> TViewerPipeClient::GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
     return GetNodesFromBoardReply(*ev->Get());
+}
+
+std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
+    if (DatabaseBoardInfoResponse && DatabaseBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(DatabaseBoardInfoResponse->GetRef());
+    } else if (ResourceBoardInfoResponse && ResourceBoardInfoResponse->IsOk()) {
+        return GetNodesFromBoardReply(ResourceBoardInfoResponse->GetRef());
+    }
+    return {0};
+}
+
+bool TViewerPipeClient::IsDatabaseRequest() {
+    return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {
@@ -1208,7 +1241,7 @@ void TViewerPipeClient::RedirectToDatabase(const TString& database) {
     Become(&TViewerPipeClient::StateResolveDatabase);
 }
 
-bool TViewerPipeClient::NeedToRedirect() {
+bool TViewerPipeClient::NeedToRedirect(bool checkDatabaseAuth) {
     auto request = GetRequest();
     if (NeedRedirect && request) {
         NeedRedirect = false;
@@ -1218,7 +1251,7 @@ bool TViewerPipeClient::NeedToRedirect() {
             RedirectToDatabase(Database); // to find some dynamic node and redirect query there
             return true;
         }
-        if (!Viewer->CheckAccessViewer(request)) {
+        if (checkDatabaseAuth && !Viewer->CheckAccessViewer(request)) {
             ReplyAndPassAway(GetHTTPFORBIDDEN("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
             return true;
         }

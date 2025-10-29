@@ -142,6 +142,7 @@ BELONGS ya.make
         include/boost/smart_ptr/detail/sp_counted_base_snc_ps3.hpp [16:18]
         include/boost/smart_ptr/detail/sp_counted_base_std_atomic.hpp [14:16]
         include/boost/smart_ptr/detail/sp_counted_base_sync.hpp [14:16]
+        include/boost/smart_ptr/detail/sp_cxx20_constexpr.hpp [14:16]
         include/boost/smart_ptr/detail/sp_interlocked.hpp [15:17]
         include/boost/smart_ptr/detail/sp_noexcept.hpp [14:16]
         include/boost/smart_ptr/enable_shared_from.hpp [8:10]

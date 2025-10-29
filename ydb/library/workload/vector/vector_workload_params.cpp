@@ -13,56 +13,50 @@
 namespace NYdbWorkload {
 
 void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandType commandType, int workloadType) {
-    auto addCommonParam = [&]() {
-        opts.AddLongOption( "table", "Table name.")
-            .DefaultValue("vector_index_workload").StoreResult(&TableName);
-        opts.AddLongOption( "index", "Index name.")
-            .DefaultValue("index").StoreResult(&IndexName);
-    };
-
     auto addInitParam = [&]() {
-        opts.AddLongOption( "rows", "Number of vectors to init the table.")
+        opts.AddLongOption( "rows", "Number of vectors to init the table")
             .Required().StoreResult(&VectorInitCount);
         opts.AddLongOption( "distance", "Distance/similarity function")
             .Required().StoreResult(&Distance);
         opts.AddLongOption( "vector-type", "Type of vectors")
             .Required().StoreResult(&VectorType);
-        opts.AddLongOption( "vector-dimension", "Vector dimension.")
+        opts.AddLongOption( "vector-dimension", "Vector dimension")
             .Required().StoreResult(&VectorDimension);
         opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree")
             .Required().StoreResult(&KmeansTreeLevels);
         opts.AddLongOption( "kmeans-tree-clusters", "Number of cluster in kmeans")
             .Required().StoreResult(&KmeansTreeClusters);
-
     };
 
     auto addUpsertParam = [&]() {
     };
 
     auto addSelectParam = [&]() {
-        opts.AddLongOption( "query-table", "Name of the table with predefined search vectors.")
+        opts.AddLongOption( "query-table", "Name of the table with predefined search vectors")
             .DefaultValue("").StoreResult(&QueryTableName);
-        opts.AddLongOption( "targets", "Number of vectors to search as targets.")
+        opts.AddLongOption( "targets", "Number of vectors to search as targets")
             .DefaultValue(100).StoreResult(&Targets);
-        opts.AddLongOption( "limit", "Maximum number of vectors to return.")
+        opts.AddLongOption( "limit", "Maximum number of vectors to return")
             .DefaultValue(5).StoreResult(&Limit);
-        opts.AddLongOption( "kmeans-tree-clusters", "Maximum number of clusters to use during search.")
+        opts.AddLongOption( "kmeans-tree-clusters", "Maximum number of clusters to use during search")
             .DefaultValue(1).StoreResult(&KmeansTreeSearchClusters);
-        opts.AddLongOption( "recall-threads", "Number of threads for concurrent queries during recall measurement.")
+        opts.AddLongOption( "recall-threads", "Number of threads for concurrent queries during recall measurement")
             .DefaultValue(10).StoreResult(&RecallThreads);
-        opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search.")
+        opts.AddLongOption( "recall", "Measure recall metrics. It trains on 'targets' vector by bruce-force search")
             .StoreTrue(&Recall);
-        opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index.")
+        opts.AddLongOption( "non-indexed", "Take vector settings from the index, but search without the index")
             .StoreTrue(&NonIndexedSearch);
+        opts.AddLongOption("stale-ro", "Read with StaleRO mode")
+            .StoreTrue(&StaleRO);            
     };
 
     switch (commandType) {
     case TWorkloadParams::ECommandType::Init:
-        addCommonParam();
+        ConfigureCommonOpts(opts);
         addInitParam();
         break;
     case TWorkloadParams::ECommandType::Run:
-        addCommonParam();
+        ConfigureCommonOpts(opts);
         switch (static_cast<EWorkloadRunType>(workloadType)) {
         case EWorkloadRunType::Upsert:
             addUpsertParam();
@@ -75,6 +69,26 @@ void TVectorWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const EComma
     default:
         break;
     }
+}
+
+void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption( "table", "Table name")
+        .DefaultValue("vector_index_workload").StoreResult(&TableName);
+    opts.AddLongOption( "index", "Index name")
+        .DefaultValue("index").StoreResult(&IndexName);
+}
+
+void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
+    opts.AddLongOption( "distance", "Distance/similarity function")
+        .Required().StoreResult(&Distance);
+    opts.AddLongOption( "vector-type", "Type of vectors")
+        .Required().StoreResult(&VectorType);
+    opts.AddLongOption( "vector-dimension", "Vector dimension")
+        .Required().StoreResult(&VectorDimension);
+    opts.AddLongOption( "kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .Required().StoreResult(&KmeansTreeLevels);
+    opts.AddLongOption( "kmeans-tree-clusters", "Number of clusters in kmeans. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
+        .Required().StoreResult(&KmeansTreeClusters);
 }
 
 void TVectorWorkloadParams::Init() {
@@ -91,9 +105,7 @@ void TVectorWorkloadParams::Init() {
     // Find the specified index
     bool indexFound = false;
 
-    Y_ABORT_UNLESS(tableDescription.GetPrimaryKeyColumns().size() == 1,
-        "Only single key is supported. But table %s has %d key columns", TableName.c_str(), tableDescription.GetPrimaryKeyColumns().size());
-    KeyColumn = tableDescription.GetPrimaryKeyColumns().at(0);
+    KeyColumns = tableDescription.GetPrimaryKeyColumns();
 
     for (const auto& index : tableDescription.GetIndexDescriptions()) {
         if (index.GetIndexName() == IndexName) {
@@ -103,6 +115,7 @@ void TVectorWorkloadParams::Init() {
             const auto& keyColumns = index.GetIndexColumns();
             if (keyColumns.size() > 1) {
                 // The first column is the prefix column, the last column is the embedding
+                Y_ABORT_UNLESS(keyColumns.size() == 2, "Only single prefix column is supported");
                 PrefixColumn = keyColumns[0];
             }
             EmbeddingColumn = keyColumns.back();
@@ -124,7 +137,7 @@ void TVectorWorkloadParams::Init() {
                 str.resize(str.size()-1);
             PrefixType = str;
         }
-        if (column.Name == KeyColumn) {
+        if (KeyColumns.size() == 1 && column.Name == KeyColumns[0]) {
             KeyIsInt = (column.Type.ToString().contains("int") || column.Type.ToString().contains("Int"));
         }
     }

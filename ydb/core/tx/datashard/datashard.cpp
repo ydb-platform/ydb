@@ -35,7 +35,6 @@ using namespace NTabletFlatExecutor;
 // But in unit tests we want to test both scenarios
 bool gAllowLogBatchingDefaultValue = true;
 
-TDuration gDbStatsReportInterval = TDuration::Seconds(10);
 ui64 gDbStatsDataSizeResolution = 10*1024*1024;
 ui64 gDbStatsRowCountResolution = 100000;
 ui32 gDbStatsHistogramBucketsCount = 10;
@@ -313,58 +312,60 @@ void TDataShard::Die(const TActorContext& ctx) {
     return IActor::Die(ctx);
 }
 
-void TDataShard::IcbRegister() {
+void TDataShard::InitControls() {
     if (!IcbRegistered) {
         auto* appData = AppData();
+        auto& icb = *appData->Icb;
 
-        appData->Icb->RegisterSharedControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-        appData->Icb->RegisterSharedControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
+        TControlBoard::RegisterSharedControl(DisableByKeyFilter, icb.DataShardControls.DisableByKeyFilter);
+        TControlBoard::RegisterSharedControl(MaxTxInFly, icb.DataShardControls.MaxTxInFly);
+        TControlBoard::RegisterSharedControl(MaxTxLagMilliseconds, icb.DataShardControls.MaxTxLagMilliseconds);
+        TControlBoard::RegisterSharedControl(DataTxProfileLogThresholdMs, icb.DataShardControls.DataTxProfile.LogThresholdMs);
+        TControlBoard::RegisterSharedControl(DataTxProfileBufferThresholdMs, icb.DataShardControls.DataTxProfile.BufferThresholdMs);
+        TControlBoard::RegisterSharedControl(DataTxProfileBufferSize, icb.DataShardControls.DataTxProfile.BufferSize);
 
-        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
-        appData->Icb->RegisterSharedControl(CpuUsageReportThresholdPercent, "DataShardControls.CpuUsageReportThreshlodPercent");
-        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, "DataShardControls.CpuUsageReportIntervalSeconds");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportThresholdBytes, "DataShardControls.HighDataSizeReportThreshlodBytes");
-        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, "DataShardControls.HighDataSizeReportIntervalSeconds");
+        TControlBoard::RegisterSharedControl(CanCancelROWithReadSets, icb.DataShardControls.CanCancelROWithReadSets);
+        TControlBoard::RegisterSharedControl(PerShardReadSizeLimit, icb.TxLimitControls.PerShardReadSizeLimit);
+        TControlBoard::RegisterSharedControl(CpuUsageReportThresholdPercent, icb.DataShardControls.CpuUsageReportThresholdPercent);
+        TControlBoard::RegisterSharedControl(CpuUsageReportIntervalSeconds, icb.DataShardControls.CpuUsageReportIntervalSeconds);
+        TControlBoard::RegisterSharedControl(HighDataSizeReportThresholdBytes, icb.DataShardControls.HighDataSizeReportThresholdBytes);
+        TControlBoard::RegisterSharedControl(HighDataSizeReportIntervalSeconds, icb.DataShardControls.HighDataSizeReportIntervalSeconds);
 
-        appData->Icb->RegisterSharedControl(BackupReadAheadLo, "DataShardControls.BackupReadAheadLo");
-        appData->Icb->RegisterSharedControl(BackupReadAheadHi, "DataShardControls.BackupReadAheadHi");
 
-        appData->Icb->RegisterSharedControl(TtlReadAheadLo, "DataShardControls.TtlReadAheadLo");
-        appData->Icb->RegisterSharedControl(TtlReadAheadHi, "DataShardControls.TtlReadAheadHi");
+        TControlBoard::RegisterSharedControl(BackupReadAheadLo, icb.DataShardControls.BackupReadAheadLo);
+        TControlBoard::RegisterSharedControl(BackupReadAheadHi, icb.DataShardControls.BackupReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(EnableLockedWrites, "DataShardControls.EnableLockedWrites");
-        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, "DataShardControls.MaxLockedWritesPerKey");
+        TControlBoard::RegisterSharedControl(TtlReadAheadLo, icb.DataShardControls.TtlReadAheadLo);
+        TControlBoard::RegisterSharedControl(TtlReadAheadHi, icb.DataShardControls.TtlReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(EnableLeaderLeases, "DataShardControls.EnableLeaderLeases");
-        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, "DataShardControls.MinLeaderLeaseDurationUs");
+        TControlBoard::RegisterSharedControl(EnableLockedWrites, icb.DataShardControls.EnableLockedWrites);
+        TControlBoard::RegisterSharedControl(MaxLockedWritesPerKey, icb.DataShardControls.MaxLockedWritesPerKey);
 
-        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, "DataShardControls.ChangeRecordDebugPrint");
+        TControlBoard::RegisterSharedControl(EnableLeaderLeases, icb.DataShardControls.EnableLeaderLeases);
+        TControlBoard::RegisterSharedControl(MinLeaderLeaseDurationUs, icb.DataShardControls.MinLeaderLeaseDurationUs);
 
-        appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadLo, "DataShardControls.IncrementalRestoreReadAheadLo");
-        appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadHi, "DataShardControls.IncrementalRestoreReadAheadHi");
+        TControlBoard::RegisterSharedControl(ChangeRecordDebugPrint, icb.DataShardControls.ChangeRecordDebugPrint);
 
-        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, "DataShardControls.CdcInitialScanReadAheadLo");
-        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, "DataShardControls.CdcInitialScanReadAheadHi");
+        TControlBoard::RegisterSharedControl(IncrementalRestoreReadAheadLo, icb.DataShardControls.IncrementalRestoreReadAheadLo);
+        TControlBoard::RegisterSharedControl(IncrementalRestoreReadAheadHi, icb.DataShardControls.IncrementalRestoreReadAheadHi);
 
-        appData->Icb->RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, "DataShardControls.ReadIteratorKeysExtBlobsPrecharge");
+        TControlBoard::RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, icb.DataShardControls.ReadIteratorKeysExtBlobsPrecharge);
+
+        TControlBoard::RegisterSharedControl(CdcInitialScanReadAheadLo, icb.DataShardControls.CdcInitialScanReadAheadLo);
+        TControlBoard::RegisterSharedControl(CdcInitialScanReadAheadHi, icb.DataShardControls.CdcInitialScanReadAheadHi);
 
         IcbRegistered = true;
     }
 }
 
 bool TDataShard::ReadOnlyLeaseEnabled() {
-    IcbRegister();
+    InitControls();
     ui64 value = EnableLeaderLeases;
     return value != 0;
 }
 
 TDuration TDataShard::ReadOnlyLeaseDuration() {
-    IcbRegister();
+    InitControls();
     ui64 value = MinLeaderLeaseDurationUs;
     return TDuration::MicroSeconds(value);
 }
@@ -372,7 +373,7 @@ TDuration TDataShard::ReadOnlyLeaseDuration() {
 void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::OnActivateExecutor: tablet " << TabletID() << " actor " << ctx.SelfID);
 
-    IcbRegister();
+    InitControls();
 
     // OnActivateExecutor might be called multiple times for a follower
     // but the counters should be initialized only once
@@ -620,6 +621,14 @@ void TDataShard::SendConfirmedReplies(TMonotonic ts, std::vector<std::unique_ptr
 void TDataShard::SendCommittedReplies(std::vector<std::unique_ptr<IEventHandle>>&& replies) {
     for (auto& ev : replies) {
         TActivationContext::Send(std::move(ev));
+    }
+}
+
+void TDataShard::SendRestartNotification(TOperation* op) {
+    if (!op->HasFlag(TTxFlags::RestartNotificationSent)) {
+        auto notify = MakeHolder<TEvDataShard::TEvProposeTransactionRestart>(TabletID(), op->GetGlobalTxId());
+        Send(op->GetTarget(), notify.Release(), 0, op->GetCookie());
+        op->SetFlag(TTxFlags::RestartNotificationSent);
     }
 }
 
@@ -909,7 +918,7 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
 
                     if (cIt->second.SchemaSnapshotAcquired) {
                         const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
-                        if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                        if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
                             ScheduleRemoveSchemaSnapshot(snapshotKey);
                         }
                     }
@@ -1046,7 +1055,7 @@ void TDataShard::CommitLockChangeRecords(NIceDb::TNiceDb& db, ui64 lockId, ui64 
 
             if (cIt->second.SchemaSnapshotAcquired) {
                 const auto snapshotKey = TSchemaSnapshotKey(cIt->second.TableId, cIt->second.SchemaVersion);
-                if (const auto last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+                if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
                     ScheduleRemoveSchemaSnapshot(snapshotKey);
                 }
             }
@@ -1116,7 +1125,7 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
 
     if (record.SchemaSnapshotAcquired) {
         const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
-        if (const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
+        if (SchemaSnapshotManager.ReleaseReference(snapshotKey)) {
             ScheduleRemoveSchemaSnapshot(snapshotKey);
         }
     }
@@ -1507,7 +1516,7 @@ void TDataShard::ScheduleRemoveAbandonedLockChanges() {
             continue;
         }
 
-        if (auto* info = VolatileTxManager.FindByCommitTxId(lockId)) {
+        if (VolatileTxManager.FindByCommitTxId(lockId)) {
             // Skip lock changes attached to volatile transactions
             continue;
         }
@@ -3283,6 +3292,24 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
     IncCounter(COUNTER_PREPARE_COMPLETE);
 }
 
+template <typename TEvRequest>
+bool TDataShard::ShouldDelayOperation(TEvRequest& ev) {
+    if (MediatorStateWaiting) {
+        MediatorStateWaitingMsgs.emplace_back(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    if (Pipeline.HasProposeDelayers()) {
+        DelayedProposeQueue.emplace_back().Reset(ev.Release());
+        UpdateProposeQueueSize();
+        return true;
+    }
+    return false;
+}
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvUploadRowsRequest::TPtr>(TEvDataShard::TEvUploadRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvEraseRowsRequest::TPtr>(TEvDataShard::TEvEraseRowsRequest::TPtr& ev);
+template bool TDataShard::ShouldDelayOperation<TEvDataShard::TEvS3UploadRowsRequest::TPtr>(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev);
+
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
         for (auto& ev : DelayedProposeQueue) {
@@ -4443,21 +4470,6 @@ void TDataShard::Handle(TEvDataShard::TEvStoreS3DownloadInfo::TPtr& ev, const TA
     Execute(new TTxStoreS3DownloadInfo(this, ev), ctx);
 }
 
-void TDataShard::Handle(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev, const TActorContext& ctx)
-{
-    const float rejectProbabilty = Executor()->GetRejectProbability();
-    if (rejectProbabilty > 0) {
-        const float rnd = AppData(ctx)->RandomProvider->GenRandReal2();
-        if (rnd < rejectProbabilty) {
-            DelayedS3UploadRows.emplace_back().Reset(ev.Release());
-            IncCounter(COUNTER_BULK_UPSERT_OVERLOADED);
-            return;
-        }
-    }
-
-    Execute(new TTxS3UploadRows(this, ev), ctx);
-}
-
 void TDataShard::ScanComplete(NTable::EStatus,
                                      TAutoPtr<IDestructable> prod,
                                      ui64 cookie,
@@ -4546,6 +4558,18 @@ void TDataShard::Handle(TEvPrivate::TEvRestartOperation::TPtr &ev, const TActorC
 
     // Continue current Tx
     PlanQueue.Progress(ctx);
+}
+
+void TDataShard::Handle(TEvPrivate::TEvBlockFailPointUnblock::TPtr& ev, const TActorContext& ctx) {
+    const auto txId = ev->Get()->TxId;
+
+    if (auto op = Pipeline.FindOp(txId)) {
+        if (op->HasFlag(TTxFlags::BlockFailPointWaiting)) {
+            op->SetFlag(TTxFlags::BlockFailPointUnblocked);
+            Pipeline.AddCandidateOp(op);
+            PlanQueue.Progress(ctx);
+        }
+    }
 }
 
 bool TDataShard::ReassignChannelsEnabled() const {

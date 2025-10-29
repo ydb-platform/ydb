@@ -3,7 +3,7 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/services/persqueue_v1/actors/partition_writer_cache_actor.h>
-#include <ydb/core/persqueue/write_id.h>
+#include <ydb/core/persqueue/public/write_id.h>
 
 namespace NKikimr::NPersQueueTests {
 

@@ -201,14 +201,7 @@ public:
         Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
         auto table = context.SS->Tables.at(pathId);
 
-        table->AlterVersion += 1;
-
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistTableAlterVersion(db, pathId, table);
-
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
-
         context.SS->ChangeTxState(db, OperationId, TTxState::ProposedWaitParts);
 
         return true;
@@ -254,15 +247,24 @@ public:
         Y_ABORT_UNLESS(txState);
         Y_ABORT_UNLESS(IsExpectedTxType(txState->TxType));
 
-        // FIXME: should we release all path states here? Seems now our RestoreMultipleIncrementalBackups became Single again, need to fix it.
-        if (RestoreOp.GetSrcPathIds().size() > 0) {
-            for (const auto& pathId : RestoreOp.GetSrcPathIds()) {
-                context.OnComplete.ReleasePathState(OperationId, TPathId::FromProto(pathId), TPathElement::EPathState::EPathStateNoChanges);
+        if (txState->TargetPathId != InvalidPathId) {
+            Y_ABORT_UNLESS(context.SS->PathsById.contains(txState->TargetPathId));
+            auto targetPath = context.SS->PathsById.at(txState->TargetPathId);
+            
+            context.SS->ClearDescribePathCaches(targetPath);
+            context.OnComplete.PublishToSchemeBoard(OperationId, txState->TargetPathId);
+            context.OnComplete.ReleasePathState(OperationId, txState->TargetPathId, TPathElement::EPathState::EPathStateNoChanges);
+        }
+
+        if (RestoreOp.SrcTablePathsSize() > 0) {
+            for (const auto& srcTablePathStr : RestoreOp.GetSrcTablePaths()) {
+                const auto srcTablePath = TPath::Resolve(srcTablePathStr, context.SS);
+                if (srcTablePath.IsResolved()) {
+                    context.OnComplete.ReleasePathState(OperationId, srcTablePath.Base()->PathId, TPathElement::EPathState::EPathStateNoChanges);
+                }
             }
-        } else {
-            if (txState->SourcePathId) {
-                context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
-            }
+        } else if (txState->SourcePathId != InvalidPathId) {
+            context.OnComplete.ReleasePathState(OperationId, txState->SourcePathId, TPathElement::EPathState::EPathStateNoChanges);
         }
 
         context.OnComplete.DoneOperation(OperationId);

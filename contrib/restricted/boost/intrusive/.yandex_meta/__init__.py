@@ -9,7 +9,7 @@ def post_install(self):
 boost_intrusive = NixSourceProject(
     nixattr="boost_intrusive",
     arcdir=boost.make_arcdir("intrusive"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

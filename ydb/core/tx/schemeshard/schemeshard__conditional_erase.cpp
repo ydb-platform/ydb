@@ -1,6 +1,8 @@
 #include "schemeshard_impl.h"
 
 #include <util/string/join.h>
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -239,7 +241,7 @@ private:
 
             auto index = GetIndex(childPath);
             if (index->Type == NKikimrSchemeOp::EIndexTypeGlobalAsync
-                || index->Type == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
+                || !DoesIndexSupportTTL(index->Type)) {
                 continue;
             }
 
@@ -276,7 +278,7 @@ private:
     }
 
     static TVector<std::pair<ui32, ui32>> MakeColumnIds(TTableInfo::TPtr mainTable, TTableIndexInfo::TPtr index, TTableInfo::TPtr indexImplTable) {
-        Y_ABORT_UNLESS(index->Type != NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree);
+        Y_ABORT_UNLESS(DoesIndexSupportTTL(index->Type));
         TVector<std::pair<ui32, ui32>> result;
         THashSet<TString> keys;
 
@@ -430,16 +432,14 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
 
         Self->PersistTablePartitionCondErase(db, tableId, partitionIdx, tableInfo);
 
-        if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
-            StatsCollectorEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
-                Self->GetDomainKey(tableId), tableId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
-            );
+        StatsCollectorEv = MakeHolder<NSysView::TEvSysView::TEvUpdateTtlStats>(
+            Self->GetDomainKey(tableId), tableId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()))
+        );
 
-            auto& stats = StatsCollectorEv->Stats;
-            stats.SetLastRunTime(now.MilliSeconds());
-            stats.SetLastRowsProcessed(record.GetStats().GetRowsProcessed());
-            stats.SetLastRowsErased(record.GetStats().GetRowsErased());
-        }
+        auto& stats = StatsCollectorEv->Stats;
+        stats.SetLastRunTime(now.MilliSeconds());
+        stats.SetLastRowsProcessed(record.GetStats().GetRowsProcessed());
+        stats.SetLastRowsErased(record.GetStats().GetRowsErased());
 
         Y_ABORT_UNLESS(lag.Defined());
         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());

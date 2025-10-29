@@ -77,10 +77,11 @@ struct TEvPrivate {
         EvAskColumnData,
 
         EvRequestFilter,
-        EvDuplicateFilterDataFetched,
-        EvDuplicateSourceCacheResult,
+        EvFilterRequestResourcesAllocated,
         EvFilterConstructionResult,
-        EvDuplicateFilterIntervalResult,
+        
+        EvReportScanDiagnostics,
+        EvReportScanIteratorDiagnostics,
 
         EvEnd
     };
@@ -346,6 +347,33 @@ struct TEvPrivate {
         NOlap::TWritingBuffer& MutableWritesBuffer() {
             return WritesBuffer;
         }
+    };
+    
+    struct TEvReportScanDiagnostics: public TEventLocal<TEvReportScanDiagnostics, EvReportScanDiagnostics> {
+        TEvReportScanDiagnostics(TString&& requestMessage, TString&& dotGraph, TString&& ssaProgram, TString&& pkRangesFilter, bool isPublicScan)
+            : RequestMessage(std::move(requestMessage))
+            , DotGraph(std::move(dotGraph))
+            , SSAProgram(std::move(ssaProgram))
+            , PKRangesFilter(std::move(pkRangesFilter))
+            , IsPublicScan(isPublicScan) {
+        }
+
+        ui64 RequestId = 0;
+        TString RequestMessage;
+        TString DotGraph;
+        TString SSAProgram;
+        TString PKRangesFilter;
+        bool IsPublicScan;
+    };
+
+    struct TEvReportScanIteratorDiagnostics: public TEventLocal<TEvReportScanIteratorDiagnostics, EvReportScanIteratorDiagnostics> {
+        TEvReportScanIteratorDiagnostics(ui64 requestId,TString&& scanIteratorDiagnostics)
+            : RequestId(requestId)
+            , ScanIteratorDiagnostics(std::move(scanIteratorDiagnostics)) {
+        }
+
+        ui64 RequestId;
+        TString ScanIteratorDiagnostics;
     };
 };
 

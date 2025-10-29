@@ -21,6 +21,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .Default(0)
         .DontSerializeDefault();
 
+    registrar.ExternalBaseClassParameter("main_job_id", &TListJobsOptions::MainJobId)
+        .Default()
+        .DontSerializeDefault();
+
     registrar.ExternalBaseClassParameter("job_competition_id", &TListJobsOptions::JobCompetitionId)
         .Default()
         .DontSerializeDefault();
@@ -66,6 +70,10 @@ void TListJobsContinuationTokenSerializer::Register(TRegistrar registrar)
         .DontSerializeDefault();
 
     registrar.ExternalBaseClassParameter("operation_incarnation", &TThat::OperationIncarnation)
+        .Default()
+        .DontSerializeDefault();
+
+    registrar.ExternalBaseClassParameter("monitoring_descriptor", &TThat::MonitoringDescriptor)
         .Default()
         .DontSerializeDefault();
 
@@ -206,7 +214,7 @@ void Deserialize(TOperation& operation, NYTree::IAttributeDictionaryPtr attribut
         attributes = attributes->Clone();
     }
 
-    auto setField = [&] (auto& field, const TString& name) {
+    auto setField = [&] (auto& field, const std::string& name) {
         using T = std::remove_reference_t<decltype(field)>;
         if constexpr (std::is_same_v<T, NYson::TYsonString>) {
             if (auto value = attributes->FindYson(name)) {
@@ -331,6 +339,8 @@ void Serialize(const TJob& job, NYson::IYsonConsumer* consumer, TStringBuf idKey
             .OptionalItem("monitoring_descriptor", job.MonitoringDescriptor)
             .OptionalItem("is_stale", job.IsStale)
             .OptionalItem("job_cookie", job.JobCookie)
+            .OptionalItem("job_cookie_group_index", job.JobCookieGroupIndex)
+            .OptionalItem("main_job_id", job.MainJobId)
             .OptionalItem("archive_features", job.ArchiveFeatures)
             .OptionalItem("operation_incarnation", job.OperationIncarnation)
             .OptionalItem("allocation_id", job.AllocationId)
@@ -420,4 +430,3 @@ TGetJobStderrResponse TGetJobStderrResponse::MakeJobStderr(const TSharedRef& dat
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

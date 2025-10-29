@@ -18,9 +18,7 @@ def main():
         import yandex.type_info.typing as ti_typing
         import six
     except ImportError as e:
-        raise ImportError(
-            str(e) + ". Make sure that library/python/type_info is in your PEERDIR list"
-        )
+        raise ImportError(str(e) + ". Make sure that library/python/type_info is in your PEERDIR list")
 
     from yql import typing
 
@@ -80,10 +78,10 @@ def main():
             arg_type = param.stop
             ti_base.validate_type(arg_type)
             if param.step is not None:
-               for x in param.step:
-                   if x != AutoMap:
-                       raise ValueError("Expected AutoMap as parameter flag but got: {}".format(ti_base._with_type(x)))
-                   flags.add(x)
+                for x in param.step:
+                    if x != AutoMap:
+                        raise ValueError("Expected AutoMap as parameter flag but got: {}".format(ti_base._with_type(x)))
+                    flags.add(x)
         else:
             ti_base.validate_type(arg_type)
         return (name, arg_type, flags)
@@ -91,13 +89,17 @@ def main():
     @six.python_2_unicode_compatible
     class GenericCallableAlias(ti_base.Type):
         def __str__(self):
-            return ("Callable<(" +
-                        ",".join(_format_arg(x) for x in self.args[:len(self.args)-self.optional_args]) +
-                        ("," if len(self.args) > self.optional_args and self.optional_args else "") +
-                        ("[" if self.optional_args else "") +
-                        ",".join(_format_arg(x) for x in self.args[len(self.args)-self.optional_args:]) +
-                        ("]" if self.optional_args else "") +
-                        ")->" + str(getattr(self, "return")) + ">")
+            return (
+                "Callable<("
+                + ",".join(_format_arg(x) for x in self.args[: len(self.args) - self.optional_args])
+                + ("," if len(self.args) > self.optional_args and self.optional_args else "")
+                + ("[" if self.optional_args else "")
+                + ",".join(_format_arg(x) for x in self.args[len(self.args) - self.optional_args :])
+                + ("]" if self.optional_args else "")
+                + ")->"
+                + str(getattr(self, "return"))
+                + ">"
+            )
 
         def to_yson_type(self):
             yson_repr = {
@@ -108,18 +110,28 @@ def main():
             }
             return yson_repr
 
-
     class GenericCallable(ti_base.Generic):
         def __getitem__(self, params):
-            if not isinstance(params, tuple) or len(params) < 2 or not isinstance(params[0], int) or not ti_typing.is_valid_type(params[1]):
-                raise ValueError("Expected at least two arguments (integer and type of return value) but got: {}".format(ti_base._with_type(params)))
+            if (
+                not isinstance(params, tuple)
+                or len(params) < 2
+                or not isinstance(params[0], int)
+                or not ti_typing.is_valid_type(params[1])
+            ):
+                raise ValueError(
+                    "Expected at least two arguments (integer and type of return value) but got: {}".format(
+                        ti_base._with_type(params)
+                    )
+                )
             args = []
             for param in params[2:]:
                 name, arg_type, flags = _extract_arg_info(param)
                 args.append((name, arg_type, flags))
 
             if params[0] < 0 or params[0] > len(args):
-                raise ValueError("Optional argument count - " + str(params[0]) + " out of range [0.." + str(len(args)) + "]")
+                raise ValueError(
+                    "Optional argument count - " + str(params[0]) + " out of range [0.." + str(len(args)) + "]"
+                )
 
             attrs = {
                 "optional_args": params[0],

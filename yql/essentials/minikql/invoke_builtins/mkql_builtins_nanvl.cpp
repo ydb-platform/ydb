@@ -36,7 +36,7 @@ struct TNanvl {
         const auto val = GetterFor<TLeft>(left, context, block);
         const auto fnType = FunctionType::get(Type::getInt1Ty(context), {val->getType()}, false);
         const auto name = std::is_same<TLeft, float>() ? "MyFloatIsNan" : "MyDoubleIsNan";
-        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool(*)(TLeft)>(&std::isnan)));
+        ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(static_cast<bool (*)(TLeft)>(&std::isnan)));
         const auto func = module.getOrInsertFunction(name, fnType).getCallee();
         const auto isnan = CallInst::Create(fnType, func, {val}, "isnan", block);
 
@@ -73,9 +73,8 @@ struct TDecimalNanvl {
 
 template <
     typename TInput1, typename TInput2, typename TOutput,
-    template<typename, typename, typename, bool> class TFunc,
-    template<typename, typename, typename, bool, bool> class TArgs
->
+    template <typename, typename, typename, bool> class TFunc,
+    template <typename, typename, typename, bool, bool> class TArgs>
 void RegisterBinaryNavlLeftOpt(IBuiltinFunctionRegistry& registry, const char* name) {
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout, false>, TArgs<TInput1, TInput2, TOutput, false, false>, TBinaryWrap<false, false>>(registry, name);
     RegisterFunctionImpl<TFunc<typename TInput1::TLayout, typename TInput2::TLayout, typename TOutput::TLayout, true>, TArgs<TInput1, TInput2, TOutput, false, true>, TBinaryWrap<false, false>>(registry, name);
@@ -97,7 +96,7 @@ void RegisterBinaryNavlDecimal(IBuiltinFunctionRegistry& registry, const char* n
     RegisterFunctionImpl<TDecimalNanvl, TBinaryArgsOpt<NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, NUdf::TDataType<NUdf::TDecimal>, true, true>, TBinaryWrap<true, false>>(registry, name);
 }
 
-}
+} // namespace
 
 void RegisterNanvl(IBuiltinFunctionRegistry& registry) {
     RegisterBinaryNavlFunction(registry, "Nanvl");

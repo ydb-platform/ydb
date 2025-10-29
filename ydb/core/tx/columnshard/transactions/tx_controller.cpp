@@ -212,7 +212,7 @@ void TTxController::ProgressOnExecute(const ui64 txId, NTabletFlatExecutor::TTra
     auto opIt = Operators.find(txId);
     AFL_VERIFY(opIt != Operators.end())("tx_id", txId);
     Counters.OnFinishPlannedTx(opIt->second->GetOpType());
-    AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", txId);
+    AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD_TX)("event", "finished_tx")("tx_id", txId);
     OnTxCompleted(txId);
     Schema::EraseTxInfo(db, txId);
 }

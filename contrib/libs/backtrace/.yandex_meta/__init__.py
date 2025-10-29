@@ -10,7 +10,7 @@ def post_install(self):
             Switch(
                 [
                     ("OS_DARWIN", Linkable(SRCS=["macho.c"])),
-                    ("OS_LINUX OR OS_ANDROID", Linkable(SRCS=["elf.c"])),
+                    ("OS_LINUX OR OS_ANDROID OR OS_FREEBSD", Linkable(SRCS=["elf.c"])),
                 ]
             ),
         )
@@ -19,7 +19,7 @@ def post_install(self):
 libbacktrace = GNUMakeNixProject(
     nixattr="libbacktrace",
     arcdir="contrib/libs/backtrace",
-    owners=["dfyz", "g:cpp-contrib"],
+    owners=["g:cpp-contrib"],
     copy_sources=["macho.c"],
     platform_dispatchers=["config.h"],
     post_install=post_install,

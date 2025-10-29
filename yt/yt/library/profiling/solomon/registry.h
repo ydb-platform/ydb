@@ -123,8 +123,9 @@ public:
     static TSolomonRegistryPtr Get();
 
     void Disable();
+
     void SetDynamicTags(std::vector<TTag> dynamicTags);
-    std::vector<TTag> GetDynamicTags();
+    std::vector<TTag> GetDynamicTags() const;
 
     void SetGridFactor(std::function<int(const std::string&)> gridFactor);
     void SetWindowSize(int windowSize);
@@ -144,7 +145,7 @@ public:
 
     std::vector<TSensorInfo> ListSensors() const;
 
-    const TTagRegistry& GetTags() const;
+    const TTagRegistry& GetTagRegistry() const;
 
     i64 GetNextIteration() const;
     int GetWindowSize() const;
@@ -154,8 +155,7 @@ public:
     const TWeakProfiler& GetSelfProfiler() const;
 
     NProto::TSensorDump DumpSensors();
-    NProto::TSensorDump DumpSensors(std::vector<TTagId> extraTags);
-    NProto::TSensorDump DumpSensors(const std::optional<std::string>& host, const THashMap<std::string, std::string>& instanceTags);
+    NProto::TSensorDump DumpSensors(TTagSet customTagSet);
 
 private:
     i64 Iteration_ = 0;
@@ -172,7 +172,7 @@ private:
     template <class TFn>
     void DoRegister(TFn fn);
 
-    TTagRegistry Tags_;
+    TTagRegistry TagRegistry_;
     TProducerSet Producers_;
 
     THashMap<std::string, TSensorSet> Sensors_;
@@ -187,6 +187,8 @@ private:
     TGauge TagCount_;
 
     friend class TRemoteRegistry;
+
+    TTagIdSet EncodeTagSet(const TTagSet& tagSet);
 };
 
 DEFINE_REFCOUNTED_TYPE(TSolomonRegistry)

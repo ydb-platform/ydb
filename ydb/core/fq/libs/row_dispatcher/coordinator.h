@@ -1,9 +1,8 @@
 #pragma once
 
-#include <ydb/core/fq/libs/config/protos/row_dispatcher.pb.h>
-
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/core/fq/libs/row_dispatcher/common/row_dispatcher_settings.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+#include <ydb/library/actors/core/actor.h>
 
 namespace NFq {
 
@@ -11,9 +10,9 @@ namespace NFq {
 
 std::unique_ptr<NActors::IActor> NewCoordinator(
     NActors::TActorId rowDispatcherId,
-    const NConfig::TRowDispatcherCoordinatorConfig& config,
-    const TYqSharedResources::TPtr& yqSharedResources,
+    const TRowDispatcherSettings::TCoordinatorSettings& config,
     const TString& tenant,
-    const ::NMonitoring::TDynamicCounterPtr& counters);
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    NActors::TActorId nodesManagerId);
 
 } // namespace NFq

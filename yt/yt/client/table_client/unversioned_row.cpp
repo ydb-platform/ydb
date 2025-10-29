@@ -48,6 +48,77 @@ const TString SerializedNullRow;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TUnversionedOwningValue::TUnversionedOwningValue()
+    : Value_{
+        .Id = 0,
+        .Type = EValueType::TheBottom,
+        .Flags = {},
+        .Length = 0,
+        .Data = {},
+    }
+    , StringHolder_(nullptr)
+{ }
+
+TUnversionedOwningValue::TUnversionedOwningValue(TUnversionedOwningValue&& other) noexcept
+    : TUnversionedOwningValue()
+{
+    *this = std::move(other);
+}
+
+TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other)
+    : Value_(other)
+    , StringHolder_(nullptr)
+{
+    if (IsStringLikeType(Value_.Type)) {
+        auto ref = TSharedMutableRef::Allocate<TOwningValueTag>(Value_.Length, {.InitializeStorage = false});
+        ::memcpy(ref.data(), Value_.Data.String, Value_.Length);
+        Value_.Data.String = ref.data();
+        StringHolder_ = ref.ReleaseHolder();
+    }
+}
+
+TUnversionedOwningValue::TUnversionedOwningValue(const TUnversionedValue& other, TSharedRangeHolderPtr stringHolder)
+    : Value_(other)
+    , StringHolder_(std::move(stringHolder))
+{ }
+
+TUnversionedOwningValue& TUnversionedOwningValue::operator=(TUnversionedOwningValue&& other) noexcept
+{
+    std::swap(Value_, other.Value_);
+    std::swap(StringHolder_, other.StringHolder_);
+    return *this;
+}
+
+TUnversionedOwningValue::operator TUnversionedValue() const
+{
+    return Value_;
+}
+
+void TUnversionedOwningValue::Clear()
+{
+    Value_.Type = EValueType::TheBottom;
+    Value_.Length = 0;
+    StringHolder_ = {};
+}
+
+EValueType TUnversionedOwningValue::Type() const
+{
+    return Value_.Type;
+}
+
+TSharedRef TUnversionedOwningValue::GetStringRef() const
+{
+    YT_VERIFY(IsStringLikeType(Value_.Type));
+    return TSharedRef(Value_.Data.String, Value_.Length, StringHolder_);
+}
+
+TSharedRangeHolderPtr TUnversionedOwningValue::GetStringHolder() const
+{
+    return StringHolder_;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 size_t EstimateRowValueSize(const TUnversionedValue& value, bool isInlineHunkValue)
 {
     size_t result = MaxVarUint32Size * 2; // id and type

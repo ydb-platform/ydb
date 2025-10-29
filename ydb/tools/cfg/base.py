@@ -105,7 +105,7 @@ Domain = collections.namedtuple(
 )
 
 KiKiMRHost = collections.namedtuple(
-    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "rack", "host_config_id", "port"]
+    "_KiKiMRHost", ["hostname", "node_id", "drives", "ic_port", "body", "datacenter", "module", "rack", "host_config_id", "port"]
 )
 
 DEFAULT_PLAN_RESOLUTION = 10
@@ -221,10 +221,12 @@ class ComputeUnit(object):
 
 
 class Tenant(object):
-    def __init__(self, name, storage_units, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None):
+    def __init__(self, name, storage_units=None, compute_units=None, overridden_configs=None, shared=False, plan_resolution=None, coordinators=None, mediators=None, shared_database_path=None):
         self.name = name
         self.overridden_configs = overridden_configs
-        self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
+        self.storage_units = tuple()
+        if storage_units:
+            self.storage_units = tuple(StorageUnit(**storage_unit_template) for storage_unit_template in storage_units)
         self.compute_units = tuple()
         if compute_units:
             self.compute_units = tuple(ComputeUnit(**compute_unit_template) for compute_unit_template in compute_units)
@@ -232,6 +234,7 @@ class Tenant(object):
         self.plan_resolution = plan_resolution
         self.coordinators = coordinators
         self.mediators = mediators
+        self.shared_database_path = shared_database_path
 
 
 class HostConfig(object):
@@ -414,6 +417,16 @@ class ClusterDetailsProvider(object):
 
         return str(self._host_info_provider.get_body(host_description.get("name", host_description.get("host"))))
 
+    def _get_module(self, host_description):
+        if host_description.get("module") is not None:
+            return str(host_description.get("module"))
+        module = host_description.get("location", {}).get("module", None)
+        if module is not None:
+            return str(module)
+
+        module_from_provider = self._host_info_provider.get_module(host_description.get("name", host_description.get("host")))
+        return str(module_from_provider) if module_from_provider else ""
+
     def _collect_drives_info(self, host_description):
         host_config_id = host_description.get("host_config_id", None)
         drives = host_description.get("drives", [])
@@ -436,6 +449,7 @@ class ClusterDetailsProvider(object):
             ic_port=host_description.get("ic_port", DEFAULT_INTERCONNECT_PORT),
             body=self._get_body(host_description),
             datacenter=self._get_datacenter(host_description),
+            module=self._get_module(host_description),
             rack=self._get_rack(host_description),
             host_config_id=host_description.get("host_config_id", None),
             port=host_description.get("port", DEFAULT_INTERCONNECT_PORT),

@@ -11,7 +11,7 @@ public:
     static constexpr ui64 FIRST_OFFSET = 42;
 
     using TBase = TBaseFixture;
-    using TCallback = std::function<void(ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result)>;
+    using TCallback = std::function<void(ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result)>;
 
     class TParsedDataConsumer : public IParsedDataConsumer {
     public:
@@ -60,7 +60,7 @@ public:
                 CurrentOffset++;
             }
 
-            TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result(Columns.size(), nullptr);
+            TVector<std::span<NYql::NUdf::TUnboxedValue>> result(Columns.size());
             for (ui64 i = 0; i < Columns.size(); ++i) {
                 if (const auto it = ExpectedErrors.find(i); it != ExpectedErrors.end()) {
                     CheckError(Self.Parser->GetParsedColumn(i), it->second.first, it->second.second);
@@ -118,11 +118,11 @@ public:
     }
 
     TStatus MakeParser(TVector<TString> columnNames, TString columnType) {
-        return MakeParser(columnNames, columnType, [](ui64, TVector<const TVector<NYql::NUdf::TUnboxedValue>*>) {});
+        return MakeParser(columnNames, columnType, [](ui64, TVector<std::span<NYql::NUdf::TUnboxedValue>>) {});
     }
 
     TStatus MakeParser(TVector<TSchemaColumn> columns) {
-        return MakeParser(columns, [](ui64, TVector<const TVector<NYql::NUdf::TUnboxedValue>*>) {});
+        return MakeParser(columns, [](ui64, TVector<std::span<NYql::NUdf::TUnboxedValue>>) {});
     }
 
     void PushToParser(ui64 offset, const TString& data) {
@@ -157,7 +157,12 @@ class TJsonParserFixture : public TBaseParserFixture {
 public:
     TJsonParserFixture()
         : TBase()
-        , Config({.BatchSize = 1_MB, .LatencyLimit = TDuration::Zero(), .BufferCellCount = 1000})
+        , Config({
+            .FunctionRegistry = FunctionRegistry,
+            .BatchSize = 1_MB,
+            .LatencyLimit = TDuration::Zero(),
+            .BufferCellCount = 1000
+        })
     {}
 
 protected:
@@ -172,7 +177,7 @@ public:
 class TRawParserFixture : public TBaseParserFixture {
 protected:
     TValueStatus<ITopicParser::TPtr> CreateParser() override {
-        return CreateRawParser(ParserHandler, {});
+        return CreateRawParser(ParserHandler, FunctionRegistry, {});
     }
 };
 
@@ -180,41 +185,41 @@ protected:
 
 Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(Simple1, TJsonParserFixture) {
-        CheckSuccess(MakeParser({{"a1", "[DataType; String]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({{"a1", "[DataType; String]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL(101, result[1]->at(0).GetOptionalValue().Get<ui64>());
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(101, result[1][0].GetOptionalValue().Get<ui64>());
         }));
         PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": 101, "event": "event1"})");
     }
 
     Y_UNIT_TEST_F(Simple2, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"a2", "a1"}, "[DataType; String]", [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"a2", "a1"}, "[DataType; String]", [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET, R"({"a1": "hello1", "a2": "101", "event": "event1"})");
     }
 
     Y_UNIT_TEST_F(Simple3, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET,R"({"a2": "hello1", "a1": "101", "event": "event1"})");
     }
 
     Y_UNIT_TEST_F(Simple4, TJsonParserFixture) {
-        CheckSuccess(MakeParser({"a2", "a1"}, "[DataType; String]", [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"a2", "a1"}, "[DataType; String]", [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[1]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("101", TString(result[1][0].AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET, R"({"a2": "hello1", "a1": "101", "event": "event1"})");
     }
@@ -224,11 +229,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
         const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
 
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0]->at(1).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][1].AsStringRef()));
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
@@ -241,12 +246,12 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(ManyValues, TJsonParserFixture) {
         ExpectedBatches = 1;
 
-        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
             for (size_t i = 0; i < numberRows; ++i) {
-                UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(result[0]->at(i).AsStringRef()), i);
-                UNIT_ASSERT_VALUES_EQUAL_C("101", TString(result[1]->at(i).AsStringRef()), i);
+                UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(result[0][i].AsStringRef()), i);
+                UNIT_ASSERT_VALUES_EQUAL_C("101", TString(result[1][i].AsStringRef()), i);
             }
         }));
 
@@ -260,20 +265,20 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(MissingFields, TJsonParserFixture) {
         ExpectedBatches = 1;
 
-        CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}, {"a2", "[OptionalType; [DataType; Uint64]]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(3, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
             for (size_t i = 0; i < numberRows; ++i) {
                 if (i == 2) {
-                    UNIT_ASSERT_C(!result[0]->at(i), i);
+                    UNIT_ASSERT_C(!result[0][i], i);
                 } else {
-                    NYql::NUdf::TUnboxedValue value = result[0]->at(i).GetOptionalValue();
+                    NYql::NUdf::TUnboxedValue value = result[0][i].GetOptionalValue();
                     UNIT_ASSERT_VALUES_EQUAL_C("hello1", TString(value.AsStringRef()), i);
                 }
                 if (i == 1) {
-                    UNIT_ASSERT_C(!result[1]->at(i), i);
+                    UNIT_ASSERT_C(!result[1][i], i);
                 } else {
-                    UNIT_ASSERT_VALUES_EQUAL_C(101, result[1]->at(i).GetOptionalValue().Get<ui64>(), i);
+                    UNIT_ASSERT_VALUES_EQUAL_C(101, result[1][i].GetOptionalValue().Get<ui64>(), i);
                 }
             }
         }));
@@ -288,21 +293,21 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(NestedTypes, TJsonParserFixture) {
         ExpectedBatches = 1;
 
-        CheckSuccess(MakeParser({{"nested", "[OptionalType; [DataType; Json]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({{"nested", "[OptionalType; [DataType; Json]]"}, {"a1", "[DataType; String]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(4, numberRows);
 
             UNIT_ASSERT_VALUES_EQUAL(2, result.size());
-            UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", TString(result[0]->at(0).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("{\"key\": \"value\"}", TString(result[0][0].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello1", TString(result[1][0].AsStringRef()));
 
-            UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", TString(result[0]->at(1).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1]->at(1).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("[\"key1\", \"key2\"]", TString(result[0][1].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello2", TString(result[1][1].AsStringRef()));
 
-            UNIT_ASSERT_VALUES_EQUAL("\"some string\"", TString(result[0]->at(2).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1]->at(2).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("\"some string\"", TString(result[0][2].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello3", TString(result[1][2].AsStringRef()));
 
-            UNIT_ASSERT_VALUES_EQUAL("123456", TString(result[0]->at(3).AsStringRef()));
-            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1]->at(3).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("123456", TString(result[0][3].AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL("hello4", TString(result[1][3].AsStringRef()));
         }));
 
         Parser->ParseMessages({
@@ -316,12 +321,12 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(SimpleBooleans, TJsonParserFixture) {
         ExpectedBatches = 1;
 
-        CheckSuccess(MakeParser({{"a", "[DataType; Bool]"}}, [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({{"a", "[DataType; Bool]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
 
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-            UNIT_ASSERT_VALUES_EQUAL(true, result[0]->at(0).Get<bool>());
-            UNIT_ASSERT_VALUES_EQUAL(false, result[0]->at(1).Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(true, result[0][0].Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
         }));
 
         Parser->ParseMessages({
@@ -330,15 +335,68 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         });
     }
 
+    Y_UNIT_TEST_F(ChangeParserSchema, TJsonParserFixture) {
+        ExpectedBatches = 1;
+
+        CheckSuccess(MakeParser({{"a", "[DataType; Bool]"}}, [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+            UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+            UNIT_ASSERT_VALUES_EQUAL(true, result[0][0].Get<bool>());
+            UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
+        }));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"a", "[DataType; Bool]"}, {"b", "[DataType; Int64]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+                UNIT_ASSERT_VALUES_EQUAL(2, result.size());
+                UNIT_ASSERT_VALUES_EQUAL(true, result[0][0].Get<bool>());
+                UNIT_ASSERT_VALUES_EQUAL(false, result[0][1].Get<bool>());
+                UNIT_ASSERT_VALUES_EQUAL(42, result[1][0].Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(84, result[1][1].Get<i64>());
+            }
+        )));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"b", "[DataType; Int64]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
+
+                UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+                UNIT_ASSERT_VALUES_EQUAL(42, result[0][0].Get<i64>());
+                UNIT_ASSERT_VALUES_EQUAL(84, result[0][1].Get<i64>());
+            }
+        )));
+
+        Parser->ParseMessages({
+            GetMessage(FIRST_OFFSET, R"({"a": true, "b": 42})"),
+            GetMessage(FIRST_OFFSET + 1, R"({"a": false, "b": 84})")
+        });
+    }
+
     Y_UNIT_TEST_F(ManyBatches, TJsonParserFixture) {
         ExpectedBatches = 2;
         Config.BufferCellCount = 1;
 
         const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
@@ -353,10 +411,10 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
         Config.BatchSize = 10;
 
         const TString largeString = "abcdefghjkl1234567890+abcdefghjkl1234567890";
-        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"col"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(largeString, TString(result[0][0].AsStringRef()));
         }));
 
         const TString jsonString = TStringBuilder() << "{\"col\": \"" << largeString << "\"}";
@@ -413,7 +471,7 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
     Y_UNIT_TEST_F(JsonStructureValidation, TJsonParserFixture) {
         CheckSuccess(MakeParser({{"a1", "[OptionalType; [DataType; String]]"}}));
-        CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Failed to determine json value type, current token: 'Yelse', error: TAPE_ERROR: The JSON document has an improper structure");
+        CheckColumnError(R"({"a1": Yelse})", 0, EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json string at offset " << FIRST_OFFSET << ", got parsing error for column 'a1' with type [OptionalType; [DataType; String]] subissue: { <main>: Error: Failed to extract json string, current token: 'Yelse', error: INCORRECT_TYPE: The JSON element does not have the requested type.");
         CheckBatchError(R"({"a1": "st""r"})", EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << FIRST_OFFSET + 1 << ", json item was corrupted: TAPE_ERROR: The JSON document has an improper structure");
         CheckBatchError(R"({"a1": "x"} {"a1": "y"})", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 2 << " but got 2 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {\"a1\": \"x\"} {\"a1\": \"y\"}");
         CheckBatchError(R"({)", EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected 1 json rows from offset " << FIRST_OFFSET + 3 << " but got 0 (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: {");
@@ -422,11 +480,11 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
 
 Y_UNIT_TEST_SUITE(TestRawParser) {
     Y_UNIT_TEST_F(Simple, TRawParserFixture) {
-        CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
 
-            NYql::NUdf::TUnboxedValue value = result[0]->at(0).GetOptionalValue();
+            NYql::NUdf::TUnboxedValue value = result[0][0].GetOptionalValue();
             UNIT_ASSERT_VALUES_EQUAL(R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})", TString(value.AsStringRef()));
         }));
         PushToParser(FIRST_OFFSET, R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})");
@@ -441,10 +499,10 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
         ExpectedBatches = data.size();
 
         int i = 0;
-        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [&](ui64 numberRows, TVector<const TVector<NYql::NUdf::TUnboxedValue>*> result) {
+        CheckSuccess(MakeParser({"a1"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
             UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
             UNIT_ASSERT_VALUES_EQUAL(1, result.size());
-            UNIT_ASSERT_VALUES_EQUAL(data[i], TString(result[0]->at(0).AsStringRef()));
+            UNIT_ASSERT_VALUES_EQUAL(data[i], TString(result[0][0].AsStringRef()));
             i++;
         }));
 
@@ -453,6 +511,33 @@ Y_UNIT_TEST_SUITE(TestRawParser) {
             GetMessage(FIRST_OFFSET + 1, data[1]),
             GetMessage(FIRST_OFFSET + 2, data[2])
         });
+    }
+
+    Y_UNIT_TEST_F(ChangeParserSchema, TRawParserFixture) {
+        CheckSuccess(MakeParser({{"data", "[OptionalType; [DataType; String]]"}}, [](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+            UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+
+            NYql::NUdf::TUnboxedValue value = result[0][0].GetOptionalValue();
+            UNIT_ASSERT_VALUES_EQUAL(R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})", TString(value.AsStringRef()));
+        }));
+
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello1__large_str", "a2": 101, "event": "event1"})");
+
+        ExpectedBatches = 0;
+        CheckSuccess(Parser->ChangeConsumer(MakeIntrusive<TParsedDataConsumer>(
+            *this,
+            TVector<TSchemaColumn>{{"data", "[DataType; String]"}},
+            [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> result) {
+                UNIT_ASSERT_VALUES_EQUAL(1, numberRows);
+                UNIT_ASSERT_VALUES_EQUAL(1, result.size());
+
+                NYql::NUdf::TUnboxedValue value = result[0][0];
+                UNIT_ASSERT_VALUES_EQUAL(R"({"a1": "hello2__large_str", "a2": 101, "event": "event2"})", TString(value.AsStringRef()));
+            }
+        )));
+
+        PushToParser(FIRST_OFFSET, R"({"a1": "hello2__large_str", "a2": 101, "event": "event2"})");
     }
 
     Y_UNIT_TEST_F(TypeKindsValidation, TRawParserFixture) {

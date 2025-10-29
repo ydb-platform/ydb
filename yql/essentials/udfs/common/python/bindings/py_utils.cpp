@@ -8,12 +8,11 @@
 
 #include <regex>
 
-
 namespace NPython {
 
 TPyObjectPtr PyRepr(TStringBuf asciiStr, bool intern) {
     for (auto c : asciiStr) {
-        Y_ABORT_UNLESS((c&0x80) == 0, "expected ascii");
+        Y_ABORT_UNLESS((c & 0x80) == 0, "expected ascii");
     }
 
     Py_ssize_t size = static_cast<Py_ssize_t>(asciiStr.size());
@@ -41,7 +40,7 @@ TString PyObjectRepr(PyObject* value) {
     static constexpr std::string_view truncSuffix = "(truncated)";
     const TPyObjectPtr repr(PyObject_Repr(value));
     if (!repr) {
-       return TString("repr error: ") + GetLastErrorAsString();
+        return TString("repr error: ") + GetLastErrorAsString();
     }
 
     TString string;
@@ -64,11 +63,13 @@ bool HasEncodingCookie(const TString& source) {
     //
 
     static std::regex encodingRe(
-                "^[ \\t\\v]*#.*?coding[:=][ \\t]*[-_.a-zA-Z0-9]+.*");
+        "^[ \\t\\v]*#.*?coding[:=][ \\t]*[-_.a-zA-Z0-9]+.*");
 
     int i = 0;
-    for (const auto& it: StringSplitter(source).Split('\n')) {
-        if (i++ == 2) break;
+    for (const auto& it : StringSplitter(source).Split('\n')) {
+        if (i++ == 2) {
+            break;
+        }
 
         TStringBuf line = it.Token();
         if (std::regex_match(line.begin(), line.end(), encodingRe)) {
@@ -86,4 +87,4 @@ void PyCleanup() {
     PySys_SetObject("last_traceback", Py_None);
 }
 
-} // namspace NPython
+} // namespace NPython

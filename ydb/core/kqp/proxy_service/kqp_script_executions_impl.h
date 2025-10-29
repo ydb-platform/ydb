@@ -40,37 +40,25 @@ struct TEvPrivate {
     };
 
     struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
-        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
-            : Status(statusCode)
+        TEvLeaseCheckResult() = default;
+
+        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
+            : Status(status)
             , Issues(std::move(issues))
-            , LeaseExpired(false)
-            , RetryRequired(false)
         {}
 
-        TEvLeaseCheckResult(TMaybe<Ydb::StatusIds::StatusCode> operationStatus, TMaybe<Ydb::Query::ExecStatus> executionStatus,
-            TMaybe<NYql::TIssues> operationIssues, const NActors::TActorId& runScriptActorId, bool leaseExpired,
-            TMaybe<EFinalizationStatus> finalizationStatus, bool retryRequired, i64 leaseGeneration)
-            : Status(Ydb::StatusIds::SUCCESS)
-            , OperationStatus(operationStatus)
-            , ExecutionStatus(executionStatus)
-            , OperationIssues(operationIssues)
-            , RunScriptActorId(runScriptActorId)
-            , LeaseExpired(leaseExpired)
-            , FinalizationStatus(finalizationStatus)
-            , RetryRequired(retryRequired)
-            , LeaseGeneration(leaseGeneration)
-        {}
-
-        const Ydb::StatusIds::StatusCode Status;
-        const NYql::TIssues Issues;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        NYql::TIssues Issues;
         TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
         TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
         TMaybe<NYql::TIssues> OperationIssues;
-        const NActors::TActorId RunScriptActorId;
-        const bool LeaseExpired = false;
-        const TMaybe<EFinalizationStatus> FinalizationStatus;
-        const bool RetryRequired = false;
-        const i64 LeaseGeneration = 0;
+        NActors::TActorId RunScriptActorId;
+        bool LeaseExpired = false;
+        TMaybe<EFinalizationStatus> FinalizationStatus;
+        bool RetryRequired = false;
+        i64 LeaseGeneration = 0;
+        bool HasRetryPolicy = false;
+        std::optional<std::vector<Ydb::Query::ResultSetMeta>> ResultSetMetas;
     };
 };
 

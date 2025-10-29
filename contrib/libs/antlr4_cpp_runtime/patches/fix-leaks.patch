@@ -1,0 +1,20 @@
+commit aa2abaf3d0a4e18522c824242e2fe5beda3ef828
+author: snermolaev
+date: 2017-08-28T13:38:30+03:00
+revision: 3049103
+
+    Eliminate memory leaks in ParserATNSimulator
+    REVIEW: 318545
+
+--- a/src/atn/ParserATNSimulator.cpp	(39fc5c73fef9929ed0166d6f56978f3e8f5e933b)
++++ b/src/atn/ParserATNSimulator.cpp	(aa2abaf3d0a4e18522c824242e2fe5beda3ef828)
+@@ -393,6 +393,9 @@ size_t ParserATNSimulator::execATNWithFullContext(dfa::DFA &dfa, dfa::DFAState *
+     }
+   }
+ 
++  if (previous != s0) // Don't delete the start set
++    delete previous;
++
+   // If the configuration set uniquely predicts an alternative,
+   // without conflict, then we know that it's a full LL decision
+   // not SLL.

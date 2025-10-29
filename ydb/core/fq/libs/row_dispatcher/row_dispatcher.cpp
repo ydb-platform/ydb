@@ -5,27 +5,26 @@
 #include "leader_election.h"
 #include "probes.h"
 
+#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/core/fq/libs/events/events.h>
+#include <ydb/core/fq/libs/metrics/sanitize_label.h>
+#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
+#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
+#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
+
 #include <yql/essentials/public/purecalc/common/interface.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
-#include <ydb/core/fq/libs/events/events.h>
-#include <ydb/core/fq/libs/metrics/sanitize_label.h>
-#include <ydb/core/mon/mon.h>
-
-#include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
-#include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
-#include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
+#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 #include <util/generic/queue.h>
 #include <util/stream/format.h>
-
-#include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
 namespace NFq {
 
@@ -322,14 +321,14 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
         TDuration LastUpdateMetricsPeriod;
     };
 
-    NConfig::TRowDispatcherConfig Config;
+    const TRowDispatcherSettings Config;
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
-    TYqSharedResources::TPtr YqSharedResources;
     TActorId CompileServiceActorId;
     TMaybe<TActorId> CoordinatorActorId;
     ui64 CoordinatorGeneration = 0;
     TSet<TActorId> CoordinatorChangedSubscribers;
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     const TString LogPrefix;
     ui64 NextEventQueueId = 0;
     TString Tenant;
@@ -339,11 +338,13 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
     TRowDispatcherMetrics Metrics;
     TUserPoolMetrics UserPoolMetrics;
     NYql::IPqGateway::TPtr PqGateway;
+    NYdb::TDriver Driver;
     NActors::TMon* Monitoring;
     TNodesTracker NodesTracker;
     NYql::TCounters::TEntry AllSessionsDateRate;
     TAggregatedStats AggrStats; 
     ui64 LastCpuTime = 0;
+    NActors::TActorId NodesManagerId;
 
     struct TConsumerCounters {
         ui64 NewDataArrived = 0;
@@ -413,16 +414,19 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
 public:
     explicit TRowDispatcher(
-        const NConfig::TRowDispatcherConfig& config,
+        const TRowDispatcherSettings& config,
         const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-        const TYqSharedResources::TPtr& yqSharedResources,
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         const TString& tenant,
         const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+        const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NMonitoring::TDynamicCounterPtr& countersRoot,
         const NYql::IPqGateway::TPtr& pqGateway,
-        NActors::TMon* monitoring = nullptr);
+        NYdb::TDriver driver,
+        NActors::TMon* monitoring = nullptr,
+        NActors::TActorId nodesManagerId = {}
+    );
 
     void Bootstrap();
 
@@ -494,20 +498,22 @@ public:
 };
 
 TRowDispatcher::TRowDispatcher(
-    const NConfig::TRowDispatcherConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    NActors::TMon* monitoring)
+    NYdb::TDriver driver,
+    NActors::TMon* monitoring,
+    NActors::TActorId nodesManagerId)
     : Config(config)
     , CredentialsProviderFactory(credentialsProviderFactory)
-    , YqSharedResources(yqSharedResources)
     , CredentialsFactory(credentialsFactory)
+    , FunctionRegistry(functionRegistry)
     , LogPrefix("RowDispatcher: ")
     , Tenant(tenant)
     , ActorFactory(actorFactory)
@@ -516,8 +522,11 @@ TRowDispatcher::TRowDispatcher(
     , Metrics(counters)
     , UserPoolMetrics(countersRoot->GetSubgroup("counters", "utils"))
     , PqGateway(pqGateway)
+    , Driver(driver)
     , Monitoring(monitoring)
+    , NodesManagerId(nodesManagerId)
 {
+    Y_ENSURE(!Tenant.empty());
 }
 
 void TRowDispatcher::Bootstrap() {
@@ -525,15 +534,16 @@ void TRowDispatcher::Bootstrap() {
     LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
-    auto coordinatorId = Register(NewCoordinator(SelfId(), config, YqSharedResources, Tenant, Counters).release());
-    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, YqSharedResources, Tenant, Counters).release());
+    auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
+    Register(NewLeaderElection(SelfId(), coordinatorId, config, CredentialsProviderFactory, Driver, Tenant, Counters).release());
 
     CompileServiceActorId = Register(NRowDispatcher::CreatePurecalcCompileService(Config.GetCompileService(), Counters));
 
     Schedule(TDuration::Seconds(CoordinatorPingPeriodSec), new TEvPrivate::TEvCoordinatorPing());
     Schedule(TDuration::Seconds(UpdateMetricsPeriodSec), new NFq::TEvPrivate::TEvUpdateMetrics());
-    Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
+    // Schedule(TDuration::Seconds(PrintStateToLogPeriodSec), new NFq::TEvPrivate::TEvPrintStateToLog());  // Logs (InternalState) is too big
+    Y_ENSURE(Config.GetSendStatusPeriod() > TDuration::Zero());
+    Schedule(Config.GetSendStatusPeriod(), new NFq::TEvPrivate::TEvSendStatistic());
 
     if (Monitoring) {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(FQ_ROW_DISPATCHER_PROVIDER));
@@ -673,7 +683,6 @@ void TRowDispatcher::UpdateMetrics() {
     for (const auto& key : toDelete) {
          AggrStats.LastQueryStats.erase(key);
     }
-    PrintStateToLog();
 }
 
 TString TRowDispatcher::GetInternalState() {
@@ -875,10 +884,11 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 source.GetEndpoint(),
                 source.GetDatabase(),
                 Config,
+                FunctionRegistry,
                 SelfId(),
                 CompileServiceActorId,
                 partitionId,
-                YqSharedResources->UserSpaceYdbDriver,
+                Driver,
                 CreateCredentialsProviderFactoryForStructuredToken(
                     CredentialsFactory,
                     ev->Get()->Record.GetToken(),
@@ -1151,7 +1161,7 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
     LOG_ROW_DISPATCHER_TRACE("TEvPrivate::TEvSendStatistic");
 
     UpdateCpuTime();
-    Schedule(TDuration::Seconds(Config.GetSendStatusPeriodSec()), new NFq::TEvPrivate::TEvSendStatistic());
+    Schedule(Config.GetSendStatusPeriod(), new NFq::TEvPrivate::TEvSendStatistic());
     for (auto& [actorId, consumer] : Consumers) {
         if (!NodesTracker.GetNodeConnected(actorId.NodeId())) {
             continue;       // Wait Connected to prevent retry_queue increases.
@@ -1168,7 +1178,9 @@ void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
             }
             auto* partitionsProto = event->Record.AddPartition();
             partitionsProto->SetPartitionId(partitionId);
-            partitionsProto->SetNextMessageOffset(partition.Stat.Offset);
+            if (partition.Stat.Offset) {
+                partitionsProto->SetNextMessageOffset(*partition.Stat.Offset);
+            }
             readBytes += partition.Stat.ReadBytes;
             filteredBytes += partition.Stat.FilteredBytes;
             filteredRows += partition.Stat.FilteredRows;
@@ -1280,28 +1292,32 @@ void TRowDispatcher::UpdateCpuTime() {
 ////////////////////////////////////////////////////////////////////////////////
 
 std::unique_ptr<NActors::IActor> NewRowDispatcher(
-    const NConfig::TRowDispatcherConfig& config,
+    const TRowDispatcherSettings& config,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
-    const TYqSharedResources::TPtr& yqSharedResources,
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     const TString& tenant,
     const NFq::NRowDispatcher::IActorFactory::TPtr& actorFactory,
+    const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
-    NActors::TMon* monitoring)
+    NYdb::TDriver driver,
+    NActors::TMon* monitoring,
+    NActors::TActorId nodesManagerId)
 {
     return std::unique_ptr<NActors::IActor>(new TRowDispatcher(
         config,
         credentialsProviderFactory,
-        yqSharedResources,
         credentialsFactory,
         tenant,
         actorFactory,
+        functionRegistry,
         counters,
         countersRoot,
         pqGateway,
-        monitoring));
+        driver,
+        monitoring,
+        nodesManagerId));
 }
 
 } // namespace NFq

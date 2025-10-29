@@ -58,6 +58,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         Self->TraversalStartKey = TSerializedCellVec(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal start key");
                         break;
+                    case Schema::SysParam_TraversalTableDatabase:
+                        Self->TraversalDatabase = value;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table database: "
+                            << Self->TraversalDatabase);
+                        break;
                     case Schema::SysParam_TraversalTableOwnerId:
                         Self->TraversalPathId.OwnerId = FromString<ui64>(value);
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded traversal table owner id: "
@@ -106,8 +111,9 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
             while (!rowset.EndOfSet()) {
                 ui64 schemeShardId = rowset.GetValue<Schema::BaseStatistics::SchemeShardId>();
                 TString stats = rowset.GetValue<Schema::BaseStatistics::Stats>();
-
-                Self->BaseStatistics[schemeShardId] = stats;
+                auto& schemeShardStats = Self->BaseStatistics[schemeShardId];
+                schemeShardStats.Committed = std::make_shared<TString>(std::move(stats));
+                schemeShardStats.Latest = schemeShardStats.Committed;
 
                 if (!rowset.Next()) {
                     return false;
@@ -195,9 +201,11 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                 TString operationId = rowset.GetValue<Schema::ForceTraversalOperations::OperationId>();
                 TString types = rowset.GetValue<Schema::ForceTraversalOperations::Types>();
                 ui64 createdAt = rowset.GetValue<Schema::ForceTraversalOperations::CreatedAt>();
+                TString databaseName = rowset.GetValue<Schema::ForceTraversalOperations::DatabaseName>();
 
                 TForceTraversalOperation operation {
                     .OperationId = operationId,
+                    .DatabaseName = databaseName,
                     .Tables = {},
                     .Types = types,
                     .ReplyToActorId = {},
@@ -294,6 +302,7 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
         if (Self->TraversalPathId && Self->TraversalStartKey) {
             SA_LOG_D("[" << Self->TabletID() << "] TTxInit::Complete. Start navigate. PathId " << Self->TraversalPathId);
             Self->NavigateType = ENavigateType::Traversal;
+            Self->NavigateDatabase = Self->TraversalDatabase;
             Self->NavigatePathId = Self->TraversalPathId;
             Self->Navigate();
         }

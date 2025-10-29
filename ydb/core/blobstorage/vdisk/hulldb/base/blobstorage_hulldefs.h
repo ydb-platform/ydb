@@ -135,7 +135,9 @@ namespace NKikimr {
         const double HullCompReadBatchEfficiencyThreshold;
         const TDuration HullCompStorageRatioCalcPeriod;
         const TDuration HullCompStorageRatioMaxCalcDuration;
-        const bool AddHeader;
+
+        ui32 HullCompLevel0MaxSstsAtOnce;
+        ui32 HullCompSortedPartsNum;
 
         NMonGroup::TCompactionStrategyGroup CompactionStrategyGroup;
         NMonGroup::TLsmHullGroup LsmHullGroup;
@@ -156,7 +158,9 @@ namespace NKikimr {
                 double hullCompReadBatchEfficiencyThreshold,
                 TDuration hullCompStorageRatioCalcPeriod,
                 TDuration hullCompStorageRatioMaxCalcDuration,
-                bool addHeader);
+                ui32 hullCompLevel0MaxSstsAtOnce,
+                ui32 hullCompSortedPartsNum
+        );
 
         void UpdateSpaceCounters(const NHullComp::TSstRatio& prev, const NHullComp::TSstRatio& current);
     };
@@ -192,4 +196,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

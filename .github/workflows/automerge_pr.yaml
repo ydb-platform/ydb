@@ -1,7 +1,7 @@
 name: Automerge PR
 on:
   schedule:
-    - cron: "30 1-23 * * *"   # Hourly during 1-23 interval for PR completion
+    - cron: "*/5 * * * *"   # At every 5th minute
   workflow_dispatch:
 concurrency:
   group: ${{ github.workflow }}

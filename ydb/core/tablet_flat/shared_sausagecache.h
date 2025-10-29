@@ -1,9 +1,7 @@
 #pragma once
 
-#include "shared_cache_counters.h"
 #include <ydb/core/base/memory_controller_iface.h>
 #include <ydb/core/protos/shared_cache.pb.h>
-#include <ydb/core/util/cache_cache.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NSharedCache {

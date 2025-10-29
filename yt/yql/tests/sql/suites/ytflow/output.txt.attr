@@ -57,5 +57,5 @@
         ]
     };
     "_yql_dynamic" = %true;
-    "enable_dynamic_store_read" = %true;
+    "_yql_dynamic_native_read" = %true;
 }

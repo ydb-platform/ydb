@@ -12,7 +12,12 @@ namespace Ydb {
 
 namespace NYdb::inline Dev {
 
+namespace NQuery {
+    struct TExecuteQueryBuffer;
+}
+
 class TProtoAccessor;
+class TArrowAccessor;
 
 struct TColumn {
     std::string Name;
@@ -33,9 +38,22 @@ bool operator!=(const TColumn& col1, const TColumn& col2);
 class TResultSet {
     friend class TResultSetParser;
     friend class NYdb::TProtoAccessor;
+    friend class NYdb::TArrowAccessor;
+    friend struct NQuery::TExecuteQueryBuffer;
+
+public:
+    enum class EFormat {
+        Unspecified = 0,
+        Value = 1,
+        Arrow = 2,
+    };
+
 public:
     TResultSet(const Ydb::ResultSet& proto);
     TResultSet(Ydb::ResultSet&& proto);
+
+    TResultSet(const Ydb::ResultSet& proto, const std::string& arrowSchema, const std::vector<std::string>& bytesData);
+    TResultSet(Ydb::ResultSet&& proto, std::string&& arrowSchema, std::vector<std::string>&& bytesData);
 
     //! Returns number of columns
     size_t ColumnsCount() const;
@@ -51,6 +69,18 @@ public:
 
 private:
     const Ydb::ResultSet& GetProto() const;
+
+    //! Mutable proto is used to move bytes without copying
+    Ydb::ResultSet& MutableProto();
+
+    //! Returns format of the result set
+    EFormat Format() const;
+
+    //! Returns serialized schema of arrow record batches
+    const std::string& GetArrowSchema() const;
+
+    //! Returns bytes for binary data formats (arrow, etc.)
+    const std::vector<std::string>& GetBytesData() const;
 
 private:
     class TImpl;

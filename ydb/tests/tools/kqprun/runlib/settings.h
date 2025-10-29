@@ -11,14 +11,16 @@
 
 namespace NKikimrRun {
 
+constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
+
 struct TAsyncQueriesSettings {
-    enum class EVerbose {
+    enum class EVerbosity {
         EachQuery,
         Final,
     };
 
     ui64 InFlightLimit = 0;
-    EVerbose Verbose = EVerbose::EachQuery;
+    EVerbosity Verbosity = EVerbosity::EachQuery;
 };
 
 struct TServerSettings {

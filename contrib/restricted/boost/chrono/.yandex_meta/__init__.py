@@ -12,7 +12,7 @@ def post_install(self):
 boost_chrono = NixSourceProject(
     nixattr="boost_chrono",
     arcdir=boost.make_arcdir("chrono"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

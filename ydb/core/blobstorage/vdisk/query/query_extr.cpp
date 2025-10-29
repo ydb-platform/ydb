@@ -315,7 +315,7 @@ namespace NKikimr {
                 quoter = QueryCtx->HullCtx->VCtx->ReplNodeResponseQuoter;
             }
             const TDuration duration = quoter
-                ? quoter->Take(TActivationContext::Now(), Result->CalculateSerializedSizeCached())
+                ? quoter->Take(TActivationContext::Monotonic(), Result->CalculateSerializedSizeCached())
                 : TDuration::Zero();
             if (duration != TDuration::Zero()) {
                 Schedule(duration, new TEvents::TEvWakeup);

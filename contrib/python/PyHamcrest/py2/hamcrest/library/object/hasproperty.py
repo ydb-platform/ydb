@@ -1,9 +1,9 @@
-from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest import described_as
 from hamcrest.core import anything
-from hamcrest.core.core.allof import all_of
-from hamcrest.core.string_description import StringDescription
-from hamcrest.core.helpers.hasmethod import hasmethod
+from hamcrest.core.base_matcher import BaseMatcher
+from hamcrest.core.core.allof import AllOf
 from hamcrest.core.helpers.wrap_matcher import wrap_matcher as wrap_shortcut
+from hamcrest.core.string_description import StringDescription
 
 __author__ = "Chris Rose"
 __copyright__ = "Copyright 2011 hamcrest.org"
@@ -38,13 +38,15 @@ class IsObjectWithProperty(BaseMatcher):
             return
 
         if not hasattr(item, self.property_name):
-            mismatch_description.append_value(item) \
-                                                    .append_text(' did not have the ') \
-                                                    .append_value(self.property_name) \
-                                                    .append_text(' property')
+            mismatch_description.append_description_of(item) \
+                                .append_text(' did not have the ') \
+                                .append_description_of(self.property_name) \
+                                .append_text(' property')
             return
 
-        mismatch_description.append_text('property ').append_value(self.property_name).append_text(' ')
+        mismatch_description.append_text('property ') \
+                            .append_description_of(self.property_name) \
+                            .append_text(' ')
         value = getattr(item, self.property_name)
         self.value_matcher.describe_mismatch(value, mismatch_description)
 
@@ -150,5 +152,20 @@ def has_properties(*keys_valuematchers, **kv_args):
     for key, value in kv_args.items():
         base_dict[key] = wrap_shortcut(value)
 
-    return all_of(*[has_property(property_name, property_value_matcher) for \
-                   property_name, property_value_matcher in base_dict.items()])
+    if len(base_dict) > 1:
+        description = StringDescription().append_text('an object with properties ')
+        for i, (property_name, property_value_matcher) in enumerate(sorted(base_dict.items())):
+            description.append_value(property_name).append_text(' matching ').append_description_of(
+                property_value_matcher)
+            if i < len(base_dict) - 1:
+                description.append_text(' and ')
+
+        return described_as(str(description),
+                            AllOf(*[has_property(property_name, property_value_matcher)
+                                    for property_name, property_value_matcher
+                                    in sorted(base_dict.items())],
+                                  describe_all_mismatches=True,
+                                  describe_matcher_in_mismatch=False))
+    else:
+        property_name, property_value_matcher = base_dict.popitem()
+        return has_property(property_name, property_value_matcher)

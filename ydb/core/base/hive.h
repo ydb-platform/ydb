@@ -51,6 +51,8 @@ namespace NKikimr {
             EvRequestTabletDistribution,
             EvRequestScaleRecommendation,
             EvConfigureScaleRecommender,
+            EvRequestDrainInfo,
+            EvSetDown,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -88,6 +90,9 @@ namespace NKikimr {
             EvResponseTabletDistribution,
             EvResponseScaleRecommendation,
             EvConfigureScaleRecommenderReply,
+            EvDrainNodeAck,
+            EvResponseDrainInfo,
+            EvSetDownReply,
 
             EvEnd
         };
@@ -527,7 +532,8 @@ namespace NKikimr {
 
             TEvReassignTablet(ui64 tabletId,
                               const TVector<ui32>& channels = {},
-                              const TVector<ui32>& forcedGroupIds = {})
+                              const TVector<ui32>& forcedGroupIds = {},
+                              bool async = false)
             {
                 Record.SetTabletID(tabletId);
                 for (ui32 channel : channels) {
@@ -535,6 +541,9 @@ namespace NKikimr {
                 }
                 for (ui32 forcedGroupId : forcedGroupIds) {
                     Record.AddForcedGroupIDs(forcedGroupId);
+                }
+                if (async) {
+                    Record.SetAsync(async);
                 }
             }
         };
@@ -623,6 +632,14 @@ namespace NKikimr {
                 : TEvDrainNodeResult(status)
             {
                 Record.SetMovements(movements);
+            }
+        };
+
+        struct TEvDrainNodeAck : TEventPB<TEvDrainNodeAck, NKikimrHive::TEvDrainNodeAck, EvDrainNodeAck> {
+            TEvDrainNodeAck() = default;
+
+            TEvDrainNodeAck(ui64 seqNo) {
+                Record.SetSeqNo(seqNo);
             }
         };
 
@@ -913,6 +930,26 @@ namespace NKikimr {
         
         struct TEvConfigureScaleRecommenderReply : TEventPB<TEvConfigureScaleRecommenderReply,
             NKikimrHive::TEvConfigureScaleRecommenderReply, EvConfigureScaleRecommenderReply> {};
+
+        struct TEvRequestDrainInfo : TEventPB<TEvRequestDrainInfo, NKikimrHive::TEvRequestDrainInfo, EvRequestDrainInfo> {
+            TEvRequestDrainInfo() = default;
+
+            TEvRequestDrainInfo(ui32 nodeId) {
+                Record.SetNodeId(nodeId);
+            }
+        };
+
+        struct TEvResponseDrainInfo : TEventPB<TEvResponseDrainInfo, NKikimrHive::TEvResponseDrainInfo, EvResponseDrainInfo> {};
+
+        struct TEvSetDown : TEventPB<TEvSetDown, NKikimrHive::TEvSetDown, EvSetDown> {
+            TEvSetDown() = default;
+
+            TEvSetDown(ui32 nodeId, bool down = true) {
+                Record.SetNodeId(nodeId);
+                Record.SetDown(down);
+            }
+        };
+        struct TEvSetDownReply : TEventPB<TEvSetDownReply, NKikimrHive::TEvSetDownReply, EvSetDownReply> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

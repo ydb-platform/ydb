@@ -28,12 +28,13 @@ public:
     {
     }
 
-    void operator()(const TRange& range, ui64 value) {
+    bool operator()(const TRange& range, ui64 value) {
         if (Index++) {
             Builder << ',';
             Builder << ' ';
         }
         PrintRange(Builder, range, value);
+        return true;
     }
 
 private:
@@ -214,6 +215,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
             TCheckValue expected{ checkIt->first.first, checkIt->second, checkIt->first.second };
             UNIT_ASSERT_VALUES_EQUAL(found, expected);
             ++checkIt;
+            return true;
         });
         UNIT_ASSERT_C(checkIt == map.end(), "Map has more values than the treap");
 
@@ -235,6 +237,7 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
                 UNIT_ASSERT_VALUES_EQUAL_C(found, expected, "Treap returned a value that does not match with the map");
                 ++checkIt;
                 ++foundCount;
+                return true;
             });
             auto foundStats = treap.Stats();
             // Check if there is any other matching value
@@ -245,6 +248,37 @@ Y_UNIT_TEST_SUITE(TRangeTreap) {
                                                     << TCheckValue(checkIt->first.first, checkIt->second, checkIt->first.second));
             Cerr << "... found " << foundCount << " ranges, needed " << foundStats.Comparisons << " comparisons ("
                  << double(foundStats.Comparisons) / double(Max(foundCount, ui64(1))) << " per range)" << Endl;
+        }
+    }
+
+    Y_UNIT_TEST(EarlyQuit) {
+        TRangeTreap treap;
+
+        const size_t nRanges = 1000000;
+        for (size_t i = 0; i < nRanges; ++i) {
+            ui64 left = i + 1;
+            ui64 right = i + 100;
+            ui64 value = i + 1;
+            treap.AddRange(TRange(left, true, right, true), value);
+        }
+        treap.Validate();
+
+        {
+            ui64 iterations = 0;
+            treap.EachRange([&iterations](const TRange&, ui64) {
+                ++iterations;
+                return iterations < 100;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(iterations, 100);
+        }
+
+        {
+            ui64 iterations = 0;
+            treap.EachIntersection(100, [&iterations](const TRange&, ui64) {
+                ++iterations;
+                return iterations < 10;
+            });
+            UNIT_ASSERT_VALUES_EQUAL(iterations, 10);
         }
     }
 }

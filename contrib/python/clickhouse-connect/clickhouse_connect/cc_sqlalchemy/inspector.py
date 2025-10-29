@@ -2,6 +2,7 @@ import sqlalchemy.schema as sa_schema
 
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy import text
 
 from clickhouse_connect.cc_sqlalchemy.datatypes.base import sqla_type_from_name
 from clickhouse_connect.cc_sqlalchemy.ddl.tableengine import build_engine
@@ -12,8 +13,8 @@ ch_col_args = ('default_type', 'codec_expression', 'ttl_expression')
 
 
 def get_engine(connection, table_name, schema=None):
-    result_set = connection.execute(
-        f"SELECT engine_full FROM system.tables WHERE database = '{schema}' and name = '{table_name}'")
+    result_set = connection.execute(text(
+        f"SELECT engine_full FROM system.tables WHERE database = '{schema}' and name = '{table_name}'"))
     row = next(result_set, None)
     if not row:
         raise NoResultFound(f'Table {schema}.{table_name} does not exist')
@@ -35,7 +36,7 @@ class ChInspector(Inspector):
 
     def get_columns(self, table_name, schema=None, **_kwargs):
         table_id = full_table(table_name, schema)
-        result_set = self.bind.execute(f'DESCRIBE TABLE {table_id}')
+        result_set = self.bind.execute(text(f'DESCRIBE TABLE {table_id}'))
         if not result_set:
             raise NoResultFound(f'Table {full_table} does not exist')
         columns = []
@@ -52,6 +53,3 @@ class ChInspector(Inspector):
                    'ttl_expression': row.ttl_expression}
             columns.append(col)
         return columns
-
-
-ChInspector.reflecttable = ChInspector.reflect_table  # Hack to provide backward compatibility for SQLAlchemy 1.3

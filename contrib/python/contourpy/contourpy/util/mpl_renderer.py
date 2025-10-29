@@ -213,7 +213,7 @@ class MplRenderer(Renderer):
             ax (int or Matplotlib Axes, optional): Which Axes to plot on, default ``0``.
             color (str, optional): Circle color, default ``"black"``.
         """
-        mask = np.ma.getmask(z)  # type: ignore[no-untyped-call]
+        mask = np.ma.getmask(z)
         if mask is np.ma.nomask:
             return
         ax = self._get_ax(ax)

@@ -151,11 +151,18 @@ struct TChunkWriterConfig
 
     bool EnableLargeColumnarStatistics;
 
+    std::optional<bool> EnableSegmentMetaInBlocks;
+    //! This takes precedence over TChunkWriterOptions::EnableColumnMetaInChunkMeta
+    std::optional<bool> EnableColumnMetaInChunkMeta;
+
     TChunkIndexesWriterConfigPtr ChunkIndexes;
 
     TSlimVersionedWriterConfigPtr Slim;
 
     TVersionedRowDigestConfigPtr VersionedRowDigest;
+
+    // Being overwritten by mount config, not registered in TChunkWriterConfig.
+    TMinHashDigestConfigPtr MinHashDigest;
 
     TChunkWriterTestingOptionsPtr TestingOptions;
 
@@ -408,6 +415,7 @@ struct TChunkWriterOptions
     bool EnableSkynetSharing;
     bool ReturnBoundaryKeys;
     bool CastAnyToComposite = false;
+    bool CastCompositeToAny;
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;
@@ -454,6 +462,21 @@ struct TVersionedRowDigestConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TVersionedRowDigestConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TMinHashDigestConfig
+    : public NYTree::TYsonStruct
+{
+    int WriteCount;
+    int DeleteTombstoneCount;
+
+    REGISTER_YSON_STRUCT(TMinHashDigestConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TMinHashDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

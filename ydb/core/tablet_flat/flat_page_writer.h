@@ -329,7 +329,7 @@ namespace NPage {
             return DataPageBuilder.BytesUsed();
         }
 
-        TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId) const
+        TSizeInfo CalcSize(TCellsRef key, const TRowState& row, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0) const
         {
             Y_ENSURE(key.size() == GroupInfo.KeyTypes.size());
 
@@ -345,6 +345,8 @@ namespace NPage {
             ret.DataPageSize += isErased ? sizeof(NPage::TDataPage::TVersion) : 0;
             ret.DataPageSize += isVersioned ? sizeof(NPage::TDataPage::TVersion) : 0;
             ret.DataPageSize += GroupId.Index == 0 && isDelta ? sizeof(NPage::TDataPage::TDelta) : 0;
+            ret.DataPageSize += GroupId.Index == 0 && lockMode != ELockMode::None ? sizeof(NPage::TDataPage::TLocked) : 0;
+            Y_UNUSED(lockTxId);
 
             // Only the main group includes the key
             for (TPos it = 0; it < GroupInfo.ColsKeyData.size(); it++) {
@@ -354,7 +356,7 @@ namespace NPage {
             for (const auto& pin : Pinout) {
                 auto &info = GroupId.Historic ? Scheme->HistoryColumns[pin.From] : Scheme->AllColumns[pin.From];
 
-                if (!row.IsFinalized(pin.To) || info.IsKey() || info.IsFixed) {
+                if (info.IsKey() || info.IsFixed || !row.IsFinalized(pin.To)) {
 
                 } else if (row.GetCellOp(pin.To) != ELargeObj::Inline) {
                     /* External blob occupies only fixed technical field */
@@ -374,7 +376,7 @@ namespace NPage {
             return ret;
         }
 
-        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId)
+        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode = ELockMode::None, ui64 lockTxId = 0)
         {
             if (more.Overflow) {
                 LastRecord = nullptr;
@@ -386,7 +388,7 @@ namespace NPage {
                 DataPageBuilder.ExtraAs<TDataPage::TExtra>()->BaseRow = RowId;
             }
 
-            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, more.DataPageSize);
+            Put(key, row, saver, finalRow, minVersion, maxVersion, txId, lockMode, lockTxId, more.DataPageSize);
 
             if (txId == 0) {
                 BlobRowId = ++RowId;
@@ -429,7 +431,7 @@ namespace NPage {
         }
 
     private:
-        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, TPgSize recordSize)
+        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, ELockMode lockMode, ui64 lockTxId, TPgSize recordSize)
         {
             const bool isErased = !maxVersion.IsMax();
             const bool isVersioned = !minVersion.IsMin();
@@ -450,7 +452,7 @@ namespace NPage {
             }
 
             if (GroupId.Index == 0) {
-                rec.SetFields(row.GetRowState(), isErased, isVersioned, isDelta);
+                rec.SetFields(row.GetRowState(), isErased, isVersioned, isDelta, lockMode != ELockMode::None);
 
                 if (isErased) {
                     DataPageBuilder.Place<NPage::TDataPage::TVersion>().Set(maxVersion);
@@ -462,6 +464,10 @@ namespace NPage {
 
                 if (isDelta) {
                     DataPageBuilder.Place<NPage::TDataPage::TDelta>().SetTxId(txId);
+                }
+
+                if (lockMode != ELockMode::None) {
+                    DataPageBuilder.Place<NPage::TDataPage::TLocked>().Set(lockMode, lockTxId);
                 }
             } else {
                 rec.SetZero(); // We don't store flags in alternative groups
@@ -481,7 +487,7 @@ namespace NPage {
             for (const auto& pin : Pinout) {
                 auto &info = GroupId.Historic ? Scheme->HistoryColumns[pin.From] : Scheme->AllColumns[pin.From];
 
-                if (!row.IsFinalized(pin.To) || info.IsKey()) {
+                if (info.IsKey() || !row.IsFinalized(pin.To)) {
 
                 } else if (row.GetCellOp(pin.To) == ECellOp::Reset) {
                     if (!finalRow)

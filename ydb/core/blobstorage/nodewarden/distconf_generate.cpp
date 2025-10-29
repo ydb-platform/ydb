@@ -56,7 +56,10 @@ namespace NKikimr::NStorage {
                     for (int i = 0; i < piles.size(); ++i) {
                         prefix << "pile# " << i << ' ';
                         allocateGroup(TBridgePileId::FromPileIndex(i), bridgeProxyGroupId);
-                        groupId.CopyToProto(group, &NKikimrBlobStorage::TGroupInfo::AddBridgeGroupIds);
+                        auto *pile = group->MutableBridgeGroupState()->AddPile();
+                        groupId.CopyToProto(pile, &NKikimrBridge::TGroupState::TPile::SetGroupId);
+                        pile->SetGroupGeneration(1);
+                        pile->SetStage(NKikimrBridge::TGroupState::SYNCED);
                         ++groupId;
                     }
                 } else {
@@ -107,24 +110,27 @@ namespace NKikimr::NStorage {
             config->SetExpectedStorageYamlVersion(storageVersion + 1);
         }
 
-        if (!Cfg->DomainsConfig) { // no automatic configuration required
-        } else if (Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
+        if (Cfg->DomainsConfig && Cfg->DomainsConfig->StateStorageSize() == 1) { // the StateStorage config is already defined explicitly, just migrate it
             const auto& ss = Cfg->DomainsConfig->GetStateStorage(0);
             config->MutableStateStorageConfig()->CopyFrom(ss);
             config->MutableStateStorageBoardConfig()->CopyFrom(ss);
             config->MutableSchemeBoardConfig()->CopyFrom(ss);
-        } else if (!Cfg->DomainsConfig->StateStorageSize()) { // no StateStorage config, generate a new one
-            std::unordered_set<ui32> usedNodes;
-            GenerateStateStorageConfig(config->MutableStateStorageConfig(), *config, usedNodes);
-            GenerateStateStorageConfig(config->MutableStateStorageBoardConfig(), *config, usedNodes);
-            GenerateStateStorageConfig(config->MutableSchemeBoardConfig(), *config, usedNodes);
         }
+
+        std::unordered_set<ui32> usedNodes;
+#define UPDATE_EXPLICIT_CONFIG(NAME) \
+        if (Cfg->DomainsConfig && Cfg->DomainsConfig->HasExplicit##NAME##Config()) { \
+            config->Mutable##NAME##Config()->CopyFrom(Cfg->DomainsConfig->GetExplicit##NAME##Config()); \
+        } \
+        if (!config->Has##NAME##Config()) { \
+            GenerateStateStorageConfig(config->Mutable##NAME##Config(), *config, usedNodes); \
+        }
+
+        UPDATE_EXPLICIT_CONFIG(StateStorage)
+        UPDATE_EXPLICIT_CONFIG(StateStorageBoard)
+        UPDATE_EXPLICIT_CONFIG(SchemeBoard)
 
         config->SetSelfAssemblyUUID(selfAssemblyUUID);
-
-        if (auto error = UpdateClusterState(config)) {
-            return error;
-        }
 
         return std::nullopt;
     }
@@ -575,8 +581,13 @@ namespace NKikimr::NStorage {
         });
     }
 
-    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss,
-            const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes) {
+    bool TDistributedConfigKeeper::GenerateStateStorageConfig(NKikimrConfig::TDomainsConfig::TStateStorage *ss
+            , const NKikimrBlobStorage::TStorageConfig& baseConfig, std::unordered_set<ui32>& usedNodes
+            , const NKikimrConfig::TDomainsConfig::TStateStorage& oldConfig
+            , ui32 overrideReplicasInRingCount
+            , ui32 overrideRingsCount
+            , ui32 replicasSpecificVolume
+        ) {
         std::map<TBridgePileId, THashMap<TString, std::vector<std::tuple<ui32, TNodeLocation>>>> nodes;
         bool goodConfig = true;
         for (const auto& node : baseConfig.GetAllNodes()) {
@@ -585,15 +596,15 @@ namespace NKikimr::NStorage {
             nodes[pileId][location.GetDataCenterId()].emplace_back(node.GetNodeId(), location);
         }
         for (auto& [pileId, nodesByDataCenter] : nodes) {
-            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes);
+            TStateStoragePerPileGenerator generator(nodesByDataCenter, SelfHealNodesState, pileId, usedNodes, oldConfig, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
             generator.AddRingGroup(ss);
             goodConfig &= generator.IsGoodConfig();
         }
         return goodConfig;
     }
 
-    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config, bool& checkSyncersAfterCommit) {
-        return UpdateBridgeConfig(config, checkSyncersAfterCommit);
+    bool TDistributedConfigKeeper::UpdateConfig(NKikimrBlobStorage::TStorageConfig *config) {
+        return UpdateBridgeConfig(config);
     }
 
 } // NKikimr::NStorage

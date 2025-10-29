@@ -9,7 +9,7 @@ namespace NJson {
             MAP,
             MAP_KEY
         };
-    }
+    } // namespace NImpl
     template <class TStringType>
     struct TPathElemImpl {
         NImpl::EType Type;
@@ -37,4 +37,4 @@ namespace NJson {
     };
 
     typedef TPathElemImpl<TString> TPathElem;
-}
+} // namespace NJson

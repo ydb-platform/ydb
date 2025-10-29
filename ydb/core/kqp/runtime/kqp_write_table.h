@@ -139,6 +139,7 @@ public:
         ui64 OperationsCount = 0;
         bool IsFinal = false;
         ui64 SendAttempts = 0;
+        ui64 NextOverloadSeqNo = 0;
     };
     virtual std::optional<TMessageMetadata> GetMessageMetadata(ui64 shardId) = 0;
 

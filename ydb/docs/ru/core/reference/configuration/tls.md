@@ -1,6 +1,6 @@
-# Настройка TLS
+# tls
 
-{{ ydb-short-name }} поддерживает [шифрование данных при передаче по сети](../../security/encryption/data-in-transit.md), и каждый сетевой протокол может иметь свои настройки [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security). Этот раздел документации предоставляет справочную информацию по настройке TLS в {{ ydb-short-name }}.
+Секция `tls` настраивает параметры [TLS](https://ru.wikipedia.org/wiki/Transport_Layer_Security) для [шифрования данных при передаче по сети](../../security/encryption/data-in-transit.md) в {{ ydb-short-name }}. Каждый сетевой протокол может иметь различные настройки TLS для обеспечения безопасной связи между компонентами кластера и клиентами.
 
 ## Interconnect
 
@@ -127,7 +127,7 @@ tracing_config:
 
 ## Асинхронная репликация
 
-[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из которых выступает в роли клиента для другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
+[Асинхронная репликация](../../concepts/async-replication.md) синхронизирует данные между двумя базами данных {{ ydb-short-name }}, одна из них выступает в роли клиента по отношению к другой. Использование TLS при такой коммуникации контролируется параметром `CONNECTION_STRING` в запросах [CREATE ASYNC REPLICATION](../../yql/reference/syntax/create-async-replication.md). Для TLS-соединений используйте протокол `grpcs://`. Изменения в серверной конфигурации не требуются.
 
 При использовании пользовательского удостоверяющего центра (Certificate Authority, CA) передайте его сертификат в параметре `CA_CERT` при создании экземпляра асинхронной репликации.
 

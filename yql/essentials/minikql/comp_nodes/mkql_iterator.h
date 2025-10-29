@@ -8,5 +8,5 @@ IComputationNode* WrapIterator(TCallable& callable, const TComputationNodeFactor
 IComputationNode* WrapEmptyIterator(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapForwardList(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

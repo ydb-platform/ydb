@@ -62,9 +62,9 @@ TYdbClientCommandRoot::TYdbClientCommandRoot(const TString& name, const TClientS
     : TClientCommandRoot(name, settings)
 {
     if (settings.StorageUrl.has_value()) {
-        AddCommand(std::make_unique<TCommandUpdate>());
+        AddLocalCommand(std::make_unique<TCommandUpdate>());
     }
-    AddCommand(std::make_unique<TCommandVersion>());
+    AddLocalCommand(std::make_unique<TCommandVersion>());
 }
 
 namespace {

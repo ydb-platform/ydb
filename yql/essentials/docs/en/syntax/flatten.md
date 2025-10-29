@@ -82,6 +82,8 @@ To specify the type of container to convert to, you can use:
 * `FLATTEN OPTIONAL BY`
 
    To filter the `NULL` values without serialization, specify the operation by using `FLATTEN OPTIONAL BY`.
+   
+   Since YQL [2025.03](../changelog/2025.03.md), this expression also accepts any non-Optional type (in particular, application on the `NullType` returns `EmptyList`, Postgres types are filtered by non-`NULL`, and other data types are mapped as is).
 
 #### Examples
 

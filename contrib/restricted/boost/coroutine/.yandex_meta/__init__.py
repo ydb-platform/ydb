@@ -42,7 +42,7 @@ def post_install(self):
 boost_coroutine = NixSourceProject(
     nixattr="boost_coroutine",
     arcdir=boost.make_arcdir("coroutine"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

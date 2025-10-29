@@ -177,6 +177,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
             "yt/python_py2/",
+            "cml/comrade_agent/src/contrib/",
         )
 
         if not upath.startswith(no_lint_allowed_paths):

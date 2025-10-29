@@ -12,7 +12,7 @@
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/utils/yql_yt_table_input_streams.h>
-#include <yt/yql/providers/yt/fmr/yt_job_service/interface/yql_yt_job_service.h>
+#include <yt/yql/providers/yt/fmr/yt_job_service/impl/yql_yt_job_service_impl.h>
 #include <yt/yql/providers/yt/fmr/request_options/proto_helpers/yql_yt_request_proto_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
@@ -85,7 +85,7 @@ public:
             ParseRecords(tableDataServiceReader, ytTableWriter, Settings_.ParseRecordSettings.UploadReadBlockCount, Settings_.ParseRecordSettings.UploadReadBlockSize, cancelFlag);
             ytTableWriter->Flush();
 
-            return TStatistics();
+            return TStatistics(); // TODO - get actual stats from yt table.
         } catch (...) {
             YQL_CLOG(ERROR, FastMapReduce) << "Gotten error inside upload: " << CurrentExceptionMessage();
             return TError(CurrentExceptionMessage());
@@ -104,7 +104,7 @@ public:
             auto& parseRecordSettings = Settings_.ParseRecordSettings;
 
             auto tableDataServiceWriter = MakeIntrusive<TFmrTableDataServiceWriter>(output.TableId, output.PartId, TableDataService_, output.SerializedColumnGroups, Settings_.FmrWriterSettings);
-            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads);
+            auto threadPool = CreateThreadPool(parseRecordSettings.MergeNumThreads, parseRecordSettings.MaxQueueSize, TThreadPool::TParams().SetBlocking(true).SetCatching(true));
             TMaybe<TMutex> mutex = TMutex();
             for (const auto& inputTableRef : taskTableInputRef.Inputs) {
                 threadPool->SafeAddFunc([&, tableDataServiceWriter] {
@@ -139,7 +139,6 @@ public:
         TStringStream serializedJobStateStream(params.SerializedMapJobState);
         mapJob.Load(serializedJobStateStream);
         FillMapFmrJob(mapJob, params, clusterConnections, TableDataServiceDiscoveryFilePath_, YtJobService_);
-
         return JobLauncher_->LaunchJob(mapJob);
     }
 

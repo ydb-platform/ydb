@@ -52,6 +52,7 @@ struct ISystemAttributeProvider;
 DECLARE_REFCOUNTED_STRUCT(IYPathService)
 DECLARE_REFCOUNTED_STRUCT(IYPathServiceContext)
 DECLARE_REFCOUNTED_STRUCT(ICachedYPathService)
+DECLARE_REFCOUNTED_STRUCT(IServiceCombiner)
 DECLARE_REFCOUNTED_CLASS(TCompositeMapService)
 
 DECLARE_REFCOUNTED_CLASS(TYPathRequest)
@@ -62,8 +63,6 @@ class TTypedYPathRequest;
 
 template <class TRequestMessage, class TResponseMessage>
 class TTypedYPathResponse;
-
-DECLARE_REFCOUNTED_CLASS(TServiceCombiner)
 
 using NYPath::TYPath;
 using NYPath::TYPathBuf;

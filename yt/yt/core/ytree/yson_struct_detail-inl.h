@@ -184,7 +184,7 @@ struct TYsonSourceTraits<NYson::TYsonPullParserCursor*>
     template <class... TArgs, class TFiller>
     static void FillVector(NYson::TYsonPullParserCursor*& source, std::vector<TArgs...>& vector, TFiller filler)
     {
-        source->ParseList([&](NYson::TYsonPullParserCursor* cursor) {
+        source->ParseList([&] (NYson::TYsonPullParserCursor* cursor) {
             filler(vector, cursor);
         });
     }
@@ -764,7 +764,36 @@ bool CompareValues(const T& lhs, const T& rhs)
     return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
 }
 
+template <class TFrom, class TTo>
+constexpr bool IsPointerStaticCastable = requires { static_cast<TTo*>(static_cast<TFrom*>(nullptr)); };
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NPrivate
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <class TOption>
+std::optional<TOption> IYsonStructParameter::FindOption() const
+{
+    if (auto option = FindOption(typeid(TOption)); option.has_value()) {
+        YT_VERIFY(option.type() == typeid(TOption));
+        return std::any_cast<TOption>(option);
+    } else {
+        return std::nullopt;
+    }
+}
+
+template <class TOption>
+TOption IYsonStructParameter::GetOptionOrThrow() const
+{
+    auto option = FindOption<TOption>();
+    if (!option) {
+        THROW_ERROR_EXCEPTION("Option %Qv is not found", TypeName<TOption>());
+    }
+    return *option;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -774,9 +803,18 @@ TYsonFieldAccessor<TStruct, TValue>::TYsonFieldAccessor(TYsonStructField<TStruct
 { }
 
 template <class TStruct, class TValue>
-TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(TYsonStructBase* source)
 {
+    if constexpr (NPrivate::IsPointerStaticCastable<TYsonStructBase, TStruct>) {
+        return static_cast<TStruct*>(source)->*Field_;
+    }
     return TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source)->*Field_;
+}
+
+template <class TStruct, class TValue>
+const TValue& TYsonFieldAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return TYsonFieldAccessor::GetValue(const_cast<TYsonStructBase*>(source));
 }
 
 template <class TStruct, class TValue>
@@ -802,9 +840,18 @@ bool TUniversalYsonParameterAccessor<TStruct, TValue>::HoldsField(ITypeErasedYso
 }
 
 template <class TStruct, class TValue>
-TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(TYsonStructBase* source)
 {
+    if constexpr (NPrivate::IsPointerStaticCastable<TYsonStructBase, TStruct>) {
+        return Accessor_(static_cast<TStruct*>(source));
+    }
     return Accessor_(TYsonStructRegistry::Get()->template CachedDynamicCast<TStruct>(source));
+}
+
+template <class TStruct, class TValue>
+const TValue& TUniversalYsonParameterAccessor<TStruct, TValue>::GetValue(const TYsonStructBase* source)
+{
+    return TUniversalYsonParameterAccessor::GetValue(const_cast<TYsonStructBase*>(source));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -813,8 +860,10 @@ template <class TValue>
 TYsonStructParameter<TValue>::TYsonStructParameter(
     std::string key,
     std::unique_ptr<IYsonFieldAccessor<TValue>> fieldAccessor,
-    int fieldIndex)
+    int fieldIndex,
+    const std::type_info& containingStructTypeInfo)
     : Key_(std::move(key))
+    , RegisteringStructTypeInfo_(containingStructTypeInfo)
     , FieldAccessor_(std::move(fieldAccessor))
     , FieldIndex_(fieldIndex)
 { }
@@ -912,7 +961,7 @@ void TYsonStructParameter<TValue>::SafeLoad(
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::PostprocessParameter(const TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const
+void TYsonStructParameter<TValue>::PostprocessParameter(TYsonStructBase* self, const std::function<NYPath::TYPath()>& pathGetter) const
 {
     TValue& value = FieldAccessor_->GetValue(self);
     NPrivate::PostprocessRecursive(value, pathGetter);
@@ -947,6 +996,10 @@ void TYsonStructParameter<TValue>::Save(const TYsonStructBase* self, NYson::IYso
 template <class TValue>
 bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) const
 {
+    if (!Optional_) {
+        return false;
+    }
+
     const auto& value = FieldAccessor_->GetValue(self);
     if constexpr (NPrivate::CSupportsDontSerializeDefault<TValue>) {
         if (!SerializeDefault_ && value == (*DefaultCtor_)()) {
@@ -955,7 +1008,7 @@ bool TYsonStructParameter<TValue>::CanOmitValue(const TYsonStructBase* self) con
     }
 
     if (!DefaultCtor_) {
-        return NYT::NYTree::NDetail::CanOmitValue(&value, nullptr);
+        return NYT::NYTree::NDetail::CanOmitValue(&value, static_cast<TValue*>(nullptr));
     }
 
     if (TriviallyInitializedIntrusivePtr_) {
@@ -1078,6 +1131,14 @@ TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::DefaultNew(TArgs&&..
 }
 
 template <class TValue>
+template <class TOption>
+TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::AddOption(TOption option)
+{
+    EmplaceOrCrash(Options_, typeid(TOption), std::move(option));
+    return *this;
+}
+
+template <class TValue>
 TYsonStructParameter<TValue>& TYsonStructParameter<TValue>::CheckThat(TValidator validator)
 {
     Validators_.push_back(std::move(validator));
@@ -1091,10 +1152,50 @@ IMapNodePtr TYsonStructParameter<TValue>::GetRecursiveUnrecognized(const TYsonSt
 }
 
 template <class TValue>
-void TYsonStructParameter<TValue>::WriteSchema(const TYsonStructBase* self, NYson::IYsonConsumer* consumer) const
+std::any TYsonStructParameter<TValue>::FindOption(const std::type_info& typeInfo) const
 {
-    // TODO(bulatman) What about constraints: minimum, maximum, default and etc?
-    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer);
+    if (auto it = Options_.find(typeInfo); it != Options_.end()) {
+        return it->second;
+    }
+    return {};
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::WriteMemberSchema(
+    const TYsonStructBase* self,
+    NYson::IYsonConsumer* consumer,
+    const std::function<NYTree::INodePtr()>& defaultValueGetter,
+    const TYsonStructWriteSchemaOptions& options) const
+{
+    // TODO(bulatman) What about constraints: minimum, maximum and etc?
+    BuildYsonFluently(consumer)
+        .BeginMap()
+            .Item("name").Value(Key_)
+            .DoIf(options.AddCppTypeNames, [&] (auto fluent) {
+                fluent.Item("cpp_type_name").Value(TypeName<TValue>());
+                fluent.Item("containing_struct_cpp_type_name").Value(TypeName(RegisteringStructTypeInfo_));
+            })
+            .DoIf(options.AddDefaultValues && !IsRequired(), [&] (auto fluent) {
+                if (auto defaultValue = defaultValueGetter()) {
+                    fluent.Item("default_value").Value(defaultValue);
+                }
+            })
+            .Item("type").Do([&] (auto fluent) {
+                WriteTypeSchema(self, fluent.GetConsumer(), options);
+            })
+            .DoIf(IsRequired(), [] (auto fluent) {
+                fluent.Item("required").Value(true);
+            })
+        .EndMap();
+}
+
+template <class TValue>
+void TYsonStructParameter<TValue>::WriteTypeSchema(
+    const TYsonStructBase* self,
+    NYson::IYsonConsumer* consumer,
+    const TYsonStructWriteSchemaOptions& options) const
+{
+    NPrivate::WriteSchema(FieldAccessor_->GetValue(self), consumer, options);
 }
 
 template <class TValue>

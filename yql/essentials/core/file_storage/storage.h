@@ -16,10 +16,18 @@ public:
     TFileLink(const TFsPath& path, const TString& storageFileName, ui64 size, const TString& md5, bool deleteOnDestroy = true);
     ~TFileLink();
 
-    const TString& GetStorageFileName() const { return StorageFileName_; }
-    const TFsPath& GetPath() const { return Path_; }
-    ui64 GetSize() const { return Size_; }
-    const TString& GetMd5() const { return Md5_; }
+    const TString& GetStorageFileName() const {
+        return StorageFileName_;
+    }
+    const TFsPath& GetPath() const {
+        return Path_;
+    }
+    ui64 GetSize() const {
+        return Size_;
+    }
+    const TString& GetMd5() const {
+        return Md5_;
+    }
 
 private:
     const TFsPath Path_;
@@ -50,6 +58,9 @@ public:
     TFsPath GetRoot() const;
     // Returns temp storage directory
     TFsPath GetTemp() const;
+    // Returns path of lock filename. Some lock files can be reused for different
+    // |lockName| to prevent the growth of gargabe.
+    TFsPath GetLockFilePath(const TString& componentName, const TString& lockName) const;
     // Puts the passed data to the storage with the specified storage file name.
     // The second argument outFileName specifies a name of temporary link returned from the Put(). If empty, then random guid is used.
     // Provide valid md5 if it is known in advance, otherwise pass "". It will be overridden by puller result
@@ -76,4 +87,4 @@ constexpr int MODE0744 = S_IRWXU | S_IRGRP | S_IROTH;
 void SetCacheFilePermissions(const TString& path);
 bool SetCacheFilePermissionsNoThrow(const TString& path);
 void SetFilePermissions(const TString& path, int mode);
-} // NYql
+} // namespace NYql

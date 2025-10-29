@@ -195,8 +195,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) = 0;
 
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files
@@ -280,6 +281,12 @@ public:
         const TTransactionId& transactionId,
         const TYPath& path,
         const TAlterTableOptions& options = {}) = 0;
+
+    virtual std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transcationId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) = 0;
 
     virtual std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,

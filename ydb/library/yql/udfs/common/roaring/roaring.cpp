@@ -62,8 +62,8 @@ namespace {
                           const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
             auto* left = GetBitmapFromArg(args[0]);
-            const auto modifySourceBitmap = args[1].GetOrDefault<bool>(false);
             auto* right = Derived::GetRightBitmap(args[1]);
+            const auto modifySourceBitmap = args[2].GetOrDefault<bool>(false);
             if (modifySourceBitmap) {
                 Derived::PerformInplaceOperation(left, right);
                 if (Derived::UseBinary()) {
@@ -81,31 +81,31 @@ namespace {
     };
 
 // Operation implementations
-#define DEFINE_ROARING_OP(ClassName, OpName, OpFunc, OpFuncInplace, UseBin)                          \
-    class ClassName: public TRoaringOperationBase<ClassName> {                                       \
-    public:                                                                                          \
-        static constexpr bool UseBinary() {                                                          \
-            return UseBin;                                                                           \
-        }                                                                                            \
-        static const TStringRef GetName() {                                                          \
-            return TStringRef::Of(OpName);                                                           \
-        }                                                                                            \
-                                                                                                     \
-        static roaring_bitmap_t* GetRightBitmap(const TUnboxedValuePod& arg) {                       \
-            if constexpr (UseBin) {                                                                  \
-                return DeserializePortable(arg.AsStringRef());                                       \
-            } else {                                                                                 \
-                return GetBitmapFromArg(arg);                                                        \
-            }                                                                                        \
-        }                                                                                            \
-                                                                                                     \
-        static roaring_bitmap_t* PerformOperation(roaring_bitmap_t* left, roaring_bitmap_t* right) { \
-            return OpFunc(left, right);                                                              \
-        }                                                                                            \
-                                                                                                     \
-        static void PerformInplaceOperation(roaring_bitmap_t* left, roaring_bitmap_t* right) {       \
-            OpFuncInplace(left, right);                                                              \
-        }                                                                                            \
+#define DEFINE_ROARING_OP(ClassName, OpName, OpFunc, OpFuncInplace, UseBin)                                         \
+    class ClassName: public TRoaringOperationBase<ClassName> {                                                      \
+    public:                                                                                                         \
+        static constexpr bool UseBinary() {                                                                         \
+            return UseBin;                                                                                          \
+        }                                                                                                           \
+        static const TStringRef GetName() {                                                                         \
+            return TStringRef::Of(OpName);                                                                          \
+        }                                                                                                           \
+                                                                                                                    \
+        static roaring_bitmap_t* GetRightBitmap(const TUnboxedValuePod& arg) {                                      \
+            if constexpr (UseBin) {                                                                                 \
+                return DeserializePortable(arg.AsStringRef());                                                      \
+            } else {                                                                                                \
+                return GetBitmapFromArg(arg);                                                                       \
+            }                                                                                                       \
+        }                                                                                                           \
+                                                                                                                    \
+        static roaring_bitmap_t* PerformOperation(const roaring_bitmap_t* left, const roaring_bitmap_t* right) {    \
+            return OpFunc(left, right);                                                                             \
+        }                                                                                                           \
+                                                                                                                    \
+        static void PerformInplaceOperation(roaring_bitmap_t* left, const roaring_bitmap_t* right) {                \
+            OpFuncInplace(left, right);                                                                             \
+        }                                                                                                           \
     };
 
     DEFINE_ROARING_OP(TRoaringOrWithBinary, "OrWithBinary", roaring_bitmap_or, roaring_bitmap_or_inplace, true)

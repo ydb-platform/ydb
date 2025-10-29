@@ -1,3 +1,5 @@
+import warnings
+
 __author__ = "Jon Reid"
 __copyright__ = "Copyright 2011 hamcrest.org"
 __license__ = "BSD, see License.txt"
@@ -69,7 +71,7 @@ class IsSequenceContainingInOrder(BaseMatcher):
                    .append_list('[', ', ', ']', self.matchers)
 
 
-def contains(*items):
+def contains_exactly(*items):
     """Matches if sequence's elements satisfy a given list of matchers, in order.
 
     :param match1,...: A comma-separated list of matchers.
@@ -86,3 +88,9 @@ def contains(*items):
     for item in items:
         matchers.append(wrap_matcher(item))
     return IsSequenceContainingInOrder(matchers)
+
+
+def contains(*items):
+    """Deprecated - use contains_exactly(*items)"""
+    warnings.warn("deprecated - use contains_exactly(*items)", DeprecationWarning)
+    return contains_exactly(*items)

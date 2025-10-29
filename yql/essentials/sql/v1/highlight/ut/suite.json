@@ -23,6 +23,18 @@
     ["-123", "P#LLL"],
     ["SELECT 123l AS `Int64`, 0b01u AS `Uint32`, 0xFFul AS `Uint64`, 0o7ut AS `Uint8`, 456s AS `Int16`, 1.2345f AS `Float`;", "KKKKKK#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLLL#_#KK#_#QQQQQQQQ#P#_#LLLLL#_#KK#_#QQQQQQQ#P#_#LLLL#_#KK#_#QQQQQQQ#P#_#LLLLLLL#_#KK#_#QQQQQQQ#P"]
   ],
+  "Boolean": [
+    ["true", "LLLL"],
+    ["fAlSe", "LLLLL"]
+  ],
+  "Pragma": [
+    ["PRAGMA Debug", "KKKKKK#_#OOOOO"],
+    ["PRAGMA yt.Pool", "KKKKKK#_#OOOOOOO"],
+    ["PRAGMA Warning('*')", "KKKKKK#_#OOOOOOO#P#SSS#P"]
+  ],
+  "Hint": [
+    ["INSERT INTO t WITH TRUNCATE", "KKKKKK#_#KKKK#_#I#_#KKKK#_#OOOOOOOO"]
+  ],
   "Comment": [
     ["- select", "P#_#KKKKKK"],
     ["select -- select", "KKKKKK#_#CCCCCCCCC"],
@@ -91,6 +103,7 @@
     ["`/cluster/database`", "QQQQQQQQQQQQQQQQQQQ"],
     ["`test`select", "QQQQQQ#KKKKKK"],
     ["`/cluster", "E#P#IIIIIII"],
-    ["`\uD83D\uDE00`", "QQQQQQ"]
+    ["`\uD83D\uDE00`", "QQQQQQ"],
+    ["@tmp", "QQQQ"]
   ]
 }

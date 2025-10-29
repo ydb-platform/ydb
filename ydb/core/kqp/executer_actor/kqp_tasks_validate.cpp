@@ -31,22 +31,6 @@ private:
         auto& channel = TasksGraph.GetChannel(channelId);
 
         YQL_ENSURE(channel.SrcTask);
-        auto& srcTask = TasksGraph.GetTask(channel.SrcTask);
-
-        if (channel.DstTask) {
-            auto& dstTask = TasksGraph.GetTask(channel.DstTask);
-
-            auto& stageInfo = TasksGraph.GetStageInfo(dstTask.StageId);
-            auto& dstStage = stageInfo.Meta.GetStage(stageInfo.Id);
-
-            if (IsDataExec() && dstTask.Meta.ShardId && dstStage.SourcesSize() == 0) {
-                YQL_ENSURE(srcTask.Meta.ShardId, "Invalid channel from non-shard task to shard task"
-                    << ", channelId: " << channelId
-                    << ", srcTaskId: " << channel.SrcTask
-                    << ", dstTaskId: " << channel.DstTask);
-            }
-        }
-
         if (!EnableSpilling) {
             YQL_ENSURE(channel.InMemory, "With spilling off, all channels should be stored in memory only. "
                 << "Not InMemory channelId: " << channelId);

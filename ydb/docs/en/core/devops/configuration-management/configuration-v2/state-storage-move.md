@@ -4,7 +4,7 @@
 
 {% include [new](../_includes/configuration-version-note.md) %}
 
-If you need to decommission a {{ ydb-short-name }} cluster node that contains part of [State Storage](../../../reference/configuration/index.md#domains-state), you need to move it to another node.
+If you need to decommission a {{ ydb-short-name }} cluster node that contains part of [State Storage](../../../reference/configuration/domains_config.md#domains-state), you need to move it to another node.
 
 {% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 

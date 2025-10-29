@@ -17,4 +17,4 @@ unsigned long FindNearestPrime(unsigned long num) {
     return *LowerBound(PRIMES, PRIMES + Y_ARRAY_SIZE(PRIMES) - 1, num);
 }
 
-}
+} // namespace NKikimr

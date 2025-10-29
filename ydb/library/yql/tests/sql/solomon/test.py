@@ -18,7 +18,8 @@ from yql_utils import (
 
 from test_utils import (
     get_config,
-    pytest_generate_tests_for_run)
+    pytest_generate_tests_for_run,
+    get_case_file)
 
 ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 DQRUN_PATH = yql_binary_path('ydb/library/yql/tools/dqrun/dqrun')
@@ -46,8 +47,12 @@ def compose_gateways_config(solomon_endpoint):
     config_message = gateways_config_pb2.TGatewaysConfig()
     solomon_cluster = config_message.Solomon.ClusterMapping.add()
     solomon_cluster.Name = "local_solomon"
-    solomon_cluster.Cluster = solomon_endpoint
+    solomon_cluster.Cluster = os.environ.get("SOLOMON_HTTP_ENDPOINT")
     solomon_cluster.UseSsl = False
+
+    grpc_endpoint_setting = solomon_cluster.Settings.add()
+    grpc_endpoint_setting.Name = "grpc_location"
+    grpc_endpoint_setting.Value = os.environ.get("SOLOMON_GRPC_ENDPOINT")
 
     return text_format.MessageToString(config_message)
 
@@ -66,7 +71,7 @@ def test(suite, case, cfg, solomon):
     log('===' + case + '-' + cfg)
 
     xfail = is_xfail(config)
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
+    program_sql = get_case_file(DATA_PATH, suite, case)
     sql_query = codecs.open(program_sql, encoding='utf-8').read()
 
     files = get_files(suite, config, DATA_PATH)

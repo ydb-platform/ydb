@@ -1,0 +1,6 @@
+select ListSort(DictKeys(Block(($p)->{
+    return FromMutDict(FromDynamicLinear(
+        ListFold([1,2,1],ToDynamicLinear(MutDictCreate(Int32,Void,$p)),($item,$state)->{
+            return ToDynamicLinear(MutDictInsert(FromDynamicLinear($state),$item,Void()));
+        })));
+})));

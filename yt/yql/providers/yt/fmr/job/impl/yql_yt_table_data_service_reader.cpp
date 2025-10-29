@@ -23,10 +23,7 @@ TFmrTableDataServiceReader::TFmrTableDataServiceReader(
 {
     SetMinChunkInNewRange();
     ReadAhead();
-
 }
-
-// TODO  - написать логику с NeededColumns
 
 size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
     ui64 totalRead = 0;
@@ -87,24 +84,38 @@ void TFmrTableDataServiceReader::ReadAhead() {
 
 NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataServiceValueFuture(const TString& partId, ui64 chunkNum) {
     const auto tableDataServiceGroup = GetTableDataServiceGroup(TableId_, partId);
+    std::vector<NThreading::TFuture<TMaybe<TString>>> getTableDataServiceColumnGroupValueFutures;
     if (ColumnGroupSpec_.IsEmpty()) {
         // Column group spec is not set, so table data service has single value with all columns.
         auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, TString());
-        return TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId);
-    }
-
-    std::vector<NThreading::TFuture<TMaybe<TString>>> getTableDataServiceColumnGroupValueFutures;
-    for (auto& [groupName, cols]: ColumnGroupSpec_.ColumnGroups) {
-        auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, groupName);
         getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId));
+    } else {
+        for (auto& [groupName, cols]: ColumnGroupSpec_.ColumnGroups) {
+            bool needToGetCurrentColumnGroupData = false;
+            if (NeededColumns_.empty()) {
+                needToGetCurrentColumnGroupData = true;
+            } else {
+                for (auto& neededColumn: NeededColumns_) {
+                    if (cols.contains(neededColumn)) {
+                        needToGetCurrentColumnGroupData = true;
+                        break;
+                    }
+                }
+            }
+
+            if (needToGetCurrentColumnGroupData) {
+                auto tableDataServiceChunkId = GetTableDataServiceChunkId(chunkNum, groupName);
+                getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, tableDataServiceChunkId));
+            }
+        }
+
+        if (!ColumnGroupSpec_.DefaultColumnGroupName.empty()) {
+            getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, GetTableDataServiceChunkId(chunkNum, ColumnGroupSpec_.DefaultColumnGroupName)));
+
+        }
     }
 
-    if (!ColumnGroupSpec_.DefaultColumnGroupName.empty()) {
-        getTableDataServiceColumnGroupValueFutures.emplace_back(TableDataService_->Get(tableDataServiceGroup, GetTableDataServiceChunkId(chunkNum, ColumnGroupSpec_.DefaultColumnGroupName)));
-
-    }
-
-    return NThreading::WaitExceptionOrAll(getTableDataServiceColumnGroupValueFutures).Apply([&getTableDataServiceColumnGroupValueFutures] (const auto& f) {
+    return NThreading::WaitExceptionOrAll(getTableDataServiceColumnGroupValueFutures).Apply([&getTableDataServiceColumnGroupValueFutures, this] (const auto& f) {
         f.GetValue(); // rethrow error if any
         std::vector<TString> columnGroupsYsonValues;
         for (auto& future: getTableDataServiceColumnGroupValueFutures) {
@@ -112,7 +123,7 @@ NThreading::TFuture<TMaybe<TString>> TFmrTableDataServiceReader::GetTableDataSer
             YQL_ENSURE(colGroupYsonValue.Defined());
             columnGroupsYsonValues.emplace_back(*colGroupYsonValue);
         }
-        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnion(columnGroupsYsonValues));
+        return NThreading::MakeFuture<TMaybe<TString>>(GetYsonUnion(columnGroupsYsonValues, NeededColumns_));
     });
 
 }

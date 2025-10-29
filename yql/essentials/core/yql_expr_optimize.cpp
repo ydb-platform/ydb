@@ -1,13 +1,14 @@
 #include "yql_expr_optimize.h"
-
-#include <util/generic/hash.h>
 #include "yql_expr_type_annotation.h"
 #include "yql_func_stack.h"
 
+#include <yql/essentials/core/sql_types/yql_callable_names.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/profile.h>
 
 #include <util/generic/scope.h>
+#include <util/generic/hash.h>
+
 
 namespace NYql {
 
@@ -179,7 +180,11 @@ namespace {
                     }
                 }
                 if (bodyChanged) {
-                    ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
+                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                        ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
+                    } else {
+                        ret = ctx.Expr.DeepCopyLambda(*current, std::move(newBody));
+                    }
                     AddExpected(*node, *ret, ctx.Expr, ctx.Settings);
                 }
             }
@@ -295,7 +300,11 @@ namespace {
                 }
 
                 if (bodyChanged) {
-                    ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
+                    if (std::any_of(node->Head().Children().cbegin(), node->Head().Children().cend(), [](const auto& p) { return p->StartsExecution(); })) {
+                        ret = ctx.Expr.NewLambda(node->Pos(), node->HeadPtr(), std::move(newBody));
+                    } else {
+                        ret = ctx.Expr.DeepCopyLambda(*node, std::move(newBody));
+                    }
                     changed = true;
                 }
             }
@@ -406,21 +415,39 @@ namespace {
     }
 
     void VisitExprByFirstInternal(const TExprNode::TPtr& node, const TExprVisitPtrFunc& preFunc,
-        const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes)
+        const TExprVisitPtrFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
     {
         if (!visitedNodes.emplace(node.Get()).second) {
             return;
         }
 
+        if (node->IsArgument()) {
+            if (auto it = worldMap.find(node.Get()); it != worldMap.end()) {
+                VisitExprByFirstInternal(it->second, preFunc, postFunc, visitedNodes, worldMap);
+                return;
+            }
+        }
         if (!preFunc || preFunc(node)) {
             if (node->ChildrenSize() > 0) {
                 if (node->Content() == SyncName) {
                     for (const auto& child : node->Children()) {
-                        VisitExprByFirstInternal(child, preFunc, postFunc, visitedNodes);
+                        VisitExprByFirstInternal(child, preFunc, postFunc, visitedNodes, worldMap);
+                    }
+                }
+                else if (node->Content() == SeqName) {
+                    if (node->ChildrenSize()) {
+                        auto world = node->HeadPtr();
+                        for (size_t i = 1; i < node->ChildrenSize(); ++i) {
+                            if (node->Child(i)->IsLambda()) {
+                                worldMap[&node->Child(i)->Head().Head()] = world;
+                                world = node->Child(i)->TailPtr();
+                            }
+                        }
+                        VisitExprByFirstInternal(world, preFunc, postFunc, visitedNodes, worldMap);
                     }
                 }
                 else {
-                    VisitExprByFirstInternal(node->HeadPtr(), preFunc, postFunc, visitedNodes);
+                    VisitExprByFirstInternal(node->HeadPtr(), preFunc, postFunc, visitedNodes, worldMap);
                 }
             }
         }
@@ -431,21 +458,40 @@ namespace {
     }
 
     void VisitExprByFirstInternal(const TExprNode& node, const TExprVisitRefFunc& preFunc,
-        const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes)
+        const TExprVisitRefFunc& postFunc, TNodeSet& visitedNodes, TNodeOnNodeOwnedMap& worldMap)
     {
         if (!visitedNodes.emplace(&node).second) {
             return;
+        }
+
+        if (node.IsArgument()) {
+            if (auto it = worldMap.find(&node); it != worldMap.end()) {
+                VisitExprByFirstInternal(*it->second, preFunc, postFunc, visitedNodes, worldMap);
+                return;
+            }
         }
 
         if (!preFunc || preFunc(node)) {
             if (node.ChildrenSize() > 0) {
                 if (node.Content() == SyncName) {
                     for (const auto& child : node.Children()) {
-                        VisitExprByFirstInternal(*child, preFunc, postFunc, visitedNodes);
+                        VisitExprByFirstInternal(*child, preFunc, postFunc, visitedNodes, worldMap);
+                    }
+                }
+                else if (node.Content() == SeqName) {
+                    if (node.ChildrenSize()) {
+                        auto world = node.HeadPtr();
+                        for (size_t i = 1; i < node.ChildrenSize(); ++i) {
+                            if (node.Child(i)->IsLambda()) {
+                                worldMap[&node.Child(i)->Head().Head()] = world;
+                                world = node.Child(i)->TailPtr();
+                            }
+                        }
+                        VisitExprByFirstInternal(*world, preFunc, postFunc, visitedNodes, worldMap);
                     }
                 }
                 else {
-                    VisitExprByFirstInternal(node.Head(), preFunc, postFunc, visitedNodes);
+                    VisitExprByFirstInternal(node.Head(), preFunc, postFunc, visitedNodes, worldMap);
                 }
             }
         }
@@ -548,6 +594,74 @@ IGraphTransformer::TStatus RemapExpr(const TExprNode::TPtr& input, TExprNode::TP
     TExprContext& ctx, const TOptimizeExprSettings& settings)
 {
     return OptimizeExprInternal<TCallableOptimizer>(input, output, {}, &remaps, ctx, settings);
+}
+
+IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, TTypeAnnotationContext& types) {
+    if (ctx.Step.IsDone(TExprStep::ExpandSeq))
+        return IGraphTransformer::TStatus::Ok;
+
+    TOptimizeExprSettings settings(nullptr);
+    auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, bool& changed, TExprContext& ctx) -> TExprNode::TPtr {
+        if (node->Content() == SeqName) {
+            if (!EnsureMinArgsCount(*node, 1, ctx)) {
+                return nullptr;
+            }
+            if (types.EarlyExpandSeq) {
+                auto world = node->HeadPtr();
+                for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                    const auto lambda = node->Child(i);
+                    if (!lambda->IsLambda()) {
+                        return node;
+                    }
+
+                    const auto& lambdaArgs = lambda->Head();
+                    if (!EnsureArgsCount(lambdaArgs, 1, ctx)) {
+                        return nullptr;
+                    }
+
+                    world = ctx.ReplaceNode(lambda->TailPtr(), lambdaArgs.Head(), std::move(world));
+                }
+
+                changed = true;
+                return world;
+            } else {
+                bool hasTrivial = false;
+                for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                    const auto lambda = node->Child(i);
+                    if (!lambda->IsLambda()) {
+                        return node;
+                    }
+
+                    const auto& lambdaArgs = lambda->Head();
+                    if (!EnsureArgsCount(lambdaArgs, 1, ctx)) {
+                        return nullptr;
+                    }
+                    hasTrivial = hasTrivial || &lambda->Head().Head() == &lambda->Tail();
+                }
+
+                // only remove trivial lambdas
+                if (hasTrivial) {
+                    TExprNode::TListType newChildren;
+                    newChildren.push_back(node->HeadPtr());
+                    for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
+                        auto lambda = node->ChildPtr(i);
+                        if (&lambda->Head().Head() != &lambda->Tail()) {
+                            newChildren.push_back(std::move(lambda));
+                        }
+                    }
+                    changed = true;
+                    return ctx.ChangeChildren(*node, std::move(newChildren));
+                }
+            }
+        }
+        return node;
+    }, ctx, settings);
+
+    if (ret.Level == IGraphTransformer::TStatus::Ok) {
+        ctx.Step.Done(TExprStep::ExpandSeq);
+    }
+
+    return ret;
 }
 
 IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
@@ -793,29 +907,6 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
 
                 changed = true;
                 return node->Tail().ChildPtr(index);
-            }
-            else if (node->Content() == "Seq!") {
-                if (!EnsureMinArgsCount(*node, 1, ctx)) {
-                    return nullptr;
-                }
-
-                auto world = node->HeadPtr();
-                for (ui32 i = 1; i < node->ChildrenSize(); ++i) {
-                    const auto lambda = node->Child(i);
-                    if (!lambda->IsLambda()) {
-                        return node;
-                    }
-
-                    const auto& lambdaArgs = lambda->Head();
-                    if (!EnsureArgsCount(lambdaArgs, 1, ctx)) {
-                        return nullptr;
-                    }
-
-                    world = ctx.ReplaceNode(lambda->TailPtr(), lambdaArgs.Head(), std::move(world));
-                }
-
-                changed = true;
-                return world;
             } else if (node->Content() == "SubqueryExtend" || node->Content() == "SubqueryUnionAll" ||
                 node->Content() == "SubqueryMerge" || node->Content() == "SubqueryUnionMerge") {
                 if (!EnsureMinArgsCount(*node, 1, ctx)) {
@@ -950,21 +1041,40 @@ void VisitExprLambdasLast(const TExprNode::TPtr& root, const TExprVisitPtrFunc& 
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func) {
     TNodeSet visitedNodes;
-    VisitExprByFirstInternal(root, func, {}, visitedNodes);
+    TNodeOnNodeOwnedMap worldMap;
+    VisitExprByFirstInternal(root, func, {}, visitedNodes, worldMap);
+}
+
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeOnNodeOwnedMap& worldMap) {
+    TNodeSet visitedNodes;
+    VisitExprByFirstInternal(root, func, {}, visitedNodes, worldMap);
 }
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc) {
     TNodeSet visitedNodes;
-    VisitExprByFirstInternal(root, preFunc, postFunc, visitedNodes);
+    TNodeOnNodeOwnedMap worldMap;
+    VisitExprByFirstInternal(root, preFunc, postFunc, visitedNodes, worldMap);
+}
+
+void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& preFunc, const TExprVisitPtrFunc& postFunc, TNodeOnNodeOwnedMap& worldMap) {
+    TNodeSet visitedNodes;
+    VisitExprByFirstInternal(root, preFunc, postFunc, visitedNodes, worldMap);
 }
 
 void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func) {
     TNodeSet visitedNodes;
-    VisitExprByFirstInternal(root, func, {}, visitedNodes);
+    TNodeOnNodeOwnedMap worldMap;
+    VisitExprByFirstInternal(root, func, {}, visitedNodes, worldMap);
+}
+
+void VisitExprByFirst(const TExprNode& root, const TExprVisitRefFunc& func, TNodeOnNodeOwnedMap& worldMap) {
+    TNodeSet visitedNodes;
+    VisitExprByFirstInternal(root, func, {}, visitedNodes, worldMap);
 }
 
 void VisitExprByFirst(const TExprNode::TPtr& root, const TExprVisitPtrFunc& func, TNodeSet& visitedNodes) {
-    VisitExprByFirstInternal(root, func, {}, visitedNodes);
+    TNodeOnNodeOwnedMap worldMap;
+    VisitExprByFirstInternal(root, func, {}, visitedNodes, worldMap);
 }
 
 TExprNode::TPtr FindNode(const TExprNode::TPtr& root, const TExprVisitPtrFunc& predicate) {

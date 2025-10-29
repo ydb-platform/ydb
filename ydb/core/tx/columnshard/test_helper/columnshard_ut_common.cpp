@@ -5,6 +5,8 @@
 #include <ydb/core/base/tablet_resolver.h>
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
+#include <ydb/core/sys_view/common/path.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/sys_view/portions/schema.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/max/meta.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
@@ -176,7 +178,7 @@ void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vec
     record.SetScanId(scanId);
     AFL_VERIFY(!pathIds.empty());
     record.SetLocalPathId(pathIds[0]);
-    record.SetTablePath(TString("/") + NSysView::SysPathName + "/" + NSysView::StorePrimaryIndexPortionStatsName);
+    record.SetTablePath("/.sys/store_primary_index_portion_stats");
 
     // Schema: pathId, kind, rows, bytes, rawBytes. PK: {pathId, kind}
     //record.SetSchemaVersion(0);
@@ -419,7 +421,7 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         }
         if (NOlap::NIndexes::NMax::TIndexMeta::IsAvailableType(columns[i].GetType())) {
             *schema->AddIndexes() = NOlap::NIndexes::TIndexMetaContainer(
-                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", i + 1))
+                std::make_shared<NOlap::NIndexes::NMax::TIndexMeta>(1000 + i, "MAX::INDEX::" + columns[i].GetName(), "__LOCAL_METADATA", false, i + 1))
                                         .SerializeToProto();
         }
     }

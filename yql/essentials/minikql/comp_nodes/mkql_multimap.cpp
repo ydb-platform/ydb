@@ -1,6 +1,6 @@
 #include "mkql_multimap.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/utils/cast.h>
 
@@ -13,12 +13,17 @@ using NYql::EnsureDynamicCast;
 
 namespace {
 
-class TFlowMultiMapWrapper : public TStatefulFlowCodegeneratorNode<TFlowMultiMapWrapper> {
+class TFlowMultiMapWrapper: public TStatefulFlowCodegeneratorNode<TFlowMultiMapWrapper> {
     typedef TStatefulFlowCodegeneratorNode<TFlowMultiMapWrapper> TBaseComputation;
+
 public:
     TFlowMultiMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* flow, IComputationExternalNode* item, TComputationNodePtrVector&& newItems)
-        : TBaseComputation(mutables, flow, kind), Flow(flow), Item(item), NewItems(std::move(newItems))
-    {}
+        : TBaseComputation(mutables, flow, kind)
+        , Flow(flow)
+        , Item(item)
+        , NewItems(std::move(newItems))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
@@ -94,6 +99,7 @@ private:
     void RegisterDependencies() const final {
         if (const auto flow = FlowDependsOn(Flow)) {
             Own(flow, Item);
+            std::for_each(NewItems.cbegin(), NewItems.cend(), std::bind(&TFlowMultiMapWrapper::DependsOn, flow, std::placeholders::_1));
         }
     }
 
@@ -102,13 +108,13 @@ private:
     const TComputationNodePtrVector NewItems;
 };
 
-class TListMultiMapWrapper : public TBothWaysCodegeneratorNode<TListMultiMapWrapper> {
+class TListMultiMapWrapper: public TBothWaysCodegeneratorNode<TListMultiMapWrapper> {
 private:
     typedef TBothWaysCodegeneratorNode<TListMultiMapWrapper> TBaseComputation;
 
-    class TListValue : public TCustomListValue {
+    class TListValue: public TCustomListValue {
     public:
-        class TIterator : public TComputationValue<TIterator> {
+        class TIterator: public TComputationValue<TIterator> {
         public:
             TIterator(TMemoryUsageInfo* memInfo, TComputationContext& compCtx, NUdf::TUnboxedValue&& iter, IComputationExternalNode* item, const TComputationNodePtrVector& newItems)
                 : TComputationValue<TIterator>(memInfo)
@@ -116,7 +122,8 @@ private:
                 , Iter(std::move(iter))
                 , Item(item)
                 , NewItems(newItems)
-            {}
+            {
+            }
 
         private:
             bool Next(NUdf::TUnboxedValue& value) override {
@@ -127,8 +134,9 @@ private:
                 }
 
                 value = NewItems[Position]->GetValue(CompCtx);
-                if (++Position == NewItems.size())
+                if (++Position == NewItems.size()) {
                     Position = 0U;
+                }
                 return true;
             }
 
@@ -145,7 +153,8 @@ private:
             , List(std::move(list))
             , Item(item)
             , NewItems(newItems)
-        {}
+        {
+        }
 
     private:
         NUdf::TUnboxedValue GetListIterator() const final {
@@ -180,8 +189,12 @@ private:
 
 public:
     TListMultiMapWrapper(TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* item, TComputationNodePtrVector&& newItems)
-        : TBaseComputation(mutables), List(list), Item(item), NewItems(std::move(newItems))
-    {}
+        : TBaseComputation(mutables)
+        , List(list)
+        , Item(item)
+        , NewItems(std::move(newItems))
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
@@ -192,8 +205,9 @@ public:
             const auto result = ctx.HolderFactory.CreateDirectArrayHolder(size * NewItems.size(), items);
             while (size--) {
                 Item->SetValue(ctx, NUdf::TUnboxedValue(*elements++));
-                for (const auto newItem : NewItems)
+                for (const auto newItem : NewItems) {
                     *items++ = newItem->GetValue(ctx);
+                }
             }
             return result;
         }
@@ -231,9 +245,7 @@ public:
             block = hard;
 
             const auto size = CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::GetListLength>(Type::getInt64Ty(context), list, ctx.Codegen, block);
-            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
-                new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-                new AllocaInst(elementsType, 0U, "items_ptr", block);
+            const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(elementsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(elementsType, 0U, "items_ptr", block);
             const auto full = BinaryOperator::CreateMul(size, ConstantInt::get(size->getType(), NewItems.size()), "full", block);
             const auto array = GenNewArray(ctx, full, itemsPtr, block);
             const auto items = new LoadInst(elementsType, itemsPtr, "items", block);
@@ -283,7 +295,7 @@ public:
             const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TListMultiMapWrapper::MakeLazyList>());
             const auto ptrType = PointerType::getUnqual(StructType::get(context));
             const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-            const auto funType = FunctionType::get(list->getType() , {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
+            const auto funType = FunctionType::get(list->getType(), {self->getType(), ctx.Ctx->getType(), list->getType()}, false);
             const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
             const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx, list}, "value", block);
             map->addIncoming(value, block);
@@ -309,8 +321,9 @@ private:
 
     void FinalizeFunctions(NYql::NCodegen::ICodegen& codegen) final {
         TMutableCodegeneratorRootNode<TListMultiMapWrapper>::FinalizeFunctions(codegen);
-        if (MapFunc)
+        if (MapFunc) {
             Map = reinterpret_cast<TMapPtr>(codegen.GetPointerToFunction(MapFunc));
+        }
     }
 
     Function* GenerateMapper(NYql::NCodegen::ICodegen& codegen, const TString& name) const {
@@ -321,8 +334,9 @@ private:
 
         MKQL_ENSURE(codegenItem, "Item must be codegenerator node.");
 
-        if (const auto f = module.getFunction(name.c_str()))
+        if (const auto f = module.getFunction(name.c_str())) {
             return f;
+        }
 
         const auto valueType = Type::getInt128Ty(context);
         const auto positionType = Type::getInt64Ty(context);
@@ -400,8 +414,9 @@ private:
     const TComputationNodePtrVector NewItems;
 };
 
-class TNarrowMultiMapWrapper : public TStatefulFlowCodegeneratorNode<TNarrowMultiMapWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowMultiMapWrapper>;
+class TNarrowMultiMapWrapper: public TStatefulFlowCodegeneratorNode<TNarrowMultiMapWrapper> {
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowMultiMapWrapper>;
+
 public:
     TNarrowMultiMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
         : TBaseComputation(mutables, flow, kind)
@@ -410,7 +425,8 @@ public:
         , NewItems(std::move(newItems))
         , PasstroughtMap(GetPasstroughtMap(Items, NewItems))
         , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsFinish()) {
@@ -421,9 +437,11 @@ public:
         if (!pos) {
             auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i])
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i]) {
                     fields[i] = &Items[i]->RefValue(ctx);
+                }
+            }
 
             switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
@@ -517,7 +535,7 @@ private:
     const ui32 WideFieldsIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapMultiMap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() > 2U, "Expected at least three arguments.");
@@ -529,7 +547,7 @@ IComputationNode* WrapMultiMap(TCallable& callable, const TComputationNodeFactor
     TComputationNodePtrVector newItems;
     newItems.reserve(callable.GetInputsCount() - 2U);
     ui32 index = 1U;
-    std::generate_n(std::back_inserter(newItems), callable.GetInputsCount() - 2U, [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); });
+    std::generate_n(std::back_inserter(newItems), callable.GetInputsCount() - 2U, [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
     const auto itemArg = LocateExternalNode(ctx.NodeLocator, callable, 1U);
     if (listType->IsFlow()) {
@@ -551,12 +569,12 @@ IComputationNode* WrapNarrowMultiMap(TCallable& callable, const TComputationNode
         TComputationNodePtrVector newItems;
         newItems.reserve(callable.GetInputsCount() - width - 1U);
         ui32 index = width;
-        std::generate_n(std::back_inserter(newItems), callable.GetInputsCount() - width - 1U, [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); });
+        std::generate_n(std::back_inserter(newItems), callable.GetInputsCount() - width - 1U, [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
         TComputationExternalNodePtrVector args;
         args.reserve(width);
         index = 0U;
-        std::generate_n(std::back_inserter(args), width, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
+        std::generate_n(std::back_inserter(args), width, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
         return new TNarrowMultiMapWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), wide, std::move(args), std::move(newItems));
     }
@@ -564,5 +582,5 @@ IComputationNode* WrapNarrowMultiMap(TCallable& callable, const TComputationNode
     THROW yexception() << "Expected wide flow.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

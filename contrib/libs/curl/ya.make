@@ -23,6 +23,7 @@ PEERDIR(
     contrib/libs/nghttp2
     contrib/libs/nghttp3
     contrib/libs/ngtcp2
+    contrib/libs/ngtcp2/crypto/quictls
     contrib/libs/openssl
     contrib/libs/zlib
     contrib/libs/zstd

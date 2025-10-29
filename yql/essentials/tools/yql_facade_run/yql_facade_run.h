@@ -24,45 +24,45 @@
 #include <functional>
 
 namespace NKikimr::NMiniKQL {
-    class IFunctionRegistry;
-}
+class IFunctionRegistry;
+} // namespace NKikimr::NMiniKQL
 
 namespace NYql {
-    class TFileStorageConfig;
-    class TGatewaysConfig;
-}
+class TFileStorageConfig;
+class TGatewaysConfig;
+} // namespace NYql
 
 namespace NYql::NProto {
-    class TPgExtensions;
-}
+class TPgExtensions;
+} // namespace NYql::NProto
 
 namespace NYqlMountConfig {
-    class TMountConfig;
-}
+class TMountConfig;
+} // namespace NYqlMountConfig
 
 namespace NYql {
 
 enum class ERunMode {
-    Parse       /* "parse" */,
-    Compile     /* "compile" */,
-    Validate    /* "validate" */,
-    Optimize    /* "optimize" */,
-    Peephole    /* "peephole" */,
-    Lineage     /* "lineage" */,
-    Discover    /* "discover" */,
-    Run         /* "run" */,
+    Parse /* "parse" */,
+    Compile /* "compile" */,
+    Validate /* "validate" */,
+    Optimize /* "optimize" */,
+    Peephole /* "peephole" */,
+    Lineage /* "lineage" */,
+    Discover /* "discover" */,
+    Run /* "run" */,
 };
 
 enum class EProgramType {
-    SExpr   /* "s-expr" */,
-    Sql     /* "sql" */,
-    Pg      /* "pg" */,
+    SExpr /* "s-expr" */,
+    Sql /* "sql" */,
+    Pg /* "pg" */,
 };
 
 enum class EQPlayerMode {
-    None    /* "none" */,
+    None /* "none" */,
     Capture /* "capture" */,
-    Replay  /* "replay" */,
+    Replay /* "replay" */,
 };
 
 class TFacadeRunOptions {
@@ -81,6 +81,7 @@ public:
     TString Token;
     ui64 MemLimit = 0;
     EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    EQPlayerCaptureMode QPlayerCaptureMode = EQPlayerCaptureMode::None;
     TString OperationId;
     TQContext QPlayerContext;
 
@@ -92,6 +93,7 @@ public:
     bool TestSqlFormat = false;
     bool TestLexers = false;
     bool TestComplete = false;
+    bool TestSyntaxAmbiguities = false;
     THashMap<TString, NSQLTranslation::TTableBindingSettings> Bindings;
 
     bool PrintAst = false;
@@ -140,8 +142,9 @@ public:
     bool EnableQPlayer = false;
     bool OptimizeLibs = true;
     bool CustomTests = false;
+    bool EnableLineage = false;
 
-    void Parse(int argc, const char *argv[]);
+    void Parse(int argc, const char* argv[]);
 
     void AddOptExtension(std::function<void(NLastGetopt::TOpts& opts)> optExtender) {
         OptExtenders_.push_back(std::move(optExtender));
@@ -183,7 +186,7 @@ public:
     TFacadeRunner(TString name);
     ~TFacadeRunner();
 
-    int Main(int argc, const char *argv[]);
+    int Main(int argc, const char* argv[]);
 
     void AddFsDownloadFactory(std::function<NFS::IDownloaderPtr()> factory) {
         FsDownloadFactories_.push_back(std::move(factory));
@@ -199,7 +202,7 @@ public:
     }
     template <class TPbConfig>
     void FillClusterMapping(const TPbConfig& config, const TString& provider) {
-        for (auto& cluster: config.GetClusterMapping()) {
+        for (auto& cluster : config.GetClusterMapping()) {
             ClusterMapping_.emplace(to_lower(cluster.GetName()), provider);
         }
     }
@@ -222,7 +225,7 @@ public:
     }
 
 protected:
-    virtual int DoMain(int argc, const char *argv[]);
+    virtual int DoMain(int argc, const char* argv[]);
     virtual int DoRun(TProgramFactory& factory);
     virtual TProgram::TStatus DoRunProgram(TProgramPtr program);
 
@@ -242,4 +245,4 @@ private:
     std::unique_ptr<NYql::NLog::YqlLoggerScope> YqlLogger_;
 };
 
-} // NYql
+} // namespace NYql

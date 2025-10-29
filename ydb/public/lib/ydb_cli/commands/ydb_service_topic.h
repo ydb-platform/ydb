@@ -38,6 +38,15 @@ namespace NYdb::NConsoleClient {
         NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
     };
 
+    class TCommandWithMetricsLevel {
+    protected:
+        void AddMetricsLevels(TClientCommand::TConfig& config);
+        TMaybe<NTopic::EMetricsLevel> GetMetricsLevel() const;
+
+    private:
+        NTopic::EMetricsLevel MetricsLevel_;
+    };
+
     class TCommandWithAutoPartitioning {
     protected:
         void AddAutoPartitioning(TClientCommand::TConfig& config, bool withDefault);
@@ -61,7 +70,12 @@ namespace NYdb::NConsoleClient {
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicCreate: public TYdbCommand,
+                               public TCommandWithTopicName,
+                               public TCommandWithSupportedCodecs,
+                               public TCommandWithMeteringMode,
+                               public TCommandWithAutoPartitioning,
+                               public TCommandWithMetricsLevel {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -69,15 +83,21 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        ui64 RetentionPeriodHours_;
+        TDuration RetentionPeriod_ = TDuration::Hours(24);
         ui64 RetentionStorageMb_;
         ui32 MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
         ui32 PartitionWriteSpeedKbps_;
         TMaybe<ui32> PartitionsPerTablet_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode, public TCommandWithAutoPartitioning {
+    class TCommandTopicAlter: public TYdbCommand,
+                              public TCommandWithTopicName,
+                              public TCommandWithSupportedCodecs,
+                              public TCommandWithMeteringMode,
+                              public TCommandWithAutoPartitioning,
+                              public TCommandWithMetricsLevel {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -85,13 +105,14 @@ namespace NYdb::NConsoleClient {
         int Run(TConfig& config) override;
 
     private:
-        TMaybe<ui64> RetentionPeriodHours_;
+        TMaybe<TDuration> RetentionPeriod_;
         TMaybe<ui64> RetentionStorageMb_;
         TMaybe<ui32> MinActivePartitions_;
         TMaybe<ui32> MaxActivePartitions_;
 
 
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+        TMaybe<NTopic::EMetricsLevel> MetricsLevel_;
 
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
@@ -124,6 +145,7 @@ namespace NYdb::NConsoleClient {
     private:
         TString ConsumerName_;
         bool IsImportant_;
+        TMaybe<TDuration> AvailabilityPeriod_;
         TMaybe<TInstant> StartingMessageTimestamp_;
     };
 
@@ -192,7 +214,7 @@ namespace NYdb::NConsoleClient {
     private:
         TString Consumer_ = "";
         TVector<ui64> PartitionIds_;
-        TMaybe<uint32_t> Offset_;
+        TMaybe<uint64_t> Offset_;
         TMaybe<uint32_t> Partition_;
         TMaybe<TInstant> Timestamp_;
         TMaybe<TString> File_;
@@ -221,6 +243,7 @@ namespace NYdb::NConsoleClient {
         void AddAllowedTransformFormats(TConfig& config);
         void ParseTransformFormat();
         NTopic::TReadSessionSettings PrepareReadSessionSettings();
+        TTopicReaderSettings PrepareReaderSettings() const;
     };
 
     class TCommandWithCodec {
@@ -257,6 +280,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> BatchSize_;
         TMaybe<ui64> BatchMessagesCount_;
         TMaybe<TString> MessageGroupId_;
+        TMaybe<TDuration> MessagesWaitTimeout_;
 
         ui64 MessageSizeLimit_ = 0;
         void ParseMessageSizeLimit();

@@ -9,13 +9,19 @@
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
+#include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
+
+#include <library/cpp/testing/hook/hook.h>
+
 namespace NKikimr::NKqp {
 
-static const TString DEFAULT_TABLE_NAME = "/Root/olapStore/olapTable";
-static const TString DEFAULT_TIER_NAME = "/Root/tier1";
+static const TString DEFAULT_TABLE_PATH = "/Root/olapStore/olapTable";
+static const TString DEFAULT_TIER_NAME = "tier1";
+static const TString DEFAULT_TIER_PATH = "/Root/tier1";
 static const TString DEFAULT_COLUMN_NAME = "timestamp";
 
 class TAbortedWriteCounterController final: public NOlap::TWaitCompactionController {
@@ -45,7 +51,7 @@ private:
     std::optional<TLocalHelper> OlapHelper;
     std::optional<TCtrlGuard> CsController;
 
-    YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_NAME);
+    YDB_ACCESSOR(TString, TablePath, DEFAULT_TABLE_PATH);
 
 public:
     TTieringTestHelper() {
@@ -54,6 +60,11 @@ public:
 
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
+        runnerSettings.SetColumnShardAlterObjectEnabled(true);
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableColumnshardBool(true);
+        featureFlags.SetEnableColumnStore(true);
+        runnerSettings.SetFeatureFlags(featureFlags);
         TestHelper.emplace(runnerSettings);
         OlapHelper.emplace(TestHelper->GetKikimr());
         TestHelper->GetRuntime().SetLogPriority(NKikimrServices::TX_TIERING, NActors::NLog::PRI_DEBUG);
@@ -79,7 +90,7 @@ public:
     }
 
     void WriteSampleData() {
-        for (ui64 i = 0; i < 100; ++i) {
+        for (ui64 i = 0; i < 400; ++i) {
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
             WriteTestData(TestHelper->GetKikimr(), TablePath, 0, 3600000000 + i * 10000, 1000);
         }
@@ -105,6 +116,14 @@ public:
     }
 };
 
+Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
+    NKikimr::InitAwsAPI();
+}
+
+Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
+    NKikimr::ShutdownAwsAPI();
+}
+
 Y_UNIT_TEST_SUITE(KqpOlapTiering) {
     Y_UNIT_TEST(EvictionResetTiering) {
         TTieringTestHelper tieringHelper;
@@ -113,17 +132,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
-        testHelper.ResetTiering(DEFAULT_TABLE_NAME);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitCompactions(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
     }
@@ -135,15 +154,15 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
         tieringHelper.CheckAllDataInTier("__DEFAULT");
 
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
         {
             const TString query =
@@ -161,21 +180,38 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
         tieringHelper.SetTablePath("/Root/olapTable");
-
+        tieringHelper.GetTestHelper().GetKikimr().GetTestServer().GetRuntime()->GetAppData().ColumnShardConfig.SetBulkUpsertRequireAllColumns(false);
         olapHelper.CreateTestOlapStandaloneTable();
-        testHelper.CreateTier("tier1");
-        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering("/Root/olapTable", DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+
         {
             const TString query = R"(ALTER TABLE `/Root/olapTable` ADD COLUMN f Int32)";
             auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
         }
-        testHelper.RebootTablets("/Root/olapTable");
 
-        tieringHelper.WriteSampleData();
+        for (ui64 i = 0; i < 100; ++i) {
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+            WriteTestData(testHelper.GetKikimr(), "/Root/olapTable", 0, 3600000000 + i * 10000, 1000);
+        }
+
+        testHelper.RebootTablets("/Root/olapTable");
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto selectQuery = TStringBuilder();
+        selectQuery << R"(
+            SELECT
+                TierName, SUM(ColumnRawBytes) AS RawBytes, SUM(Rows) AS Rows
+            FROM `/Root/olapTable/.sys/primary_index_portion_stats`
+            WHERE Activity == 1
+            GROUP BY TierName)";
+
+        auto rows = ExecuteScanQuery(tableClient, selectQuery);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
     }
 
     Y_UNIT_TEST(EvictionWithStrippedEdsPath) {
@@ -185,12 +221,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
 
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
     }
 
     Y_UNIT_TEST(TieringValidation) {
@@ -199,7 +235,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
 
         {
             const TString query =
@@ -215,7 +251,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetStatus(), NYdb::EStatus::SUCCESS);
         }
 
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
     }
 
     Y_UNIT_TEST(DeletedTier) {
@@ -226,16 +262,16 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
 
         csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
-        testHelper.ResetTiering(DEFAULT_TABLE_NAME);
-        testHelper.RebootTablets(DEFAULT_TABLE_NAME);
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
 
         TString selectQuery = R"(SELECT MAX(level) AS level FROM `/Root/olapStore/olapTable`)";
         ui64 scanResult;
@@ -250,17 +286,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        testHelper.RebootTablets(DEFAULT_TABLE_NAME);
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
 
         {
             auto it = tableClient.StreamExecuteScanQuery(selectQuery, NYdb::NTable::TStreamExecScanQuerySettings()).GetValueSync();
             auto streamPart = it.ReadNext().GetValueSync();
             UNIT_ASSERT(!streamPart.IsSuccess());
-            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "Error reading blob range");
+            UNIT_ASSERT_STRING_CONTAINS(streamPart.GetIssues().ToString(), "/Root/tier1");
         }
 
-        testHelper.CreateTier("tier1");
-        testHelper.RebootTablets(DEFAULT_TABLE_NAME);
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.RebootTablets(DEFAULT_TABLE_PATH);
 
         {
             auto rows = ExecuteScanQuery(tableClient, selectQuery);
@@ -281,7 +317,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         {
             const TDuration tsInterval = TDuration::Days(3650);
             const ui64 rows = 10000;
-            WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_NAME, 0, (TInstant::Now() - tsInterval).MicroSeconds(), rows, false,
+            WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, (TInstant::Now() - tsInterval).MicroSeconds(), rows, false,
                 tsInterval.MicroSeconds() / rows);
         }
 
@@ -383,16 +419,16 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
-        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_NAME, false);
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH, false);
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
 
         csController->DisableBackground(NYDBTest::ICSController::EBackground::GC);
-        testHelper.ResetTiering(DEFAULT_TABLE_NAME);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitActualization(TDuration::Seconds(5));
 
         tieringHelper.CheckAllDataInTier("__DEFAULT", false);
@@ -400,12 +436,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         csController->EnableBackground(NYDBTest::ICSController::EBackground::GC);
         csController->SetExternalStorageUnavailable(true);
-        testHelper.ResetTiering(DEFAULT_TABLE_NAME);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitCleaning(TDuration::Seconds(5));
         UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize(), 0);
 
         csController->SetExternalStorageUnavailable(false);
-        testHelper.ResetTiering(DEFAULT_TABLE_NAME);
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
         csController->WaitCondition(TDuration::Seconds(60), []() {
             return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
         });
@@ -418,21 +454,195 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         auto& testHelper = tieringHelper.GetTestHelper();
 
         olapHelper.CreateTestOlapTable();
-        testHelper.CreateTier("tier1");
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
         tieringHelper.WriteSampleData();
         putController->WaitCompactions(TDuration::Seconds(5));
 
         putController->SetExternalStorageUnavailable(true);
-        testHelper.SetTiering(DEFAULT_TABLE_NAME, DEFAULT_TIER_NAME, DEFAULT_COLUMN_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
 
         putController->WaitActualization(TDuration::Seconds(5));
         Sleep(TDuration::Seconds(5));
 
-        UNIT_ASSERT_C(putController->GetAbortedWrites() > 20,
-            "Expected load spike, but only " << putController->GetAbortedWrites() << " PutObject requests recorded");   // comment after fix
-        // UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
-        //               "Expected load spike, but was "
-        //               << putController->GetAbortedWrites() << " PutObject requests recorded"); // uncomment after fix
+        UNIT_ASSERT_C(putController->GetAbortedWrites() < 10,
+                      "Expected reduced load, but was "
+                      << putController->GetAbortedWrites() << " PutObject requests recorded");
+    }
+
+    Y_UNIT_TEST(ReconfigureTier) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        testHelper.ResetTiering(DEFAULT_TABLE_PATH);
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("__DEFAULT");
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(DROP EXTERNAL DATA SOURCE `/Root/tier1`)").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+                UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+                CREATE EXTERNAL DATA SOURCE `)" + DEFAULT_TIER_PATH + R"(` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="http://fake.fake/olap-another-bucket",
+                    AUTH_METHOD="AWS",
+                    AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
+                    AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
+                    AWS_REGION="ru-central1"
+            );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+        UNIT_ASSERT_GT(Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-another-bucket").GetSize(), 0);
+    }
+
+    Y_UNIT_TEST(TieringForIndexes) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        
+        {
+            auto alterQuery =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_uid, TYPE=MAX,
+                    FEATURES=`{"inherit_portion_storage" : true, "column_name" : "level"}`);
+                )";
+            auto session = tableClient.CreateSession().GetValueSync().GetSession();
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT *
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1 AND EntityName == "index_ngramm_uid"
+            )";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            for (auto& row: rows) {
+                UNIT_ASSERT_VALUES_EQUAL(*NYdb::TValueParser(row.find("TierName")->second).GetOptionalUtf8(), DEFAULT_TIER_PATH);
+            }
+        }
+
+        ExecuteScanQuery(tableClient, "SELECT *  FROM `/Root/olapStore/olapTable`");
+    }
+
+    Y_UNIT_TEST(TieringBoolToS3) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& testHelper = tieringHelper.GetTestHelper();
+
+        TVector<NKikimr::NKqp::TTestHelper::TColumnSchema> schema = {
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int64).SetNullable(false),
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("ts").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            NKikimr::NKqp::TTestHelper::TColumnSchema().SetName("flag").SetType(NScheme::NTypeIds::Bool),
+        };
+
+        NKikimr::NKqp::TTestHelper::TColumnTable col;
+        col.SetName(DEFAULT_TABLE_PATH).SetPrimaryKey({"ts", "id"}).SetSharding({"ts"}).SetSchema(schema);
+        testHelper.CreateTable(col);
+
+        {
+            arrow::Int64Builder id;
+            auto tsType = arrow::timestamp(arrow::TimeUnit::MICRO);
+            arrow::TimestampBuilder ts(tsType, arrow::default_memory_pool());
+            arrow::UInt8Builder flag;
+
+            const i64 tsMicros = (TInstant::Now() - TDuration::Days(365)).MicroSeconds();
+            Y_ABORT_UNLESS(id.Append(1).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(1).ok());
+
+            Y_ABORT_UNLESS(id.Append(2).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(0).ok());
+
+            Y_ABORT_UNLESS(id.Append(3).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(1).ok());
+
+            Y_ABORT_UNLESS(id.Append(4).ok());
+            Y_ABORT_UNLESS(ts.Append(tsMicros).ok());
+            Y_ABORT_UNLESS(flag.Append(0).ok());
+
+            std::shared_ptr<arrow::Array> idArr;
+            Y_ABORT_UNLESS(id.Finish(&idArr).ok());
+
+            std::shared_ptr<arrow::Array> tsArr;
+            Y_ABORT_UNLESS(ts.Finish(&tsArr).ok());
+
+            std::shared_ptr<arrow::Array> fArr;
+            Y_ABORT_UNLESS(flag.Finish(&fArr).ok());
+
+            auto aSchema = arrow::schema({
+                arrow::field("id", arrow::int64(), /*nullable=*/ false),
+                arrow::field("ts", tsType, /*nullable*/ false),
+                arrow::field("flag", arrow::uint8())
+            });
+
+            auto batch = arrow::RecordBatch::Make(aSchema, 4, { idArr, tsArr, fArr });
+            testHelper.BulkUpsert(col, batch);
+        }
+
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, "ts");
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto selectQuery = TStringBuilder();
+            selectQuery << R"(
+                SELECT TierName, SUM(ColumnRawBytes) as RawBytes, SUM(Rows) AS Rows
+                FROM `)" << DEFAULT_TABLE_PATH << R"(/.sys/primary_index_portion_stats`
+                WHERE Activity == 1
+                GROUP BY TierName)";
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(GetUtf8(rows[0].at("TierName")), DEFAULT_TIER_PATH);
+        }
+
+        {
+            NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+            auto rows = ExecuteScanQuery(tableClient, TStringBuilder() << "SELECT COUNT(*) AS cnt FROM `" << DEFAULT_TABLE_PATH << "`");
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetUint64(rows[0].at("cnt")), 0);
+        }
     }
 }
 

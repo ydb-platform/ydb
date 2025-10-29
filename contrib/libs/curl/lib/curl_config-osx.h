@@ -1031,6 +1031,9 @@
 /* Use Unix domain sockets */
 #define USE_UNIX_SOCKETS 1
 
+/* enable websockets support */
+#define USE_WEBSOCKETS 1
+
 /* Define to 1 if you have the `normaliz' (WinIDN) library (-lnormaliz). */
 /* #undef USE_WIN32_IDN */
 

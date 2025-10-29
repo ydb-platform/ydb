@@ -136,6 +136,10 @@ struct TEvKqp {
         std::vector<NKikimrKqp::TScriptExecutionRetryState::TMapping> RetryMapping;
         bool SaveQueryPhysicalGraph = false;
         std::optional<NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
+        std::optional<TString> ExecutionId;
+        bool DisableDefaultTimeout = false;
+        i64 Generation = 1;
+        TString CheckpointId;
     };
 
     struct TEvScriptResponse : public TEventLocal<TEvScriptResponse, TKqpEvents::EvScriptResponse> {

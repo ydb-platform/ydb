@@ -421,7 +421,7 @@ void TRequest::ForwardHeadersOnlyForIAM(NHttp::THttpOutgoingRequestPtr& request)
 }
 
 TString GetAuthHeaderValue(const TString& tokenName) {
-    NMVP::TMvpTokenator* tokenator = MVPAppData()->Tokenator;
+    NMVP::TMvpTokenator* tokenator = NMVP::MVPAppData()->Tokenator;
     TString authHeaderValue;
     if (tokenator && !tokenName.empty()) {
         authHeaderValue = tokenator->GetToken(tokenName);

@@ -6,13 +6,13 @@ import yql_utils
 
 import yatest.common
 from yql_utils import execute, get_tables, get_files, get_http_files, \
-    KSV_ATTR, yql_binary_path, is_xfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
+    KSV_ATTR, yql_binary_path, is_xfail, is_xsqlfail, is_canonize_peephole, is_peephole_use_blocks, is_canonize_lineage, \
     is_skip_forceblocks, get_param, normalize_source_code_path, replace_vals, get_gateway_cfg_suffix, \
     do_custom_query_check, stable_result_file, stable_table_file, is_with_final_result_issues, \
     normalize_result, get_langver
 from yqlrun import YQLRun
 
-from test_utils import get_config, get_parameters_json
+from test_utils import get_config, get_parameters_json, get_case_file
 from test_file_common import run_file, run_file_no_cache, get_gateways_config, get_sql_query
 
 DEFAULT_LANG_VER = '2025.01'
@@ -44,11 +44,15 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if langver is None:
         langver = DEFAULT_LANG_VER
 
-    xfail = is_xfail(config)
+    program_sql = get_case_file(DATA_PATH, suite, case)
+
+    if is_xsqlfail(config, program_sql):
+        pytest.skip('xsqlfail is not supported in this mode')
+
+    xfail = is_xfail(config, program_sql)
     if xfail and what != 'Results':
         pytest.skip('xfail is not supported in this mode')
 
-    program_sql = os.path.join(DATA_PATH, suite, '%s.sql' % case)
     with codecs.open(program_sql, encoding='utf-8') as program_file_descr:
         sql_query = program_file_descr.read()
 

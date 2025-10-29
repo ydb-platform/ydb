@@ -1,8 +1,8 @@
 #include "service_actor.h"
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/control/lib/dynamic_control_board_impl.h>
 #include <ydb/core/control/lib/immediate_control_board_wrapper.h>
-#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <library/cpp/monlib/service/pages/templates.h>
@@ -201,7 +201,7 @@ public:
         Become(&TPDiskReaderLoadTestActor::StateFunc);
         ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill());
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
-        AppData(ctx)->Icb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
+        AppData(ctx)->Dcb->RegisterLocalControl(MaxInFlight, Sprintf("PDiskReadLoadActor_MaxInFlight_%4" PRIu64, Tag).c_str());
         if (IsWardenlessTest) {
             ErrorReason = "Still waiting for YardInitResult";
             SendRequest(ctx, std::make_unique<NPDisk::TEvYardInit>(OwnerRound, VDiskId, PDiskGuid));

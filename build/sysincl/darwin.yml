@@ -254,6 +254,7 @@
   - Kernel/IOKit/hidsystem/IOHIDUsageTables.h
   - Metal/Metal.h
   - Network/Network.h
+  - NetworkExtension/NetworkExtension.h
   - OpenCL/cl.h
   - OpenCL/cl_gl.h
   - OpenCL/opencl.h

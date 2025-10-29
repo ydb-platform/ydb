@@ -99,6 +99,7 @@ message TEvWriteResult {
     optional uint64 WriteId = 4;
     optional uint64 TableId = 5;
     optional string DedupId = 6;
+    optional uint64 OverloadSubscribed = 7;
 }
 
 message TEvRead {
@@ -183,10 +184,6 @@ message TEvProposeTransactionResult {
     optional uint64 Step = 9;
 }
 
-message TEvCancelTransactionProposal {
-    optional uint64 TxId = 1;
-}
-
 message TEvNotifyTxCompletion {
     optional uint64 TxId = 1;
 }
@@ -269,6 +266,7 @@ message TCreateTable {
 message TMoveTable {
     optional uint64 SrcPathId = 1;
     optional uint64 DstPathId = 2;
+    optional string DstPath = 3;
 }
 
 message TInitShard {
@@ -352,7 +350,19 @@ message TEvReadBlobRangesResult {
 message TInternalOperationData {
     repeated uint64 InternalWriteIds = 1;
     optional uint32 ModificationType = 2;
-    optional uint64 PathId = 3;
+    optional uint64 PathId = 3; // InternalPathId
     optional bool WritePortions = 4;
     optional bool IsBulk = 5;
+    optional uint64 SchemeShardLocalPathId = 6;
+}
+
+// Sent by columnshard when some overload reason stopped being relevant
+message TEvOverloadReady {
+    optional uint64 TabletID = 1;
+    optional uint64 SeqNo = 2;
+}
+
+// Sent by overload subscribers to unsubscribe and free memory
+message TEvOverloadUnsubscribe {
+    optional uint64 SeqNo = 1;
 }

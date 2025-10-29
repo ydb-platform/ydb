@@ -30,16 +30,13 @@ struct TUserData {
 
     static void UserDataToLibraries(
         const TVector<TUserData>& userData,
-        THashMap<TString,TString>& libraries
-    );
+        THashMap<TString, TString>& libraries);
 
     static void FillFromFolder(
         TFsPath root,
         EType type,
-        TVector<TUserData>& userData
-    );
+        TVector<TUserData>& userData);
 };
 
-
-}
-}
+} // namespace NUserData
+} // namespace NYql

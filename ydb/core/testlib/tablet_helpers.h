@@ -50,8 +50,8 @@ namespace NKikimr {
     }
     TDomainsInfo::TDomain::TStoragePoolKinds DefaultPoolKinds(ui32 count = 1);
 
-    i64 SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
-    bool SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
+    void SetSplitMergePartCountLimit(TTestActorRuntime* runtime, i64 val);
+    void SetAllowServerlessStorageBilling(TTestActorRuntime* runtime, bool isAllow);
 
     const TString INITIAL_TEST_DISPATCH_NAME = "Trace";
 
@@ -149,6 +149,7 @@ namespace NKikimr {
         const TTabletTypes::EType Type;
         const ui64 TabletId;
         TActorId BootstrapperActorId;
+        TMap<ui32, TActorId> FollowerLaunchers; // keyed by followerId
         ETabletState State = ETabletState::Unknown;
         TSubDomainKey ObjectDomain;  // what subdomain tablet belongs to
 

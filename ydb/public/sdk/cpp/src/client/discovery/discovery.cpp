@@ -31,11 +31,24 @@ TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discover
             info.IPv6Addrs.emplace_back(addr);
         }
         info.SslTargetNameOverride = endpointInfo.ssl_target_name_override();
+        info.BridgePileName = endpointInfo.bridge_pile_name();
+    }
+
+    const auto& pileStates = proto.pile_states();
+    PileStates_.reserve(pileStates.size());
+    for (const auto& pileState : pileStates) {
+        TPileState& info = PileStates_.emplace_back();
+        info.State = static_cast<TPileState::EState>(pileState.state());
+        info.PileName = pileState.pile_name();
     }
 }
 
 const std::vector<TEndpointInfo>& TListEndpointsResult::GetEndpointsInfo() const {
     return Info_;
+}
+
+const std::vector<TPileState>& TListEndpointsResult::GetPileStates() const {
+    return PileStates_;
 }
 
 TWhoAmIResult::TWhoAmIResult(TStatus&& status, const Ydb::Discovery::WhoAmIResult& proto)

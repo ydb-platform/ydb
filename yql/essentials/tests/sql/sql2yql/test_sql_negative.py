@@ -1,16 +1,15 @@
 import os
 import pytest
 import yatest.common
-from yql_utils import get_supported_providers, get_param
+from yql_utils import get_supported_providers, get_param, is_xsqlfail
 
-from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH
+from test_utils import pytest_generate_tests_for_run, get_config, SQLRUN_PATH, SQL_FLAGS, get_case_file
 
-NEGATIVE_TEMPLATE = '.sqlx'
 DATA_PATH = yatest.common.source_path('yql/essentials/tests/sql/suites')
 
 
 def pytest_generate_tests(metafunc):
-    pytest_generate_tests_for_run(metafunc, NEGATIVE_TEMPLATE, data_path=DATA_PATH)
+    pytest_generate_tests_for_run(metafunc, template=['.sql', '.yql', '.sqlx'], data_path=DATA_PATH)
 
 
 def run_sql2yql(program_sql, out_dir, err_file_path):
@@ -27,6 +26,10 @@ def run_sql2yql(program_sql, out_dir, err_file_path):
         '--syntax-version=1',
         '/dev/stdin',
     ]
+
+    if SQL_FLAGS:
+        cmd_sql.append('--flags=%s' % ','.join(SQL_FLAGS))
+
     with open(program_sql) as f:
         sql_res = yatest.common.process.execute(cmd_sql, check_exit_code=False, stdin=f, env={'YQL_DETERMINISTIC_MODE': '1'})
 
@@ -49,7 +52,11 @@ def test(suite, case, cfg, tmpdir):
         if "yson" in case:
             pytest.skip('yson is not supported on non-default target platform')
 
-    program_sql = os.path.join(DATA_PATH, suite, case + NEGATIVE_TEMPLATE)
+    program_sql = get_case_file(DATA_PATH, suite, case, ['.sql', '.yql', '.sqlx'])
+
+    if not is_xsqlfail(config, program_sql):
+        pytest.skip('only xsqlfail is supported in this mode')
+
     out_dir = tmpdir.mkdir(suite).mkdir(case).dirname
     files = []
 

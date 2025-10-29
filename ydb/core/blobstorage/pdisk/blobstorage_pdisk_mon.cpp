@@ -73,6 +73,11 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     COUNTER_INIT(StatsGroup, UsedSpaceBytes, false);
     COUNTER_INIT(StatsGroup, SectorMapAllocatedBytes, false);
 
+    COUNTER_INIT(StatsGroup, EmulatedWriteErrors, true);
+    COUNTER_INIT(StatsGroup, EmulatedReadErrors, true);
+    COUNTER_INIT(StatsGroup, EmulatedSilentWriteFails, true);
+    COUNTER_INIT(StatsGroup, EmulatedReadReplays, true);
+
     // states subgroup
     COUNTER_INIT(StateGroup, PDiskState, false);
     COUNTER_INIT(StateGroup, PDiskBriefState, false);
@@ -231,6 +236,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardSlay, YardSlay);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardControl, YardControl);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, YardResize, YardResize);
+    IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ChangeExpectedSlotCount, ChangeExpectedSlotCount);
 
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, ShredPDisk, ShredPDisk);
     IO_REQ_INIT_IF_EXTENDED(PDiskGroup, PreShredCompactVDisk, PreShredCompactVDisk);

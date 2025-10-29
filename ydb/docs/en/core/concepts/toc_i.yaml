@@ -1,21 +1,31 @@
 items:
 - name: Glossary
   href: glossary.md
+- name: Analytical Features
+  include:
+    path: analytics/toc_p.yaml
+    mode: link
+- name: Architecture
+  href: architecture.md
 - name: Connecting to a database
   href: connect.md
-- name: Cluster structure
+- name: Schema objects
   href: datamodel/index.md
   include:
     path: datamodel/toc_p.yaml
     mode: link
 - name: Cluster topology
   href: topology.md
+- name: Query execution
+  href: query_execution.md
 - name: Transactions
   href: transactions.md
 - name: Secondary indexes
   href: secondary_indexes.md
 - name: Vector search
   href: vector_search.md
+- name: Spilling
+  href: spilling.md
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
@@ -30,6 +40,9 @@ items:
 - name: Asynchronous replication
   href: async-replication.md
   when: feature_async_replication
+- name: Data transfer
+  href: transfer.md
+  when: feature_transfer
 - name: Query optimizer
   href: optimizer.md
 - name: Federated query

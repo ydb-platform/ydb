@@ -1,14 +1,6 @@
 # Обновление данных с помощью UPDATE
 
-{% note warning %}
-
-{% include [not_allow_for_olap](../../_includes/not_allow_for_olap_text.md) %}
-
-{% include [not_allow_for_olap](../../_includes/ways_add_data_to_olap.md) %}
-
-{% endnote %}
-
-Обновите данные в строковой таблице с помощью оператора [UPDATE](../../yql/reference/syntax/update.md).
+Обновите данные в таблице с помощью оператора [UPDATE](../../yql/reference/syntax/update.md).
 
 {% include [yql-reference-prerequisites](_includes/yql_tutorial_prerequisites.md) %}
 

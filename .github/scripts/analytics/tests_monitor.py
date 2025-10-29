@@ -1,107 +1,57 @@
 #!/usr/bin/env python3
 
 import argparse
-import configparser
 import datetime
 import os
-import posixpath
-import sys
-import traceback
 import time
 import ydb
 import pandas as pd
 from collections import Counter
 from multiprocessing import Pool, cpu_count
-
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
-config.read(config_file_path)
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
+from ydb_wrapper import YDBWrapper
 
 
-def create_tables(pool, table_path):
+def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
-    def callee(session):
-        session.execute_scheme(
-            f"""
-            CREATE table IF NOT EXISTS `{table_path}` (
-                `test_name` Utf8 NOT NULL,
-                `suite_folder` Utf8 NOT NULL,
-                `full_name` Utf8 NOT NULL,
-                `date_window` Date NOT NULL,
-                `build_type` Utf8 NOT NULL,
-                `branch` Utf8 NOT NULL,
-                `days_ago_window` Uint64 NOT NULL,
-                `history` Utf8,
-                `history_class` Utf8,
-                `pass_count` Uint64,
-                `mute_count` Uint64,
-                `fail_count` Uint64,
-                `skip_count` Uint64,
-                `success_rate` Uint64,
-                `summary` Utf8,
-                `owner` Utf8,
-                `is_muted` Uint32,
-                `is_test_chunk` Uint32,
-                `state` Utf8,
-                `previous_state` Utf8,
-                `state_change_date` Date,
-                `days_in_state` Uint64,
-                `previous_mute_state` Uint32,
-                `mute_state_change_date` Date,
-                `days_in_mute_state` Uint64,
-                `previous_state_filtered` Utf8,
-                `state_change_date_filtered` Date,
-                `days_in_state_filtered` Uint64,
-                `state_filtered` Utf8,
-                PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window, build_type, branch)
-            )
-                PARTITION BY HASH(build_type,branch)
-                WITH (STORE = COLUMN)
-            """
+    create_sql = f"""
+        CREATE table IF NOT EXISTS `{table_path}` (
+            `test_name` Utf8 NOT NULL,
+            `suite_folder` Utf8 NOT NULL,
+            `full_name` Utf8 NOT NULL,
+            `date_window` Date NOT NULL,
+            `build_type` Utf8 NOT NULL,
+            `branch` Utf8 NOT NULL,
+            `days_ago_window` Uint64 NOT NULL,
+            `history` Utf8,
+            `history_class` Utf8,
+            `pass_count` Uint64,
+            `mute_count` Uint64,
+            `fail_count` Uint64,
+            `skip_count` Uint64,
+            `success_rate` Uint64,
+            `summary` Utf8,
+            `owner` Utf8,
+            `is_muted` Uint32,
+            `is_test_chunk` Uint32,
+            `state` Utf8,
+            `previous_state` Utf8,
+            `state_change_date` Date,
+            `days_in_state` Uint64,
+            `previous_mute_state` Uint32,
+            `mute_state_change_date` Date,
+            `days_in_mute_state` Uint64,
+            `previous_state_filtered` Utf8,
+            `state_change_date_filtered` Date,
+            `days_in_state_filtered` Uint64,
+            `state_filtered` Utf8,
+            PRIMARY KEY (`test_name`, `suite_folder`, `full_name`,date_window, build_type, branch)
         )
-
-    return pool.retry_operation_sync(callee)
-
-
-def bulk_upsert(table_client, table_path, rows):
-    print(f"> bulk upsert: {table_path}")
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("history", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("success_rate", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("summary", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("is_test_chunk", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("previous_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-        .add_column("days_in_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("mute_state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
-        .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-    )
-    table_client.bulk_upsert(table_path, rows, column_types)
+            PARTITION BY HASH(build_type,branch)
+            WITH (STORE = COLUMN)
+        """
+    
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
 def process_test_group(name, group, last_day_data, default_start_date):
@@ -308,22 +258,12 @@ def main():
     branch = args.branch
     concurrent_mode = args.concurrent_mode
 
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-        return 1
-    else:
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
-
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=False)
-        table_client = ydb.TableClient(driver, tc_settings)
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    script_name = os.path.basename(__file__)
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
+        if not ydb_wrapper.check_credentials():
+            return 1
+        
         base_date = datetime.datetime(1970, 1, 1)
         default_start_date = datetime.date(2025, 2, 1)
         today = datetime.date.today()
@@ -337,91 +277,126 @@ def main():
             WHERE build_type = '{build_type}'
             AND branch = '{branch}'
         """
-        query = ydb.ScanQuery(query_last_exist_day, {})
-        it = driver.table_client.scan_query(query)
-        last_exist_day = None
-        while True:
-            try:
-                result = next(it)
-                last_exist_day = result.result_set.rows[0][
-                    'last_exist_day'
-                ]  # exclude last day, we want recalculate last day
-                break
-            except StopIteration:
-                break
-            except Exception as e:
-                print(f"Error during fetching last existing day: {e}")
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(query_last_exist_day)
+            last_exist_day = results[0]['last_exist_day'] if results else None
+        except Exception as e:
+            print(f"Error during fetching last existing day: {e}")
+            last_exist_day = None
 
         last_exist_df = None
         last_day_data = None
 
-        # If no data exists, set last_exist_day to a default start date
-        if last_exist_day is None:
-            last_exist_day = default_start_date
-            last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days + 1)]
-            print(f"Monitor data do not exist - init new monitor collecting from default date {last_exist_day_str}")
+    # If no data exists, try to find when this branch was created
+    if last_exist_day is None:
+        print(f"Monitor data do not exist for branch '{branch}' - checking when branch was created")
+        
+        # Try to find the earliest date when this branch had any test runs
+        query_branch_creation = f"""
+            SELECT MIN(run_timestamp) as earliest_run
+            FROM `test_results/test_runs_column`
+            WHERE branch = '{branch}' AND build_type = '{build_type}'
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(query_branch_creation)
+            branch_creation_date = None
+            
+            if results and results[0]['earliest_run']:
+                earliest_run = results[0]['earliest_run']
+                
+                # Convert timestamp to datetime with error handling
+                try:
+                    if earliest_run > 1000000000000000:  # Microseconds
+                        timestamp_seconds = earliest_run / 1000000
+                        branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                        print(f"Converted from microseconds: {branch_creation_date}")
+                    elif earliest_run > 1000000000000:  # Milliseconds
+                        timestamp_seconds = earliest_run / 1000
+                        branch_creation_date = datetime.datetime.fromtimestamp(timestamp_seconds).date()
+                        print(f"Converted from milliseconds: {branch_creation_date}")
+                    else:  # Seconds
+                        branch_creation_date = datetime.datetime.fromtimestamp(earliest_run).date()
+                        print(f"Converted from seconds: {branch_creation_date}")
+                except (OSError, OverflowError, ValueError) as e:
+                    print(f"Error converting timestamp {earliest_run} to datetime: {e}")
+                    branch_creation_date = None
+        except Exception as e:
+            print(f"Error fetching branch creation date: {e}")
+            branch_creation_date = None
+        
+        # Use branch creation date if found, otherwise fall back to 1 week ago
+        if branch_creation_date:
+            last_exist_day = branch_creation_date
+            print(f"Found branch creation date: {branch_creation_date}")
         else:
-            # Get data from tests_monitor for last existing day
-            last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
-            if last_exist_day == today:  # to recalculate data for today
-                last_exist_day = last_exist_day - datetime.timedelta(days=1)
-            last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
-            print(f"Monitor data exist - geting data for date {last_exist_day_str}")
-            date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days)]
-            query_last_exist_data = f"""
-                SELECT *
-                FROM `{table_path}`
-                WHERE build_type = '{build_type}'
-                AND branch = '{branch}'
-                AND date_window = Date('{last_exist_day_str}')
-            """
-            query = ydb.ScanQuery(query_last_exist_data, {})
-            it = driver.table_client.scan_query(query)
+            last_exist_day = today - datetime.timedelta(days=7)
+            print(f"No test runs found for branch, using 1 week ago: {last_exist_day}")
+        
+        last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
+        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days + 1)]
+        print(f"Init new monitor collecting from date {last_exist_day_str}")
+    else:
+        # Get data from tests_monitor for last existing day
+        last_exist_day = (base_date + datetime.timedelta(days=last_exist_day)).date()
+        if last_exist_day == today:  # to recalculate data for today
+            last_exist_day = last_exist_day - datetime.timedelta(days=1)
+        last_exist_day_str = last_exist_day.strftime('%Y-%m-%d')
+        print(f"Monitor data exist - geting data for date {last_exist_day_str}")
+        date_list = [today - datetime.timedelta(days=x) for x in range((today - last_exist_day).days)]
+        query_last_exist_data = f"""
+            SELECT *
+            FROM `{table_path}`
+            WHERE build_type = '{build_type}'
+            AND branch = '{branch}'
+            AND date_window = Date('{last_exist_day_str}')
+        """
+        
+        try:
+            results = ydb_wrapper.execute_scan_query(query_last_exist_data)
             last_exist_data = []
 
-            while True:
-                try:
-                    result = next(it)
-                    # Convert each row to a dictionary with consistent keys
-                    for row in result.result_set.rows:
-                        row_dict = {
-                            'test_name': row['test_name'],
-                            'suite_folder': row['suite_folder'],
-                            'full_name': row['full_name'],
-                            'date_window': base_date + datetime.timedelta(days=row['date_window']),
-                            'build_type': row['build_type'],
-                            'branch': row['branch'],
-                            'days_ago_window': row['days_ago_window'],
-                            'history': row['history'],
-                            'history_class': row['history_class'],
-                            'pass_count': row['pass_count'],
-                            'mute_count': row['mute_count'],
-                            'fail_count': row['fail_count'],
-                            'skip_count': row['skip_count'],
-                            'success_rate': row['success_rate'],
-                            'summary': row['summary'],
-                            'owners': row['owner'],
-                            'is_muted': row['is_muted'],
-                            'is_test_chunk': row['is_test_chunk'],
-                            'state': row['state'],
-                            'previous_state': row['previous_state'],
-                            'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
-                            'days_in_state': row['days_in_state'],
-                            'previous_mute_state': row['previous_mute_state'],
-                            'mute_state_change_date': base_date + datetime.timedelta(days=row['mute_state_change_date']),
-                            'days_in_mute_state': row['days_in_mute_state'],
-                            'previous_state_filtered': row['previous_state_filtered'],
-                            'state_change_date_filtered': base_date
-                            + datetime.timedelta(days=row['state_change_date_filtered']),
-                            'days_in_state_filtered': row['days_in_state_filtered'],
-                            'state_filtered': row['state_filtered'],
-                        }
-                        last_exist_data.append(row_dict)
-                except StopIteration:
-                    break
+            for row in results:
+                # Convert each row to a dictionary with consistent keys
+                row_dict = {
+                    'test_name': row['test_name'],
+                    'suite_folder': row['suite_folder'],
+                    'full_name': row['full_name'],
+                    'date_window': base_date + datetime.timedelta(days=row['date_window']),
+                    'build_type': row['build_type'],
+                    'branch': row['branch'],
+                    'days_ago_window': row['days_ago_window'],
+                    'history': row['history'],
+                    'history_class': row['history_class'],
+                    'pass_count': row['pass_count'],
+                    'mute_count': row['mute_count'],
+                    'fail_count': row['fail_count'],
+                    'skip_count': row['skip_count'],
+                    'success_rate': row['success_rate'],
+                    'summary': row['summary'],
+                    'owners': row['owner'],
+                    'is_muted': row['is_muted'],
+                    'is_test_chunk': row['is_test_chunk'],
+                    'state': row['state'],
+                    'previous_state': row['previous_state'],
+                    'state_change_date': base_date + datetime.timedelta(days=row['state_change_date']),
+                    'days_in_state': row['days_in_state'],
+                    'previous_mute_state': row['previous_mute_state'],
+                    'mute_state_change_date': base_date + datetime.timedelta(days=row['mute_state_change_date']),
+                    'days_in_mute_state': row['days_in_mute_state'],
+                    'previous_state_filtered': row['previous_state_filtered'],
+                    'state_change_date_filtered': base_date
+                    + datetime.timedelta(days=row['state_change_date_filtered']),
+                    'days_in_state_filtered': row['days_in_state_filtered'],
+                    'state_filtered': row['state_filtered'],
+                }
+                last_exist_data.append(row_dict)
 
             last_exist_df = pd.DataFrame(last_exist_data)
+        except Exception as e:
+            print(f"Error fetching last existing data: {e}")
+            last_exist_df = None
 
         # Get data from flaky_tests_window table for dates after last existing day
         data = {
@@ -456,10 +431,10 @@ def main():
                     hist.history AS history,
                     hist.history_class AS history_class,
                     hist.mute_count AS mute_count,
-                    COALESCE(owners_t.owners, fallback_t.owners) AS owners,
+                    owners_t.owners AS owners,
                     hist.pass_count AS pass_count,
-                    COALESCE(owners_t.run_timestamp_last, NULL) AS run_timestamp_last,
-                    COALESCE(owners_t.is_muted, NULL) AS is_muted,
+                    owners_t.run_timestamp_last AS run_timestamp_last,
+                    owners_t.is_muted AS is_muted,
                     hist.skip_count AS skip_count,
                     hist.suite_folder AS suite_folder,
                     hist.test_name AS test_name
@@ -471,7 +446,7 @@ def main():
                     AND build_type = '{build_type}' 
                     AND branch = '{branch}'
                 ) AS hist 
-                LEFT JOIN (
+                INNER JOIN (
                     SELECT 
                         test_name,
                         suite_folder,
@@ -488,38 +463,10 @@ def main():
                 ON 
                     hist.test_name = owners_t.test_name
                     AND hist.suite_folder = owners_t.suite_folder
-                    AND hist.date_window = owners_t.date
-                LEFT JOIN (
-                    SELECT 
-                        test_name,
-                        suite_folder,
-                        owners
-                    FROM 
-                        `test_results/analytics/testowners`
-                ) AS fallback_t
-                ON 
-                    hist.test_name = fallback_t.test_name
-                    AND hist.suite_folder = fallback_t.suite_folder
-                WHERE
-                    owners_t.test_name IS NOT NULL OR fallback_t.test_name IS NOT NULL;
+                    AND hist.date_window = owners_t.date;
             """
-            query = ydb.ScanQuery(query_get_history, {})
-            # start transaction time
-            start_time = time.time()
-            it = driver.table_client.scan_query(query)
-            # end transaction time
-
-            results = []
-            prepared_for_update_rows = []
-            while True:
-                try:
-                    result = next(it)
-                    results = results + result.result_set.rows
-                except StopIteration:
-                    break
-            end_time = time.time()
-            print(f'Captured raw data for {date} duration: {end_time - start_time}')
-            start_time = time.time()
+            # Execute query using ydb_wrapper
+            results = ydb_wrapper.execute_scan_query(query_get_history)
 
             # Check if new data was found
             if results:
@@ -575,7 +522,7 @@ def main():
 
         end_time = time.time()
         print(f'Dataframe inited: {end_time - start_time}')
-        tart_time = time.time()
+        start_time = time.time()
 
         df = df.sort_values(by=['full_name', 'date_window'])
 
@@ -721,26 +668,48 @@ def main():
 
         start_upsert_time = time.time()
 
-        with ydb.SessionPool(driver) as pool:
+        # Create table and bulk upsert using ydb_wrapper
+        create_tables(ydb_wrapper, table_path)
+        full_path = f"{ydb_wrapper.database_path}/{table_path}"
 
-            create_tables(pool, table_path)
-            full_path = posixpath.join(DATABASE_PATH, table_path)
+        chunk_size = 40000
 
-            def chunk_data(data, chunk_size):
-                for i in range(0, len(data), chunk_size):
-                    yield data[i : i + chunk_size]
-
-            chunk_size = 40000
-            total_chunks = len(prepared_for_update_rows) // chunk_size + (
-                1 if len(prepared_for_update_rows) % chunk_size != 0 else 0
-            )
-
-            for i, chunk in enumerate(chunk_data(prepared_for_update_rows, chunk_size), start=1):
-                start_time = time.time()
-                print(f"Uploading chunk {i}/{total_chunks}")
-                bulk_upsert(driver.table_client, full_path, chunk)
-                end_time = time.time()
-                print(f'upsert for: {end_time - start_time} ')
+        # Подготавливаем column_types один раз
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("build_type", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("date_window", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_ago_window", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("history", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("history_class", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("pass_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("mute_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("fail_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("skip_count", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("success_rate", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("summary", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("owner", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("is_test_chunk", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("previous_state", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_in_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("previous_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+            .add_column("days_in_mute_state", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("mute_state_change_date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("previous_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("state_change_date_filtered", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("days_in_state_filtered", ydb.OptionalType(ydb.PrimitiveType.Uint64))
+            .add_column("state_filtered", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+        )
+        
+        # Используем bulk_upsert_batches для агрегированной статистики
+        ydb_wrapper.bulk_upsert_batches(full_path, prepared_for_update_rows, column_types, chunk_size)
 
         end_time = time.time()
         print(f'monitor data upserted: {end_time - start_upsert_time}')

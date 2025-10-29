@@ -3,6 +3,8 @@ import json
 import logging
 import re
 import uuid
+from importlib import import_module
+from importlib.metadata import version as dist_version
 from base64 import b64encode
 from typing import Optional, Dict, Any, Sequence, Union, List, Callable, Generator, BinaryIO
 from urllib.parse import urlencode
@@ -40,13 +42,15 @@ class HttpClient(Client):
     valid_transport_settings = {'database', 'buffer_size', 'session_id',
                                 'compress', 'decompress', 'session_timeout',
                                 'session_check', 'query_id', 'quota_key',
-                                'wait_end_of_query', 'client_protocol_version'}
+                                'wait_end_of_query', 'client_protocol_version',
+                                'role'}
     optional_transport_settings = {'send_progress_in_http_headers',
                                    'http_headers_progress_interval_ms',
                                    'enable_http_compression'}
     _owns_pool_manager = False
 
-    # pylint: disable=too-many-positional-arguments,too-many-arguments,too-many-locals,too-many-branches,too-many-statements,unused-argument
+    # R0917: too-many-positional-arguments
+    # pylint: disable=too-many-arguments,R0917,too-many-locals,too-many-branches,too-many-statements,unused-argument
     def __init__(self,
                  interface: str,
                  host: str,
@@ -75,7 +79,9 @@ class HttpClient(Client):
                  show_clickhouse_errors: Optional[bool] = None,
                  autogenerate_session_id: Optional[bool] = None,
                  tls_mode: Optional[str] = None,
-                 proxy_path: str = ''):
+                 proxy_path: str = '',
+                 form_encode_query_params: bool = False,
+                 rename_response_column: Optional[str] = None):
         """
         Create an HTTP ClickHouse Connect client
         See clickhouse_connect.get_client for parameters
@@ -85,6 +91,7 @@ class HttpClient(Client):
             proxy_path = '/' + proxy_path
         self.url = f'{interface}://{host}:{port}{proxy_path}'
         self.headers = {}
+        self.form_encode_query_params = form_encode_query_params
         self.params = dict_copy(HttpClient.params)
         ch_settings = dict_copy(settings, self.params)
         self.http = pool_mgr
@@ -125,6 +132,7 @@ class HttpClient(Client):
         elif (not client_cert or tls_mode in ('strict', 'proxy')) and username:
             self.headers['Authorization'] = 'Basic ' + b64encode(f'{username}:{password}'.encode()).decode()
 
+        self._reported_libs = set()
         self.headers['User-Agent'] = common.build_client_name(client_name)
         self._read_format = self._write_format = 'Native'
         self._transform = NativeTransform()
@@ -140,6 +148,7 @@ class HttpClient(Client):
         self._send_comp_setting = False
         self._progress_interval = None
         self._active_session = None
+        self._rename_response_column = rename_response_column
 
         # allow to override the global autogenerate_session_id setting via the constructor params
         _autogenerate_session_id = common.get_setting('autogenerate_session_id') \
@@ -211,18 +220,42 @@ class HttpClient(Client):
         if self.protocol_version:
             params['client_protocol_version'] = self.protocol_version
             context.block_info = True
-        params.update(context.bind_params)
         params.update(self._validate_settings(context.settings))
+        context.rename_response_column = self._rename_response_column
         if not context.is_insert and columns_only_re.search(context.uncommented_query):
-            response = self._raw_request(f'{context.final_query}\n FORMAT JSON',
-                                         params, headers, retries=self.query_retries)
+            # Mirror normal query behavior for form encoding and external data
+            fmt_json_query = f'{context.final_query}\n FORMAT JSON'
+            if self.form_encode_query_params:
+                fields = {'query': fmt_json_query}
+                fields.update(context.bind_params)
+                if context.external_data:  # Deal with form encoding + external data
+                    params.update(context.external_data.query_params)
+                    fields.update(context.external_data.form_data)
+                response = self._raw_request(bytes(), params, headers, retries=self.query_retries, fields=fields)
+            elif context.external_data:  # Deal with external data without form encoding
+                fields = context.external_data.form_data
+                params.update(context.bind_params)
+                params.update(context.external_data.query_params)
+                params['query'] = fmt_json_query
+                response = self._raw_request(bytes(), params, headers, retries=self.query_retries, fields=fields)
+            else:  # Legacy behavior (plain body, bind params in URL)
+                params.update(context.bind_params)
+                response = self._raw_request(fmt_json_query,
+                                             params, headers, retries=self.query_retries)
             json_result = json.loads(response.data)
             # ClickHouse will respond with a JSON object of meta, data, and some other objects
             # We just grab the column names and column types from the metadata sub object
             names: List[str] = []
             types: List[ClickHouseType] = []
+            renamer = context.column_renamer
             for col in json_result['meta']:
-                names.append(col['name'])
+                name = col['name']
+                if renamer is not None:
+                    try:
+                        name = renamer(name)
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        logger.debug("Failed to rename col '%s'. Skipping rename. Error: %s", name, e)
+                names.append(name)
                 types.append(registry.get_from_name(col['type']))
             return QueryResult([], None, tuple(names), tuple(types))
 
@@ -231,12 +264,23 @@ class HttpClient(Client):
             if self._send_comp_setting:
                 params['enable_http_compression'] = '1'
         final_query = self._prep_query(context)
-        if context.external_data:
+        fields = {}
+        # Setup additional query parameters and body
+        if self.form_encode_query_params:
+            body = bytes()
+            fields['query'] = final_query
+            fields.update(context.bind_params)
+            if context.external_data:
+                params.update(context.external_data.query_params)
+                fields.update(context.external_data.form_data)
+        elif context.external_data:
+            params.update(context.bind_params)
             body = bytes()
             params['query'] = final_query
             params.update(context.external_data.query_params)
             fields = context.external_data.form_data
         else:
+            params.update(context.bind_params)
             body = final_query
             fields = None
             headers['Content-Type'] = 'text/plain; charset=utf-8'
@@ -380,25 +424,47 @@ class HttpClient(Client):
         return QuerySummary(self._summary(response))
 
     def _error_handler(self, response: HTTPResponse, retried: bool = False) -> None:
-        if self.show_clickhouse_errors:
+        """
+        Handles HTTP errors. Tries to be robust and provide maximum context.
+        """
+        try:
+            body = ""
+            # Always try to read the response body for context.
             try:
-                err_content = get_response_data(response)
+                # get_response_data reads body and decodes it for the error message
+                raw_body = get_response_data(response)
+                body = common.format_error(
+                    raw_body.decode(errors="backslashreplace")
+                ).strip()
             except Exception:  # pylint: disable=broad-except
-                err_content = None
-            finally:
-                response.close()
+                # If we can't read or decode the body, we'll proceed without it
+                logger.warning("Failed to read error response body", exc_info=True)
 
-            err_str = f'HTTPDriver for {self.url} returned response code {response.status}'
-            err_code = response.headers.get(ex_header)
-            if err_code:
-                err_str = f'HTTPDriver for {self.url} received ClickHouse error code {err_code}'
-            if err_content:
-                err_msg = common.format_error(err_content.decode(errors='backslashreplace'))
-                if err_msg.startswith('Code'):
-                    err_str = f'{err_str}\n {err_msg}'
-        else:
-            err_str = 'The ClickHouse server returned an error.'
+            # Build the error message
+            if self.show_clickhouse_errors:
+                err_code = response.headers.get(ex_header)
+                if err_code:
+                    # Prioritize the specific ClickHouse exception code if it exists.
+                    err_str = f"Received ClickHouse exception, code: {err_code}"
+                else:
+                    # Otherwise, just use the generic HTTP status
+                    err_str = f"HTTP driver received HTTP status {response.status}"
 
+                if body:
+                    # Always append the body if it exists
+                    err_str = f"{err_str}, server response: {body}"
+            else:
+                # Simple message for when detailed errors are disabled
+                err_str = "The ClickHouse server returned an error"
+
+            # Add the URL for additional context
+            err_str = f"{err_str} (for url {self.url})"
+
+        finally:
+            # Ensure closed response to prevent resource leaks
+            response.close()
+
+        # Raise the appropriate exception class
         raise OperationalError(err_str) if retried else DatabaseError(err_str) from None
 
     def _raw_request(self,
@@ -519,18 +585,74 @@ class HttpClient(Client):
         params = self._validate_settings(settings or {})
         if use_database and self.database:
             params['database'] = self.database
-        params.update(bind_params)
-        if external_data:
-            if isinstance(final_query, bytes):
-                raise ProgrammingError('Cannot combine binary query data with `External Data`')
+        fields = {}
+        # Setup query body
+        if external_data and not self.form_encode_query_params and isinstance(final_query, bytes):
+            raise ProgrammingError("Binary query cannot be placed in URL when using External Data; enable form encoding.")
+        # Setup additional query parameters and body
+        if self.form_encode_query_params:
+            body = bytes()
+            fields['query'] = final_query
+            fields.update(bind_params)
+            if external_data:
+                params.update(external_data.query_params)
+                fields.update(external_data.form_data)
+        elif external_data:
+            params.update(bind_params)
             body = bytes()
             params['query'] = final_query
             params.update(external_data.query_params)
             fields = external_data.form_data
         else:
+            params.update(bind_params)
             body = final_query
             fields = None
         return body, params, fields
+
+    # pylint: disable=broad-exception-caught
+    def _add_integration_tag(self, name: str):
+        """
+        Dynamically adds a product (like pandas or sqlalchemy) to the User-Agent string details section.
+        """
+        if not common.get_setting("send_integration_tags") or name in self._reported_libs:
+            return
+
+        try:
+            ver = "unknown"
+            try:
+                ver = dist_version(name)
+            except Exception:
+                try:
+                    mod = import_module(name)
+                    ver = getattr(mod, "__version__", "unknown")
+                except Exception:
+                    pass
+
+            product_info = f"{name}/{ver}"
+
+            ua = self.headers.get("User-Agent", "")
+            start = ua.find("(")
+            if start == -1:
+                return
+            end = ua.find(")", start + 1)
+            if end == -1:
+                return
+
+            details = ua[start + 1 : end].strip()
+
+            if product_info in details:
+                self._reported_libs.add(name)
+                return
+
+            new_details = f"{product_info}; {details}" if details else product_info
+            new_ua = f"{ua[: start + 1]}{new_details}{ua[end:]}"
+            self.headers["User-Agent"] = new_ua.strip()
+
+            self._reported_libs.add(name)
+            logger.debug("Added '%s' to User-Agent", product_info)
+
+        except Exception as e:
+            logger.debug("Problem adding '%s' to User-Agent: %s", name, e)
 
     def ping(self):
         """

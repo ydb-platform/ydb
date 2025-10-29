@@ -18,9 +18,17 @@ namespace NYdb::inline Dev {
 
 class TResultSetParser;
 
+// Forward declarations for friend access
+namespace NTable {
+
+class TTableClient;
+
+} // namespace NTable
+
 //! Representation of YDB type.
 class TType {
     friend class TProtoAccessor;
+    friend class NTable::TTableClient;
 public:
     TType(const Ydb::Type& typeProto);
     TType(Ydb::Type&& typeProto);
@@ -60,7 +68,9 @@ enum class EPrimitiveType {
     TzDatetime   = 0x0035,
     TzTimestamp  = 0x0036,
     String       = 0x1001,
+    Bytes        = 0x1001,
     Utf8         = 0x1200,
+    Text         = 0x1200,
     Yson         = 0x1201,
     Json         = 0x1202,
     Uuid         = 0x1203,
@@ -264,12 +274,6 @@ struct TUuidValue {
     } Buf_;
 };
 
-namespace NTable {
-
-class TTableClient;
-
-} // namespace NTable
-
 //! Representation of YDB value.
 class TValue {
     friend class TValueParser;
@@ -295,6 +299,12 @@ private:
     class TImpl;
     std::shared_ptr<TImpl> Impl_;
 };
+
+//! Wide types are used to represent YDB date types (Date32, Datetime64, Timestamp64, Interval64).
+//! They are used to avoid overflows when converting from YDB types to C++ types.
+using TWideDays = std::chrono::duration<int32_t, std::ratio<86400>>;
+using TWideSeconds = std::chrono::duration<int64_t, std::ratio<1>>;
+using TWideMicroseconds = std::chrono::duration<int64_t, std::micro>;
 
 class TValueParser : public TMoveOnly {
     friend class TResultSetParser;
@@ -322,15 +332,17 @@ public:
     TInstant GetDatetime() const;
     TInstant GetTimestamp() const;
     int64_t GetInterval() const;
-    int32_t GetDate32() const;
-    int64_t GetDatetime64() const;
-    int64_t GetTimestamp64() const;
-    int64_t GetInterval64() const;
+    std::chrono::sys_time<TWideDays> GetDate32() const;
+    std::chrono::sys_time<TWideSeconds> GetDatetime64() const;
+    std::chrono::sys_time<TWideMicroseconds> GetTimestamp64() const;
+    TWideMicroseconds GetInterval64() const;
     const std::string& GetTzDate() const;
     const std::string& GetTzDatetime() const;
     const std::string& GetTzTimestamp() const;
     const std::string& GetString() const;
+    const std::string& GetBytes() const;
     const std::string& GetUtf8() const;
+    const std::string& GetText() const;
     const std::string& GetYson() const;
     const std::string& GetJson() const;
     TDecimalValue GetDecimal() const;
@@ -354,15 +366,17 @@ public:
     std::optional<TInstant> GetOptionalDatetime() const;
     std::optional<TInstant> GetOptionalTimestamp() const;
     std::optional<int64_t> GetOptionalInterval() const;
-    std::optional<int32_t> GetOptionalDate32() const;
-    std::optional<int64_t> GetOptionalDatetime64() const;
-    std::optional<int64_t> GetOptionalTimestamp64() const;
-    std::optional<int64_t> GetOptionalInterval64() const;
+    std::optional<std::chrono::sys_time<TWideDays>> GetOptionalDate32() const;
+    std::optional<std::chrono::sys_time<TWideSeconds>> GetOptionalDatetime64() const;
+    std::optional<std::chrono::sys_time<TWideMicroseconds>> GetOptionalTimestamp64() const;
+    std::optional<TWideMicroseconds> GetOptionalInterval64() const;
     std::optional<std::string> GetOptionalTzDate() const;
     std::optional<std::string> GetOptionalTzDatetime() const;
     std::optional<std::string> GetOptionalTzTimestamp() const;
     std::optional<std::string> GetOptionalString() const;
+    std::optional<std::string> GetOptionalBytes() const;
     std::optional<std::string> GetOptionalUtf8() const;
+    std::optional<std::string> GetOptionalText() const;
     std::optional<std::string> GetOptionalYson() const;
     std::optional<std::string> GetOptionalJson() const;
     std::optional<TDecimalValue> GetOptionalDecimal() const;
@@ -440,7 +454,9 @@ public:
     TDerived& TzDatetime(const std::string& value);
     TDerived& TzTimestamp(const std::string& value);
     TDerived& String(const std::string& value);
+    TDerived& Bytes(const std::string& value);
     TDerived& Utf8(const std::string& value);
+    TDerived& Text(const std::string& value);
     TDerived& Yson(const std::string& value);
     TDerived& Json(const std::string& value);
     TDerived& Decimal(const TDecimalValue& value);
@@ -448,10 +464,10 @@ public:
     TDerived& Uuid(const TUuidValue& value);
     TDerived& JsonDocument(const std::string& value);
     TDerived& DyNumber(const std::string& value);
-    TDerived& Date32(const int32_t value);
-    TDerived& Datetime64(const int64_t value);
-    TDerived& Timestamp64(const int64_t value);
-    TDerived& Interval64(const int64_t value);
+    TDerived& Date32(const std::chrono::sys_time<TWideDays>& value);
+    TDerived& Datetime64(const std::chrono::sys_time<TWideSeconds>& value);
+    TDerived& Timestamp64(const std::chrono::sys_time<TWideMicroseconds>& value);
+    TDerived& Interval64(const TWideMicroseconds& value);
 
     TDerived& OptionalBool(const std::optional<bool>& value);
     TDerived& OptionalInt8(const std::optional<int8_t>& value);
@@ -472,16 +488,18 @@ public:
     TDerived& OptionalTzDatetime(const std::optional<std::string>& value);
     TDerived& OptionalTzTimestamp(const std::optional<std::string>& value);
     TDerived& OptionalString(const std::optional<std::string>& value);
+    TDerived& OptionalBytes(const std::optional<std::string>& value);
     TDerived& OptionalUtf8(const std::optional<std::string>& value);
+    TDerived& OptionalText(const std::optional<std::string>& value);
     TDerived& OptionalYson(const std::optional<std::string>& value);
     TDerived& OptionalJson(const std::optional<std::string>& value);
     TDerived& OptionalUuid(const std::optional<TUuidValue>& value);
     TDerived& OptionalJsonDocument(const std::optional<std::string>& value);
     TDerived& OptionalDyNumber(const std::optional<std::string>& value);
-    TDerived& OptionalDate32(const std::optional<int32_t>& value);
-    TDerived& OptionalDatetime64(const std::optional<int64_t>& value);
-    TDerived& OptionalTimestamp64(const std::optional<int64_t>& value);
-    TDerived& OptionalInterval64(const std::optional<int64_t>& value);
+    TDerived& OptionalDate32(const std::optional<std::chrono::sys_time<TWideDays>>& value);
+    TDerived& OptionalDatetime64(const std::optional<std::chrono::sys_time<TWideSeconds>>& value);
+    TDerived& OptionalTimestamp64(const std::optional<std::chrono::sys_time<TWideMicroseconds>>& value);
+    TDerived& OptionalInterval64(const std::optional<TWideMicroseconds>& value);
 
     // Optional
     TDerived& BeginOptional();

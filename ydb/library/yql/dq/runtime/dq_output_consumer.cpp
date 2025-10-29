@@ -33,16 +33,7 @@ using namespace NUdf;
 
 // TODO: maybe use common interface without templates?
 
-struct THashV1 {
-    explicit THashV1(
-        const TVector<TColumnInfo>& keyColumns
-    )
-    {
-        for (const auto& column : keyColumns) {
-            Hashers.emplace_back(MakeHashImpl(column.Type));
-        }
-    }
-
+struct THashBase {
     void Start() {
         Hash = 0;
     }
@@ -51,20 +42,27 @@ struct THashV1 {
     void Update(const TValue& value, size_t keyIdx) {
         Hash = CombineHashes(Hash, value.HasValue() ? Hashers.at(keyIdx)->Hash(value) : 0);
     }
-
-    ui64 Finish(ui64 outputsSize) {
-        return Hash % outputsSize;
-    }
-
 protected:
+    THashBase() = default;
+
     TVector<NUdf::IHash::TPtr> Hashers;
     ui64 Hash;
 };
 
+struct THashV1 : public THashBase {
+    explicit THashV1(const TVector<TColumnInfo>& keyColumns) {
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(MakeHashImpl(column.DataType));
+        }
+    }
+
+    ui64 Finish(ui64 outputsSize) {
+        return Hash % outputsSize;
+    }
+};
+
 struct THashV2 : public THashV1 {
-    explicit THashV2(
-        const TVector<TColumnInfo>& keyColumns
-    )
+    explicit THashV2(const TVector<TColumnInfo>& keyColumns)
         : THashV1(keyColumns)
     {}
 
@@ -78,24 +76,24 @@ struct THashV2 : public THashV1 {
     }
 };
 
-struct TBlockHashV1 {
-    TBlockHashV1(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
-    )
-    {
-        TBlockTypeHelper helper;
-        auto multiType = static_cast<const NMiniKQL::TMultiType*>(outputType);
-        for (const auto& column : keyColumns) {
-            auto columnType = multiType->GetElementType(column.Index);
-            YQL_ENSURE(columnType->IsBlock());
-            auto blockType = static_cast<const NMiniKQL::TBlockType*>(columnType);
-            Hashers.emplace_back(helper.MakeHasher(blockType->GetItemType()));
-        }
-    }
-
+struct TBlockHashBase {
     void Start() {
         Hash = 0;
+    }
+
+protected:
+    TBlockHashBase() = default;
+
+    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
+    ui64 Hash;
+};
+
+struct TBlockHashV1 : public TBlockHashBase {
+    explicit TBlockHashV1(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.OriginalType));
+        }
     }
 
     template <class TValue>
@@ -106,19 +104,20 @@ struct TBlockHashV1 {
     ui64 Finish(ui64 outputsSize) {
         return Hash % outputsSize;
     }
-
-protected:
-    TVector<NUdf::IBlockItemHasher::TPtr> Hashers;
-    ui64 Hash;
 };
 
-struct TBlockHashV2 : public TBlockHashV1 {
-    TBlockHashV2(
-        const TVector<TColumnInfo>& keyColumns,
-        const NKikimr::NMiniKQL::TType* outputType
-    )
-        : TBlockHashV1(keyColumns, outputType)
-    {}
+struct TBlockHashV2 : public TBlockHashBase {
+    explicit TBlockHashV2(const TVector<TColumnInfo>& keyColumns) {
+        TBlockTypeHelper helper;
+        for (const auto& column : keyColumns) {
+            Hashers.emplace_back(helper.MakeHasher(column.DataType));
+        }
+    }
+
+    template <class TValue>
+    void Update(const TValue& item, size_t keyIdx) {
+        Hash = CombineHashes(Hash, item.HasValue() ? Hashers.at(keyIdx)->Hash(item) : 0);
+    }
 
     ui64 Finish(ui64 outputsSize) {
         return THashV2::SpreadHash(Hash) % outputsSize;
@@ -369,10 +368,6 @@ private:
     mutable TUnboxedValue WaitingValue;
     mutable TUnboxedValueVector WideWaitingValues;
     mutable IDqOutput::TPtr OutputWaiting;
-protected:
-    virtual bool DoTryFinish() override {
-        return true;
-    }
 public:
     TDqOutputHashPartitionConsumer(
         TVector<IDqOutput::TPtr>&& outputs,
@@ -539,10 +534,6 @@ private:
         for (auto& output : Outputs_) {
             output->Finish();
         }
-    }
-
-    bool DoTryFinish() final {
-        return true;
     }
 
     size_t GetHashPartitionIndex(const TUnboxedValue* values) {
@@ -720,10 +711,6 @@ private:
         for (auto& output : Outputs_) {
             output->Finish();
         }
-    }
-
-    bool DoTryFinish() final {
-        return true;
     }
 
     size_t GetHashPartitionIndex(const arrow::Datum* values[], ui64 blockIndex) {
@@ -930,7 +917,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV2>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV2 hashFunc(keyColumns, outputType);
+            TBlockHashV2 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output
@@ -947,7 +934,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 return MakeIntrusive<TDqOutputHashPartitionConsumer<THashV1>>(std::move(outputs), std::move(keyColumns), outputWidth, std::move(hashFunc));
             }
 
-            TBlockHashV1 hashFunc(keyColumns, outputType);
+            TBlockHashV1 hashFunc(keyColumns);
             YQL_ENSURE(outputWidth.Defined(), "Expecting wide stream for block data");
             if (AllOf(keyColumns, [](const auto& info) { return *info.IsScalar; })) {
                 // all key columns are scalars - all data will go to single output

@@ -95,6 +95,7 @@ void PrintSingleField(const Message& proto,
                      NJson::TJsonValue& json, TStringBuf key) {
         Y_ABORT_UNLESS(!field.is_repeated(), "field is repeated.");
         json[key]["id"] = field.number();
+        json[key]["file"] = field.file()->name();
         PrintSingleFieldValue(proto, field, json[key]["default-value"]);
 }
 
@@ -104,6 +105,7 @@ void PrintSingleField(const Message& proto,
         Y_ABORT_UNLESS(field.is_repeated(), "field isn't repeated.");
         const Reflection* reflection = proto.GetReflection();
         json[key]["id"] = field.number();
+        json[key]["file"] = field.file()->name();
         auto& array = json[key].InsertValue("default-value", NJson::TJsonArray());
         for (size_t i = 0, endI = reflection->FieldSize(proto, &field); i < endI; ++i) {
             PrintRepeatedFieldValue(proto, field, array.AppendValue(NJson::JSON_UNDEFINED), i);

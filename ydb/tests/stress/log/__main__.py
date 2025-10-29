@@ -10,6 +10,7 @@ if __name__ == '__main__':
     parser.add_argument('--endpoint', default='grpc://localhost:2135', help="YDB endpoint")
     parser.add_argument('--database', default=None, required=True, help='A database to connect')
     parser.add_argument('--duration', default=120, type=lambda x: int(x), help='A duration of workload in seconds')
+    parser.add_argument('--log_prefix', default='log', help='Log path')
     parser.add_argument('--store_type', default='row', choices=['row', 'column'], help='Table type either row or column')
     parser.add_argument('--log_file', default=None, help='Append log into specified file')
 
@@ -24,6 +25,6 @@ if __name__ == '__main__':
             level=logging.INFO
         )
 
-    workload = YdbLogWorkload(args.endpoint, args.database, args.store_type, f'log_{args.store_type}')
+    workload = YdbLogWorkload(args.endpoint, args.database, args.duration, args.store_type, args.log_prefix)
     workload.start()
     workload.join()

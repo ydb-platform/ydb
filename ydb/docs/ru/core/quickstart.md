@@ -72,6 +72,8 @@
 
 - Docker x86_64
 
+    {% include [index.md](reference/docker/_includes/rosetta.md) %}
+
    1. Создайте каталог для тестирования {{ ydb-short-name }} и используйте его в качестве текущего рабочего каталога:
 
       ```bash
@@ -93,8 +95,6 @@
       ```
 
       Если контейнер успешно запустился, вы увидите его идентификатор. Контейнеру может потребоваться несколько секунд для инициализации. База данных будет недоступна до окончания инициализации.
-
-      {% include [index.md](reference/docker/_includes/rosetta.md) %}
 
 - Minikube
 
@@ -321,7 +321,7 @@ FLATTEN LIST BY keys AS key
    kubectl delete database.ydb.tech database-minikube-sample
    ```
 
-   Чтобы удалить кластер{{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
+   Чтобы удалить кластер {{ ydb-short-name }}, выполните следующие команды (все данные будут потеряны):
 
    ```bash
    kubectl delete storage.ydb.tech storage-minikube-sample

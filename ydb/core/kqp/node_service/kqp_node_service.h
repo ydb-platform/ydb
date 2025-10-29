@@ -74,13 +74,18 @@ struct TEvKqpNode {
 
 
 struct TNodeServiceState : public NKikimr::NKqp::NComputeActor::IKqpNodeState {
-    TNodeServiceState() = default;
     static constexpr ui64 BucketsCount = 64;
 
+    const TActorSystem* ActorSystem = nullptr;
+
 public:
-    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) {
+    explicit TNodeServiceState(const TActorSystem* actorSystem)
+        : ActorSystem(actorSystem)
+    {}
+
+    void OnTaskTerminate(ui64 txId, ui64 taskId, bool success) override {
         auto& bucket = GetStateBucketByTx(txId);
-        bucket.RemoveTask(txId, taskId, success);
+        bucket.RemoveTask(txId, taskId, success, ActorSystem);
     }
 
     NKqpNode::TState& GetStateBucketByTx(ui64 txId) {

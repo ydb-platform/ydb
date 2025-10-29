@@ -172,6 +172,20 @@ public:
     TYtJoinNodeOp* OriginalOp; // Only for nonReorderable
 };
 
+TMaybe<uint64_t> ColumnsDataWeight(const TVector<TYtColumnStatistic>& columns) {
+    if (columns.empty()) {
+        return Nothing();
+    }
+    uint64_t result = 0;
+    for (const auto& column : columns) {
+        if (!column.DataWeight) {
+            return Nothing();
+        }
+        result += *column.DataWeight;
+    }
+    return result;
+}
+
 class TOptimizerTreeBuilder
 {
 public:
@@ -207,7 +221,7 @@ public:
         }
         limits.LookupJoinMemLimit = Min(State->Configuration->LookupJoinLimit.Get().GetOrElse(0),
                                         State->Configuration->EvaluationTableSizeLimit.Get().GetOrElse(Max<ui64>()));
-        OutProviderCtx = std::make_shared<TYtProviderContext>(limits, std::move(ProviderRelInfo_));
+        OutProviderCtx = std::make_shared<TYtProviderContext>(limits, std::move(ProviderRelInfo_), State->Types->CostBasedOptimizerVersion);
     }
 
 private:
@@ -314,6 +328,7 @@ private:
         stat->ColumnStatistics = TIntrusivePtr<TOptimizerStatistics::TColumnStatMap>(
             new TOptimizerStatistics::TColumnStatMap());
         auto providerStats = std::make_unique<TYtProviderStatistic>();
+        bool canUseDataWeight = true;
 
         if (Y_UNLIKELY(!section.Settings().Empty()) && Y_UNLIKELY(section.Settings().Item(0).Name() == "Test")) {
             for (const auto& setting : section.Settings()) {
@@ -323,15 +338,17 @@ private:
             }
         } else {
             for (auto path: section.Paths()) {
-                auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-                if (pathInfo->HasColumns()) {
-                    NYT::TRichYPath ytPath;
-                    pathInfo->FillRichYPath(ytPath);
-                    stat->Ncols = std::max<int>(stat->Ncols, std::ssize(ytPath.Columns_->Parts_));
+                const TYtPathInfo pathInfo(path);
+                if (pathInfo.HasColumns()) {
+                    stat->Ncols = std::max<int>(stat->Ncols, std::ssize(*pathInfo.Columns->GetColumns()));
                 }
                 auto tableStat = TYtTableBaseInfo::GetStat(path.Table());
                 stat->ByteSize += tableStat->DataSize;
                 stat->Nrows += tableStat->RecordsCount;
+                const bool hasLookup = pathInfo.Table->Meta && pathInfo.Table->Meta->Attrs.Value("optimize_for", "scan") == "lookup";
+                if (hasLookup) {
+                    canUseDataWeight = false;
+                }
             }
             if (section.Ref().GetState() >= TExprNode::EState::ConstrComplete) {
                 auto sorted = section.Ref().GetConstraint<TSortedConstraintNode>();
@@ -354,6 +371,11 @@ private:
             TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> extendedStats;
             extendedStats = GetStatsFromCache(leaf, keyList);
             columnInfo = ExtractColumnInfo(extendedStats);
+            if (canUseDataWeight && State->Types->CostBasedOptimizerVersion >= 1) {
+                if (const auto dataWeight = ColumnsDataWeight(columnInfo)) {
+                    stat->ByteSize = *dataWeight;
+                }
+            }
         }
 
         TDynBitMap relBitmap;

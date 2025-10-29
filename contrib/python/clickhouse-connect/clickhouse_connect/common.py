@@ -77,6 +77,11 @@ _init_common('product_name', (), '')  # Product name used as part of client iden
 _init_common('readonly', (0, 1), 0)  # Implied "read_only" ClickHouse settings for versions prior to 19.17
 _init_common('send_os_user', (True, False), True)
 
+# Include integration tags (library name/version) in the User-Agent, e.g.:
+# pandas/2.2.5; polars/0.20.x; sqlalchemy/2.0.x. These tags are only included
+# when using relevant API methods.
+_init_common('send_integration_tags', (True, False), True)
+
 # Use the client protocol version  This is needed for DateTime timezone columns but breaks with current version of
 # chproxy
 _init_common('use_protocol_version', (True, False), True)
@@ -85,3 +90,8 @@ _init_common('max_error_size', (), 1024)
 
 # HTTP raw data buffer for streaming queries.  This should not be reduced below 64KB to ensure compatibility with LZ4 compression
 _init_common('http_buffer_size', (), 10 * 1024 * 1024)
+
+# If True and using pandas 2.x, preserves the datetime64/timedelta64
+# dtype resolution (e.g., 's', 'ms', 'us', 'ns'). If False (or on
+# pandas <2.x), coerces to nanosecond ('ns') resolution for compatibility.
+_init_common('preserve_pandas_datetime_resolution', (True, False), False)

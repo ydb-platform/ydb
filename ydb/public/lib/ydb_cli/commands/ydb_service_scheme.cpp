@@ -3,11 +3,13 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
+#include <ydb/public/lib/ydb_cli/dump/util/util.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <google/protobuf/port_def.inc>
 
+#include <util/stream/format.h>
 #include <util/string/join.h>
 
 namespace NYdb {
@@ -120,6 +122,39 @@ namespace {
             Cout << "none" << Endl;
         }
     }
+
+    struct TPrettyDurationFormatParameters {
+        double EntitiesPerSecond;
+        TStringBuf EntityName;
+        TStringBuf ZeroString;
+        TStringBuf MaxString;
+        int MaxPrecision;
+    };
+
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_DEFAULT{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "0 hours",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    constexpr TPrettyDurationFormatParameters PRETTY_HOURS_NON_ZERO{
+        .EntitiesPerSecond = 3600,
+        .EntityName = "hours",
+        .ZeroString = "",
+        .MaxString = "+infinity",
+        .MaxPrecision = 3,
+    };
+
+    TString PrettyDurationString(TDuration duration, const TPrettyDurationFormatParameters& paramerters) {
+        if (duration == TDuration::Zero()) {
+            return ToString(paramerters.ZeroString);
+        } else if (duration == TDuration::Max()) {
+            return ToString(paramerters.MaxString);
+        }
+        return TStringBuilder() << Prec(duration.MillisecondsFloat() / (paramerters.EntitiesPerSecond * 1000.0), PREC_POINT_DIGITS_STRIP_ZEROES, paramerters.MaxPrecision) << " " << paramerters.EntityName;
+    }
 }
 
 void PrintAllPermissions(
@@ -138,6 +173,9 @@ int PrintPrettyDescribeConsumerResult(const NYdb::NTopic::TConsumerDescription& 
     const NYdb::NTopic::TConsumer& consumer = description.GetConsumer();
     Cout << "Consumer " << consumer.GetConsumerName() << ": " << Endl;
     Cout << "Important: " << (consumer.GetImportant() ? "Yes" : "No") << Endl;
+    if (const auto availabilityPeriodStr = PrettyDurationString(consumer.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO)) {
+        Cout << "Availability period: " << availabilityPeriodStr << Endl;
+    }
     if (const TInstant& readFrom = consumer.GetReadFrom()) {
         Cout << "Read from: " << readFrom.ToRfc822StringLocal() << Endl;
     } else {
@@ -314,13 +352,14 @@ namespace {
         if (consumers.empty()) {
             return;
         }
-        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important" });
+        TPrettyTable table({ "ConsumerName", "SupportedCodecs", "ReadFrom", "Important", "Availability period", });
         for (const auto& c: consumers) {
             table.AddRow()
                 .Column(0, c.GetConsumerName())
                 .Column(1, FormatCodecs(c.GetSupportedCodecs()))
                 .Column(2, c.GetReadFrom().ToRfc822StringLocal())
-                .Column(3, c.GetImportant() ? "Yes" : "No");
+                .Column(3, c.GetImportant() ? "Yes" : "No")
+                .Column(4, PrettyDurationString(c.GetAvailabilityPeriod(), PRETTY_HOURS_NON_ZERO));
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }
@@ -344,7 +383,7 @@ namespace {
 
     void PrintMain(const NTopic::TTopicDescription& topicDescription) {
         Cout << Endl << "Main:";
-        Cout << Endl << "RetentionPeriod: " << topicDescription.GetRetentionPeriod().Hours() << " hours";
+        Cout << Endl << "RetentionPeriod: " << PrettyDurationString(topicDescription.GetRetentionPeriod(), PRETTY_HOURS_DEFAULT);
         if (topicDescription.GetRetentionStorageMb().has_value()) {
             Cout << Endl << "StorageRetention: " << *topicDescription.GetRetentionStorageMb() << " MB";
         }
@@ -613,6 +652,7 @@ int TCommandDescribe::PrintTransferResponsePretty(const NYdb::NReplication::TDes
     Cout << Endl << "State: ";
     switch (desc.GetState()) {
     case NReplication::TTransferDescription::EState::Running:
+    case NReplication::TTransferDescription::EState::Paused:
         Cout << desc.GetState();
         break;
     case NReplication::TTransferDescription::EState::Error:
@@ -654,17 +694,23 @@ int TCommandDescribe::DescribeTransfer(const TDriver& driver) {
     return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintTransferResponsePretty);
 }
 
-int TCommandDescribe::PrintViewResponsePretty(const NYdb::NView::TDescribeViewResult& result) const {
-    Cout << "\nQuery text:\n" << result.GetViewDescription().GetQueryText() << Endl;
-    return EXIT_SUCCESS;
+namespace {
+
+    void PrintViewQuery(const std::string& query) {
+        Cout << "\nQuery text:\n" << query << Endl;
+    }
+
 }
 
 int TCommandDescribe::DescribeView(const TDriver& driver) {
-    NView::TViewClient client(driver);
-    auto result = client.DescribeView(Path, {}).ExtractValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-
-    return PrintDescription(this, OutputFormat, result, &TCommandDescribe::PrintViewResponsePretty);
+    TString query;
+    auto status = NDump::DescribeViewQuery(driver, Path, query);
+    if (status.IsSuccess()) {
+        PrintViewQuery(query);
+        return EXIT_SUCCESS;
+    }
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
+    return EXIT_FAILURE;
 }
 
 int TCommandDescribe::PrintExternalDataSourceResponsePretty(const NYdb::NTable::TExternalDataSourceDescription& description) const {
@@ -793,7 +839,8 @@ namespace {
         const auto commitLog1 = settings.GetTabletCommitLog1();
         const auto external = settings.GetExternal();
         const auto storeExternalBlobs = settings.GetStoreExternalBlobs();
-        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value()) {
+        const auto externalDataChannelsCount = settings.GetExternalDataChannelsCount();
+        if (!commitLog0 && !commitLog1 && !external && !storeExternalBlobs.has_value() && !externalDataChannelsCount.has_value()) {
             return;
         }
         Cout << Endl << "Storage settings: " << Endl;
@@ -809,6 +856,9 @@ namespace {
         if (storeExternalBlobs) {
             Cout << "Store large values in \"external blobs\": "
                 << (storeExternalBlobs.value() ? "true" : "false") << Endl;
+        }
+        if (externalDataChannelsCount) {
+            Cout << "External data channels: " << externalDataChannelsCount.value() << Endl;
         }
     }
 
@@ -1235,6 +1285,7 @@ void TCommandPermissionGrant::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to grant permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to grant")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToGrant);
 }
 
@@ -1280,6 +1331,7 @@ void TCommandPermissionRevoke::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to revoke permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to revoke")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/revoke")
         .RequiredArgument("NAME").AppendTo(&PermissionsToRevoke);
 }
 
@@ -1325,6 +1377,7 @@ void TCommandPermissionSet::Config(TConfig& config) {
     SetFreeArgTitle(1, "<subject>", "Subject to set permissions");
 
     config.Opts->AddLongOption('p', "permission", "[At least one] Permission(s) to set")
+        .DocLink("ydb.tech/docs/en/yql/reference/syntax/grant")
         .RequiredArgument("NAME").AppendTo(&PermissionsToSet);
 }
 

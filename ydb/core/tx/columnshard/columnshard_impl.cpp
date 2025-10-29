@@ -40,6 +40,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/conveyor_composite/usage/service.h>
 #include <ydb/core/tx/priorities/usage/abstract.h>
@@ -52,6 +53,8 @@
 #include <util/generic/object_counter.h>
 
 namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
 
 // NOTE: We really want to batch log records by default in columnshards!
 // But in unittests we want to test both scenarios
@@ -385,15 +388,21 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(dropProto);
-    const auto& internalPathId = TablesManager.ResolveInternalPathIdVerified(schemeShardLocalPathId, false);
-    const auto& pathId = TUnifiedPathId::BuildValid(internalPathId, schemeShardLocalPathId);
-    if (!TablesManager.HasTable(internalPathId)) {
+    const auto& internalPathId = TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false);
+
+    if (!internalPathId) {
+        LOG_S_DEBUG("DropTable for unknown or deleted scheme shard pathId: " << schemeShardLocalPathId << " at tablet " << TabletID());
+        return;
+    }
+
+    const auto& pathId = TUnifiedPathId::BuildValid(*internalPathId, schemeShardLocalPathId);
+    if (!TablesManager.HasTable(*internalPathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
     }
 
     LOG_S_DEBUG("DropTable for pathId: " << pathId << " at tablet " << TabletID());
-    TablesManager.DropTable(internalPathId, version, db);
+    TablesManager.DropTable(*internalPathId, version, db);
 }
 
 void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, const NOlap::TSnapshot& /*version*/,
@@ -402,6 +411,10 @@ void TColumnShard::RunMoveTable(const NKikimrTxColumnShard::TMoveTable& proto, c
 
     const auto srcPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetSrcPathId());
     const auto dstPathId = TSchemeShardLocalPathId::FromRawValue(proto.GetDstPathId());
+    if (proto.HasDstPath()) { //This check can be deleted in 25.3 or later
+        OwnerPath = proto.GetDstPath();
+        Schema::SaveSpecialValue(db, Schema::EValueIds::OwnerPath, OwnerPath);
+    }
     TablesManager.MoveTableProgress(db, srcPathId, dstPathId);
 }
 
@@ -610,28 +623,31 @@ void TColumnShard::StartCompaction(const std::shared_ptr<NPrioritiesQueue::TAllo
     Counters.GetCSCounters().OnSetupCompaction();
     BackgroundController.ResetWaitingPriority();
 
-    auto indexChanges = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
-    if (!indexChanges) {
+    auto indexChangesList = TablesManager.MutablePrimaryIndex().StartCompaction(DataLocksManager);
+    
+    if (indexChangesList.empty()) {
         LOG_S_DEBUG("Compaction not started: cannot prepare compaction at tablet " << TabletID());
         return;
     }
 
-    auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
-    compaction.SetActivityFlag(GetTabletActivity());
-    compaction.SetQueueGuard(guard);
-    compaction.Start(*this);
+    for (const auto& indexChanges : indexChangesList) {
+        auto& compaction = *VerifyDynamicCast<NOlap::NCompaction::TGeneralCompactColumnEngineChanges*>(indexChanges.get());
+        compaction.SetActivityFlag(GetTabletActivity());
+        compaction.SetQueueGuard(guard);
+        compaction.Start(*this);
 
-    auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
-    static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
-        NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", NOlap::TGlobalLimits::GeneralCompactionMemoryLimit);
-    auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
-    NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
-        NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
-    auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
-    NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
-        std::make_shared<TCompactionExecutor>(
-            TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
-        env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+        auto actualIndexInfo = TablesManager.GetPrimaryIndex()->GetVersionedIndexReadonlyCopy();
+        static std::shared_ptr<NOlap::NGroupedMemoryManager::TStageFeatures> stageFeatures =
+            NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildStageFeatures("COMPACTION", NOlap::TGlobalLimits::GeneralCompactionMemoryLimit);
+        auto processGuard = NOlap::NGroupedMemoryManager::TCompMemoryLimiterOperator::BuildProcessGuard({ stageFeatures });
+        NOlap::NDataFetcher::TRequestInput rInput(compaction.GetSwitchedPortions(), actualIndexInfo,
+            NOlap::NBlobOperations::EConsumer::GENERAL_COMPACTION, compaction.GetTaskIdentifier(), processGuard);
+        auto env = std::make_shared<NOlap::NDataFetcher::TEnvironment>(DataAccessorsManager.GetObjectPtrVerified(), StoragesManager);
+        NOlap::NDataFetcher::TPortionsDataFetcher::StartFullPortionsFetching(std::move(rInput),
+            std::make_shared<TCompactionExecutor>(
+                TabletID(), SelfId(), indexChanges, actualIndexInfo, Counters.GetIndexationCounters(), GetLastCompletedTx(), TabletActivityImpl),
+            env, NConveyorComposite::ESpecialTaskCategory::Compaction);
+    }
 }
 
 class TDataAccessorsSubscriberBase: public NOlap::IDataAccessorRequestsSubscriber {
@@ -971,7 +987,14 @@ void TColumnShard::Die(const TActorContext& ctx) {
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
-    Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    if (SpaceWatcherId == TActorId{}) {
+        delete SpaceWatcher;
+        SpaceWatcher = nullptr;
+    } else {
+        Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);
+    }
+    Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadColumnShardDied>(NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}));
     IActor::Die(ctx);
 }
 
@@ -1240,16 +1263,19 @@ private:
     THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
+    TInstant StartTime;
 
 public:
     TTxAskPortionChunks(TColumnShard* self, const std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback>& fetchCallback,
         THashMap<TInternalPathId, NOlap::NDataAccessorControl::TPortionsByConsumer>&& portions)
         : TBase(self)
         , FetchCallback(fetchCallback)
-        , PortionsByPath(std::move(portions)) {
+        , PortionsByPath(std::move(portions))
+        , StartTime(TInstant::Now()) {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+        TInstant startTransactionTime = TInstant::Now();
         NIceDb::TNiceDb db(txc.DB);
 
         TBlobGroupSelector selector(Self->Info());
@@ -1318,6 +1344,9 @@ public:
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("stage", "finished");
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(
             std::make_shared<TAccessorsParsingTask>(FetchCallback, std::move(FetchedAccessors)), 0);
+        TDuration transactionTime = TInstant::Now() - startTransactionTime;
+        TDuration totalTime = TInstant::Now() - StartTime;
+        LWPROBE(TxAskPortionChunks, Self->TabletID(), transactionTime, totalTime, PortionsByPath.size());
         return true;
     }
     void Complete(const TActorContext& /*ctx*/) override {
@@ -1480,7 +1509,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
 
 void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
-    Tiers->ActivateTiers(usedTiers);
+    Tiers->ActivateTiers(usedTiers, true);
     OnTieringModified(pathId);
 }
 

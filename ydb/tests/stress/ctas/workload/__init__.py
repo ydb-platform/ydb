@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 import ydb
 import time
-import random
 import threading
-from enum import Enum
 
 from ydb.tests.stress.common.common import WorkloadBase
 
@@ -23,7 +21,7 @@ class WorkloadCtas(WorkloadBase):
     def get_stat(self):
         with self.lock:
             return f"Tables: {self.tables_count}, TotalRows: {self.total_rows}, LastTableRows: {self.prev_rows[0]}"
-    
+
     def get_create_query(self):
         table_path = self.get_table_path(self.table_name + str(self.tables_count))
 
@@ -32,7 +30,7 @@ class WorkloadCtas(WorkloadBase):
             params = "STORE = COLUMN"
         else:
             params = "STORE = ROW"
-        
+
         if self.tables_count == 0:
             return f"""
                 CREATE TABLE `{table_path}` (
@@ -51,9 +49,9 @@ class WorkloadCtas(WorkloadBase):
             WITH (
                 {params}
             ) AS SELECT
-                Unwrap(CAST(1 AS Uint64)) AS Key, "{ ('0' * self.value_bytes) }" AS Value;
+                Unwrap(CAST(1 AS Uint64)) AS Key, "{('0' * self.value_bytes)}" AS Value;
         """
-    
+
     def get_ctas_query(self):
         table_path = self.get_table_path(self.table_name + str(self.tables_count))
         prev_table_path1 = self.get_table_path(self.table_name + str(self.tables_count - 1))
@@ -66,10 +64,10 @@ class WorkloadCtas(WorkloadBase):
             FROM `{prev_table_path1}`
             UNION ALL
             SELECT
-                Key + Unwrap(CAST({self.prev_rows[0]} AS Uint64)) AS Key, Value 
+                Key + Unwrap(CAST({self.prev_rows[0]} AS Uint64)) AS Key, Value
             FROM `{prev_table_path2}`
         """
-    
+
     def prepare(self):
         create_query = self.get_create_query()
         self.client.query(
@@ -83,7 +81,6 @@ class WorkloadCtas(WorkloadBase):
             True,
         )
         self.tables_count += 1
-
 
     def _loop(self):
         self.prepare()
@@ -105,7 +102,7 @@ class WorkloadCtas(WorkloadBase):
             expected = self.prev_rows[0] + self.prev_rows[1]
             if actual != expected:
                 raise Exception(f"Incorrect result: expected:{expected}, actual:{actual}")
-            
+
             self.prev_rows = (actual, self.prev_rows[0])
             self.total_rows += actual
             self.tables_count += 1

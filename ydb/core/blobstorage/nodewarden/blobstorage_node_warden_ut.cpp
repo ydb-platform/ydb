@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
     ui32 CreatePDisk(TTestActorRuntime &runtime, ui32 nodeIdx, TString path, ui64 guid, ui32 pdiskId, ui64 pDiskCategory,
             const NKikimrBlobStorage::TPDiskConfig* pdiskConfig = nullptr, ui64 inferPDiskSlotCountFromUnitSize = 0,
-            TActorId nodeWarden = {}) {
+            ui32 inferPDiskSlotCountMax = 0, TActorId nodeWarden = {}) {
         VERBOSE_COUT(" Creating pdisk");
 
         ui32 nodeId = runtime.GetNodeId(nodeIdx);
@@ -284,6 +284,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         }
         if (inferPDiskSlotCountFromUnitSize != 0) {
             pdisk->SetInferPDiskSlotCountFromUnitSize(inferPDiskSlotCountFromUnitSize);
+            pdisk->SetInferPDiskSlotCountMax(inferPDiskSlotCountMax);
         }
 
         if (!nodeWarden) {
@@ -942,11 +943,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         UNIT_ASSERT_EQUAL(pdiskId, restartPDiskEv->PDiskId);
     }
 
-    void TestInferPDiskSlotCount(ui64 driveSize, ui64 unitSizeInBytes,
-            ui64 expectedSlotCount, ui32 expectedSlotSizeInUnits, double expectedRelativeError = 0) {
+    void TestInferPDiskSlotCount(ui64 driveSize, ui64 unitSizeInBytes, ui32 maxSlots,
+            ui32 expectedSlotCount, ui32 expectedSlotSizeInUnits, double expectedRelativeError = 0) {
         TIntrusivePtr<TPDiskConfig> pdiskConfig = new TPDiskConfig("fake_drive", 0, 0, 0);
 
-        NStorage::TNodeWarden::InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes);
+        NStorage::TNodeWarden::InferPDiskSlotCount(pdiskConfig, driveSize, unitSizeInBytes, maxSlots);
 
         double unitSizeCalculated = double(driveSize) / pdiskConfig->ExpectedSlotCount / pdiskConfig->SlotSizeInUnits;
         double unitSizeRelativeError =  (unitSizeCalculated - unitSizeInBytes) / unitSizeInBytes;
@@ -954,6 +955,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         VERBOSE_COUT(""
             << " driveSize# " << driveSize
             << " unitSizeInBytes# " << unitSizeInBytes
+            << " maxSlots# " << maxSlots
             << " ->"
             << " ExpectedSlotCount# " << pdiskConfig->ExpectedSlotCount
             << " SlotSizeInUnits# " << pdiskConfig->SlotSizeInUnits
@@ -975,30 +977,38 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
     }
 
     CUSTOM_UNIT_TEST(TestInferPDiskSlotCountPureFunction) {
-        TestInferPDiskSlotCount(7900, 1000, 8, 1u, 0.0125);
-        TestInferPDiskSlotCount(8000, 1000, 8, 1u, std::numeric_limits<double>::epsilon());
-        TestInferPDiskSlotCount(8100, 1000, 8, 1u, 0.0125);
-        TestInferPDiskSlotCount(16000, 1000, 16, 1u, std::numeric_limits<double>::epsilon());
-        TestInferPDiskSlotCount(24000, 1000, 12, 2u, std::numeric_limits<double>::epsilon());
-        TestInferPDiskSlotCount(31000, 1000, 16, 2u, 0.032);
-        TestInferPDiskSlotCount(50000, 1000, 13, 4u, 0.039);
-        TestInferPDiskSlotCount(50000, 100, 16, 32u, 0.024);
-        TestInferPDiskSlotCount(18000, 200, 11, 8u, 0.023);
+        TestInferPDiskSlotCount(7900, 1000, 16, 8, 1u, 0.0125);
+        TestInferPDiskSlotCount(8000, 1000, 16, 8, 1u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(8100, 1000, 16, 8, 1u, 0.0125);
+        TestInferPDiskSlotCount(16000, 1000, 16, 16, 1u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(24000, 1000, 16, 12, 2u, std::numeric_limits<double>::epsilon());
+        TestInferPDiskSlotCount(31000, 1000, 16, 16, 2u, 0.032);
+        TestInferPDiskSlotCount(50000, 1000, 16, 13, 4u, 0.039);
+        TestInferPDiskSlotCount(50000, 100, 16, 16, 32u, 0.024);
+        TestInferPDiskSlotCount(18000, 200, 16, 11, 8u, 0.023);
 
-        for (ui64 i=1; i<=1024; i++) {
-            // In all cases the relative error doesn't exceed 1/maxSlotCount
-            TestInferPDiskSlotCount(i, 1, 0, 0, 1./16);
+        for (ui32 maxSlots = 1; maxSlots <= 24; maxSlots++) {
+            for (ui64 i = 1; i <= 1024; i++) {
+                // In all cases the relative error doesn't exceed 1/maxSlots
+                TestInferPDiskSlotCount(i, 1, maxSlots, 0, 0, 1./maxSlots);
+            }
         }
 
+        const size_t c_160GB = 160'000'000'000;
         const size_t c_200GB = 200'000'000'000;
         const size_t c_2000GB = 2000'000'000'000;
 
         // Some real-world examples
-        TestInferPDiskSlotCount(1919'366'987'776, c_200GB, 10, 1u, 0.041); // "Micron_5200_MTFDDAK1T9TDD"
-        TestInferPDiskSlotCount(3199'243'124'736, c_200GB, 16, 1u, 0.001); // "SAMSUNG MZWLR3T8HBLS-00007"
-        TestInferPDiskSlotCount(6400'161'873'920, c_200GB, 16, 2u, 0.001); // "INTEL SSDPE2KE064T8"
-        TestInferPDiskSlotCount(6398'611'030'016, c_200GB, 16, 2u, 0.001); // "INTEL SSDPF2KX076T1"
-        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 9, 1u, 0.001); // "WDC  WUH721818ALE6L4"
+        TestInferPDiskSlotCount(1919'366'987'776, c_200GB, 16, 10, 1u, 0.041); // "Micron_5200_MTFDDAK1T9TDD"
+        TestInferPDiskSlotCount(3199'243'124'736, c_200GB, 16, 16, 1u, 0.001); // "SAMSUNG MZWLR3T8HBLS-00007"
+        TestInferPDiskSlotCount(6400'161'873'920, c_200GB, 16, 16, 2u, 0.001); // "INTEL SSDPE2KE064T8"
+        TestInferPDiskSlotCount(6398'611'030'016, c_200GB, 16, 16, 2u, 0.001); // "INTEL SSDPF2KX076T1"
+        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 16, 9, 1u, 0.001); // "WDC  WUH721818ALE6L4"
+
+        // Another real-world case
+        TestInferPDiskSlotCount(3199'556'648'960, c_160GB, 24, 20, 1u, 0.001);
+        TestInferPDiskSlotCount(6399'968'935'936, c_160GB, 24, 20, 2u, 0.001);
+        TestInferPDiskSlotCount(17999'117'418'496, c_2000GB, 24, 9, 1u, 0.001);
     }
 
     void CheckInferredPDiskSettings(TTestBasicRuntime& runtime, TActorId fakeWhiteboard, TActorId fakeNodeWarden,
@@ -1084,7 +1094,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         pdiskConfig.SetExpectedSlotCount(13);
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
-            &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, 16, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 13, 0u);
     }
@@ -1105,7 +1115,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
 
         NKikimrBlobStorage::TPDiskConfig pdiskConfig;
         CreatePDisk(runtime, 0, pdiskPath, 0, pdiskId, 0,
-            &pdiskConfig, inferPDiskSlotCountFromUnitSize, realNodeWarden);
+            &pdiskConfig, inferPDiskSlotCountFromUnitSize, 16, realNodeWarden);
         CheckInferredPDiskSettings(runtime, fakeWhiteboard, fakeNodeWarden,
             pdiskId, 12, 2u);
     }

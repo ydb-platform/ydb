@@ -312,7 +312,7 @@ static fiber_activation_record * create_fiber1( StackAlloc && salloc, Fn && fn) 
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( sctx.sp) - static_cast< uintptr_t >( sizeof( capture_t) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     capture_t * record = new ( storage) capture_t{
             sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // stack bottom
@@ -363,7 +363,7 @@ static fiber_activation_record * create_fiber2( preallocated palloc, StackAlloc 
     void * storage = reinterpret_cast< void * >(
             ( reinterpret_cast< uintptr_t >( palloc.sp) - static_cast< uintptr_t >( sizeof( capture_t) ) )
             & ~ static_cast< uintptr_t >( 0xff) );
-    // placment new for control structure on context stack
+    // placement new for control structure on context stack
     capture_t * record = new ( storage) capture_t{
             palloc.sctx, std::forward< StackAlloc >( salloc), std::forward< Fn >( fn) };
     // stack bottom

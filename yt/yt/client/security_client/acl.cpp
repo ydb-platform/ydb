@@ -1,5 +1,7 @@
 #include "acl.h"
 
+#include <yt/yt/core/phoenix/type_def.h>
+
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
 #include <yt/yt/core/ytree/fluent.h>
@@ -41,36 +43,9 @@ void Serialize(const TSerializableAccessControlEntry& ace, NYson::IYsonConsumer*
             .OptionalItem("subject_tag_filter", ace.SubjectTagFilter)
             .OptionalItem("columns", ace.Columns)
             .OptionalItem("vital", ace.Vital)
+            .OptionalItem(TSerializableAccessControlEntry::RowAccessPredicateKey, ace.RowAccessPredicate)
+            .OptionalItem(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey, ace.InapplicableRowAccessPredicateMode)
         .EndMap();
-}
-
-static void EnsureCorrect(const TSerializableAccessControlEntry& ace)
-{
-    if (ace.Action == ESecurityAction::Undefined) {
-        THROW_ERROR_EXCEPTION("%Qlv action is not allowed",
-            ESecurityAction::Undefined);
-    }
-
-    // Currently, we allow empty permissions with columns. They seem to be no-op.
-    bool onlyReadOrEmpty = None(ace.Permissions & ~EPermission::Read);
-    if (ace.Columns && !onlyReadOrEmpty) {
-        THROW_ERROR_EXCEPTION("ACE specifying columns may contain only %Qlv permission; found %Qlv",
-            EPermission::Read,
-            ace.Permissions);
-    }
-
-    bool hasRegisterQueueConsumer = Any(ace.Permissions & EPermission::RegisterQueueConsumer);
-    bool onlyRegisterQueueConsumer = ace.Permissions == EPermission::RegisterQueueConsumer;
-
-    if (hasRegisterQueueConsumer && !ace.Vital) {
-        THROW_ERROR_EXCEPTION("Permission %Qlv requires vitality to be specified",
-            EPermission::RegisterQueueConsumer);
-    }
-    if (ace.Vital && !onlyRegisterQueueConsumer) {
-        THROW_ERROR_EXCEPTION("ACE specifying vitality must contain a single %Qlv permission; found %Qlv",
-            EPermission::RegisterQueueConsumer,
-            ace.Permissions);
-    }
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
@@ -102,7 +77,17 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYTree::INodePtr node)
     } else {
         ace.Vital.reset();
     }
-    EnsureCorrect(ace);
+    if (auto rowAccessPredicateNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::RowAccessPredicateKey))) {
+        Deserialize(ace.RowAccessPredicate, rowAccessPredicateNode);
+    } else {
+        ace.RowAccessPredicate.reset();
+    }
+    if (auto inapplicableRowAccessPredicateModeNode = mapNode->FindChild(std::string(TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey))) {
+        Deserialize(ace.InapplicableRowAccessPredicateMode, inapplicableRowAccessPredicateModeNode);
+    } else {
+        ace.InapplicableRowAccessPredicateMode.reset();
+    }
+    ValidateAceCorrect(ace);
 }
 
 void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCursor* cursor)
@@ -138,6 +123,12 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
         } else if (key == TStringBuf("vital")) {
             cursor->Next();
             Deserialize(ace.Vital, cursor);
+        } else if (key == TSerializableAccessControlEntry::RowAccessPredicateKey) {
+            cursor->Next();
+            Deserialize(ace.RowAccessPredicate, cursor);
+        } else if (key == TSerializableAccessControlEntry::InapplicableRowAccessPredicateModeKey) {
+            cursor->Next();
+            Deserialize(ace.InapplicableRowAccessPredicateMode, cursor);
         } else {
             cursor->Next();
             cursor->SkipComplexValue();
@@ -146,7 +137,7 @@ void Deserialize(TSerializableAccessControlEntry& ace, NYson::TYsonPullParserCur
     if (!(HasAction && HasSubjects && HasPermissions)) {
         THROW_ERROR_EXCEPTION("Error parsing ACE: \"action\", \"subject\" and \"permissions\" fields are required");
     }
-    EnsureCorrect(ace);
+    ValidateAceCorrect(ace);
 }
 
 void TSerializableAccessControlEntry::Persist(const TStreamPersistenceContext& context)
@@ -185,6 +176,16 @@ void Deserialize(TSerializableAccessControlList& acl, NYson::TYsonPullParserCurs
 {
     Deserialize(acl.Entries, cursor);
 }
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TRowLevelAccessControlEntry::RegisterMetadata(auto&& registrar)
+{
+    PHOENIX_REGISTER_FIELD(1, RowAccessPredicate);
+    PHOENIX_REGISTER_FIELD(2, InapplicableRowAccessPredicateMode);
+}
+
+PHOENIX_DEFINE_TYPE(TRowLevelAccessControlEntry);
 
 ////////////////////////////////////////////////////////////////////////////////
 

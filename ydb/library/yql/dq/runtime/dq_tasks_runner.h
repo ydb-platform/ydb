@@ -267,7 +267,8 @@ public:
             Task_ = HeapTask_.get();
             Y_ABORT_UNLESS(!task.Arena);
         } else {
-            Y_ABORT("not allowed to copy dq settings for arena allocated messages.");
+            Task_ = task.GetTask();
+            Arena = const_cast<TIntrusivePtr<NActors::TProtoArenaHolder>&>(task.GetArena());
         }
     }
 
@@ -283,6 +284,12 @@ public:
         Y_ABORT_UNLESS(!ParamProvider, "GetSerialized isn't supported if external ParamProvider callback is specified!");
         return *Task_;
     }
+
+    NDqProto::TDqTask* GetTask() const {
+        Y_ABORT_UNLESS(Arena);
+        return Task_;
+    }
+
 
     const ::NYql::NDqProto::TTaskInput& GetInputs(size_t index) const {
         return Task_->GetInputs(index);
@@ -338,6 +345,10 @@ public:
 
     const TProtoStringType & GetRateLimiterResource() const {
         return Task_->GetRateLimiterResource();
+    }
+
+    const TProtoStringType& GetRateLimiterDatabase() const {
+        return Task_->GetRateLimiterDatabase();
     }
 
     const TProtoStringType& GetRateLimiter() const {

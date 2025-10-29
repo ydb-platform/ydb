@@ -97,6 +97,8 @@ public:
     std::shared_ptr<TSingleMetric> InputRows;
     std::vector<std::string> KeyColumns;
     std::vector<std::string> SortColumns;
+    TString HashFunc;
+    bool Parallel = false;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;
@@ -105,14 +107,18 @@ public:
     const NJson::TJsonValue* StatsNode = nullptr;
     const ui32 PlanNodeId;
     TStringBuilder Builder;
+    bool Blocks = false;
 };
 
 class TOperatorInput {
 
 public:
+    // Internal
     ui32 OperatorId = 0;
+    // External
     ui32 PlanNodeId = 0;
     std::optional<ui32> StageId;
+    // CTE Ref
     TString PrecomputeRef;
     std::shared_ptr<TSingleMetric> Rows;
 
@@ -131,10 +137,10 @@ public:
     TString Info;
     std::shared_ptr<TSingleMetric> OutputRows;
     std::shared_ptr<TSingleMetric> OutputThroughput;
-    TOperatorInput Input1;
-    TOperatorInput Input2;
+    std::vector<TOperatorInput> Inputs;
     std::shared_ptr<TSingleMetric> InputThroughput;
     TString Estimations;
+    bool Blocks = false;
 };
 
 class TPlan;
@@ -222,6 +228,7 @@ struct TColorPalette {
     TString SpillingTimeDark;
     TString SpillingTimeMedium;
     TString SpillingTimeLight;
+    TString BlockMedium;
 };
 
 struct TPlanViewConfig {
@@ -249,6 +256,7 @@ public:
     TPlan(const TString& nodeType, TPlanViewConfig& config, TPlanVisualizer& viz)
         : NodeType(nodeType), Config(config), Viz(viz) {
         CpuTime = std::make_shared<TSummaryMetric>();
+        ExternalCpuTime = std::make_shared<TSummaryMetric>();
         WaitInputTime = std::make_shared<TSummaryMetric>();
         WaitOutputTime = std::make_shared<TSummaryMetric>();
         MaxMemoryUsage = std::make_shared<TSummaryMetric>();
@@ -274,6 +282,7 @@ public:
     }
 
     void Load(const NJson::TJsonValue& node);
+    void MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime);
     void LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection);
     void LoadSource(const NJson::TJsonValue& node, std::vector<TOperatorInfo>& stageOperators, const NJson::TJsonValue* ingressRowsNode);
     void MarkStageIndent(ui32 indentX, ui32& offsetY, std::shared_ptr<TStage> stage);
@@ -291,6 +300,7 @@ public:
     TString NodeType;
     std::vector<std::shared_ptr<TStage>> Stages;
     std::shared_ptr<TSummaryMetric> CpuTime;
+    std::shared_ptr<TSummaryMetric> ExternalCpuTime;
     std::shared_ptr<TSummaryMetric> WaitInputTime;
     std::shared_ptr<TSummaryMetric> WaitOutputTime;
     std::shared_ptr<TSummaryMetric> MaxMemoryUsage;

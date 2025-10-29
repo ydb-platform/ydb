@@ -9,7 +9,7 @@
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/events/internal.h>
-#include <ydb/core/persqueue/pq_rl_helpers.h>
+#include <ydb/core/persqueue/public/pq_rl_helpers.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
@@ -274,8 +274,8 @@ private:
         }
     }
 
-    bool ReadFromStreamOrDie(const TActorContext& ctx);
-    bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
+    [[nodiscard]] bool ReadFromStreamOrDie(const TActorContext& ctx);
+    [[nodiscard]] bool WriteToStreamOrDie(const TActorContext& ctx, TServerMessage&& response, bool finish = false);
     bool SendControlMessage(TPartitionId id, TServerMessage&& message, const TActorContext& ctx);
 
     // grpc events
@@ -326,10 +326,10 @@ private:
 
     void RunAuthActor(const TActorContext& ctx);
     void RecheckACL(const TActorContext& ctx);
-    void InitSession(const TActorContext& ctx);
+    [[nodiscard]] bool InitSession(const TActorContext& ctx);
     void RegisterSession(const TString& topic, const TActorId& pipe, const TVector<ui32>& groups, const TActorContext& ctx);
     void CloseSession(PersQueue::ErrorCode::ErrorCode code, const TString& reason, const TActorContext& ctx);
-    void SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx);
+    [[nodiscard]] bool SendLockPartitionToSelf(ui32 partitionId, TString topicName, const TTopicHolder::TPtr& topic, const TActorContext& ctx);
 
     void SetupBytesReadByUserAgentCounter();
     void SetupCounters();

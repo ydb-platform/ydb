@@ -18,7 +18,7 @@ private:
     void DoComplete(const TActorContext& ctx) override;
 public:
     TTxApplyLinksModification(NColumnShard::TColumnShard* self, const std::shared_ptr<TTaskForTablet>& task, const TString& sessionId, const TTabletId initiatorTabletId, const ui64 packIdx)
-        : TBase(self)
+        : TBase(self, "apply_links_modification")
         , Task(task)
         , InitiatorTabletId(initiatorTabletId)
         , SessionId(sessionId)

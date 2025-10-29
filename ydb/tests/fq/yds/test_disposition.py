@@ -10,10 +10,9 @@ from ydb.tests.tools.fq_runner.fq_client import CONTROL_PLANE_REQUEST_TIMEOUT, F
 from ydb.tests.tools.fq_runner.kikimr_runner import StreamingOverKikimr
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_v1
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
-from ydb.tests.tools.datastreams_helpers.data_plane import write_stream, read_stream
 
 
-class TestContinueMode(TestYdsBase):
+class TestDisposition(TestYdsBase):
     @yq_v1
     @pytest.mark.parametrize("mvp_external_ydb_endpoint", [{"endpoint": os.getenv("YDB_ENDPOINT")}], indirect=True)
     def test_disposition_oldest(self, kikimr: StreamingOverKikimr, client: FederatedQueryClient):
@@ -29,7 +28,7 @@ class TestContinueMode(TestYdsBase):
         '''
 
         def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            write_stream(self.input_topic, input)
+            self.write_stream(input)
 
             if query_id is None:
                 result: fq.CreateQueryResult = client.create_query(
@@ -49,7 +48,9 @@ class TestContinueMode(TestYdsBase):
                 )
             client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
-            assert read_stream(self.output_topic, len(output), consumer_name=self.consumer_name) == output
+            time.sleep(5)
+
+            assert self.read_stream(len(output)) == output
 
             client.abort_query(query_id)
             client.wait_query(query_id)
@@ -75,7 +76,7 @@ class TestContinueMode(TestYdsBase):
         '''
 
         def run(input: list[str], output: list[str], query_id: str | None) -> str:
-            write_stream(self.input_topic, input)
+            self.write_stream(input)
 
             if query_id is None:
                 result: fq.CreateQueryResult = client.create_query(
@@ -95,7 +96,9 @@ class TestContinueMode(TestYdsBase):
                 )
             client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
-            assert read_stream(self.output_topic, len(output), consumer_name=self.consumer_name) == output
+            time.sleep(5)
+
+            assert self.read_stream(len(output)) == output
 
             client.abort_query(query_id)
             client.wait_query(query_id)
@@ -122,7 +125,7 @@ class TestContinueMode(TestYdsBase):
 
         def run(input: list[str], output: list[str], query_id: str | None) -> str:
             from_time = datetime.datetime.now()
-            write_stream(self.input_topic, input)
+            self.write_stream(input)
 
             if query_id is None:
                 result: fq.CreateQueryResult = client.create_query(
@@ -142,7 +145,9 @@ class TestContinueMode(TestYdsBase):
                 )
             client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
-            assert read_stream(self.output_topic, len(output), consumer_name=self.consumer_name) == output
+            time.sleep(5)
+
+            assert self.read_stream(len(output)) == output
 
             client.abort_query(query_id)
             client.wait_query(query_id)
@@ -169,7 +174,7 @@ class TestContinueMode(TestYdsBase):
 
         def run(input: list[str], output: list[str], query_id: str | None) -> str:
             from_time = datetime.datetime.now()
-            write_stream(self.input_topic, input)
+            self.write_stream(input)
 
             if query_id is None:
                 result: fq.CreateQueryResult = client.create_query(
@@ -189,7 +194,9 @@ class TestContinueMode(TestYdsBase):
                 )
             client.wait_query_status(query_id, fq.QueryMeta.RUNNING)
 
-            assert read_stream(self.output_topic, len(output), consumer_name=self.consumer_name) == output
+            time.sleep(5)
+
+            assert self.read_stream(len(output)) == output
 
             client.abort_query(query_id)
             client.wait_query(query_id)

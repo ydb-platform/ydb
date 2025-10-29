@@ -5,6 +5,8 @@
 
 #include <library/cpp/yt/misc/enum.h>
 
+#include <library/cpp/yt/yson_string/public.h>
+
 #include <library/cpp/yson/node/node.h>
 
 #include <util/generic/maybe.h>
@@ -15,6 +17,20 @@
 #include <util/datetime/base.h>
 
 namespace NYT {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NYson {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct IYsonConsumer;
+
+enum class EYsonFormat : int;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NYson
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -253,6 +269,12 @@ struct TConfig
     /// Redirects stdout to stderr for jobs.
     bool RedirectStdoutToStderr = false;
 
+    /// Append job and operation IDs as shell command options.
+    bool EnableDebugCommandLineArguments = false;
+
+    /// Path to document node with cluster config for |IClient::GetDynamicConfiguration|.
+    TString ConfigRemotePatchPath = "//sys/client_config";
+
     static bool GetBool(const char* var, bool defaultValue = false);
     static int GetInt(const char* var, int defaultValue);
     static TDuration GetDuration(const char* var, TDuration defaultValue);
@@ -279,6 +301,18 @@ struct TConfig
 
     static TConfigPtr Get();
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer);
+
+void Deserialize(TConfig& config, const TNode& node);
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString ConfigToYsonString(const TConfig& config, NYson::EYsonFormat format = NYson::EYsonFormat::Pretty);
+
+TConfig ConfigFromYsonString(TString serializedConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

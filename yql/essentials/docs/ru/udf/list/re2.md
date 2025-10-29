@@ -9,6 +9,7 @@ Re2::Capture(pattern:String, options:Struct<...>?) -> (string:String?) -> Struct
 Re2::FindAndConsume(pattern:String, options:Struct<...>?) -> (string:String?) -> List<String>
 Re2::Replace(pattern:String, options:Struct<...>?) -> (string:String?, replacement:String) -> String?
 Re2::Count(pattern:String, options:Struct<...>?) -> (string:String?) -> Uint32
+Re2::IsValidRegexp(pattern:String?, options:Struct<...>?) -> Bool
 Re2::Options([CaseSensitive:Bool?,DotNl:Bool?,Literal:Bool?,LogErrors:Bool?,LongestMatch:Bool?,MaxMem:Uint64?,NeverCapture:Bool?,NeverNl:Bool?,OneLine:Bool?,PerlClasses:Bool?,PosixSyntax:Bool?,Utf8:Bool?,WordBoundary:Bool?]) -> Struct<CaseSensitive:Bool,DotNl:Bool,Literal:Bool,LogErrors:Bool,LongestMatch:Bool,MaxMem:Uint64,NeverCapture:Bool,NeverNl:Bool,OneLine:Bool,PerlClasses:Bool,PosixSyntax:Bool,Utf8:Bool,WordBoundary:Bool>
 ```
 
@@ -85,6 +86,10 @@ SELECT
 ## Re2::Count {#count}
 
 Возвращает количество совпавших с регулярным выражением непересекающихся подстрок во входной строке.
+
+## Re2::IsValidRegexp {#isvalidregexp}
+
+Проверяет, является ли переданная строка корректным шаблоном регулярного выражения согласно синтаксису Re2. Опциональный параметр `options` позволяет валидировать шаблон с использованием тех же настроек парсинга, которые будут использоваться другими функциями Re2, обеспечивая согласованность валидации.
 
 ## Re2::Options {#options}
 

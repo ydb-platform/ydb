@@ -868,8 +868,8 @@ private:
     void Upload(TString url, THeaders headers, TString body, TOnResult callback, bool put, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
@@ -877,8 +877,8 @@ private:
     void Delete(TString url, THeaders headers, TOnResult callback, TRetryPolicy::TPtr retryPolicy) final {
         Rps->Inc();
 
-        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::DELETE, "", std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
@@ -898,8 +898,8 @@ private:
             callback(TResult(CURLE_OK, TIssues{error}));
             return;
         }
-        const std::unique_lock lock(SyncRef());
         auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), TEasyCurl::EMethod::GET, std::move(data), std::move(headers), offset, sizeLimit, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr, InitConfig, DnsGateway.GetDNSCurlList());
+        const std::unique_lock lock(SyncRef());
         Await.emplace(std::move(easy));
         Wakeup(sizeLimit);
     }

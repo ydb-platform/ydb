@@ -1,3 +1,4 @@
+#include "generator_highlight_js.h"
 #include "generator_json.h"
 #include "generator_monarch.h"
 #include "generator_textmate.h"
@@ -32,6 +33,12 @@ const TGeneratorMap generators = {
     {"tmlanguage", MakeTextMateJsonGenerator},
     {"tmbundle", MakeTextMateBundleGenerator},
     {"vim", MakeVimGenerator},
+    {"highlightjs", MakeHighlightJSGenerator},
+};
+
+const TVector<TString> modes = {
+    "default",
+    "ansi",
 };
 
 template <class TMap>
@@ -76,6 +83,7 @@ int Run(int argc, char* argv[]) {
     TString syntax;
     TString target;
     TString path;
+    TString mode;
 
     NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
     opts.AddLongOption('l', "language", "choice a syntax")
@@ -87,6 +95,11 @@ int Run(int argc, char* argv[]) {
         .RequiredArgument("target")
         .Choices(Keys(generators))
         .StoreResult(&target);
+    opts.AddLongOption('m', "mode", "set a lexer mode")
+        .RequiredArgument("mode")
+        .Choices(modes)
+        .DefaultValue("default")
+        .StoreResult(&mode);
     opts.AddLongOption('o', "output", "path to output file")
         .OptionalArgument("path")
         .StoreResult(&path);
@@ -98,17 +111,19 @@ int Run(int argc, char* argv[]) {
     const THighlightingFactory* factory = highlightings.FindPtr(syntax);
     Y_ENSURE(factory, "No highlighting for syntax '" << syntax << "'");
 
-    THighlighting highlighting = (*factory)();
+    const THighlighting highlighting = (*factory)();
 
     if (res.Has("generate")) {
         const TGeneratorFactory* generator = generators.FindPtr(target);
         Y_ENSURE(generator, "No generator for target '" << target << "'");
 
+        const bool ansi = (mode == "ansi");
+
         if (res.Has("output")) {
             TFsPath stdpath(path.c_str());
-            (*generator)()->Write(stdpath, highlighting);
+            (*generator)()->Write(stdpath, highlighting, ansi);
         } else {
-            (*generator)()->Write(Cout, highlighting);
+            (*generator)()->Write(Cout, highlighting, ansi);
         }
 
         return 0;

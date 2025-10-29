@@ -1,9 +1,23 @@
 name: Build-YDB-CLI
 run-name: Build YDB CLI
+
+permissions:
+  contents: write
+  pull-requests: write
+
 on:
   workflow_dispatch:
     inputs:
+      version-change:
+        description: "PATCH for bug fixes, MINOR for new features"
+        required: true
+        type: choice
+        options:
+          - PATCH
+          - MINOR
+        default: PATCH
       commit_sha:
+        description: Do not change this unless you know what you are doing
         type: string
         default: ""
       build-linux-amd:
@@ -31,8 +45,124 @@ defaults:
     shell: bash
 
 jobs:
+  prepare-release:
+    name: Prepare release branch and update version
+    runs-on: ubuntu-latest
+    outputs:
+      branch-name: ${{ steps.create-branch.outputs.branch-name }}
+      new-version: ${{ steps.update-version.outputs.new-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDBOT_TOKEN }}
+          ref: ${{ inputs.commit_sha }}
+          fetch-depth: 0
+
+      - name: Configure git
+        uses: ./.github/actions/configure_git
+
+      - name: Read current version
+        id: read-version
+        run: |
+          CURRENT_VERSION=$(cat ydb/apps/ydb/version.txt)
+          echo "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT_VERSION"
+
+      - name: Calculate new version
+        id: update-version
+        run: |
+          CURRENT_VERSION="${{ steps.read-version.outputs.current-version }}"
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+
+          if [ "${{ inputs.version-change }}" = "MAJOR" ]; then
+            MAJOR=$((MAJOR+1))
+            MINOR=0
+            PATCH=0
+          elif [ "${{ inputs.version-change }}" = "MINOR" ]; then
+            MINOR=$((MINOR+1))
+            PATCH=0
+          elif [ "${{ inputs.version-change }}" = "PATCH" ]; then
+            PATCH=$((PATCH+1))
+          fi
+
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          echo "new-version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+
+      - name: Create release branch
+        id: create-branch
+        run: |
+          # Ensure we're on main before creating release branch
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+          BRANCH_NAME="cli-release/${{ steps.update-version.outputs.new-version }}"
+          git checkout -b "$BRANCH_NAME"
+          echo "branch-name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Created branch: $BRANCH_NAME"
+
+      - name: Check CHANGELOG.md format
+        run: |
+          # Check if the file starts with empty line - version - empty line pattern
+          HEAD_LINES=$(head -n 3 ydb/apps/ydb/CHANGELOG.md)
+          FIRST_LINE=$(head -n 1 ydb/apps/ydb/CHANGELOG.md)
+          SECOND_LINE=$(head -n 2 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
+          THIRD_LINE=$(head -n 3 ydb/apps/ydb/CHANGELOG.md | tail -n 1)
+
+          if [[ -z "$FIRST_LINE" ]] && [[ "$SECOND_LINE" =~ ^##.*##$ ]] && [[ -z "$THIRD_LINE" ]]; then
+            echo "Error: CHANGELOG has nothing new since last release"
+            exit 1
+          fi
+
+      - name: Update version file
+        run: |
+          echo "${{ steps.update-version.outputs.new-version }}" > ydb/apps/ydb/version.txt
+          git add ydb/apps/ydb/version.txt
+
+      - name: Update CHANGELOG
+        run: |
+          NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+          # Create temporary file with new changelog structure
+          echo "" > /tmp/changelog_header.md
+          echo "## $NEW_VERSION ##" >> /tmp/changelog_header.md
+          echo "" >> /tmp/changelog_header.md
+
+          # Combine new header with existing changelog
+          cat /tmp/changelog_header.md ydb/apps/ydb/CHANGELOG.md > /tmp/new_changelog.md
+          mv /tmp/new_changelog.md ydb/apps/ydb/CHANGELOG.md
+
+          git add ydb/apps/ydb/CHANGELOG.md
+
+      - name: Create CLI version file
+        run: |
+          NEW_VERSION="${{ steps.update-version.outputs.new-version }}"
+          echo "$NEW_VERSION" > cli_version.txt
+          echo "Created cli_version.txt with version: $NEW_VERSION"
+
+      - name: Upload CLI version artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-version
+          path: cli_version.txt
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Commit changes
+        run: |
+          git commit -m "YDB CLI release ${{ steps.update-version.outputs.new-version }}"
+
+      - name: Push branch
+        run: |
+          git push origin "${{ steps.create-branch.outputs.branch-name }}"
+
   build-matrix:
     name: Build platform matrix
+    needs: prepare-release
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -72,7 +202,7 @@ jobs:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
     name: Build ${{ matrix.os }} binary
-    needs: build-matrix
+    needs: [prepare-release, build-matrix]
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
@@ -81,7 +211,7 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
       with:
-        ref: ${{ inputs.commit_sha }}
+        ref: ${{ needs.prepare-release.outputs.branch-name }}
 
     - name: Print debug information
       run: |
@@ -92,7 +222,14 @@ jobs:
     - name: Prepare Visual Studio environment and build windows binary with ya make
       if: ${{ matrix.os == 'windows-amd' }}
       shell: cmd
-      run: ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }} && python ya make ydb/apps/ydb -r -DUSE_SSE4=no -o ./
+      run: >
+        ${{ '"%ProgramFiles%\Microsoft Visual Studio\2022\Enterprise\Common7\Tools\VsDevCmd.bat" -arch=amd64' }}
+        && echo VS environment prepared, getting toolchain...
+        && for /f "tokens=*" %%i in ('.\ya.bat tool c++ --print-toolchain-path') do set TOOLCHAIN_PATH=%%i\bin\clang-cl.exe
+        && call echo Using full compiler path: %%TOOLCHAIN_PATH%%
+        && call .\ya.bat make ydb/apps/ydb -r -DUSE_SSE4=no -o .\
+        --c-compiler %%TOOLCHAIN_PATH%%
+        --cxx-compiler %%TOOLCHAIN_PATH%%
     
     - name: Build unix binary with ya make
       if: ${{ matrix.os != 'windows-amd' }}
@@ -108,68 +245,65 @@ jobs:
 
   gather-and-push-to-s3:
     name: Gather built binaries and push to s3
-    needs: build-platform-specific-binary
+    needs: [prepare-release, build-platform-specific-binary]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.commit_sha }}
-      - name: Get YDB CLI version from ydb/apps/ydb/version.txt
-        id: getver
-        run: echo "cli_version=$(cat ydb/apps/ydb/version.txt)" >> $GITHUB_OUTPUT
-      - name: Print YDB CLI version ${{ steps.getver.outputs.cli_version }}
-        run: echo ${{ steps.getver.outputs.cli_version }}
+          ref: ${{ needs.prepare-release.outputs.branch-name }}
+      - name: Print YDB CLI version ${{ needs.prepare-release.outputs.new-version }}
+        run: echo ${{ needs.prepare-release.outputs.new-version }}
 
       - name: Prepare directory for linux-amd binary
         if: ${{ inputs.build-linux-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/amd64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/linux/amd64
       - name: Prepare directory for linux-arm binary
         if: ${{ inputs.build-linux-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/linux/arm64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/linux/arm64
       - name: Prepare directory for darwin-amd binary
         if: ${{ inputs.build-darwin-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/amd64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/darwin/amd64
       - name: Prepare directory for darwin-arm binary
         if: ${{ inputs.build-darwin-arm }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/darwin/arm64
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/darwin/arm64
       - name: Prepare directory for windows-amd binary
         if: ${{ inputs.build-windows-amd }}
-        run: mkdir -p ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned
+        run: mkdir -p ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned
 
       - name: Copy linux-amd binary
         if: ${{ inputs.build-linux-amd }}
         uses: actions/download-artifact@v4
         with:
           name: linux-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/linux/amd64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/linux/amd64/
       - name: Copy linux-arm binary
         if: ${{ inputs.build-linux-arm }}
         uses: actions/download-artifact@v4
         with:
           name: linux-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/linux/arm64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/linux/arm64/
       - name: Copy darwin amd64 binary
         if: ${{ inputs.build-darwin-amd }}
         uses: actions/download-artifact@v4
         with:
           name: darwin-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/amd64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/darwin/amd64/
       - name: Copy darwin arm64 binary
         if: ${{ inputs.build-darwin-arm }}
         uses: actions/download-artifact@v4
         with:
           name: darwin-arm-binary
-          path: ${{ steps.getver.outputs.cli_version }}/darwin/arm64/
+          path: ${{ needs.prepare-release.outputs.new-version }}/darwin/arm64/
       - name: Copy windows-amd binary (unsigned)
         if: ${{ inputs.build-windows-amd }}
         uses: actions/download-artifact@v4
         with:
           name: windows-amd-binary
-          path: ${{ steps.getver.outputs.cli_version }}/windows/amd64/unsigned/
+          path: ${{ needs.prepare-release.outputs.new-version }}/windows/amd64/unsigned/
 
       - name: Print resulting file hierarchy
-        run: find ${{ steps.getver.outputs.cli_version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
+        run: find ${{ needs.prepare-release.outputs.new-version }} | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"
 
       - name: Download s3
         run: wget https://github.com/s3tools/s3cmd/releases/download/v2.4.0/s3cmd-2.4.0.tar.gz
@@ -187,5 +321,126 @@ jobs:
           S3_BUCKET: "yandexcloud-ydb"
           S3_DNS_HOST_BUCKET: "%(bucket)s.storage.yandexcloud.net"
           S3_REGION: ru-central1
-        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ steps.getver.outputs.cli_version }} "s3://$S3_BUCKET/release/"
-      
+        run: s3cmd --access_key=${{ secrets.CLI_S3_KEY_ID }} --secret_key=${{ secrets.CLI_S3_KEY_SECRET_ID }} --host="$S3_HOST" --host-bucket="$S3_DNS_HOST_BUCKET" --region="$S3_REGION" sync --recursive ${{ needs.prepare-release.outputs.new-version }} "s3://$S3_BUCKET/release/"
+
+  finalize-release:
+    name: Merge to main and finalize release
+    needs: [prepare-release, gather-and-push-to-s3]
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDBOT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        uses: ./.github/actions/configure_git
+
+      - name: Create and auto-merge PR
+        id: create-pr
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          # Create PR from release branch to main
+          PR_TITLE="YDB CLI release ${{ needs.prepare-release.outputs.new-version }}"
+          printf -v PR_BODY '%s\n' \
+            '### Changelog entry' \
+            '' \
+            '### Changelog category' \
+            '' \
+            '* Not for changelog (changelog entry is not required)' \
+            '' \
+            '### Description for reviewers' \
+            "Automated release PR for CLI version ${{ needs.prepare-release.outputs.new-version }}"
+
+          PR_URL=$(gh pr create \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY" \
+            --head "${{ needs.prepare-release.outputs.branch-name }}" \
+            --base main \
+            --repo ${{ github.repository }})
+
+          # Extract PR number from URL (e.g., "https://github.com/user/repo/pull/12" -> "12")
+          PR_NUMBER=$(basename "$PR_URL")
+
+          echo "Created PR #$PR_NUMBER"
+          echo "PR URL: $PR_URL"
+          echo "pr-number=$PR_NUMBER" >> $GITHUB_OUTPUT
+
+          if gh pr merge "$PR_NUMBER" --merge --auto; then
+            echo "Auto-merge enabled for PR #$PR_NUMBER"
+          else
+            echo "Auto-merge failed - branch protection rules required"
+            echo "Please merge PR manually: $PR_URL"
+            exit 1
+          fi
+
+      - name: Wait for PR merge
+        env:
+          GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+        run: |
+          PR_NUMBER="${{ steps.create-pr.outputs.pr-number }}"
+          echo "Waiting for PR #$PR_NUMBER to be merged (tests may take 30-60+ minutes)..."
+
+          # Wait up to 4 hours, checking every 5 minutes  
+          for i in {1..48}; do  # 48 * 5 minutes = 4 hours
+            # Check if PR is merged via GitHub API
+            PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
+
+            if [[ "$PR_STATE" == "MERGED:true" ]]; then
+              echo "PR merged successfully"
+              break
+            elif [[ "$PR_STATE" == "CLOSED:false" ]]; then
+              echo "PR was closed without merging - this shouldn't happen with auto-merge"
+              exit 1
+            else
+              echo "PR still pending (attempt $i/24), state: $PR_STATE, waiting 5 minutes..."
+              sleep 300  # 5 minutes
+            fi
+
+            # Log progress every 30 minutes
+            if [ $((i % 6)) -eq 0 ]; then
+              echo "Still waiting after $((i * 5)) minutes..."
+            fi
+          done
+
+          # Check if we timed out
+          PR_STATE=$(gh pr view "$PR_NUMBER" --json state,mergedAt --jq '.state + ":" + (.mergedAt != null | tostring)')
+          if [[ "$PR_STATE" != "MERGED:true" ]]; then
+            echo "ERROR: PR was not merged after 4 hours. Current state: $PR_STATE"
+            echo "Please check the PR status and approve if needed."
+            echo "PR URL: $(gh pr view "$PR_NUMBER" --json url --jq '.url')"
+            exit 1
+          fi
+
+      - name: Create release tag
+        run: |
+          # Create tag on release branch (exact state that CLI was built in)
+          git fetch origin "${{ needs.prepare-release.outputs.branch-name }}"
+          git checkout "${{ needs.prepare-release.outputs.branch-name }}"
+          git tag "CLI_${{ needs.prepare-release.outputs.new-version }}"
+          git push origin "CLI_${{ needs.prepare-release.outputs.new-version }}"
+          echo "Created and pushed tag CLI_${{ needs.prepare-release.outputs.new-version }} on release branch"
+
+
+  cleanup-on-failure:
+    name: Cleanup release branch on failure
+    needs: [prepare-release, gather-and-push-to-s3]
+    runs-on: ubuntu-latest
+    if: failure() && needs.prepare-release.result == 'success'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.YDBOT_TOKEN }}
+          fetch-depth: 0
+
+      - name: Configure git
+        uses: ./.github/actions/configure_git
+
+      - name: Delete release branch
+        run: |
+          # Delete the branch
+          git push origin --delete "${{ needs.prepare-release.outputs.branch-name }}" || echo "Branch already deleted"

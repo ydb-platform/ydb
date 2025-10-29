@@ -1,5 +1,5 @@
 #include "mkql_lookup.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -7,8 +7,9 @@ namespace NMiniKQL {
 
 namespace {
 
-class TLookupWrapper : public TMutableCodegeneratorPtrNode<TLookupWrapper> {
+class TLookupWrapper: public TMutableCodegeneratorPtrNode<TLookupWrapper> {
     typedef TMutableCodegeneratorPtrNode<TLookupWrapper> TBaseComputation;
+
 public:
     TLookupWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* dict, IComputationNode* key)
         : TBaseComputation(mutables, kind)
@@ -30,8 +31,9 @@ public:
 
         CallBoxedValueVirtualMethod<NUdf::TBoxedValueAccessor::EMethod::Lookup>(pointer, dict, ctx.Codegen, block, pointer);
         ValueUnRef(Key->GetRepresentation(), keyp, ctx, block);
-        if (Dict->IsTemporaryValue())
+        if (Dict->IsTemporaryValue()) {
             CleanupBoxed(dict, ctx, block);
+        }
     }
 #endif
 private:
@@ -44,7 +46,7 @@ private:
     IComputationNode* const Key;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapLookup(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -54,5 +56,5 @@ IComputationNode* WrapLookup(TCallable& callable, const TComputationNodeFactoryC
     return new TLookupWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), dict, key);
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

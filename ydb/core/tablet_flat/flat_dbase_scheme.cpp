@@ -30,7 +30,9 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
             auto &family = it.second;
 
             delta.AddFamily(table, it.first, family.Room);
-            delta.SetFamily(table, it.first, family.Cache, family.Codec);
+            delta.SetFamilyCompression(table, it.first, family.Codec);
+            delta.SetFamilyCacheMode(table, it.first, family.CacheMode);
+            delta.SetFamilyCache(table, it.first, family.Cache);
             delta.SetFamilyBlobs(table, it.first, family.Small, family.Large);
         }
 
@@ -189,8 +191,38 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     return ApplyLastRecord();
 }
 
-TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
-{
+TAlter& TAlter::SetFamilyCompression(ui32 table, ui32 family, ECodec codec) {
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetCodec(ui32(codec));
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamilyCacheMode(ui32 table, ui32 family, ECacheMode cacheMode) {
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetCacheMode(ui32(cacheMode));
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamilyCache(ui32 table, ui32 family, ECache cache) {
+    TAlterRecord& delta = *Log.AddDelta();
+    delta.SetDeltaType(TAlterRecord::SetFamily);
+    delta.SetTableId(table);
+    delta.SetFamilyId(family);
+    delta.SetInMemory(cache == ECache::Ever);
+    delta.SetCache(ui32(cache));
+
+    return ApplyLastRecord();
+}
+
+TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec) { // legacy
     TAlterRecord& delta = *Log.AddDelta();
     delta.SetDeltaType(TAlterRecord::SetFamily);
     delta.SetTableId(table);

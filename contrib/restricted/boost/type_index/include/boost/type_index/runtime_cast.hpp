@@ -9,6 +9,8 @@
 #ifndef BOOST_TYPE_INDEX_RUNTIME_CAST_HPP
 #define BOOST_TYPE_INDEX_RUNTIME_CAST_HPP
 
+#include <boost/type_index/detail/config.hpp>
+
 /// \file runtime_cast.hpp
 /// \brief Contains the basic utilities necessary to fully emulate
 /// dynamic_cast for language level constructs (raw pointers and references).

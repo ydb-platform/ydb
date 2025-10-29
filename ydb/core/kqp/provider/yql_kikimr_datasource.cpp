@@ -208,6 +208,8 @@ private:
                 return TStatus::Ok;
             case TKikimrKey::Type::Sequence:
                 return TStatus::Ok;
+            case TKikimrKey::Type::Secret:
+                return TStatus::Ok;
         }
 
         return TStatus::Error;
@@ -320,17 +322,20 @@ public:
         if (metadata.Kind != EKikimrTableKind::External) {
             return true;
         }
+
+        if (!ExternalSourceFactory) {
+            ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
+                << " (external source factory is doesn't set), please contact internal support"));
+            return false;
+        }
+
         auto source = ExternalSourceFactory->GetOrCreate(metadata.ExternalSource.Type);
         auto it = Types.DataSourceMap.find(source->GetName());
         if (it == Types.DataSourceMap.end()) {
-            TIssueScopeGuard issueScope(ctx.IssueManager, [input, &table, &ctx]() {
-                return MakeIntrusive<TIssue>(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
-                    << "Failed to load metadata for table (data source doesn't exist): "
-                    << NCommon::FullTableName(table.first, table.second)));
-            });
-
-            res.ReportIssues(ctx.IssueManager);
-            LoadResults.clear();
+            ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Unsupported. Failed to load metadata for table: " << NCommon::FullTableName(table.first, table.second)
+                << " data source " << source->GetName() << " doesn't exist, please contact internal support"));
             return false;
         }
 
@@ -344,7 +349,9 @@ public:
 
         const auto error = FillAuthProperties(properties, metadata.ExternalSource);
         if (error) {
-            res.AddIssue(TIssue(error));
+            ctx.AddError(NYql::TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
+                << "Fill auth properties for table: " << NCommon::FullTableName(table.first, table.second)
+                << " failed: " << error));
             return false;
         }
 
@@ -403,6 +410,7 @@ public:
                 }
 
                 if (!AddCluster(table, res, input, ctx)) {
+                    LoadResults.clear();
                     return TStatus::Error;
                 }
 
@@ -658,7 +666,8 @@ public:
                 node.IsCallable(TDqReadWrap::CallableName()) ||
                 node.IsCallable(TDqReadWideWrap::CallableName()) ||
                 node.IsCallable(TDqReadBlockWideWrap::CallableName()) ||
-                node.IsCallable(TDqSource::CallableName())
+                node.IsCallable(TDqSource::CallableName()) ||
+                node.IsCallable(TDqLookupSourceWrap::CallableName())
             )
         )
         {
@@ -750,6 +759,7 @@ public:
         const TString tablePath = key.GetTablePath();
         auto& tableDesc = SessionCtx->Tables().GetTable(cluster, tablePath);
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
+            YQL_ENSURE(tableDesc.Metadata);
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
                     ctx.AddError(TIssue(node->Pos(ctx),
@@ -757,6 +767,7 @@ public:
                     return nullptr;
                 }
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource) {
+                    YQL_ENSURE(ExternalSourceFactory);
                     const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)
@@ -776,6 +787,7 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 } else if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalTable) {
+                    YQL_ENSURE(ExternalSourceFactory);
                     const auto& source = ExternalSourceFactory->GetOrCreate(tableDesc.Metadata->ExternalSource.Type);
                     ctx.Step.Repeat(TExprStep::DiscoveryIO)
                             .Repeat(TExprStep::Epochs)

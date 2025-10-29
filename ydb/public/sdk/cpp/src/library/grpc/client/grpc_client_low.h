@@ -12,7 +12,6 @@
 
 #include <deque>
 #include <condition_variable>
-#include <typeindex>
 #include <typeinfo>
 #include <variant>
 #include <vector>

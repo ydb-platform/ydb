@@ -1,0 +1,33 @@
+--- contrib/libs/yaml-cpp/include/yaml-cpp/node/detail/memory.h	(index)
++++ contrib/libs/yaml-cpp/include/yaml-cpp/node/detail/memory.h	(working tree)
+@@ -25,6 +25,7 @@ class YAML_CPP_API memory {
+   memory() : m_nodes{} {}
+   node& create_node();
+   void merge(const memory& rhs);
++  size_t size() const;
+ 
+  private:
+   using Nodes = std::set<shared_node>;
+--- contrib/libs/yaml-cpp/src/memory.cpp	(index)
++++ contrib/libs/yaml-cpp/src/memory.cpp	(working tree)
+@@ -9,6 +9,10 @@ void memory_holder::merge(memory_holder& rhs) {
+   if (m_pMemory == rhs.m_pMemory)
+     return;
+ 
++  if (m_pMemory->size() < rhs.m_pMemory->size()) {
++    std::swap(m_pMemory, rhs.m_pMemory);
++  }
++
+   m_pMemory->merge(*rhs.m_pMemory);
+   rhs.m_pMemory = m_pMemory;
+ }
+@@ -22,5 +26,9 @@ node& memory::create_node() {
+ void memory::merge(const memory& rhs) {
+   m_nodes.insert(rhs.m_nodes.begin(), rhs.m_nodes.end());
+ }
++
++size_t memory::size() const {
++    return m_nodes.size();
++}
+ }  // namespace detail
+ }  // namespace YAML

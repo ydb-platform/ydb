@@ -273,6 +273,40 @@ message TKqpReadRangesSourceSettings {
     optional bool IsBatch = 22 [default = false];
 
     optional bool IsTableImmutable = 23 [default = false];
+    optional NKikimrKqp.EIsolationLevel IsolationLevel = 24 [default = ISOLATION_LEVEL_UNDEFINED];
+}
+
+// Takes input rows with a vector column, resolves the leaf cluster ID using the given
+// vector index level and prefix tables for each of them and returns rows for the posting table.
+// Primary key and data columns are copied to the posting table row and a cluster ID column is added.
+message TKqpVectorResolveSettings {
+    // Index settings
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    optional uint32 IndexLevels = 2;
+
+    // Level table and its column IDs
+    optional TKqpTransaction.TTableMeta LevelTable = 3;
+    optional uint32 LevelTableParentColumnId = 4;
+    optional uint32 LevelTableClusterColumnId = 5;
+    optional uint32 LevelTableCentroidColumnId = 6;
+
+    // Input columns (columns of the source table)
+    repeated uint32 InputColumnTypes = 7;
+    repeated NKikimrProto.TTypeInfo InputColumnTypeInfos = 8;
+    repeated uint32 CopyColumnIndexes = 9;
+    optional uint32 VectorColumnIndex = 10;
+
+    // Transaction parameters
+    optional NKikimrProto.TRowVersion Snapshot = 11;
+    optional uint64 LockTxId = 12;
+    optional uint32 LockNodeId = 13;
+    optional NKikimrDataEvents.ELockMode LockMode = 14;
+
+    // Output position of the cluster column
+    optional uint32 ClusterColumnOutPos = 15;
+
+    // Input root cluster ID column (for the prefixed index)
+    optional uint32 RootClusterColumnIndex = 16;
 }
 
 message TKqpTaskInfo {
@@ -1593,6 +1627,7 @@ message TEvLocalKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+    optional bool IsEmpty = 13;
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1751,6 +1786,41 @@ message TEvPrefixKMeansResponse {
 
     reserved 8 to 11;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 12;
+}
+
+message TEvBuildFulltextIndexRequest {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 SnapshotTxId = 4;
+    optional uint64 SnapshotStep = 5;
+
+    optional uint64 SeqNoGeneration = 6;
+    optional uint64 SeqNoRound = 7;
+
+    optional string IndexName = 8;
+
+    optional Ydb.Table.FulltextIndexSettings Settings = 9; // also has key columns
+    repeated string DataColumns = 10;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 11;
+}
+
+message TEvBuildFulltextIndexResponse {
+    optional uint64 Id = 1;
+
+    optional uint64 TabletId = 2;
+    optional NKikimrProto.TPathID PathId = 3;
+
+    optional uint64 RequestSeqNoGeneration = 4;
+    optional uint64 RequestSeqNoRound = 5;
+
+    optional NKikimrIndexBuilder.EBuildStatus Status = 6;
+    repeated Ydb.Issue.IssueMessage Issues = 7;
+
+    optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 8;
 }
 
 message TEvCdcStreamScanRequest {
@@ -2327,14 +2397,13 @@ message TInMemoryLockVolatileDependency {
 }
 
 // In-memory prepared volatile transactions, i.e. those we have accepted for
-// execution and may be planned and executed later. This includes planned and
-// acknowledged transactions that haven't executed yet (including those that
-// have not been committed yet?)
+// execution and which may be planned and executed later. This includes planned
+// and acknowledged transactions that haven't executed yet.
 message TInMemoryPreparedVolatileTx {
     optional uint64 TxId = 1;
     optional NActorsProto.TActorId Source = 2;
     optional uint64 Cookie = 3;
-    optional uint64 Type = 4;
+    optional uint64 Kind = 4;
     optional bytes Body = 5;
     optional uint64 Flags = 6;
     // This is Min/Max step of a prepared transactions, mostly used for deadline cleanup
@@ -2343,6 +2412,8 @@ message TInMemoryPreparedVolatileTx {
     // Specified when the transaction has been planned already (including predictions)
     optional uint64 PredictedStep = 9;
     optional uint64 Step = 10;
+    // Auxillary state which needs to be preserved
+    optional uint64 ReceivedAt = 11; // TInstant in microseconds
 }
 
 // In-memory waiting volatile transactions, i.e. those that have not been

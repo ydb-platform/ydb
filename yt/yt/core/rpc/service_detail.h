@@ -1153,6 +1153,8 @@ private:
     std::atomic<i64> QueueByteSize_ = 0;
     moodycamel::ConcurrentQueue<TServiceBase::TServiceContextPtr> Queue_;
 
+    std::atomic<TDuration> TestingDelay_;
+
 
     void ScheduleRequestsFromQueue();
     void RunRequest(TServiceBase::TServiceContextPtr context);

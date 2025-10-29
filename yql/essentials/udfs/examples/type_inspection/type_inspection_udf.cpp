@@ -6,7 +6,6 @@
 
 #include <util/generic/yexception.h>
 
-
 using namespace NKikimr;
 using namespace NUdf;
 
@@ -15,8 +14,7 @@ namespace {
 //////////////////////////////////////////////////////////////////////////////
 // TZip
 //////////////////////////////////////////////////////////////////////////////
-class TZip: public TBoxedValue
-{
+class TZip: public TBoxedValue {
 public:
     static TStringRef Name() {
         static auto name = TStringRef::Of("Zip");
@@ -25,15 +23,15 @@ public:
 
 private:
     TUnboxedValue Run(
-            const IValueBuilder* valueBuilder,
-            const TUnboxedValuePod* args) const override
-    {
+        const IValueBuilder* valueBuilder,
+        const TUnboxedValuePod* args) const override {
         const auto it1 = args[0].GetListIterator();
         const auto it2 = args[1].GetListIterator();
 
         std::vector<TUnboxedValue> list;
-        if (args[0].HasFastListLength() && args[1].HasFastListLength())
+        if (args[0].HasFastListLength() && args[1].HasFastListLength()) {
             list.reserve(std::min(args[0].GetListLength(), args[1].GetListLength()));
+        }
         for (TUnboxedValue one, two, *items = nullptr; it1.Next(one) && it2.Next(two);) {
             auto tuple = valueBuilder->NewArray(2U, items);
             items[0] = std::move(one);
@@ -48,8 +46,7 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TFold
 //////////////////////////////////////////////////////////////////////////////
-class TFold : public TBoxedValue
-{
+class TFold: public TBoxedValue {
 public:
     static TStringRef Name() {
         static auto name = TStringRef::Of("Fold");
@@ -59,8 +56,7 @@ public:
 private:
     TUnboxedValue Run(
         const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const override
-    {
+        const TUnboxedValuePod* args) const override {
         const auto it = args[0].GetListIterator();
         TUnboxedValue state = TUnboxedValuePod(args[1]);
         auto func = args[2];
@@ -76,10 +72,9 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TInterleave
 //////////////////////////////////////////////////////////////////////////////
-class TInterleave : public TBoxedValue
-{
+class TInterleave: public TBoxedValue {
 public:
-    class TValue : public TBoxedValue {
+    class TValue: public TBoxedValue {
     public:
         TValue(const IValueBuilder* valueBuilder, const TUnboxedValuePod& left, const TUnboxedValuePod& right)
             : ValueBuilder_(valueBuilder)
@@ -121,8 +116,7 @@ public:
 private:
     TUnboxedValue Run(
         const IValueBuilder* valueBuilder,
-        const TUnboxedValuePod* args) const override
-    {
+        const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TValue(valueBuilder, args[0], args[1]));
     }
 };
@@ -130,14 +124,14 @@ private:
 //////////////////////////////////////////////////////////////////////////////
 // TTypeInspectionModule
 //////////////////////////////////////////////////////////////////////////////
-class TTypeInspectionModule: public IUdfModule
-{
+class TTypeInspectionModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("TypeInspection");
     }
 
-    void CleanupOnTerminate() const final {}
+    void CleanupOnTerminate() const final {
+    }
 
     void GetAllFunctions(IFunctionsSink& sink) const final {
         sink.Add(TZip::Name())->SetTypeAwareness();
@@ -146,12 +140,11 @@ public:
     }
 
     void BuildFunctionTypeInfo(
-            const TStringRef& name,
-            TType* userType,
-            const TStringRef& typeConfig,
-            ui32 flags,
-            IFunctionTypeInfoBuilder& builder) const final
-    {
+        const TStringRef& name,
+        TType* userType,
+        const TStringRef& typeConfig,
+        ui32 flags,
+        IFunctionTypeInfoBuilder& builder) const final {
         try {
             Y_UNUSED(typeConfig);
 

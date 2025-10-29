@@ -382,7 +382,7 @@ public:
             return result;
         }
 
-        auto path = parentPath.Child(name);
+        auto path = parentPath.Child(name, TPath::TSplitChildTag{});
         {
             const auto checks = path.Check();
             checks

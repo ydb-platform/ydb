@@ -47,11 +47,18 @@ public:
         return Scheme;
     }
 
+    void PassAway() {
+        if (UploaderActorId) {
+            TActivationContext::AsActorContext().Send(UploaderActorId, new TEvents::TEvPoison());
+        }
+    }
+
 protected:
     const TActorId SelfId;
     const TScheme::TPtr Scheme;
 
     std::map<TString, NKqp::IDataBatcherPtr> Batchers;
+    TActorId UploaderActorId;
 };
 
 

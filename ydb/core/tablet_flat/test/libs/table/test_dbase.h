@@ -181,6 +181,28 @@ namespace NTest {
             return Put(table, *SchemedCookRow(table).Col(std::forward<TArgs>(args)...));
         }
 
+        template<typename ...TArgs>
+        inline TDbExec& EraseN(ui32 table, TArgs&&... args)
+        {
+            return Add(table, *SchemedCookRow(table).Col(std::forward<TArgs>(args)...), ERowOp::Erase);
+        }
+
+        TDbExec& LockRow(ui32 table, ELockMode mode, const TRow &row)
+        {
+            const NTest::TRowTool tool(RowSchemeFor(table));
+            auto pair = tool.Split(row, true, false);
+
+            Y_ENSURE(WriteTxId != 0);
+            Base->LockRowTx(table, mode, pair.Key, WriteTxId);
+            return *this;
+        }
+
+        template<typename ...TArgs>
+        TDbExec& LockRowN(ui32 table, ELockMode mode, TArgs&&... args)
+        {
+            return LockRow(table, mode, *SchemedCookRow(table).Col(std::forward<TArgs>(args)...));
+        }
+
         TDbExec& Apply(const TSchemeChanges &delta)
         {
             Last = Max<ui32>(), Altered = true;
@@ -223,6 +245,20 @@ namespace NTest {
             TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId };
 
             return check.To(CurrentStep()), check;
+        }
+
+        template<class... TArgs>
+        auto SelectRowVersionN(ui32 table, TArgs&&... args) {
+            auto row = *SchemedCookRow(table).Col(std::forward<TArgs>(args)...);
+            const NTest::TRowTool tool(RowSchemeFor(table));
+            auto pair = tool.Split(row, true, false);
+
+            ITransactionMapPtr txMap;
+            if (ReadTxId != 0 && Base->HasOpenTx(table, ReadTxId)) {
+                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
+            }
+
+            return Base->SelectRowVersion(table, pair.Key, 0, txMap);
         }
 
         TDbExec& Snap(ui32 table)

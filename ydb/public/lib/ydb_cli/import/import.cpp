@@ -52,6 +52,7 @@
 #include <io.h>
 #elif defined(_unix_)
 #include <unistd.h>
+#include <sys/resource.h>
 #endif
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
@@ -59,6 +60,48 @@
 namespace NYdb {
 namespace NConsoleClient {
 namespace {
+
+// Computes a safe upper bound for concurrent file openings.
+// - On Unix-like platforms, caps by RLIMIT_NOFILE with a reserve.
+// - On Windows, uses only CPU cores (no RLIMIT available).
+// Applies a practical minimum of 32, but never exceeds the RLIMIT-based cap.
+static ui64 ComputeSafeFileConcurrency(bool verbose) {
+    const unsigned hw = std::thread::hardware_concurrency();
+    const ui64 cpuCap = Max<ui64>(32, static_cast<ui64>(hw));
+
+#if defined(_win32_)
+    if (verbose) {
+        Cerr << "Hardware concurrency (cores): " << hw << Endl;
+        Cerr << "Open files soft limit (RLIMIT_NOFILE): not available on this OS" << Endl;
+        Cerr << "File concurrency used: " << cpuCap << Endl;
+    }
+    return cpuCap;
+#else
+    rlimit lim{};
+    const bool haveRlimit = (getrlimit(RLIMIT_NOFILE, &lim) == 0);
+    const ui64 soft = haveRlimit ? (lim.rlim_cur == RLIM_INFINITY ? 65536ULL : static_cast<ui64>(lim.rlim_cur)) : 0ULL;
+    ui64 result = cpuCap;
+    if (haveRlimit) {
+        const ui64 reserve = Min<ui64>(Max<ui64>(soft / 5, 64), 512); // keep headroom for sockets/logs/etc
+        if (soft <= reserve) {
+            result = 1; // extremely low limit, allow at least one
+        } else {
+            const ui64 rlimitCap = Max<ui64>(1, (soft - reserve)); // per-file budget = 1
+            result = Min<ui64>(rlimitCap, cpuCap);
+        }
+    }
+    if (verbose) {
+        Cerr << "Hardware concurrency (cores): " << hw << Endl;
+        if (haveRlimit) {
+            Cerr << "Open files soft limit (RLIMIT_NOFILE): " << soft << Endl;
+        } else {
+            Cerr << "Open files soft limit (RLIMIT_NOFILE): unknown" << Endl;
+        }
+        Cerr << "File concurrency used: " << result << Endl;
+    }
+    return result;
+#endif
+}
 
 std::shared_ptr<IInputStream> SkipBOMIfPresent(IInputStream* input, bool verbose) {
     char bom[3];
@@ -551,7 +594,6 @@ private:
                               const TString& dbPath,
                               std::shared_ptr<TProgressFile> progressFile);
     TAsyncStatus UpsertTValueBuffer(const TString& dbPath, TValueBuilder& builder);
-    TAsyncStatus UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc);
 
     TAsyncStatus UpsertTValueBufferParquet(
         const TString& dbPath,
@@ -684,7 +726,9 @@ TStatus TImportFileClient::TImpl::Import(const TVector<TString>& filePaths, cons
 
 
     TThreadPool jobPool(IThreadPool::TParams().SetThreadNamePrefix("FileWorker"));
-    jobPool.Start(filePathsSize);
+    const ui64 safeFileConcurrency = ComputeSafeFileConcurrency(Settings.Verbose_);
+    const size_t fileWorkerThreads = static_cast<size_t>(Min<ui64>(filePathsSize, safeFileConcurrency));
+    jobPool.Start(fileWorkerThreads);
     TVector<NThreading::TFuture<TStatus>> asyncResults;
 
     // If the single empty filename passed, read from stdin, else from the file
@@ -890,49 +934,6 @@ TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath,
             });
     };
     return TableClient->RetryOperation(retryFunc, RetrySettings);
-}
-
-inline
-TAsyncStatus TImportFileClient::TImpl::UpsertTValueBuffer(const TString& dbPath, std::function<TValue()>&& buildFunc) {
-    std::optional<TValue> prebuiltValue = buildFunc();
-    auto retryFunc = [this, &dbPath, buildFunc = std::move(buildFunc), prebuiltValue = std::move(prebuiltValue)]
-            (NYdb::NTable::TTableClient& tableClient) mutable -> TAsyncStatus {
-        auto buildTValueAndSendRequest = [this, &buildFunc, &dbPath, &tableClient, &prebuiltValue]() {
-            // For every retry attempt after first request build value from strings again
-            // to prevent copying data in retryFunc in a happy way when there is only one request
-            TValue builtValue = prebuiltValue.has_value() ? std::move(prebuiltValue.value()) : buildFunc();
-            prebuiltValue = std::nullopt;
-            return tableClient.BulkUpsert(dbPath, std::move(builtValue), UpsertSettings)
-                .Apply([](const NYdb::NTable::TAsyncBulkUpsertResult& bulkUpsertResult) {
-                    NYdb::TStatus status = bulkUpsertResult.GetValueSync();
-                    return NThreading::MakeFuture(status);
-                });
-        };
-        // Running and re-running (with building TValue) requests on a separate pool to avoid deadlocks
-        return NThreading::Async(std::move(buildTValueAndSendRequest), *RetryPool);
-    };
-    if (!RequestsInflight->try_acquire()) {
-        if (Settings.Verbose_ && Settings.NewlineDelimited_) {
-            if (!InformedAboutLimit.exchange(true)) {
-                Cerr << (TStringBuilder() << "@ (each '@' means max request inflight is reached and a worker thread is waiting for "
-                "any response from database)" << Endl);
-            } else {
-                Cerr << '@';
-            }
-        }
-        RequestsInflight->acquire();
-    }
-    return TableClient->RetryOperation(retryFunc, RetrySettings)
-        .Apply([this](const TAsyncStatus& asyncStatus) {
-            NYdb::TStatus status = asyncStatus.GetValueSync();
-            if (!status.IsSuccess()) {
-                if (!Failed.exchange(true)) {
-                    ErrorStatus = MakeHolder<TStatus>(status);
-                }
-            }
-            RequestsInflight->release();
-            return asyncStatus;
-        });
 }
 
 inline TAsyncStatus TImportFileClient::TImpl::UpsertTValueBufferParquet(
@@ -1330,23 +1331,21 @@ TStatus TImportFileClient::TImpl::UpsertCsvByBlocks(const TString& filePath,
             // Job ends on receiving final request (after all retries)
             std::counting_semaphore<> jobsInflight(maxJobInflight);
             auto upsertCsvFunc = [&](std::vector<TString>&& buffer) {
-                auto buildFunc = [&jobsInflight, &parser, buffer = std::move(buffer), &filePath, this]() mutable {
-                    try {
-                        return parser.BuildList(buffer, filePath);
-                    } catch (const std::exception& e) {
-                        if (!Failed.exchange(true)) {
-                            ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
-                        }
-                        jobsInflight.release();
-                        throw;
-                    }
-                };
                 jobsInflight.acquire();
-                UpsertTValueBuffer(dbPath, std::move(buildFunc))
-                    .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
-                        jobsInflight.release();
-                        return asyncStatus;
-                    });
+                try {
+                    UpsertTValueBufferOnArena(dbPath, [&parser, buffer = std::move(buffer), &filePath](google::protobuf::Arena* arena) mutable {
+                            return parser.BuildListOnArena(buffer, filePath, arena);
+                        })
+                        .Apply([&jobsInflight](const TAsyncStatus& asyncStatus) {
+                            jobsInflight.release();
+                            return asyncStatus;
+                        });
+                } catch (const std::exception& e) {
+                    if (!Failed.exchange(true)) {
+                        ErrorStatus = MakeHolder<TStatus>(MakeStatus(EStatus::INTERNAL_ERROR, e.what()));
+                    }
+                    jobsInflight.release();
+                }
             };
             std::vector<TAsyncStatus> inFlightRequests;
             std::vector<TString> buffer;
@@ -1495,7 +1494,7 @@ TStatus TImportFileClient::TImpl::UpsertJson(IInputStream& input, const TString&
 TStatus TImportFileClient::TImpl::UpsertParquet([[maybe_unused]] const TString& filename,
                                          [[maybe_unused]] const TString& dbPath,
                                          [[maybe_unused]] ProgressCallbackFunc & progressCallback) {
-#if defined(_WIN64) || defined(_WIN32) || defined(__WIN32__)
+#if defined(_win32_)
     return MakeStatus(EStatus::BAD_REQUEST, TStringBuilder() << "Not supported on Windows");
 #else
     std::shared_ptr<arrow::io::ReadableFile> infile;

@@ -8,7 +8,7 @@ General syntax for calling {{ ydb-short-name }} CLI commands:
 
 where:
 
-- `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }}CLI from the OS command line.
+- `{{ ydb-cli}}` is the command to run the {{ ydb-short-name }} CLI from the OS command line.
 - `[global options]` are [global options](../commands/global-options.md) that are common for all {{ ydb-short-name }} CLI commands.
 - `<command>` is the command.
 - `[<subcomand> ...]` are subcommands specified if the selected command contains subcommands.

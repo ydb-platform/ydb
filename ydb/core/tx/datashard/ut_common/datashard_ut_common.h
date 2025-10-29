@@ -531,7 +531,8 @@ ui64 AsyncCreateCopyTable(Tests::TServer::TPtr server,
                           TActorId sender,
                           const TString &root,
                           const TString &name,
-                          const TString &from);
+                          const TString &from,
+                          bool isBackup = false);
 
 NKikimrTxDataShard::TEvCompactTableResult CompactTable(
     TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed = false);
@@ -730,6 +731,20 @@ ui64 AsyncAlterRestoreMultipleIncrementalBackups(
         const TString& workingDir,
         const TVector<TString>& srcTablePaths,
         const TString& dstTablePAth);
+
+ui64 AsyncCreateSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema);
+
+ui64 AsyncAlterSubDomain(
+        const Tests::TServer::TPtr& server,
+        const TActorId& sender,
+        const TString& workingDir,
+        const TString& name,
+        const TString& schema);
 
 struct TReadShardedTableState {
     TActorId Sender;

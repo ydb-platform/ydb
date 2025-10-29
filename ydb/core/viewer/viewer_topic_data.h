@@ -2,8 +2,8 @@
 #include "json_pipe_req.h"
 #include "viewer.h"
 #include <ydb/core/viewer/yaml/yaml.h>
-#include <ydb/core/persqueue/user_info.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 
 namespace NKikimr::NViewer {
 
@@ -41,7 +41,7 @@ private:
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
     void FillProtoResponse(ui64 maxTotalSize = 10_MB);
     NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec);
-
+    bool ProcessCdc(const NSchemeCache::TSchemeCacheNavigate::TEntry& response);
     STATEFN(StateRequestedDescribe);
 
 

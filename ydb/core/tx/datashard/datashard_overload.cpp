@@ -8,6 +8,10 @@ void TDataShard::OnYellowChannelsChanged() {
     }
 }
 
+void TDataShard::DelayS3UploadRows(TEvDataShard::TEvS3UploadRowsRequest::TPtr& ev) {
+    DelayedS3UploadRows.emplace_back().Reset(ev.Release());
+}
+
 void TDataShard::OnRejectProbabilityRelaxed() {
     NotifyOverloadSubscribers(ERejectReason::OverloadByProbability);
     for (auto& ev : DelayedS3UploadRows) {

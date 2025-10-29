@@ -9,11 +9,6 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-SUBSCRIBER(
-    g:cpp-contrib
-    g:devtools-contrib
-)
-
 VERSION(41.0.6)
 
 ORIGINAL_SOURCE(https://github.com/pyca/cryptography/archive/refs/tags/41.0.6.tar.gz)

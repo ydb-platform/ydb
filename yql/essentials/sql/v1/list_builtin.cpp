@@ -50,7 +50,7 @@ bool TListExtractBuiltin::DoInit(TContext& ctx, ISource* src) {
 }
 
 bool TListProcessBuiltin::CheckArgs(TContext& ctx, ISource* src) {
-    if (Args_.size() != 2 ) {
+    if (Args_.size() != 2) {
         ctx.Error(Pos_) << OpName_ << " requires exactly two parameters";
         return false;
     }
@@ -137,6 +137,50 @@ bool TSetCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
 
 void TSetCreateBuiltin::DoUpdateState() const {
     State_.Set(ENodeState::Const);
+}
+
+bool TMutDictCreateBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args_.size() < 3) {
+        ctx.Error(Pos_) << OpName_ << " requires at least 3 parameters";
+        return false;
+    }
+
+    for (ui32 i = 0; i < Args_.size(); ++i) {
+        if (!Args_[i]->Init(ctx, src)) {
+            return false;
+        }
+    }
+
+    Node_ = Y("MutDictCreate", Y("DictType", Args_[0], Args_[1]));
+    for (ui32 i = 2; i < Args_.size(); ++i) {
+        Node_ = L(Node_, Y("DependsOn", Args_[i]));
+    }
+
+    return true;
+}
+
+void TMutDictCreateBuiltin::DoUpdateState() const {
+    State_.Set(ENodeState::Const);
+}
+
+bool TToMutDictBuiltin::DoInit(TContext& ctx, ISource* src) {
+    if (Args_.size() < 2) {
+        ctx.Error(Pos_) << OpName_ << " requires at least 2 parameters";
+        return false;
+    }
+
+    for (ui32 i = 0; i < Args_.size(); ++i) {
+        if (!Args_[i]->Init(ctx, src)) {
+            return false;
+        }
+    }
+
+    Node_ = Y("ToMutDict", Args_[0]);
+    for (ui32 i = 1; i < Args_.size(); ++i) {
+        Node_ = L(Node_, Y("DependsOn", Args_[i]));
+    }
+
+    return true;
 }
 
 } // namespace NSQLTranslationV1

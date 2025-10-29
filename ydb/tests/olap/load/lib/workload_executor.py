@@ -1,6 +1,8 @@
+import traceback
 import allure
 import logging
 import os
+import json
 import time as time_module
 import uuid
 import yatest.common
@@ -15,7 +17,7 @@ from ydb.tests.olap.lib.remote_execution import (
 )
 from ydb.tests.olap.lib.ydb_cli import YdbCliHelper
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
-from ydb.tests.olap.lib.utils import get_external_param
+from ydb.tests.olap.lib.utils import external_param_is_true, get_external_param
 
 # Импортируем LoadSuiteBase чтобы наследоваться от него
 from ydb.tests.olap.load.lib.conftest import LoadSuiteBase
@@ -34,6 +36,7 @@ class WorkloadTestBase(LoadSuiteBase):
     )
     timeout: float = 1800.0  # Таймаут по умолчанию
     _nemesis_started: bool = False  # Флаг для отслеживания запуска nemesis
+    _current_workload_name: str = None  # Текущее имя workload для отчетов
     cluster_path: str = str(
         get_external_param(
             "cluster_path",
@@ -42,17 +45,210 @@ class WorkloadTestBase(LoadSuiteBase):
         get_external_param(
             "yaml-config",
             ""))  # Путь к yaml конфигурации
+    _ignore_stderr_content: bool = False
+
+    @classmethod
+    def get_workload_name(cls) -> str:
+        """Получает имя текущего workload"""
+        return getattr(cls, "_current_workload_name", None)
+
+    @classmethod
+    def is_nemesis_enabled(cls) -> bool:
+        """Проверяет, включен ли nemesis"""
+        return getattr(cls, "_nemesis_started", False)
 
     @classmethod
     def setup_class(cls) -> None:
         """
         Общая инициализация для workload тестов.
+        НЕ выполняем _Verification здесь - будем делать это перед каждым тестом.
         """
         with allure.step("Workload test setup: initialize"):
             cls._setup_start_time = time_module.time()
+            cls._ignore_stderr_content = external_param_is_true('ignore_stderr_content')
+            # Выполняем только do_setup_class без _Verification
+            if hasattr(cls, 'do_setup_class'):
+                try:
+                    cls.do_setup_class()
+                except Exception as e:
+                    logging.error(f"Error in do_setup_class: {e}")
+                    raise
 
-            # Наследуемся от LoadSuiteBase
-            super().setup_class()
+    @classmethod
+    def perform_verification_with_cluster_check(cls) -> None:
+        """
+        Выполняет проверку кластера перед тестом и записывает результат.
+        """
+        suite_name = cls.suite()
+
+        with allure.step(f"Pre-test verification for {suite_name}"):
+            verification_start_time = time_module.time()
+
+            # Выполняем проверки кластера
+            cluster_issue = cls._check_cluster_health()
+
+            # Создаем результат
+            result = YdbCliHelper.WorkloadRunResult()
+            result.iterations[0] = YdbCliHelper.Iteration()
+            result.start_time = verification_start_time
+            result.iterations[0].time = time_module.time() - verification_start_time
+
+            # Добавляем ошибку если есть проблема с кластером
+            if cluster_issue.get("issue_type") is not None:
+                result.add_error(cluster_issue["issue_description"])
+
+            # Устанавливаем start_time для _Verification
+            try:
+                nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+                first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
+                result.start_time = max(verification_start_time - 600, first_node_start_time)
+            except Exception:
+                result.start_time = verification_start_time - 600
+
+            # Записываем результат проверки кластера через универсальный метод
+            cls.test_event_report(
+                event_kind='ClusterCheck',
+                verification_phase="pre_test_verification",
+                check_type="cluster_availability",
+                cluster_issue=cluster_issue
+            )
+
+            # Если проверка кластера не прошла успешно, поднимаем исключение
+            if cluster_issue.get("issue_type") is not None:
+                raise Exception(f"Cluster verification failed: {cluster_issue['issue_description']}")
+
+    @classmethod
+    def _check_cluster_health(cls) -> dict:
+        """
+        Проверяет состояние кластера и возвращает информацию о проблемах.
+
+        Returns:
+            dict: Информация о проблеме кластера или пустой dict если все OK
+        """
+        try:
+            # Проверяем доступность кластера
+            wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
+            if wait_error:
+                return cls._create_cluster_issue("cluster_not_alive", f"Cluster functionality check failed: {wait_error}")
+
+            # Проверяем наличие нод
+            nodes = YdbCluster.get_cluster_nodes(db_only=False)
+            if not nodes:
+                return cls._create_cluster_issue("cluster_no_nodes", "No working cluster nodes found")
+
+            # Кластер OK
+            return cls._create_cluster_issue(None, "Cluster check passed successfully", len(nodes))
+
+        except Exception as e:
+            return cls._create_cluster_issue("cluster_check_exception", f"Exception during cluster check: {e}")
+
+    @classmethod
+    def test_event_report(cls, event_kind: str,
+                          verification_phase: str = None, check_type: str = None,
+                          cluster_issue: dict = None) -> None:
+        """
+        Универсальный метод для создания записей о событиях теста в базе данных.
+
+        Args:
+            event_kind: Тип события ('TestInit', 'ClusterCheck')
+            verification_phase: Фаза проверки (для ClusterCheck)
+            check_type: Тип проверки (для ClusterCheck)
+            cluster_issue: Информация о проблеме кластера (для ClusterCheck)
+        """
+
+        suite_name = cls.suite()
+        workload_name = cls.get_workload_name() or suite_name
+        nemesis_enabled = cls.is_nemesis_enabled()
+
+        if event_kind == 'TestInit':
+            # TestInit - инициализация теста
+            statistics = {
+                "event_type": "test_initialization",
+                "test_started": True
+            }
+
+            # Добавляем nemesis_enabled в статистику
+            statistics["nemesis_enabled"] = nemesis_enabled
+
+            upload_data = {
+                "kind": 'TestInit',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time_module.time(),
+                "is_successful": True,  # TestInit всегда успешен
+                "statistics": statistics
+            }
+
+            allure_title = f"Test initialization for {workload_name}"
+
+        elif event_kind == 'ClusterCheck':
+            # ClusterCheck - проверка кластера
+            if cluster_issue is None:
+                raise ValueError("cluster_issue is required for ClusterCheck events")
+
+            is_successful = cluster_issue.get("issue_type") is None
+
+            stats = {
+                "verification_phase": verification_phase,
+                "check_type": check_type,
+                **cluster_issue
+            }
+
+            # Добавляем nemesis_enabled в статистику
+            stats["nemesis_enabled"] = nemesis_enabled
+
+            upload_data = {
+                "kind": 'ClusterCheck',
+                "suite": suite_name,
+                "test": workload_name,
+                "timestamp": time_module.time(),
+                "is_successful": is_successful,
+                "statistics": stats
+            }
+
+            allure_title = f"Cluster check results for {verification_phase} - {workload_name}"
+
+        else:
+            raise ValueError(f"Unknown event_kind: {event_kind}")
+
+        # Прикрепляем данные к Allure отчету
+        allure.attach(
+            json.dumps(upload_data, indent=2, default=str),
+            allure_title,
+            allure.attachment_type.JSON
+        )
+
+        ResultsProcessor.upload_results(**upload_data)
+
+    @classmethod
+    def _create_cluster_issue(cls, issue_type: str, description: str, nodes_count: int = 0) -> dict:
+        """
+        Создает информацию о проблеме кластера.
+
+        Args:
+            issue_type: Тип проблемы (None если все OK)
+            description: Описание проблемы
+            nodes_count: Количество нод (0 если проблема, реальное количество если OK)
+
+        Returns:
+            dict: Статистика проблемы кластера
+        """
+        if issue_type is None:
+            # Кластер OK
+            return {
+                "issue_type": None,
+                "issue_description": description,
+                "nodes_count": nodes_count,
+                "is_critical": False
+            }
+        else:
+            # Есть проблема
+            return {
+                "issue_type": issue_type,
+                "issue_description": description,
+                "nodes_count": nodes_count,
+                "is_critical": True
+            }
 
     @classmethod
     def do_teardown_class(cls):
@@ -124,6 +320,7 @@ class WorkloadTestBase(LoadSuiteBase):
                     False, "Stopping nemesis during teardown", nemesis_log
                 )
                 cls._nemesis_started = False
+                YdbCluster.wait_ydb_alive(120)
 
             except Exception as e:
                 error_msg = f"Error stopping nemesis: {e}"
@@ -160,7 +357,29 @@ class WorkloadTestBase(LoadSuiteBase):
 
         try:
             # Получаем все уникальные хосты кластера
-            nodes = YdbCluster.get_cluster_nodes()
+            nodes = YdbCluster.get_cluster_nodes(db_only=False)
+
+            if not nodes:
+                # Создаем информацию о проблеме и репортим
+                cluster_issue = cls._create_cluster_issue(
+                    "no_cluster_nodes_for_nemesis",
+                    "No working cluster nodes found during nemesis management",
+                    0
+                )
+
+                cls.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="nemesis_management",
+                    check_type="nemesis_cluster_check",
+                    cluster_issue=cluster_issue
+                )
+
+                # Есть проблемы с кластером - это критично для nemesis
+                error_msg = f"Cluster issue during nemesis management: {cluster_issue['issue_description']}"
+                logging.error(error_msg)
+                nemesis_log.append(error_msg)
+                raise Exception(f"Nemesis management failed: {cluster_issue['issue_description']}")
+
             unique_hosts = set(node.host for node in nodes)
 
             if enable_nemesis:
@@ -260,7 +479,7 @@ class WorkloadTestBase(LoadSuiteBase):
                         # 1. Устанавливаем права на выполнение для nemesis
                         chmod_cmd = "sudo chmod +x /Berkanavt/nemesis/bin/nemesis"
                         chmod_result = execute_command(
-                            host=host, cmd=chmod_cmd, raise_on_error=False
+                            host=host, cmd=chmod_cmd, raise_on_error=False, timeout=10
                         )
 
                         chmod_stderr = (
@@ -409,7 +628,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 try:
                     cmd = f"sudo service nemesis {action}"
                     result = execute_command(
-                        host=host, cmd=cmd, raise_on_error=False)
+                        host=host, cmd=cmd, raise_on_error=False, timeout=10)
 
                     stdout = result.stdout if result.stdout else ""
                     stderr = result.stderr if result.stderr else ""
@@ -498,10 +717,33 @@ class WorkloadTestBase(LoadSuiteBase):
                 for error in errors:
                     nemesis_log.append(f"- {error}")
 
-            # Устанавливаем флаг запуска nemesis
+            # Проверяем успешность операции nemesis
             if enable_nemesis:
-                cls._nemesis_started = True
-                nemesis_log.append("Nemesis service started successfully")
+                if error_count == 0:
+                    # Полный успех
+                    cls._nemesis_started = True
+                    nemesis_log.append("Nemesis service started successfully on all hosts")
+                elif error_count < len(unique_hosts):
+                    # Частичный успех - создаем ClusterCheck запись с предупреждением
+                    cls._nemesis_started = True  # Считаем что nemesis работает частично
+                    nemesis_log.append(f"Nemesis service started partially: {success_count}/{len(unique_hosts)} hosts")
+
+                    cluster_issue = cls._create_cluster_issue(
+                        "nemesis_partial_startup",
+                        f"Nemesis started on {success_count}/{len(unique_hosts)} hosts. Failed hosts: {error_count}. Errors: {'; '.join(errors[:3])}{'...' if len(errors) > 3 else ''}",
+                        success_count
+                    )
+
+                    cls.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="nemesis_management",
+                        check_type="nemesis_partial_failure",
+                        cluster_issue=cluster_issue
+                    )
+                else:
+                    # Полный провал - это уже обрабатывается в except блоке выше через raise Exception
+                    cls._nemesis_started = False
+                    nemesis_log.append("Nemesis service failed to start on all hosts")
             else:
                 cls._nemesis_started = False
                 nemesis_log.append("Nemesis service stopped successfully")
@@ -516,12 +758,26 @@ class WorkloadTestBase(LoadSuiteBase):
             return nemesis_log
 
         except Exception as e:
+            # Создаем информацию о проблеме и репортим
+            cluster_issue = cls._create_cluster_issue(
+                f"nemesis_{action_name.lower()}_exception",
+                f"Exception during nemesis {action_name.lower()}: {e}",
+                0
+            )
+
+            cls.test_event_report(
+                event_kind='ClusterCheck',
+                verification_phase="nemesis_management",
+                check_type=f"nemesis_{action_name.lower()}_exception",
+                cluster_issue=cluster_issue
+            )
+
             error_msg = f"Error managing nemesis: {e}"
             logging.error(error_msg)
             allure.attach(
                 str(e), "Nemesis Error", attachment_type=allure.attachment_type.TEXT
             )
-            return nemesis_log + [error_msg]
+            raise Exception(f"Nemesis management failed with exception: {e}")
 
     @classmethod
     def _copy_cluster_config(cls, host: str, host_log: list) -> dict:
@@ -531,7 +787,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
         # Копируем cluster.yaml (если указан cluster_path)
         cluster_result = cls._copy_single_config(
-            host, cls.cluster_path, "/Berkanavt/kikimr/cfg/config.yaml",
+            host, cls.cluster_path, "/Berkanavt/nemesis/cfg/config.yaml",
             "cluster config", None, host_log
         )
         if not cluster_result["success"]:
@@ -584,7 +840,8 @@ class WorkloadTestBase(LoadSuiteBase):
             result = execute_command(
                 host=host,
                 cmd=f"sudo cp {fallback_source} {remote_path}",
-                raise_on_error=False
+                raise_on_error=False,
+                timeout=10
             )
 
         # Проверяем результат
@@ -667,12 +924,13 @@ class WorkloadTestBase(LoadSuiteBase):
                 result.add_error(
                     f"Workload execution failed. stderr: {stderr}")
                 error_found = True
-            elif "error" in str(stderr).lower():
-                result.add_error(f"Error detected in stderr: {stderr}")
-                error_found = True
-            elif self._has_real_error_in_stdout(str(stdout)):
-                result.add_warning(f"Error detected in stdout: {stdout}")
-                error_found = True
+            elif not self._ignore_stderr_content:
+                if "error" in str(stderr).lower():
+                    result.add_error(f"Error detected in stderr: {stderr}")
+                    error_found = True
+                elif self._has_real_error_in_stdout(str(stdout)):
+                    result.add_warning(f"Error detected in stdout: {stdout}")
+                    error_found = True
 
         # Проверяем предупреждения
         if (
@@ -871,6 +1129,17 @@ class WorkloadTestBase(LoadSuiteBase):
             nemesis: Запускать ли сервис nemesis через 15 секунд после начала выполнения workload
             nodes_percentage: Процент нод кластера для запуска workload (от 1 до 100)
         """
+        # Сохраняем workload_name в классе для использования в других методах
+        self.__class__._current_workload_name = workload_name
+
+        # СНАЧАЛА создаем TestInit запись
+        with allure.step(f"Initialize test for {workload_name}"):
+            self.__class__.test_event_report('TestInit')
+
+        # ЗАТЕМ выполняем проверку кластера с правильным workload_name
+        with allure.step(f"Pre-workload cluster verification for {workload_name}"):
+            self.__class__.perform_verification_with_cluster_check()
+
         # Для обратной совместимости переименовываем параметр use_chunks в
         # use_iterations
         use_iterations = use_chunks
@@ -1228,6 +1497,7 @@ class WorkloadTestBase(LoadSuiteBase):
                             node_host = node_plan["node"]["node"].host
                             logging.error(
                                 f"Error executing on {node_host}: {e}")
+                            logging.error(traceback.format_exc())
                             # Добавляем информацию об ошибке
                             node_results.append(
                                 {
@@ -1382,6 +1652,12 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Получаем бинарный файл
             with allure.step("Get workload binary"):
+                allure.attach(
+                    f"Environment variable: {self.workload_env_var}",
+                    "Binary Configuration",
+                    attachment_type=allure.attachment_type.TEXT,
+                )
+                logging.info(f"Binary path from env: {os.getenv(self.workload_env_var)}")
                 binary_files = [
                     yatest.common.binary_path(
                         os.getenv(
@@ -1394,11 +1670,6 @@ class WorkloadTestBase(LoadSuiteBase):
                     )
                 ]
                 allure.attach(
-                    f"Environment variable: {self.workload_env_var}",
-                    "Binary Configuration",
-                    attachment_type=allure.attachment_type.TEXT,
-                )
-                allure.attach(
                     f"Binary path: {binary_files[0]}",
                     "Binary Path",
                     attachment_type=allure.attachment_type.TEXT,
@@ -1408,8 +1679,25 @@ class WorkloadTestBase(LoadSuiteBase):
             # Получаем уникальные хосты кластера
             with allure.step("Select unique cluster hosts"):
                 nodes = YdbCluster.get_cluster_nodes()
+
                 if not nodes:
-                    raise Exception("No cluster nodes found")
+                    # Создаем информацию о проблеме и репортим
+                    cluster_issue = self.__class__._create_cluster_issue(
+                        "cluster_no_nodes",
+                        "No working cluster nodes found during workload deployment",
+                        0
+                    )
+
+                    self.__class__.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="workload_deployment",
+                        check_type="deployment_cluster_check",
+                        cluster_issue=cluster_issue
+                    )
+
+                    # Кластер уже проверен в perform_verification_with_cluster_check()
+                    # Если мы дошли сюда, значит что-то пошло не так между проверкой и деплоем
+                    raise Exception(f"Cluster verification failed during deployment: {cluster_issue['issue_description']}")
 
                 # Собираем уникальные хосты и соответствующие им ноды
                 unique_hosts = {}
@@ -1523,6 +1811,21 @@ class WorkloadTestBase(LoadSuiteBase):
                         )
 
                     detailed_deploy_error = "\n".join(deploy_error_details)
+
+                    # Создаем ClusterCheck запись для ошибки деплоя
+                    cluster_issue = self.__class__._create_cluster_issue(
+                        "deployment_failed",
+                        f"Binary deployment failed on all {len(selected_nodes)} nodes: {detailed_deploy_error}",
+                        0
+                    )
+
+                    self.__class__.test_event_report(
+                        event_kind='ClusterCheck',
+                        verification_phase="workload_deployment",
+                        check_type="deployment_failure",
+                        cluster_issue=cluster_issue
+                    )
+
                     logging.error(detailed_deploy_error)
                     raise Exception(detailed_deploy_error)
 
@@ -1706,10 +2009,12 @@ class WorkloadTestBase(LoadSuiteBase):
                             "Command Stderr",
                             attachment_type=allure.attachment_type.TEXT,
                         )
-
-                    # success=True только если stderr пустой (исключая SSH
-                    # warnings) И нет timeout
-                    success = not bool(stderr.strip()) and not is_timeout
+                    if self._ignore_stderr_content:
+                        success = not is_timeout
+                    else:
+                        # success=True только если stderr пустой (исключая SSH
+                        # warnings) И нет timeout
+                        success = not bool(stderr.strip()) and not is_timeout
 
                     execution_time = time_module.time() - run_start_time
 
@@ -1778,50 +2083,6 @@ class WorkloadTestBase(LoadSuiteBase):
             result = result.replace(placeholder, value)
 
         return result
-
-    def _check_scheme_state(self):
-        """Проверяет состояние схемы базы данных"""
-        with allure.step("Checking scheme state"):
-            try:
-
-                ydb_cli_path = yatest.common.binary_path(
-                    os.getenv("YDB_CLI_BINARY"))
-                execution = yatest.common.execute(
-                    [
-                        ydb_cli_path,
-                        "--endpoint",
-                        f"{YdbCluster.ydb_endpoint}",
-                        "--database",
-                        f"/{YdbCluster.ydb_database}",
-                        "scheme",
-                        "ls",
-                        "-lR",
-                    ],
-                    wait=True,
-                    check_exit_code=False,
-                )
-                scheme_stdout = (
-                    execution.std_out.decode(
-                        "utf-8") if execution.std_out else ""
-                )
-                scheme_stderr = (
-                    execution.std_err.decode(
-                        "utf-8") if execution.std_err else ""
-                )
-            except Exception as e:
-                scheme_stdout = ""
-                scheme_stderr = str(e)
-
-            allure.attach(
-                scheme_stdout, "Scheme state stdout", allure.attachment_type.TEXT
-            )
-            if scheme_stderr:
-                allure.attach(
-                    scheme_stderr, "Scheme state stderr", allure.attachment_type.TEXT
-                )
-            logging.info(f"scheme stdout: {scheme_stdout}")
-            if scheme_stderr:
-                logging.warning(f"scheme stderr: {scheme_stderr}")
 
     def _process_single_run_result(
         self,
@@ -2172,9 +2433,6 @@ class WorkloadTestBase(LoadSuiteBase):
             successful_runs = execution_result["successful_runs"]
             total_runs = execution_result["total_runs"]
 
-            # Проверяем состояние схемы
-            self._check_scheme_state()
-
             # Анализируем результаты и добавляем ошибки/предупреждения
             self._analyze_execution_results(
                 overall_result, successful_runs, total_runs, use_iterations
@@ -2190,17 +2448,76 @@ class WorkloadTestBase(LoadSuiteBase):
                 use_iterations,
             )
 
-            # Финальная обработка с диагностикой
+            # Проверяем статус nemesis если он должен был запуститься
+            self._check_nemesis_status(additional_stats)
+
+            # Финальная обработка с диагностикой (подготавливает данные для выгрузки)
             overall_result.workload_start_time = execution_result["workload_start_time"]
             self.process_workload_result_with_diagnostics(
                 overall_result, workload_name, False, use_node_subcols=True
             )
+
+            # Отдельный шаг для выгрузки результатов (ПОСЛЕ подготовки всех данных)
+            self._safe_upload_results(overall_result, workload_name)
+
+            # Финальная обработка статуса (может выбросить исключение, но результаты уже выгружены)
+            # Используем node_errors, сохраненные из диагностики
+            node_errors = getattr(overall_result, '_node_errors', [])
+            self._handle_final_status(overall_result, workload_name, node_errors)
 
             logging.info(
                 f"Final result: success={
                     overall_result.success}, successful_runs={successful_runs}/{total_runs}"
             )
             return overall_result
+
+    def _check_nemesis_status(self, additional_stats: dict) -> None:
+        """
+        Проверяет статус nemesis после выполнения workload.
+        Создает ClusterCheck запись если nemesis должен был работать, но не запустился.
+
+        Args:
+            additional_stats: Дополнительная статистика с информацией о nemesis
+        """
+        # Проверяем, должен ли был запуститься nemesis
+        nemesis_enabled = additional_stats.get("nemesis_enabled", False) if additional_stats else False
+
+        if nemesis_enabled:
+            # Nemesis должен был запуститься - проверяем статус
+            nemesis_actually_started = getattr(self.__class__, "_nemesis_started", False)
+
+            if not nemesis_actually_started:
+                # Nemesis должен был запуститься, но не запустился
+                cluster_issue = self.__class__._create_cluster_issue(
+                    "nemesis_startup_failed",
+                    "Nemesis was enabled for test but failed to start. Check nemesis management logs for details.",
+                    0
+                )
+
+                self.__class__.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.warning("Nemesis was enabled but not started for test")
+            else:
+                # Nemesis запустился успешно - создаем успешную ClusterCheck запись
+                cluster_issue = self.__class__._create_cluster_issue(
+                    None,
+                    "Nemesis was successfully running during workload execution",
+                    1
+                )
+
+                self.__class__.test_event_report(
+                    event_kind='ClusterCheck',
+                    verification_phase="post_workload_verification",
+                    check_type="nemesis_status_check",
+                    cluster_issue=cluster_issue
+                )
+
+                logging.info("Nemesis was successfully running for test")
 
     def process_workload_result_with_diagnostics(
         self,
@@ -2257,6 +2574,7 @@ class WorkloadTestBase(LoadSuiteBase):
 
             # Собираем информацию об ошибках нод
             node_errors = []
+            verify_errors = {}
 
             # Проверяем состояние нод и собираем ошибки
             try:
@@ -2265,6 +2583,7 @@ class WorkloadTestBase(LoadSuiteBase):
                 diagnostics_start_time = getattr(
                     result, "workload_start_time", result.start_time
                 )
+                verify_errors = self.check_nodes_verifies_with_timing(diagnostics_start_time, end_time)
                 node_errors = self.check_nodes_diagnostics_with_timing(
                     result, diagnostics_start_time, end_time
                 )
@@ -2273,13 +2592,10 @@ class WorkloadTestBase(LoadSuiteBase):
                 logging.error(f"Error getting nodes state: {e}")
                 # Добавляем ошибку в результат
                 result.add_warning(f"Error getting nodes state: {e}")
+                node_errors = []  # Устанавливаем пустой список если диагностика не удалась
 
             # Вычисляем время выполнения
             end_time = time_module.time()
-            start_time = result.start_time if result.start_time else end_time - 1
-
-            # Добавляем информацию о workload в отчет
-            from ydb.tests.olap.lib.allure_utils import allure_test_description
 
             # Добавляем дополнительную информацию для отчета
             additional_table_strings = {}
@@ -2321,19 +2637,6 @@ class WorkloadTestBase(LoadSuiteBase):
                             avg_threads:.1f} threads per iteration"
                     )
 
-            # Создаем отчет
-            allure_test_description(
-                suite="workload",
-                test=workload_name,
-                start_time=start_time,
-                end_time=end_time,
-                addition_table_strings=additional_table_strings,
-                node_errors=node_errors,
-                workload_result=result,
-                workload_params=workload_params,
-                use_node_subcols=use_node_subcols,
-            )
-
             # --- ВАЖНО: выставляем nodes_with_issues для корректного fail ---
             stats = result.get_stats(workload_name)
             if stats is not None:
@@ -2342,32 +2645,146 @@ class WorkloadTestBase(LoadSuiteBase):
                     "nodes_with_issues",
                     len(node_errors))
 
-            # --- Обработка финального статуса (используем методы из базового класса) ---
-            self._update_summary_flags(result, workload_name)
-            self._handle_final_status(result, workload_name, node_errors)
+                # Формируем списки ошибок для выгрузки
+                node_error_messages = []
+                workload_error_messages = []
 
-            # --- Загрузка результатов ---
-            self._upload_results(result, workload_name)
-            self._upload_results_per_workload_run(result, workload_name)
+                # Собираем ошибки нод с подробностями
+                for node_error in node_errors:
+                    if node_error.core_hashes:
+                        for core_id, core_hash in node_error.core_hashes:
+                            node_error_messages.append(f"Node {node_error.node.slot} coredump {core_id}")
+                    if node_error.was_oom:
+                        node_error_messages.append(f"Node {node_error.node.slot} experienced OOM")
+                    if hasattr(node_error, 'verifies') and node_error.verifies > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} had {node_error.verifies} VERIFY fails")
+                    if hasattr(node_error, 'sanitizer_errors') and node_error.sanitizer_errors > 0:
+                        node_error_messages.append(f"Node {node_error.node.host} has {node_error.sanitizer_errors} SAN errors")
+
+                # Собираем workload ошибки (не связанные с нодами)
+                if result.errors:
+                    for err in result.errors:
+                        if "coredump" not in err.lower() and "oom" not in err.lower():
+                            workload_error_messages.append(err)
+
+                # Добавляем в статистику
+                result.add_stat(workload_name, "node_error_messages", node_error_messages)
+                result.add_stat(workload_name, "workload_error_messages", workload_error_messages)
+
+                # Добавляем boolean флаги
+                result.add_stat(workload_name, "node_errors", len(node_error_messages) > 0)
+                result.add_stat(workload_name, "workload_errors", len(workload_error_messages) > 0)
+
+                # Собираем workload предупреждения (исключая node-специфичные)
+                workload_warning_messages = []
+                if result.warnings:
+                    for warn in result.warnings:
+                        if "coredump" not in warn.lower() and "oom" not in warn.lower():
+                            workload_warning_messages.append(warn)
+
+                result.add_stat(workload_name, "workload_warning_messages", workload_warning_messages)
+                result.add_stat(workload_name, "workload_warnings", len(workload_warning_messages) > 0)
+
+            # 3. Формирование summary/статистики (with_errors/with_warnings автоматически добавляются в ydb_cli.py)
+
+            # 4. Формирование allure-отчёта
+            self._create_allure_report(result, workload_name, workload_params, node_errors, use_node_subcols, verify_errors)
+
+            # Сохраняем node_errors для использования после выгрузки
+            result._node_errors = node_errors
+
+            # Данные подготовлены, теперь можно выгружать результаты
+
+    def _safe_upload_results(self, result, workload_name):
+        """Безопасная выгрузка результатов с обработкой ошибок и Allure отчетом"""
+        with allure.step("Upload results to YDB"):
+            if not ResultsProcessor.send_results:
+                allure.attach("Results upload is disabled (send_results=false)",
+                              "Upload status", allure.attachment_type.TEXT)
+                return
+
+            try:
+                # Выгружаем агрегированные результаты
+                self._upload_results(result, workload_name)
+
+                # Выгружаем результаты по каждому запуску
+                per_run_count = sum(len(getattr(iteration, "runs", [iteration]))
+                                    for iteration in result.iterations.values())
+                self._upload_results_per_workload_run(result, workload_name)
+
+                # Информативное сообщение о том, что было выгружено
+                upload_summary = [
+                    "Results uploaded successfully:",
+                    "• Aggregate results: 1 record (kind=Stability)",
+                    f"• Per-run results: {per_run_count} records (kind=Stability)",
+                    f"• Total iterations: {len(result.iterations)}",
+                    f"• Workload: {workload_name}",
+                    f"• Suite: {type(self).suite()}",
+                ]
+                allure.attach("\n".join(upload_summary),
+                              "Upload summary", allure.attachment_type.TEXT)
+            except Exception as e:
+                # Логируем ошибку выгрузки, но не прерываем выполнение
+                error_msg = f"Failed to upload results: {e}"
+                logging.error(error_msg)
+                result.add_warning(error_msg)
+                # После добавления warning нужно пересчитать summary флаги
+                # summary флаги (with_errors/with_warnings) автоматически добавляются в ydb_cli.py
+
+                # Подробная информация об ошибке для Allure
+                error_details = [
+                    f"Error type: {type(e).__name__}",
+                    f"Error message: {str(e)}",
+                    f"Timestamp: {time_module.strftime('%Y-%m-%d %H:%M:%S')}",
+                ]
+
+                # Добавляем дополнительную информацию если это YDB ошибка
+                if hasattr(e, 'issues'):
+                    error_details.append(f"YDB issues: {e.issues}")
+                if hasattr(e, 'status'):
+                    error_details.append(f"Status: {e.status}")
+
+                allure.attach("\n".join(error_details),
+                              "Upload error details", allure.attachment_type.TEXT)
 
     def _upload_results(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         stats = result.get_stats(workload_name)
         if stats is not None:
             stats["aggregation_level"] = "aggregate"
             stats["run_id"] = ResultsProcessor.get_run_id()
+            # Добавляем времена workload для правильного анализа
+            workload_start_time = getattr(result, 'workload_start_time', None)
+            if workload_start_time:
+                stats["workload_start_time"] = workload_start_time
+                # Время окончания workload = время до начала диагностики
+                workload_end_time = workload_start_time + stats.get("total_execution_time", 0)
+                stats["workload_end_time"] = workload_end_time
+                stats["workload_duration"] = stats.get("total_execution_time", 0)
+
         end_time = time_module.time()
-        ResultsProcessor.upload_results(
-            kind="Stability",
-            suite=type(self).suite(),
-            test=workload_name,
-            timestamp=end_time,
-            is_successful=result.success,
-            statistics=stats,
+
+        # Подготавливаем данные для выгрузки
+        upload_data = {
+            "kind": "Stability",
+            "suite": type(self).suite(),
+            "test": workload_name,
+            "timestamp": end_time,
+            "is_successful": result.success,
+            "statistics": stats,
+        }
+
+        # Прикрепляем данные к Allure отчету
+        allure.attach(
+            json.dumps(upload_data, indent=2, default=str),
+            f"Aggregate results upload data for {workload_name}",
+            allure.attachment_type.JSON
         )
 
+        ResultsProcessor.upload_results(**upload_data)
+
     def _upload_results_per_workload_run(self, result, workload_name):
-        """Переопределенный метод для workload тестов с kind='Stability'"""
+        """Переопределенный метод для workload тестов"""
         suite = type(self).suite()
         agg_stats = result.get_stats(workload_name)
         nemesis_enabled = agg_stats.get(
@@ -2396,12 +2813,24 @@ class WorkloadTestBase(LoadSuiteBase):
                     "aggregation_level": "per_run",
                     "run_id": run_id,
                 }
-                ResultsProcessor.upload_results(
-                    kind="Stability",
-                    suite=suite,
-                    test=f"{workload_name}__iter_{iter_num}__run_{run_idx}",
-                    timestamp=time_module.time(),
-                    is_successful=(resolution == "ok"),
-                    duration=stats["duration"],
-                    statistics=stats,
-                )
+
+                # Подготавливаем данные для выгрузки per-run
+                per_run_upload_data = {
+                    "kind": "Stability",
+                    "suite": suite,
+                    "test": f"{workload_name}__iter_{iter_num}__run_{run_idx}",
+                    "timestamp": time_module.time(),
+                    "is_successful": (resolution == "ok"),
+                    "duration": stats["duration"],
+                    "statistics": stats,
+                }
+
+                # Прикрепляем данные к Allure отчету (только для первых нескольких runs чтобы не засорять отчет)
+                if iter_num <= 2 and run_idx <= 2:  # Ограничиваем количество attach'ей
+                    allure.attach(
+                        json.dumps(per_run_upload_data, indent=2, default=str),
+                        f"Per-run results upload data: {workload_name} iter_{iter_num} run_{run_idx}",
+                        allure.attachment_type.JSON
+                    )
+
+                ResultsProcessor.upload_results(**per_run_upload_data)

@@ -5,12 +5,10 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 
-
 namespace NKikimr {
 namespace NMiniKQL {
 
 namespace {
-
 
 ui64 g_Yield = std::numeric_limits<ui64>::max();
 ui64 g_TestStreamData[] = {0, 0, 1, 0, 0, 0, 1, 2, 3};
@@ -18,8 +16,9 @@ ui64 g_TestYieldStreamData[] = {0, 1, 2, g_Yield, 0, g_Yield, 1, 2, 0, 1, 2, 0, 
 
 class TTestStreamWrapper: public TMutableComputationNode<TTestStreamWrapper> {
     typedef TMutableComputationNode<TTestStreamWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
@@ -55,7 +54,8 @@ public:
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 
 private:
     const ui64 Count_;
@@ -63,14 +63,17 @@ private:
 
 class TTestYieldStreamWrapper: public TMutableComputationNode<TTestYieldStreamWrapper> {
     typedef TMutableComputationNode<TTestYieldStreamWrapper> TBaseComputation;
+
 public:
-    class TStreamValue : public TComputationValue<TStreamValue> {
+    class TStreamValue: public TComputationValue<TStreamValue> {
     public:
         using TBase = TComputationValue<TStreamValue>;
 
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& compCtx)
             : TBase(memInfo)
-            , CompCtx_(compCtx) {}
+            , CompCtx_(compCtx)
+        {
+        }
 
     private:
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) override {
@@ -99,14 +102,17 @@ public:
     };
 
     TTestYieldStreamWrapper(TComputationMutables& mutables)
-        : TBaseComputation(mutables) {}
+        : TBaseComputation(mutables)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         return ctx.HolderFactory.Create<TStreamValue>(ctx);
     }
 
 private:
-    void RegisterDependencies() const final {}
+    void RegisterDependencies() const final {
+    }
 };
 
 IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
@@ -115,13 +121,12 @@ IComputationNode* WrapTestStream(TCallable& callable, const TComputationNodeFact
     return new TTestStreamWrapper(ctx.Mutables, count);
 }
 
-
 IComputationNode* WrapTestYieldStream(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(!callable.GetInputsCount(), "Expected no args");
     return new TTestYieldStreamWrapper(ctx.Mutables);
 }
 
-}
+} // namespace
 
 TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     return [customFactory](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
@@ -148,5 +153,5 @@ TComputationNodeFactory GetTestFactory(TComputationNodeFactory customFactory) {
     };
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -378,7 +378,6 @@ protected:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
         ALOG_DEBUG(NKikimrServices::KEYVALUE,
                 "KeyValue# " << TabletID()
                 << " Enqueue, event type# " << (ui32)ev->GetTypeRewrite()
@@ -544,10 +543,6 @@ protected:
         ctx.Send(Tablet(), new TEvents::TEvPoisonPill);
     }
 
-    void RestoreActorActivity() {
-        SetActivityType(NKikimrServices::TActivity::KEYVALUE_ACTOR);
-    }
-
     void Handle(TEvKeyValue::TEvVacuumRequest::TPtr &ev) {
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvVacuumRequest " << ev->Get()->ToString());
@@ -616,7 +611,6 @@ public:
     }
 
     STFUNC(StateInit) {
-        RestoreActorActivity();
         ALOG_DEBUG(NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " StateInit flat event type# " << (ui32)ev->GetTypeRewrite()
                 << " event# " << ev->ToString());
@@ -626,7 +620,6 @@ public:
     STFUNC(StateWork) {
         if (HandleHook(ev))
             return;
-        RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKeyValue::TEvRead, Handle);
             hFunc(TEvKeyValue::TEvReadRange, Handle);
@@ -657,7 +650,6 @@ public:
     }
 
     STFUNC(StateBroken) {
-        RestoreActorActivity();
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTablet::TEvTabletDead, HandleTabletDead)
 

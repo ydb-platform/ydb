@@ -12,7 +12,7 @@
 
 namespace NYdb::NConsoleClient {
     namespace {
-        constexpr TDuration DefaultMessagesWaitTimeout = TDuration::Seconds(1);
+        constexpr TDuration DefaultMessagesWaitTimeout = TDuration::Seconds(5);
     }
 
     TTopicWriterParams::TTopicWriterParams() {
@@ -20,12 +20,14 @@ namespace NYdb::NConsoleClient {
 
     TTopicWriterParams::TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter, ui64 messageSizeLimit,
                                            TMaybe<TDuration> batchDuration, TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount,
-                                           ETransformBody transform)
+                                           ETransformBody transform,
+                                           TMaybe<TDuration> messagesWaitTimeout)
         : MessagingFormat_(inputFormat)
         , BatchDuration_(batchDuration)
         , BatchSize_(batchSize)
         , BatchMessagesCount_(batchMessagesCount)
         , Transform_(transform)
+        , MessagesWaitTimeout_(messagesWaitTimeout)
         , MessageSizeLimit_(messageSizeLimit) {
         if (inputFormat == EMessagingFormat::NewlineDelimited || inputFormat == EMessagingFormat::Concatenated) {
             Delimiter_ = TMaybe<char>('\n');
@@ -69,12 +71,12 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicWriter::Init() {
-        TInstant endPreparationTime = Now() + DefaultMessagesWaitTimeout;
+        const TInstant endPreparationTime =
+            Now() + WriterParams_.MessagesWaitTimeout().GetOrElse(DefaultMessagesWaitTimeout);
         NThreading::TFuture<uint64_t> initSeqNo = WriteSession_->GetInitSeqNo();
 
         while (Now() < endPreparationTime) {
-            // TODO(shmel1k@): handle situation if seqNo already exists but with exception.
-            if (!initSeqNo.HasValue() && !initSeqNo.Wait(TDuration::Seconds(1))) {
+            if (!initSeqNo.HasValue() && !initSeqNo.HasException() && !initSeqNo.Wait(TDuration::Seconds(1))) {
                 // TODO(shmel1k@): change logs
                 Cerr << "no init seqno yet" << Endl;
                 continue;
@@ -91,6 +93,8 @@ namespace NYdb::NConsoleClient {
                     return HandleEvent(*event);
                 }
                 initSeqNo.TryRethrow();
+            } else {
+                Cerr << "we never received the seqno" << Endl;
             }
             return EXIT_FAILURE;
         }

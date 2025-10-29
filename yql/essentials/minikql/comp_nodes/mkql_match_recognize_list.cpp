@@ -4,13 +4,14 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 namespace {
 
-class TIterator : public TTemporaryComputationValue<TIterator> {
+class TIterator: public TTemporaryComputationValue<TIterator> {
 public:
     TIterator(TMemoryUsageInfo* memUsage, const TSparseList& parent)
         : TTemporaryComputationValue<TIterator>(memUsage)
         , Parent(parent)
         , Current(Parent.Begin())
-    {}
+    {
+    }
 
 private:
     bool Skip() final {
@@ -37,13 +38,15 @@ private:
     TSparseList::iterator Current;
 };
 
-class TKeysIterator : public TTemporaryComputationValue<TKeysIterator> {
+class TKeysIterator: public TTemporaryComputationValue<TKeysIterator> {
 public:
     TKeysIterator(TMemoryUsageInfo* memUsage, const TSparseList& parent)
         : TTemporaryComputationValue<TKeysIterator>(memUsage)
         , Parent(parent)
         , Current(Parent.Begin())
-    {}
+    {
+    }
+
 private:
     bool Skip() final {
         return ++Current != Parent.End();
@@ -66,7 +69,8 @@ private:
 TListValue::TListValue(TMemoryUsageInfo* memUsage, const TSparseList& list)
     : TComputationValue<TListValue>(memUsage)
     , List(list)
-{}
+{
+}
 
 bool TListValue::HasFastListLength() const {
     return true;

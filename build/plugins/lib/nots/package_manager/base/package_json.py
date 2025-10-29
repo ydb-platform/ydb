@@ -134,9 +134,7 @@ class PackageJson(object):
 
         return None
 
-    # TODO: FBP-1254
-    # def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
-    def get_workspace_dep_spec_paths(self):
+    def get_workspace_dep_spec_paths(self) -> list[tuple[str, str]]:
         """
         Returns names and paths from specifiers of the defined workspace dependencies.
         :rtype: list[tuple[str, str]]
@@ -182,7 +180,13 @@ class PackageJson(object):
 
         for name, rel_path in self.get_workspace_dep_spec_paths():
             dep_path = os.path.normpath(os.path.join(pj_dir, rel_path))
-            dep_pj = PackageJson.load(build_pj_path(dep_path))
+            dep_pj_path = build_pj_path(dep_path)
+            try:
+                dep_pj = PackageJson.load(dep_pj_path)
+            except IOError as e:
+                logger.debug(f"{self.path}: cannot load {name}: {e}. Process dependency as empty package.")
+                dep_pj = PackageJson(dep_pj_path)
+                dep_pj.data = {"name": name}
 
             if name != dep_pj.get_name():
                 raise PackageJsonWorkspaceError(

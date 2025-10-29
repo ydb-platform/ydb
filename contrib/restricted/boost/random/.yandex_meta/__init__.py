@@ -20,7 +20,7 @@ def post_install(self):
 boost_random = NixSourceProject(
     nixattr="boost_random",
     arcdir=boost.make_arcdir("random"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
         "src/",

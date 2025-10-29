@@ -9,5 +9,5 @@ namespace NMiniKQL {
 TCallableVisitFuncProvider GetLiteralPropagationOptimizationFuncProvider();
 TRuntimeNode LiteralPropagationOptimization(TRuntimeNode root, const TTypeEnvironment& env, bool inPlace);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

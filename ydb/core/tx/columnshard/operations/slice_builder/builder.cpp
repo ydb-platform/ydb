@@ -45,7 +45,7 @@ void TBuildSlicesTask::ReplyError(const TString& message, const NColumnShard::TE
 }
 
 class TPortionWriteController: public NColumnShard::IWriteController,
-                               public NColumnShard::TMonitoringObjectsCounter<TIndexedWriteController, true> {
+                               public NColumnShard::TMonitoringObjectsCounter<TPortionWriteController, true> {
 public:
     class TInsertPortion {
     private:
@@ -106,7 +106,7 @@ void TBuildSlicesTask::DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) {
             Context.GetTabletActorId())("write_id", WriteData.GetWriteMeta().GetWriteId())("path_id", WriteData.GetWriteMeta().GetPathId());
     if (!Context.IsActive()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "abort_execution");
-        ReplyError("execution aborted", NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
+        ReplyError(TStringBuilder{} << "execution aborted, reason " << Context.GetErrorMessage(), NColumnShard::TEvPrivate::TEvWriteBlobsResult::EErrorClass::Internal);
         return;
     }
     if (!OriginalBatch) {

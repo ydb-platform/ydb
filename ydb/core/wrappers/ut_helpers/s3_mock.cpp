@@ -187,9 +187,8 @@ bool TS3Mock::TRequest::HttpServeList(const TReplyParams& params, TStringBuf buc
 
     TVector<TString> paths;
     for (const auto& [key, value] : Parent->Data) {
-        TFsPath path = key;
-        if (path.IsSubpathOf(TStringBuilder() << bucketName << "/" << prefix)) {
-            paths.push_back(path);
+        if (key.StartsWith(TStringBuilder() << bucketName << "/" << prefix)) {
+            paths.push_back(key);
         }
     }
 
@@ -421,7 +420,7 @@ bool TS3Mock::TRequest::DoReply(const TReplyParams& params) {
     case EMethod::Head:
     case EMethod::Get:
         if (queryParams.Has("prefix")) {
-            return HttpServeList(params, pathStr, queryParams.Get("prefix"));
+            return HttpServeList(params, pathStr == "/" ? "" : pathStr, queryParams.Get("prefix"));
         } else if (Parent->Data.contains(pathStr)) {
             return HttpServeRead(params, method, pathStr);
         } else {

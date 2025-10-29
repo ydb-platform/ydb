@@ -79,6 +79,7 @@ YT_DEFINE_ERROR_ENUM(
     ((SafeModeEnabled)              (906))
     ((AlreadyPresentInGroup)        (908))
     ((IrreversibleAclModification)  (909))
+    ((NoSuchUser)                   (910))
 );
 
 DEFINE_ENUM(EAccessControlObjectNamespace,
@@ -100,7 +101,13 @@ DEFINE_ENUM(EAccessControlObject,
     (CollectCoverage)
 );
 
+DEFINE_ENUM(EInapplicableRowAccessPredicateMode,
+    // Fail the read action (e.g. scheduler operation / read_table command / SPYT/CHYT query).
+    (Fail)
+    // Pretend that the RL ACE does not exist for the current read action.
+    (Ignore)
+);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NSecurityClient
-

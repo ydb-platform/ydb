@@ -206,41 +206,32 @@ TOperationId TOperationPreparer::StartOperation(
     return operationId;
 }
 
-void TOperationPreparer::LockFiles(TVector<TRichYPath>* paths)
+TRichYPath TOperationPreparer::LockFile(const TRichYPath& path)
 {
     CheckValidity();
 
-    TVector<::NThreading::TFuture<TLockId>> lockIdFutures;
-    lockIdFutures.reserve(paths->size());
     auto lockRequest = Client_->GetRawClient()->CreateRawBatchRequest();
-    for (const auto& path : *paths) {
-        lockIdFutures.push_back(lockRequest->Lock(
-            FileTransaction_->GetId(),
-            path.Path_,
-            ELockMode::LM_SNAPSHOT,
-            TLockOptions().Waitable(true)));
-    }
+    auto lockIdFuture = lockRequest->Lock(
+        FileTransaction_->GetId(),
+        path.Path_,
+        ELockMode::LM_SNAPSHOT,
+        TLockOptions().Waitable(true));
+
     lockRequest->ExecuteBatch();
 
-    TVector<::NThreading::TFuture<TNode>> nodeIdFutures;
-    nodeIdFutures.reserve(paths->size());
-    auto getNodeIdRequest = Client_->GetRawClient()->CreateRawBatchRequest();
-    for (const auto& lockIdFuture : lockIdFutures) {
-        nodeIdFutures.push_back(getNodeIdRequest->Get(
-            FileTransaction_->GetId(),
-            ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id",
-            TGetOptions()));
-    }
-    getNodeIdRequest->ExecuteBatch();
+    auto nodeIdFuture = Client_->GetRawClient()->Get(
+        FileTransaction_->GetId(),
+        ::TStringBuilder() << '#' << GetGuidAsString(lockIdFuture.GetValue()) << "/@node_id");
 
-    for (size_t i = 0; i != paths->size(); ++i) {
-        auto& richPath = (*paths)[i];
-        richPath.OriginalPath(richPath.Path_);
-        richPath.Path("#" + nodeIdFutures[i].GetValue().AsString());
-        YT_LOG_DEBUG("Locked file %v, new path is %v",
-            *richPath.OriginalPath_,
-            richPath.Path_);
-    }
+    auto result = path;
+    result.OriginalPath(path.Path_);
+    result.Path("#" + nodeIdFuture.AsString());
+
+    YT_LOG_DEBUG("Locked file %v, new path is %v",
+        *result.OriginalPath_,
+        result.Path_);
+
+    return result;
 }
 
 void TOperationPreparer::CheckValidity() const
@@ -378,6 +369,23 @@ static TMaybe<TSmallJobFile> GetJobState(const IJob& job)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TJobPreparer::TEagerLockingFileCache::TEagerLockingFileCache(TOperationPreparer& operationPreparer)
+    : OperationPreparer_(operationPreparer)
+{ }
+
+const TVector<TRichYPath>& TJobPreparer::TEagerLockingFileCache::GetFiles() const
+{
+    return LockedFiles_;
+}
+
+void TJobPreparer::TEagerLockingFileCache::InsertFile(const TRichYPath& path)
+{
+    LockedFiles_.emplace_back(
+        OperationPreparer_.LockFile(path));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TJobPreparer::TJobPreparer(
     TOperationPreparer& operationPreparer,
     const TUserJobSpec& spec,
@@ -389,6 +397,7 @@ TJobPreparer::TJobPreparer(
     , OperationPreparer_(operationPreparer)
     , Spec_(spec)
     , Options_(options)
+    , LockedFilesCache_(OperationPreparer_)
     , Layers_(spec.Layers_)
 {
 
@@ -416,14 +425,13 @@ TJobPreparer::TJobPreparer(
     } else {
         PrepareJobBinary(job, outputTableCount, jobStateSmallFile.Defined());
     }
-
-    operationPreparer.LockFiles(&CachedFiles_);
 }
 
 TVector<TRichYPath> TJobPreparer::GetFiles() const
 {
     TVector<TRichYPath> allFiles = CypressFiles_;
-    allFiles.insert(allFiles.end(), CachedFiles_.begin(), CachedFiles_.end());
+    const auto& cachedFiles = LockedFilesCache_.GetFiles();
+    allFiles.insert(allFiles.end(), cachedFiles.begin(), cachedFiles.end());
     return allFiles;
 }
 
@@ -460,6 +468,11 @@ ui64 TJobPreparer::GetTotalFileSize() const
 bool TJobPreparer::ShouldRedirectStdoutToStderr() const
 {
     return !IsCommandJob_ && OperationPreparer_.GetContext().Config->RedirectStdoutToStderr;
+}
+
+bool TJobPreparer::ShouldEnableDebugCommandLineArguments() const
+{
+    return !IsCommandJob_ && OperationPreparer_.GetContext().Config->EnableDebugCommandLineArguments;
 }
 
 TString TJobPreparer::GetFileStorage() const
@@ -791,8 +804,7 @@ void TJobPreparer::UploadLocalFile(
     if (ShouldMountSandbox()) {
         TotalFileSize_ += RoundUpFileSize(stat.Size);
     }
-
-    CachedFiles_.push_back(cypressPath);
+    LockedFilesCache_.InsertFile(std::move(cypressPath));
 }
 
 void TJobPreparer::UploadBinary(const TJobBinaryConfig& jobBinary)
@@ -821,7 +833,7 @@ void TJobPreparer::UploadSmallFile(const TSmallJobFile& smallFile)
 {
     auto cachePath = UploadToCache(TDataToUpload(smallFile.Data, smallFile.FileName + " [generated-file]"));
     auto path = OperationPreparer_.GetContext().Config->ApiFilePathOptions;
-    CachedFiles_.push_back(path.Path(cachePath).FileName(smallFile.FileName));
+    LockedFilesCache_.InsertFile(path.Path(cachePath).FileName(smallFile.FileName));
     if (ShouldMountSandbox()) {
         TotalFileSize_ += RoundUpFileSize(smallFile.Data.size());
     }

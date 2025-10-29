@@ -6,13 +6,13 @@
 #include <util/thread/pool.h>
 #include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
-#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service//file/yql_yt_file_coordinator_service.h>
+#include <yt/yql/providers/yt/fmr/coordinator/yt_coordinator_service/file/yql_yt_file_coordinator_service.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
 
 namespace NYql::NFmr {
 
 TDownloadOperationParams downloadOperationParams{
-    .Input = TYtTableRef{.RichPath = NYT::TRichYPath().Path("Path").Cluster("Cluster"), .FilePath = "FilePath"},
+    .Input = TYtTableRef("Cluster", "Path", "Filepath"),
     .Output = TFmrTableRef{{"Cluster", "Path"}}
 };
 

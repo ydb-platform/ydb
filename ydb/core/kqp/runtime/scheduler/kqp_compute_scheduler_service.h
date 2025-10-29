@@ -15,14 +15,16 @@ public:
     void SetTotalCpuLimit(ui64 cpu);
     ui64 GetTotalCpuLimit() const;
 
-    void AddOrUpdateDatabase(const TString& databaseId, const NHdrf::TStaticAttributes& attrs);
+    void AddOrUpdateDatabase(const NHdrf::TDatabaseId& databaseId, const NHdrf::TStaticAttributes& attrs);
 
-    void AddOrUpdatePool(const TString& databaseId, const TString& poolId, const NHdrf::TStaticAttributes& attrs);
+    void AddOrUpdatePool(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TStaticAttributes& attrs);
 
-    NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
-    void RemoveQuery(const TString& databaseId, const TString& poolId, const NHdrf::TQueryId& queryId);
+    NHdrf::NDynamic::TQueryPtr AddOrUpdateQuery(const NHdrf::TDatabaseId& databaseId, const NHdrf::TPoolId& poolId, const NHdrf::TQueryId& queryId, const NHdrf::TStaticAttributes& attrs);
+    bool RemoveQuery(const NHdrf::TQueryId& queryId);
 
-    void UpdateFairShare();
+    // We want to allow FairShare to be over Limit.
+    // If you need to change this behaviour change variable's default value
+    void UpdateFairShare(bool allowFairShareOverlimit = true);
 
 private:
     TRWMutex Mutex;
@@ -89,8 +91,6 @@ struct TEvAddQuery : public TEventLocal<TEvAddQuery, TEvents::EvAddQuery> {
 };
 
 struct TEvRemoveQuery : public TEventLocal<TEvRemoveQuery, TEvents::EvRemoveQuery> {
-    TString DatabaseId;
-    TString PoolId;
     NHdrf::TQueryId QueryId;
 };
 

@@ -5,7 +5,7 @@
 
 using namespace NKikimr::NBinaryJson;
 
-class TBinaryJsonEntryTest : public TBinaryJsonTestBase {
+class TBinaryJsonEntryTest: public TBinaryJsonTestBase {
 public:
     TBinaryJsonEntryTest()
         : TBinaryJsonTestBase()
@@ -13,11 +13,11 @@ public:
     }
 
     UNIT_TEST_SUITE(TBinaryJsonEntryTest);
-        UNIT_TEST(TestGetType);
-        UNIT_TEST(TestGetContainer);
-        UNIT_TEST(TestGetString);
-        UNIT_TEST(TestGetNumber);
-        UNIT_TEST(TestOutOfBounds);
+    UNIT_TEST(TestGetType);
+    UNIT_TEST(TestGetContainer);
+    UNIT_TEST(TestGetString);
+    UNIT_TEST(TestGetNumber);
+    UNIT_TEST(TestOutOfBounds);
     UNIT_TEST_SUITE_END();
 
     void TestGetType() {
@@ -97,10 +97,10 @@ public:
 
     void TestOutOfBounds() {
         const TVector<std::pair<TString, double>> testCases = {
-            { "1e100000000", std::numeric_limits<double>::infinity() },
-            { "-1e100000000", -std::numeric_limits<double>::infinity() },
-            { "1.797693135e+308", std::numeric_limits<double>::infinity() },
-            { "-1.797693135e+308", -std::numeric_limits<double>::infinity() },
+            {"1e100000000", std::numeric_limits<double>::infinity()},
+            {"-1e100000000", -std::numeric_limits<double>::infinity()},
+            {"1.797693135e+308", std::numeric_limits<double>::infinity()},
+            {"-1.797693135e+308", -std::numeric_limits<double>::infinity()},
         };
 
         for (const auto& testCase : testCases) {
@@ -118,4 +118,3 @@ public:
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TBinaryJsonEntryTest);
-

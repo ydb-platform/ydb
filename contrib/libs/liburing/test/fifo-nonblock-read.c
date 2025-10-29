@@ -19,7 +19,6 @@ int main(int argc, char *argv[])
 	struct io_uring ring;
 	char buf[32];
 	int fds[2];
-	int flags;
 	int ret;
 
 	io_uring_queue_init(1, &ring, 0);
@@ -29,17 +28,7 @@ int main(int argc, char *argv[])
 		return T_EXIT_FAIL;
 	}
 
-	flags = fcntl(fds[0], F_GETFL, 0);
-	if (flags < 0) {
-		perror("fcntl get");
-		return T_EXIT_FAIL;
-	}
-	flags |= O_NONBLOCK;
-	ret = fcntl(fds[0], F_SETFL, flags);
-	if (ret < 0) {
-		perror("fcntl set");
-		return T_EXIT_FAIL;
-	}
+	t_set_nonblock(fds[0]);
 
 	sqe = io_uring_get_sqe(&ring);
 	io_uring_prep_read(sqe, fds[0], buf, sizeof(buf), 0);

@@ -69,8 +69,27 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     TPathElement::EPathState::EPathStateNoChanges);
             }
 
-            // Perform final cleanup
             PerformFinalCleanup(finalize, context);
+
+            {
+                ui64 originalOpId = finalize.GetOriginalOperationId();
+                NIceDb::TNiceDb db(context.GetDB());
+                
+                auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
+                if (stateIt != context.SS->IncrementalRestoreStates.end()) {
+                    const auto& involvedShards = stateIt->second.InvolvedShards;
+
+                    LOG_I("Cleaning up " << involvedShards.size() << " shard progress entries for operation " << originalOpId);
+
+                    for (const auto& shardIdx : involvedShards) {
+                        db.Table<Schema::IncrementalRestoreShardProgress>()
+                            .Key(originalOpId, ui64(shardIdx.GetLocalId()))
+                            .Delete();
+                    }
+                }
+                
+                db.Table<Schema::IncrementalRestoreState>().Key(originalOpId).Delete();
+            }
 
             context.OnComplete.DoneOperation(OperationId);
             return true;
@@ -117,23 +136,23 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
             
             NIceDb::TNiceDb db(context.GetDB());
             
-            // 1. Clean up IncrementalRestoreOperations table
-            db.Table<Schema::IncrementalRestoreOperations>()
-                .Key(originalOpId)
-                .Delete();
-            LOG_I("Deleted IncrementalRestoreOperations entry for operation: " << originalOpId);
+            auto stateIt = context.SS->IncrementalRestoreStates.find(originalOpId);
+            if (stateIt != context.SS->IncrementalRestoreStates.end()) {
+                auto& state = stateIt->second;
+                state.State = TIncrementalRestoreState::EState::Completed;
+                
+                LOG_I("Marked incremental restore state as completed for operation: " << originalOpId);
+            }
             
-            // 2. Clean up in-memory state
-            context.SS->IncrementalRestoreStates.erase(originalOpId);
+            LOG_I("Keeping IncrementalRestoreOperations entry for operation: " << originalOpId << " - will be cleaned up on FORGET");
+            
             context.SS->LongIncrementalRestoreOps.erase(TOperationId(originalOpId, 0));
-            LOG_I("Cleaned up in-memory state for operation: " << originalOpId);
+            LOG_I("Cleaned up long incremental restore ops for operation: " << originalOpId);
             
-            // 3. Clean up mappings
             CleanupMappings(context.SS, originalOpId, context);
         }
 
         void CleanupMappings(TSchemeShard* ss, ui64 operationId, TOperationContext& context) {
-            // Clean up TxIdToIncrementalRestore
             auto txIt = ss->TxIdToIncrementalRestore.begin();
             while (txIt != ss->TxIdToIncrementalRestore.end()) {
                 if (txIt->second == operationId) {
@@ -144,7 +163,6 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 }
             }
             
-            // Clean up IncrementalRestoreOperationToState
             auto opIt = ss->IncrementalRestoreOperationToState.begin();
             while (opIt != ss->IncrementalRestoreOperationToState.end()) {
                 if (opIt->second == operationId) {

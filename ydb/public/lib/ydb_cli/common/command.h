@@ -37,6 +37,7 @@ public:
     bool Visible = true;
     bool Hidden = false;
     bool Dangerous = false;
+    bool Local = false;
     bool OnlyExplicitProfile = false;
     const TClientCommand* Parent;
     TClientCommandOptions Opts;
@@ -88,15 +89,8 @@ public:
             TArgSetting Max;
         };
 
-        enum EVerbosityLevel : ui32 {
-            NONE = 0,
-            WARN = 1,
-            INFO = 2,
-            DEBUG = 3,
-        };
-
-        static ELogPriority VerbosityLevelToELogPriority(EVerbosityLevel lvl);
-        static ELogPriority VerbosityLevelToELogPriorityChatty(EVerbosityLevel lvl);
+        static ELogPriority VerbosityLevelToELogPriority(ui32 lvl);
+        static ELogPriority VerbosityLevelToELogPriorityChatty(ui32 lvl);
 
         int ArgC;
         char** ArgV;
@@ -135,7 +129,7 @@ public:
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
 
-        EVerbosityLevel VerbosityLevel = EVerbosityLevel::NONE;
+        ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosiltyLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
 
         bool JsonUi64AsText = false;
@@ -170,6 +164,8 @@ public:
         bool AllowEmptyAddress = false;
         bool OnlyExplicitProfile = false;
         bool AssumeYes = false;
+        // Whether a command is local (need no connection to YDB) or not
+        bool LocalCommand = false;
         std::optional<std::string> StorageUrl = std::nullopt;
 
         TCredentialsGetter CredentialsGetter;
@@ -207,7 +203,7 @@ public:
         static size_t ParseHelpCommandVerbosilty(int argc, char** argv);
 
         bool IsVerbose() const {
-            return VerbosityLevel != EVerbosityLevel::NONE;
+            return VerbosityLevel > 0;
         }
 
         void SetFreeArgsMin(size_t value) {
@@ -424,6 +420,7 @@ public:
 
     void Hide();
     void MarkDangerous();
+    void MarkLocal();
     void UseOnlyExplicitProfile();
 
 protected:
@@ -453,6 +450,7 @@ public:
     void AddCommand(std::unique_ptr<TClientCommand> command);
     void AddHiddenCommand(std::unique_ptr<TClientCommand> command);
     void AddDangerousCommand(std::unique_ptr<TClientCommand> command);
+    void AddLocalCommand(std::unique_ptr<TClientCommand> command);
     virtual void Prepare(TConfig& config) override;
     void RenderCommandDescription(
         TStringStream& stream,

@@ -197,4 +197,8 @@ void GetPruneKeysColumnsForJoinLeaves(const NNodes::TCoEquiJoinTuple& joinTree, 
 
 TExprNode::TPtr DropAnyOverJoinInputs(TExprNode::TPtr joinTree, const TJoinLabels& labels, const THashMap<TStringBuf, THashSet<TStringBuf>>& keyColumnsByLabel, TExprContext& ctx);
 
+static constexpr TStringBuf YqlCanaryColumnName = "_yql_canary_";
+static constexpr TStringBuf YqlJoinKeyColumnName = "_yql_join_key";
+
+bool IsNoPullColumn(TStringBuf columnName);
 }

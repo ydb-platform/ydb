@@ -9,7 +9,7 @@ namespace NKikimr::NMiniKQL::NMatchRecognize {
 
 using TMeasureInputColumnOrder = TMKQLVector<std::pair<NYql::NMatchRecognize::EMeasureInputDataSpecialColumns, size_t>>;
 
-class TRowForMeasureValue final : public TComputationValue<TRowForMeasureValue> {
+class TRowForMeasureValue final: public TComputationValue<TRowForMeasureValue> {
 public:
     TRowForMeasureValue(
         TMemoryUsageInfo* memInfo,
@@ -31,7 +31,7 @@ private:
     ui64 MatchNumber;
 };
 
-class TMeasureInputDataValue final : public TComputationValue<TMeasureInputDataValue> {
+class TMeasureInputDataValue final: public TComputationValue<TMeasureInputDataValue> {
 public:
     TMeasureInputDataValue(
         TMemoryUsageInfo* memInfo,

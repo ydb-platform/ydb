@@ -295,8 +295,11 @@ void nghttp3_ksl_clear(nghttp3_ksl *ksl);
 /*
  * nghttp3_ksl_nth_node returns the |n|th node under |blk|.
  */
-#define nghttp3_ksl_nth_node(KSL, BLK, N)                                      \
-  ((nghttp3_ksl_node *)(void *)((BLK)->nodes + (KSL)->nodelen * (N)))
+static inline nghttp3_ksl_node *nghttp3_ksl_nth_node(const nghttp3_ksl *ksl,
+                                                     const nghttp3_ksl_blk *blk,
+                                                     size_t n) {
+  return (nghttp3_ksl_node *)(void *)(blk->nodes + ksl->nodelen * n);
+}
 
 #ifndef WIN32
 /*
@@ -318,18 +321,21 @@ void nghttp3_ksl_it_init(nghttp3_ksl_it *it, const nghttp3_ksl *ksl,
  * |it| points to.  It is undefined to call this function when
  * nghttp3_ksl_it_end(it) returns nonzero.
  */
-#define nghttp3_ksl_it_get(IT)                                                 \
-  nghttp3_ksl_nth_node((IT)->ksl, (IT)->blk, (IT)->i)->data
+static inline void *nghttp3_ksl_it_get(const nghttp3_ksl_it *it) {
+  return nghttp3_ksl_nth_node(it->ksl, it->blk, it->i)->data;
+}
 
 /*
  * nghttp3_ksl_it_next advances the iterator by one.  It is undefined
  * if this function is called when nghttp3_ksl_it_end(it) returns
  * nonzero.
  */
-#define nghttp3_ksl_it_next(IT)                                                \
-  (++(IT)->i == (IT)->blk->n && (IT)->blk->next                                \
-     ? ((IT)->blk = (IT)->blk->next, (IT)->i = 0)                              \
-     : 0)
+static inline void nghttp3_ksl_it_next(nghttp3_ksl_it *it) {
+  if (++it->i == it->blk->n && it->blk->next) {
+    it->blk = it->blk->next;
+    it->i = 0;
+  }
+}
 
 /*
  * nghttp3_ksl_it_prev moves backward the iterator by one.  It is
@@ -342,8 +348,9 @@ void nghttp3_ksl_it_prev(nghttp3_ksl_it *it);
  * nghttp3_ksl_it_end returns nonzero if |it| points to the one beyond
  * the last node.
  */
-#define nghttp3_ksl_it_end(IT)                                                 \
-  ((IT)->blk->n == (IT)->i && (IT)->blk->next == NULL)
+static inline int nghttp3_ksl_it_end(const nghttp3_ksl_it *it) {
+  return it->blk->n == it->i && it->blk->next == NULL;
+}
 
 /*
  * nghttp3_ksl_it_begin returns nonzero if |it| points to the first
@@ -357,8 +364,9 @@ int nghttp3_ksl_it_begin(const nghttp3_ksl_it *it);
  * It is undefined to call this function when nghttp3_ksl_it_end(it)
  * returns nonzero.
  */
-#define nghttp3_ksl_it_key(IT)                                                 \
-  ((nghttp3_ksl_key *)nghttp3_ksl_nth_node((IT)->ksl, (IT)->blk, (IT)->i)->key)
+static inline nghttp3_ksl_key *nghttp3_ksl_it_key(const nghttp3_ksl_it *it) {
+  return (nghttp3_ksl_key *)nghttp3_ksl_nth_node(it->ksl, it->blk, it->i)->key;
+}
 
 /*
  * nghttp3_ksl_range_compar is an implementation of

@@ -1,3 +1,6 @@
+#include <ydb/core/base/table_index.h>
+#include <ydb/core/base/fulltext.h>
+
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
@@ -99,7 +102,7 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
 
     const bool isSink = NeedSinks(table, kqpCtx);
 
-    auto indexes = BuildSecondaryIndexVector(table, insert.Pos(), ctx);
+    auto indexes = BuildAffectedIndexTables(table, insert.Pos(), ctx, nullptr);
     YQL_ENSURE(indexes);
     const bool canUseStreamIndex = kqpCtx.Config->EnableIndexStreamWrite
         && std::all_of(indexes.begin(), indexes.end(), [](const auto& index) {
@@ -188,18 +191,54 @@ TExprBase KqpBuildInsertIndexStages(TExprBase node, TExprContext& ctx, const TKq
             }
 
             for (const auto& column : indexDesc->DataColumns) {
-                if (inputColumnsSet.contains(column)) {
-                    YQL_ENSURE(indexTableColumnsSet.emplace(column).second);
+                if (inputColumnsSet.contains(column) && indexTableColumnsSet.emplace(column).second) {
                     indexTableColumns.emplace_back(column);
                 }
             }
 
-            auto upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
-                insert.Pos(), ctx, true);
+            std::optional<TExprBase> upsertIndexRows;
+            switch (indexDesc->Type) {
+                case TIndexDescription::EType::GlobalSync:
+                case TIndexDescription::EType::GlobalAsync:
+                case TIndexDescription::EType::GlobalSyncUnique: {
+                    upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
+                        insert.Pos(), ctx, true);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalSyncVectorKMeansTree: {
+                    upsertIndexRows = MakeInsertIndexRows(insertRowsPrecompute, table, inputColumnsSet, indexTableColumns,
+                        insert.Pos(), ctx, true);
+                    if (indexDesc->KeyColumns.size() > 1) {
+                        // First resolve prefix IDs using StreamLookup
+                        const auto& prefixTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << insert.Table().Path().Value()
+                            << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NKMeans::PrefixTable);
+                        if (prefixTable.Metadata->Columns.at(NTableIndex::NKMeans::IdColumn).DefaultKind == NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_SEQUENCE) {
+                            auto res = BuildVectorIndexPrefixRowsWithNew(table, prefixTable, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
+                            upsertIndexRows = std::move(res.first);
+                            effects.emplace_back(std::move(res.second));
+                        } else {
+                            // Handle old prefixed vector index tables without the sequence
+                            upsertIndexRows = BuildVectorIndexPrefixRows(table, prefixTable, true, indexDesc, upsertIndexRows.value(), indexTableColumns, insert.Pos(), ctx);
+                        }
+                    }
+                    upsertIndexRows = BuildVectorIndexPostingRows(table, insert.Table(), indexDesc->Name, indexTableColumns,
+                        upsertIndexRows.value(), true, insert.Pos(), ctx);
+                    indexTableColumns = BuildVectorIndexPostingColumns(table, indexDesc);
+                    break;
+                }
+                case TIndexDescription::EType::GlobalFulltext: {
+                    // For fulltext indexes, we need to tokenize the text and create inserted rows
+                    upsertIndexRows = BuildFulltextIndexRows(table, indexDesc, insertRowsPrecompute, inputColumnsSet, indexTableColumns, /*includeDataColumns=*/true,
+                        insert.Pos(), ctx);
+                    break;
+                }
+            }
+            Y_ENSURE(upsertIndexRows.has_value());
+            Y_ENSURE(indexTableColumns);
 
             auto upsertIndex = Build<TKqlUpsertRows>(ctx, insert.Pos())
                 .Table(tableNode)
-                .Input(upsertIndexRows)
+                .Input(upsertIndexRows.value())
                 .Columns(BuildColumnsList(indexTableColumns, insert.Pos(), ctx))
                 .ReturningColumns<TCoAtomList>().Build()
                 .IsBatch(ctx.NewAtom(insert.Pos(), "false"))

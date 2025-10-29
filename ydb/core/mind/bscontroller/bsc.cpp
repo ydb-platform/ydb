@@ -114,33 +114,39 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
-void TBlobStorageController::TGroupInfo::FillInGroupParameters(
+bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
         TBlobStorageController *self) const {
     if (GroupMetrics) {
         params->MergeFrom(GroupMetrics->GetGroupParameters());
+        return true;
     } else if (BridgeGroupInfo) {
         Y_ABORT_UNLESS(self->BridgeInfo);
-        for (const auto& groupId : BridgeGroupInfo->GetBridgeGroupIds()) {
-            if (TGroupInfo *groupInfo = self->FindGroup(TGroupId::FromValue(groupId))) {
+        bool res = true;
+        for (const auto& pile : BridgeGroupInfo->GetBridgeGroupState().GetPile()) {
+            const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+            if (TGroupInfo *groupInfo = self->FindGroup(groupId)) {
                 Y_ABORT_UNLESS(groupInfo->BridgePileId);
                 if (!NBridge::PileStateTraits(self->BridgeInfo->GetPile(groupInfo->BridgePileId)->State).AllowsConnection) {
                     continue; // ignore groups from disconnected piles
                 }
-                groupInfo->FillInGroupParameters(params, self);
+                res &= groupInfo->FillInGroupParameters(params, self);
             } else {
                 Y_DEBUG_ABORT();
             }
         }
+        return res;
     } else {
-        FillInResources(params->MutableAssuredResources(), true);
-        FillInResources(params->MutableCurrentResources(), false);
-        FillInVDiskResources(params);
+        bool res = true;
+        res &= FillInResources(params->MutableAssuredResources(), true);
+        res &= FillInResources(params->MutableCurrentResources(), false);
+        res &= FillInVDiskResources(params);
         params->SetGroupSizeInUnits(GroupSizeInUnits);
+        return res;
     }
 }
 
-void TBlobStorageController::TGroupInfo::FillInResources(
+bool TBlobStorageController::TGroupInfo::FillInResources(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {
     // count minimum params for each of slots assuming they are shared fairly between all the slots (expected or currently created)
     std::optional<ui64> size;
@@ -148,6 +154,10 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     std::optional<ui64> readThroughput;
     std::optional<ui64> writeThroughput;
     std::optional<double> occupancy;
+
+    Y_ABORT_UNLESS(Topology);
+    TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
+
     for (const TVSlotInfo *vslot : VDisksInGroup) {
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
@@ -181,6 +191,14 @@ void TBlobStorageController::TGroupInfo::FillInResources(
         if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
             occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
         }
+
+        const bool hasAllMetrics = metrics.HasMaxIOPS()
+            && metrics.HasMaxReadThroughput()
+            && metrics.HasMaxWriteThroughput()
+            && vslot->Metrics.HasOccupancy();
+        if (hasAllMetrics) {
+            vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
+        }
     }
 
     // and recalculate it to the total size of the group according to the erasure
@@ -201,10 +219,15 @@ void TBlobStorageController::TGroupInfo::FillInResources(
     if (occupancy) {
         pb->SetOccupancy(Max<double>(pb->HasOccupancy() ? pb->GetOccupancy() : Min<double>(), *occupancy));
     }
+
+    return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
-void TBlobStorageController::TGroupInfo::FillInVDiskResources(
+bool TBlobStorageController::TGroupInfo::FillInVDiskResources(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *pb) const {
+    Y_ABORT_UNLESS(Topology);
+    TBlobStorageGroupInfo::TGroupVDisks vdisksWithAllMetrics(Topology.get());
+
     TBlobStorageGroupType type(ErasureSpecies);
     const double f = (double)VDisksInGroup.size() * type.DataParts() / type.TotalPartCount();
     for (const TVSlotInfo *vslot : VDisksInGroup) {
@@ -218,7 +241,14 @@ void TBlobStorageController::TGroupInfo::FillInVDiskResources(
         if (m.HasSpaceColor()) {
             pb->SetSpaceColor(pb->HasSpaceColor() ? Max(pb->GetSpaceColor(), m.GetSpaceColor()) : m.GetSpaceColor());
         }
+
+        const bool hasAllMetrics = m.HasAvailableSize() && m.HasAllocatedSize();
+        if (hasAllMetrics) {
+            vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
+        }
     }
+
+    return Topology->GetQuorumChecker().CheckQuorumForGroup(vdisksWithAllMetrics);
 }
 
 NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
@@ -269,8 +299,8 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     const bool isFirstStorageConfig = !StorageConfig;
     Y_DEBUG_ABORT_UNLESS(!isFirstStorageConfig || CurrentStateFunc() == &TThis::StateInit);
 
-    StorageConfig = std::move(ev->Get()->Config);
-    BridgeInfo = std::move(ev->Get()->BridgeInfo);
+    auto prevStorageConfig = std::exchange(StorageConfig, std::move(ev->Get()->Config));
+    auto prevBridgeInfo = std::exchange(BridgeInfo, std::move(ev->Get()->BridgeInfo));
     SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
@@ -311,6 +341,31 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
+    // if bridge info has changed, then add any dynamic groups to sys view changed list
+    THashSet<TGroupId> groupsToCheck;
+    if (BridgeInfo) {
+        bool changed = false;
+        if (!prevBridgeInfo) {
+            changed = true;
+        } else {
+            Y_ABORT_UNLESS(std::size(prevBridgeInfo->Piles) == std::size(BridgeInfo->Piles));
+            for (size_t k = 0; k < std::size(BridgeInfo->Piles); ++k) {
+                if (prevBridgeInfo->Piles[k].State != BridgeInfo->Piles[k].State) {
+                    changed = true;
+                    break;
+                }
+            }
+        }
+        if (changed) {
+            for (const auto& [groupId, group] : GroupMap) {
+                SysViewChangedGroups.insert(groupId);
+            }
+            for (const auto& [groupId, iter] : GroupToWaitingSelectGroupsItem) {
+                groupsToCheck.insert(groupId);
+            }
+        }
+    }
+
     if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
@@ -338,6 +393,16 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     if (Loaded) {
         ApplyStorageConfig();
+    }
+
+    ApplyStaticGroupUpdateForSyncers(prevStaticGroups);
+    UpdateWaitingGroups(groupsToCheck);
+
+    if (Loaded && BridgeInfo && (!prevStorageConfig || prevStorageConfig->GetClusterState().GetGeneration() <
+            StorageConfig->GetClusterState().GetGeneration())) {
+        // cluster state has changed -- we need to recheck groups
+        RecheckUnsyncedBridgePiles = true;
+        CheckUnsyncedBridgePiles();
     }
 }
 
@@ -435,7 +500,6 @@ void TBlobStorageController::ApplyBscSettings(const NKikimrConfig::TBlobStorageC
 
 std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageController::BuildConfigRequestFromStorageConfig(
         const NKikimrBlobStorage::TStorageConfig& storageConfig, const THostRecordMap& hostRecords, bool validationMode) {
-
     if (Boxes.size() > 1 || !storageConfig.HasBlobStorageConfig()) {
         return nullptr;
     }
@@ -535,6 +599,8 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
         request->SetRollback(true);
     }
 
+    request->MutableStorageConfig()->PackFrom(storageConfig);
+
     if (request->CommandSize()) {
         return ev;
     }
@@ -543,32 +609,6 @@ std::unique_ptr<TEvBlobStorage::TEvControllerConfigRequest> TBlobStorageControll
 }
 
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    InvokeOnRootTimer.Reset();
-    InvokeOnRootCmd.reset();
-
-    if (StorageConfig->HasClusterStateDetails()) {
-        for (const auto& unsynced : StorageConfig->GetClusterStateDetails().GetPileSyncState()) {
-            if (unsynced.GetUnsyncedBSC()) {
-                auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-                auto& record = ev->Record;
-                auto *nbsf = record.MutableNotifyBridgeSyncFinished();
-                nbsf->SetGeneration(StorageConfig->GetClusterState().GetGeneration());
-                nbsf->SetBridgePileId(unsynced.GetBridgePileId());
-                using TQuery = NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot::TNotifyBridgeSyncFinished;
-                nbsf->SetStatus(TQuery::Success);
-                nbsf->SetBSC(true);
-                for (const auto& [groupId, info] : GroupMap) {
-                    if (info->BridgeGroupInfo) {
-                        groupId.CopyToProto(nbsf, &TQuery::AddUnsyncedGroupIdsToAdd);
-                    }
-                }
-                // remember the command in case it fails
-                InvokeOnRootCmd.emplace(record);
-                Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
-            }
-        }
-    }
-
     if (!StorageConfig->HasBlobStorageConfig()) {
         return;
     }
@@ -583,24 +623,6 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (auto ev = BuildConfigRequestFromStorageConfig(*StorageConfig, HostRecords, false)) {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, ev->Record));
         Send(SelfId(), ev.release());
-    }
-}
-
-void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
-    const auto status = ev->Get()->Record.GetStatus();
-    const bool success = status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
-    const bool retriable =
-        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
-        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
-    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC38, "TEvNodeConfigInvokeOnRootResult",
-        (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
-    if (success) {
-        InvokeOnRootCmd.reset();
-    } else if (retriable && InvokeOnRootCmd) {
-        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
-        ev->Record.CopyFrom(*InvokeOnRootCmd);
-        TActivationContext::Schedule(TDuration::MilliSeconds(InvokeOnRootTimer.NextBackoffMs()), new IEventHandle(
-            MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release()));
     }
 }
 
@@ -741,21 +763,24 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
                 break;
             }
 
-            const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
             NKikimrBlobStorage::TStorageConfig storageConfig;
-
-            try {
-                NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
-                TString errorReason;
-                if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+            if (record.HasStorageConfig()) {
+                record.GetStorageConfig().UnpackTo(&storageConfig);
+            } else {
+                const TString& effectiveConfig = storageYaml ? *storageYaml : *mainYaml;
+                try {
+                    NKikimrConfig::TAppConfig appConfig = NYaml::Parse(effectiveConfig);
+                    TString errorReason;
+                    if (!NKikimr::NStorage::DeriveStorageConfig(appConfig, &storageConfig, &errorReason)) {
+                        rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                        rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                        break;
+                    }
+                } catch (const std::exception& ex) {
                     rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                    rr.SetErrorReason("failed to derive storage config: " + errorReason);
+                    rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
                     break;
                 }
-            } catch (const std::exception& ex) {
-                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
-                rr.SetErrorReason(TStringBuilder() << "failed to parse YAML: " << ex.what());
-                break;
             }
 
             const ui64 cookie = NextValidationCookie++;
@@ -813,12 +838,16 @@ void TBlobStorageController::SetHostRecords(THostRecordMap hostRecords) {
     }
 
     // there were no host records, this is the first call, so we must initialize SelfHeal now and start booting tablet
-    if (auto *appData = AppData(); appData && appData->Icb) {
-        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
-        appData->Icb->RegisterSharedControl(*EnableSelfHealWithDegraded,
-            "BlobStorageControllerControls.EnableSelfHealWithDegraded");
+    if (auto *appData = AppData()) {
+        if (appData->Icb) {
+            EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
+            TControlBoard::RegisterSharedControl(*EnableSelfHealWithDegraded,
+                appData->Icb->BlobStorageControllerControls.EnableSelfHealWithDegraded);
+        }
     }
     Y_ABORT_UNLESS(!SelfHealId);
+
+    SelfHealSettings = ParseSelfHealSettings(StorageConfig);
     SelfHealId = Register(CreateSelfHealActor());
 
     ClusterBalancingSettings = ParseClusterBalancingSettings(StorageConfig);
@@ -972,6 +1001,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
         cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         hFunc(NStorage::TEvNodeConfigInvokeOnRootResult, Handle);
+        cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
+        hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -979,6 +1010,9 @@ STFUNC(TBlobStorageController::StateWork) {
             }
         break;
     }
+
+    // start any pending bridge syncers
+    ProcessSyncers();
 
     if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
         STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),
@@ -1128,6 +1162,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kMovePDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateBridgeGroupInfo:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:
@@ -1168,7 +1203,7 @@ void TBlobStorageController::TStaticGroupInfo::UpdateStatus(TMonotonic mono, TBl
         if (const auto it = controller->StaticVSlots.find(vslotId); it != controller->StaticVSlots.end()) {
             if (mono <= it->second.ReadySince) { // VDisk can't be treated as READY one
                 failed |= {topology, vdiskId};
-            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); !pdisk || !pdisk->HasGoodExpectedStatus()) {
+            } else if (const TPDiskInfo *pdisk = controller->FindPDisk(vslotId.ComprisingPDiskId()); pdisk && !pdisk->HasGoodExpectedStatus()) {
                 failedByPDisk |= {topology, vdiskId};
             }
         } else {
@@ -1202,25 +1237,64 @@ void TBlobStorageController::TStaticGroupInfo::UpdateLayoutCorrect(TBlobStorageC
     LayoutCorrect = layout.IsCorrect();
 }
 
-TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
-        const TStaticGroupFinder& finder) const {
-    if (Info && Info->IsBridged()) {
-        std::optional<TGroupInfo::TGroupStatus> res;
-        for (TGroupId groupId : Info->GetBridgeGroupIds()) {
-            if (TStaticGroupInfo *g = finder(groupId)) {
-                if (const auto& s = g->GetStatus(finder); res) {
-                    res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
-                } else {
-                    res.emplace(s);
-                }
-            } else {
-                Y_DEBUG_ABORT();
-            }
+namespace {
+
+    template<typename T, typename TFinder>
+    TBlobStorageController::TGroupInfo::TGroupStatus GetGroupStatus(const T& entity, TFinder&& finder,
+            const TBridgeInfo *bridgeInfo) {
+        const NKikimrBlobStorage::TGroupInfo *groupInfo = nullptr;
+        if constexpr (std::is_same_v<T, TBlobStorageController::TGroupInfo>) {
+            groupInfo = entity.BridgeGroupInfo
+                ? &entity.BridgeGroupInfo.value()
+                : nullptr;
+        } else {
+            Y_DEBUG_ABORT_UNLESS(entity.Info);
+            Y_DEBUG_ABORT_UNLESS(entity.Info->Group);
+            groupInfo = entity.Info && entity.Info->Group && entity.Info->Group->HasBridgeGroupState()
+                ? &entity.Info->Group.value()
+                : nullptr;
         }
-        return res.value_or(TGroupInfo::TGroupStatus());
-    } else {
-        return Status;
+
+        if (groupInfo) {
+            Y_ABORT_UNLESS(bridgeInfo);
+            Y_ABORT_UNLESS(groupInfo->HasBridgeGroupState());
+
+            std::optional<TBlobStorageController::TGroupInfo::TGroupStatus> res;
+            const auto& bridgeGroupState = groupInfo->GetBridgeGroupState();
+            const auto& piles = bridgeGroupState.GetPile();
+
+            for (int pileIndex = 0; pileIndex < piles.size(); ++pileIndex) {
+                const TBridgePileId bridgePileId = TBridgePileId::FromPileIndex(pileIndex);
+                if (NBridge::PileStateTraits(bridgeInfo->GetPile(bridgePileId)->State).RequiresDataQuorum) {
+                    const auto& pile = piles[pileIndex];
+                    const auto groupId = TGroupId::FromProto(&pile, &NKikimrBridge::TGroupState::TPile::GetGroupId);
+                    if (const auto *group = finder(groupId)) {
+                        const auto& s = group->GetStatus(finder, bridgeInfo);
+                        if (res) {
+                            res->MakeWorst(s.OperatingStatus, s.ExpectedStatus);
+                        } else {
+                            res.emplace(s);
+                        }
+                    }
+                }
+            }
+
+            return res.value_or(TBlobStorageController::TGroupInfo::TGroupStatus());
+        } else {
+            return entity.Status;
+        }
     }
+
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TGroupInfo::GetStatus(
+        const TGroupFinder& finder, const TBridgeInfo *bridgeInfo) const {
+    return GetGroupStatus(*this, finder, bridgeInfo);
+}
+
+TBlobStorageController::TGroupInfo::TGroupStatus TBlobStorageController::TStaticGroupInfo::GetStatus(
+        const TStaticGroupFinder& finder, const TBridgeInfo *bridgeInfo) const {
+    return GetGroupStatus(*this, finder, bridgeInfo);
 }
 
 bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGroupFinder& finder) const {
@@ -1237,6 +1311,42 @@ bool TBlobStorageController::TStaticGroupInfo::IsLayoutCorrect(const TStaticGrou
         return true;
     } else {
         return LayoutCorrect;
+    }
+}
+
+void TBlobStorageController::InvokeOnRoot(NKikimrBlobStorage::TEvNodeConfigInvokeOnRoot&& request,
+        std::function<void(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult&)>&& callback) {
+    const ui64 cookie = NextInvokeOnRootCookie++;
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC42, "InvokeOnRoot", (Request, request), (Cookie, cookie));
+    const auto [it, inserted] = InvokeOnRootCommands.emplace(cookie, TInvokeOnRootCommand{
+        .Request = std::move(request),
+        .Callback = std::move(callback),
+    });
+    auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+    ev->Record.CopyFrom(it->second.Request);
+    Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release(), 0, cookie);
+}
+
+void TBlobStorageController::Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
+    const auto it = InvokeOnRootCommands.find(ev->Cookie);
+    Y_ABORT_UNLESS(it != InvokeOnRootCommands.end());
+    TInvokeOnRootCommand& cmd = it->second;
+    auto& record = ev->Get()->Record;
+    const auto status = record.GetStatus();
+    const bool success = status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK;
+    const bool retriable =
+        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::RACE ||
+        status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::NO_QUORUM;
+    STLOG(retriable ? PRI_INFO : success ? PRI_DEBUG : PRI_WARN, BS_CONTROLLER, BSC41, "TEvNodeConfigInvokeOnRootResult",
+        (Cookie, ev->Cookie), (Response, ev->Get()->Record), (Success, success), (Retriable, retriable));
+    if (retriable) {
+        auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
+        ev->Record.CopyFrom(cmd.Request);
+        TActivationContext::Schedule(cmd.Timer.Next(), new IEventHandle(
+            MakeBlobStorageNodeWardenID(SelfId().NodeId()), SelfId(), ev.release(), 0, it->first));
+    } else {
+        cmd.Callback(record);
+        InvokeOnRootCommands.erase(it);
     }
 }
 

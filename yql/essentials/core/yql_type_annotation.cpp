@@ -25,9 +25,14 @@ bool TTypeAnnotationContext::Initialize(TExprContext& ctx) {
 }
 
 bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
-    for (auto& x : DataSources) {
-        if (!x->Initialize(ctx)) {
+    THashMap<TString, NLayers::ILayersIntegrationPtr> layersIntegrations;
+
+    for (auto& [name, source] : DataSourceMap) {
+        if (!source->Initialize(ctx)) {
             return false;
+        }
+        if (auto layersIntegration = source->GetLayersIntegration()) {
+            layersIntegrations[name] = layersIntegration;
         }
     }
 
@@ -40,7 +45,10 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     Y_ENSURE(UserDataStorage);
     UserDataStorage->FillUserDataUrls();
 
+    DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
+    DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, std::move(layersIntegrations));
     return true;
 }
 
@@ -56,6 +64,7 @@ void TTypeAnnotationContext::Reset() {
     StatisticsMap.clear();
     NoBlockRewriteCallableStats.clear();
     NoBlockRewriteTypeStats.clear();
+    LayersRegistry->ClearLayers();
 }
 
 void TTypeAnnotationContext::IncNoBlockCallable(TStringBuf callableName) {

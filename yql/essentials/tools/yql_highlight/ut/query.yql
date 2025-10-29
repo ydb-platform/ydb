@@ -1,3 +1,10 @@
+USE plato;
+
+PRAGMA AutoCommit;
+PRAGMA TablePathPrefix = 'home/yql';
+PRAGMA Warning('disable', '1101');
+PRAGMA yson.Strict;
+
 SELECT 1; -- A single-line comment SELECT 1
 select 1; /*
    Some SELECT 1
@@ -17,6 +24,14 @@ SELECT @@some
 multiline with double at: @@@@
 text@@;
 SELECT "foo"u, '[1;2]'y, @@{"a":null}@@j;
+
+INSERT INTO @tmp WITH TRUNCATE;
+
+CREATE TABLE t (id Uint64 PRIMARY KEY (id)) WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_BY_SIZE = ENABLED,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 512
+);
 
 SELECT
     CAST(123l AS Int64) AS `Int64`,

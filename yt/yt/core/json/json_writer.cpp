@@ -139,8 +139,8 @@ class TWebJsonConsumer
     : public TJsonConsumer
 {
 public:
-    static const i64 MaxSafeInteger = ((i64)1 << 53) - 1;
-    static const i64 MinSafeInteger = -MaxSafeInteger;
+    static constexpr i64 MaxSafeInteger = (static_cast<i64>(1) << 53) - 1;
+    static constexpr i64 MinSafeInteger = -MaxSafeInteger;
 
     TWebJsonConsumer(
         IJsonWriter* jsonWriter,
@@ -156,11 +156,10 @@ public:
     void OnUint64Scalar(ui64 value);
 
 private:
+    const TWebJsonFormatConfigPtr Config_;
+
     void SetUnsafeIntegerSerializationParameters();
     void ResetUnsafeIntegerSerializationParameters();
-
-private:
-    TWebJsonFormatConfigPtr Config_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

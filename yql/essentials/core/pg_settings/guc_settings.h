@@ -26,6 +26,7 @@ public:
 
     size_t GetHash() const noexcept;
     bool operator==(const TGUCSettings& other) const;
+
 private:
     std::unordered_map<std::string, std::string> Settings_;
     std::unordered_map<std::string, std::string> RollbackSettings_;

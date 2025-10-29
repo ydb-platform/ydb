@@ -13,7 +13,6 @@
 
 #define PYTHON_TEST_TAG "Python2Test"
 
-
 using namespace NKikimr;
 using namespace NMiniKQL;
 
@@ -49,15 +48,14 @@ public:
         , FunctionInfoBuilder_(NYql::UnknownLangVersion, Env_, TypeInfoHelper_, "", nullptr, {})
     {
         HolderFactory_ = MakeHolder<THolderFactory>(
-                    Alloc_.Ref(),
-                    MemInfo_,
-                    nullptr);
+            Alloc_.Ref(),
+            MemInfo_,
+            nullptr);
         ValueBuilder_ = MakeHolder<TDefaultValueBuilder>(*HolderFactory_, NUdf::EValidatePolicy::Exception);
         BindTerminator_ = MakeHolder<TBindTerminator>(ValueBuilder_.Get());
         Singleton<TPyInitializer>();
         CastCtx_ = MakeIntrusive<TPyCastContext>(&GetValueBuilder(),
-            MakeIntrusive<TPyContext>(TypeInfoHelper_.Get(), NUdf::TStringRef::Of(PYTHON_TEST_TAG), NUdf::TSourcePosition())
-        );
+                                                 MakeIntrusive<TPyContext>(TypeInfoHelper_.Get(), NUdf::TStringRef::Of(PYTHON_TEST_TAG), NUdf::TSourcePosition()));
     }
 
     ~TPythonTestEngine() {
@@ -90,8 +88,8 @@ public:
 
     template <typename TChecker>
     void ToMiniKQLWithArg(
-            NUdf::TType* udfType, PyObject* argValue,
-            const TStringBuf& script, TChecker&& checker)
+        NUdf::TType* udfType, PyObject* argValue,
+        const TStringBuf& script, TChecker&& checker)
     {
         TPyObjectPtr args = Py_BuildValue("(O)", argValue);
 
@@ -108,8 +106,8 @@ public:
 
     template <typename TExpectedType, typename TChecker>
     void ToMiniKQLWithArg(
-            PyObject* argValue,
-            const TStringBuf& script, TChecker&& checker)
+        PyObject* argValue,
+        const TStringBuf& script, TChecker&& checker)
     {
         auto type = GetTypeBuilder().SimpleType<TExpectedType>();
         ToMiniKQLWithArg<TChecker>(type, argValue, script, std::move(checker));
@@ -143,9 +141,9 @@ public:
 
     template <typename TMiniKQLValueBuilder>
     TPyObjectPtr ToPython(
-                NUdf::TType* udfType,
-                TMiniKQLValueBuilder&& builder,
-                const TStringBuf& script)
+        NUdf::TType* udfType,
+        TMiniKQLValueBuilder&& builder,
+        const TStringBuf& script)
     {
         try {
             TType* type = static_cast<TType*>(udfType);
@@ -239,7 +237,7 @@ private:
     }
 
     TPyObjectPtr RunPythonFunction(
-            const TStringBuf& script, PyObject* args = nullptr)
+        const TStringBuf& script, PyObject* args = nullptr)
     {
         TPyObjectPtr function(CompilePythonFunction(script));
         return PyObject_CallObject(function.Get(), args);

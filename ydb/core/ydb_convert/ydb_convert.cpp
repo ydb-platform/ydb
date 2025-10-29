@@ -5,6 +5,7 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
@@ -1278,7 +1279,21 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
         }
         break;
     }
-    case NScheme::NTypeIds::Decimal :
+    case NScheme::NTypeIds::Decimal : {
+
+        std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
+        valInPool.first = val.low_128();
+        valInPool.second = val.high_128();
+        ui8 precision = type.GetDecimalType().GetPrecision();
+        auto validate = NYql::NDecimal::FromHalfs(val.low_128(), val.high_128());
+        if (!NKikimr::NMiniKQL::IsValidDecimal(precision, validate)) {
+            err = "Invalid decimal value";
+            return false;
+        }
+
+        c = TCell((const char*)&valInPool, sizeof(valInPool));
+        break;
+    }
     case NScheme::NTypeIds::Uuid : {
         std::pair<ui64,ui64>& valInPool = *valueDataPool.Allocate<std::pair<ui64,ui64> >();
         valInPool.first = val.low_128();
@@ -1397,16 +1412,16 @@ void ProtoValueFromCell(NYdb::TValueBuilder& vb, const NScheme::TTypeInfo& typeI
         vb.Interval(cell.AsValue<i64>());
         break;
     case EPrimitiveType::Date32:
-        vb.Date32(cell.AsValue<i32>());
+        vb.Date32(std::chrono::sys_time<TWideDays>(TWideDays(cell.AsValue<i32>())));
         break;
     case EPrimitiveType::Datetime64:
-        vb.Datetime64(cell.AsValue<i64>());
+        vb.Datetime64(std::chrono::sys_time<TWideSeconds>(TWideSeconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Timestamp64:
-        vb.Timestamp64(cell.AsValue<i64>());
+        vb.Timestamp64(std::chrono::sys_time<TWideMicroseconds>(TWideMicroseconds(cell.AsValue<i64>())));
         break;
     case EPrimitiveType::Interval64:
-        vb.Interval64(cell.AsValue<i64>());
+        vb.Interval64(TWideMicroseconds(cell.AsValue<i64>()));
         break;
     case EPrimitiveType::TzDate:
         vb.TzDate(getString());

@@ -1,6 +1,5 @@
 #include "progress_merger.h"
 
-
 namespace NYql::NProgressMerger {
 
 //////////////////////////////////////////////////////////////////////////////
@@ -28,8 +27,8 @@ TNodeProgressBase::TNodeProgressBase(
     , FinishedAt_(finishedAt)
     , Stages_(stages)
     , Dirty_(true)
-{}
-
+{
+}
 
 bool TNodeProgressBase::MergeWith(const TOperationProgress& p) {
     bool dirty = false;
@@ -59,7 +58,7 @@ bool TNodeProgressBase::MergeWith(const TOperationProgress& p) {
     }
 
     // (5) stage
-    if (!p.Stage.first.empty() &&  Progress_.Stage != p.Stage) {
+    if (!p.Stage.first.empty() && Progress_.Stage != p.Stage) {
         Progress_.Stage = p.Stage;
         Stages_.push_back(p.Stage);
         dirty = true;
@@ -88,7 +87,7 @@ void TNodeProgressBase::Abort() {
 
 bool TNodeProgressBase::IsUnfinished() const {
     return Progress_.State == EState::Started ||
-            Progress_.State == EState::InProgress;
+           Progress_.State == EState::InProgress;
 }
 
 bool TNodeProgressBase::IsDirty() const {

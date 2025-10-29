@@ -42,6 +42,21 @@ TEST(TSchemaSerialization, ParseUsingNodeAndSerialize)
 R"RR({"$attributes":{"strict":true,"unique_keys":false},"$value":[{"name":"a","required":false,"type":"int64","type_v3":{"type_name":"optional","item":"int64"}},{"stable_name":"b","deleted":true}]})RR");
 }
 
+TEST(TSchemaSerialization, ParseEntityUsingNodeAndSerialize)
+{
+    NYT::NFormats::TFormat format(NFormats::EFormatType::Json);
+
+    TBlobOutput buffer;
+    auto consumer = CreateConsumerForFormat(format, NFormats::EDataType::Structured, &buffer);
+
+    Serialize(TTableSchemaPtr{}, consumer.get());
+    consumer->Flush();
+    auto ref = buffer.Flush();
+    auto buf = ref.ToStringBuf();
+
+    EXPECT_EQ(TString(buf.data(), buf.size()), "null");
+}
+
 TEST(TSchemaSerialization, Cursor)
 {
     const char* schemaString = "<strict=%true;unique_keys=%false>"

@@ -19,10 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
+        build_preset: ["relwithdebinfo", "release-asan"]
     with:
       test_targets: ydb/
       test_size: large
-      branches: ''
+      branches: ${{ startsWith(inputs.use_default_branches, 'false') && github.ref_name || '' }}
       branches_config_path: '.github/config/stable_tests_branches.json'
       build_preset: ${{ matrix.build_preset }}

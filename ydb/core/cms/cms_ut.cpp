@@ -521,6 +521,164 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         );
     }
 
+    Y_UNIT_TEST(ManualRequestApproval)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        // Disconnect 3 nodes, in this case locking is not allowed
+        for (ui32 i = 0; i < 3; i++) {
+            auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(i)];
+            node.Connected = false;
+        }
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", false, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        // Request that cannot be fulfilled
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+        auto rid1 = rec1.GetRequestId();
+
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
+
+        TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+        auto rec2 = env.CheckGetPermission("user", permissionId);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+
+        {
+            // Request cannot be fulfilled, since node 0 is locked by previously approved request
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+        }
+
+        env.AdvanceCurrentTime(TDuration::Minutes(30));
+
+        {
+            // This will trigger CMS cleanup.
+            env.CheckPermissionRequest(MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+            ), TStatus::DISALLOW_TEMP);
+
+            auto list = env.CheckListRequests("user", 2);
+            auto reqs = list.GetRequests();
+            for (const auto& req : reqs) {
+                UNIT_ASSERT_VALUES_UNEQUAL(req.GetRequestId(), "user-r-1");
+            }
+         
+            // Check that manually approved permission was cleaned up
+            env.CheckGetPermission("user", permissionId, false, TStatus::WRONG_REQUEST);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalLockingAllNodes)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto& node = TFakeNodeWhiteboardService::Info[env.GetNodeId(0)];
+        node.Connected = false;
+        env.RegenerateBSConfig(TFakeNodeWhiteboardService::Config.MutableResponse()->MutableStatus(0)->MutableBaseConfig(), opts);
+
+        for (ui32 i = 0; i < 8; i++) {
+            auto req = MakePermissionRequest(
+                TRequestOptions("user", false, false, true),
+                MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(i), 60000000)
+            );
+            req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+            // Request that cannot be fulfilled
+            auto rec1 = env.CheckPermissionRequest(req, TStatus::DISALLOW_TEMP);
+
+            auto rid1 = rec1.GetRequestId();
+
+            // Manual approval
+            auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+            UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 1);
+            TString permissionId = approveResp.GetManuallyApprovedPermissions(0).GetId();
+            auto rec2 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), permissionId);
+        }
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalWithPartialAlreadyApproved)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(1), 60000000),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(2), 60000000)
+        );
+
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        auto rec1 = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(rec1.PermissionsSize(), 1);
+        auto rec2 = env.CheckGetPermission("user", rec1.GetPermissions(0).GetId());
+        UNIT_ASSERT_VALUES_EQUAL(rec2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rec2.GetPermissions(0).GetId(), rec1.GetPermissions(0).GetId());
+
+        auto rid1 = rec1.GetRequestId();
+        
+        // Manual approval
+        auto approveResp = env.CheckApproveRequest("user", rid1, false, TStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(approveResp.ManuallyApprovedPermissionsSize(), 2);
+        for (const auto& permission : approveResp.GetManuallyApprovedPermissions()) {
+            auto permissionId = permission.GetId();
+            auto rec3 = env.CheckGetPermission("user", permissionId);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.PermissionsSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rec3.GetPermissions(0).GetId(), permissionId);
+        }
+        
+        // Check that request is now allowed
+        env.CheckRequest("user", rid1, false, TStatus::ALLOW);
+    }
+
+    Y_UNIT_TEST(ManualRequestApprovalAlreadyLockedNode)
+    {
+        auto opts = TTestEnvOpts(8, 8).WithSentinel().WithDynamicGroups();
+        TCmsTestEnv env(opts);
+
+        auto req = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+
+        env.CheckPermissionRequest(req, TStatus::ALLOW);
+
+        auto req2 = MakePermissionRequest(
+            TRequestOptions("user", true, false, true),
+            MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000)
+        );
+        req2->Record.SetAvailabilityMode(NKikimrCms::EAvailabilityMode::MODE_MAX_AVAILABILITY);
+        auto rec2 = env.CheckPermissionRequest(req2, TStatus::DISALLOW_TEMP);
+        auto rid2 = rec2.GetRequestId();
+
+        // Manual approval should fail since node 0 is already locked
+        env.CheckApproveRequest("user", rid2, false, TStatus::WRONG_REQUEST);
+    }
+
     Y_UNIT_TEST(RequestReplacePDiskDoesntBreakGroup)
     {
         auto opts = TTestEnvOpts(8, 2).WithSentinel().WithDynamicGroups();
@@ -2615,7 +2773,68 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         // tablet 'FLAT_BS_CONTROLLER' has too many unavailable nodes.
         env.CheckPermissionRequest("user", false, false, false, true, MODE_MAX_AVAILABILITY, TStatus::DISALLOW_TEMP,
                                    MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
-        
+    }
+
+    Y_UNIT_TEST(DisableCMS){
+        TCmsTestEnv env(16);
+
+        auto r1 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
+                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(r1.PermissionsSize(), 1);
+
+        // Scheduled request
+        auto r2 = env.CheckPermissionRequest("user", false, false, /* scheduled */ true, true, TStatus::DISALLOW_TEMP,
+                                             MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(0), 60000000));
+
+        // Disable CMS
+        NKikimrCms::TCmsConfig config;
+        config.SetEnable(false);
+        env.SetCmsConfig(config);
+
+        env.CheckDonePermission("user", r1.GetPermissions(0).GetId());
+
+        // Requests should fail
+        env.CheckPermissionRequest("user", false, false, true, true, TStatus::ERROR_TEMP,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
+        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ERROR_TEMP);
+
+        // Enable CMS back
+        config.SetEnable(true);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        auto r3 = env.CheckPermissionRequest("user", false, false, true, true, TStatus::ALLOW,
+                                   MakeAction(TAction::SHUTDOWN_HOST, env.GetNodeId(9), 60000000));
+        UNIT_ASSERT_VALUES_EQUAL(r3.PermissionsSize(), 1);
+        env.CheckRequest("user", r2.GetRequestId(), true, TStatus::ALLOW, 1);
+    }
+
+    Y_UNIT_TEST(WalleDisableCMS){
+        TCmsTestEnv env(16);
+
+        env.CheckWalleCreateTask("task-1", "reboot", false, TStatus::ALLOW, env.GetNodeId(0));
+
+        // Scheduled request
+        env.CheckWalleCreateTask("task-2", "reboot", false, TStatus::DISALLOW_TEMP, env.GetNodeId(0));
+
+        // Disable CMS
+        NKikimrCms::TCmsConfig config;
+        config.SetEnable(false);
+        env.SetCmsConfig(config);
+
+        env.CheckWalleRemoveTask("task-1");
+
+        // Requests should fail
+        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ERROR_TEMP, env.GetNodeId(9));
+        env.CheckWalleCheckTask("task-2", TStatus::ERROR_TEMP);
+
+        // Enable CMS back
+        config.SetEnable(true);
+        env.SetCmsConfig(config);
+
+        // Requests should be ok
+        env.CheckWalleCreateTask("task-3", "reboot", false, TStatus::ALLOW, env.GetNodeId(9));
+        env.CheckWalleCheckTask("task-2", TStatus::ALLOW);
     }
 }
 

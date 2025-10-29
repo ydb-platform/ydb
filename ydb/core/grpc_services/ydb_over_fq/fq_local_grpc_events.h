@@ -32,6 +32,14 @@ public:
         return TBase::GetBaseRequest().GetPeerName();
     }
 
+    TString GetRpcMethodName() const override {
+        // We have no grpc method, but the closest analog is protobuf name
+        if (const NProtoBuf::Message* req = TBase::GetRequest()) {
+            return req->GetDescriptor()->name();
+        }
+        return {};
+    }
+
 private:
     TString Scope_;
 };

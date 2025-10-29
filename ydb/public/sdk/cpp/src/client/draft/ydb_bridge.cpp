@@ -1,7 +1,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_bridge.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/make_request/make.h>
 
 #include <ydb/public/api/grpc/draft/ydb_bridge_v1.grpc.pb.h>
 #include <ydb/public/api/protos/draft/ydb_bridge.pb.h>
@@ -59,13 +59,15 @@ public:
 
         auto extractor = [promise] (google::protobuf::Any* any, TPlainStatus status) mutable {
                 std::vector<TPileStateUpdate> state;
+                uint64_t generation = 0;
                 if (any) {
                     Ydb::Bridge::GetClusterStateResult result;
                     if (any->UnpackTo(&result)) {
                         state = StateFromProto(result);
+                        generation = result.generation();
                     }
                 }
-                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state)));
+                promise.SetValue(TGetClusterStateResult(TStatus(std::move(status)), std::move(state), std::move(generation)));
             };
 
         Connections_->RunDeferred<Ydb::Bridge::V1::BridgeService, Ydb::Bridge::GetClusterStateRequest, Ydb::Bridge::GetClusterStateResponse>(

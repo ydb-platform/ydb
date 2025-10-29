@@ -40,7 +40,6 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
-        OPTION(std::optional<bool>, EnableSystemViews, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);
@@ -81,6 +80,8 @@ namespace NSchemeShardUT_Private {
         OPTION(TVector<TIntrusivePtr<NFake::TProxyDS>>, DSProxies, {});
         OPTION(std::optional<bool>, EnableSystemNamesProtection, std::nullopt);
         OPTION(std::optional<bool>, EnableRealSystemViewPaths, std::nullopt);
+        OPTION(ui32, NStoragePools, 2);
+        OPTION(std::optional<ui32>, DataShardStatsReportIntervalSeconds, std::nullopt);
 
         #undef OPTION
     };
@@ -161,7 +162,7 @@ namespace NSchemeShardUT_Private {
 
     private:
         static std::function<IActor*(const TActorId&, TTabletStorageInfo*)> GetTabletCreationFunc(ui32 type);
-        void AddDomain(TTestActorRuntime& runtime, TAppPrepare& app, ui32 domainUid, ui64 hive, ui64 schemeRoot);
+        void AddDomain(TTestActorRuntime& runtime, TAppPrepare& app, ui32 domainUid, ui64 hive, ui64 schemeRoot, ui32 storagePoolCount);
 
         void BootSchemeShard(TTestActorRuntime& runtime, ui64 schemeRoot);
         void BootTxAllocator(TTestActorRuntime& runtime, ui64 tabletId);

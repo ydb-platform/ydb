@@ -12,9 +12,9 @@ namespace NYql {
 namespace NCommon {
 
 void LoadSystemModulePaths(
-        const TString& resolverPath,
-        const TString& dir,
-        NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
+    const TString& resolverPath,
+    const TString& dir,
+    NKikimr::NMiniKQL::TUdfModulePathsMap* paths);
 
 IUdfResolver::TPtr CreateOutProcUdfResolver(
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

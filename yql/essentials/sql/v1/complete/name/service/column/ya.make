@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     name_service.cpp
+    replicating.cpp
 )
 
 PEERDIR(

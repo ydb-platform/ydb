@@ -158,6 +158,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
             exportInfo->UserSID = request.GetUserSID();
         }
 
+        exportInfo->SanitizedToken = request.GetSanitizedToken();
+
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistCreateExport(db, *exportInfo);
 
@@ -219,15 +221,10 @@ private:
 
     template <typename TSettings>
     bool FillItems(TExportInfo& exportInfo, const TSettings& settings, TString& explain) {
-        TString commonSourcePath = GetCommonSourcePath(settings);
-        if (commonSourcePath && commonSourcePath.back() != '/') {
-            commonSourcePath.push_back('/');
-        }
         exportInfo.Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString srcPath = commonSourcePath + item.source_path();
-            const TPath path = TPath::Resolve(srcPath, Self);
+            const TPath path = TPath::Resolve(item.source_path(), Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -243,7 +240,7 @@ private:
                 }
             }
 
-            exportInfo.Items.emplace_back(srcPath, path.Base()->PathId, path->PathType);
+            exportInfo.Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
             exportInfo.PendingItems.push_back(itemIdx);
         }
 

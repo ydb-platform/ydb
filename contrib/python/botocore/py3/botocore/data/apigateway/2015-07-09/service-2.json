@@ -1956,7 +1956,7 @@
         {"shape":"UnauthorizedException"},
         {"shape":"TooManyRequestsException"}
       ],
-      "documentation":"<p>Changes information about a model.</p>"
+      "documentation":"<p>Changes information about a model. The maximum size of the model is 400 KB.</p>"
     },
     "UpdateRequestValidator":{
       "name":"UpdateRequestValidator",
@@ -2743,7 +2743,7 @@
         },
         "schema":{
           "shape":"String",
-          "documentation":"<p>The schema for the model. For <code>application/json</code> models, this should be JSON schema draft 4 model.</p>"
+          "documentation":"<p>The schema for the model. For <code>application/json</code> models, this should be JSON schema draft 4 model. The maximum size of the model is 400 KB.</p>"
         },
         "contentType":{
           "shape":"String",
@@ -5448,7 +5448,7 @@
         },
         "dataTraceEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>Specifies whether data trace logging is enabled for this method, which affects the log entries pushed to Amazon CloudWatch Logs.</p>"
+          "documentation":"<p>Specifies whether data trace logging is enabled for this method, which affects the log entries pushed to Amazon CloudWatch Logs. This can be useful to troubleshoot APIs, but can result in logging sensitive data. We recommend that you don't enable this option for production APIs.</p>"
         },
         "throttlingBurstLimit":{
           "shape":"Integer",
@@ -6234,7 +6234,7 @@
         },
         "cacheClusterEnabled":{
           "shape":"Boolean",
-          "documentation":"<p>Specifies whether a cache cluster is enabled for the stage.</p>"
+          "documentation":"<p>Specifies whether a cache cluster is enabled for the stage. To activate a method-level cache, set <code>CachingEnabled</code> to <code>true</code> for a method. </p>"
         },
         "cacheClusterSize":{
           "shape":"CacheClusterSize",

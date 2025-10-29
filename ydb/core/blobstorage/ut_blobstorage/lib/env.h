@@ -26,10 +26,9 @@ struct TEnvironmentSetup {
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
-    using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
+    using TIcbControlKey = std::pair<ui32, TString>; // { nodeId, name }
 
     static const std::initializer_list<ui32> DebugLogComponents;
-
     std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
     struct TSettings {
@@ -63,6 +62,9 @@ struct TEnvironmentSetup {
         const bool TrackSharedQuotaInPDiskMock = false;
         const bool SelfManagementConfig = false;
         const bool EnableDeepScrubbing = false;
+        const ui32 NumPiles = 0;
+        const bool AutomaticBootstrap = false;
+        const std::function<TIntrusivePtr<TStateStorageInfo>(std::function<TActorId(ui32, ui32)>, ui32)> StateStorageInfoGenerator = nullptr;
     };
 
     const TSettings Settings;
@@ -265,7 +267,17 @@ struct TEnvironmentSetup {
             domainsInfo->AddHive(MakeDefaultHiveID());
         }
 
-        return std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+        auto res = std::make_unique<TTestActorSystem>(Settings.NodeCount, NLog::PRI_ERROR, domainsInfo, featureFlags);
+
+        if (Settings.NumPiles) {
+            auto& bridgeConfig = res->GetAppDataBridgeConfig();
+            for (ui32 i = 0; i < Settings.NumPiles; ++i) {
+                auto *pile = bridgeConfig.AddPiles();
+                pile->SetName(TStringBuilder() << "pile_" << i + 1);
+            }
+        }
+
+        return res;
     }
 
     void Initialize() {
@@ -273,6 +285,9 @@ struct TEnvironmentSetup {
         TAppData::TimeProvider = TTestActorSystem::CreateTimeProvider();
         if (Settings.PrepareRuntime) {
             Settings.PrepareRuntime(*Runtime);
+        }
+        if (Settings.StateStorageInfoGenerator) {
+            Runtime->StateStorageInfoGenerator = Settings.StateStorageInfoGenerator;
         }
         SetupLogging();
         Runtime->Start();
@@ -383,6 +398,9 @@ struct TEnvironmentSetup {
     }
 
     void SetupStaticStorage() {
+        if (Settings.SelfManagementConfig && Settings.AutomaticBootstrap && Settings.LocationGenerator) {
+            return;
+        }
         const TActorId proxyId = MakeBlobStorageProxyID(GroupId);
         for (const ui32 nodeId : Runtime->GetNodes()) {
             Runtime->RegisterService(proxyId, Runtime->Register(CreateBlobStorageGroupProxyMockActor(Group0), nodeId));
@@ -404,6 +422,68 @@ struct TEnvironmentSetup {
                 if (Settings.SelfManagementConfig) {
                     config->SelfManagementConfig = std::make_optional(NKikimrConfig::TSelfManagementConfig());
                     config->SelfManagementConfig->SetEnabled(true);
+                    if (Settings.AutomaticBootstrap) {
+                        config->SelfManagementConfig->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
+                        config->SelfManagementConfig->SetPDiskType(NKikimrBlobStorage::EPDiskType::NVME);
+                        config->SelfManagementConfig->SetAutomaticBootstrap(true);
+                    }
+                    if (Settings.AutomaticBootstrap && Settings.LocationGenerator) {
+                        auto *hostconf = config->BlobStorageConfig.AddDefineHostConfig();
+                        hostconf->SetHostConfigId(1);
+                        auto *drive = hostconf->AddDrive();
+                        drive->SetType(NKikimrBlobStorage::EPDiskType::NVME);
+
+                        auto& ns = config->NameserviceConfig;
+                        auto *box = config->BlobStorageConfig.MutableDefineBox();
+                        for (ui32 nodeId : Runtime->GetNodes()) {
+                            auto *node = ns.AddNode();
+                            node->SetNodeId(nodeId);
+                            node->SetHost(TStringBuilder() << "host_" << nodeId);
+                            node->SetInterconnectHost(node->GetHost());
+                            node->SetPort(19001);
+                            Settings.LocationGenerator(nodeId).Serialize(node->MutableLocation(), false);
+                            auto *host = box->AddHost();
+                            host->SetEnforcedNodeId(nodeId);
+                            host->SetHostConfigId(hostconf->GetHostConfigId());
+                        }
+
+                        auto makeHosts = [&] {
+                            TStringBuilder res;
+                            for (ui32 nodeId : Runtime->GetNodes()) {
+                                res << "  - {host: host_" << nodeId << ", location: {data_center: my_dc, rack: rack_"
+                                    << nodeId << ", unit: unit_" << nodeId << ", bridge_pile_name: pile_"
+                                    << (nodeId - 1) / 8 + 1 << "}}\n";
+                            }
+                            return res;
+                        };
+
+                        config->StartupConfigYaml = TStringBuilder() <<
+R"(
+metadata:
+  kind: MainConfig
+  cluster: \"\"
+  version: 0
+config:
+  erasure: block-4-2
+  default_disk_type: NVME
+  self_management_config:
+    enabled: true
+    automatic_bootstrap: true
+  bridge_config:
+    piles:
+    - name: pile_1
+    - name: pile_2
+    - name: pile_3
+  host_configs:
+  - nvme:
+    - SectorMap:0:1000
+    - SectorMap:1:1000
+    - SectorMap:2:1000
+    - SectorMap:3:1000
+    - SectorMap:4:1000
+  hosts:
+)" << makeHosts();
+                    }
                 }
                 config->BlobStorageConfig.MutableServiceSet()->AddAvailabilityDomains(DomainId);
                 config->VDiskReplPausedAtStart = Settings.VDiskReplPausedAtStart;
@@ -430,35 +510,47 @@ struct TEnvironmentSetup {
                 }
                 config->FeatureFlags = Settings.FeatureFlags;
 
+                if (Settings.NumPiles) {
+                    config->BridgeConfig.emplace().CopyFrom(Runtime->GetAppDataBridgeConfig());
+                }
+
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
-#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+                auto& icb = *appData->Icb;
+#define ADD_ICB_CONTROL(ICB_CONTROL_PATH, defaultVal, minVal, maxVal, currentValue) {   \
+                    auto& icbControl = icb.ICB_CONTROL_PATH;                            \
                     TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    appData->Icb->RegisterSharedControl(control, controlName);          \
+                    TControlBoard::RegisterSharedControl(control, icbControl);          \
                     control = currentValue;                                             \
-                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
+                    IcbControls.insert({{nodeId, #ICB_CONTROL_PATH}, std::move(control)});    \
                 }
 
                 if (Settings.BurstThresholdNs) {
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsHDD", 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsSSD", 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_ICB_CONTROL("VDiskControls.BurstThresholdNsNVME", 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsHDD, 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsSSD, 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(VDiskControls.BurstThresholdNsNVME, 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
                 }
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleHDD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleSSD", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
-                ADD_ICB_CONTROL("VDiskControls.DiskTimeAvailableScaleNVME", 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThreshold", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdHDD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.SlowDiskThresholdSSD", 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplier", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplierHDD", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.PredictedDelayMultiplierSSD", 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisks", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksHDD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
-                ADD_ICB_CONTROL("DSProxyControls.MaxNumOfSlowDisksSSD", 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleHDD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(VDiskControls.DiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
 
-                ADD_ICB_CONTROL("VDiskControls.EnableDeepScrubbing", false, false, true, Settings.EnableDeepScrubbing);
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThreshold, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdHDD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.SlowDiskThresholdSSD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplier, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierHDD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.PredictedDelayMultiplierSSD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(DSProxyControls.MaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+                ADD_ICB_CONTROL(VDiskControls.EnableDeepScrubbing, false, false, true, Settings.EnableDeepScrubbing);
+                ADD_ICB_CONTROL(VDiskControls.HullCompThrottlerBytesRate, 0, 0, 10737418240, 0);
+                ADD_ICB_CONTROL(VDiskControls.DefragThrottlerBytesRate, 0, 0, 10'000'000'000, 0);
+                ADD_ICB_CONTROL(VDiskControls.MaxChunksToDefragInflight, 10, 1, 50, 10);
+                ADD_ICB_CONTROL(VDiskControls.DefaultHugeGarbagePerMille, 300, 0, 1000, 300);
+                ADD_ICB_CONTROL(VDiskControls.GarbageThresholdToRunFullCompactionPerMille, 0, 0, 300, 0);
                 
 #undef ADD_ICB_CONTROL
 
@@ -572,6 +664,26 @@ struct TEnvironmentSetup {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
+    void CreatePool(ui32 numGroups = 0, NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::NVME) {
+        NKikimrBlobStorage::TConfigRequest request;
+
+        auto *cmd2 = request.AddCommand()->MutableDefineStoragePool();
+        cmd2->SetBoxId(1);
+        cmd2->SetStoragePoolId(1);
+        cmd2->SetName(StoragePoolName);
+        cmd2->SetKind(StoragePoolName);
+        cmd2->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
+        cmd2->SetVDiskKind("Default");
+        cmd2->SetNumGroups(numGroups ? numGroups : NumGroups);
+        cmd2->AddPDiskFilter()->AddProperty()->SetType(pdiskType);
+        if (Settings.Encryption) {
+            cmd2->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
+        }
+
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     void AlterBox(ui32 itemConfigGeneration, ui32 numDrivesPerNode = 0, ui32 numStorageNodes = 0,
         NKikimrBlobStorage::EPDiskType pdiskType = NKikimrBlobStorage::EPDiskType::ROT) {
         NKikimrBlobStorage::TConfigRequest request;
@@ -600,7 +712,7 @@ struct TEnvironmentSetup {
             host->SetHostConfigId(numStorageNodes == 0 || index < numStorageNodes ? 1 : 2);
             ++index;
         }
-        
+
         cmd1->SetItemConfigGeneration(itemConfigGeneration);
 
         auto response = Invoke(request);
@@ -808,7 +920,7 @@ struct TEnvironmentSetup {
         WithQueueId(vdiskId, NKikimrBlobStorage::EVDiskQueueId::PutTabletLog, [&](TActorId queueId) {
             const TActorId& edge = Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
             Runtime->Send(new IEventHandle(queueId, edge, new TEvBlobStorage::TEvVPut(blobId, TRope(part), vdiskId, false, nullptr,
-                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog)), queueId.NodeId());
+                TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false)), queueId.NodeId());
             auto r = WaitForEdgeActorEvent<TEvBlobStorage::TEvVPutResult>(edge);
 
             auto& record = r->Get()->Record;
@@ -1008,7 +1120,7 @@ struct TEnvironmentSetup {
             std::unique_ptr<typename std::invoke_result_t<TFactory>::element_type> ev(factory());
             Runtime->Send(new IEventHandle(actorId, edge, ev.release(), IEventHandle::FlagTrackDelivery), edge.NodeId());
             auto res = Runtime->WaitForEdgeActorEvent({edge});
-            if (auto *msg = res->CastAsLocal<TEvents::TEvUndelivered>()) {
+            if (res->CastAsLocal<TEvents::TEvUndelivered>()) {
                 UNIT_ASSERT(checkUndelivered);
                 Sim(TDuration::Seconds(5));
             } else {
@@ -1025,8 +1137,8 @@ struct TEnvironmentSetup {
     }
 
     ui64 AggregateVDiskCountersBase(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue, 
-            TString counter, bool derivative = false) {
+            const std::vector<ui32>& pdiskLayout, TString subsgroupName, TString subgroupValue,
+            TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
         ui64 ctr = 0;
 
         for (ui32 nodeId = 1; nodeId <= nodesCount; ++nodeId) {
@@ -1038,14 +1150,17 @@ struct TEnvironmentSetup {
                 ss.Clear();
                 ss << LeftPad(pdiskLayout[i], 9, '0');
                 TString pdisk = ss.Str();
-                ctr += GetServiceCounters(appData->Counters, "vdisks")->
+                auto cntr = GetServiceCounters(appData->Counters, "vdisks")->
                         GetSubgroup("storagePool", storagePool)->
                         GetSubgroup("group", std::to_string(groupId))->
                         GetSubgroup("orderNumber", orderNumber)->
                         GetSubgroup("pdisk", pdisk)->
                         GetSubgroup("media", "rot")->
-                        GetSubgroup(subsgroupName, subgroupValue)->
-                        GetCounter(counter, derivative)->Val();
+                        GetSubgroup(subsgroupName, subgroupValue);
+                for (const auto& [label, value] : labels) {
+                    cntr = cntr->GetSubgroup(label, value);
+                }
+                ctr += cntr->GetCounter(counter, derivative)->Val();
             }
         }
         return ctr;
@@ -1077,15 +1192,15 @@ struct TEnvironmentSetup {
     }
 
     ui64 AggregateVDiskCounters(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, bool derivative = false) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
-            "subsystem", subsystem, counter, derivative);
+        const std::vector<ui32>& pdiskLayout, TString subsystem, TString counter, std::unordered_map<TString, TString> labels = {}, bool derivative = false) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
+            "subsystem", subsystem, counter, labels, derivative);
     }
 
     ui64 AggregateVDiskCountersWithHandleClass(TString storagePool, ui32 nodesCount, ui32 groupSize, ui32 groupId,
-        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter) {
-        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout, 
-            "handleclass", handleclass, counter);
+        const std::vector<ui32>& pdiskLayout, TString handleclass, TString counter, std::unordered_map<TString, TString> labels = {}) {
+        return AggregateVDiskCountersBase(storagePool, nodesCount, groupSize, groupId, pdiskLayout,
+            "handleclass", handleclass, counter, labels);
     }
 
     void SetIcbControl(ui32 nodeId, TString controlName, ui64 value) {

@@ -57,7 +57,7 @@
 
     ```sql
     CREATE TABLE series_with_families (
-        series_id Uint64,
+        series_id Uint64 NOT NULL,
         title Utf8,
         series_info Utf8 FAMILY family_large,
         release_date Uint64,

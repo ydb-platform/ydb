@@ -2,7 +2,6 @@
  * Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
  * SPDX-License-Identifier: Apache-2.0.
  */
-
 #include <aws/common/environment.h>
 #include <aws/common/file.h>
 #include <aws/common/logging.h>

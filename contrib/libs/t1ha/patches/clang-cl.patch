@@ -1,0 +1,5 @@
+--- a/src/t1ha0.c	(44cadc7fea4c04518cd850f024c8561d18e228e0)
++++ b/src/t1ha0.c	(1327e1c4adff73eca2f0de6afee8b1a31967ef8b)
+@@ -361,1 +361,1 @@ uint64_t t1ha0_32be(const void *data, size_t len, uint64_t seed) {
+-#ifdef __GNUC__
++#if defined(__GNUC__) || defined(__clang__)

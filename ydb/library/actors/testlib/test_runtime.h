@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/events.h>
@@ -8,16 +9,18 @@
 #include <ydb/library/actors/core/mailbox.h>
 #include <ydb/library/actors/core/monotonic_provider.h>
 #include <ydb/library/actors/util/should_continue.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/mock/ic_mock.h>
 #include <library/cpp/random_provider/random_provider.h>
 #include <library/cpp/time_provider/time_provider.h>
 #include <library/cpp/testing/unittest/tests_data.h>
+#include <library/cpp/threading/future/future.h>
 
 #include <util/datetime/base.h>
 #include <util/folder/tempdir.h>
 #include <util/generic/deque.h>
 #include <util/generic/hash.h>
+#include <util/generic/function.h>
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/generic/queue.h>
@@ -239,6 +242,25 @@ namespace NActors {
         : public TTestEventObserverTraits<TEvType>
     {};
 
+    class TFunctorActor: public TActorBootstrapped<TFunctorActor> {
+    public:
+        TFunctorActor(std::function<void()> func, TActorId edgeActor)
+            : Func(std::move(func))
+            , EdgeActor(edgeActor)
+        {
+        }
+
+        void Bootstrap() {
+            Func();
+            Send(EdgeActor, new TEvents::TEvWakeup());
+            PassAway();
+        }
+
+    private:
+        std::function<void()> Func;
+        TActorId EdgeActor;
+    };
+
     class TTestActorRuntimeBase: public TNonCopyable {
     public:
         class TEdgeActor;
@@ -261,7 +283,7 @@ namespace NActors {
 
 
         TTestActorRuntimeBase(THeSingleSystemEnv);
-        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads);
+        TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount, bool UseRealThreads, bool useRdmaAllocator=false);
         TTestActorRuntimeBase(ui32 nodeCount, ui32 dataCenterCount);
         TTestActorRuntimeBase(ui32 nodeCount = 1, bool useRealThreads = false);
         virtual ~TTestActorRuntimeBase();
@@ -662,6 +684,30 @@ namespace NActors {
             WaitFor(Cerr, description, condition, simTimeout);
         }
 
+        // Run function inside actor system context
+        // This allows func to safely use AppData().
+        template <typename Func>
+        TFunctionResult<Func> RunCall(Func&& func) {
+            using TResult = TFunctionResult<Func>;
+            auto edgeActor = AllocateEdgeActor();
+            auto promise = NThreading::NewPromise<TResult>();
+            auto future = promise.GetFuture();
+            Register(new TFunctorActor([f = std::move(func), p = std::move(promise)]() mutable {
+                try {
+                    if constexpr (std::is_same_v<TResult, void>) {
+                        f();
+                        p.SetValue();
+                    } else {
+                        p.SetValue(f());
+                    }
+                } catch (...) {
+                    p.SetException(std::current_exception());
+                }
+            }, edgeActor));
+            auto edgeEvent = GrabEdgeEvent<TEvents::TEvWakeup>(edgeActor);
+            return future.ExtractValue();
+        }
+
     protected:
         struct TNodeDataBase;
         TNodeDataBase* GetRawNode(ui32 node) const {
@@ -709,6 +755,7 @@ namespace NActors {
         const ui32 NodeCount;
         const ui32 DataCenterCount;
         const bool UseRealThreads;
+        const bool UseRdmaAllocator = false;
         std::function<void(ui32, TIntrusivePtr<TInterconnectProxyCommon>)> ICCommonSetupper;
 
         ui64 LocalId;

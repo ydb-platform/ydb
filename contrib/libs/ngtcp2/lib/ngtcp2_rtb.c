@@ -43,16 +43,19 @@ ngtcp2_objalloc_def(rtb_entry, ngtcp2_rtb_entry, oplent)
 static void rtb_entry_init(ngtcp2_rtb_entry *ent, const ngtcp2_pkt_hd *hd,
                            ngtcp2_frame_chain *frc, ngtcp2_tstamp ts,
                            size_t pktlen, uint16_t flags) {
-  memset(ent, 0, sizeof(*ent));
-
-  ent->hd.pkt_num = hd->pkt_num;
-  ent->hd.type = hd->type;
-  ent->hd.flags = hd->flags;
-  ent->frc = frc;
-  ent->ts = ts;
-  ent->lost_ts = UINT64_MAX;
-  ent->pktlen = pktlen;
-  ent->flags = flags;
+  *ent = (ngtcp2_rtb_entry){
+    .hd =
+      {
+        .pkt_num = hd->pkt_num,
+        .type = hd->type,
+        .flags = hd->flags,
+      },
+    .frc = frc,
+    .ts = ts,
+    .lost_ts = UINT64_MAX,
+    .pktlen = pktlen,
+    .flags = flags,
+  };
 }
 
 int ngtcp2_rtb_entry_objalloc_new(ngtcp2_rtb_entry **pent,
@@ -451,19 +454,28 @@ static int rtb_on_pkt_lost(ngtcp2_rtb *rtb, ngtcp2_rtb_entry *ent,
   if (ent->flags &
       (NGTCP2_RTB_ENTRY_FLAG_PMTUD_PROBE | NGTCP2_RTB_ENTRY_FLAG_SKIP)) {
     ++rtb->num_lost_ignore_pkts;
-  } else if (rtb->cc->on_pkt_lost) {
-    cc->on_pkt_lost(cc, cstat,
-                    ngtcp2_cc_pkt_init(&pkt, ent->hd.pkt_num, ent->pktlen,
-                                       pktns->id, ent->ts, ent->rst.lost,
-                                       ent->rst.tx_in_flight,
-                                       ent->rst.is_app_limited),
-                    ts);
+  } else {
+    ++cstat->pkt_lost;
+    cstat->bytes_lost += ent->pktlen;
+
+    if (ent->hd.pkt_num >= rtb->cc_pkt_num) {
+      rtb->rst->lost += ent->pktlen;
+
+      if (rtb->cc->on_pkt_lost) {
+        cc->on_pkt_lost(cc, cstat,
+                        ngtcp2_cc_pkt_init(&pkt, ent->hd.pkt_num, ent->pktlen,
+                                           pktns->id, ent->ts, ent->rst.lost,
+                                           ent->rst.tx_in_flight,
+                                           ent->rst.is_app_limited),
+                        ts);
+      }
+    }
   }
 
   if (ent->flags & NGTCP2_RTB_ENTRY_FLAG_PTO_RECLAIMED) {
-    ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                    "pkn=%" PRId64 " has already been reclaimed on PTO",
-                    ent->hd.pkt_num);
+    ngtcp2_log_infof(rtb->log, NGTCP2_LOG_EVENT_LDC,
+                     "pkn=%" PRId64 " has already been reclaimed on PTO",
+                     ent->hd.pkt_num);
     assert(!(ent->flags & NGTCP2_RTB_ENTRY_FLAG_LOST_RETRANSMITTED));
     assert(UINT64_MAX == ent->lost_ts);
   } else {
@@ -704,6 +716,8 @@ static void rtb_on_pkt_acked(ngtcp2_rtb *rtb, ngtcp2_rtb_entry *ent,
   ngtcp2_cc *cc = rtb->cc;
   ngtcp2_cc_pkt pkt;
 
+  assert(ent->hd.pkt_num >= rtb->cc_pkt_num);
+
   ngtcp2_rst_update_rate_sample(rtb->rst, ent, ts);
 
   if (cc->on_pkt_acked) {
@@ -784,17 +798,17 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
   int ack_eliciting_pkt_acked = 0;
   size_t ecn_acked = 0;
   int verify_ecn = 0;
-  ngtcp2_cc_ack cc_ack = {0};
+  ngtcp2_cc_ack cc_ack = {
+    .prior_bytes_in_flight = cstat->bytes_in_flight,
+    .rtt = UINT64_MAX,
+  };
   size_t num_lost_pkts = rtb->num_lost_pkts - rtb->num_lost_ignore_pkts;
-
-  cc_ack.prior_bytes_in_flight = cstat->bytes_in_flight;
-  cc_ack.rtt = UINT64_MAX;
 
   if (conn && (conn->flags & NGTCP2_CONN_FLAG_KEY_UPDATE_NOT_CONFIRMED) &&
       (conn->flags & NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR) &&
       largest_ack >= conn->pktns.crypto.tx.ckm->pkt_num) {
-    conn->flags &= (uint32_t) ~(NGTCP2_CONN_FLAG_KEY_UPDATE_NOT_CONFIRMED |
-                                NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR);
+    conn->flags &= (uint32_t)~(NGTCP2_CONN_FLAG_KEY_UPDATE_NOT_CONFIRMED |
+                               NGTCP2_CONN_FLAG_KEY_UPDATE_INITIATOR);
     conn->crypto.key_update.confirmed_ts = ts;
 
     ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_CRY, "key update confirmed");
@@ -843,7 +857,6 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
     }
 
     rtb_remove(rtb, &it, &acked_ent, ent, cstat);
-    ++num_acked;
   }
 
   for (i = 0; i < fr->rangecnt; ++i) {
@@ -873,7 +886,6 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
       }
 
       rtb_remove(rtb, &it, &acked_ent, ent, cstat);
-      ++num_acked;
     }
   }
 
@@ -882,7 +894,8 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
       ngtcp2_max_uint64(pkt_ts - largest_pkt_sent_ts, NGTCP2_NANOSECONDS);
 
     rv = ngtcp2_conn_update_rtt(conn, cc_ack.rtt, fr->ack_delay_unscaled, ts);
-    if (rv == 0 && cc->new_rtt_sample) {
+    if (rv == 0 && cc->new_rtt_sample &&
+        rtb->largest_acked_tx_pkt_num >= rtb->cc_pkt_num) {
       cc->new_rtt_sample(cc, cstat, ts);
     }
   }
@@ -904,9 +917,12 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
 
         cc_ack.bytes_delivered += ent->pktlen;
         cc_ack.pkt_delivered = ent->rst.delivered;
+
+        rtb_on_pkt_acked(rtb, ent, cstat, pktns, ts);
+
+        ++num_acked;
       }
 
-      rtb_on_pkt_acked(rtb, ent, cstat, pktns, ts);
       acked_ent = ent->next;
       ngtcp2_rtb_entry_objalloc_del(ent, rtb->rtb_entry_objalloc,
                                     rtb->frc_objalloc, rtb->mem);
@@ -921,6 +937,7 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
     for (ent = acked_ent; ent; ent = acked_ent) {
       rtb_on_pkt_acked(rtb, ent, cstat, pktns, ts);
       acked_ent = ent->next;
+      ++num_acked;
       ngtcp2_rtb_entry_objalloc_del(ent, rtb->rtb_entry_objalloc,
                                     rtb->frc_objalloc, rtb->mem);
     }
@@ -941,8 +958,6 @@ ngtcp2_ssize ngtcp2_rtb_recv_ack(ngtcp2_rtb *rtb, const ngtcp2_ack *fr,
       }
     }
   }
-
-  rtb->rst->lost += cc_ack.bytes_lost;
 
   cc_ack.largest_pkt_sent_ts = largest_pkt_sent_ts;
   if (num_acked && cc->on_ack_recv) {
@@ -1143,10 +1158,10 @@ static int rtb_detect_lost_pkt(ngtcp2_rtb *rtb, uint64_t *ppkt_lost,
        */
       if (pktns->id == NGTCP2_PKTNS_ID_APPLICATION && loss_window &&
           loss_window >= congestion_period) {
-        ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                        "persistent congestion loss_window=%" PRIu64
-                        " congestion_period=%" PRIu64,
-                        loss_window, congestion_period);
+        ngtcp2_log_infof(rtb->log, NGTCP2_LOG_EVENT_LDC,
+                         "persistent congestion loss_window=%" PRIu64
+                         " congestion_period=%" PRIu64,
+                         loss_window, congestion_period);
 
         /* Reset min_rtt, srtt, and rttvar here.  Next new RTT
            sample will be used to recalculate these values. */
@@ -1193,8 +1208,8 @@ void ngtcp2_rtb_remove_excessive_lost_pkt(ngtcp2_rtb *rtb, size_t n) {
 
     assert(ent->flags & NGTCP2_RTB_ENTRY_FLAG_LOST_RETRANSMITTED);
 
-    ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                    "removing stale lost pkn=%" PRId64, ent->hd.pkt_num);
+    ngtcp2_log_infof(rtb->log, NGTCP2_LOG_EVENT_LDC,
+                     "removing stale lost pkn=%" PRId64, ent->hd.pkt_num);
 
     --rtb->num_lost_pkts;
 
@@ -1235,8 +1250,8 @@ void ngtcp2_rtb_remove_expired_lost_pkt(ngtcp2_rtb *rtb,
       return;
     }
 
-    ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                    "removing stale lost pkn=%" PRId64, ent->hd.pkt_num);
+    ngtcp2_log_infof(rtb->log, NGTCP2_LOG_EVENT_LDC,
+                     "removing stale lost pkn=%" PRId64, ent->hd.pkt_num);
 
     --rtb->num_lost_pkts;
 
@@ -1388,9 +1403,9 @@ int ngtcp2_rtb_reclaim_on_retry(ngtcp2_rtb *rtb, ngtcp2_conn *conn,
     assert(!(ent->flags & NGTCP2_RTB_ENTRY_FLAG_PMTUD_PROBE));
 
     if (ent->flags & NGTCP2_RTB_ENTRY_FLAG_PTO_RECLAIMED) {
-      ngtcp2_log_info(rtb->log, NGTCP2_LOG_EVENT_LDC,
-                      "pkn=%" PRId64 " has already been reclaimed on PTO",
-                      ent->hd.pkt_num);
+      ngtcp2_log_infof(rtb->log, NGTCP2_LOG_EVENT_LDC,
+                       "pkn=%" PRId64 " has already been reclaimed on PTO",
+                       ent->hd.pkt_num);
       continue;
     }
 

@@ -36,25 +36,7 @@
                     "black"
                 ]
             },
-            "formula": {
-                "by_platform": {
-                    "darwin-arm64": {
-                        "uri": "sbr:9001701041"
-                    },
-                    "darwin-x86_64": {
-                        "uri": "sbr:9001702459"
-                    },
-                    "linux-aarch64": {
-                        "uri": "sbr:9001699599"
-                    },
-                    "linux-x86_64": {
-                        "uri": "sbr:9001705785"
-                    },
-                    "win32-x86_64": {
-                        "uri": "sbr:9001704491"
-                    }
-                }
-            }
+            "formula": "build/external_resources/black/resources.json"
         },
         "bloat": {
             "executable": {
@@ -101,55 +83,6 @@
                 ]
             },
             "formula": "build/platform/clang/clang-format/clang-format18.json"
-        },
-        "clang16": {
-            "executable": {
-                "c++": [
-                    "bin",
-                    "clang++"
-                ],
-                "c++filt": [
-                    "bin",
-                    "llvm-cxxfilt"
-                ],
-                "cc": [
-                    "bin",
-                    "clang"
-                ],
-                "clang-rename": [
-                    "bin",
-                    "clang-rename"
-                ],
-                "llvm-cov": [
-                    "bin",
-                    "llvm-cov"
-                ],
-                "llvm-gcov": [
-                    "bin",
-                    "llvm-gcov"
-                ],
-                "llvm-nm": [
-                    "bin",
-                    "llvm-nm"
-                ],
-                "llvm-objcopy": [
-                    "bin",
-                    "llvm-objcopy"
-                ],
-                "llvm-profdata": [
-                    "bin",
-                    "llvm-profdata"
-                ],
-                "llvm-strip": [
-                    "bin",
-                    "llvm-strip"
-                ],
-                "llvm-symbolizer": [
-                    "bin",
-                    "llvm-symbolizer"
-                ]
-            },
-            "formula": "build/platform/clang/clang16.json"
         },
         "clang18": {
             "executable": {
@@ -249,7 +182,7 @@
             },
             "formula": "build/platform/clang/clang20.json"
         },
-        "clangd": {
+        "clangd-18": {
             "executable": {
                 "clangd": [
                     "bin",
@@ -257,6 +190,15 @@
                 ]
             },
             "formula": "build/platform/clang/clangd/clangd18.json"
+        },
+        "clangd-20": {
+            "executable": {
+                "clangd": [
+                    "bin",
+                    "clangd"
+                ]
+            },
+            "formula": "build/platform/clang/clangd/clangd20.json"
         },
         "gdb": {
             "executable": {
@@ -309,7 +251,7 @@
                     "gofmt"
                 ]
             },
-            "formula": "build/external_resources/go_tools/go1.23.json"
+            "formula": "build/external_resources/go_tools/go1.24.json"
         },
         "jdk17": {
             "executable": {
@@ -361,6 +303,15 @@
             },
             "formula": "build/platform/python/ymake_python3/resources.json"
         },
+        "ruff": {
+            "executable": {
+                "ruff": [
+                    "bin",
+                    "ruff"
+                ]
+            },
+            "formula": "build/external_resources/ruff/resources.json"
+        },
         "ya-tc": {
             "executable": {
                 "ya-tc": [
@@ -376,6 +327,14 @@
                 ]
             },
             "formula": "build/external_resources/yexport/public.resources.json"
+        },
+        "ygdiff": {
+            "executable": {
+                "ygdiff": [
+                    "ygdiff"
+                ]
+            },
+            "formula": "build/yandex_specific/autocheck/ygdiff/resources.json"
         },
         "ymake": {
             "executable": {
@@ -644,684 +603,6 @@
                 }
             }
         },
-        "clang16": {
-            "env": {
-                "CPATH": [
-                    ""
-                ],
-                "LIBRARY_PATH": [
-                    ""
-                ],
-                "SDKROOT": [
-                    ""
-                ]
-            },
-            "params": {
-                "c_compiler": "$(CLANG)/bin/clang",
-                "cxx_compiler": "$(CLANG)/bin/clang++",
-                "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
-                "match_root": "CLANG",
-                "nm": "$(CLANG)/bin/llvm-nm",
-                "objcopy": "$(CLANG)/bin/llvm-objcopy",
-                "profiles": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/Contents/Developer/Platforms/iPhoneOS.platform/Developer/Library/CoreSimulator/Profiles",
-                "simctl": "$(XCODE_TOOLS_ROOT-sbr:799017771)/Xcode/SystemRoot/PrivateFrameworks/CoreSimulator.framework/Resources/bin/simctl",
-                "strip": "$(CLANG)/bin/llvm-strip",
-                "type": "clang",
-                "use_bundle": true,
-                "version": "16"
-            },
-            "platforms": [
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "power9le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "i386",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOSSIM"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7a",
-                        "os": "YOCTO"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "power9le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "i386",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "armv7",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOSSIM"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "aarch64",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "power9le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "i386",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "armv7",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOS"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "arm64",
-                        "os": "IOSSIM"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7a",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7a_cortex_a9",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7ahf_cortex_a35",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7ahf_cortex_a53",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv7ahf",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv8a_cortex_a35",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "armv8a_cortex_a53",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "ppc64le",
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "power9le",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "armv7ahf_cortex_a53",
-                        "os": "LINUX"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "wasm32",
-                        "os": "EMSCRIPTEN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "wasm64",
-                        "os": "EMSCRIPTEN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "arch": "arm64",
-                        "os": "DARWIN"
-                    },
-                    "target": {
-                        "arch": "armv7ahf_cortex_a53",
-                        "os": "LINUX"
-                    }
-                }
-            ],
-            "tools": {
-                "c++": {
-                    "bottle": "clang16",
-                    "executable": "c++"
-                },
-                "c++filt": {
-                    "bottle": "clang16",
-                    "executable": "c++filt"
-                },
-                "cc": {
-                    "bottle": "clang16",
-                    "executable": "cc"
-                },
-                "clang-rename": {
-                    "bottle": "clang16",
-                    "executable": "clang-rename"
-                },
-                "gcov": {
-                    "bottle": "clang16",
-                    "executable": "llvm-gcov"
-                },
-                "llvm-cov": {
-                    "bottle": "clang16",
-                    "executable": "llvm-cov"
-                },
-                "llvm-profdata": {
-                    "bottle": "clang16",
-                    "executable": "llvm-profdata"
-                },
-                "llvm-symbolizer": {
-                    "bottle": "clang16",
-                    "executable": "llvm-symbolizer"
-                },
-                "nm": {
-                    "bottle": "clang16",
-                    "executable": "llvm-nm"
-                },
-                "objcopy": {
-                    "bottle": "clang16",
-                    "executable": "llvm-objcopy"
-                },
-                "strip": {
-                    "bottle": "clang16",
-                    "executable": "llvm-strip"
-                }
-            }
-        },
-        "clang16-windows": {
-            "name": "clang16",
-            "params": {
-                "c_compiler": "$(CLANG)/bin/clang-cl",
-                "cxx_compiler": "$(CLANG)/bin/clang-cl",
-                "cxx_std": "c++20",
-                "llvm-symbolizer": "$(CLANG)/bin/llvm-symbolizer",
-                "match_root": "CLANG",
-                "type": "msvc",
-                "use_bundle": true,
-                "use_clang": true,
-                "version": "16"
-            },
-            "platforms": [
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "LINUX"
-                    },
-                    "target": {
-                        "arch": "i686",
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "target": {
-                        "arch": "x86_64",
-                        "os": "WIN"
-                    }
-                },
-                {
-                    "default": false,
-                    "host": {
-                        "os": "WIN"
-                    },
-                    "target": {
-                        "arch": "i686",
-                        "os": "WIN"
-                    }
-                }
-            ],
-            "tools": {
-                "c++": {
-                    "bottle": "clang16",
-                    "executable": "c++"
-                },
-                "c++filt": {
-                    "bottle": "clang16",
-                    "executable": "c++filt"
-                },
-                "cc": {
-                    "bottle": "clang16",
-                    "executable": "cc"
-                },
-                "gcov": {
-                    "bottle": "clang16",
-                    "executable": "llvm-gcov"
-                },
-                "llvm-cov": {
-                    "bottle": "clang16",
-                    "executable": "llvm-cov"
-                },
-                "llvm-profdata": {
-                    "bottle": "clang16",
-                    "executable": "llvm-profdata"
-                },
-                "llvm-symbolizer": {
-                    "bottle": "clang16",
-                    "executable": "llvm-symbolizer"
-                },
-                "nm": {
-                    "bottle": "clang16",
-                    "executable": "llvm-nm"
-                },
-                "objcopy": {
-                    "bottle": "clang16",
-                    "executable": "llvm-objcopy"
-                },
-                "strip": {
-                    "bottle": "clang16",
-                    "executable": "llvm-strip"
-                }
-            }
-        },
         "clang18": {
             "env": {
                 "CPATH": [
@@ -1350,7 +631,7 @@
             },
             "platforms": [
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1360,7 +641,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1370,7 +651,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1380,7 +661,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "aarch64",
                         "os": "LINUX"
@@ -1390,7 +671,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "aarch64",
                         "os": "LINUX"
@@ -1401,7 +682,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1411,7 +692,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1421,7 +702,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1431,7 +712,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1441,7 +722,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1451,7 +732,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1461,7 +742,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1471,7 +752,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1481,7 +762,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1491,7 +772,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1501,7 +782,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1511,7 +792,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1521,7 +802,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1531,7 +812,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1541,7 +822,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1551,7 +832,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1561,7 +842,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1571,7 +852,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1581,7 +862,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1591,7 +872,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1601,7 +882,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1611,7 +892,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1622,7 +903,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1633,7 +914,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1644,7 +925,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1655,7 +936,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1666,7 +947,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1677,7 +958,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1688,7 +969,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1699,7 +980,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1710,7 +991,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1721,7 +1002,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1732,7 +1013,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1742,7 +1023,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1752,7 +1033,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1762,7 +1043,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1772,7 +1053,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1782,7 +1063,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1792,7 +1073,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1802,7 +1083,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1812,7 +1093,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
@@ -1823,7 +1104,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
@@ -1834,7 +1115,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -1844,7 +1125,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1854,7 +1135,28 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1864,7 +1166,28 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": false,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -1937,7 +1260,7 @@
             },
             "platforms": [
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1947,7 +1270,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "LINUX"
                     },
@@ -1957,7 +1280,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "WIN"
                     },
@@ -1967,7 +1290,7 @@
                     }
                 },
                 {
-                    "default": true,
+                    "default": false,
                     "host": {
                         "os": "WIN"
                     },
@@ -2048,7 +1371,7 @@
             },
             "platforms": [
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2058,7 +1381,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2068,7 +1391,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2078,7 +1401,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "aarch64",
                         "os": "LINUX"
@@ -2088,7 +1411,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "aarch64",
                         "os": "LINUX"
@@ -2099,7 +1422,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2109,7 +1432,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2119,7 +1442,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2129,7 +1452,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2139,7 +1462,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2149,7 +1472,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2159,7 +1482,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2169,7 +1492,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2179,7 +1502,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2189,7 +1512,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2199,7 +1522,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2209,7 +1532,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2219,7 +1542,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2229,7 +1552,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2239,7 +1562,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2249,7 +1572,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2259,7 +1582,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2269,7 +1592,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2279,7 +1602,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2289,7 +1612,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2299,7 +1622,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2309,7 +1632,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2320,7 +1643,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2331,7 +1654,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2342,7 +1665,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2353,7 +1676,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2364,7 +1687,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2375,7 +1698,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2386,7 +1709,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2397,7 +1720,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2408,7 +1731,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2419,7 +1742,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2430,7 +1753,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2440,7 +1763,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2450,7 +1773,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2460,7 +1783,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2470,7 +1793,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2480,7 +1803,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2490,7 +1813,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2500,7 +1823,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2510,7 +1833,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
@@ -2521,7 +1844,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "arch": "ppc64le",
                         "os": "LINUX"
@@ -2532,7 +1855,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "DARWIN"
                     },
@@ -2542,7 +1865,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2552,7 +1875,28 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm32",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2562,7 +1906,28 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    },
+                    "target": {
+                        "arch": "wasm64",
+                        "os": "EMSCRIPTEN"
+                    }
+                },
+                {
+                    "default": true,
                     "host": {
                         "arch": "arm64",
                         "os": "DARWIN"
@@ -2635,7 +2000,7 @@
             },
             "platforms": [
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2645,7 +2010,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "LINUX"
                     },
@@ -2655,7 +2020,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -2665,7 +2030,7 @@
                     }
                 },
                 {
-                    "default": false,
+                    "default": true,
                     "host": {
                         "os": "WIN"
                     },
@@ -2756,7 +2121,93 @@
             ],
             "tools": {
                 "clangd": {
-                    "bottle": "clangd",
+                    "bottle": "clangd-20",
+                    "executable": "clangd"
+                }
+            }
+        },
+        "clangd-18": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd-18": {
+                    "bottle": "clangd-18",
+                    "executable": "clangd"
+                }
+            }
+        },
+        "clangd-20": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "x86_64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "aarch64",
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "clangd-20": {
+                    "bottle": "clangd-20",
                     "executable": "clangd"
                 }
             }
@@ -2852,7 +2303,7 @@
         "golang": {
             "params": {
                 "type": "golang",
-                "version": "1.23.8"
+                "version": "1.24.6"
             },
             "platforms": [
                 {
@@ -3082,6 +2533,35 @@
                 }
             }
         },
+        "ruff": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "arch": "arm64",
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                }
+            ],
+            "tools": {
+                "ruff": {
+                    "bottle": "ruff",
+                    "executable": "ruff"
+                }
+            }
+        },
         "ya-tc": {
             "platforms": [
                 {
@@ -3117,6 +2597,34 @@
                 "yexport": {
                     "bottle": "yexport",
                     "executable": "yexport"
+                }
+            }
+        },
+        "ygdiff": {
+            "platforms": [
+                {
+                    "default": true,
+                    "host": {
+                        "os": "LINUX"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "DARWIN"
+                    }
+                },
+                {
+                    "default": true,
+                    "host": {
+                        "os": "WIN"
+                    }
+                }
+            ],
+            "tools": {
+                "ygdiff": {
+                    "bottle": "ygdiff",
+                    "executable": "ygdiff"
                 }
             }
         },
@@ -3232,6 +2740,12 @@
         "clangd": {
             "description": "Run clangd language server"
         },
+        "clangd-18": {
+            "description": "Run clangd language server (18 version)"
+        },
+        "clangd-20": {
+            "description": "Run clangd language server (20 version)"
+        },
         "gcov": {
             "description": "Run gcov"
         },
@@ -3294,6 +2808,9 @@
             "description": "Run Python 3",
             "visible": false
         },
+        "ruff": {
+            "description": "An extremely fast Python linter, written in Rust."
+        },
         "strip": {
             "description": "Run strip utility"
         },
@@ -3303,6 +2820,10 @@
         },
         "yexport": {
             "description": "Run yexport",
+            "visible": false
+        },
+        "ygdiff": {
+            "description": "Run ygdiff tool",
             "visible": false
         },
         "ymake": {

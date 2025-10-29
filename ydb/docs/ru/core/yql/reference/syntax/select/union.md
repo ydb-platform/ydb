@@ -1,11 +1,5 @@
 # Объединение результатов подзапросов (UNION)
 
-{% if oss == true and backend_name == "YDB" %}
-
-{% include [olap_warning_note](../../../../_includes/not_allow_for_olap_note.md) %}
-
-{% endif %}
-
 ## UNION {#union}
 
 Объединение результатов нескольких подзапросов с удалением дубликатов.

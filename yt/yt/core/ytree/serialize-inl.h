@@ -56,6 +56,18 @@ bool CanOmitValue(const std::optional<T>* parameter, const std::optional<T>* def
     return false;
 }
 
+// TYsonString.
+inline bool CanOmitValue(const NYson::TYsonString* parameter, const NYson::TYsonString* defaultValue)
+{
+    if (!defaultValue) {
+        return !*parameter;
+    }
+    if (!*parameter && !*defaultValue) {
+        return true;
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
@@ -465,7 +477,7 @@ void Serialize(const TEnumIndexedArray<E, T, Min, Max>& vector, NYson::IYsonCons
             continue;
         }
         const auto& value = vector[key];
-        if (!NDetail::CanOmitValue(&value, nullptr)) {
+        if (!NDetail::CanOmitValue(&value, static_cast<T*>(nullptr))) {
             consumer->OnKeyedItem(FormatEnum(key));
             Serialize(value, consumer);
         }

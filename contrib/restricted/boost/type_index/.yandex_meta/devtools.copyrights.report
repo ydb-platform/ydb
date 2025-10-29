@@ -55,6 +55,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         include/boost/type_index/ctti_type_index.hpp [2:2]
+        include/boost/type_index/detail/config.hpp [2:2]
         include/boost/type_index/detail/ctti_register_class.hpp [2:2]
         include/boost/type_index/detail/stl_register_class.hpp [2:2]
         include/boost/type_index/stl_type_index.hpp [2:2]

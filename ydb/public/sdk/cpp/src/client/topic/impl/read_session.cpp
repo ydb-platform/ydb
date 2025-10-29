@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/logger/log.h>
+#include <ydb/public/sdk/cpp/src/client/impl/internal/logger/log.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <util/generic/guid.h>

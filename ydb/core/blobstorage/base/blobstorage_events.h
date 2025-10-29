@@ -270,6 +270,15 @@ namespace NKikimr {
     {
     };
 
+    struct TEvBlobStorage::TEvControllerUpdateSyncerState
+        : TEventPB<
+            TEvControllerUpdateSyncerState,
+            NKikimrBlobStorage::TEvControllerUpdateSyncerState,
+            TEvBlobStorage::EvControllerUpdateSyncerState>
+    {
+        TEvControllerUpdateSyncerState() = default;
+    };
+
     struct TEvBlobStorage::TEvVStatus : public TEventPB<
         TEvBlobStorage::TEvVStatus,
         NKikimrBlobStorage::TEvVStatus,
@@ -303,12 +312,12 @@ namespace NKikimr {
             }
         }
 
-        TEvVStatusResult(NKikimrProto::EReplyStatus status, const NKikimrBlobStorage::TVDiskID &vdisk) {
+        TEvVStatusResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk) {
             Y_ABORT_UNLESS(status != NKikimrProto::OK);
             Record.SetStatus(status);
             Record.SetJoinedGroup(false);
             Record.SetReplicated(false);
-            Record.MutableVDiskID()->CopyFrom(vdisk);
+            VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
         }
     };
 

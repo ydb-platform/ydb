@@ -206,4 +206,30 @@ TClearSessionRequest ClearSessionRequestFromProto(const NProto::TClearSessionReq
     return TClearSessionRequest{.SessionId = protoRequest.GetSessionId()};
 }
 
+NProto::TDropTablesRequest DropTablesRequestToProto(const TDropTablesRequest& request) {
+    NProto::TDropTablesRequest protoRequest;
+    for (const auto& tableId : request.TableIds) {
+        protoRequest.AddTableIds(tableId);
+    }
+    return protoRequest;
+}
+
+TDropTablesRequest DropTablesRequestFromProto(const NProto::TDropTablesRequest& protoRequest) {
+    TDropTablesRequest request;
+    for (const auto& tableId : protoRequest.GetTableIds()) {
+        request.TableIds.push_back(tableId);
+    }
+    return request;
+}
+
+NProto::TDropTablesResponse DropTablesResponseToProto(const TDropTablesResponse& response) {
+    Y_UNUSED(response);
+    return NProto::TDropTablesResponse();
+}
+
+TDropTablesResponse DropTablesResponseFromProto(const NProto::TDropTablesResponse& protoResponse) {
+    Y_UNUSED(protoResponse);
+    return TDropTablesResponse{};
+}
+
 } // namespace NYql::NFmr

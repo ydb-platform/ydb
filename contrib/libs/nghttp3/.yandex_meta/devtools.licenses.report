@@ -71,11 +71,11 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
     Files with this license:
-        README.rst [68:71]
+        README.rst [70:73]
 
 KEEP     MIT                  a3a8f7feced3937b87cd090ba748e24b
 BELONGS ya.make
-FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp3/nghttp3.h at line 22, lib/includes/nghttp3/version.h at line 21, lib/nghttp3_balloc.c at line 21, lib/nghttp3_balloc.h at line 21, lib/nghttp3_buf.c at line 21, lib/nghttp3_buf.h at line 21, lib/nghttp3_conn.c at line 20, lib/nghttp3_conn.h at line 20, lib/nghttp3_conv.c at line 21, lib/nghttp3_conv.h at line 21, lib/nghttp3_debug.c at line 21, lib/nghttp3_debug.h at line 21, lib/nghttp3_err.c at line 20, lib/nghttp3_err.h at line 20, lib/nghttp3_frame.c at line 21, lib/nghttp3_frame.h at line 21, lib/nghttp3_gaptr.c at line 21, lib/nghttp3_gaptr.h at line 21, lib/nghttp3_http.c at line 21, lib/nghttp3_http.h at line 21, lib/nghttp3_idtr.c at line 21, lib/nghttp3_idtr.h at line 21, lib/nghttp3_ksl.c at line 21, lib/nghttp3_ksl.h at line 21, lib/nghttp3_macro.h at line 21, lib/nghttp3_map.c at line 22, lib/nghttp3_map.h at line 22, lib/nghttp3_mem.c at line 22, lib/nghttp3_mem.h at line 22, lib/nghttp3_objalloc.c at line 21, lib/nghttp3_objalloc.h at line 21, lib/nghttp3_opl.c at line 21, lib/nghttp3_opl.h at line 21, lib/nghttp3_pq.c at line 22, lib/nghttp3_pq.h at line 22, lib/nghttp3_qpack.c at line 21, lib/nghttp3_qpack.h at line 21, lib/nghttp3_qpack_huffman.c at line 21, lib/nghttp3_qpack_huffman.h at line 21, lib/nghttp3_qpack_huffman_data.c at line 21, lib/nghttp3_range.c at line 21, lib/nghttp3_range.h at line 21, lib/nghttp3_rcbuf.c at line 21, lib/nghttp3_rcbuf.h at line 21, lib/nghttp3_ringbuf.c at line 21, lib/nghttp3_ringbuf.h at line 21, lib/nghttp3_str.c at line 22, lib/nghttp3_str.h at line 22, lib/nghttp3_stream.c at line 20, lib/nghttp3_stream.h at line 20, lib/nghttp3_tnode.c at line 20, lib/nghttp3_tnode.h at line 20, lib/nghttp3_unreachable.c at line 21, lib/nghttp3_unreachable.h at line 21, lib/nghttp3_vec.c at line 21, lib/nghttp3_vec.h at line 21, lib/nghttp3_version.c at line 20, lib/sfparse/sfparse.c at line 22, lib/sfparse/sfparse.h at line 22
+FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp3/nghttp3.h at line 22, lib/includes/nghttp3/version.h at line 21, lib/nghttp3_balloc.c at line 21, lib/nghttp3_balloc.h at line 21, lib/nghttp3_buf.c at line 21, lib/nghttp3_buf.h at line 21, lib/nghttp3_callbacks.c at line 20, lib/nghttp3_callbacks.h at line 20, lib/nghttp3_conn.c at line 20, lib/nghttp3_conn.h at line 20, lib/nghttp3_conv.c at line 21, lib/nghttp3_conv.h at line 21, lib/nghttp3_debug.c at line 21, lib/nghttp3_debug.h at line 21, lib/nghttp3_err.c at line 20, lib/nghttp3_err.h at line 20, lib/nghttp3_frame.c at line 21, lib/nghttp3_frame.h at line 21, lib/nghttp3_gaptr.c at line 21, lib/nghttp3_gaptr.h at line 21, lib/nghttp3_http.c at line 21, lib/nghttp3_http.h at line 21, lib/nghttp3_idtr.c at line 21, lib/nghttp3_idtr.h at line 21, lib/nghttp3_ksl.c at line 21, lib/nghttp3_ksl.h at line 21, lib/nghttp3_macro.h at line 21, lib/nghttp3_map.c at line 22, lib/nghttp3_map.h at line 22, lib/nghttp3_mem.c at line 22, lib/nghttp3_mem.h at line 22, lib/nghttp3_objalloc.c at line 21, lib/nghttp3_objalloc.h at line 21, lib/nghttp3_opl.c at line 21, lib/nghttp3_opl.h at line 21, lib/nghttp3_pq.c at line 22, lib/nghttp3_pq.h at line 22, lib/nghttp3_qpack.c at line 21, lib/nghttp3_qpack.h at line 21, lib/nghttp3_qpack_huffman.c at line 21, lib/nghttp3_qpack_huffman.h at line 21, lib/nghttp3_qpack_huffman_data.c at line 21, lib/nghttp3_range.c at line 21, lib/nghttp3_range.h at line 21, lib/nghttp3_rcbuf.c at line 21, lib/nghttp3_rcbuf.h at line 21, lib/nghttp3_ringbuf.c at line 21, lib/nghttp3_ringbuf.h at line 21, lib/nghttp3_settings.c at line 20, lib/nghttp3_settings.h at line 20, lib/nghttp3_str.c at line 22, lib/nghttp3_str.h at line 22, lib/nghttp3_stream.c at line 20, lib/nghttp3_stream.h at line 20, lib/nghttp3_tnode.c at line 20, lib/nghttp3_tnode.h at line 20, lib/nghttp3_unreachable.c at line 21, lib/nghttp3_unreachable.h at line 21, lib/nghttp3_vec.c at line 21, lib/nghttp3_vec.h at line 21, lib/nghttp3_version.c at line 20, lib/sfparse/sfparse.c at line 22, lib/sfparse/sfparse.h at line 22
     Note: matched license text is too long. Read it in the source files.
     Scancode info:
         Original SPDX id: MIT
@@ -89,6 +89,8 @@ FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp3/nghttp3.h at line 22, 
         lib/nghttp3_balloc.h [7:24]
         lib/nghttp3_buf.c [7:24]
         lib/nghttp3_buf.h [7:24]
+        lib/nghttp3_callbacks.c [6:23]
+        lib/nghttp3_callbacks.h [6:23]
         lib/nghttp3_conn.c [6:23]
         lib/nghttp3_conn.h [6:23]
         lib/nghttp3_conv.c [7:24]
@@ -129,6 +131,8 @@ FILE_INCLUDE AUTHORS found in files: lib/includes/nghttp3/nghttp3.h at line 22, 
         lib/nghttp3_rcbuf.h [7:24]
         lib/nghttp3_ringbuf.c [7:24]
         lib/nghttp3_ringbuf.h [7:24]
+        lib/nghttp3_settings.c [6:23]
+        lib/nghttp3_settings.h [6:23]
         lib/nghttp3_str.c [8:25]
         lib/nghttp3_str.h [8:25]
         lib/nghttp3_stream.c [6:23]

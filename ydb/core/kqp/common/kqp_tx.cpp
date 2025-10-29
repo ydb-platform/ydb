@@ -14,7 +14,7 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
     if (pathId.OwnerId() != 0) {
         auto table = txCtx.TableByIdMap.FindPtr(pathId);
         if (!table) {
-            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table.");
+            return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table, pathId: " << pathId.ToString() << " .");
         }
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << *table << "`");
     } else {
@@ -24,7 +24,7 @@ NYql::TIssue GetLocksInvalidatedIssue(const TKqpTransactionContext& txCtx, const
                 return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Table: " << "`" << table << "`");
             }
         }
-        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table."); 
+        return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message << " Unknown table, pathId: " << pathId.ToString() << " .");
     }
 }
 
@@ -52,7 +52,7 @@ NYql::TIssue GetLocksInvalidatedIssue(const TShardIdToTableInfo& shardIdToTableI
         }
         return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
     } else {
-        message << " Unknown table.";   
+        message << " Unknown table, tabletId: " << shardId << " .";
     }
     return YqlIssue(TPosition(), TIssuesIds::KIKIMR_LOCKS_INVALIDATED, message);
 }
@@ -175,6 +175,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     bool hasStreamLookup = false;
     bool hasSinkWrite = false;
     bool hasSinkInsert = false;
+    bool hasVectorResolve = false;
 
     for (const auto &tx : physicalQuery.GetTransactions()) {
         switch (tx.GetType()) {
@@ -208,6 +209,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
 
             for (const auto &input : stage.GetInputs()) {
                 hasStreamLookup |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup;
+                hasVectorResolve |= input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve;
             }
 
             for (const auto &tableOp : stage.GetTableOps()) {
@@ -226,7 +228,7 @@ bool NeedSnapshot(const TKqpTransactionContext& txCtx, const NYql::TKikimrConfig
     YQL_ENSURE(!hasSinkWrite || hasEffects);
 
     // We need snapshot for stream lookup, besause it's used for dependent reads
-    if (hasStreamLookup) {
+    if (hasStreamLookup || hasVectorResolve) {
         return true;
     }
 
@@ -379,6 +381,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                     break;
                 case NKqpProto::TKqpPhyConnection::kSequencer:
                     return true;
+                case NKqpProto::TKqpPhyConnection::kVectorResolve: // FIXME: Maybe, when prefix tables are enabled
                 case NKqpProto::TKqpPhyConnection::kUnionAll:
                 case NKqpProto::TKqpPhyConnection::kParallelUnionAll:
                 case NKqpProto::TKqpPhyConnection::kMap:
@@ -389,6 +392,7 @@ bool HasUncommittedChangesRead(THashSet<NKikimr::TTableId>& modifiedTables, cons
                 case NKqpProto::TKqpPhyConnection::kResult:
                 case NKqpProto::TKqpPhyConnection::kValue:
                 case NKqpProto::TKqpPhyConnection::kMerge:
+                case NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup:
                 case NKqpProto::TKqpPhyConnection::TYPE_NOT_SET:
                     break;
                 }

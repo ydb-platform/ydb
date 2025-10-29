@@ -51,7 +51,19 @@ SELECT * FROM ydb_datasource.<table_name>
 При работе с внешними источниками данных {{ ydb-short-name }} существует ряд ограничений:
 
 1. {% include [!](_includes/supported_requests.md) %}
-1. {% include [!](_includes/predicate_pushdown.md) %}
+1. {% include [!](_includes/predicate_pushdown_preamble.md) %}
+
+    |Описание|Пример|Ограничение|
+    |---|---|---|
+    |Фильтров вида `IS NULL`/`IS NOT NULL`|`WHERE column1 IS NULL` или `WHERE column1 IS NOT NULL`||
+    |Логических условий `OR`, `NOT`, `AND` и круглых скобок для управление приоритетом вычислений. |`WHERE column1 IS NULL OR (column2 IS NOT NULL AND column3 > 10)`.||
+    |[Операторов сравнения](../../yql/reference/syntax/expressions.md#comparison-operators) c другими колонками или константами. |`WHERE column1 > column2 OR column3 <= 10`.||
+    |Оператора сопоставления строк с образцом `LIKE`.|`WHERE column1 LIKE '_abc%'`|В настоящее время поддерживается пушдаун только простых паттернов, основанных на префиксах (`'abc_'`, `'abc%'`), суффиксах (`'_abc'`, `'%abc'`) или поиске подстроки в строке (`'_abc_'`, `'%abc%'`, `'_abc%'`, `'%abc_'`). При необходимости пушдауна более сложных паттернов рекомендуется воспользуется `REGEXP`.|
+    |Оператора сопоставления строк с образцом `REGEXP`.|`WHERE column1 REGEXP '.*abc.*'`||
+
+    При использовании других видов фильтров пушдаун на источник не выполняется: фильтрация строк внешней таблицы будет выполнена на стороне федеративной {{ ydb-short-name }}, что означает, что {{ ydb-short-name }} выполнит полное чтение (full scan) внешней таблицы в момент обработки запроса.
+
+    Поддерживаемые типы данных для пушдауна фильтров:
 
     |Тип данных {{ ydb-short-name }}|
     |----|

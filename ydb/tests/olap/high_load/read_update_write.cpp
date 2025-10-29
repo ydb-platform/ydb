@@ -114,7 +114,7 @@ public:
     void DetachAll() {
         for (auto& thread: Threads) {
             thread.detach();
-        } 
+        }
     }
 
 private:
@@ -139,10 +139,10 @@ public:
         size_t counterKeys = DivUp(SizeKiB, 100);
 
         const TString tablePath = GetDatabase() + "/scenario/TestReadUpdateWriteLoad/read_update_write_load/big_table";
-    
+
         for (size_t j = 0; j < counterKeys; j += 200) {
             auto range = RangeAllocator.AllocateRange(std::min(counterKeys - j, 200ul));
-            
+
             NYdb::TValueBuilder rowsBuilder;
             rowsBuilder.BeginList();
             for (size_t i = range.first; i < range.second; i++) {
@@ -155,8 +155,16 @@ public:
             rowsBuilder.EndList();
 
             hist.TimeIt([&] {
-                auto result = Client.BulkUpsert(tablePath, rowsBuilder.Build()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                auto data = rowsBuilder.Build();
+                while (true) {
+                    auto result = Client.BulkUpsert(tablePath, NYdb::TValue{data}).ExtractValueSync();
+                    if (result.GetStatus() == NYdb::EStatus::OVERLOADED) {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                    break;
+                }
+
             });
         }
 
@@ -247,8 +255,16 @@ public:
             rowsBuilder.EndList();
 
             hist.TimeIt([&] {
-                auto result = Client.BulkUpsert(tablePath, rowsBuilder.Build()).ExtractValueSync();
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                auto data = rowsBuilder.Build();
+                while (true) {
+                    auto result = Client.BulkUpsert(tablePath, NYdb::TValue{data}).ExtractValueSync();
+                    if (result.GetStatus() == NYdb::EStatus::OVERLOADED) {
+                        continue;
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+                    break;
+                }
+
             });
         }
 
@@ -293,7 +309,7 @@ Y_UNIT_TEST_SUITE(ReadUpdateWrite) {
         TThreadGroup progressTacker;
         std::atomic_bool progressFinished;
         progressTacker.AddThread(std::thread(TProgressTracker{rangeAllocator, progressFinished}));
-        
+
 
         Cerr << "Step 1. only write" << Endl;
         {

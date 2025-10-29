@@ -23,7 +23,16 @@ namespace NKikimr::NStorage {
                         : std::nullopt));
                 }
             } else if (cacheItem.Generation == item.GetGeneration()) {
-                Y_DEBUG_ABORT_UNLESS(cacheItem.Value == newValue);
+                auto printOptionalString = [](const std::optional<TString>& res) -> TString {
+                    if (res) {
+                        return HexEncode(*res);
+                    } else {
+                        return "<nullopt>";
+                    }
+                };
+                Y_VERIFY_DEBUG_S(cacheItem.Value == newValue, "CachedItem# " <<
+                        printOptionalString(cacheItem.Value) << " NewItem# " << printOptionalString(newValue));
+                Y_UNUSED(printOptionalString);  // for release build
             }
         }
 
@@ -38,8 +47,9 @@ namespace NKikimr::NStorage {
             SendEvent(*Binding, std::move(ev));
         }
         // propagate backwards
-        for (const auto& [nodeId, info] : DirectBoundNodes) {
-            auto ev = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr, false);
+        for (auto& [nodeId, info] : DirectBoundNodes) {
+            auto ev = std::make_unique<TEvNodeConfigReversePush>(GetRootNodeId(), nullptr, std::nullopt);
+            info.LastReportedRootNodeId = GetRootNodeId();
             ev->Record.MutableCacheUpdate()->CopyFrom(updates);
             SendEvent(nodeId, info, std::move(ev));
         }

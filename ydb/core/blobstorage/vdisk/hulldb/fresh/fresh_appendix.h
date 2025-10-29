@@ -115,13 +115,13 @@ namespace NKikimr {
 
         TIterator(const THullCtxPtr &hullCtx, TContType *apndx)
             : Apndx(apndx)
-            , It()
+            , It(Apndx ? Apndx->SortedRecs.end() : TFreshAppendix::TVecIterator())
         {
             Y_UNUSED(hullCtx);
         }
 
         bool Valid() const {
-            return Apndx && It >= Apndx->SortedRecs.begin() && It < Apndx->SortedRecs.end();
+            return Apndx && It != Apndx->SortedRecs.end();
         }
 
         void Next() {
@@ -130,10 +130,11 @@ namespace NKikimr {
         }
 
         void Prev() {
-            if (It == Apndx->SortedRecs.begin())
-                It = {};
-            else
+            if (It == Apndx->SortedRecs.begin()) {
+                It = Apndx->SortedRecs.end();
+            } else {
                 --It;
+            }
         }
 
         TKey GetCurKey() const {
@@ -147,11 +148,18 @@ namespace NKikimr {
         }
 
         void SeekToFirst() {
+            Y_DEBUG_ABORT_UNLESS(Apndx);
             It = Apndx->SortedRecs.begin();
         }
 
+        void SeekToLast() {
+            Y_DEBUG_ABORT_UNLESS(Apndx);
+            It = Apndx->SortedRecs.empty() ? Apndx->SortedRecs.end() : std::prev(Apndx->SortedRecs.end());
+        }
+
         void Seek(const TKey &key) {
-            It = ::LowerBound(Apndx->SortedRecs.begin(), Apndx->SortedRecs.end(), key);
+            Y_DEBUG_ABORT_UNLESS(Apndx);
+            It = std::lower_bound(Apndx->SortedRecs.begin(), Apndx->SortedRecs.end(), key);
         }
 
         template <class TRecordMerger>

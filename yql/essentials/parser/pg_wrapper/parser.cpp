@@ -294,4 +294,5 @@ extern "C" void setup_pg_thread_cleanup() {
     MyDatabaseId = 3; // from catalog.pg_database
     namespace_search_path = pstrdup("public");
     InitializeSessionUserId(nullptr, 1);
+    SetUserIdAndSecContext(1, 0);
 };

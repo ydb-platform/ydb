@@ -6,11 +6,11 @@
 
 namespace NSQLComplete {
 
-    struct TSchemaData {
-        THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> Folders;
-        THashMap<TString, THashMap<TString, TTableDetails>> Tables;
-    };
+struct TSchemaData {
+    THashMap<TString, THashMap<TString, TVector<TFolderEntry>>> Folders;
+    THashMap<TString, THashMap<TString, TTableDetails>> Tables;
+};
 
-    ISimpleSchema::TPtr MakeStaticSimpleSchema(TSchemaData data);
+ISimpleSchema::TPtr MakeStaticSimpleSchema(TSchemaData data);
 
 } // namespace NSQLComplete

@@ -77,7 +77,7 @@ public:
     virtual void OnPg(TMaybe<TStringBuf> value, bool isUtf8) = 0;
 };
 
-class TSameActionDataVisitor : public IDataVisitor {
+class TSameActionDataVisitor: public IDataVisitor {
 public:
     void OnVoid() override;
     void OnNull() override;
@@ -149,19 +149,19 @@ public:
     virtual void Do() = 0;
 };
 
-class TThrowingDataVisitor : public TSameActionDataVisitor {
+class TThrowingDataVisitor: public TSameActionDataVisitor {
 public:
     void Do() final;
 };
 
-class TEmptyDataVisitor : public TSameActionDataVisitor {
+class TEmptyDataVisitor: public TSameActionDataVisitor {
 public:
     void Do() final;
 };
 
 void ParseData(const NYT::TNode& typeNode, const NYT::TNode& dataNode, IDataVisitor& visitor);
 
-class TDataBuilder : public IDataVisitor {
+class TDataBuilder: public IDataVisitor {
 public:
     TDataBuilder();
     const NYT::TNode& GetResult() const;
@@ -242,4 +242,4 @@ private:
     TVector<NYT::TNode*> Stack_;
 };
 
-}
+} // namespace NYql::NResult

@@ -57,7 +57,7 @@ TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Run(const TExprNode::T
     return Slave_->Run(node, ctx, std::move(options));
 }
 
-TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) const {
+TFuture<IYtGateway::TRunResult> TYtForwardingGatewayBase::Prepare(const TExprNode::TPtr& node, TExprContext& ctx, TPrepareOptions&& options) {
     return Slave_->Prepare(node, ctx, std::move(options));
 }
 
@@ -137,12 +137,20 @@ void TYtForwardingGatewayBase::AddCluster(const TYtClusterConfig& config) {
     Slave_->AddCluster(config);
 }
 
-IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) {
+IYtGateway::TClusterConnectionResult TYtForwardingGatewayBase::GetClusterConnection(const TClusterConnectionOptions&& options) const {
     return Slave_->GetClusterConnection(std::move(options));
 }
 
 TMaybe<TString> TYtForwardingGatewayBase::GetTableFilePath(const TGetTableFilePathOptions&& options) {
     return Slave_->GetTableFilePath(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TLayersSnapshotResult> TYtForwardingGatewayBase::SnapshotLayers(TSnapshotLayersOptions&& options) {
+    return Slave_->SnapshotLayers(std::move(options));
+}
+
+NThreading::TFuture<IYtGateway::TDumpResult> TYtForwardingGatewayBase::Dump(TDumpOptions&& options) {
+    return Slave_->Dump(std::move(options));
 }
 
 } // namspace NYql

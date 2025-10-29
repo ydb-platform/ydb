@@ -39,6 +39,7 @@ namespace NActors {
 #endif
         };
         traceId.Serialize(&descr.TraceId);
+        NSan::Unpoison(&descr.TraceId, sizeof(descr.TraceId));
 
         // and channel header before the descriptor
         TChannelPart part{

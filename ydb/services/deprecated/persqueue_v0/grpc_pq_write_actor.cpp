@@ -3,8 +3,8 @@
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/core/persqueue/writer/metadata_initializers.h>
 
-#include <ydb/core/persqueue/pq_database.h>
-#include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/persqueue/public/pq_database.h>
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
@@ -113,7 +113,7 @@ void TWriteSessionActor::Bootstrap(const TActorContext& ctx) {
     Become(&TThis::StateFunc);
     const auto& pqConfig = AppData(ctx)->PQConfig;
 
-    Database = NKikimr::NPQ::GetDatabaseFromConfig(pqConfig);
+    Database = CanonizePath(NKikimr::NPQ::GetDatabaseFromConfig(pqConfig));
     ConverterFactory = MakeHolder<NPersQueue::TTopicNamesConverterFactory>(
             pqConfig, LocalDC
     );
@@ -221,7 +221,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
     }
     PeerName = event->PeerName;
     if (!event->Database.empty()) {
-        Database = event->Database;
+        Database = CanonizePath(event->Database);
     }
 
     SourceId = init.GetSourceId();
@@ -438,8 +438,8 @@ void TWriteSessionActor::InitCheckACL(const TActorContext& ctx) {
 
     auto entries = NKikimr::NGRpcProxy::V1::GetTicketParserEntries(DatabaseId, FolderId);
     ctx.Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = Database,
             .Ticket = ticket,
+            .Database = Database,
             .PeerName = PeerName,
             .Entries = entries
         }));

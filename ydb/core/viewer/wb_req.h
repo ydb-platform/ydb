@@ -98,7 +98,6 @@ public:
                      RequestSettings.FilterNodeIds.end(),
                      (ui32)0,
                      TlsActivationContext->ActorSystem()->NodeId);
-
         TBase::InitConfig(RequestSettings);
         Request = BuildRequest();
         if (RequestSettings.FilterNodeIds.empty()) {

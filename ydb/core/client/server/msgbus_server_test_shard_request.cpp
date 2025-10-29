@@ -1,13 +1,14 @@
 #include "msgbus_tabletreq.h"
+#include <ydb/core/client/server/msgbus_securereq.h>
 #include <ydb/core/test_tablet/events.h>
 
 namespace NKikimr::NMsgBusProxy {
 
 static constexpr TDuration RequestTimeout = TDuration::Seconds(90);
 
-class TMessageBusTestShardControl : public TMessageBusSimpleTabletRequest<TMessageBusTestShardControl,
-        NTestShard::TEvControlResponse, NKikimrServices::TActivity::FRONT_TEST_SHARD_REQUEST> {
-    using TBase = TMessageBusSimpleTabletRequest;
+class TMessageBusTestShardControl : public TMessageBusSecureRequest<TMessageBusSimpleTabletRequest<TMessageBusTestShardControl,
+        NTestShard::TEvControlResponse, NKikimrServices::TActivity::FRONT_TEST_SHARD_REQUEST>> {
+    using TBase = TMessageBusSecureRequest;
 
     NKikimrClient::TTestShardControlRequest Request;
 
@@ -15,7 +16,11 @@ public:
     TMessageBusTestShardControl(TBusMessageContext& msg, NKikimrClient::TTestShardControlRequest& record)
         : TBase(msg, record.GetTabletId(), true, RequestTimeout, false /* no followers */)
         , Request(std::move(record))
-    {}
+    {
+        TBase::SetSecurityToken(Request.GetSecurityToken());
+        TBase::SetPeerName(msg.GetPeerName());
+        TBase::SetRequireAdminAccess(true);
+    }
 
     void Handle(NTestShard::TEvControlResponse::TPtr /*ev*/, const TActorContext& ctx) {
         auto response = std::make_unique<TBusResponse>();

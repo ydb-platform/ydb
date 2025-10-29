@@ -14,6 +14,7 @@ SRCS(
     driver.h
     factories.h
     factories.cpp
+    grpc_servers_manager.h
     kikimr_services_initializers.cpp
     kikimr_services_initializers.h
     main.h
@@ -38,6 +39,7 @@ PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/audit
     ydb/core/audit/audit_config
+    ydb/core/audit/heartbeat_actor
     ydb/core/backup/controller
     ydb/core/base
     ydb/core/blob_depot
@@ -53,6 +55,7 @@ PEERDIR(
     ydb/core/cms
     ydb/core/cms/console
     ydb/core/control
+    ydb/core/counters_info
     ydb/core/driver_lib/base_utils
     ydb/core/driver_lib/cli_config_base
     ydb/core/driver_lib/cli_utils
@@ -95,6 +98,7 @@ PEERDIR(
     ydb/core/scheme_types
     ydb/core/security
     ydb/core/security/ldap_auth_provider
+    ydb/core/security/token_manager
     ydb/core/statistics/aggregator
     ydb/core/statistics/service
     ydb/core/sys_view/processor

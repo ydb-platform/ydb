@@ -53,11 +53,16 @@ bool IsVersionedType(EObjectType type)
         type == EObjectType::OverreplicatedChunkMap ||
         type == EObjectType::UnderreplicatedChunkMap ||
         type == EObjectType::DataMissingChunkMap ||
+        type == EObjectType::DataMissingChunksSampleMap ||
         type == EObjectType::ParityMissingChunkMap ||
+        type == EObjectType::ParityMissingChunksSampleMap ||
         type == EObjectType::OldestPartMissingChunkMap ||
+        type == EObjectType::OldestPartMissingChunksSampleMap ||
         type == EObjectType::QuorumMissingChunkMap ||
+        type == EObjectType::QuorumMissingChunksSampleMap ||
         type == EObjectType::UnsafelyPlacedChunkMap ||
         type == EObjectType::InconsistentlyPlacedChunkMap ||
+        type == EObjectType::InconsistentlyPlacedChunksSampleMap ||
         type == EObjectType::UnexpectedOverreplicatedChunkMap ||
         type == EObjectType::ReplicaTemporarilyUnavailableChunkMap ||
         type == EObjectType::ForeignChunkMap ||
@@ -170,8 +175,7 @@ bool IsUserType(EObjectType type)
         type == EObjectType::SchedulerPool ||
         type == EObjectType::SchedulerPoolTree ||
         type == EObjectType::ChaosReplicatedTable ||
-        type == EObjectType::HunkStorage ||
-        type == EObjectType::SecondaryIndex;
+        type == EObjectType::HunkStorage;
 }
 
 bool IsSchemafulType(EObjectType type)
@@ -363,4 +367,3 @@ bool IsGlobalCellId(TCellId cellId)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NObjectClient
-

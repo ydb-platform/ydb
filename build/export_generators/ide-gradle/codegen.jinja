@@ -1,11 +1,13 @@
 {%- macro TopDepends(taskvar) -%}
 {%-     if proto_template %}
 
-tasks.getByName("prepareMainProtos").dependsOn({{ taskvar }})
+tasks.named("prepareMainProtos").configure {
+    dependsOn({{ taskvar }})
+}
 {%-     endif -%}
 
 {#-     Check main target codegen -#}
-{%-     if varprefix == "codegen" %}
+{%-     if varprefix == MAIN_VARPREFIX %}
 tasks.compileJava.configure {
     dependsOn({{ taskvar }})
 }
@@ -13,18 +15,26 @@ tasks.compileJava.configure {
 tasks.compileTestJava.configure {
     dependsOn({{ taskvar }})
 }
-{%-    if hasResources %}
+{%-     if hasResources -%}
+{#-         Check main target codegen -#}
+{%-         if varprefix == MAIN_VARPREFIX %}
 tasks.processResources.configure {
     dependsOn({{ taskvar }})
 }
-{%-    endif -%}
+{%-         endif %}
+tasks.processTestResources.configure {
+    dependsOn({{ taskvar }})
+}
+{%-     endif -%}
 {%-     if with_lombok_plugin %}
-tasks.getByName("delombok").mustRunAfter({{ taskvar }})
+tasks.named("delombok").configure {
+    mustRunAfter({{ taskvar }})
+}
 {%-     endif -%}
 
 {%-     if with_kotlin -%}
 {#-         Check main target codegen -#}
-{%-         if varprefix == "codegen" %}
+{%-         if varprefix == MAIN_VARPREFIX %}
 tasks.compileKotlin.configure {
     dependsOn({{ taskvar }})
 }
@@ -45,16 +55,20 @@ tasks.withType<KaptGenerateStubsTask>().configureEach {
 {%-     if obj['_parent_object_index'] and obj['_parent_object_index'] in current_target_object_indexes -%}
 {%-         set parent_taskvar = varprefix + obj['_parent_object_index'] %}
 
-tasks.getByName("{{ parent_taskvar }}").dependsOn({{ taskvar }})
+tasks.named("{{ parent_taskvar }}").configure {
+    dependsOn({{ taskvar }})
+}
 {%-     else -%}
 {{ TopDepends(taskvar) }}
 {%-     endif  -%}
 {%- endmacro -%}
 
+{%- set codegenBindir = export_root + "/" + curdir -%}
+
 {%- if target is defined -%}
 {%-     set current_target = target -%}
 {#-     Main target codegen -#}
-{%-     set varprefix = "codegen" -%}
+{%-     set varprefix = MAIN_VARPREFIX -%}
 {%-     include "[generator]/codegen_current_target.jinja" -%}
 {%- endif -%}
 {%- if extra_targets|length -%}

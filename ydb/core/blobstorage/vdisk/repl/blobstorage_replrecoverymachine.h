@@ -210,7 +210,8 @@ namespace NKikimr {
                             Y_VERIFY_S(data.GetSize() == partSize, ReplCtx->VCtx->VDiskLogPrefix);
                             if (ReplCtx->HugeBlobCtx->IsHugeBlob(groupType, id, ReplCtx->MinHugeBlobInBytes)) {
                                 AddBlobToQueue(partId, TDiskBlob::Create(id.BlobSize(), i + 1, groupType.TotalPartCount(),
-                                    std::move(data), Arena, ReplCtx->GetAddHeader()), {}, true, rbq);
+                                    std::move(data), Arena, ReplCtx->VDiskCfg->BlobHeaderMode, std::nullopt), {}, true,
+                                    rbq);
                                 ++numHuge;
                             } else {
                                 partData[numSmallParts++] = std::move(data);
@@ -221,7 +222,8 @@ namespace NKikimr {
                         if (numSmallParts) {
                             // fill in disk blob buffer
                             AddBlobToQueue(id, TDiskBlob::CreateFromDistinctParts(&partData[0], &partData[numSmallParts],
-                                small, id.BlobSize(), Arena, ReplCtx->GetAddHeader()), small, false, rbq);
+                                small, id.BlobSize(), Arena, ReplCtx->VDiskCfg->BlobHeaderMode, std::nullopt), small,
+                                false, rbq);
                         }
 
                         ReplInfo->LogoBlobsRecovered += !!numSmallParts;
@@ -373,7 +375,7 @@ namespace NKikimr {
                     merger.Add(TDiskBlob(&last.Data, last.LocalParts, ReplCtx->VCtx->Top->GType, id));
                     merger.Add(TDiskBlob(&blob, parts, ReplCtx->VCtx->Top->GType, id));
                     last.LocalParts = merger.GetDiskBlob().GetParts();
-                    last.Data = merger.CreateDiskBlob(Arena, ReplCtx->GetAddHeader());
+                    last.Data = merger.CreateDiskBlob(Arena, ReplCtx->VDiskCfg->BlobHeaderMode);
                 } else {
                     rbq.emplace(id, std::move(blob), isHugeBlob, parts);
                 }
@@ -396,7 +398,7 @@ namespace NKikimr {
                         const NMatrix::TVectorType parts = NMatrix::TVectorType::MakeOneHot(id.PartId() - 1,
                             gtype.TotalPartCount());
                         AddBlobToQueue(id.FullID(), TDiskBlob::Create(id.BlobSize(), parts, TRope(),
-                            Arena, ReplCtx->GetAddHeader()), parts, isHugeBlob, rbq);
+                            Arena, ReplCtx->VDiskCfg->BlobHeaderMode, std::nullopt), parts, isHugeBlob, rbq);
                     }
                     ++ReplInfo->MetadataBlobs;
                 }

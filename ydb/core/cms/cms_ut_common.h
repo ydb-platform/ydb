@@ -338,6 +338,12 @@ public:
         bool dry = false,
         NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK);
     NKikimrCms::TManageRequestResponse CheckListRequests(const TString &user, ui64 count);
+    NKikimrCms::TManageRequestResponse CheckApproveRequest(
+        const TString &user,
+        const TString &id,
+        bool dry = false,
+        NKikimrCms::TStatus::ECode code = NKikimrCms::TStatus::OK
+    );
 
     NKikimrCms::TPermissionResponse CheckRequest(
         const TString &user,
@@ -498,6 +504,24 @@ public:
             const Ts&... actionGroups) 
     {   
         return CheckMaintenanceTaskCreate(taskUid, code, Ydb::Maintenance::AVAILABILITY_MODE_STRONG, actionGroups...);
+    }
+
+    Ydb::Maintenance::ManageActionResult CheckCompleteAction(
+        const Ydb::Maintenance::ActionUid &actionUid,
+        Ydb::StatusIds::StatusCode code)
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvCompleteActionRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->mutable_action_uids()->Add()->CopyFrom(actionUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvManageActionResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
     }
 
     void EnableBSBaseConfig();

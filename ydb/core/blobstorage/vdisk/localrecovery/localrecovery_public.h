@@ -51,6 +51,7 @@ namespace NKikimr {
         TVDiskIncarnationGuid VDiskIncarnationGuid;
         NKikimrVDiskData::TScrubEntrypoint ScrubEntrypoint;
         ui64 ScrubEntrypointLsn;
+        NKikimrVDiskData::TMetadataEntryPoint MetadataEntryPoint;
 
         TEvLocalRecoveryDone(NKikimrProto::EReplyStatus status,
                              TIntrusivePtr<TLocalRecoveryInfo> recovInfo,
@@ -65,7 +66,8 @@ namespace NKikimr {
                              const TIntrusivePtr<TLsnMngr> &lsnMngr,
                              TVDiskIncarnationGuid vdiskIncarnationGuid,
                              NKikimrVDiskData::TScrubEntrypoint scrubEntrypoint,
-                             ui64 scrubEntrypointLsn);
+                             ui64 scrubEntrypointLsn,
+                             NKikimrVDiskData::TMetadataEntryPoint metadataEntryPoint);
         ~TEvLocalRecoveryDone();
     };
 

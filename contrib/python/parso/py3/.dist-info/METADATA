@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.4
 Name: parso
-Version: 0.8.4
+Version: 0.8.5
 Summary: A Python Parser
 Home-page: https://github.com/davidhalter/parso
 Author: David Halter
@@ -20,18 +20,39 @@ Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: Text Editors :: Integrated Development Environments (IDE)
 Classifier: Topic :: Utilities
 Classifier: Typing :: Typed
 Requires-Python: >=3.6
-Provides-Extra: qa
-Requires-Dist: flake8 (==5.0.4) ; extra == 'qa'
-Requires-Dist: mypy (==0.971) ; extra == 'qa'
-Requires-Dist: types-setuptools (==67.2.0.1) ; extra == 'qa'
+License-File: LICENSE.txt
+License-File: AUTHORS.txt
 Provides-Extra: testing
-Requires-Dist: docopt ; extra == 'testing'
-Requires-Dist: pytest ; extra == 'testing'
+Requires-Dist: pytest; extra == "testing"
+Requires-Dist: docopt; extra == "testing"
+Provides-Extra: qa
+Requires-Dist: flake8==5.0.4; extra == "qa"
+Requires-Dist: mypy==0.971; extra == "qa"
+Requires-Dist: types-setuptools==67.2.0.1; extra == "qa"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: home-page
+Dynamic: keywords
+Dynamic: license
+Dynamic: license-file
+Dynamic: maintainer
+Dynamic: maintainer-email
+Dynamic: platform
+Dynamic: provides-extra
+Dynamic: requires-python
+Dynamic: summary
 
 ###################################################################
 parso - A Python Parser
@@ -103,6 +124,8 @@ Resources
 Installation
 ============
 
+.. code-block:: bash
+
     pip install parso
 
 Future
@@ -123,8 +146,7 @@ Acknowledgements
 
 - Guido van Rossum (@gvanrossum) for creating the parser generator pgen2
   (originally used in lib2to3).
-- `Salome Schneider <https://www.crepes-schnaegg.ch/cr%C3%AApes-schn%C3%A4gg/kunst-f%C3%BCrs-cr%C3%AApes-mobil/>`_
-  for the extremely awesome parso logo.
+- Salome Schneider for the extremely awesome parso logo.
 
 
 .. _jedi: https://github.com/davidhalter/jedi
@@ -137,6 +159,11 @@ Changelog
 
 Unreleased
 ++++++++++
+
+0.8.5 (2025-08-23)
+++++++++++++++++++
+
+- Add a fallback grammar for Python 3.14+
 
 0.8.4 (2024-04-05)
 ++++++++++++++++++
@@ -283,5 +310,3 @@ This is going to be the last release that supports Python 2.7, 3.4 and 3.5.
 +++++++++++++++++++
 
 - Pulling the library out of Jedi. Some APIs will definitely change.
-
-

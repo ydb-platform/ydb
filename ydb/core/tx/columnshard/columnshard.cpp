@@ -11,8 +11,10 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tablet/write_queue.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/priorities/usage/service.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -37,7 +39,7 @@ void TColumnShard::CleanupActors(const TActorContext& ctx) {
     ctx.Send(BufferizationPortionsWriteActorId, new TEvents::TEvPoisonPill);
     NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::KillSource(SelfId());
     if (!!OperationsManager) {
-        OperationsManager->StopWriting();
+        OperationsManager->StopWriting(TStringBuilder{} << "ColumnShard tablet id: " << TabletID() << " was stoped");
     }
     if (PrioritizationClientId) {
         NPrioritiesQueue::TCompServiceOperator::UnregisterClient(PrioritizationClientId);
@@ -96,6 +98,7 @@ void TColumnShard::TrySwitchToWork(const TActorContext& ctx) {
 void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     using namespace NOlap::NReader;
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS_READER));
+    NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CS));
     StartInstant = TMonotonic::Now();
     Counters.GetCSCounters().Initialization.OnActivateExecutor(TMonotonic::Now() - CreateInstant);
     const TLogContextGuard gLogging =
@@ -112,7 +115,7 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     Tiers->Start(Tiers);
     if (const auto& tiersSnapshot = NYDBTest::TControllers::GetColumnShardController()->GetOverrideTierConfigs(); !tiersSnapshot.empty()) {
         for (const auto& [id, tier] : tiersSnapshot) {
-            Tiers->ActivateTiers({ NTiers::TExternalStorageId(id) });
+            Tiers->ActivateTiers({ NTiers::TExternalStorageId(id) }, false);
             Tiers->UpdateTierConfig(tier, NTiers::TExternalStorageId(id), false);
         }
     }
@@ -122,6 +125,8 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("event", "initialize_shard")("step", "initialize_tiring_finished");
     auto& icb = *AppData(ctx)->Icb;
     SpaceWatcherId = RegisterWithSameMailbox(SpaceWatcher);
+    ScanDiagnosticsActorId = Register(new NDiagnostics::TScanDiagnosticsActor());
+    ActorsToStop.push_back(ScanDiagnosticsActorId);
     Limits.RegisterControls(icb);
     Settings.RegisterControls(icb);
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
@@ -185,12 +190,15 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
-    Y_UNUSED(ev);
+    PipeServersInterconnectSessions.emplace(ev->Get()->ServerId, ev->Get()->InterconnectSession);
     LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
-void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&) {
-    Y_UNUSED(ev);
+void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
+    PipeServersInterconnectSessions.erase(ev->Get()->ServerId);
+    ctx.Send(NOverload::TOverloadManagerServiceOperator::MakeServiceId(),
+        std::make_unique<NOverload::TEvOverloadPipeServerDisconnected>(
+            NOverload::TColumnShardInfo{.ColumnShardId = SelfId(), .TabletId = TabletID()}, NOverload::TPipeServerInfo{.PipeServerId = ev->Get()->ServerId, .InterconnectSessionId = {}}));
     LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 

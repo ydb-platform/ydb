@@ -38,7 +38,7 @@ public:
     }
     void StartCommitFail(const ui64 txId);
     [[nodiscard]] NTxUT::TPlanStep StartCommit(const ui64 txId);
-    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort(const ui64 txId);
+    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort();
 
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(
         const std::shared_ptr<arrow::RecordBatch>& batch, const std::vector<ui32>& columnIds, const ui64 txId);

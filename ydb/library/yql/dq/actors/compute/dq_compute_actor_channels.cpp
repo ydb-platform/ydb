@@ -580,7 +580,6 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     outputChannel.InFlight.emplace(
         seqNo,
         TOutputChannelState::TInFlightMessage(
-            seqNo,
             std::move(channelData),
             finished
         )
@@ -725,6 +724,7 @@ const TDqComputeActorChannels::TOutputChannelStats* TDqComputeActorChannels::Get
 
 void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
     TInputChannelState& inputChannel = InCh(channelId);
+    inputChannel.PollRequest.reset();
     SendChannelDataAck(inputChannel, freeSpace);
 }
 
@@ -737,12 +737,8 @@ void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChanne
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", finished: " << inputChannel.Finished);
 
-    inputChannel.InFlight.emplace(
-        inputChannel.LastRecvSeqNo,
-        TInputChannelState::TInFlightMessage(
-            inputChannel.LastRecvSeqNo,
+    inputChannel.InFlight[inputChannel.LastRecvSeqNo] = TInputChannelState::TInFlightMessage(
             freeSpace
-        )
     );
 
     auto ackEv = MakeHolder<TEvDqCompute::TEvChannelDataAck>();

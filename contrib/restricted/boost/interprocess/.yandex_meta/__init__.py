@@ -9,7 +9,7 @@ def post_install(self):
 boost_interprocess = NixSourceProject(
     nixattr="boost_interprocess",
     arcdir=boost.make_arcdir("interprocess"),
-    owners=["g:cpp-contrib", "g:taxi-common"],
+    owners=["g:cpp-contrib"],
     copy_sources=[
         "include/boost/",
     ],

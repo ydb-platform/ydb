@@ -87,7 +87,7 @@ static_assert(TUnversionedValueConversionTraits<std::optional<i64>>::Scalar, "i6
 static_assert(!TUnversionedValueConversionTraits<TString>::Inline, "TString must not be inline.");
 static_assert(TUnversionedValueConversionTraits<TString>::Scalar, "TString must be scalar.");
 static_assert(TUnversionedValueConversionTraits<TAnnotatedValue<i64>>::Scalar, "i64 must be scalar.");
-YT_DEFINE_STRONG_TYPEDEF(TStrongInt, i64)
+YT_DEFINE_STRONG_TYPEDEF(TStrongInt, i64);
 static_assert(TUnversionedValueConversionTraits<TStrongInt>::Scalar, "TStrongInt must be scalar.");
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -32,6 +32,7 @@ from fontTools.otlLib.builder import (
     AnySubstBuilder,
 )
 from fontTools.otlLib.error import OpenTypeLibError
+from fontTools.varLib.errors import VarLibError
 from fontTools.varLib.varStore import OnlineVarStoreBuilder
 from fontTools.varLib.builder import buildVarDevTable
 from fontTools.varLib.featureVars import addFeatureVariationsRaw
@@ -926,6 +927,11 @@ class Builder(object):
                     l.lookup_index for l in lookups if l.lookup_index is not None
                 )
             )
+            # order doesn't matter, but lookup_indices preserves it.
+            # We want to combine identical sets of lookups (order doesn't matter)
+            # but also respect the order provided by the user (although there's
+            # a reasonable argument to just sort and dedupe, which fontc does)
+            lookup_key = frozenset(lookup_indices)
 
             size_feature = tag == "GPOS" and feature_tag == "size"
             force_feature = self.any_feature_variations(feature_tag, tag)
@@ -943,7 +949,7 @@ class Builder(object):
                         "stash debug information. See fonttools#2065."
                     )
 
-            feature_key = (feature_tag, lookup_indices)
+            feature_key = (feature_tag, lookup_key)
             feature_index = feature_indices.get(feature_key)
             if feature_index is None:
                 feature_index = len(table.FeatureList.FeatureRecord)
@@ -1723,9 +1729,14 @@ class Builder(object):
         if not varscalar.does_vary:
             return varscalar.default, None
 
-        default, index = varscalar.add_to_variation_store(
-            self.varstorebuilder, self.model_cache, self.font.get("avar")
-        )
+        try:
+            default, index = varscalar.add_to_variation_store(
+                self.varstorebuilder, self.model_cache, self.font.get("avar")
+            )
+        except VarLibError as e:
+            raise FeatureLibError(
+                "Failed to compute deltas for variable scalar", location
+            ) from e
 
         device = None
         if index is not None and index != 0xFFFFFFFF:

@@ -2,7 +2,8 @@
 #include "test_client.h"
 
 #include <ydb/core/client/flat_ut_client.h>
-#include <ydb/core/persqueue/cluster_tracker.h>
+#include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/mind/address_classification/net_classifier.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
@@ -99,7 +100,8 @@ struct TRequestCreatePQ {
         const TVector<TString>& important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     )
         : Topic(topic)
         , NumParts(numParts)
@@ -112,6 +114,7 @@ struct TRequestCreatePQ {
         , ReadRules(readRules)
         , Important(important)
         , MirrorFrom(mirrorFrom)
+        , PartitionStrategy(std::move(partitionStrategy))
         , SourceIdMaxCount(sourceIdMaxCount)
         , SourceIdLifetime(sourceIdLifetime)
     {}
@@ -131,6 +134,7 @@ struct TRequestCreatePQ {
     TVector<TString> Important;
 
     std::optional<NKikimrPQ::TMirrorPartitionConfig> MirrorFrom;
+    std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> PartitionStrategy;
 
     ui64 SourceIdMaxCount;
     ui64 SourceIdLifetime;
@@ -160,22 +164,22 @@ struct TRequestCreatePQ {
         codec->AddIds(2);
         codec->AddCodecs("lzop");
 
-        for (auto& i : Important) {
-            config->MutablePartitionConfig()->AddImportantClientId(i);
-        }
-
         config->MutablePartitionConfig()->SetWriteSpeedInBytesPerSecond(WriteSpeed);
         config->MutablePartitionConfig()->SetBurstSize(WriteSpeed);
         for (auto& rr : ReadRules) {
-            config->AddReadRules(rr);
-            config->AddReadFromTimestampsMs(0);
-            config->AddConsumerFormatVersions(0);
-            config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs();
+            auto* consumer = config->AddConsumers();
+            consumer->SetName(rr);
+            consumer->SetReadFromTimestampsMs(0);
+            consumer->SetFormatVersion(0);
+            consumer->SetVersion(0);
         }
-//        if (!ReadRules.empty()) {
-//            config->SetRequireAuthRead(true);
-//        }
+
+        for (auto& i : Important) {
+            auto* consumer = NPQ::GetConsumer(*config, i);
+            UNIT_ASSERT(consumer);
+            consumer->SetImportant(true);
+        }
+
         if (!User.empty()) {
             auto rq = config->MutablePartitionConfig()->AddReadQuota();
             rq->SetSpeedInBytesPerSecond(ReadSpeed);
@@ -187,6 +191,12 @@ struct TRequestCreatePQ {
             auto mirrorFromConfig = config->MutablePartitionConfig()->MutableMirrorFrom();
             mirrorFromConfig->CopyFrom(MirrorFrom.value());
         }
+
+        if (PartitionStrategy) {
+            auto* partitionStrategy = config->MutablePartitionStrategy();
+            partitionStrategy->CopyFrom(PartitionStrategy.value());
+        }
+
         return request;
     }
 };
@@ -947,7 +957,7 @@ public:
             .DoWait = doWait,
             .CanWrite = canWrite,
             .Dc = dc,
-            .ReadRules = rr,
+            .ReadRules = std::move(rr),
             .Account = account,
             .ExpectFail = expectFail
         });
@@ -976,11 +986,11 @@ public:
         CallPersQueueGRPC(createRequest.GetRequest()->Record);
 
         AddTopic(createRequest.Topic);
-        while (doWait && GetTopicVersionFromPath(createRequest.Topic) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromPath(createRequest.Topic) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
-        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) != prevVersion + 1) {
+        while (doWait && GetTopicVersionFromMetadata(createRequest.Topic, prevVersion) < prevVersion + 1) {
             Sleep(TDuration::MilliSeconds(500));
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
@@ -998,14 +1008,15 @@ public:
         TVector<TString> important = {},
         std::optional<NKikimrPQ::TMirrorPartitionConfig> mirrorFrom = {},
         ui64 sourceIdMaxCount = 6000000,
-        ui64 sourceIdLifetime = 86400
+        ui64 sourceIdLifetime = 86400,
+        std::optional<NKikimrPQ::TPQTabletConfig::TPartitionStrategy> partitionStrategy = {}
     ) {
         Y_ABORT_UNLESS(name.StartsWith("rt3."));
 
         Cerr << "PQ Client: create topic: " << name << " with " << nParts << " partitions" << Endl;
         auto request = TRequestCreatePQ(
                 name, nParts, 0, lifetimeS, lowWatermark, writeSpeed, user, readSpeed, rr, important, mirrorFrom,
-                sourceIdMaxCount, sourceIdLifetime
+                sourceIdMaxCount, sourceIdLifetime, partitionStrategy
         );
         return CreateTopic(request);
     }
@@ -1015,7 +1026,9 @@ public:
         if (!UseConfigTables) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
-        auto settings = NYdb::NPersQueue::TAlterTopicSettings().PartitionsCount(nParts);
+        auto settings = NYdb::NPersQueue::TAlterTopicSettings()
+            .PartitionsCount(nParts)
+            .ReadRules({NYdb::NPersQueue::TReadRuleSettings().ConsumerName("user")});
         settings.RetentionPeriod(TDuration::Seconds(lifetimeS));
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto res = pqClient.AlterTopic(path, settings);
@@ -1118,9 +1131,13 @@ public:
         return "";
     }
 
-    void ChooseProxy() {
+    void ChooseProxy(const TString& securityToken = {}) {
         NKikimrClient::TChooseProxyRequest request;
         NKikimrClient::TResponse response;
+
+        if (!securityToken.empty()) {
+            request.SetSecurityToken(securityToken);
+        }
 
         Cerr << "ChooseProxy request to server " << Client->GetConfig().Ip << ":" << Client->GetConfig().Port << "\n"
                 << PrintToString(request) << Endl;

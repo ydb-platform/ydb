@@ -36,7 +36,7 @@ void TTopicSdkTestSetup::CreateTopic(const std::string& name, const std::string&
 {
     ITopicTestSetup::CreateTopic(name, consumer, partitionCount, maxPartitionCount, retention, important);
 
-    Server_.WaitInit(GetTopicPath());
+    Server_.WaitInit(GetTopicPath(name));
 }
 
 TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& name, const std::string& consumer)
@@ -56,10 +56,16 @@ TConsumerDescription TTopicSdkTestSetup::DescribeConsumer(const std::string& nam
 void TTopicSdkTestSetup::Write(const std::string& message, std::uint32_t partitionId,
                                const std::optional<std::string> producer,
                                std::optional<std::uint64_t> seqNo) {
+    Write(GetTopicPath(), message, partitionId, producer, seqNo);
+}
+
+void TTopicSdkTestSetup::Write(const std::string& topic, const std::string& message, std::uint32_t partitionId,
+                               const std::optional<std::string> producer,
+                               std::optional<std::uint64_t> seqNo) {                            
     TTopicClient client(MakeDriver());
 
     TWriteSessionSettings settings;
-    settings.Path(GetTopicPath());
+    settings.Path(topic);
     settings.PartitionId(partitionId);
     settings.DeduplicationEnabled(producer.has_value());
     if (producer) {
@@ -151,8 +157,8 @@ std::string TTopicSdkTestSetup::GetDatabase() const {
     return Database_;
 }
 
-std::string TTopicSdkTestSetup::GetFullTopicPath() const {
-    return GetDatabase() + "/" + GetTopicPath();
+std::string TTopicSdkTestSetup::GetFullTopicPath(const std::string& name) const {
+    return GetDatabase() + "/" + GetTopicPath(name);
 }
 
 std::vector<std::uint32_t> TTopicSdkTestSetup::GetNodeIds() {

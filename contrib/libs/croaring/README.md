@@ -48,7 +48,7 @@ Bitsets, also called bitmaps, are commonly used as fast data structures. Unfortu
 
 Roaring bitmaps are compressed bitmaps which tend to outperform conventional compressed bitmaps such as WAH, EWAH or Concise.
 They are used by several major systems such as [Apache Lucene][lucene] and derivative systems such as [Solr][solr] and
-[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), [YDB](https://ydb.tech), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
+[Elasticsearch][elasticsearch], [Metamarkets' Druid][druid], [LinkedIn Pinot][pinot], [Netflix Atlas][atlas], [Apache Spark][spark], [OpenSearchServer][opensearchserver], [Cloud Torrent][cloudtorrent], [Whoosh][whoosh], [InfluxDB](https://www.influxdata.com), [Pilosa][pilosa], [Bleve](http://www.blevesearch.com), [Microsoft Visual Studio Team Services (VSTS)][vsts], and eBay's [Apache Kylin][kylin]. The CRoaring library is used in several systems such as [Apache Doris](http://doris.incubator.apache.org), [ClickHouse](https://github.com/ClickHouse/ClickHouse), [Redpanda](https://github.com/redpanda-data/redpanda), [YDB](https://ydb.tech), [Alibaba Tair](https://www.alibabacloud.com/help/en/redis/developer-reference/tairroaring-command), [clice](https://github.com/clice-io/clice), and [StarRocks](https://github.com/StarRocks/starrocks). The YouTube SQL Engine, [Google Procella](https://research.google/pubs/pub48388/), uses Roaring bitmaps for indexing.
 
 We published a peer-reviewed article on the design and evaluation of this library:
 
@@ -206,7 +206,7 @@ CPMAddPackage(
   NAME roaring
   GITHUB_REPOSITORY "RoaringBitmap/CRoaring"
   GIT_TAG v2.0.4
-  OPTIONS "BUILD_TESTING OFF"
+  OPTIONS "ENABLE_ROARING_TESTS OFF"
 )
 
 target_link_libraries(hello roaring::roaring)
@@ -281,8 +281,8 @@ The C interface is found in the files
 
 We also have a C++ interface:
 
-- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring.hh),
-- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring64map.hh).
+- [roaring.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring.hh),
+- [roaring64map.hh](https://github.com/RoaringBitmap/CRoaring/blob/master/cpp/roaring/roaring64map.hh).
 
 
 # Main API functions
@@ -447,7 +447,7 @@ The C++ interface is provided via the `roaring.hh` (32-bit) and `roaring64map.hh
 
 ## Example Usage
 ```cpp
-#include "roaring.hh"
+#include "roaring/roaring.hh"
 using namespace roaring;
 
 Roaring r1;
@@ -921,7 +921,7 @@ int main() {
 
 
 
-# Building with cmake (Linux and macOS, Visual Studio users should see below)
+# Building with cmake (Linux and macOS, Visual Studio or OpenHarmony users should see below)
 
 CRoaring follows the standard cmake workflow. Starting from the root directory of
 the project (CRoaring), you can do:
@@ -1038,6 +1038,11 @@ will build and install `roaring` as a static library.
 These commands will also print out instructions on how to use the library from MSBuild or CMake-based projects.
 
 If you find the version of `roaring` shipped with `vcpkg` is out-of-date, feel free to report it to `vcpkg` community either by submiting an issue or by creating a PR.
+
+
+# Building (OpenHarmony)
+
+To build with OpenHarmony SDK please see the [OpenHarmony Cross Compile Guide](https://gitcode.com/openharmony-sig/tpc_c_cplusplus/blob/master/Cross-Compilation Guide for Open-Source Third-Party Libraries in OpenHarmony_en.md)
 
 # SIMD-related throttling
 

@@ -12,6 +12,7 @@ constexpr ui32 INTERNAL_HEIGHT = 14;
 constexpr ui32 INTERNAL_WIDTH = 16;
 constexpr ui32 INTERNAL_TEXT_HEIGHT = 8;
 constexpr ui32 TIME_SERIES_RANGES = 32;
+constexpr ui32 CONN_ARROW = 4;
 
 TString FormatDurationMs(ui64 durationMs) {
     TStringBuilder builder;
@@ -184,6 +185,17 @@ TString GetEstimation(const NJson::TJsonValue& node) {
         }
     }
     return ebuilder;
+}
+
+TString DivP1(ui32 divisible, ui32 divisor) {
+    TStringBuilder result;
+    ui32 p0 = divisible / divisor;
+    result << p0;
+    ui32 p1 = divisible * 10 / divisor - p0 * 10;
+    if (p1) {
+        result << '.' << p1;
+    }
+    return result;
 }
 
 bool TAggregation::Load(const NJson::TJsonValue& node) {
@@ -549,15 +561,58 @@ void TPlan::ResolveCteRefs() {
 
 void TPlan::ResolveOperatorInputs() {
     for (auto& s : Stages) {
-        for (auto& o : s->Operators) {
-            if (o.Input1.PlanNodeId && !NodeToSource.contains(o.Input1.PlanNodeId)) {
-                o.Input1.StageId = NodeToConnection.at(o.Input1.PlanNodeId)->FromStage->PhysicalStageId;
-            }
-            if (o.Input2.PlanNodeId && !NodeToSource.contains(o.Input2.PlanNodeId)) {
-                o.Input2.StageId = NodeToConnection.at(o.Input2.PlanNodeId)->FromStage->PhysicalStageId;
+        for (auto& op : s->Operators) {
+            for (auto& input : op.Inputs) {
+                if (input.PlanNodeId && !NodeToSource.contains(input.PlanNodeId)) {
+                    input.StageId = NodeToConnection.at(input.PlanNodeId)->FromStage->PhysicalStageId;
+                }
             }
         }
     }
+}
+
+void TPlan::MergeTotalCpu(std::shared_ptr<TSingleMetric> cpuTime) {
+
+            std::vector<ui64> updatedCpuTimes;
+            std::vector<ui64> updatedCpuValues;
+
+            auto itt = TotalCpuTimes.begin();
+            auto itv = TotalCpuValues.begin();
+            auto ith = cpuTime->History.Values.begin();
+
+            ui64 v0 = 0;
+            ui64 v1 = 0;
+            ui64 t = 0;
+
+            while (itt != TotalCpuTimes.end() || ith != cpuTime->History.Values.end()) {
+
+                if (itt == TotalCpuTimes.end()) {
+                    t = ith->first;
+                    v1 = ith->second;
+                    ith++;
+                } else if (ith == cpuTime->History.Values.end()) {
+                    t = *itt++;
+                    v0 = *itv++;
+                } else if (*itt == ith->first) {
+                    t = *itt++;
+                    v0 = *itv++;
+                    v1 = ith->second;
+                    ith++;
+                } else if (*itt > ith->first) {
+                    t = ith->first;
+                    v1 = ith->second;
+                    ith++;
+                } else {
+                    t = *itt++;
+                    v0 = *itv++;
+                }
+
+                updatedCpuTimes.push_back(t);
+                updatedCpuValues.push_back(v0 + v1);
+            }
+
+            TotalCpuTimes.swap(updatedCpuTimes);
+            TotalCpuValues.swap(updatedCpuValues);
 }
 
 void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& node, TConnection* outputConnection) {
@@ -588,14 +643,19 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         auto operatorsArray = operators->GetArray();
         for (const auto& subNode : operatorsArray) {
             if (auto* nameNode = subNode.GetValueByPath("Name")) {
-                auto name = nameNode->GetStringSafe();
+                TString name = nameNode->GetStringSafe();
                 TString info;
+                bool blocks = false;
                 TString operatorType = "";
                 TString operatorId = "0";
                 auto externalOperator = false;
 
-                if (name == "Iterator" || name == "Member" || name == "ToFlow") {
+                if (/* name == "Iterator" || */ name == "Member" || name == "ToFlow") {
                     continue;
+                }
+
+                if (auto* blocksNode = subNode.GetValueByPath("Blocks")) {
+                    blocks = blocksNode->GetStringSafe() == "True";
                 }
 
                 if (name == "Filter" && prevFilter) {
@@ -727,6 +787,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         }
                     }
                     info = builder;
+                    if (auto* pushdownNode = subNode.GetValueByPath("Pushdown")) {
+                        externalOperator = pushdownNode->GetStringSafe() == "True";
+                    }
                 } else if (name == "TableFullScan" || name == "TablePointLookup" || name == "TableRangeScan") {
                     TStringBuilder builder;
                     if (auto* tableNode = subNode.GetValueByPath("Table")) {
@@ -785,14 +848,14 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 }
 
-                TOperatorInput input1;
-                TOperatorInput input2;
+                std::vector<TOperatorInput> inputs;
 
                 if (auto* inputsArrayNode = subNode.GetValueByPath("Inputs")) {
                     for (const auto& inputNode : inputsArrayNode->GetArray()) {
                         if (auto* internalOperatorIdNode = inputNode.GetValueByPath("InternalOperatorId")) {
                             auto internalOperatorId = internalOperatorIdNode->GetUIntegerSafe();
-                            if (internalOperatorId && input1.OperatorId != internalOperatorId && input2.OperatorId != internalOperatorId) {
+                            if (internalOperatorId && std::find_if(inputs.begin(), inputs.end(),
+                                    [=](const TOperatorInput& input) { return input.OperatorId == internalOperatorId; }) == inputs.end()) {
                                 if (internalOperatorId < operatorsArray.size()) {
                                     TString precomputeRef;
                                     auto* node = &operatorsArray[internalOperatorId];
@@ -821,43 +884,36 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                             }
                                         }
                                     }
-                                    if (!input1.IsAssigned()) {
-                                        input1.OperatorId = internalOperatorId;
-                                        input1.PrecomputeRef = precomputeRef;
-                                    } else {
-                                        input2.OperatorId = internalOperatorId;
-                                        input2.PrecomputeRef = precomputeRef;
-                                        break;
-                                    }
+                                    inputs.emplace_back();
+                                    inputs.back().OperatorId = internalOperatorId;
+                                    inputs.back().PrecomputeRef = precomputeRef;
                                 }
                             }
                         }
                         if (auto* externalPlanNodeIdNode = inputNode.GetValueByPath("ExternalPlanNodeId")) {
                             auto externalPlanNodeId = externalPlanNodeIdNode->GetIntegerSafe();
-                            if (externalPlanNodeId && input1.PlanNodeId != externalPlanNodeId && input2.PlanNodeId != externalPlanNodeId) {
-                                if (!input1.IsAssigned()) {
-                                    input1.PlanNodeId = externalPlanNodeId;
-                                } else {
-                                    input2.PlanNodeId = externalPlanNodeId;
-                                    break;
-                                }
+                            if (externalPlanNodeId && std::find_if(inputs.begin(), inputs.end(),
+                                    [=](const TOperatorInput& input) { return input.PlanNodeId == externalPlanNodeId; }) == inputs.end()) {
+                                inputs.emplace_back();
+                                inputs.back().PlanNodeId = externalPlanNodeId;
                             }
                         }
                     }
                 } else if (auto* precomputeRefNode = subNode.GetValueByPath("Input")) {
-                    input1.PrecomputeRef = precomputeRefNode->GetStringSafe();
+                    inputs.emplace_back();
+                    inputs.back().PrecomputeRef = precomputeRefNode->GetStringSafe();
                 }
 
                 if (externalOperator && !stage->External) {
                     externalOperators.emplace_back(name, info);
                     externalOperators.back().Estimations = GetEstimation(subNode);
-                    externalOperators.back().Input1 = input1;
-                    externalOperators.back().Input2 = input2;
+                    externalOperators.back().Inputs.swap(inputs);
+                    externalOperators.back().Blocks = blocks;
                 } else {
                     stage->Operators.emplace_back(name, info);
                     stage->Operators.back().Estimations = GetEstimation(subNode);
-                    stage->Operators.back().Input1 = input1;
-                    stage->Operators.back().Input2 = input2;
+                    stage->Operators.back().Inputs.swap(inputs);
+                    stage->Operators.back().Blocks = blocks;
                 }
 
                 if (stage->StatsNode) {
@@ -910,6 +966,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                             if (auto* ingressTopNode = stage->StatsNode->GetValueByPath("Ingress")) {
                                 // only 1 ingress node is possible (???)
                                 auto& ingress0 = (*ingressTopNode)[0];
+                                if (auto* nameNode = ingress0.GetValueByPath("Name")) {
+                                    if (nameNode->GetStringSafe() == "CS") {
+                                        externalOperators.back().Blocks = true;
+                                    }
+                                }
                                 if (auto* ingressNode = ingress0.GetValueByPath("Ingress")) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
                                         stage->IngressBytes = std::make_shared<TSingleMetric>(IngressBytes,
@@ -939,6 +1000,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
     if (!externalOperators.empty() && !stage->External) {
         auto connection = std::make_shared<TConnection>(*stage, "External", 0);
+        connection->Blocks = true;
         stage->Connections.push_back(connection);
         Stages.push_back(std::make_shared<TStage>(this, "External"));
         StageToExternalConnection[Stages.back().get()] = connection.get();
@@ -952,6 +1014,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
     if (stage->Operators.empty()) {
         stage->Operators.emplace_back(stage->NodeType, "");
         // add inputs + outputs from connections
+    }
+
+    if (outputConnection) {
+        stage->Operators.front().Blocks |= outputConnection->Blocks;
     }
 
     const NJson::TJsonValue* inputNode = nullptr;
@@ -971,6 +1037,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* externalRowsNode = externalNode->GetValueByPath("ExternalRows")) {
                         externalStage->EgressRows = std::make_shared<TSingleMetric>(ExternalRows, *externalRowsNode);
                         externalStage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *externalRowsNode);
+                    }
+                    if (auto* cpuTimeNode = externalNode->GetValueByPath("CpuTimeUs")) {
+                        externalStage->CpuTime = std::make_shared<TSingleMetric>(ExternalCpuTime, *cpuTimeNode);
+                        MergeTotalCpu(externalStage->CpuTime);
                     }
                     if (auto* partitionCountNode = externalNode->GetValueByPath("PartitionCount")) {
                         externalStage->Tasks = partitionCountNode->GetIntegerSafe();
@@ -1085,10 +1155,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     subNodeType = "Lookup";
                 } else if (subNodeType == "TableLookupJoin") {
                     subNodeType = "LookupJoin";
+                } else if (subNodeType == "DqCnParallelUnionAll") {
+                    subNodeType = "UnionAll";
                 }
 
-                auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
-                auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
+                std::shared_ptr<TConnection> connection;
+
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
                     for (auto& subPlan : subNode->GetArray()) {
                         TString nodeType;
@@ -1101,19 +1173,12 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 ythrow yexception() << "Unexpected plan node type [" << planNodeType << "]";
                             }
                         }
-                        auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                        connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                        if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
+                            connection->Blocks = blocksNode->GetStringSafe() == "True";
+                        }
                         NodeToConnection[connectionPlanNodeId] = connection.get();
                         stage->Connections.push_back(connection);
-                        if (keyColumnsNode) {
-                            for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                                stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
-                            }
-                        }
-                        if (sortColumnsNode) {
-                            for (auto& sortColumn : sortColumnsNode->GetArray()) {
-                                stage->Connections.back()->SortColumns.push_back(sortColumn.GetStringSafe());
-                            }
-                        }
 
                         if (auto* planNodeIdNode = subPlan.GetValueByPath("PlanNodeId")) {
                             auto planNodeId = planNodeIdNode->GetStringRobust();
@@ -1138,10 +1203,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                                     for (auto& op : stage->Operators) {
-                                                        if (op.Input1.PlanNodeId == connectionPlanNodeId) {
-                                                            op.Input1.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
-                                                        } else if (op.Input2.PlanNodeId == connectionPlanNodeId) {
-                                                            op.Input2.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                        for(auto& input : op.Inputs) {
+                                                            if (input.PlanNodeId == connectionPlanNodeId) {
+                                                                input.Rows = std::make_shared<TSingleMetric>(OperatorInputRows, *rowsNode);
+                                                            }
                                                         }
                                                     }
                                                 } else {
@@ -1183,17 +1248,34 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                 } else if (auto* cteNameNode = plan.GetValueByPath("CTE Name")) {
                     auto cteName = "CTE " + cteNameNode->GetStringSafe();
-                    auto connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                    connection = std::make_shared<TConnection>(*stage, subNodeType, connectionPlanNodeId);
+                    if (auto* blocksNode = plan.GetValueByPath("Blocks")) {
+                        connection->Blocks = blocksNode->GetStringSafe() == "True";
+                    }
                     NodeToConnection[connectionPlanNodeId] = connection.get();
                     connection->CteConnection = true;
                     stage->Connections.push_back(connection);
-                    if (keyColumnsNode) {
+                    CteRefs.emplace_back(cteName, connection);
+                    connection->StatsNode = stage->StatsNode;
+                }
+
+                if (connection) {
+                    if (auto* keyColumnsNode = plan.GetValueByPath("KeyColumns")) {
                         for (auto& keyColumn : keyColumnsNode->GetArray()) {
-                            stage->Connections.back()->KeyColumns.push_back(keyColumn.GetStringSafe());
+                            connection->KeyColumns.push_back(keyColumn.GetStringSafe());
                         }
                     }
-                    CteRefs.emplace_back(cteName, stage->Connections.back());
-                    stage->Connections.back()->StatsNode = stage->StatsNode;
+                    if (auto* sortColumnsNode = plan.GetValueByPath("SortColumns")) {
+                        for (auto& sortColumn : sortColumnsNode->GetArray()) {
+                            connection->SortColumns.push_back(sortColumn.GetStringSafe());
+                        }
+                    }
+                    if (auto* hashFuncNode = plan.GetValueByPath("HashFunc")) {
+                        connection->HashFunc = hashFuncNode->GetStringSafe();
+                    }
+                    if (auto* parallelNode = plan.GetValueByPath("Parallel")) {
+                        connection->Parallel = parallelNode->GetStringSafe() == "True";
+                    }
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
@@ -1274,47 +1356,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
 
         if (auto* cpuTimeNode = stage->StatsNode->GetValueByPath("CpuTimeUs")) {
             stage->CpuTime = std::make_shared<TSingleMetric>(CpuTime, *cpuTimeNode, stage->MinTime, stage->MaxTime);
-
-            std::vector<ui64> updatedCpuTimes;
-            std::vector<ui64> updatedCpuValues;
-
-            auto itt = TotalCpuTimes.begin();
-            auto itv = TotalCpuValues.begin();
-            auto ith = stage->CpuTime->History.Values.begin();
-
-            ui64 v0 = 0;
-            ui64 v1 = 0;
-            ui64 t = 0;
-
-            while (itt != TotalCpuTimes.end() || ith != stage->CpuTime->History.Values.end()) {
-
-                if (itt == TotalCpuTimes.end()) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else if (ith == stage->CpuTime->History.Values.end()) {
-                    t = *itt++;
-                    v0 = *itv++;
-                } else if (*itt == ith->first) {
-                    t = *itt++;
-                    v0 = *itv++;
-                    v1 = ith->second;
-                    ith++;
-                } else if (*itt > ith->first) {
-                    t = ith->first;
-                    v1 = ith->second;
-                    ith++;
-                } else {
-                    t = *itt++;
-                    v0 = *itv++;
-                }
-
-                updatedCpuTimes.push_back(t);
-                updatedCpuValues.push_back(v0 + v1);
-            }
-
-            TotalCpuTimes.swap(updatedCpuTimes);
-            TotalCpuValues.swap(updatedCpuValues);
+            MergeTotalCpu(stage->CpuTime);
         }
 
         if (auto* mmuNode = stage->StatsNode->GetValueByPath("MaxMemoryUsage")) {
@@ -1669,25 +1711,26 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             << SvgRect(Config.HeaderLeft + s->IndentX, y + offsetY, INDENT_X, s->IndentY - y, stageClass);
         }
 
-        if (!s->External) {
-            s->Builder
-            << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2, s->OffsetY + s->Height / 2 + offsetY, ToString(s->PhysicalStageId));
-        }
-
         {
             ui32 y0 = s->OffsetY + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 + offsetY;
-            bool first = true;
+            ui32 index = 0;
             for (auto op : s->Operators) {
-                if (first) {
-                    first = false;
-                } else {
+                if (index > 0) {
                     s->Builder << SvgLine(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2, y0, Config.HeaderLeft + Config.HeaderWidth, y0, "opdiv");
                 }
                 s->Builder
-                    << "<g><title>" << op.Name << ": " << op.Info << "</title>"
+                    << "<g><title>" << op.Name << ": " << op.Info << (op.Blocks ? " Blocks: True" : "") << "</title>";
+                if (op.Blocks) {
+                    auto h = INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y;
+                    if (index == s->Operators.size() - 1) {
+                        h = s->OffsetY + s->Height + offsetY - y0;
+                    }
+                    s->Builder
+                    << SvgRect(Config.HeaderLeft + s->IndentX, y0, INTERNAL_WIDTH + INDENT_X, h, "blocks");
+                }
+                s->Builder
                     << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2, y0 + INTERNAL_TEXT_HEIGHT, "texts clipped", op.Name)
-                    << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2 + 4, y0 + INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y, "texts clipped", op.Info);
-
+                    << SvgText(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH + 2 + 8, y0 + INTERNAL_TEXT_HEIGHT * 2 + INTERNAL_GAP_Y, "texts clipped", op.Info);
                 if (op.OutputRows) {
                     TStringBuilder tooltip;
                     auto textSum = FormatTooltip(tooltip, "Output Rows", op.OutputRows.get(), FormatInteger);
@@ -1700,37 +1743,36 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
                 s->Builder
                     << "</g>" << Endl;
 
-                if (op.Input1.StageId) {
-                    NodeToConnection.at(op.Input1.PlanNodeId)->Builder
-                        << "<g><title>Input from Stage " << *op.Input1.StageId << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * op.Input2.IsAssigned()) / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), ToString(*op.Input1.StageId))
-                        << "</g>" << Endl;
-                } else if (op.Input1.PrecomputeRef) {
-                    auto it = Viz.CteSubPlans.find(op.Input1.PrecomputeRef);
-                    if (it != Viz.CteSubPlans.end()) {
-                        it->second->Builder
-                        << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * op.Input2.IsAssigned()) / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), "P")
-                        << "</g>" << Endl;
-                    }
-                }
-                if (op.Input2.StageId) {
-                    NodeToConnection.at(op.Input2.PlanNodeId)->Builder
-                        << "<g><title>Input from Stage " << *op.Input2.StageId << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), ToString(*op.Input2.StageId))
-                        << "</g>" << Endl;
-                } else if (op.Input2.PrecomputeRef) {
-                    auto it = Viz.CteSubPlans.find(op.Input2.PrecomputeRef);
-                    if (it != Viz.CteSubPlans.end()) {
-                        it->second->Builder
-                        << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
-                        << SvgStageId(Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH / 2, y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y), "P")
-                        << "</g>" << Endl;
+                if (!op.Inputs.empty()) {
+                    auto opX = Config.HeaderLeft + Config.HeaderWidth - INTERNAL_WIDTH * (1 + 2 * (op.Inputs.size() - 1)) / 2;
+                    auto opY = y0 + (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y);
+                    for (auto& input : op.Inputs) {
+                        if (input.StageId) {
+                            NodeToConnection.at(input.PlanNodeId)->Builder
+                                << "<g><title>Input from Stage " << *input.StageId << "</title>" << Endl
+                                << SvgStageId(opX, opY, ToString(*input.StageId))
+                                << "</g>" << Endl;
+                        } else if (input.PrecomputeRef) {
+                            auto it = Viz.CteSubPlans.find(input.PrecomputeRef);
+                            if (it != Viz.CteSubPlans.end()) {
+                                it->second->Builder
+                                << "<g><title>Data from precompute " << it->second->NodeType << "</title>" << Endl
+                                << SvgStageId(opX, opY, "P")
+                                << "</g>" << Endl;
+                            }
+                        }
+                        opX += INTERNAL_WIDTH;
                     }
                 }
 
                 y0 += (INTERNAL_TEXT_HEIGHT + INTERNAL_GAP_Y) * 2;
+                index++;
             }
+        }
+
+        if (!s->External) {
+            s->Builder
+            << SvgStageId(Config.HeaderLeft + s->IndentX + INTERNAL_WIDTH / 2, s->OffsetY + s->Height / 2 + offsetY, ToString(s->PhysicalStageId));
         }
 
         ui32 y0 = s->OffsetY + offsetY + INTERNAL_GAP_Y;
@@ -2072,20 +2114,39 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             else                                  mark = "?";
 
             c->Builder
-                << "  <polygon points='" << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y + INTERNAL_HEIGHT << " "
-                << Config.HeaderLeft + x << "," << y + INTERNAL_HEIGHT << " ";
-            if (s->Connections.size() >= 2) {
-            c->Builder
-                << Config.HeaderLeft + x - INTERNAL_GAP_X * 2 << "," << y + INTERNAL_HEIGHT / 2 << " ";
-            }
-            c->Builder
-                << Config.HeaderLeft + x << "," << y << " ";
+                << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH << ',' << y + INTERNAL_HEIGHT << "l-" << INTERNAL_WIDTH << ",0";
             if (s->Connections.size() == 1) {
-            c->Builder
-                << Config.HeaderLeft + x + INTERNAL_WIDTH / 2 << "," << y - INTERNAL_GAP_Y * 2 << " ";
+                c->Builder
+                << "l0,-" << INTERNAL_HEIGHT << "l" << INTERNAL_WIDTH / 2 << ",-" << CONN_ARROW << 'l' << INTERNAL_WIDTH / 2 << ',' << CONN_ARROW;
+            } else {
+                c->Builder
+                << "l-" << CONN_ARROW << ",-" << INTERNAL_HEIGHT / 2 << 'l' << CONN_ARROW << ",-" << INTERNAL_HEIGHT / 2 << 'l' << INTERNAL_WIDTH << ",0";
             }
             c->Builder
-                << Config.HeaderLeft + x + INTERNAL_WIDTH << "," << y << "' class='conn' />" << Endl
+                << "z' class='" << (c->Blocks ? "conn blocks": "conn") << "' />" << Endl;
+/*
+            if (c->Blocks) {
+                if (s->Connections.size() == 1) {
+                    c->Builder
+                    << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH - (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / 2
+                    << ',' << y + INTERNAL_HEIGHT
+                    << "l-" << INTERNAL_TEXT_HEIGHT << ",0l0,-" << INTERNAL_HEIGHT + 4 * INTERNAL_TEXT_HEIGHT / INTERNAL_WIDTH
+                    << 'l' << INTERNAL_TEXT_HEIGHT / 2 << ",-" << CONN_ARROW * (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / INTERNAL_WIDTH
+                    << 'l' << INTERNAL_TEXT_HEIGHT / 2 << ',' << CONN_ARROW * (INTERNAL_WIDTH - INTERNAL_TEXT_HEIGHT) / INTERNAL_WIDTH
+                    << "z' class='blocks' />" << Endl;
+                } else {
+                    c->Builder
+                    << "  <path d='M" << Config.HeaderLeft + x + INTERNAL_WIDTH
+                    << ',' << y + INTERNAL_HEIGHT - (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+                    << "l-" << INTERNAL_WIDTH + CONN_ARROW * INTERNAL_TEXT_HEIGHT / INTERNAL_HEIGHT
+                    << ",0l-" << DivP1(CONN_ARROW * (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT), INTERNAL_HEIGHT) << ",-" << INTERNAL_TEXT_HEIGHT / 2
+                    << "l" << DivP1(CONN_ARROW * (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT), INTERNAL_HEIGHT) << ",-" << INTERNAL_TEXT_HEIGHT / 2
+                    << 'l' << INTERNAL_WIDTH + CONN_ARROW * INTERNAL_TEXT_HEIGHT / INTERNAL_HEIGHT << ",0"
+                    << "z' class='blocks' />" << Endl;
+                }
+            }
+*/
+            c->Builder
                 << SvgText(Config.HeaderLeft + x + INTERNAL_WIDTH / 2, y + INTERNAL_TEXT_HEIGHT  + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2 - 1, "conn", mark);
 
             if (c->InputBytes) {
@@ -2218,6 +2279,15 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
                     builder << s;
                 }
             }
+            if (c->Blocks) {
+                builder << " Blocks: True";
+            }
+            if (c->HashFunc) {
+                builder << " HashFunc: " << c->HashFunc;
+            }
+            if (c->Parallel) {
+                builder << " Parallel: True";
+            }
             builder
                 << "</title>" << Endl
                 << s
@@ -2227,6 +2297,9 @@ void TPlan::PrintSvg(TStringBuilder& builder) {
 
     for (const auto& [_, c] : StageToExternalConnection) {
         TString s = c->Builder;
+        if (c->Blocks) {
+            builder << " Blocks: True";
+        }
         if (s) {
             builder
                 << "<g class='selectable'><title>Connection: " << c->NodeType << "</title>" << Endl
@@ -2276,6 +2349,8 @@ TColorPalette::TColorPalette() {
     SpillingTimeDark    = "var(--spill-dark, #CC9700)";
     SpillingTimeMedium  = "var(--spill-medium, #FFC522)";
     SpillingTimeLight   = "var(--spill-light, #FFD766)";
+
+    BlockMedium = "var(--block-medium, #EACB68)";
 }
 
 TPlanViewConfig::TPlanViewConfig() {
@@ -2511,6 +2586,7 @@ TString TPlanVisualizer::PrintSvg() {
     svg << "<style type='text/css'>" << Endl
         << "  rect.stage { stroke-width:0; fill:" << Config.Palette.StageMain << "; }" << Endl
         << "  rect.clone { stroke-width:0; fill:" << Config.Palette.StageClone << "; }" << Endl
+        << "  rect.blocks { stroke-width:0; fill:" << Config.Palette.BlockMedium << "; }" << Endl
         << "  .texts { text-anchor:start; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .textm { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
         << "  .texte { text-anchor:end; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT << "px; fill:" << Config.Palette.StageText << "; }" << Endl
@@ -2518,13 +2594,17 @@ TString TPlanVisualizer::PrintSvg() {
         << "  line.opdiv { stroke-width:1; stroke:" << Config.Palette.StageGrid << "; stroke-dasharray:1,2; }" << Endl
         << "  text.clipped { clip-path:url(#clipTextPath); }" << Endl
         << "  polygon.conn { stroke-width:0; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
+        << "  path.conn { stroke-width:1; stroke:" << Config.Palette.ConnectionFill << "; fill:" << Config.Palette.ConnectionFill << "; }" << Endl
+        << "  path.conn.blocks { stroke-width:1; stroke:" << Config.Palette.ConnectionFill << "; fill:" << Config.Palette.BlockMedium << "; }" << Endl
         << "  text.conn { text-anchor:middle; font-family:Verdana; font-size:" << INTERNAL_TEXT_HEIGHT - 2 << "px; fill:" << Config.Palette.ConnectionText << "; }" << Endl
         << "  rect.background { stroke-width:0; fill:#33FFFF; opacity:0; }" << Endl
         << "  g.selected circle.stage { fill:#33FFFF; }" << Endl
         << "  g.selected polygon.conn { fill:#33FFFF; }" << Endl
+        << "  g.selected path.conn { stroke:#33FFFF; fill:#33FFFF; }" << Endl
         << "  g.selected rect.stage { fill:#33FFFF; }" << Endl
         << "  g.selected rect.clone { fill:#33FFFF; }" << Endl
         << "  g.selected rect.background { opacity:1; }" << Endl
+        << "  g.selected path.blocks { stroke:#33FFFF; }" << Endl
         << "</style>" << Endl;
     svg << R"(
 <script type="text/ecmascript">

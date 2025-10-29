@@ -296,6 +296,18 @@
     "test_ydb_scheme.TestSchemeDescribe.test_describe_view": {
         "uri": "file://test_ydb_scheme.TestSchemeDescribe.test_describe_view/result.output"
     },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_disabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_disabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_disabled_view_service_enabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_disabled_view_service_enabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_disabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_disabled_/result.output"
+    },
+    "test_ydb_scheme.TestViewSchemeDescribe.test_describe_view[show_create_enabled_view_service_enabled]": {
+        "uri": "file://test_ydb_scheme.TestViewSchemeDescribe.test_describe_view_show_create_enabled_view_service_enabled_/result.output"
+    },
     "test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table": {
         "uri": "file://test_ydb_scripting.TestExecuteScriptFromStdinWithWideOutput.test_wide_table/result.output"
     },

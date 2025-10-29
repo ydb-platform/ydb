@@ -16,9 +16,10 @@ from clickhouse_connect.datatypes.registry import get_from_name
 from clickhouse_connect.datatypes.special import UUID
 from clickhouse_connect.datatypes.string import String, FixedString
 from clickhouse_connect.datatypes.temporal import Date, Date32, DateTime, DateTime64
+from clickhouse_connect.driver import tzutil
 from clickhouse_connect.driver.common import array_sizes
 
-dt_from_ts = datetime.utcfromtimestamp
+dt_from_ts = tzutil.utcfromtimestamp
 dt_from_ts_tz = datetime.fromtimestamp
 epoch_date = date(1970, 1, 1)
 date32_start_date = date(1925, 1, 1)
@@ -181,7 +182,9 @@ def random_ipv6():
         ip_int = (int(random() * 4294967296) << 96) | (int(random() * 4294967296)) | (
                     int(random() * 4294967296) << 32) | ( int(random() * 4294967296) << 64)
         return IPv6Address(ip_int)
-    return IPv4Address(int(random() * 2 ** 32))
+    # Return mapped IPv4 as IPv6
+    ipv4_int = int(random() * 2 ** 32)
+    return IPv6Address(f"::ffff:{IPv4Address(ipv4_int)}")
 
 
 def random_nested(keys: Sequence[str], types: Sequence[ClickHouseType], col_def: RandomValueDef):

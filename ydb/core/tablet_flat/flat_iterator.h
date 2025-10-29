@@ -301,7 +301,16 @@ public:
                     Stage = EStage::Fill;
                 }
             } else if ((Ready = Apply()) != EReady::Data) {
-
+                if (Ready == EReady::Gone) {
+                    Stage = EStage::Turn;
+                    Ready = EReady::Data;
+                    InitLastKey(ERowOp::Absent);
+                    ++Stats.DeletedRowSkips; /* skip this invisible key */
+                    if (ErasedKeysCache && mode == ENext::Data && !Stats.UncertainErase) {
+                        // Erase cache should treat this key as a cachable erase
+                        eraseCache.OnEraseKey(GetKey().Cells(), TRowVersion::Min());
+                    }
+                }
             } else if (mode != ENext::Data || State.GetRowState() != ERowOp::Erase) {
                 InitLastKey(State.GetRowState());
                 break;
@@ -342,6 +351,7 @@ public:
     bool IsUncommitted() const;
     ui64 GetUncommittedTxId() const;
     EReady SkipUncommitted();
+    std::tuple<ELockMode, ui64> GetLockInfo() const;
     TRowVersion GetRowVersion() const;
     EReady SkipToRowVersion(TRowVersion rowVersion);
 
@@ -743,6 +753,30 @@ inline EReady TTableIterBase<TIteratorOps>::SkipUncommitted()
 }
 
 template<class TIteratorOps>
+inline std::tuple<ELockMode, ui64> TTableIterBase<TIteratorOps>::GetLockInfo() const
+{
+    // Must only be called after a fully successful Apply()
+    Y_DEBUG_ABORT_UNLESS(Stage == EStage::Done && Ready == EReady::Data);
+
+    // There must be at least one active iterator
+    Y_DEBUG_ABORT_UNLESS(Active != Inactive);
+
+    TIteratorId ai = TReverseIter(Inactive)->IteratorId;
+    switch (ai.Type) {
+        case EType::Mem: {
+            auto& it = *MemIters[ai.Index];
+            return it.GetLockInfo();
+        }
+        case EType::Run: {
+            auto& it = *RunIters[ai.Index];
+            return it.GetLockInfo();
+        }
+        default:
+            Y_TABLET_ERROR("Unexpected iterator type");
+    }
+}
+
+template<class TIteratorOps>
 inline TRowVersion TTableIterBase<TIteratorOps>::GetRowVersion() const
 {
     // Must only be called after a fully successful Apply()
@@ -857,7 +891,9 @@ inline EReady TTableIterBase<TIteratorOps>::DoSkipUncommitted()
             case EType::Mem: {
                 auto& it = *MemIters[ai.Index];
                 Y_DEBUG_ABORT_UNLESS(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
-                TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
+                if (!it.IsDeltaLockOnly()) {
+                    TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
+                }
                 if (it.SkipDelta()) {
                     return EReady::Data;
                 }
@@ -866,7 +902,9 @@ inline EReady TTableIterBase<TIteratorOps>::DoSkipUncommitted()
             case EType::Run: {
                 auto& it = *RunIters[ai.Index];
                 Y_DEBUG_ABORT_UNLESS(it.IsDelta() && !CommittedTransactions.Find(it.GetDeltaTxId()));
-                TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
+                if (!it.IsDeltaLockOnly()) {
+                    TransactionObserver.OnSkipUncommitted(it.GetDeltaTxId());
+                }
                 auto ready = it.SkipDelta();
                 if (ready != EReady::Gone) {
                     return ready;
@@ -902,6 +940,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
     // We must have at least one active iterator
     Y_DEBUG_ABORT_UNLESS(Active != Inactive);
 
+    bool found = false;
     bool committed = false;
     for (auto i = TReverseIter(Inactive), e = TReverseIter(Active); i != e; ++i) {
         TIteratorId ai = i->IteratorId;
@@ -909,6 +948,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
             case EType::Mem: {
                 auto& it = *MemIters[ai.Index];
                 if (!committed) {
+                retryMemDelta:
                     Delta = it.IsDelta();
                     if (Delta) {
                         DeltaTxId = it.GetDeltaTxId();
@@ -916,12 +956,23 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         if (!rowVersion) {
                             it.ApplyDelta(State);
                             Uncommitted = true;
+                            found = true;
                             break;
+                        }
+                        if (it.IsDeltaLockOnly()) {
+                            // Lock-only deltas disappear on commit
+                            if (it.SkipDelta()) {
+                                goto retryMemDelta;
+                            }
+                            // We need to skip this memtable
+                            --Inactive;
+                            continue;
                         }
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
                     committed = true;
+                    found = true;
                 }
                 it.Apply(State, CommittedTransactions, TransactionObserver);
                 break;
@@ -929,6 +980,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
             case EType::Run: {
                 auto& it = *RunIters[ai.Index];
                 if (!committed) {
+                retryRunDelta:
                     Delta = it.IsDelta();
                     if (Delta) {
                         DeltaTxId = it.GetDeltaTxId();
@@ -936,12 +988,27 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                         if (!rowVersion) {
                             it.ApplyDelta(State);
                             Uncommitted = true;
+                            found = true;
                             break;
+                        }
+                        if (it.IsDeltaLockOnly()) {
+                            // Lock-only deltas disappear on commit
+                            auto ready = it.SkipDelta();
+                            if (ready == EReady::Data) {
+                                goto retryRunDelta;
+                            }
+                            if (ready == EReady::Page) {
+                                return ready;
+                            }
+                            // We need to skip this run
+                            --Inactive;
+                            continue;
                         }
                         DeltaVersion = *rowVersion;
                     }
                     Uncommitted = false;
                     committed = true;
+                    found = true;
                 }
                 it.Apply(State, CommittedTransactions, TransactionObserver);
                 break;
@@ -952,6 +1019,11 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
 
         if (State.IsFinalized() || !committed)
             break;
+    }
+
+    if (!found) {
+        // This key doesn't exist
+        return EReady::Gone;
     }
 
     if (State.Need()) {

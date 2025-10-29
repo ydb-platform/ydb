@@ -14,6 +14,7 @@
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/tracing/probes.h>
 #include <ydb/core/tx/columnshard/tx_reader/composite.h>
 #include <ydb/core/tx/tiering/manager.h>
 
@@ -23,6 +24,12 @@
 #include <library/cpp/time_provider/time_provider.h>
 
 #include <concepts>
+
+namespace NKikimr::NColumnShard {
+
+LWTRACE_USING(YDB_CS);
+
+}
 
 namespace NKikimr::NOlap {
 
@@ -204,17 +211,17 @@ ui64 TColumnEngineForLogs::GetCompactionPriority(const std::shared_ptr<NDataLock
     }
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCompaction(
+std::vector<std::shared_ptr<TColumnEngineChanges>> TColumnEngineForLogs::StartCompaction(
     const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept {
     AFL_VERIFY(dataLocksManager);
     auto granule = GranulesStorage->GetGranuleForCompaction(dataLocksManager);
     if (!granule) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "no granules for start compaction");
-        return nullptr;
+        return {};
     }
     granule->OnStartCompaction();
-    auto changes = granule->GetOptimizationTask(granule, dataLocksManager);
-    if (!changes) {
+    auto changes = granule->GetOptimizationTasks(granule, dataLocksManager);
+    if (changes.empty()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "cannot build optimization task for granule that need compaction")(
             "weight", granule->GetCompactionPriority().DebugString());
     }
@@ -258,35 +265,6 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
     bool limitExceeded = false;
     const ui32 maxChunksCount = 500000;
     const ui32 maxPortionsCount = 1000;
-    for (TInternalPathId pathId : pathsToDrop) {
-        auto g = GranulesStorage->GetGranuleOptional(pathId);
-        if (!g) {
-            continue;
-        }
-        if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
-            continue;
-        }
-        for (auto& [portion, info] : g->GetPortions()) {
-            if (info->CheckForCleanup()) {
-                continue;
-            }
-            if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
-                ++skipLocked;
-                continue;
-            }
-            ++portionsCount;
-            chunksCount += info->GetApproxChunksCount(info->GetSchema(GetVersionedIndex())->GetColumnsCount());
-            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
-            } else {
-                limitExceeded = true;
-                break;
-            }
-            changes->AddPortionToRemove(info);
-            ++portionsFromDrop;
-        }
-        changes->AddTableToDrop(pathId);
-    }
-
     const TInstant snapshotInstant = snapshot.GetPlanInstant();
     for (auto it = CleanupPortions.begin(); !limitExceeded && it != CleanupPortions.end();) {
         if (it->first > snapshotInstant) {
@@ -323,9 +301,48 @@ std::shared_ptr<TCleanupPortionsColumnEngineChanges> TColumnEngineForLogs::Start
             ++it;
         }
     }
+
+    for (TInternalPathId pathId : pathsToDrop) {
+        auto g = GranulesStorage->GetGranuleOptional(pathId);
+        if (!g) {
+            continue;
+        }
+        if (dataLocksManager->IsLocked(*g, NDataLocks::ELockCategory::Tables)) {
+            continue;
+        }
+        for (auto& [portion, info] : g->GetPortions()) {
+            if (info->CheckForCleanup()) {
+                continue;
+            }
+            if (dataLocksManager->IsLocked(*info, NDataLocks::ELockCategory::Cleanup)) {
+                ++skipLocked;
+                continue;
+            }
+            ++portionsCount;
+            chunksCount += info->GetApproxChunksCount(info->GetSchema(GetVersionedIndex())->GetColumnsCount());
+            if ((portionsCount < maxPortionsCount && chunksCount < maxChunksCount) || changes->GetPortionsToDrop().empty()) {
+            } else {
+                limitExceeded = true;
+                break;
+            }
+            changes->AddPortionToRemove(info);
+            ++portionsFromDrop;
+        }
+        changes->AddTableToDrop(pathId);
+    }
+
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "StartCleanup")("portions_count", CleanupPortions.size())("portions_prepared",
         changes->GetPortionsToAccess().size())("drop", portionsFromDrop)("skip", skipLocked)("portions_counter", portionsCount)(
         "chunks", chunksCount)("limit", limitExceeded)("max_portions", maxPortionsCount)("max_chunks", maxChunksCount);
+
+    using namespace NKikimr::NColumnShard;
+    if (LWPROBE_ENABLED(StartCleanup)) {
+        ui64 totalPortions = 0;
+        for (const auto& [_, portions]: CleanupPortions) {
+        totalPortions += portions.size();
+        }
+        LWPROBE(StartCleanup, TabletId, CleanupPortions.size(), totalPortions, changes->GetPortionsToAccess().size(), portionsFromDrop, skipLocked, portionsCount, chunksCount, limitExceeded, maxPortionsCount, maxChunksCount);
+    }
 
     if (changes->GetPortionsToAccess().empty()) {
         return nullptr;

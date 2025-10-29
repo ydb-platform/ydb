@@ -119,9 +119,10 @@ struct TSerializerCtx {
     TMap<TString, ui32> StageGuidToId;
     THashMap<ui32, TVector<std::pair<ui32, ui32>>> ParamBindings;
     THashSet<ui32> PrecomputePhases;
+    TMap<TString, const TExprNode*> OptimizedStages;
     ui32 PlanNodeId = 0;
 
-    const TExprContext& ExprCtx;
+    TExprContext& ExprCtx;
     const TString Database;
     const TString& Cluster;
     const TIntrusivePtr<NYql::TKikimrTablesData> TablesData;
@@ -491,8 +492,21 @@ private:
 
         planNode.Type = EPlanNodeType::Connection;
 
+        auto isBlockConnection = IsWideSequenceBlockType(*connection.Output().Stage().Program().Body().Ref().GetTypeAnn());
+        if (!isBlockConnection) {
+            if (auto it = SerializerCtx.OptimizedStages.find(settings.Id); it != SerializerCtx.OptimizedStages.end()) {
+                isBlockConnection = IsWideSequenceBlockType(*TMaybeNode<TDqPhyStage>(it->second).Cast().Program().Body().Ref().GetTypeAnn());
+            }
+        }
+        if (isBlockConnection) {
+            planNode.NodeInfo["Blocks"] = "True";
+        }
+
         if (connection.Maybe<TDqCnUnionAll>()) {
             planNode.TypeName = "UnionAll";
+        } else if (connection.Maybe<TDqCnParallelUnionAll>()) {
+            planNode.TypeName = "UnionAll";
+            planNode.NodeInfo["Parallel"] = "True";
         } else if (connection.Maybe<TDqCnBroadcast>()) {
             planNode.TypeName = "Broadcast";
         } else if (connection.Maybe<TDqCnMap>()) {
@@ -512,7 +526,7 @@ private:
             if (hashShuffle.HashFunc().IsValid()) {
                 hashFunc = hashShuffle.HashFunc().Cast().StringValue();
             } else {
-                hashFunc = "HashV1";
+                hashFunc = ToString(SerializerCtx.Config->DefaultHashShuffleFuncType);
             }
         } else if (auto merge = connection.Maybe<TDqCnMerge>()) {
             planNode.TypeName = "Merge";
@@ -557,8 +571,8 @@ private:
             } else if (inputItemType->GetKind() == ETypeAnnotationKind::Tuple) {
                 planNode.TypeName = "TableLookupJoin";
                 const auto inputTupleType = inputItemType->Cast<TTupleExprType>();
-                YQL_ENSURE(inputTupleType->GetItems()[0]->GetKind() == ETypeAnnotationKind::Optional);
-                const auto joinKeyType = inputTupleType->GetItems()[0]->Cast<TOptionalExprType>()->GetItemType();
+                YQL_ENSURE(inputTupleType->GetItems()[1]->GetKind() == ETypeAnnotationKind::Optional);
+                const auto joinKeyType = inputTupleType->GetItems()[1]->Cast<TOptionalExprType>()->GetItemType();
                 YQL_ENSURE(joinKeyType->GetKind() == ETypeAnnotationKind::Struct);
                 lookupKeyColumnsStruct = joinKeyType->Cast<TStructExprType>();
             }
@@ -617,6 +631,7 @@ private:
         TString RangesDesc;
 
         bool IncludePointPrefixLen = false;
+        THashMap<TString, TString> IndexSelectionInfo;
     };
 
     template<typename TColumnsIterator>
@@ -691,6 +706,22 @@ private:
             op.Properties["ReadRangesPointPrefixLen"] = ToString(params.ExplainPrompt.PointPrefixLen);
         }
 
+        if (!params.ExplainPrompt.IndexSelectionInfo.empty()) {
+            TStringBuilder fullInfo;
+            bool isFirst = true;
+            for(const auto& [name, info] : params.IndexSelectionInfo) {
+                if (isFirst) {
+                    isFirst = false;
+                } else {
+                    fullInfo << ", ";
+                }
+
+                fullInfo << name << ": " << info;
+            }
+
+            op.Properties["IndexSelectionInfo"] = TString(fullInfo);
+        }
+
         // Add remaining columns from columnsIter (avoiding duplicates)
         for (const auto& col : columnsIter) {
             TString colName = TString(col.Value());
@@ -721,7 +752,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = true
+            .IncludePointPrefixLen = true,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(sourceSettings.Settings()).IndexSelectionInfo
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, sourceSettings.Columns());
@@ -1014,6 +1046,8 @@ private:
     TVector<std::variant<ui32, TArgContext>> Visit(TExprNode::TPtr node, TQueryPlanNode& planNode) {
         TMaybe<std::variant<ui32, TArgContext>> operatorId;
 
+        auto maybeCallable = TMaybeNode<TCallable>(node);
+
         if (auto maybeRead = TMaybeNode<TKqlReadTableBase>(node)) {
             auto read = maybeRead.Cast();
             TString table = TString(read.Table().Path()); TKqlKeyRange range = read.Range();
@@ -1066,6 +1100,12 @@ private:
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeBlockCombine = TMaybeNode<TCoBlockCombineHashed>(node)) {
             operatorId = Visit(maybeBlockCombine.Cast(), planNode);
+        } else if (maybeCallable && (maybeCallable.Cast().CallableName() == "BlockMergeFinalizeHashed" || maybeCallable.Cast().CallableName() == "BlockMergeManyFinalizeHashed")) {
+            TOperator op;
+            op.Properties["Name"] = "Aggregate";
+            op.Properties["Blocks"] = "True";
+            op.Properties["Phase"] = "Final";
+            operatorId = AddOperator(planNode, "Aggregate", std::move(op));
         } else if (auto maybeCombiner = TMaybeNode<TCoWideCombiner>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
         } else if (auto maybeSort = TMaybeNode<TCoSort>(node)) {
@@ -1124,6 +1164,26 @@ private:
             } else if (TMaybeNode<TKqpReadOlapTableRangesBase>(node)) {
                 auto olapTable = TExprBase(node).Cast<TKqpReadOlapTableRangesBase>();
 
+                ui32 currentOperatorId = 0;
+
+                auto aggr = [](const TExprNode::TPtr& n) -> bool {
+                    if (auto maybeAggregation = TMaybeNode<TKqpOlapAgg>(n)) { return true; } return false;
+                };
+
+                if (auto maybeKqpOlapAggregation = FindNode(olapTable.Process().Body().Ptr(), aggr)) {
+                    auto kqpOlapAggregation = TExprBase(maybeKqpOlapAggregation).Cast<TKqpOlapAgg>();
+
+                    TOperator op;
+                    op.Properties["Name"] = "Aggregate";
+                    op.Properties["Phase"] = "Intermediate";
+                    op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
+
+                    AddOptimizerEstimates(op, kqpOlapAggregation);
+                    currentOperatorId = AddOperator(planNode, "Aggregate", std::move(op));
+                    operatorId = currentOperatorId;
+                }
+
                 auto pred = [](const TExprNode::TPtr& n) -> bool {
                     if (auto maybeFilter = TMaybeNode<TKqpOlapFilter>(n)) { return true; } return false;
                 };
@@ -1135,13 +1195,25 @@ private:
                     op.Properties["Name"] = "Filter";
                     op.Properties["Predicate"] = OlapFilterStr(kqpOlapFilter);
                     op.Properties["Pushdown"] = "True";
+                    op.Properties["Blocks"] = "True";
 
                     AddOptimizerEstimates(op, kqpOlapFilter);
+                    auto filterOperatorId = AddOperator(planNode, "Filter", std::move(op));
 
-                    operatorId = AddOperator(planNode, "Filter", std::move(op));
-                    inputIds.push_back(Visit(olapTable, planNode));
+                    if (operatorId) {
+                        planNode.Operators[currentOperatorId].Inputs.push_back(filterOperatorId);
+                    } else {
+                        operatorId = filterOperatorId;
+                    }
+                    currentOperatorId = filterOperatorId;
+                }
+
+                auto tableOperatorId = Visit(olapTable, planNode);
+
+                if (operatorId) {
+                    planNode.Operators[currentOperatorId].Inputs.push_back(tableOperatorId);
                 } else {
-                    operatorId = Visit(olapTable, planNode);
+                    operatorId = tableOperatorId;
                 }
             } else if (TMaybeNode<TCoToFlow>(node)) {
                 // do nothing
@@ -1323,6 +1395,7 @@ private:
 
         TOperator op;
         op.Properties["Name"] = "Aggregate";
+        op.Properties["Blocks"] = "True";
         op.Properties["GroupBy"] = NPlanUtils::PrettyExprStr(blockCombine.Keys());
 
         if (blockCombine.Aggregations().Ref().IsList()) {
@@ -1768,7 +1841,7 @@ private:
         return AddOperator(planNode, readName, std::move(op));
     }
 
-    std::variant<ui32, TArgContext> Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
+    ui32 Visit(const TKqlReadTableRangesBase& read, TQueryPlanNode& planNode) {
         const auto tablePath = TString(read.Table().Path());
         const auto explainPrompt = TKqpReadTableExplainPrompt::Parse(read);
         const auto rangesDesc = NPlanUtils::PrettyExprStr(read.Ranges());
@@ -1780,7 +1853,8 @@ private:
             .TablePath = tablePath,
             .ExplainPrompt = explainPrompt,
             .RangesDesc = rangesDesc,
-            .IncludePointPrefixLen = false
+            .IncludePointPrefixLen = false,
+            .IndexSelectionInfo = TKqpReadTableSettings::Parse(read.Settings()).IndexSelectionInfo,
         };
 
         ProcessReadRangesCommon(params, readInfo, op, planNode, read.Columns());
@@ -2698,6 +2772,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, TIntrusivePtr<NO
 // TODO(sk): check prepared statements params in read ranges
 // TODO(sk): check params from correlated subqueries // lookup join
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQuery& query,
+    const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, TExprContext& ctx, const TString& database,
     const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TKikimrConfiguration::TPtr config,
     TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx)
@@ -2740,7 +2815,19 @@ void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const TKqpPhysicalQ
 
     id = 0;
     for (ui32 txId = 0; txId < query.Transactions().Size(); ++txId) {
+        if (txId < peepHoleOptimizedQuery.Transactions().Size()) {
+            VisitExpr(peepHoleOptimizedQuery.Transactions().Item(txId).Ref(),
+                [&serializerCtx](const TExprNode& node) {
+                    if (auto maybeStage = TMaybeNode<TDqPhyStage>(&node)) {
+                        auto stageGuid = NDq::TDqStageSettings::Parse(maybeStage.Cast()).Id;
+                        serializerCtx.OptimizedStages[stageGuid] = maybeStage.Raw();
+                    }
+                    return true;
+                }
+            );
+        }
         setPlan(id++, query.Transactions().Item(txId), (*queryProto.MutableTransactions())[txId]);
+        serializerCtx.OptimizedStages.clear();
     }
 
     TVector<const TString> txPlans;
@@ -3092,6 +3179,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                     for (auto input : (*stat)->GetInput()) {
                         auto& inputInfo = inputStats.AppendValue(NJson::JSON_MAP);
                         auto stageGuid = stageIdToGuid.at(input.first);
+                        AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                         auto planNodeId = guidToPlaneId.at(stageGuid);
                         inputInfo["Name"] = ToString(planNodeId);
                         if (input.second.HasPush()) {
@@ -3110,6 +3198,7 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                             outputInfo["Name"] = "RESULT";
                         } else {
                             auto stageGuid = stageIdToGuid.at(output.first);
+                            AFL_ENSURE(guidToPlaneId.contains(stageGuid));
                             auto planNodeId = guidToPlaneId.at(stageGuid);
                             outputInfo["Name"] = ToString(planNodeId);
                         }
@@ -3225,7 +3314,6 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, const 
             txPlans.push_back(txPlan);
         }
     }
-
     NJsonWriter::TBuf writer;
     writer.BeginObject();
 

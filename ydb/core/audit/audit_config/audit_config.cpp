@@ -35,7 +35,7 @@ TAuditConfig& TAuditConfig::operator=(const NKikimrConfig::TAuditConfig& cfg) {
     return *this;
 }
 
-bool TAuditConfig::EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass, NACLibProto::ESubjectType subjectType) const {
+bool TAuditConfig::EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::ELogClass logClass, NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase logPhase, NACLibProto::ESubjectType subjectType) const {
     auto cfg = LogClassMap.find(logClass);
     if (cfg == LogClassMap.end()) {
         cfg = LogClassMap.find(NKikimrConfig::TAuditConfig::TLogClassConfig::Default);
@@ -49,7 +49,7 @@ bool TAuditConfig::EnableLogging(NKikimrConfig::TAuditConfig::TLogClassConfig::E
             return false;
         }
     }
-    return true;
+    return std::find(cfg->second.LogPhase.begin(), cfg->second.LogPhase.end(), logPhase) != cfg->second.LogPhase.end();
 }
 
 void TAuditConfig::ResetLogClassMap() {
@@ -63,6 +63,14 @@ void TAuditConfig::ResetLogClassMap() {
         it->second.ExcludeSubjectTypes.reserve(cfg.GetExcludeAccountType().size());
         for (int accountType : cfg.GetExcludeAccountType()) {
             it->second.ExcludeSubjectTypes.push_back(ToSubjectType(static_cast<NKikimrConfig::TAuditConfig::TLogClassConfig::EAccountType>(accountType)));
+        }
+
+        it->second.LogPhase.reserve(cfg.LogPhaseSize());
+        for (int logPhase : cfg.GetLogPhase()) {
+            it->second.LogPhase.push_back(static_cast<NKikimrConfig::TAuditConfig::TLogClassConfig::ELogPhase>(logPhase));
+        }
+        if (it->second.LogPhase.empty()) { // Default: write logs only for "Completed" phase
+            it->second.LogPhase.push_back(NKikimrConfig::TAuditConfig::TLogClassConfig::Completed);
         }
     }
 

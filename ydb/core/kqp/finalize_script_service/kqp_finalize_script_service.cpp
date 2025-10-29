@@ -7,7 +7,6 @@
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/library/table_creator/table_creator.h>
-#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 
 #include <queue>
 
@@ -43,17 +42,6 @@ public:
         }
     }
 
-    void Handle(TEvSaveScriptExternalEffectRequest::TPtr& ev) {
-        auto& description = ev->Get()->Description;
-        description.Sinks = FilterExternalSinks(description.Sinks);
-
-        if (!description.Sinks.empty()) {
-            Register(CreateSaveScriptExternalEffectActor(std::move(ev)));
-        } else {
-            Send(ev->Sender, new TEvSaveScriptExternalEffectResponse(Ydb::StatusIds::SUCCESS, {}));
-        }
-    }
-
     void Handle(TEvScriptFinalizeRequest::TPtr& ev) {
         TString executionId = ev->Get()->Description.ExecutionId;
 
@@ -74,7 +62,6 @@ public:
     }
 
     STRICT_STFUNC(MainState,
-        hFunc(TEvSaveScriptExternalEffectRequest, Handle);
         hFunc(TEvScriptFinalizeRequest, Handle);
         hFunc(TEvScriptFinalizeResponse, Handle);
         sFunc(TEvStartScriptExecutionBackgroundChecks, StartScriptExecutionBackgroundChecks);
@@ -121,30 +108,6 @@ private:
             FinalizationRequestsQueue.erase(executionId);
         }
         TryStartFinalizeRequest();
-    }
-
-private:
-    bool ValidateExternalSink(const NKqpProto::TKqpExternalSink& sink) {
-        if (sink.GetType() != "S3Sink") {
-            return false;
-        }
-
-        NYql::NS3::TSink sinkSettings;
-        sink.GetSettings().UnpackTo(&sinkSettings);
-
-        return sinkSettings.GetAtomicUploadCommit();
-    }
-
-    std::vector<NKqpProto::TKqpExternalSink> FilterExternalSinks(const std::vector<NKqpProto::TKqpExternalSink>& sinks) {
-        std::vector<NKqpProto::TKqpExternalSink> filteredSinks;
-        filteredSinks.reserve(sinks.size());
-        for (const auto& sink : sinks) {
-            if (ValidateExternalSink(sink)) {
-                filteredSinks.push_back(sink);
-            }
-        }
-
-        return filteredSinks;
     }
 
 private:

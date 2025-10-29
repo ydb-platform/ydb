@@ -8,16 +8,15 @@
 namespace NYql {
 
 struct TTruncateIssueOpts {
-
-#define YQL_TRUNC_DECL_FIELD(type, name, def)    \
+#define YQL_TRUNC_DECL_FIELD(type, name, def)          \
     TTruncateIssueOpts& Set##name(type arg##name)& {   \
-        name = arg##name;                               \
-        return *this;                                   \
-    }                                                   \
+        name = arg##name;                              \
+        return *this;                                  \
+    }                                                  \
     TTruncateIssueOpts&& Set##name(type arg##name)&& { \
-        name = arg##name;                               \
-        return std::move(*this);                        \
-    }                                                   \
+        name = arg##name;                              \
+        return std::move(*this);                       \
+    }                                                  \
     type name = def;
 
     YQL_TRUNC_DECL_FIELD(ui32, MaxLevels, Max<ui32>())

@@ -18,8 +18,8 @@ def __path_to_match_rule(path):
     # already a rule
 
     # convert "**/*" to "*" (python compatible with fnmatch)
-    if path.endswith('**/*'):
-        return path[:-3]  # /**/* -> /*
+    if '**/*' in path:
+        return path.replace('**/*', '*')  # /**/* -> /*
 
     if path.endswith("*") or ('*' in path or '?' in path):
         return path

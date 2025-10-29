@@ -2,8 +2,8 @@
 
 #include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
+#include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
-#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/table_creator/table_creator.h>
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
@@ -23,9 +23,9 @@ namespace NSysView {
 
 using namespace NActors;
 
-class TResourcePoolsScan : public TScanActorBase<TResourcePoolsScan> {
+class TResourcePoolsScan : public TScanActorWithoutBackPressure<TResourcePoolsScan> {
 public:
-    using TBase  = TScanActorBase<TResourcePoolsScan>;
+    using TBase = TScanActorWithoutBackPressure<TResourcePoolsScan>;
 
     enum class EState {
         LIST_RESOURCE_POOLS,
@@ -37,19 +37,18 @@ public:
     }
 
     TResourcePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
-        const NKikimrSysView::TSysViewDescription& sysViewInfo,
+        const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
         const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-        TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
-        : TBase(ownerId, scanId, sysViewInfo, tableRange, columns)
+        TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
+        : TBase(ownerId, scanId, database, sysViewInfo, tableRange, columns)
         , UserToken(std::move(userToken))
-        , Database(database)
         , Reverse(reverse)
     {
     }
 
     STFUNC(StateScan) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
+            sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
@@ -61,21 +60,14 @@ public:
     }
 
 private:
-    void ProceedToScan() override {
-        Become(&TResourcePoolsScan::StateScan);
-        if (AckReceived) {
-            StartScan();
-        }
-    }
-
-    void StartScan() {
+    void StartScan() final {
         SendRequestToSchemeCache({{".metadata/workload_manager", "pools"}},  NSchemeCache::TSchemeCacheNavigate::OpList);
     }
 
     void SendRequestToSchemeCache(const TVector<TVector<TString>>& pathsComponents, NSchemeCache::TSchemeCacheNavigate::EOp operation) {
         auto event = NTableCreator::BuildSchemeCacheNavigateRequest(
             pathsComponents,
-            Database,
+            DatabaseName,
             UserToken
         );
         for (auto& resultSet : event->ResultSet) {
@@ -238,24 +230,19 @@ private:
         SendBatch(std::move(batch));
     }
 
-    void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
-        StartScan();
-    }
-
 private:
     EState State = EState::LIST_RESOURCE_POOLS;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    const TString Database;
     const bool Reverse;
 };
 
 THolder<NActors::IActor> CreateResourcePoolsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
-    TIntrusiveConstPtr<NACLib::TUserToken> userToken, const TString& database, bool reverse)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken, bool reverse)
 {
-    return MakeHolder<TResourcePoolsScan>(ownerId, scanId, sysViewInfo, tableRange, columns,
-        std::move(userToken), database, reverse);
+    return MakeHolder<TResourcePoolsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns,
+        std::move(userToken), reverse);
 }
 
 } // NSysView

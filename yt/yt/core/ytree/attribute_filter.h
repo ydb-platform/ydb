@@ -114,6 +114,9 @@ public:
     //! to std::nullopt, which stands for "take the top-level key as is".
     TKeyToFilter Normalize() const;
 
+    //! Removes selected keys from the key and path filters.
+    void Remove(const std::vector<IAttributeDictionary::TKey>& keys);
+
     //! This helper structure enabling us to either return given IYsonConsumer* as is
     //! without creating any new consumers, or to wrap it into another consumer actual
     //! filtering.

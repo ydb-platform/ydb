@@ -9,58 +9,61 @@
 
 namespace NSQLComplete {
 
-    struct TFolderEntry {
-        static constexpr const char* Folder = "Folder";
-        static constexpr const char* Table = "Table";
+struct TFolderEntry {
+    static constexpr const char* Folder = "Folder";
+    static constexpr const char* Table = "Table";
 
-        TString Type;
-        TString Name;
+    static THashSet<TString> KnownTypes;
 
-        friend bool operator==(const TFolderEntry& lhs, const TFolderEntry& rhs) = default;
-    };
+    TString Type;
+    TString Name;
 
-    struct TListFilter {
-        TMaybe<THashSet<TString>> Types;
-    };
+    friend bool operator==(const TFolderEntry& lhs, const TFolderEntry& rhs) = default;
+};
 
-    struct TListRequest {
-        TString Cluster;
+struct TListFilter {
+    TMaybe<THashSet<TString>> Types;
+    bool IsUnknownAllowed = false;
+};
 
-        // `Path` structure is defined by a `System`.
-        // Can end with a folder entry name hint.
-        // For example, `/local/exa` lists a folder `/local`,
-        // but can rank and filter entries by a hint `exa`.
-        TString Path;
+struct TListRequest {
+    TString Cluster;
 
-        TListFilter Filter;
-        size_t Limit = 128;
-    };
+    // `Path` structure is defined by a `System`.
+    // Can end with a folder entry name hint.
+    // For example, `/local/exa` lists a folder `/local`,
+    // but can rank and filter entries by a hint `exa`.
+    TString Path;
 
-    struct TListResponse {
-        size_t NameHintLength = 0;
-        TVector<TFolderEntry> Entries;
-    };
+    TListFilter Filter;
+    size_t Limit = 128;
+};
 
-    struct TDescribeTableRequest {
-        TString TableCluster;
-        TString TablePath;
-        TString ColumnPrefix;
-        size_t ColumnsLimit = 128; // TODO: introduce default limit constant
-    };
+struct TListResponse {
+    size_t NameHintLength = 0;
+    TVector<TFolderEntry> Entries;
+};
 
-    struct TDescribeTableResponse {
-        bool IsExisting = false;
-        TVector<TString> Columns;
-    };
+struct TDescribeTableRequest {
+    TString TableCluster;
+    TString TablePath;
+    TString ColumnPrefix;
+    size_t ColumnsLimit = 128; // TODO: introduce default limit constant
+};
 
-    class ISchema: public TThrRefBase {
-    public:
-        using TPtr = TIntrusivePtr<ISchema>;
+struct TDescribeTableResponse {
+    bool IsExisting = false;
+    TVector<TString> Columns;
+};
 
-        virtual NThreading::TFuture<TListResponse> List(const TListRequest& request) const = 0;
+class ISchema: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<ISchema>;
 
-        virtual NThreading::TFuture<TDescribeTableResponse>
-        Describe(const TDescribeTableRequest& request) const = 0;
-    };
+    virtual NThreading::TFuture<TListResponse> List(const TListRequest& request) const = 0;
+
+    virtual NThreading::TFuture<TDescribeTableResponse>
+    Describe(const TDescribeTableRequest& request) const = 0;
+};
 
 } // namespace NSQLComplete

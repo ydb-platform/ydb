@@ -3,9 +3,8 @@
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
-
+#include <ydb/core/fq/libs/config/protos/checkpoint_coordinator.pb.h>
 #include <ydb/library/actors/core/hfunc.h>
-
 #include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/state/dq_state_load_plan.h>
 
@@ -24,10 +23,18 @@
 
 namespace NFq {
 
+using namespace NActors;
+
+TCheckpointCoordinatorSettings::TCheckpointCoordinatorSettings(const NFq::NConfig::TCheckpointCoordinatorConfig& config)
+    : CheckpointingPeriod(TDuration::MilliSeconds(config.GetCheckpointingPeriodMillis() ? config.GetCheckpointingPeriodMillis() : 30'000))
+    , CheckpointingSnapshotRotationPeriod(config.GetCheckpointingSnapshotRotationPeriod())
+    , MaxInflight(config.GetMaxInflight())
+{}
+
 TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
                                                const TActorId& storageProxy,
                                                const TActorId& runActorId,
-                                               const TCheckpointCoordinatorConfig& settings,
+                                               const TCheckpointCoordinatorSettings& settings,
                                                const ::NMonitoring::TDynamicCounterPtr& counters,
                                                const NProto::TGraphParams& graphParams,
                                                const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -37,7 +44,6 @@ TCheckpointCoordinator::TCheckpointCoordinator(TCoordinatorId coordinatorId,
     , StorageProxy(storageProxy)
     , RunActorId(runActorId)
     , Settings(settings)
-    , CheckpointingPeriod(TDuration::MilliSeconds(Settings.GetCheckpointingPeriodMillis()))
     , CheckpointingSnapshotRotationPeriod(Settings.GetCheckpointingSnapshotRotationPeriod())
     , CheckpointingSnapshotRotationIndex(CheckpointingSnapshotRotationPeriod)   // First - snapshot
     , GraphParams(graphParams)
@@ -52,7 +58,9 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
     ControlId = ev->Sender;
 
     for (const auto& task : ev->Get()->Tasks) {
+        Y_ABORT_UNLESS(task.ActorId);
         auto& actorId = TaskIdToActor[task.Id];
+        TaskIds.emplace(task.ActorId, task.Id);
         if (actorId) {
             OnInternalError(TStringBuilder() << "Duplicate task id: " << task.Id);
             return;
@@ -95,7 +103,7 @@ void TCheckpointCoordinator::Handle(NFq::TEvCheckpointCoordinator::TEvReadyState
 }
 
 void TCheckpointCoordinator::ScheduleNextCheckpoint() {
-    Schedule(CheckpointingPeriod, new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
+    Schedule(Settings.GetCheckpointingPeriod(), new TEvCheckpointCoordinator::TEvScheduleCheckpointing());
 }
 
 void TCheckpointCoordinator::UpdateInProgressMetric() {
@@ -235,6 +243,8 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         Send(RunActorId, new NFq::TEvCheckpointCoordinator::TEvRaiseTransientIssues(std::move(issues)));
     }
 
+    CC_LOG_I("Going to restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for tasks #" << plan.size());
+
     PendingRestoreCheckpoint = TPendingRestoreCheckpoint(checkpoint.CheckpointId, false, ActorsToWaitForSet);
     ++*Metrics.RestoredStreamingOffsetsFromCheckpoint;
     for (const auto& [taskId, taskPlan] : plan) {
@@ -247,6 +257,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
         }
         const auto transportIt = ActorsToWaitFor.find(actorIdIt->second);
         if (transportIt != ActorsToWaitFor.end()) {
+            CC_LOG_D("Restore offsets from foreign checkpoint " << checkpoint.CheckpointId << " for task " << taskId);
             transportIt->second->EventsQueue.Send(
                 new NYql::NDq::TEvDqCompute::TEvRestoreFromCheckpoint(
                     checkpoint.CheckpointId.SeqNo,
@@ -315,10 +326,7 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvRestoreFro
         }
 
         ScheduleNextCheckpoint();
-        CC_LOG_I("[" << checkpoint << "] State restored, send TEvRun to " << AllActors.size() << " actors");
-        for (const auto& [actor, transport] : AllActors) {
-            transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvRun());
-        }
+        StartAllTasks();
     }
 }
 
@@ -528,6 +536,16 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvStateCommi
     }
 }
 
+void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvState::TPtr& ev) {
+    auto& state = ev->Get()->Record;
+    ui64 taskId = state.GetTaskId();
+    CC_LOG_D("Got TEvState from " << ev->Sender << ", task id " << taskId << ". State: " << state.GetState());
+
+    if (state.GetState() == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+        FinishedTasks.insert(taskId);
+    }
+}
+    
 void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvCompleteCheckpointResponse::TPtr& ev) {
     const auto& checkpointId = ev->Get()->CheckpointId;
     CC_LOG_D("[" << checkpointId << "] Got TEvCompleteCheckpointResponse");
@@ -596,16 +614,21 @@ void TCheckpointCoordinator::Handle(NActors::TEvInterconnect::TEvNodeConnected::
 }
 
 void TCheckpointCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-    CC_LOG_D("Handle undelivered");
-
-    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
-        actorIt->second->EventsQueue.HandleUndelivered(ev);
-    }
-
     TStringBuilder message;
     message << "Undelivered Event " << ev->Get()->SourceType
         << " from " << SelfId() << " (Self) to " << ev->Sender
         << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
+
+    auto it = TaskIds.find(ev->Sender);
+    if (it != TaskIds.end() && FinishedTasks.contains(it->second)) {
+        CC_LOG_D("Ignore undelivered from finished CAs");
+        return;
+    }
+
+    CC_LOG_D(message);
+    if (const auto actorIt = AllActors.find(ev->Sender); actorIt != AllActors.end()) {
+        actorIt->second->EventsQueue.HandleUndelivered(ev);
+    }
     OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message, {});
 }
 
@@ -650,7 +673,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
     TCoordinatorId coordinatorId,
     const TActorId& storageProxy,
     const TActorId& runActorId,
-    const TCheckpointCoordinatorConfig& settings,
+    const TCheckpointCoordinatorSettings& config,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     const NProto::TGraphParams& graphParams,
     const FederatedQuery::StateLoadMode& stateLoadMode,
@@ -660,7 +683,7 @@ THolder<NActors::IActor> MakeCheckpointCoordinator(
         coordinatorId,
         storageProxy,
         runActorId,
-        settings,
+        config,
         counters,
         graphParams,
         stateLoadMode,

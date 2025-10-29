@@ -10,7 +10,7 @@ namespace NKikimr::NOlap {
 
 std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBuildRequestInitiator() const {
     const auto& writeMetaData = WriteData.GetWriteMeta();
-    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Snapshot, writeMetaData.GetLockIdOptional());
+    auto request = std::make_unique<TEvColumnShard::TEvInternalScan>(writeMetaData.GetPathId(), Context.GetApplyToSnapshot(), Context.GetLockId());
     request->TaskIdentifier = GetTaskId();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")(
         "count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)("task_id", WriteData.GetWriteMeta().GetId());
@@ -61,16 +61,14 @@ NKikimr::TConclusionStatus TModificationRestoreTask::DoOnFinished() {
     return TConclusionStatus::Success();
 }
 
-TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger,
-    const TSnapshot actualSnapshot, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context)
+TModificationRestoreTask::TModificationRestoreTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<IMerger>& merger, const NArrow::TContainerWithIndexes<arrow::RecordBatch>& incomingData, const TWritingContext& context)
     : TBase(context.GetTabletId(), context.GetTabletActorId(),
           writeData.GetWriteMeta().GetId() + "::" + ::ToString(writeData.GetWriteMeta().GetWriteId()))
     , WriteData(std::move(writeData))
     , Merger(merger)
-    , Snapshot(actualSnapshot)
     , IncomingData(incomingData)
     , Context(context) {
-    AFL_VERIFY(actualSnapshot.Valid());
+    AFL_VERIFY(context.GetApplyToSnapshot().Valid());
 }
 
 void TModificationRestoreTask::SendErrorMessage(

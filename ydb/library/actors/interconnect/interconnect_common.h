@@ -2,6 +2,8 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actorsystem.h>
+#include <ydb/library/actors/interconnect/logging/logging.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/monlib/metrics/metric_registry.h>
@@ -9,8 +11,6 @@
 #include <util/generic/set.h>
 #include <util/system/datetime.h>
 
-#include "poller_tcp.h"
-#include "logging.h"
 #include "event_filter.h"
 
 #include <atomic>
@@ -129,7 +129,15 @@ namespace NActors {
         std::unordered_map<ui16, TString> ChannelName;
         std::optional<ui32> OutgoingHandshakeInflightLimit;
         std::vector<TActorId> ConnectionCheckerActorIds; // a list of actors used for checking connection params
-        std::optional<TString> BridgePileName;
+
+        std::atomic_uint64_t NumSessionsWithDataInQueue = 0;
+        std::atomic_uint64_t CyclesOnLastSwitch = 0;
+        std::atomic_uint64_t CyclesWithNonzeroSessions = 0;
+        std::atomic_uint64_t CyclesWithZeroSessions = 0;
+
+        double CalculateNetworkUtilization();
+        void AddSessionWithDataInQueue();
+        void RemoveSessionWithDataInQueue();
 
         struct TVersionInfo {
             TString Tag; // version tag for this node

@@ -9,7 +9,7 @@
 #define LIBCBOR_CONFIGURATION_H
 
 #define CBOR_MAJOR_VERSION 0
-#define CBOR_MINOR_VERSION 12
+#define CBOR_MINOR_VERSION 13
 #define CBOR_PATCH_VERSION 0
 
 #define CBOR_BUFFER_GROWTH 2
@@ -27,6 +27,7 @@
 /* Ignore the compiler warnings for libcbor. */
 #ifdef _MSC_VER
 #    pragma warning(disable : 4028)
+#    pragma warning(disable : 4189)
 #    pragma warning(disable : 4715)
 #    pragma warning(disable : 4232)
 #    pragma warning(disable : 4068)

@@ -199,8 +199,9 @@ public:
         const TJobId& jobId,
         const TGetJobStderrOptions& options = {}) override;
 
-    std::vector<TJobTraceEvent> GetJobTrace(
+    IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = {}) override;
 
     // Files
@@ -278,6 +279,12 @@ public:
     TNode::TListType SelectRows(
         const TString& query,
         const TSelectRowsOptions& options = {}) override;
+
+    std::unique_ptr<IOutputStream> WriteTable(
+        const TTransactionId& transactionId,
+        const TRichYPath& path,
+        const TMaybe<TFormat>& format,
+        const TTableWriterOptions& options = {}) override;
 
     std::unique_ptr<IInputStream> ReadTable(
         const TTransactionId& transactionId,

@@ -508,7 +508,7 @@ typedef struct {
 // When we are a 32 bit (WoW64) process accessing a 64 bit process
 // we need to use the 64 bit structure layout and a special function
 // to read its memory.
-typedef NTSTATUS (NTAPI *_NtWow64ReadVirtualMemory64)(
+PSUTIL_MAYBE_EXTERN typedef NTSTATUS (NTAPI *_NtWow64ReadVirtualMemory64)(
     HANDLE ProcessHandle,
     PVOID64 BaseAddress,
     PVOID Buffer,

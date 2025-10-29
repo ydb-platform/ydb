@@ -17,13 +17,13 @@
 /* #undef HAVE_AFUNIX_H */
 
 /* Define to 1 if you have the `arc4random' function. */
-/* #undef HAVE_ARC4RANDOM */
+#define HAVE_ARC4RANDOM 1
 
 /* Define to 1 if you have the `arc4random_addrandom' function. */
 /* #undef HAVE_ARC4RANDOM_ADDRANDOM */
 
 /* Define to 1 if you have the `arc4random_buf' function. */
-/* #undef HAVE_ARC4RANDOM_BUF */
+#define HAVE_ARC4RANDOM_BUF 1
 
 /* Define to 1 if you have the <arpa/inet.h> header file. */
 #define HAVE_ARPA_INET_H 1
@@ -244,7 +244,7 @@
 #define HAVE_STRING_H 1
 
 /* Define to 1 if you have the `strlcpy' function. */
-/* #undef HAVE_STRLCPY */
+#define HAVE_STRLCPY 1
 
 /* Define to 1 if you have the `strsep' function. */
 #define HAVE_STRSEP 1

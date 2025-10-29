@@ -1,18 +1,27 @@
 #include "distconf_invoke.h"
-#include "ydb/core/base/statestorage.h"
 #include "distconf_selfheal.h"
+
+#include <ydb/core/base/statestorage.h>
+#include <ydb/core/base/nodestate.h>
+#include <ydb/core/config/validation/validators.h>
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
-        const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
+    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume) {
+        const NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
         bool result = true;
         std::unordered_set<ui32> usedNodes;
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes);
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes);
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes, config.GetStateStorageConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (pileupReplicas) {
+            usedNodes.clear();
+        }
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes, config.GetStateStorageBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
+        if (pileupReplicas) {
+            usedNodes.clear();
+        }
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes, config.GetSchemeBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         return result;
     }
 
@@ -62,11 +71,23 @@ namespace NKikimr::NStorage {
         #undef F
     }
 
-    void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig) {
+    void TInvokeRequestHandlerActor::GetCurrentStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool getNodesState) {
         const NKikimrBlobStorage::TStorageConfig &config = *Self->StorageConfig;
         currentConfig->MutableStateStorageConfig()->CopyFrom(config.GetStateStorageConfig());
         currentConfig->MutableStateStorageBoardConfig()->CopyFrom(config.GetStateStorageBoardConfig());
         currentConfig->MutableSchemeBoardConfig()->CopyFrom(config.GetSchemeBoardConfig());
+        if (!getNodesState) {
+            return;
+        }
+        for (const auto& node : config.GetAllNodes()) {
+            TNodeLocation location(node.GetLocation());
+            ui32 nodeId = node.GetNodeId();
+            auto* nodeState = currentConfig->AddNodesState();
+            nodeState->SetNodeId(nodeId);
+            ui32 state = Self->SelfHealNodesState.contains(nodeId) ? Self->SelfHealNodesState.at(nodeId) : (ui32)ENodeState::UNKNOWN;
+            nodeState->SetState(state);
+            nodeState->SetLocation(location.GetRackId());
+        }
     }
 
     void TInvokeRequestHandlerActor::GetStateStorageConfig(const TQuery::TGetStateStorageConfig& cmd) {
@@ -76,10 +97,10 @@ namespace NKikimr::NStorage {
             auto* currentConfig = record->MutableStateStorageConfig();
 
             if (cmd.GetRecommended()) {
-                GetRecommendedStateStorageConfig(currentConfig);
+                GetRecommendedStateStorageConfig(currentConfig, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
                 AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(currentConfig);
             } else {
-                GetCurrentStateStorageConfig(currentConfig);
+                GetCurrentStateStorageConfig(currentConfig, cmd.GetNodesState());
             }
         });
     }
@@ -91,23 +112,27 @@ namespace NKikimr::NStorage {
             Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
         }
         if (cmd.GetEnableSelfHealStateStorage()) {
-            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true);
+            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
+        } else {
+            Finish(TResult::OK, std::nullopt);
         }
     }
 
     void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
-        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal());
+        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal(), cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal) {
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume) {
         RunCommonChecks();
+        STLOG(PRI_DEBUG, BS_NODE, NW105, "TInvokeRequestHandlerActor::SelfHealStateStorage", (waitForConfigStep, waitForConfigStep),
+            (forceHeal, forceHeal), (pileupReplicas, pileupReplicas), (overrideReplicasInRingCount, overrideReplicasInRingCount), (overrideRingsCount, overrideRingsCount), (replicasSpecificVolume, replicasSpecificVolume));
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig) && !forceHeal) {
+        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
         }
 
         NKikimrBlobStorage::TStateStorageConfig currentConfig;
-        GetCurrentStateStorageConfig(&currentConfig);
+        GetCurrentStateStorageConfig(&currentConfig, false);
 
         if (Self->StateStorageSelfHealActor) {
             Self->Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->StateStorageSelfHealActor.value(), Self->SelfId(), nullptr, 0));
@@ -167,7 +192,7 @@ namespace NKikimr::NStorage {
                     }
                 }
             }
-            if (!hasBadNodes) {
+            if (!hasBadNodes && !pileupReplicas) {
                 return ReconfigType::NONE; // Current config is optimal and all nodes are good
             }
 
@@ -289,7 +314,7 @@ namespace NKikimr::NStorage {
         if (!cmd.HasStateStorageConfig() && !cmd.HasStateStorageBoardConfig() && !cmd.HasSchemeBoardConfig()) {
             throw TExError() << "New configuration is not defined";
         }
-        auto process = [&](const char *name, auto buildInfo, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
+        auto process = [&](const char *name, auto hasFunc, auto func, auto configHasFunc, auto configMutableFunc) {
             if (!(cmd.*hasFunc)()) {
                 return;
             }
@@ -301,88 +326,11 @@ namespace NKikimr::NStorage {
             if (newSSConfig.HasRing()) {
                 throw TExError() << "New " << name << " configuration Ring option is not allowed, use RingGroups";
             }
-            if (newSSConfig.RingGroupsSize() < 1) {
-                throw TExError() << "New " << name << " configuration RingGroups is not filled in";
+            const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, *(config.*configMutableFunc)(), newSSConfig);
+            if(!error.empty()) {
+                throw TExError() << error;
             }
-            if (newSSConfig.GetRingGroups(0).GetWriteOnly()) {
-                throw TExError() << "New " << name << " configuration first RingGroup is writeOnly";
-            }
-            for (auto& rg : newSSConfig.GetRingGroups()) {
-                if (rg.RingSize() && rg.NodeSize()) {
-                    throw TExError() << name << " Ring and Node are defined, use the one of them";
-                }
-                const size_t numItems = Max(rg.RingSize(), rg.NodeSize());
-                if (!rg.HasNToSelect() || numItems < 1 || rg.GetNToSelect() < 1 || rg.GetNToSelect() > numItems) {
-                    throw TExError() << name << " invalid ring group selection";
-                }
-                for (auto &ring : rg.GetRing()) {
-                    if (ring.RingSize() > 0) {
-                        throw TExError() << name << " too deep nested ring declaration";
-                    }
-                    if (ring.HasRingGroupActorIdOffset()) {
-                        throw TExError() << name << " RingGroupActorIdOffset should be used in ring group level, not ring";
-                    }
-                    if (ring.NodeSize() < 1) {
-                        throw TExError() << name << " empty ring";
-                    }
-                }
-            }
-            try {
-                TIntrusivePtr<TStateStorageInfo> newSSInfo;
-                TIntrusivePtr<TStateStorageInfo> oldSSInfo;
-                newSSInfo = (*buildInfo)(newSSConfig);
-                oldSSInfo = (*buildInfo)(*(config.*configMutableFunc)());
-                THashSet<TActorId> replicas;
-                for (auto& ringGroup : newSSInfo->RingGroups) {
-                    for (auto& ring : ringGroup.Rings) {
-                        for (auto& node : ring.Replicas) {
-                            if (!replicas.insert(node).second) {
-                                throw TExError() << name << " replicas ActorId intersection, specify"
-                                    " RingGroupActorIdOffset if you run multiple replicas on one node";
-                            }
-                        }
-                    }
-                }
 
-                Y_ABORT_UNLESS(newSSInfo->RingGroups.size() > 0 && oldSSInfo->RingGroups.size() > 0);
-
-                for (auto& newGroup : newSSInfo->RingGroups) {
-                    if (newGroup.WriteOnly) {
-                        continue;
-                    }
-                    bool found = false;
-                    for (auto& rg : oldSSInfo->RingGroups) {
-                        if (newGroup.SameConfiguration(rg)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw TExError() << "New introduced ring group should be WriteOnly old: " << oldSSInfo->ToString()
-                            << " new: " << newSSInfo->ToString();
-                    }
-                }
-                for (auto& oldGroup : oldSSInfo->RingGroups) {
-                    if (oldGroup.WriteOnly) {
-                        continue;
-                    }
-                    bool found = false;
-                    for (auto& rg : newSSInfo->RingGroups) {
-                        if (oldGroup.SameConfiguration(rg)) {
-                            found = true;
-                            break;
-                        }
-                    }
-                    if (!found) {
-                        throw TExError() << "Can not delete not WriteOnly ring group. Make it WriteOnly before deletion old: "
-                            << oldSSInfo->ToString() << " new: " << newSSInfo->ToString();
-                    }
-                }
-            } catch (const TExError& e) {
-                throw e;
-            } catch (const std::exception& e) {
-                throw TExError() << "Can not build " << name << " info from config. " << e.what();
-            }
             auto* ssConfig = (config.*configMutableFunc)();
             if (newSSConfig.RingGroupsSize() == 1) {
                 ssConfig->MutableRing()->CopyFrom(newSSConfig.GetRingGroups(0));
@@ -393,7 +341,7 @@ namespace NKikimr::NStorage {
         };
 
 #define PROCESS(NAME) \
-        process(#NAME, &NKikimr::Build##NAME##Info, \
+        process(#NAME, \
                 &NKikimrBlobStorage::TStateStorageConfig::Has##NAME##Config, \
                 &NKikimrBlobStorage::TStateStorageConfig::Get##NAME##Config, \
                 &NKikimrBlobStorage::TStorageConfig::Has##NAME##Config, \
@@ -418,10 +366,7 @@ namespace NKikimr::NStorage {
             }
 
             bool found = false;
-
-            auto *m = (config.*mutableFunc)();
-            for (size_t i = 0; i < m->RingGroupsSize(); i++) {
-                auto *ring = m->MutableRingGroups(i);
+            auto processRing = [&](auto* ring) {
                 if (ring->RingSize() && ring->NodeSize()) {
                     throw TExError() << name << " incorrect configuration: both Ring and Node fields are set";
                 }
@@ -436,8 +381,10 @@ namespace NKikimr::NStorage {
                             found = true;
                             if (!cmd.GetDisableRing()) {
                                 ring->MutableNode()->Set(i, cmd.GetTo());
+                                ring->ClearIsDisabled();
+                            } else {
+                                ring->SetIsDisabled(true);
                             }
-                            ring->SetIsDisabled(cmd.GetDisableRing());
                         }
                     }
                 };
@@ -460,6 +407,19 @@ namespace NKikimr::NStorage {
                         }
                     }
                 }
+
+            };
+            auto *m = (config.*mutableFunc)();
+
+            if (m->RingGroupsSize() && m->HasRing()) {
+                throw TExError() << name << " incorrect configuration: both Ring and RingGroups fields are set";
+            }
+            for (size_t i = 0; i < m->RingGroupsSize(); i++) {
+                auto *ring = m->MutableRingGroups(i);
+                processRing(ring);
+            }
+            if (m->HasRing()) {
+                processRing(m->MutableRing());
             }
             if (!found) {
                 throw TExError() << name << " From node not found";

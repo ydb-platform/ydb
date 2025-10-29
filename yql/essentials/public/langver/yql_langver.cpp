@@ -9,13 +9,13 @@ namespace NYql {
 
 namespace {
 
-constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 2);
+constexpr TLangVersion MaxReleasedLangVersion = MakeLangVersion(2025, 3);
 
-const std::pair<ui32,ui32> Versions[] = {
+const std::pair<ui32, ui32> Versions[] = {
 #include "yql_langver_list.inc"
 };
 
-}
+} // namespace
 
 bool IsValidLangVersion(TLangVersion ver) {
     for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
@@ -69,6 +69,16 @@ bool FormatLangVersion(TLangVersion ver, TLangVersionBuffer& buffer, TStringBuf&
     return true;
 }
 
+TMaybe<TString> FormatLangVersion(TLangVersion ver) {
+    TLangVersionBuffer buffer;
+    TStringBuf result;
+    if (!FormatLangVersion(ver, buffer, result)) {
+        return Nothing();
+    }
+
+    return TString(result);
+}
+
 TLangVersion GetMaxReleasedLangVersion() {
     return MaxReleasedLangVersion;
 }
@@ -84,15 +94,21 @@ TLangVersion GetMaxLangVersion() {
 }
 
 bool IsBackwardCompatibleFeatureAvailable(TLangVersion currentVer, TLangVersion featureVer,
-    EBackportCompatibleFeaturesMode mode) {
+                                          EBackportCompatibleFeaturesMode mode) {
     switch (mode) {
-    case EBackportCompatibleFeaturesMode::All:
-        return true;
-    case EBackportCompatibleFeaturesMode::Released:
-        return IsAvailableLangVersion(featureVer, GetMaxReleasedLangVersion());
-    case EBackportCompatibleFeaturesMode::None:
-        return IsAvailableLangVersion(featureVer, currentVer);
+        case EBackportCompatibleFeaturesMode::All:
+            return true;
+        case EBackportCompatibleFeaturesMode::Released:
+            return IsAvailableLangVersion(featureVer, GetMaxReleasedLangVersion());
+        case EBackportCompatibleFeaturesMode::None:
+            return IsAvailableLangVersion(featureVer, currentVer);
     }
 }
 
+void EnumerateLangVersions(const std::function<void(TLangVersion)>& callback) {
+    for (size_t i = 0; i < Y_ARRAY_SIZE(Versions); ++i) {
+        callback(MakeLangVersion(Versions[i].first, Versions[i].second));
+    }
 }
+
+} // namespace NYql

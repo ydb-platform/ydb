@@ -1,5 +1,5 @@
 #include "mkql_aggrcount.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders_codegen.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -9,12 +9,14 @@ namespace NMiniKQL {
 
 namespace {
 
-class TAggrCountInitWrapper : public TDecoratorCodegeneratorNode<TAggrCountInitWrapper> {
+class TAggrCountInitWrapper: public TDecoratorCodegeneratorNode<TAggrCountInitWrapper> {
     typedef TDecoratorCodegeneratorNode<TAggrCountInitWrapper> TBaseComputation;
+
 public:
     TAggrCountInitWrapper(IComputationNode* value)
         : TBaseComputation(value)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         return NUdf::TUnboxedValuePod(ui64(value ? 1ULL : 0ULL));
@@ -24,19 +26,22 @@ public:
     Value* DoGenerateGetValue(const TCodegenContext& ctx, Value* value, BasicBlock*& block) const {
         auto& context = ctx.Codegen.GetContext();
         const auto check = IsExists(value, block, context);
-        if (Node_->IsTemporaryValue())
+        if (Node_->IsTemporaryValue()) {
             ValueCleanup(Node_->GetRepresentation(), value, ctx, block);
+        }
         return MakeBoolean(check, context, block);
     }
 #endif
 };
 
-class TAggrCountUpdateWrapper : public TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper> {
+class TAggrCountUpdateWrapper: public TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper> {
     typedef TDecoratorCodegeneratorNode<TAggrCountUpdateWrapper> TBaseComputation;
+
 public:
     TAggrCountUpdateWrapper(IComputationNode* state)
         : TBaseComputation(state)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext&, const NUdf::TUnboxedValuePod& value) const {
         return NUdf::TUnboxedValuePod(value.Get<ui64>() + 1U);
@@ -49,8 +54,9 @@ public:
 #endif
 };
 
-class TAggrCountIfUpdateWrapper : public TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper> {
+class TAggrCountIfUpdateWrapper: public TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper> {
     typedef TMutableCodegeneratorNode<TAggrCountIfUpdateWrapper> TBaseComputation;
+
 public:
     TAggrCountIfUpdateWrapper(TComputationMutables& mutables, IComputationNode* value, IComputationNode* state)
         : TBaseComputation(mutables, EValueRepresentation::Embedded)
@@ -70,8 +76,9 @@ public:
         const auto state = GetNodeValue(State, ctx, block);
         const auto value = GetNodeValue(Arg, ctx, block);
         const auto check = IsExists(value, block, context);
-        if (Arg->IsTemporaryValue())
+        if (Arg->IsTemporaryValue()) {
             ValueCleanup(Arg->GetRepresentation(), value, ctx, block);
+        }
         const auto zext = new ZExtInst(check, state->getType(), "zext", block);
         const auto incr = BinaryOperator::CreateAdd(state, zext, "incr", block);
         return incr;
@@ -87,7 +94,7 @@ private:
     IComputationNode* const State;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapAggrCountInit(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected 1 arg");
@@ -108,5 +115,5 @@ IComputationNode* WrapAggrCountUpdate(TCallable& callable, const TComputationNod
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

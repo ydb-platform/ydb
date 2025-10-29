@@ -1,0 +1,45 @@
+/* postgres can not */
+pragma EmitAggApply;
+pragma EmitTableSource;
+
+$data = [
+    <|
+        x: (
+            AsTagged(1, 'A'),
+            AsTagged(just(2), 'B'),
+            AsTagged(NULL, 'C'),
+            AsTagged(Nothing(Int32?), 'D'),
+            AsTagged(Nothing(pgint4), 'E')
+        )
+    |>
+];
+
+SELECT
+    x.0,
+FROM
+    AS_TABLE($data)
+;
+
+SELECT
+    x.1,
+FROM
+    AS_TABLE($data)
+;
+
+SELECT
+    x.2,
+FROM
+    AS_TABLE($data)
+;
+
+SELECT
+    x.3,
+FROM
+    AS_TABLE($data)
+;
+
+SELECT
+    x.4,
+FROM
+    AS_TABLE($data)
+;

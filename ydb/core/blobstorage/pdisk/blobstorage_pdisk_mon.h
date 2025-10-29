@@ -251,6 +251,11 @@ struct TPDiskMon {
     ::NMonitoring::TDynamicCounters::TCounterPtr UsedSpaceBytes;
     ::NMonitoring::TDynamicCounters::TCounterPtr SectorMapAllocatedBytes;
 
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedWriteErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedSilentWriteFails;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EmulatedReadReplays;
+
     // states subgroup
     TIntrusivePtr<::NMonitoring::TDynamicCounters> StateGroup;
     ::NMonitoring::TDynamicCounters::TCounterPtr PDiskState;
@@ -474,6 +479,7 @@ struct TPDiskMon {
     TReqCounters YardSlay;
     TReqCounters YardControl;
     TReqCounters YardResize;
+    TReqCounters ChangeExpectedSlotCount;
 
     TReqCounters ShredPDisk;
     TReqCounters PreShredCompactVDisk;

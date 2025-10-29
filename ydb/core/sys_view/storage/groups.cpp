@@ -42,16 +42,24 @@ public:
             {T::ProxyGroupId::ColumnId, {E::kInfoFieldNumber, V::kProxyGroupIdFieldNumber}},
             {T::BridgePileId::ColumnId, {E::kInfoFieldNumber, V::kBridgePileIdFieldNumber}},
             {T::GroupSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kGroupSizeInUnitsFieldNumber}},
+            {T::BridgeSyncStage::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncStageFieldNumber}},
+            {T::BridgeDataSyncProgress::ColumnId, {E::kInfoFieldNumber, V::kBridgeDataSyncProgressFieldNumber}},
+            {T::BridgeDataSyncErrors::ColumnId, {E::kInfoFieldNumber, V::kBridgeDataSyncErrorsFieldNumber}},
+            {T::BridgeSyncLastError::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncLastErrorFieldNumber}},
+            {T::BridgeSyncLastErrorTimestamp::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncLastErrorTimestampFieldNumber}},
+            {T::BridgeSyncFirstErrorTimestamp::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncFirstErrorTimestampFieldNumber}},
+            {T::BridgeSyncErrorCount::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncErrorCountFieldNumber}},
+            {T::BridgeSyncRunning::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncRunningFieldNumber}},
         };
         return fieldMap;
     }
 
 };
 THolder<NActors::IActor> CreateGroupsScan(const NActors::TActorId& ownerId, ui32 scanId,
-    const NKikimrSysView::TSysViewDescription& sysViewInfo, const TTableRange& tableRange,
-    const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
+    const TString& database, const NKikimrSysView::TSysViewDescription& sysViewInfo,
+    const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
-    return MakeHolder<TGroupsScan>(ownerId, scanId, sysViewInfo, tableRange, columns);
+    return MakeHolder<TGroupsScan>(ownerId, scanId, database, sysViewInfo, tableRange, columns);
 }
 
 } // NKikimr::NSysView

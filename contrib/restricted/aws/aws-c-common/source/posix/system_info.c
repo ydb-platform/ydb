@@ -34,6 +34,16 @@ size_t aws_system_info_processor_count(void) {
     AWS_FATAL_POSTCONDITION(nprocs >= 0);
     return 0;
 }
+
+size_t aws_system_info_page_size(void) {
+    long page_size = sysconf(_SC_PAGESIZE);
+    if (AWS_LIKELY(page_size >= 0)) {
+        return (size_t)page_size;
+    }
+
+    AWS_FATAL_POSTCONDITION(page_size >= 0);
+    return 0;
+}
 #else
 size_t aws_system_info_processor_count(void) {
 #    if defined(AWS_NUM_CPU_CORES)
@@ -41,6 +51,17 @@ size_t aws_system_info_processor_count(void) {
     return AWS_NUM_CPU_CORES;
 #    else
     return 1;
+#    endif
+}
+
+size_t aws_system_info_page_size(void) {
+#    if defined(AWS_PAGE_SIZE)
+    AWS_FATAL_PRECONDITION(AWS_PAGE_SIZE > 0);
+    return AWS_PAGE_SIZE;
+#    else
+    /* Default page size fallback - most systems use 4KiB pages */
+    AWS_LOGF(AWS_LL_INFO, AWS_LS_COMMON_GENERAL, "No page size found, fallback to 4KiB");
+    return 4096;
 #    endif
 }
 #endif

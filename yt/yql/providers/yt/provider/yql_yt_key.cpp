@@ -85,26 +85,26 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
             .DiveHandler = walkFolders.DiveHandler().Ptr(),
             .PostHandler = walkFolders.PostHandler().Ptr(),
         });
-        
+
         return true;
     }
     else if (const auto maybeWalkFolders = TMaybeNode<TYtWalkFoldersImpl>(&key)) {
         Type = EType::WalkFoldersImpl;
         const auto walkFolders = maybeWalkFolders.Cast();
-        
+
         ui64 stateKey;
         if (!TryFromString(walkFolders.ProcessStateKey().StringValue(), stateKey)) {
             ctx.AddError(TIssue(ctx.GetPosition(key.Pos()),
                 TStringBuilder() << MrWalkFoldersImplName << ": incorrect format of state map key"));
             return false;
         }
-        
+
         WalkFolderImplArgs = MakeMaybe(TWalkFoldersImplArgs{
             .UserStateExpr = walkFolders.PickledUserState().Ptr(),
             .UserStateType = walkFolders.UserStateType().Ptr(),
             .StateKey = stateKey,
         });
-        
+
         Type = EType::WalkFoldersImpl;
         return true;
     }
@@ -202,6 +202,13 @@ bool TYtKey::Parse(const TExprNode& key, TExprContext& ctx, bool isOutput) {
                     ctx.AddError(TIssue(ctx.GetPosition(viewNode->Child(0)->Pos()), "View name must not be empty"));
                     return false;
                 }
+            } else if (tag->Content() == "extraColumns") {
+                const TExprNode::TPtr value = key.Child(i)->Child(1);
+                if (!value->IsCallable("AsStruct")) {
+                    ctx.AddError(TIssue(ctx.GetPosition(value->Pos()), "Expected literal Struct"));
+                    return false;
+                }
+                ExtraColumns = value;
             } else {
                 ctx.AddError(TIssue(ctx.GetPosition(tag->Pos()), TStringBuilder() << "Unexpected tag: " << tag->Content()));
                 return false;

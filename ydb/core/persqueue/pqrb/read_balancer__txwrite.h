@@ -48,7 +48,7 @@ struct TPersQueueReadBalancer::TTxWrite : public ITransaction {
         NIceDb::TNiceDb db(txc.DB);
         TString config;
         bool res = Self->TabletConfig.SerializeToString(&config);
-        Y_ABORT_UNLESS(res);
+        AFL_ENSURE(res)("tablet_id", Self->TabletID())("path", Self->Path)("topic", Self->Topic);
         db.Table<Schema::Data>().Key(1).Update(
             NIceDb::TUpdate<Schema::Data::PathId>(Self->PathId),
             NIceDb::TUpdate<Schema::Data::Topic>(Self->Topic),

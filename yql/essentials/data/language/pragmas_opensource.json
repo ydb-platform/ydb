@@ -45,6 +45,9 @@
     "name": "yt.CompactForDistinct"
   },
   {
+    "name": "yt.ConvertDynamicTablesToStatic"
+  },
+  {
     "name": "yt.CoreDumpPath"
   },
   {
@@ -118,6 +121,9 @@
   },
   {
     "name": "yt.DropUnusedKeysFromKeyFilter"
+  },
+  {
+    "name": "yt.EarlyPartitionPruning"
   },
   {
     "name": "yt.EnableDynamicStoreReadInDQ"
@@ -282,6 +288,9 @@
     "name": "yt.JoinWaitAllInputs"
   },
   {
+    "name": "yt.KeepMergeWithDynamicInput"
+  },
+  {
     "name": "yt.KeepTempTables"
   },
   {
@@ -295,6 +304,9 @@
   },
   {
     "name": "yt.LLVMPerNodeMemSize"
+  },
+  {
+    "name": "yt.LayerCaches"
   },
   {
     "name": "yt.LayerPaths"
@@ -615,6 +627,9 @@
     "name": "yt.UseNativeDynamicTableRead"
   },
   {
+    "name": "yt.UseNativeYtDefaultColumnOrder"
+  },
+  {
     "name": "yt.UseNativeYtTypes"
   },
   {
@@ -643,6 +658,12 @@
   },
   {
     "name": "yt.UserSlots"
+  },
+  {
+    "name": "yt.ValidateClusters"
+  },
+  {
+    "name": "yt.ValidatePool"
   },
   {
     "name": "yt.ViewIsolation"
@@ -801,6 +822,9 @@
     "name": "dq.UseWideChannels"
   },
   {
+    "name": "dq.ValuePackerVersion"
+  },
+  {
     "name": "dq.WatermarksEnableIdlePartitions"
   },
   {
@@ -876,6 +900,9 @@
     "name": "CostBasedOptimizer"
   },
   {
+    "name": "CostBasedOptimizerVersion"
+  },
+  {
     "name": "DataWatermarks"
   },
   {
@@ -886,6 +913,9 @@
   },
   {
     "name": "DirectRead"
+  },
+  {
+    "name": "DirectRowDependsOn"
   },
   {
     "name": "DisableAnsiCurrentRow"
@@ -930,6 +960,9 @@
     "name": "DisableDeriveColumnOrder"
   },
   {
+    "name": "DisableDirectRowDependsOn"
+  },
+  {
     "name": "DisableDistinctOverKeys"
   },
   {
@@ -952,6 +985,9 @@
   },
   {
     "name": "DisableEmitUnionMerge"
+  },
+  {
+    "name": "DisableExceptIntersectBefore202503"
   },
   {
     "name": "DisableFailOnGroupByExprOverride"
@@ -988,6 +1024,9 @@
   },
   {
     "name": "DisableSimpleColumns"
+  },
+  {
+    "name": "DisableSimplePg"
   },
   {
     "name": "DisableStrictJoinKeyTypes"
@@ -1053,6 +1092,9 @@
     "name": "ErrorMsg"
   },
   {
+    "name": "ExceptIntersectBefore202503"
+  },
+  {
     "name": "FailOnGroupByExprOverride"
   },
   {
@@ -1087,6 +1129,9 @@
   },
   {
     "name": "JsonQueryReturnsJsonDocument"
+  },
+  {
+    "name": "Layer"
   },
   {
     "name": "Library"
@@ -1143,6 +1188,9 @@
     "name": "SimpleColumns"
   },
   {
+    "name": "SimplePg"
+  },
+  {
     "name": "StrictJoinKeyTypes"
   },
   {
@@ -1183,6 +1231,9 @@
   },
   {
     "name": "WarningMsg"
+  },
+  {
+    "name": "YqlSelect"
   },
   {
     "name": "yson.AutoConvert"

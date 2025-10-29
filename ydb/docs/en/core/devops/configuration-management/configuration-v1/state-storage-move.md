@@ -2,7 +2,7 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
-If you need to decommission a {{ ydb-short-name }} cluster host that contains part of [State Storage](../../../reference/configuration/index.md#domains-state), you need to move it to another host.
+If you need to decommission a {{ ydb-short-name }} cluster host that contains part of [State Storage](../../../reference/configuration/domains_config.md#domains-state), you need to move it to another host.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 
@@ -21,7 +21,7 @@ domains_config:
 ...
 ```
 
-On the host with `node_id:1`, a cluster [static node](../../../reference/configuration/index.md#hosts) is configured and running, which serves part of State Storage. Suppose we need to decommission this host.
+On the host with `node_id:1`, a cluster [static node](../../../reference/configuration/hosts.md#hosts) is configured and running, which serves part of State Storage. Suppose we need to decommission this host.
 
 To replace `node_id:1`, we [added](cluster-expansion.md#add-host) a new host with `node_id:10` to the cluster and [deployed](cluster-expansion.md#add-static-node) a static node on it.
 

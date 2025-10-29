@@ -15,8 +15,9 @@ struct TLoadedResources {
     TString Get(TStringBuf resourceId) {
         const std::unique_lock lock(Sync);
         const auto ins = Resources.emplace(resourceId, "");
-        if (ins.second)
+        if (ins.second) {
             ins.first->second = NResource::Find(resourceId);
+        }
         return ins.first->second;
     }
 
@@ -24,11 +25,11 @@ struct TLoadedResources {
     std::unordered_map<TString, TString> Resources;
 };
 
-}
+} // namespace
 
 TString LoadResourceOnce(TStringBuf resourceId) {
     return Singleton<TLoadedResources>()->Get(resourceId);
 }
 
-}
-}
+} // namespace NUdf
+} // namespace NYql

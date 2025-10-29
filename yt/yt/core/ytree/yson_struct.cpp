@@ -215,9 +215,9 @@ std::vector<std::string> TYsonStructBase::GetAllParameterAliases(const std::stri
     return result;
 }
 
-void TYsonStructBase::WriteSchema(IYsonConsumer* consumer) const
+void TYsonStructBase::WriteSchema(IYsonConsumer* consumer, const TYsonStructWriteSchemaOptions& options) const
 {
-    return Meta_->WriteSchema(this, consumer);
+    return Meta_->WriteSchema(this, consumer, options);
 }
 
 bool TYsonStructBase::IsEqual(const TYsonStructBase& rhs) const

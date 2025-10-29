@@ -4,7 +4,7 @@
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/base/subdomain.h>
-#include <ydb/core/persqueue/utils.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/partition_chooser.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
@@ -129,6 +129,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         return DomainKey != ResourcesDomainKey;
     }
 
+    inline TPathId GetResourcesDomainKey() {
+        return ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;
@@ -153,6 +157,7 @@ enum class ETableKind {
     KindSyncIndexTable = 2,
     KindAsyncIndexTable = 3,
     KindVectorIndexTable = 4,
+    KindFulltextIndexTable = 5,
 };
 
 struct TSchemeCacheNavigate {
@@ -203,6 +208,8 @@ struct TSchemeCacheNavigate {
         KindBackupCollection = 23,
         KindTransfer = 24,
         KindSysView = 25,
+        KindSecret = 26,
+        KindStreamingQuery = 27,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -329,6 +336,16 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TSysViewDescription Description;
     };
 
+    struct TSecretInfo : public TAtomicRefCount<TSecretInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TSecretDescription Description;
+    };
+
+    struct TStreamingQueryInfo : public TAtomicRefCount<TStreamingQueryInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TStreamingQueryDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -385,6 +402,8 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TResourcePoolInfo> ResourcePoolInfo;
         TIntrusiveConstPtr<TBackupCollectionInfo> BackupCollectionInfo;
         TIntrusiveConstPtr<TSysViewInfo> SysViewInfo;
+        TIntrusiveConstPtr<TSecretInfo> SecretInfo;
+        TIntrusiveConstPtr<TStreamingQueryInfo> StreamingQueryInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

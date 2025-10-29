@@ -245,6 +245,7 @@ protected:
     friend class TTxProcessUpdateFollowers;
     friend class TTxMonEvent_StopDomain;
     friend class TTxUpdatePiles;
+    friend class TTxSetDown;
 
     friend class TDeleteTabletActor;
 
@@ -253,7 +254,7 @@ protected:
     bool IsSafeOperation(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
     bool IsItPossibleToStartBalancer(EBalancerType balancerType);
     void StartHiveBalancer(TBalancerSettings&& settings);
-    void StartHiveDrain(TDrainTarget target, TDrainSettings settings);
+    THiveDrain* StartHiveDrain(TDrainTarget target, TDrainSettings settings);
     void StartHiveFill(TNodeId nodeId, const TActorId& initiator);
     void StartHiveStorageBalancer(TStorageBalancerSettings settings);
     void CreateEvMonitoring(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
@@ -288,7 +289,7 @@ protected:
     ITransaction* CreateResumeTabletByTenant(TTabletId tabletId);
     ITransaction* CreateStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external = false);
     ITransaction* CreateUpdateTabletMetrics(TEvHive::TEvTabletMetrics::TPtr& ev);
-    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup);
+    ITransaction* CreateReassignGroups(TTabletId tabletId, const TActorId& actorToNotify, const std::bitset<MAX_TABLET_CHANNELS>& channelProfileNewGroup, bool async);
     ITransaction* CreateReassignGroupsOnDecommit(ui32 groupId, std::unique_ptr<IEventHandle> reply);
     ITransaction* CreateLockTabletExecution(const NKikimrHive::TEvLockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
     ITransaction* CreateUnlockTabletExecution(const NKikimrHive::TEvUnlockTabletExecution& rec, const TActorId& sender, const ui64 cookie);
@@ -303,7 +304,7 @@ protected:
     ITransaction* CreateReleaseTablets(TEvHive::TEvReleaseTablets::TPtr event);
     ITransaction* CreateReleaseTabletsReply(TEvHive::TEvReleaseTabletsReply::TPtr event);
     ITransaction* CreateConfigureSubdomain(TEvHive::TEvConfigureHive::TPtr event);
-    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0);
+    ITransaction* CreateSwitchDrainOn(TNodeId nodeId, TDrainSettings settings, const TActorId& initiator, ui64 seqNo = 0, ui64 cookie = 0);
     ITransaction* CreateSwitchDrainOff(TDrainTarget target, TDrainSettings settings, NKikimrProto::EReplyStatus status, ui32 movements);
     ITransaction* CreateTabletOwnersReply(TEvHive::TEvTabletOwnersReply::TPtr event);
     ITransaction* CreateRequestTabletOwners(TEvHive::TEvRequestTabletOwners::TPtr event);
@@ -314,6 +315,7 @@ protected:
     ITransaction* CreateDeleteNode(TNodeId nodeId);
     ITransaction* CreateConfigureScaleRecommender(TEvHive::TEvConfigureScaleRecommender::TPtr event);
     ITransaction* CreateUpdatePiles();
+    ITransaction* CreateSetDown(TEvHive::TEvSetDown::TPtr& event);
 
 public:
     TDomainsView DomainsView;
@@ -349,6 +351,7 @@ protected:
 
     bool AreWeRootHive() const { return RootHiveId == HiveId; }
     bool AreWeSubDomainHive() const { return RootHiveId != HiveId; }
+    std::optional<TActorId> GetPipeToTenantHive(const TNodeInfo* node);
 
     struct TAggregateMetrics {
         NKikimrTabletBase::TMetrics Metrics;
@@ -449,7 +452,6 @@ protected:
     ui64 UpdateTabletMetricsInProgress = 0;
     static constexpr ui64 MAX_UPDATE_TABLET_METRICS_IN_PROGRESS = 10000; // 10K
     i64 DeleteTabletInProgress = 0;
-    static constexpr i64 MAX_DELETE_TABLET_IN_PROGRESS = 100;
     std::queue<TTabletId> DeleteTabletQueue;
 
     TString BootStateBooting = "Booting";
@@ -609,6 +611,8 @@ protected:
     void Handle(TEvNodeWardenStorageConfig::TPtr& ev);
     void HandleInit(TEvNodeWardenStorageConfig::TPtr& ev);
     void Handle(TEvPrivate::TEvUpdateBalanceCounters::TPtr& ev);
+    void Handle(TEvHive::TEvRequestDrainInfo::TPtr& ev);
+    void Handle(TEvHive::TEvSetDown::TPtr& ev);
 
 protected:
     void RestartPipeTx(ui64 tabletId);
@@ -693,6 +697,8 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void UpdateCounterTabletChannelHistorySize();
     void UpdateCounterNodesDown(i64 nodesDownDiff);
     void UpdateCounterNodesFrozen(i64 nodesFrozenDiff);
+    void UpdateCounterDeleteTabletQueueSize();
+    void UpdateCounterTabletsDeleting();
     void RecordTabletMove(const TTabletMoveInfo& info);
     bool DomainHasNodes(const TSubDomainKey &domainKey) const;
     void ProcessBootQueue();
@@ -736,8 +742,9 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
     void BlockStorageForDelete(TTabletId tabletId, TSideEffects& sideEffects);
     void ProcessPendingStopTablet();
     void ProcessPendingResumeTablet();
-    bool IsAllowedPile(TBridgePileId pile) const;
+    bool IsPrimaryPile(TBridgePileId pile) const; // NOTE: this counts promoted pile as primary
     TBridgePileInfo& GetPile(TBridgePileId pileId);
+    const TBridgePileInfo* FindPile(TBridgePileId pileId) const;
     void UpdatePiles();
 
     ui32 GetEventPriority(IEventHandle* ev);
@@ -1030,6 +1037,10 @@ TTabletInfo* FindTabletEvenInDeleting(TTabletId tabletId, TFollowerId followerId
 
     TDuration GetBalanceCountersRefreshFrequency() const {
         return TDuration::MilliSeconds(CurrentConfig.GetBalanceCountersRefreshFrequency());
+    }
+
+    i64 GetMaxDeleteTabletInProgress() const {
+        return static_cast<i64>(CurrentConfig.GetMaxDeleteTabletInProgress());
     }
 
     static void ActualizeRestartStatistics(google::protobuf::RepeatedField<google::protobuf::uint64>& restartTimestamps, ui64 barrier);

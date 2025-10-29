@@ -15,28 +15,28 @@ using namespace NTableClient;
 
 TEST(TArrowSchemaConverterTest, ConvertSimpleTypes)
 {
-    const auto arrowSchema = arrow::schema({
-        arrow::field("f_null", arrow::null(), false),
-        arrow::field("f_boolean", arrow::boolean(), false),
-        arrow::field("f_int8", arrow::int8(), false),
-        arrow::field("f_int16", arrow::int16(), false),
-        arrow::field("f_int32", arrow::int32(), false),
-        arrow::field("f_int64", arrow::int64(), false),
-        arrow::field("f_uint8", arrow::uint8(), false),
-        arrow::field("f_uint16", arrow::uint16(), false),
-        arrow::field("f_uint32", arrow::uint32(), false),
-        arrow::field("f_uint64", arrow::uint64(), false),
-        arrow::field("f_float16", arrow::float16(), false),
-        arrow::field("f_float32", arrow::float32(), false),
-        arrow::field("f_float64", arrow::float64(), false),
-        arrow::field("f_utf8", arrow::utf8(), false),
-        arrow::field("f_large_utf8", arrow::large_utf8(), false),
-        arrow::field("f_binary", arrow::binary(), false),
-        arrow::field("f_large_binary", arrow::large_binary(), false),
-        arrow::field("f_decimal", arrow::decimal(35, 18), false),
-        arrow::field("f_date32", arrow::date32(), false),
-        arrow::field("f_date64", arrow::date64(), false),
-        arrow::field("f_timestamp", arrow::timestamp(arrow::TimeUnit::MICRO), false),
+    const auto arrowSchema = arrow20::schema({
+        arrow20::field("f_null", arrow20::null(), false),
+        arrow20::field("f_boolean", arrow20::boolean(), false),
+        arrow20::field("f_int8", arrow20::int8(), false),
+        arrow20::field("f_int16", arrow20::int16(), false),
+        arrow20::field("f_int32", arrow20::int32(), false),
+        arrow20::field("f_int64", arrow20::int64(), false),
+        arrow20::field("f_uint8", arrow20::uint8(), false),
+        arrow20::field("f_uint16", arrow20::uint16(), false),
+        arrow20::field("f_uint32", arrow20::uint32(), false),
+        arrow20::field("f_uint64", arrow20::uint64(), false),
+        arrow20::field("f_float16", arrow20::float16(), false),
+        arrow20::field("f_float32", arrow20::float32(), false),
+        arrow20::field("f_float64", arrow20::float64(), false),
+        arrow20::field("f_utf8", arrow20::utf8(), false),
+        arrow20::field("f_large_utf8", arrow20::large_utf8(), false),
+        arrow20::field("f_binary", arrow20::binary(), false),
+        arrow20::field("f_large_binary", arrow20::large_binary(), false),
+        arrow20::field("f_decimal", arrow20::smallest_decimal(35, 18), false),
+        arrow20::field("f_date32", arrow20::date32(), false),
+        arrow20::field("f_date64", arrow20::date64(), false),
+        arrow20::field("f_timestamp", arrow20::timestamp(arrow20::TimeUnit::MICRO), false),
     });
 
     const auto result = CreateYTTableSchemaFromArrowSchema(arrowSchema);
@@ -70,17 +70,17 @@ TEST(TArrowSchemaConverterTest, ConvertSimpleTypes)
 
 TEST(TArrowSchemaConverterTest, ConvertComplexTypes)
 {
-    const auto complexSchema = arrow::schema({
-        arrow::field("f_array", arrow::list(arrow::field("item", arrow::int32(), false)), false),
-        arrow::field("f_struct", arrow::struct_({
-            arrow::field("nested_num", arrow::int32(), false),
-            arrow::field("nested_struct", arrow::struct_({
-                arrow::field("inner_list", arrow::list(arrow::field("item", arrow::int32(), false)), false),
-                arrow::field("inner_num", arrow::int32(), false)
+    const auto complexSchema = arrow20::schema({
+        arrow20::field("f_array", arrow20::list(arrow20::field("item", arrow20::int32(), false)), false),
+        arrow20::field("f_struct", arrow20::struct_({
+            arrow20::field("nested_num", arrow20::int32(), false),
+            arrow20::field("nested_struct", arrow20::struct_({
+                arrow20::field("inner_list", arrow20::list(arrow20::field("item", arrow20::int32(), false)), false),
+                arrow20::field("inner_num", arrow20::int32(), false)
             }), false)
         }), false),
-        arrow::field("f_map", arrow::map(arrow::utf8(), arrow::uint64()), false),
-        arrow::field("f_opt", arrow::int32())
+        arrow20::field("f_map", arrow20::map(arrow20::utf8(), arrow20::uint64()), false),
+        arrow20::field("f_opt", arrow20::int32())
     });
 
     const auto result = CreateYTTableSchemaFromArrowSchema(complexSchema);

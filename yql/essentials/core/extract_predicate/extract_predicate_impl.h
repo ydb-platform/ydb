@@ -4,20 +4,22 @@
 
 namespace NYql::NDetail {
 
-class TPredicateRangeExtractor : public IPredicateRangeExtractor {
+class TPredicateRangeExtractor: public IPredicateRangeExtractor {
 public:
     explicit TPredicateRangeExtractor(const TPredicateExtractorSettings& settings = {})
         : Settings_(settings)
-    {}
+    {
+    }
 
     bool Prepare(const TExprNode::TPtr& filterLambdaNode, const TTypeAnnotationNode& rowType,
-        THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override final;
+                 THashSet<TString>& possibleIndexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) override final;
 
     TExprNode::TPtr GetPreparedRange() const {
         return Range_;
     }
 
     TBuildResult BuildComputeNode(const TVector<TString>& indexKeys, TExprContext& ctx, TTypeAnnotationContext& typesCtx) const override final;
+
 private:
     const TPredicateExtractorSettings Settings_;
     TExprNode::TPtr FilterLambda_;
@@ -25,4 +27,4 @@ private:
     TExprNode::TPtr Range_;
 };
 
-}
+} // namespace NYql::NDetail

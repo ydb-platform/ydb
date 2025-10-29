@@ -16,6 +16,7 @@
 #include "flat_executor_compaction_logic.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_vacuum_logic.h"
+#include "flat_executor_backup.h"
 #include "flat_bio_events.h"
 #include "flat_bio_stats.h"
 #include "flat_fwd_sieve.h"
@@ -96,7 +97,7 @@ struct TPendingPartSwitch {
             : PartComponents(std::move(pc))
         {
             for (size_t idx = 0; idx < PartComponents.PageCollectionComponents.size(); ++idx) {
-                if (!PartComponents.PageCollectionComponents[idx].Packet) {
+                if (!PartComponents.PageCollectionComponents[idx].PageCollection) {
                     Loaders.emplace_back(idx, PartComponents.PageCollectionComponents[idx].LargeGlobId);
                 }
             }
@@ -108,7 +109,7 @@ struct TPendingPartSwitch {
 
         bool Accept(TLargeGlobLoaders::iterator it, const TLogoBlobID& id, TString body) {
             if (it->Accept(id, std::move(body))) {
-                PartComponents.PageCollectionComponents[it->Index].ParsePacket(it->Finish());
+                PartComponents.PageCollectionComponents[it->Index].ParsePageCollection(it->Finish());
                 Loaders.erase(it);
                 return !Loaders;
             }
@@ -279,14 +280,6 @@ struct TPendingPartSwitch {
     }
 };
 
-enum class ESharedCacheRequestType : ui64 {
-    Undefined = 0,
-    Transaction = 1,
-    InMemPages,
-    PendingInit,
-    BootLogic,
-};
-
 struct TExecutorStatsImpl : public TExecutorStats {
     TInstant YellowLastChecked;
     ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */
@@ -305,7 +298,7 @@ struct TTransactionWaitPad : public NPageCollection::TPagesWaitPad {
 struct TCompactionChangesCtx;
 
 struct TExecutorCaches {
-    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TInfo>> PageCaches;
+    THashMap<TLogoBlobID, TIntrusivePtr<TPrivatePageCache::TPageCollection>> PageCollections;
     THashMap<TLogoBlobID, TSharedData> TxStatusCaches;
 };
 
@@ -393,6 +386,8 @@ class TExecutor
     // Counts the number of times LeaseDuration was increased
     size_t LeaseDurationIncreases = 0;
 
+    const ui64 MaxTxInFly;
+
     struct TLeaseCommit : public TIntrusiveListItem<TLeaseCommit> {
         using TByEndMap = std::multimap<TMonotonic, TLeaseCommit*>;
 
@@ -447,6 +442,7 @@ class TExecutor
 
     TWaitingSnaps WaitingSnapshots;
 
+    ui64 BootAttempt = 0;
     THolder<TExecutorBootLogic> BootLogic;
     THolder<TPrivatePageCache> PrivatePageCache;
     THolder<TExecutorCounters> Counters;
@@ -499,7 +495,6 @@ class TExecutor
     size_t ReadyPartSwitches = 0;
 
     ui64 UsedTabletMemory = 0;
-    ui64 StickyPagesMemory = 0;
     ui64 TransactionPagesMemory = 0;
 
     TActorContext SelfCtx() const;
@@ -514,7 +509,7 @@ class TExecutor
     void Broken();
     void Active(const TActorContext &ctx);
     void ActivateFollower(const TActorContext &ctx);
-    void RecreatePageCollectionsCache();
+    void RecreatePrivateCache();
     void ReflectSchemeSettings();
     void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) override;
     void CheckYellow(TVector<ui32> &&yellowMoveChannels, TVector<ui32> &&yellowStopChannels, bool terminal = false);
@@ -547,19 +542,21 @@ class TExecutor
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TInfo* collectionInfo);
+    void TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad, TVector<NSharedCache::TEvResult::TLoaded>&& pages, TPrivatePageCache::TPageCollection* collectionInfo);
     void ActivateWaitingTransaction(TTransactionWaitPad& transaction);
     void LogWaitingTransaction(const TTransactionWaitPad& transaction);
-    void AddCachesOfBundle(const NTable::TPartView &partView);
-    void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
-    void DropCachesOfBundle(const NTable::TPart &part);
-    void DropSingleCache(const TLogoBlobID&);
+    void AddPartStorePageCollections(const NTable::TPartView &partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    void AddPageCollection(const TIntrusivePtr<TPrivatePageCache::TPageCollection> &pageCollection);
+    void DropPartStorePageCollections(const NTable::TPart &part);
+    void DropPageCollection(const TLogoBlobID& pageCollectionId);
+    void StartBackup();
 
-    void TranslateCacheTouchesToSharedCache();
-    void RequestInMemPagesForDatabase(bool pendingOnly = false);
-    void RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartView &partView, const THashSet<NTable::TTag> &stickyColumns);
-    void StickInMemPages(NSharedCache::TEvResult *msg);
+    void UpdateCacheModesForPartStore(NTable::TPartView& partView, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
+    void UpdateCachePagesForDatabase(bool pendingOnly = false);
+    void RequestStickyPagesForPartStore(NTable::TPartView& partView, const THashSet<NTable::TTag>& stickyColumns);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
+    THashMap<NTable::TTag, ECacheMode> GetCacheModes(ui32 tableId);
+    ECacheMode GetCacheMode(const TVector<NTable::TPartScheme::TColumn>& columns, const THashMap<NTable::TTag, ECacheMode>& cacheModes);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);
@@ -606,9 +603,12 @@ class TExecutor
     void Handle(NOps::TEvResult *ops, TProdCompact *msg, bool cancelled);
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
+    void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
+    void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);
+    void ForceSendCounters();
     void UpdateYellow();
     void UpdateCompactions();
     void Handle(TEvTablet::TEvCheckBlobstorageStatusResult::TPtr &ev);
@@ -641,6 +641,9 @@ class TExecutor
             TCompactionChangesCtx& ctx,
             const NTable::TCompactionChanges& changes,
             NKikimrCompaction::ECompactionStrategy strategy);
+
+    void RenderHtmlCounters(TStringStream& str) const;
+    void RenderJsonCounters(TStringStream& str) const;
 
 public:
     void Describe(IOutputStream &out) const override

@@ -22,6 +22,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/bridge-mirror-3dc-3-nodes.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_/block-4-2.yaml.result.json"
         }
     ],
@@ -46,6 +49,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/bridge-mirror-3dc-3-nodes.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args0-dump_ds_init_/block-4-2.yaml.result.json"
@@ -74,6 +80,9 @@
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
         },
         {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/bridge-mirror-3dc-3-nodes.yaml.result.json"
+        },
+        {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_/block-4-2.yaml.result.json"
         }
     ],
@@ -98,6 +107,9 @@
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/mirror-3dc-3-nodes-in-memory.yaml.result.json"
+        },
+        {
+            "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/bridge-mirror-3dc-3-nodes.yaml.result.json"
         },
         {
             "uri": "file://test_transform.TestYamlConfigTransformations.test_basic_args1-dump_ds_init_/block-4-2.yaml.result.json"

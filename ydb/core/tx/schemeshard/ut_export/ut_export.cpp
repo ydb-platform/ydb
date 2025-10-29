@@ -9,6 +9,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/ut_backup_restore_common.h>
 #include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
@@ -652,72 +653,43 @@ namespace {
             Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
-        void TestTopic(bool enablePermissions = false) {
-          EnvOptions().EnablePermissionsExport(enablePermissions);
-          Env();
-          ui64 txId = 100;
+        void TestTopic(bool enablePermissions = false, ui64 topicsCount = 1, ui64 consumersCount = 0) {
+            EnvOptions().EnablePermissionsExport(enablePermissions);
+            Env();
+            ui64 txId = 100;
 
-          TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", R"(
-              Name: "Topic"
-              TotalGroupCount: 2
-              PartitionPerTablet: 1
-              PQTabletConfig {
-                  PartitionConfig {
-                      LifetimeSeconds: 10
-                  }
-              }
-          )");
-          Env().TestWaitNotification(Runtime(), txId);
+            TVector<TString> requestItems;
+            TVector<NDescUT::TSimpleTopic> expected;
 
-          auto request = Sprintf(R"(
-              ExportToS3Settings {
-                endpoint: "localhost:%d"
-                scheme: HTTP
-                items {
-                  source_path: "/MyRoot/Topic"
-                  destination_prefix: ""
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                auto topic = NDescUT::TSimpleTopic(i, (topicsCount == 1 || i > 0) ? consumersCount : 0);
+                TestCreatePQGroup(Runtime(), ++txId, "/MyRoot", topic.GetPrivateProto().DebugString());
+                Env().TestWaitNotification(Runtime(), txId);
+                requestItems.push_back(topic.GetExportRequestItem());
+                expected.push_back(topic);
+            }
+
+            auto exportRequest = NDescUT::TExportRequest(S3Port(), requestItems);
+
+            auto schemeshardId = TTestTxConfig::SchemeShard;
+            TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", exportRequest.GetRequest(), "", "", Ydb::StatusIds::SUCCESS);
+            Env().TestWaitNotification(Runtime(), txId, schemeshardId);
+
+            TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+            for (ui64 i = 0; i < topicsCount; ++i) {
+                const auto& topicExpected = expected.at(i);
+                const auto& topicPath = topicExpected.GetPath();
+                UNIT_ASSERT(HasS3File(topicPath));
+                UNIT_ASSERT(topicExpected.CompareWithString(GetS3FileContent(topicPath)));
+
+                if (enablePermissions) {
+                    auto permissionsPath = topicExpected.GetPermissions().GetPath();
+                    UNIT_ASSERT(HasS3File(permissionsPath));
+                    UNIT_ASSERT(topicExpected.GetPermissions().CompareWithString(GetS3FileContent(permissionsPath)));
                 }
-              }
-          )", S3Port());
-
-          auto schemeshardId = TTestTxConfig::SchemeShard;
-          TestExport(Runtime(), schemeshardId, ++txId, "/MyRoot", request, "", "", Ydb::StatusIds::SUCCESS);
-          Env().TestWaitNotification(Runtime(), txId, schemeshardId);
-
-          TestGetExport(Runtime(), schemeshardId, txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
-          UNIT_ASSERT(HasS3File("/create_topic.pb"));
-          UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/create_topic.pb"), R"(partitioning_settings {
-  min_active_partitions: 2
-  max_active_partitions: 1
-  auto_partitioning_settings {
-    strategy: AUTO_PARTITIONING_STRATEGY_DISABLED
-    partition_write_speed {
-      stabilization_window {
-        seconds: 300
-      }
-      up_utilization_percent: 80
-      down_utilization_percent: 20
-    }
-  }
-}
-retention_period {
-  seconds: 10
-}
-supported_codecs {
-}
-partition_write_speed_bytes_per_second: 50000000
-partition_write_burst_bytes: 50000000
-)");
-
-          if (enablePermissions) {
-            UNIT_ASSERT(HasS3File("/permissions.pb"));
-            UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/permissions.pb"), R"(actions {
-  change_owner: "root@builtin"
-}
-)");
-          }
-
-        };
+            }
+        }
 
     protected:
         TS3Mock::TSettings& S3Settings() {
@@ -1962,6 +1934,21 @@ partitioning_settings {
         UNIT_ASSERT_LT(entry.GetStartTime().seconds(), entry.GetEndTime().seconds());
     }
 
+    struct TWaitExportItemStateDelayFunc {
+        bool GotModify = false;
+        bool GotModifyResult = false;
+
+        bool operator()(TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransaction) {
+                GotModify |= ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
+                    .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
+            }
+
+            GotModifyResult |= GotModify && ev->GetTypeRewrite() == TEvSchemeShard::EvModifySchemeTransactionResult;
+            return GotModifyResult && ev->GetTypeRewrite() == TEvSchemeShard::EvNotifyTxCompletion;
+        }
+    };
+
     Y_UNIT_TEST(CancelledExportEndTime) {
         Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
@@ -1975,15 +1962,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
-        };
-
+        TWaitExportItemStateDelayFunc delayFunc;
         THolder<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
@@ -2014,17 +1993,29 @@ partitioning_settings {
             });
             Runtime().DispatchEvents(opts);
         }
-        Runtime().SetObserverFunc(prevObserver);
+        // Block TEvSchemeShard::TEvCancelTxResult
+        THolder<IEventHandle> cancelAck;
+        Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
+                cancelAck.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
 
         TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
 
-        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot");
+        auto desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         auto entry = desc.GetResponse().GetEntry();
         UNIT_ASSERT_VALUES_EQUAL(entry.GetProgress(), Ydb::Export::ExportProgress::PROGRESS_CANCELLATION);
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
 
+        Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
+        if (cancelAck) {
+            Runtime().Send(cancelAck.Release(), 0, true);
+        }
         Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
@@ -2138,15 +2129,7 @@ partitioning_settings {
         )");
         Env().TestWaitNotification(Runtime(), txId);
 
-        auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
-                return false;
-            }
-
-            return ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record
-                .GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpBackup;
-        };
-
+        TWaitExportItemStateDelayFunc delayFunc;
         THolder<IEventHandle> delayed;
         auto prevObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (delayFunc(ev)) {
@@ -2205,7 +2188,16 @@ partitioning_settings {
             });
             Runtime().DispatchEvents(opts);
         }
-        Runtime().SetObserverFunc(prevObserver);
+
+        // Block TEvSchemeShard::TEvCancelTxResult
+        THolder<IEventHandle> cancelAck;
+        Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvSchemeShard::EvCancelTxResult) {
+                cancelAck.Reset(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
 
         // Cancel export mid-air
         //
@@ -2217,7 +2209,11 @@ partitioning_settings {
         UNIT_ASSERT(entry.HasStartTime());
         UNIT_ASSERT(!entry.HasEndTime());
 
+        Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(delayed.Release(), 0, true);
+        if (cancelAck) {
+            Runtime().Send(cancelAck.Release(), 0, true);
+        }
         Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
@@ -2502,7 +2498,7 @@ partitioning_settings {
         Env().TestWaitNotification(Runtime(), txId);
 
         // Verify checksums are created
-        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 6);
+        UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 8);
 
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
@@ -2510,11 +2506,15 @@ partitioning_settings {
 
         const auto* metadataChecksum = S3Mock().GetData().FindPtr("/metadata.json.sha256");
         UNIT_ASSERT(metadataChecksum);
-        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "fbb85825fb12c5f38661864db884ba3fd1512fc4b0a2a41960d7d62d19318ab6 metadata.json");
+        UNIT_ASSERT_VALUES_EQUAL(*metadataChecksum, "29c79eb8109b4142731fc894869185d6c0e99c4b2f605ea3fc726b0328b8e316 metadata.json");
 
         const auto* schemeChecksum = S3Mock().GetData().FindPtr("/scheme.pb.sha256");
         UNIT_ASSERT(schemeChecksum);
         UNIT_ASSERT_VALUES_EQUAL(*schemeChecksum, "cb1fb80965ae92e6369acda2b3b5921fd5518c97d6437f467ce00492907f9eb6 scheme.pb");
+
+        const auto* permissionsChecksum = S3Mock().GetData().FindPtr("/permissions.pb.sha256");
+        UNIT_ASSERT(permissionsChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*permissionsChecksum, "b41fd8921ff3a7314d9c702dc0e71aace6af8443e0102add0432895c5e50a326 permissions.pb");
     }
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
@@ -2715,7 +2715,7 @@ attributes {
         UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json"));
         UNIT_ASSERT(HasS3File("/my_export/Table1/scheme.pb"));
         UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
-        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\"}");
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\",\"checksum\":\"sha256\"}");
     }
 
     Y_UNIT_TEST(SchemaMappingEncryption) {
@@ -2846,11 +2846,11 @@ attributes {
 
         THashSet<TString> ivs;
         for (auto [key, content] : S3Mock().GetData()) {
-            if (key == "/my_export/metadata.json") {
+            if (key == "/my_export/metadata.json" || key.EndsWith(".sha256")) {
                 continue;
             }
 
-            // All files except backup metadata must be encrypted
+            // All files except backup metadata and checksums must be encrypted
             UNIT_ASSERT_C(key.EndsWith(".enc"), key);
 
             // Check that we can decrypt content with our key (== it is really encrypted with our key)
@@ -2916,11 +2916,177 @@ attributes {
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
     }
 
-    Y_UNIT_TEST(Topics) {
+    Y_UNIT_TEST(TopicExport) {
       TestTopic();
     }
 
-    Y_UNIT_TEST(TopicsWithPermissions) {
+    Y_UNIT_TEST(TopicWithPermissionsExport) {
       TestTopic(true);
+    }
+
+    Y_UNIT_TEST(TopicsExport) {
+      TestTopic(false, 5, 4);
+    }
+
+    Y_UNIT_TEST(TopicsWithPermissionsExport) {
+      TestTopic(true, 5, 4);
+    }
+
+    Y_UNIT_TEST(ExportTableWithUniqueIndex) {
+      Env();
+      ui64 txId = 100;
+
+      TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+          TableDescription {
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+          }
+          IndexDescription {
+            Name: "ByValue"
+            KeyColumnNames: ["value"]
+            Type: EIndexTypeGlobalUnique
+          }
+      )");
+      Env().TestWaitNotification(Runtime(), txId);
+
+      TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+          ExportToS3Settings {
+            endpoint: "localhost:%d"
+            scheme: HTTP
+            items {
+              source_path: "/MyRoot/Table"
+              destination_prefix: ""
+            }
+          }
+      )", S3Port()));
+      Env().TestWaitNotification(Runtime(), txId);
+
+      TestDescribeResult(DescribePrivatePath(Runtime(), "/MyRoot/Table/ByValue"),
+            {NLs::PathExist,
+             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+             NLs::IndexKeys({"value"})});
+    }
+
+    Y_UNIT_TEST(DecimalOutOfRange) {
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Write a normal decimal value
+        // 10.0^13-1 (scale 9) = 0x21e19e0c9ba76a53600
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x19e0c9ba76a53600ULL, 0x21eULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+        // Write a decimal value that is out of range for precision 22
+        // 10.0^13 (scale 9) = 10^22 = 0x21e19e0c9bab2400000
+        {
+            ui64 key = 2u;
+            std::pair<ui64, i64> value = { 0x19e0c9bab2400000ULL, 0x21eULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        UNIT_ASSERT(HasS3File("/Backup1/metadata.json"));
+        UNIT_ASSERT(HasS3File("/Backup1/data_00.csv"));
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/Backup1/data_00.csv"),
+            "1,9999999999999\n"
+            "2,10000000000000\n");
+
+        TestImport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "Backup1"
+                destination_path: "/MyRoot/Table2"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetImport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "Backup2"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        // Note: out-of-range values are restored as inf
+        UNIT_ASSERT(HasS3File("/Backup2/metadata.json"));
+        UNIT_ASSERT(HasS3File("/Backup2/data_00.csv"));
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/Backup2/data_00.csv"),
+            "1,9999999999999\n"
+            "2,inf\n");
+    }
+
+    Y_UNIT_TEST(CorruptedDecimalValue) {
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint64" }
+                Columns { Name: "value" Type: "Decimal" }
+                KeyColumnNames: ["key"]
+            )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        // Write a decimal value that is way out of range for max precision 35
+        // 10^38 = 0x4b3b4ca85a86c47a098a224000000000
+        {
+            ui64 key = 1u;
+            std::pair<ui64, i64> value = { 0x098a224000000000ULL, 0x4b3b4ca85a86c47aULL };
+            UploadRow(Runtime(), "/MyRoot/Table1", 0, {1}, {2}, {TCell::Make(key)}, {TCell::Make(value)});
+        }
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table1"
+                destination_prefix: "Backup1"
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 }

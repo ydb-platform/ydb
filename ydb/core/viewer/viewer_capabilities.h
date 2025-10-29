@@ -15,7 +15,7 @@ public:
     {}
 
     void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
+        if (TBase::NeedToRedirect(false/* don't check auth for capabilities on purpose */)) {
             return;
         }
         ReplyAndPassAway();

@@ -20,8 +20,8 @@ PEERDIR(
     ydb/core/base
     ydb/core/grpc_services
     ydb/core/kqp
-    ydb/core/persqueue
-    ydb/core/persqueue/codecs
+    ydb/core/persqueue/events
+    ydb/core/persqueue/public/codecs
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/ydb_convert
@@ -29,6 +29,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/library/persqueue/obfuscate
 #    ydb/library/persqueue/tests
     ydb/library/persqueue/topic_parser
+    ydb/library/cloud_permissions
     ydb/public/api/grpc
     ydb/public/api/grpc/draft
     ydb/public/api/protos

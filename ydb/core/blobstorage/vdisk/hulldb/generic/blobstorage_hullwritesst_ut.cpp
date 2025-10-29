@@ -75,7 +75,8 @@ namespace NKikimr {
                 , AppendBlockSize(appendBlockSize)
                 , WriteBlockSize(writeBlockSize)
                 , WriterPtr(new TWriter(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse, Owner, OwnerRound,
-                        ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena, true))
+                        ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
+                        EBlobHeaderMode::OLD_HEADER))
                 , Arena(&TRopeArenaBackend::Allocate)
                 , ReservedChunks()
                 , Stat()
@@ -156,7 +157,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::Test(ui32 maxStep, const TString &data) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -167,7 +168,7 @@ namespace NKikimr {
                 TMemRecLogoBlob memRec(ingress);
 
 
-                TRope blobBuf = TDiskBlob::Create(data.size(), 1, 3, TRope(data), Arena, true);
+                TRope blobBuf = TDiskBlob::Create(data.size(), 1, 3, TRope(data), Arena, EBlobHeaderMode::OLD_HEADER, std::nullopt);
 
                 memRec.SetDiskBlob(TDiskPart(0, 0, data.size()));
                 merger.Clear();
@@ -187,7 +188,7 @@ namespace NKikimr {
                     Finish(step);
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        true);
+                        EBlobHeaderMode::OLD_HEADER);
                     Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
@@ -200,7 +201,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyLogoBlob, TMemRecLogoBlob, TWriterLogoBlob>::TestOutbound(ui32 maxStep) {
-            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
+            TTLogoBlobCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 step = 0; step < maxStep; step++) {
                 TLogoBlobID id(1, 1, step, 0, 0, 0);
@@ -236,7 +237,7 @@ namespace NKikimr {
 
                     WriterPtr = std::make_unique<TWriterLogoBlob>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        true);
+                        EBlobHeaderMode::OLD_HEADER);
                     Y_ABORT_UNLESS(push());
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {
@@ -249,7 +250,7 @@ namespace NKikimr {
 
         template <>
         void TTest<TKeyBlock, TMemRecBlock, TWriterBlock>::Test(ui32 maxGen) {
-            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, true);
+            TBlockCompactRecordMerger merger(TBlobStorageGroupType::ErasureMirror3, EBlobHeaderMode::OLD_HEADER);
 
             for (ui32 gen = 0; gen < maxGen; gen++) {
                 TKeyBlock key(34 + gen);
@@ -263,7 +264,7 @@ namespace NKikimr {
 
                     WriterPtr = std::make_unique<TWriterBlock>(TestCtx.GetVCtx(), EWriterDataType::Fresh, ChunksToUse,
                         Owner, OwnerRound, ChunkSize, AppendBlockSize, WriteBlockSize, 0, false, ReservedChunks, Arena,
-                        true);
+                        EBlobHeaderMode::OLD_HEADER);
                     Y_ABORT_UNLESS(WriterPtr->PushIndexOnly(key, merger.GetMemRec(), nullptr, nullptr));
                 }
                 while (auto msg = WriterPtr->GetPendingMessage()) {

@@ -60,19 +60,19 @@ Y_UNIT_TEST_SUITE(KqpWorkloadService) {
         // Dedicated, enabled
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1)
+            settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx)
         ), poolId);
 
         // Shared, enabled
         TSampleQueries::CheckNotFound(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2)
+            settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx)
         ), poolId);
 
         // Serverless, disabled
         TSampleQueries::TSelect42::CheckResult(ydb->ExecuteQuery(
             TSampleQueries::TSelect42::Query,
-            settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2)
+            settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx)
         ));
     }
 
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         auto settings = TQueryRunnerSettings()
             .PoolId("")
             .Database(serverlessTenant)
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
         const TString& poolId = "my_pool";
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", TStringBuilder() << R"(
@@ -647,7 +647,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsDdl) {
         auto settings = TQueryRunnerSettings()
             .PoolId("")
             .Database(serverlessTenant)
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
         auto hangingRequest = ydb->ExecuteQueryAsync(TSampleQueries::TSelect42::Query, settings.HangUpDuringExecution(true));
         ydb->WaitQueryExecution(hangingRequest);
@@ -790,7 +790,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
             .PoolId("")
             .UserSID("test@user")
             .Database(ydb->GetSettings().GetServerlessTenantName())
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
         const TString& poolId = "my_pool";
         CreateSampleResourcePoolClassifier(ydb, settings, poolId);
@@ -938,7 +938,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
         auto settings = TQueryRunnerSettings()
             .PoolId("")
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
         const TString& poolId = "my_pool";
         ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
@@ -1050,7 +1050,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
         auto settings = TQueryRunnerSettings()
             .PoolId("")
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
 
         const TString& poolId = "my_pool";
         ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
@@ -1239,7 +1239,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
 
         auto settings = TQueryRunnerSettings()
             .PoolId("")
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
 
         ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
             CREATE RESOURCE POOL a WITH (
@@ -1408,7 +1408,7 @@ Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
 
         auto settings = TQueryRunnerSettings()
             .PoolId("")
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
 
         const TString& poolId = "my_pool";
         ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
@@ -1672,7 +1672,7 @@ Y_UNIT_TEST_SUITE(DefaultPoolSettings) {
 
         auto settings = TQueryRunnerSettings()
             .PoolId("")
-            .NodeIndex(1);
+            .NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
 
         {  // Check tables
             auto result = ydb->ExecuteQuery(R"(

@@ -686,17 +686,17 @@ void TPCCChecker::CheckSync() {
         &TPCCChecker::ConsistencyCheck3324,
         &TPCCChecker::ConsistencyCheck3325,
         &TPCCChecker::ConsistencyCheck3326,
-        //&TPCCChecker::ConsistencyCheck3327, //mem
+        &TPCCChecker::ConsistencyCheck3327, //requires a lot of mem
         &TPCCChecker::ConsistencyCheck3328,
         &TPCCChecker::ConsistencyCheck3329,
-        //&TPCCChecker::ConsistencyCheck33210, // mem
+        &TPCCChecker::ConsistencyCheck33210, //requires a lot of mem
     };
 
     if (Config.JustImported) {
         checkFunctions.insert(checkFunctions.end(), &TPCCChecker::ConsistencyCheck33211);
     }
 
-    // checkFunctions.insert(checkFunctions.end(), &TPCCChecker::ConsistencyCheck33212); // mem
+    checkFunctions.insert(checkFunctions.end(), &TPCCChecker::ConsistencyCheck33212); //requires a lot of mem
 
     for (auto& checkFunction : checkFunctions) {
         (this->*checkFunction)(queryClient);
@@ -780,7 +780,7 @@ void TPCCChecker::ConsistencyCheckPart2(TQueryClient& client) {
 void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
     // sum(O_OL_CNT) = [number of rows in the ORDER-LINE table for this district]
 
-    const int WAREHOUSE_RANGE_SIZE = 1000;
+    const int WAREHOUSE_RANGE_SIZE = 50;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -822,7 +822,7 @@ void TPCCChecker::ConsistencyCheck3324(TQueryClient& client) {
 }
 
 void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
-    const int WAREHOUSE_RANGE_SIZE = 250;
+    const int WAREHOUSE_RANGE_SIZE = 50;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -885,7 +885,7 @@ void TPCCChecker::ConsistencyCheck3325(TQueryClient& client) {
 }
 
 void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
-    const int WAREHOUSE_RANGE_SIZE = 250;
+    const int WAREHOUSE_RANGE_SIZE = 50;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -959,7 +959,7 @@ void TPCCChecker::ConsistencyCheck3326(TQueryClient& client) {
 
 // TODO: rewrite (to much mem and materialization size)
 void TPCCChecker::ConsistencyCheck3327(TQueryClient& client) {
-    const int WAREHOUSE_RANGE_SIZE = 100;
+    const int WAREHOUSE_RANGE_SIZE = 10;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -1066,7 +1066,7 @@ void TPCCChecker::ConsistencyCheck3329(TQueryClient& client) {
 // TODO: rewrite (to much mem and materialization size)
 void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
     // 3.3.2.10: For each customer, C_BALANCE = sum(delivered OL_AMOUNTs) - sum(H_AMOUNT)
-    const int WAREHOUSE_RANGE_SIZE = 250;
+    const int WAREHOUSE_RANGE_SIZE = 10;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -1136,7 +1136,7 @@ void TPCCChecker::ConsistencyCheck33210(TQueryClient& client) {
 
 void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
     // 3.3.2.11: For each district, ORDER count - NEW_ORDER count = 2100
-    const int WAREHOUSE_RANGE_SIZE = 250;
+    const int WAREHOUSE_RANGE_SIZE = 50;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {
@@ -1182,7 +1182,7 @@ void TPCCChecker::ConsistencyCheck33211(TQueryClient& client) {
 // TODO: rewrite (to much mem and materialization size)
 void TPCCChecker::ConsistencyCheck33212(TQueryClient& client) {
     // 3.3.2.12: For each customer, C_BALANCE + C_YTD_PAYMENT = sum(delivered OL_AMOUNTs)
-    const int WAREHOUSE_RANGE_SIZE = 100;
+    const int WAREHOUSE_RANGE_SIZE = 10;
     std::vector<TFuture<void>> rangeFutures;
 
     for (int startWh = 1; startWh <= Config.WarehouseCount; startWh += WAREHOUSE_RANGE_SIZE) {

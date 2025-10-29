@@ -9,7 +9,10 @@ logger = logging.getLogger(__name__)
 CLUSTER_CONFIG = dict(
     additional_log_configs={
         # 'TX_PROXY': LogLevels.DEBUG,
-    }
+    },
+    extra_feature_flags=[
+        "enable_schema_secrets",
+    ],
 )
 DATABASE = "/Root/test"
 TABLE_NAME = "table"
@@ -18,6 +21,7 @@ CREATE_TABLE_GRANTS = ['ydb.granular.create_table']
 ALTER_TABLE_ADD_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_COLUMN_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ERASE_ROW_GRANTS = ['ydb.granular.describe_schema', 'ydb.granular.select_row', 'ydb.granular.erase_row']
+ALTER_TABLE_CREATE_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_ALTER_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 ALTER_TABLE_DROP_INDEX_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 DROP_TABLE_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
@@ -27,21 +31,10 @@ READ_TOPIC_GRANTS = []
 ALTER_TABLE_DROP_CHANGEFEED_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
 CREATE_TOPIC_GRANTS = ['ydb.granular.create_queue']
 DROP_TOPIC_GRANTS = ['ydb.granular.remove_schema']
-ALL_USED_GRANS = set(
-    CREATE_TABLE_GRANTS
-    + ALTER_TABLE_ADD_COLUMN_GRANTS
-    + ALTER_TABLE_DROP_COLUMN_GRANTS
-    + ERASE_ROW_GRANTS
-    + ALTER_TABLE_ALTER_INDEX_GRANTS
-    + ALTER_TABLE_DROP_INDEX_GRANTS
-    + DROP_TABLE_GRANTS
-    + ALTER_TABLE_ADD_CHANGEFEED_GRANTS
-    + ALTER_TOPIC_ADD_CONSUMER_GRANTS
-    + READ_TOPIC_GRANTS
-    + ALTER_TABLE_DROP_CHANGEFEED_GRANTS
-    + CREATE_TOPIC_GRANTS
-    + DROP_TOPIC_GRANTS
-)
+
+CREATE_SECRET_GRANTS = ['ydb.granular.create_table']
+ALTER_SECRET_GRANTS = ['ydb.granular.alter_schema', 'ydb.granular.describe_schema']
+DROP_SECRET_GRANTS = ['ydb.granular.remove_schema', 'ydb.granular.describe_schema']
 
 
 def run_query(config, query):
@@ -71,29 +64,25 @@ def create_user(ydb_cluster, admin_config, user_name):
     )
 
 
-def revoke_grants(admin_config, user_name, object_name, all_grants):
-    if all_grants is None or len(all_grants) == 0:
-        return
-
-    revoke_grants_query = ''
-    for grant in all_grants:
-        revoke_grants_query += f"REVOKE '{grant}' ON `{object_name}` FROM {user_name};"
-    run_with_assert(admin_config, revoke_grants_query)
+def revoke_all_grants(admin_config, user_name, object_name):
+    run_with_assert(admin_config, f"REVOKE all ON `{object_name}` FROM {user_name};")
 
 
 def provide_grants(admin_config, user_name, object_name, required_grants):
     if required_grants is None or len(required_grants) == 0:
         return
 
-    provide_grants_query = ''
+    grants = ""
     for grant in required_grants:
-        assert grant in ALL_USED_GRANS, 'Keep ALL_USED_GRANS updated with all used grants'
-        provide_grants_query += f"GRANT '{grant}' ON `{object_name}` TO {user_name};"
-    run_with_assert(admin_config, provide_grants_query)
+        if grants:
+            grants += ", "
+        grants += f"'{grant}'"
+
+    run_with_assert(admin_config, f"GRANT {grants} ON `{object_name}` TO {user_name};")
 
 
 def _test_grants(admin_config, user_config, user_name, query, object_name, required_grants, expected_err):
-    revoke_grants(admin_config, user_name, object_name, ALL_USED_GRANS)
+    revoke_all_grants(admin_config, user_name, object_name)
     if required_grants is not None and len(required_grants) > 0:  # means the query does not require any grants
         run_with_assert(user_config, query, expected_err=expected_err)
         provide_grants(admin_config, user_name, object_name, required_grants)
@@ -164,12 +153,12 @@ def test_granular_grants_for_tables(ydb_cluster):
     create_index_query = f"ALTER TABLE `{TABLE_PATH}` ADD INDEX `b_column_index` GLOBAL ON (`b`);"
     _test_grants(
         tenant_admin_config,
-        user1_config,
-        'user1',
+        user2_config,
+        'user2',
         create_index_query,
         TABLE_PATH,
-        [],  # user1 is the owner of a table
-        "",
+        ALTER_TABLE_CREATE_INDEX_GRANTS,
+        "you do not have access permissions",
     )
 
     # ALTER TABLE ... ALTER INDEX
@@ -312,6 +301,59 @@ def test_pq_grants(ydb_cluster):
         drop_topic_query,
         DATABASE,
         DROP_TOPIC_GRANTS,
+        "Access denied",
+    )
+
+    ydb_cluster.remove_database(DATABASE)
+    ydb_cluster.unregister_and_stop_slots(database_nodes)
+
+
+def test_secret_grants(ydb_cluster):
+    ydb_cluster.create_database(DATABASE, storage_pool_units_count={"hdd": 1})
+    database_nodes = ydb_cluster.register_and_start_slots(DATABASE, count=1)
+    ydb_cluster.wait_tenant_up(DATABASE)
+
+    tenant_admin_config = ydb.DriverConfig(
+        endpoint="%s:%s" % (ydb_cluster.nodes[1].host, ydb_cluster.nodes[1].port),
+        database=DATABASE,
+    )
+
+    # CREATE SECRET
+    user1_config = create_user(ydb_cluster, tenant_admin_config, "user1")
+    secret_name = f"{DATABASE}/secret"
+    create_secret_query = f"CREATE SECRET `{secret_name}` WITH (value = \"one\");"
+    _test_grants(
+        tenant_admin_config,
+        user1_config,
+        'user1',
+        create_secret_query,
+        DATABASE,
+        CREATE_SECRET_GRANTS,
+        "Access denied",
+    )
+
+    # ALTER SECRET
+    user2_config = create_user(ydb_cluster, tenant_admin_config, "user2")
+    alter_secret_query = f"ALTER SECRET `{secret_name}` WITH (value = \"two\");"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        alter_secret_query,
+        secret_name,
+        ALTER_SECRET_GRANTS,
+        "Access denied",
+    )
+
+    # DROP SECRET
+    drop_secret_query = f"DROP SECRET `{secret_name}`;"
+    _test_grants(
+        tenant_admin_config,
+        user2_config,
+        'user2',
+        drop_secret_query,
+        secret_name,
+        DROP_SECRET_GRANTS,
         "Access denied",
     )
 

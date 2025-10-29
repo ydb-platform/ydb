@@ -85,6 +85,7 @@ message TEvAnalyze {
     optional bytes OperationId = 1; // unique identifier to match response item
     repeated TTable Tables = 2; // list of analyzed tables and columns
     repeated EColumnStatisticType Types = 3; // list of statistics types requested. Empty means asking for all available.
+    optional string Database = 4; // database name the tables belong to
 }
 
 // SA -> KQP
@@ -96,7 +97,7 @@ message TEvAnalyzeResponse {
         STATUS_SUCCESS = 1;
         STATUS_ERROR = 2;
     }
-    optional EStatus Status = 2;    
+    optional EStatus Status = 2;
 }
 
 // KQP -> SA

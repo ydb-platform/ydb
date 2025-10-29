@@ -6,6 +6,8 @@ SRCS(
 
 PEERDIR(
     yql/essentials/providers/common/codec
+    yql/essentials/providers/common/provider
+    yql/essentials/providers/result/expr_nodes
     yql/essentials/utils/log
     yt/cpp/mapreduce/common
     yt/cpp/mapreduce/interface

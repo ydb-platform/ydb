@@ -30,9 +30,12 @@ namespace NYdb {
             bool UseTopicCommit = false;
             bool UseTableSelect = false;
             bool UseTableUpsert = false;
+            TDuration RestartInterval = TDuration::Max();
+            bool ReadWithoutCommit = false;
             bool ReadWithoutConsumer = false;
             size_t CommitPeriodMs = 15'000;
             size_t CommitMessages = 1'000'000;
+            std::optional<size_t> MaxMemoryUsageBytes = 15_MB;
         };
 
         class TTransactionSupport;

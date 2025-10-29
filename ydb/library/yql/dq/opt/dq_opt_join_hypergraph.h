@@ -269,6 +269,13 @@ public:
         }
     }
 
+    /*
+     * Updates the left and right node sets of an existing edge in the hypergraph saving its invariants.
+     *
+     * This method is typically used during join optimization when we need to expand
+     * the scope of a join edge to include additional nodes (e.g., when applying
+     * join hints or reordering operations).
+     */
     void UpdateEdgeSides(size_t idx, TNodeSet newLeft, TNodeSet newRight) {
         auto& edge = Edges_[idx];
 

@@ -13,6 +13,31 @@ namespace NKikimr {
     // TFullCompactionState
     ////////////////////////////////////////////////////////////////////////////
     struct TFullCompactionState {
+        class TRateLimitter {
+        public:
+            TRateLimitter(TIntrusivePtr<TVDiskConfig> config)
+                : Config(config)
+            {}
+
+            bool IsEnable() const {
+                if (!(ui32) Config->HullCompFullCompPeriodSec) {
+                    return true;
+                }
+                return (TActivationContext::Now() - LastUpdateTime).Seconds() > (ui32) Config->HullCompFullCompPeriodSec; 
+            }
+
+            void Update() {
+                LastUpdateTime = TActivationContext::Now();
+            }
+
+        private:
+            TInstant LastUpdateTime = TInstant::Zero();
+            TIntrusivePtr<TVDiskConfig> Config;
+        };
+
+        TRateLimitter RateLimitter;
+        bool Force = false;
+
         struct TCompactionRequest {
             EHullDbType Type = EHullDbType::Max;
             ui64 RequestId = 0;
@@ -21,15 +46,20 @@ namespace NKikimr {
         std::deque<TCompactionRequest> Requests;
         std::optional<NHullComp::TFullCompactionAttrs> FullCompactionAttrs;
 
+        TFullCompactionState(TIntrusivePtr<TVDiskConfig> config) : RateLimitter(config) {}
+
         bool Enabled() const {
-            return bool(FullCompactionAttrs);
+            return bool(FullCompactionAttrs) && (Force || RateLimitter.IsEnable());
         }
 
         void FullCompactionTask(ui64 fullCompactionLsn, TInstant now, EHullDbType type, ui64 requestId,
-                const TActorId &recipient, THashSet<ui64> tablesToCompact)
+                const TActorId &recipient, THashSet<ui64> tablesToCompact, bool force)
         {
             FullCompactionAttrs.emplace(fullCompactionLsn, now, std::move(tablesToCompact));
             Requests.push_back({type, requestId, recipient});
+            if (force) {
+                Force = true;
+            }
         }
 
         void Compacted(const TActorContext& ctx, const std::pair<std::optional<NHullComp::TFullCompactionAttrs>, bool>& info) {
@@ -40,6 +70,8 @@ namespace NKikimr {
                 }
                 Requests.clear();
                 FullCompactionAttrs.reset();
+                RateLimitter.Update();
+                Force = false;
             }
         }
 
@@ -91,7 +123,7 @@ namespace NKikimr {
         std::unique_ptr<TFreshCompaction> compaction(new TFreshCompaction(
             hullCtx, rtCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, freshSegment, freshSegmentSnap,
             std::move(barriersSnap), std::move(levelSnap), it, firstLsn, lastLsn, TDuration::Max(), {},
-            allowGarbageCollection));
+            allowGarbageCollection, false));
 
         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(hullCtx->VCtx->VDiskLogPrefix,
@@ -222,7 +254,7 @@ namespace NKikimr {
             return res;
         }
 
-        void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec) {
+        void RunLevelCompaction(const TActorContext &ctx, TVector<TOrderedLevelSegmentsPtr> &vec, bool isFullCompaction) {
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateCompInProgress);
 
             // set up lsns + find out number of elements to merge
@@ -239,10 +271,12 @@ namespace NKikimr {
             // set up iterator
             TLevelSliceForwardIterator it(HullDs->HullCtx, vec);
             it.SeekToFirst();
+            // set using trottle, enable only for full compaction
+            bool useThrottle = isFullCompaction;
 
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(HullDs->HullCtx, RTCtx, HugeBlobCtx,
                 MinHugeBlobInBytes, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
-                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection));
+                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection, useThrottle));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -309,7 +343,7 @@ namespace NKikimr {
                     LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: level scheduled",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
-                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains);
+                    RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                     break;
                 }
                 default:
@@ -645,7 +679,7 @@ namespace NKikimr {
 
                 case E::FULL:
                     FullCompactionState.FullCompactionTask(confirmedLsn, ctx.Now(), msg->Type, msg->RequestId, ev->Sender,
-                        std::move(msg->TablesToCompact));
+                        std::move(msg->TablesToCompact), msg->Force);
                     ScheduleCompaction(ctx);
                     break;
 
@@ -717,8 +751,8 @@ namespace NKikimr {
             , RTCtx(std::move(rtCtx))
             , SyncLogFirstLsnToKeep(std::move(syncLogFirstLsnToKeep))
             , Boundaries(new NHullComp::TBoundaries(RTCtx->PDiskCtx->Dsk->ChunkSize,
-                                                    Config->HullCompLevel0MaxSstsAtOnce,
-                                                    Config->HullCompSortedPartsNum,
+                                                    HullDs->HullCtx->HullCompLevel0MaxSstsAtOnce,
+                                                    HullDs->HullCtx->HullCompSortedPartsNum,
                                                     Config->Level0UseDreg))
             , HullDbCommitterCtx(new THullDbCommitterCtx(RTCtx->PDiskCtx,
                                                     HullDs->HullCtx,
@@ -729,6 +763,7 @@ namespace NKikimr {
             , CompactionTask(new TCompactionTask)
             , ActiveActors(RTCtx->LevelIndex->ActorCtx->ActiveActors)
             , LevelStat(HullDs->HullCtx->VCtx->VDiskCounters)
+            , FullCompactionState(Config)
             , HugeBlobCtx(std::move(hugeBlobCtx))
             , MinHugeBlobInBytes(minHugeBlobInBytes)
         {}

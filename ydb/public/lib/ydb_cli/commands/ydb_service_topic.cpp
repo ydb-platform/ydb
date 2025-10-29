@@ -11,11 +11,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
+#include <util/stream/format.h>
 #include <util/stream/str.h>
 #include <util/string/cast.h>
 #include <util/string/hex.h>
 #include <util/string/vector.h>
 #include <util/string/join.h>
+#include <util/string/strip.h>
 
 #define TIMESTAMP_FORMAT_OPTION_DESCRIPTION "Timestamp may be specified in unix time format (seconds from 1970.01.01) or in ISO-8601 format (like 2020-07-10T15:00:00Z)"
 
@@ -33,6 +35,15 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("gzip", NYdb::NTopic::ECodec::GZIP),
             std::pair<TString, NYdb::NTopic::ECodec>("lzop", NYdb::NTopic::ECodec::LZOP),
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
+        };
+
+        TVector<ui32> ExistingMetricsLevels = {2, 3};
+
+        THashMap<ui32, TString> MetricsLevelsDescriptions = {
+            {0, "No metrics."},
+            {1, "Database level metrics."},
+            {2, "Database and topic level metrics."},
+            {3, "Database, topic, and partition level metrics."},
         };
 
         THashMap<TString, NTopic::EMeteringMode> ExistingMeteringModes = {
@@ -66,7 +77,8 @@ namespace NYdb::NConsoleClient {
             {ETopicMetadataField::MessageGroupID, "Message group id. All messages with the same message group id are guaranteed to be read in FIFO order."},
             {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition."},
             {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing."},
-            {ETopicMetadataField::Meta, "Message additional metadata."},
+            {ETopicMetadataField::MessageMeta, "Message metadata"},
+            {ETopicMetadataField::SessionMeta, "Message session metadata."},
         };
 
         const TVector<ETopicMetadataField> AllTopicMetadataFields = {
@@ -76,7 +88,8 @@ namespace NYdb::NConsoleClient {
             ETopicMetadataField::MessageGroupID,
             ETopicMetadataField::Offset,
             ETopicMetadataField::SeqNo,
-            ETopicMetadataField::Meta,
+            ETopicMetadataField::MessageMeta,
+            ETopicMetadataField::SessionMeta,
         };
 
         const THashMap<TString, ETopicMetadataField> TopicMetadataFieldsMap = {
@@ -86,7 +99,9 @@ namespace NYdb::NConsoleClient {
             {"message_group_id", ETopicMetadataField::MessageGroupID},
             {"offset", ETopicMetadataField::Offset},
             {"seq_no", ETopicMetadataField::SeqNo},
-            {"meta", ETopicMetadataField::Meta},
+            {"message_meta", ETopicMetadataField::MessageMeta},
+            {"session_meta", ETopicMetadataField::SessionMeta},
+            {"meta", ETopicMetadataField::Meta}
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {
@@ -149,6 +164,28 @@ namespace NYdb::NConsoleClient {
 
             return exists->second;
         }
+
+        TDuration ParseDurationHours(const TStringBuf str) {
+            double hours = 0;
+            if (!TryFromString(str, hours)) {
+                throw TMisuseException() << "Invalid hours duration '" << str << "'";
+            }
+            if (hours < 0) {
+                throw TMisuseException() << "Duration must be non-negative";
+            }
+            if (!std::isfinite(hours)) {
+                throw TMisuseException() << "Duration must be finite";
+            }
+            return TDuration::Seconds(hours * 3600); // using floating-point ctor with saturation
+        }
+
+        TDuration ParseDuration(TStringBuf str) {
+            StripInPlace(str);
+            if (!str.empty() && !IsAsciiAlpha(str.back())) {
+                throw TMisuseException() << "Duration must ends with a unit name (ex. 'h' for hours, 's' for seconds)";
+            }
+            return TDuration::Parse(str);
+        }
     }
 
     void TCommandWithSupportedCodecs::AddAllowedCodecs(TClientCommand::TConfig& config, const TVector<NYdb::NTopic::ECodec>& supportedCodecs) {
@@ -157,6 +194,29 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("STRING")
             .StoreResult(&SupportedCodecsStr_);
         AllowedCodecs_ = supportedCodecs;
+    }
+
+    void TCommandWithMetricsLevel::AddMetricsLevels(TClientCommand::TConfig& config) {
+        TStringStream description;
+        description << "Available metrics levels: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& level: ExistingMetricsLevels) {
+            auto findResult = MetricsLevelsDescriptions.find(level);
+            Y_ABORT_UNLESS(findResult != MetricsLevelsDescriptions.end(),
+                     "Couldn't find description for %s metrics level", (TStringBuilder() << level).c_str());
+            description << "\n  " << colors.BoldColor() << level << colors.OldColor()
+                        << "\n    " << findResult->second;
+            if (level == 2 /* database and topic level metrics */) {
+                description << colors.CyanColor() << " (default)" << colors.OldColor();
+            }
+        }
+        config.Opts->AddLongOption("metrics-level", description.Str())
+            .Optional()
+            .StoreResult(&MetricsLevel_);
+    }
+
+    TMaybe<NTopic::EMetricsLevel> TCommandWithMetricsLevel::GetMetricsLevel() const {
+        return MetricsLevel_;
     }
 
     void TCommandWithSupportedCodecs::ParseCodecs() {
@@ -307,10 +367,18 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .StoreResult(&MinActivePartitions_)
             .DefaultValue(1);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
-            .DefaultValue(24)
+        config.Opts->AddLongOption("retention-period-hours", TStringBuilder()
+                << "Duration in hours for which data in topic is stored "
+                << "(default: " << NColorizer::StdOut().CyanColor() << RetentionPeriod_.Hours() << NColorizer::StdOut().OldColor() << ")")
+            .Hidden()
             .Optional()
-            .StoreResult(&RetentionPeriodHours_);
+            .RequiredArgument("HOURS")
+            .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
+        config.Opts->AddLongOption("retention-period", TStringBuilder()
+                << "Duration for which data in topic is stored (ex. '72h', '1440m') "
+                << "(default: " << NColorizer::StdOut().CyanColor() << HumanReadable(RetentionPeriod_) << NColorizer::StdOut().OldColor() << ")")
+            .Optional()
+            .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .DefaultValue(1024)
             .Optional()
@@ -323,6 +391,7 @@ namespace NYdb::NConsoleClient {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+        AddMetricsLevels(config);
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
@@ -333,6 +402,8 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .Hidden()
             .StoreResult(&PartitionsPerTablet_);
+
+        config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
@@ -372,11 +443,15 @@ namespace NYdb::NConsoleClient {
             settings.MeteringMode(GetMeteringMode());
         }
 
-        settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
+        settings.RetentionPeriod(RetentionPeriod_);
         settings.RetentionStorageMb(RetentionStorageMb_);
 
         if (PartitionsPerTablet_.Defined()) {
             settings.AddAttribute("_partitions_per_tablet", ToString(*PartitionsPerTablet_));
+        }
+
+        if (auto level = GetMetricsLevel(); level.Defined()) {
+            settings.MetricsLevel(*level);
         }
 
         auto status = topicClient.CreateTopic(TopicName, settings).GetValueSync();
@@ -393,9 +468,14 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partitions-count", "Initial and minimum number of partitions for topic")
             .Optional()
             .StoreResult(&MinActivePartitions_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
+            .Hidden()
             .Optional()
-            .StoreResult(&RetentionPeriodHours_);
+            .RequiredArgument("HOURS")
+            .StoreMappedResult(&RetentionPeriod_, ParseDurationHours);
+        config.Opts->AddLongOption("retention-period", "Duration for which data in topic is stored (ex. '72h', '1440m')")
+            .Optional()
+            .StoreMappedResult(&RetentionPeriod_, ParseDuration);
         config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
             .Optional()
             .StoreResult(&PartitionWriteSpeedKbps_);
@@ -406,11 +486,14 @@ namespace NYdb::NConsoleClient {
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
         AddAllowedMeteringModes(config);
+        AddMetricsLevels(config);
 
         config.Opts->AddLongOption("auto-partitioning-max-partitions-count", "Maximum number of partitions for topic")
             .Optional()
             .StoreResult(&MaxActivePartitions_);
         AddAutoPartitioning(config, true);
+
+        config.Opts->MutuallyExclusive("retention-period-hours", "retention-period");
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
@@ -459,8 +542,8 @@ namespace NYdb::NConsoleClient {
             settings.SetSupportedCodecs(codecs);
         }
 
-        if (RetentionPeriodHours_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != TDuration::Hours(*RetentionPeriodHours_)) {
-            settings.SetRetentionPeriod(TDuration::Hours(*RetentionPeriodHours_));
+        if (RetentionPeriod_.Defined() && describeResult.GetTopicDescription().GetRetentionPeriod() != RetentionPeriod_) {
+            settings.SetRetentionPeriod(*RetentionPeriod_);
         }
 
         if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
@@ -474,6 +557,10 @@ namespace NYdb::NConsoleClient {
 
         if (RetentionStorageMb_.Defined() && describeResult.GetTopicDescription().GetRetentionStorageMb() != *RetentionStorageMb_) {
             settings.SetRetentionStorageMb(*RetentionStorageMb_);
+        }
+
+        if (MetricsLevel_.Defined()) {
+            settings.SetMetricsLevel(*MetricsLevel_);
         }
 
         return settings;
@@ -554,6 +641,9 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(false)
             .StoreResult(&IsImportant_);
+        config.Opts->AddLongOption("availability-period", "Duration for which uncommited data in topic is retained (ex. '72h', '1440m')")
+            .Optional()
+            .StoreMappedResult(&AvailabilityPeriod_, ParseDuration);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -584,6 +674,9 @@ namespace NYdb::NConsoleClient {
             consumerSettings.SetSupportedCodecs(codecs);
         }
         consumerSettings.SetImportant(IsImportant_);
+        if (AvailabilityPeriod_.Defined()) {
+            consumerSettings.AvailabilityPeriod(*AvailabilityPeriod_);
+        }
 
         readRuleSettings.AppendAddConsumers(consumerSettings);
 
@@ -810,6 +903,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
             .Optional()
             .GetOpt().SplitHandler(&PartitionIds_, ',');
+        config.Opts->AddLongOption("start-offset", "Offset to start reading from. If not specified, messages are read from the last commit point for the chosen consumer.\nExactly one partition id should be specified with the '--partition-ids' option.")
+            .Optional()
+            .StoreResult(&Offset_);
 
         AddAllowedMetadataFields(config);
         AddTransform(config);
@@ -834,7 +930,12 @@ namespace NYdb::NConsoleClient {
             if (f == TopicMetadataFieldsMap.end()) {
                 throw TMisuseException() << "Field " << field << " not found in available fields"; // TODO(shmel1k@): improve message.
             }
-            set.insert(f->second);
+            if (f->second == ETopicMetadataField::Meta) {
+                set.insert(ETopicMetadataField::MessageMeta);
+                set.insert(ETopicMetadataField::SessionMeta);
+            } else {
+                set.insert(f->second);
+            }
         }
 
         TVector<ETopicMetadataField> result;
@@ -897,6 +998,27 @@ namespace NYdb::NConsoleClient {
         if (!Consumer_ && !PartitionIds_) {
             throw TMisuseException() << "Please specify either --consumer or --partition-ids to read without consumer";
         }
+
+        if (Offset_ && !(PartitionIds_.size() == 1)) {
+            throw TMisuseException() << "Please specify exactly one partition id with the '--partition-ids' option from which reading will be performed, starting from the specified offset.";
+        }
+    }
+
+    TTopicReaderSettings TCommandTopicRead::PrepareReaderSettings() const {
+        TTopicReaderSettings::TPartitionReadOffsetMap readOffsets;
+        if (Offset_) {
+            Y_ENSURE(PartitionIds_.size() == 1, "Precondition failed: read with offset requires exactly one partition id; " << LabeledOutput(PartitionIds_.size()));
+            readOffsets[PartitionIds_.at(0)] = *Offset_;
+        }
+        return TTopicReaderSettings(
+            Limit_,
+            Commit_,
+            Wait_,
+            std::move(readOffsets),
+            MessagingFormat,
+            MetadataFields_,
+            GetTransform(),
+            IdleTimeout_);
     }
 
     int TCommandTopicRead::Run(TConfig& config) {
@@ -909,14 +1031,7 @@ namespace NYdb::NConsoleClient {
         auto readSession = topicClient.CreateReadSession(PrepareReadSessionSettings());
 
         {
-            TTopicReader reader = TTopicReader(std::move(readSession), TTopicReaderSettings(
-                                                                           Limit_,
-                                                                           Commit_,
-                                                                           Wait_,
-                                                                           MessagingFormat,
-                                                                           MetadataFields_,
-                                                                           GetTransform(),
-                                                                           IdleTimeout_));
+            TTopicReader reader = TTopicReader(std::move(readSession), PrepareReaderSettings());
 
             reader.Init();
 
@@ -987,6 +1102,10 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("message-group-id", "Message group identifier. If not set, all messages from input will get the same identifier based on hex string\nrepresentation of 3 random bytes")
             .Optional()
             .StoreResult(&MessageGroupId_);
+        config.Opts->AddLongOption("init-seqno-timeout", "Max wait duration for initial seqno")
+            .Optional()
+            .Hidden()
+            .Handler([this](const TString& arg) { MessagesWaitTimeout_ = TDuration::Seconds(FromString<ui8>(arg)); });
 
         AddTransform(config);
     }
@@ -1043,7 +1162,8 @@ namespace NYdb::NConsoleClient {
             auto writeSession = NTopic::TTopicClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer =
                 TTopicWriter(writeSession, std::move(TTopicWriterParams(MessagingFormat, Delimiter_, MessageSizeLimit_, BatchDuration_,
-                                                                        BatchSize_, BatchMessagesCount_, GetTransform())));
+                                                                        BatchSize_, BatchMessagesCount_, GetTransform(),
+                                                                        MessagesWaitTimeout_)));
 
             if (int status = writer.Init(); status) {
                 return status;

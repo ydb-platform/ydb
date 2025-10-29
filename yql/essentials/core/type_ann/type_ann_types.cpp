@@ -6,6 +6,15 @@
 
 namespace NYql {
 namespace NTypeAnnImpl {
+    bool CheckLinearLangver(TPositionHandle pos, TLangVersion langver, TExprContext& ctx) {
+        if (!IsAvailableLangVersion(MakeLangVersion(2025, 4), langver)) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Linear types are not available before version 2025.04"));
+            return false;
+        }
+
+        return true;
+    }
+
     const TTypeAnnotationNode* MakeItemDescriptorType(TExprContext& ctx) {
         TVector<const TItemExprType*> items = {
             ctx.MakeType<TItemExprType>("Name", ctx.MakeType<TDataExprType>(EDataSlot::String)),
@@ -83,7 +92,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Generic>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Generic>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -95,7 +104,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Resource>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Resource>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -112,7 +121,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tagged>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tagged>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -142,7 +151,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Error>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Error>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 4, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -184,7 +193,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Data>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Data>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -221,7 +230,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::List>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::List>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -242,7 +251,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Stream>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Stream>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -263,7 +272,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Flow>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Flow>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -284,7 +293,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Block>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Block>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -305,7 +314,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Scalar>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Scalar>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -326,7 +335,57 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Optional>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Linear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = ctx.Expr.MakeType<TLinearExprType>(itemType);
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(type));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::DynamicLinear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto itemType = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (!EnsureInspectableType(input->Child(0)->Pos(), *itemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto type = ctx.Expr.MakeType<TDynamicLinearExprType>(itemType);
+        input->SetTypeAnn(ctx.Expr.MakeType<TTypeExprType>(type));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Optional>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -347,7 +406,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tuple>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Tuple>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         TTypeAnnotationNode::TListType items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
@@ -369,7 +428,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Multi>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Multi>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         TTypeAnnotationNode::TListType items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
@@ -392,7 +451,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Struct>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Struct>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         TVector<const TItemExprType*> items;
         for (size_t i = 0; i < input->ChildrenSize(); ++i) {
@@ -443,7 +502,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Dict>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Dict>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -473,7 +532,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Void>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Void>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -485,7 +544,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Null>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Null>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -497,7 +556,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Unit>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Unit>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -509,7 +568,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::EmptyList>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::EmptyList>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -521,7 +580,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::EmptyDict>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::EmptyDict>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 0, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -533,7 +592,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::OptionalItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::OptionalItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -565,7 +624,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ListItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ListItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -597,7 +656,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::StreamItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::StreamItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -624,7 +683,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::TupleElement>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::TupleElement>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -663,7 +722,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::StructMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::StructMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -703,7 +762,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::DictKey>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::DictKey>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -729,7 +788,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::DictPayload>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::DictPayload>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -755,7 +814,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Callable>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Callable>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -856,7 +915,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::CallableResult>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::CallableResult>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -877,7 +936,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::CallableArgument>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::CallableArgument>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -951,6 +1010,40 @@ namespace NTypeAnnImpl {
 
         input->SetTypeAnn(exprRoot->GetTypeAnn());
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::LinearItem>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto resType = MakeTypeHandleResourceType(ctx.Expr);
+        if (input->Child(0)->GetTypeAnn() == resType) {
+            input->SetTypeAnn(resType);
+            return IGraphTransformer::TStatus::Ok;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        auto type = input->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        if (type->GetKind() == ETypeAnnotationKind::Linear) {
+            output = ExpandType(input->Pos(), *type->Cast<TLinearExprType>()->GetItemType(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        } else if (type->GetKind() == ETypeAnnotationKind::DynamicLinear) {
+            output = ExpandType(input->Pos(), *type->Cast<TDynamicLinearExprType>()->GetItemType(), ctx.Expr);
+            return IGraphTransformer::TStatus::Repeat;
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0)->Pos()),
+                TStringBuilder() << "Expected (dynamic) linear type, but got: " << *type));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     IGraphTransformer::TStatus FormatTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -1041,7 +1134,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::AddMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::AddMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1133,17 +1226,17 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::RemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::RemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         return RemoveMemberImpl(input, output, ctx, false);
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ForceRemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::ForceRemoveMember>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         return RemoveMemberImpl(input, output, ctx, true);
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::FlattenMembers>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::FlattenMembers>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         TVector<const TItemExprType*> allItems;
         for (auto& child : input->Children()) {
             if (!EnsureTupleSize(*child, 2, ctx.Expr)) {
@@ -1189,7 +1282,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Variant>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeWrapper<ETypeAnnotationKind::Variant>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -1214,7 +1307,7 @@ namespace NTypeAnnImpl {
     }
 
     template <>
-    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::VariantUnderlying>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus TypeArgWrapper<ETypeArgument::VariantUnderlying>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -1305,6 +1398,44 @@ namespace NTypeAnnImpl {
     }
 
     template <>
+    IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::Linear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTypeHandleResourceType(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
+    IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::DynamicLinear>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        Y_UNUSED(output);
+        if (!CheckLinearLangver(input->Pos(), ctx.Types.LangVer, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTypeHandleResourceType(*input->Child(0), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(MakeTypeHandleResourceType(ctx.Expr));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
+    template <>
     IGraphTransformer::TStatus MakeTypeHandleWrapper<ETypeAnnotationKind::List>(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
@@ -1358,7 +1489,7 @@ namespace NTypeAnnImpl {
 
         auto resType = MakeTypeHandleResourceType(ctx.Expr);
         auto listType = ctx.Expr.MakeType<TListExprType>(resType);
-        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1391,7 +1522,7 @@ namespace NTypeAnnImpl {
 
         auto itemType = MakeItemDescriptorType(ctx.Expr);
         auto listType = ctx.Expr.MakeType<TListExprType>(itemType);
-        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1602,7 +1733,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 1) {
             auto optStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
-            auto status = TryConvertTo(input->ChildRef(1), *optStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(1), *optStrType, ctx.Expr, ctx.Types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -1610,7 +1741,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 2) {
             auto optListStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TListExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String)));
-            auto status = TryConvertTo(input->ChildRef(2), *optListStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(2), *optListStrType, ctx.Expr, ctx.Types);
             if (status == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -1681,14 +1812,14 @@ namespace NTypeAnnImpl {
         }
 
         auto listType = ctx.Expr.MakeType<TListExprType>(MakeArgumentDescriptorType(ctx.Expr));
-        auto status = TryConvertTo(input->ChildRef(1), *listType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(1), *listType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
 
         if (input->ChildrenSize() > 2) {
             auto optUi32Type = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32));
-            status = TryConvertTo(input->ChildRef(2), *optUi32Type, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            status = TryConvertTo(input->ChildRef(2), *optUi32Type, ctx.Expr, ctx.Types);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -1696,7 +1827,7 @@ namespace NTypeAnnImpl {
 
         if (input->ChildrenSize() > 3) {
             auto optStrType = ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::String));
-            status = TryConvertTo(input->ChildRef(3), *optStrType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            status = TryConvertTo(input->ChildRef(3), *optStrType, ctx.Expr, ctx.Types);
             if (status != IGraphTransformer::TStatus::Ok) {
                 return status;
             }
@@ -1774,7 +1905,7 @@ namespace NTypeAnnImpl {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1808,7 +1939,7 @@ namespace NTypeAnnImpl {
         }
 
         auto expectedType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::String);
-        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+        auto status = TryConvertTo(input->ChildRef(0), *expectedType, ctx.Expr, ctx.Types);
         if (status != IGraphTransformer::TStatus::Ok) {
             return status;
         }
@@ -1844,7 +1975,7 @@ namespace NTypeAnnImpl {
             }
         } else {
             auto ui32Type = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint32);
-            auto status = TryConvertTo(input->ChildRef(0), *ui32Type, ctx.Expr, {}, ctx.Types.UseTypeDiffForConvertToError);
+            auto status = TryConvertTo(input->ChildRef(0), *ui32Type, ctx.Expr, ctx.Types);
             if (status.Level != IGraphTransformer::TStatus::Ok) {
                 return status;
             }

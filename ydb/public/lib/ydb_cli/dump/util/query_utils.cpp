@@ -1,14 +1,10 @@
 #include "query_utils.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/proto_parser/proto_parser.h>
-#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
-#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
-#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
@@ -30,12 +26,8 @@ namespace NYdb::NDump {
 
 using namespace NSQLv1Generated;
 
-TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot) {
-    if (backupRoot == restoreRoot) {
-        return TString(path);
-    }
 
-    TPathSplitUnix pathSplit(path);
+TPathSplitUnix RewriteAbsolutePath(const TPathSplitUnix& pathSplit, TStringBuf backupRoot, TStringBuf restoreRoot) {
     TPathSplitUnix backupRootSplit(backupRoot);
 
     size_t matchedParts = 0;
@@ -50,15 +42,26 @@ TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf r
         restoreRootSplit.AppendComponent("..");
     }
 
-    return restoreRootSplit.AppendMany(pathSplit.begin() + matchedParts, pathSplit.end()).Reconstruct();
+    return restoreRootSplit.AppendMany(pathSplit.begin() + matchedParts, pathSplit.end());
+}
+
+TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot) {
+    if (backupRoot == restoreRoot) {
+        return TString(path);
+    }
+
+    TPathSplitUnix pathSplit(path);
+    return RewriteAbsolutePath(pathSplit, backupRoot, restoreRoot).Reconstruct();
 }
 
 namespace {
 
-struct TAbsolutePathRewriter {
+struct TPathRewriter {
     const TString Database;
     const TStringBuf BackupRoot;
     const TStringBuf RestoreRoot;
+    const TStringBuf BackupPathPrefix;
+    const TStringBuf RestorePathPrefix;
 
     static TString BuildDatabaseToken(TStringBuf database) {
         if (database) {
@@ -84,17 +87,51 @@ struct TAbsolutePathRewriter {
         return TStringBuilder() << '`' << NDump::RewriteAbsolutePath(path.Skip(1).Chop(1), BackupRoot, RestoreRoot) << '`';
     }
 
+    TPathSplitUnix BuildAbsolutePath(TStringBuf path) const {
+        Y_DEBUG_ABORT_UNLESS(!IsAbsolutePath(path));
+        if (path.StartsWith('`')) {
+            Y_DEBUG_ABORT_UNLESS(path.EndsWith('`'));
+            path.Skip(1).Chop(1);
+        }
+        TPathSplitUnix prefixSplit(BackupPathPrefix);
+        TPathSplitUnix pathSplit(path);
+        prefixSplit.AppendMany(pathSplit.begin(), pathSplit.end());
+        return prefixSplit;
+    }
+
+    TString BuildRelativePath(const TPathSplitUnix& absoluteSplit) const {
+        Y_DEBUG_ABORT_UNLESS(absoluteSplit.IsAbsolute);
+        TPathSplitUnix relativeSplit;
+        TPathSplitUnix prefixSplit(RestorePathPrefix);
+        size_t matchedParts = 0;
+        while (matchedParts < size(absoluteSplit) && matchedParts < size(prefixSplit) && absoluteSplit[matchedParts] == prefixSplit[matchedParts]) {
+            // skip equal path components
+            ++matchedParts;
+        }
+        for (size_t unmatchedParts = matchedParts; unmatchedParts < size(prefixSplit); ++unmatchedParts) {
+            relativeSplit.AppendComponent("..");
+        }
+        relativeSplit.AppendMany(absoluteSplit.begin() + matchedParts, absoluteSplit.end());
+        return relativeSplit.Reconstruct();
+    }
+
 public:
-    explicit TAbsolutePathRewriter(TStringBuf database, TStringBuf backupRoot, TStringBuf restoreRoot)
+    explicit TPathRewriter(TStringBuf database, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix)
         : Database(BuildDatabaseToken(database))
         , BackupRoot(backupRoot)
         , RestoreRoot(restoreRoot)
+        , BackupPathPrefix(backupPathPrefix)
+        , RestorePathPrefix(restorePathPrefix)
     {
     }
 
     TString operator()(const TString& path) const {
-        if (IsAbsolutePath(path) && (!Database || IsInDatabase(path))) {
-            return RewriteAbsolutePath(path);
+        if (IsAbsolutePath(path)) {
+            if (!Database || IsInDatabase(path)) {
+                return RewriteAbsolutePath(path);
+            }
+        } else if (!BackupPathPrefix.empty() && !RestorePathPrefix.empty()) {
+            return TStringBuilder() << '`' << BuildRelativePath(NDump::RewriteAbsolutePath(BuildAbsolutePath(path), BackupRoot, RestoreRoot)) << '`';
         }
 
         return path;
@@ -110,7 +147,7 @@ struct TTokenCollector {
     void operator()(const NProtoBuf::Message& message) {
         if (const auto* token = dynamic_cast<const TToken*>(&message)) {
             const auto& value = token->GetValue();
-            if (token->GetId() != NALPDefault::SQLv1LexerTokens::TOKEN_EOF) {
+            if (token->GetValue() != "<EOF>") {
                 if (!Tokens.empty()) {
                     Tokens << ' ';
                 }
@@ -246,8 +283,6 @@ bool SqlToProtoAst(const TString& queryStr, TRule_sql_query& queryProto, NYql::T
     }
 
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
@@ -269,13 +304,9 @@ bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues
     settings.Arena = &arena;
 
     NSQLTranslationV1::TLexers lexers;
-    lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
-    lexers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiLexerFactory();
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
     NSQLTranslationV1::TParsers parsers;
-    parsers.Antlr3 = NSQLTranslationV1::MakeAntlr3ParserFactory();
-    parsers.Antlr3Ansi = NSQLTranslationV1::MakeAntlr3AnsiParserFactory();
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
@@ -290,20 +321,20 @@ bool ValidateTableRefs(const TRule_sql_query& query, NYql::TIssues& issues) {
 }
 
 template <typename TRef>
-TString RewriteRefs(const TRule_sql_query& query, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot) {
-    TTokenCollector tokenCollector(TAbsolutePathRewriter(db, backupRoot, restoreRoot));
+TString RewriteRefs(const TRule_sql_query& query, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix) {
+    TTokenCollector tokenCollector(TPathRewriter(db, backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix));
     VisitAllFields<TRef>(query, tokenCollector);
     return tokenCollector.Tokens;
 }
 
 template <typename TRef>
-bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
+bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(queryStr, queryProto, issues)) {
         return false;
     }
 
-    const auto rewrittenQuery = RewriteRefs<TRef>(queryProto, db, backupRoot, restoreRoot);
+    const auto rewrittenQuery = RewriteRefs<TRef>(queryProto, db, backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix);
     // formatting here is necessary for the view to have pretty text inside it after the creation
     if (!Format(rewrittenQuery, queryStr, issues)) {
         return false;
@@ -312,16 +343,12 @@ bool RewriteRefs(TString& queryStr, TStringBuf db, TStringBuf backupRoot, TStrin
     return true;
 }
 
-bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, issues);
-}
-
-bool RewriteTableRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_table_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
+bool RewriteTableRefs(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot, TStringBuf backupPathPrefix, TStringBuf restorePathPrefix, NYql::TIssues& issues) {
+    return RewriteRefs<TRule_table_ref>(query, "", backupRoot, restoreRoot, backupPathPrefix, restorePathPrefix, issues);
 }
 
 bool RewriteObjectRefs(TString& query, TStringBuf restoreRoot, NYql::TIssues& issues) {
-    return RewriteRefs<TRule_object_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, issues);
+    return RewriteRefs<TRule_object_ref>(query, GetDatabase(query), GetBackupRoot(query), restoreRoot, "", "", issues);
 }
 
 bool RewriteCreateQuery(TString& query, std::string_view pattern, const std::string& dbPath, NYql::TIssues& issues) {

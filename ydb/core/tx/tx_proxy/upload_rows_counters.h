@@ -62,6 +62,7 @@ private:
     using TBase = NColumnShard::TCommonCountersOwner;
     NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
     NMonitoring::THistogramPtr ReplyDuration;
+    NMonitoring::THistogramPtr SuccessReplyDuration;
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsCount;
     NMonitoring::THistogramPtr PackageSizeRecordsByRecords;
@@ -71,6 +72,11 @@ private:
     NMonitoring::THistogramPtr WritingDuration;
     NMonitoring::THistogramPtr CommitDuration;
     NMonitoring::THistogramPtr PrepareReplyDuration;
+    NMonitoring::TDynamicCounters::TCounterPtr WrittenBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr FailedBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr RequestsBytes;
+
+    NMonitoring::TDynamicCounters::TCounterPtr MissingDefaultColumnsCount;
 
     THashMap<TUploadStatus, NMonitoring::TDynamicCounters::TCounterPtr, TUploadStatus::THasher> CodesCount;
 
@@ -111,13 +117,19 @@ public:
             Owner.CommitDuration->Collect((*CommitFinished - *CommitStarted).MilliSeconds());
         }
 
-        void OnReply(const TUploadStatus& status) {
+        void OnReply(const TUploadStatus& status, ui64 writtenBytes) {
             ReplyFinished = TMonotonic::Now();
             if (CommitFinished) {
                 Owner.PrepareReplyDuration->Collect((*ReplyFinished - *CommitFinished).MilliSeconds());
             }
             Owner.ReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
             Owner.GetCodeCounter(status)->Add(1);
+            if (status == Ydb::StatusIds::SUCCESS) {
+                Owner.WrittenBytes->Add(writtenBytes);
+                Owner.SuccessReplyDuration->Collect((*ReplyFinished - Start).MilliSeconds());
+            } else {
+                Owner.FailedBytes->Add(writtenBytes);
+            }
         }
     };
 
@@ -125,11 +137,16 @@ public:
         return TGuard(start, *this);
     }
 
-    void OnRequest(const ui64 rowsCount) const {
+    void OnRequest(const ui64 rowsCount, ui64 requestBytes) const {
         RequestsCount->Add(1);
         RowsCount->Add(rowsCount);
         PackageSizeRecordsByRecords->Collect((i64)rowsCount, rowsCount);
         PackageSizeCountByRecords->Collect(rowsCount);
+        RequestsBytes->Add(requestBytes);
+    }
+
+    void OnMissingDefaultColumns() {
+        MissingDefaultColumnsCount->Inc();
     }
 };
 

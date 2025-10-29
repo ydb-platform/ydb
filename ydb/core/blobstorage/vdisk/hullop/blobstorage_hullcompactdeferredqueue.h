@@ -38,14 +38,15 @@ namespace NKikimr {
         bool Started = false;
         TRopeArena& Arena;
         const TBlobStorageGroupType GType;
-        const bool AddHeader;
+        const EBlobHeaderMode BlobHeaderMode;
 
     public:
-        TDeferredItemQueueBase(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype, bool addHeader)
+        TDeferredItemQueueBase(const TString& prefix, TRopeArena& arena, TBlobStorageGroupType gtype,
+                EBlobHeaderMode blobHeaderMode)
             : VDiskLogPrefix(prefix)
             , Arena(arena)
             , GType(gtype)
-            , AddHeader(addHeader)
+            , BlobHeaderMode(blobHeaderMode)
         {}
 
         template<typename... TArgs>
@@ -96,7 +97,7 @@ namespace NKikimr {
         void ProcessItem(TItem& item) {
             // get newly generated blob raw content and put it into writer queue
             static_cast<TDerived&>(*this).ProcessItemImpl(item.PreallocatedLocation, item.Merger.CreateDiskBlob(Arena,
-                AddHeader), item.IsInline);
+                BlobHeaderMode), item.IsInline);
         }
     };
 

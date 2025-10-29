@@ -1608,6 +1608,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                   Id: 0
                   ColumnCodec: ColumnCodecLZ4
                   ColumnCache: ColumnCacheEver
+                  ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                   StorageConfig {
                     SysLog {
                       PreferredPoolKind: "hdd-1"
@@ -1653,6 +1654,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                   Id: 0
                   ColumnCodec: ColumnCodecLZ4
                   ColumnCache: ColumnCacheEver
+                  ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                   StorageConfig {
                     SysLog {
                       PreferredPoolKind: "hdd-1"
@@ -1699,6 +1701,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                Id: 0
                                ColumnCodec: ColumnCodecLZ4
                                ColumnCache: ColumnCacheEver
+                               ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                                StorageConfig {
                                  ExternalThreshold: 0
                                }
@@ -2822,6 +2825,68 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                         })_", {NKikimrScheme::StatusInvalidParameter});
     }
 
+    Y_UNIT_TEST(CreateAlterTableWithCacheMode) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table1"
+                        Columns { Name: "key1"       Type: "Uint32"}
+                        Columns { Name: "Value"      Type: "Utf8"}
+                        KeyColumnNames: ["key1"]
+                        UniformPartitionsCount: 2
+                        PartitionConfig {
+                            NamedCompactionPolicy : "UserTableDefault"
+                            ColumnFamilies {
+                                Id: 0
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                            }
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+
+        auto t1 = DescribePath(runtime, "/MyRoot/Table1");
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto t2 = DescribePath(runtime, "/MyRoot/Table1");
+
+        UNIT_ASSERT_VALUES_EQUAL(t1.DebugString(), t2.DebugString());
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table1"
+                        PartitionConfig {
+                            ColumnFamilies {
+                                Id: 0
+                                ColumnCacheMode: ColumnCacheModeRegular
+                            }
+                        })_");
+        env.TestWaitNotification(runtime, txId);
+
+        auto t3 = DescribePath(runtime, "/MyRoot/Table1");
+        UNIT_ASSERT(t2.DebugString() != t3.DebugString());
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        auto t4 = DescribePath(runtime, "/MyRoot/Table1");
+        UNIT_ASSERT_VALUES_EQUAL(t3.DebugString(), t4.DebugString());
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
+                        Name: "Table2"
+                        Columns { Name: "key1"       Type: "Uint32"}
+                        Columns { Name: "Value"      Type: "Utf8"}
+                        KeyColumnNames: ["key1"]
+                        UniformPartitionsCount: 2
+                        PartitionConfig {
+                            NamedCompactionPolicy : "UserTableDefault"
+                            ColumnFamilies {
+                                Id: 0
+                                ColumnCacheMode: ColumnCacheModeRegular
+                            }
+                        })_");
+    }
+
     Y_UNIT_TEST(DependentOps) { //+
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableRealSystemViewPaths(false));
@@ -3333,6 +3398,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                      Id: 1
                                                      ColumnCodec: ColumnCodecLZ4
                                                      ColumnCache: ColumnCacheNone
+                                                     ColumnCacheMode: ColumnCacheModeRegular
                                                    }
                                                  }
                                              )", {NKikimrScheme::StatusInvalidParameter});
@@ -3345,11 +3411,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                      Id: 0
                                                      ColumnCodec: ColumnCodecLZ4
                                                      ColumnCache: ColumnCacheNone
+                                                     ColumnCacheMode: ColumnCacheModeRegular
                                                    }
                                                    ColumnFamilies {
                                                      Id: 0
                                                      ColumnCodec: ColumnCodecLZ4
                                                      ColumnCache: ColumnCacheNone
+                                                     ColumnCacheMode: ColumnCacheModeRegular
                                                    }
                                                  }
                                              )", {NKikimrScheme::StatusInvalidParameter});
@@ -3363,6 +3431,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            Id: 0
                            ColumnCodec: ColumnCodecLZ4
                            ColumnCache: ColumnCacheNone
+                           ColumnCacheMode: ColumnCacheModeRegular
                            StorageConfig {
                              SysLog {}
                              Log {}
@@ -3378,6 +3447,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                      Id: 0
                                                      ColumnCodec: ColumnCodecLZ4
                                                      ColumnCache: ColumnCacheEver
+                                                     ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                                                    }
                                                  }
                                              )");
@@ -3392,6 +3462,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecLZ4
                                 ColumnCache: ColumnCacheOnce
+                                ColumnCacheMode: ColumnCacheModeRegular
                               }
                             })");
         env.TestWaitNotification(runtime, txId);
@@ -3425,6 +3496,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecLZ4
                                 ColumnCache: ColumnCacheOnce
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -3442,6 +3514,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            Id: 0
                            ColumnCodec: ColumnCodecLZ4
                            ColumnCache: ColumnCacheNone
+                           ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                          }
                        })");
         env.TestWaitNotification(runtime, txId);
@@ -3456,6 +3529,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            Id: 1
                            ColumnCodec: ColumnCodecLZ4
                            ColumnCache: ColumnCacheNone
+                           ColumnCacheMode: ColumnCacheModeRegular
                          }
                        })");
         env.TestWaitNotification(runtime, txId);
@@ -3465,7 +3539,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             CopyFromTable: "/MyRoot/Table")");
         env.TestWaitNotification(runtime, txId);
 
-        auto checker = [] (NKikimrSchemeOp::EColumnCache cacheType, size_t families = 1) {
+        auto checker = [] (NKikimrSchemeOp::EColumnCache cacheType, NKikimrSchemeOp::EColumnCacheMode cacheMode, size_t families = 1) {
             return [=] (const NKikimrSchemeOp::TTableDescription& tableDescription) {
                 auto partConfig = tableDescription.GetPartitionConfig();
                 Cdbg << "-----------" << Endl << partConfig.DebugString() << "\n~~~~~~\n" << Endl;
@@ -3476,6 +3550,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 const auto& otherFamily = partConfig.GetColumnFamilies(0);
                 UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetId(), 0);
                 UNIT_ASSERT_EQUAL(otherFamily.GetColumnCache(), cacheType);
+                UNIT_ASSERT_EQUAL(otherFamily.GetColumnCacheMode(), cacheMode);
 
                 UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), families - 1);
             };
@@ -3484,25 +3559,25 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // /Root/Table
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets, TTestTxConfig::FakeHiveTablets+1, TTestTxConfig::FakeHiveTablets+2}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 2);
-            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory)(tableDescription);
         }
 
         // /Root/CopyTable
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+3, TTestTxConfig::FakeHiveTablets+4, TTestTxConfig::FakeHiveTablets+5}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 3);
-            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheOnce, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeRegular)(tableDescription);
         }
 
         // /Root/CopyTable2
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+6, TTestTxConfig::FakeHiveTablets+7, TTestTxConfig::FakeHiveTablets+8}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 4);
-            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, 2)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheNone, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory, 2)(tableDescription);
         }
 
         // /Root/CopyTable3
         for (ui64 tabletId : {TTestTxConfig::FakeHiveTablets+9, TTestTxConfig::FakeHiveTablets+10, TTestTxConfig::FakeHiveTablets+11}) {
             NKikimrSchemeOp::TTableDescription tableDescription = GetDatashardSchema(runtime, tabletId, 5);
-            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver)(tableDescription);
+            checker(NKikimrSchemeOp::EColumnCache::ColumnCacheEver, NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory)(tableDescription);
         }
 
         auto descrChecker = [] (size_t families) {
@@ -4680,6 +4755,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(ConfigColumnFamily) {
         using NKikimrSchemeOp::EColumnCodec;
         using NKikimrSchemeOp::EColumnCache;
+        using NKikimrSchemeOp::EColumnCacheMode;
         using NKikimrSchemeOp::EColumnStorage;
 
         TTestBasicRuntime runtime;
@@ -4699,6 +4775,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 ColumnFamilies { Id: 0 Name: "default"
                     Storage: ColumnStorage1
                     ColumnCache: ColumnCacheNone
+                    ColumnCacheMode: ColumnCacheModeRegular
                 }
             }
         )");
@@ -4719,6 +4796,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(defaultFamily.GetName(), "default");
             UNIT_ASSERT_EQUAL(defaultFamily.GetStorage(), EColumnStorage::ColumnStorage1);
             UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCache(), EColumnCache::ColumnCacheNone);
+            UNIT_ASSERT_EQUAL(defaultFamily.GetColumnCacheMode(), EColumnCacheMode::ColumnCacheModeRegular);
+            UNIT_ASSERT(!defaultFamily.HasStorageConfig());
 
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(0).GetName(), "key1");
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetName(), "c1");
@@ -4736,7 +4815,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
             PartitionConfig {
-                ColumnFamilies { Id: 1 Name: "other" Storage: ColumnStorage1 ColumnCache: ColumnCacheEver }
+                ColumnFamilies { Id: 1 Name: "other" Storage: ColumnStorage1 ColumnCache: ColumnCacheEver ColumnCacheMode: ColumnCacheModeTryKeepInMemory }
             }
         )", {NKikimrScheme::StatusSchemeError, NKikimrScheme::StatusInvalidParameter});
 
@@ -4746,7 +4825,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Table"
             Columns { Name: "c1" Family: 0 }
             PartitionConfig {
-                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver }
+                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver ColumnCacheMode: ColumnCacheModeTryKeepInMemory }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -4755,7 +4834,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Table"
             Columns { Name: "c1" Family: 0 }
             PartitionConfig {
-                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver }
+                ColumnFamilies { Id: 0 ColumnCache: ColumnCacheEver ColumnCacheMode: ColumnCacheModeTryKeepInMemory }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -4771,6 +4850,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetId(), 0);
             UNIT_ASSERT_VALUES_EQUAL(otherFamily.GetName(), "default");
             UNIT_ASSERT_EQUAL(otherFamily.GetColumnCache(), EColumnCache::ColumnCacheEver);
+            UNIT_ASSERT_EQUAL(otherFamily.GetColumnCacheMode(), EColumnCacheMode::ColumnCacheModeTryKeepInMemory);
 
             UNIT_ASSERT_VALUES_EQUAL(tableDescription.GetColumns(1).GetFamily(), 0);
         }
@@ -4827,6 +4907,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4836,6 +4917,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 1
                                 ColumnCodec: ColumnCodecLZ4
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4860,6 +4942,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4884,6 +4967,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4893,6 +4977,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Name: "alt"
                                 ColumnCodec: ColumnCodecLZ4
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                               }
                             })");
         env.TestWaitNotification(runtime, txId);
@@ -4914,6 +4999,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4939,6 +5025,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -4965,6 +5052,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Name: ""
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {}
                                   Log {}
@@ -5189,6 +5277,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Name: "ExtBlobsOnHDD"
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog { PreferredPoolKind: "hdd-1" }
                                   Log { PreferredPoolKind: "hdd-1" }
@@ -5214,6 +5303,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Name: "ExtBlobsOnHDD"
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog { PreferredPoolKind: "hdd-1" }
                                   Log { PreferredPoolKind: "hdd-1" }
@@ -5459,6 +5549,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog { PreferredPoolKind: "hdd-1" }
                                   Log { PreferredPoolKind: "hdd-1" }
@@ -5469,6 +5560,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Name: "alt"
                                 ColumnCodec: ColumnCodecLZ4
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   Data { PreferredPoolKind: "hdd-2" }
                                 }
@@ -9866,6 +9958,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {
                                     PreferredPoolKind: "hdd-1"
@@ -9886,6 +9979,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {
                                     PreferredPoolKind: "hdd-1"
@@ -9937,6 +10031,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                 Id: 0
                                 ColumnCodec: ColumnCodecPlain
                                 ColumnCache: ColumnCacheNone
+                                ColumnCacheMode: ColumnCacheModeRegular
                                 StorageConfig {
                                   SysLog {
                                     PreferredPoolKind: "hdd-1"
@@ -9964,6 +10059,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                Id: 0
                                ColumnCodec: ColumnCodecLZ4
                                ColumnCache: ColumnCacheNone
+                               ColumnCacheMode: ColumnCacheModeRegular
                                StorageConfig {
                                  SysLog {
                                    PreferredPoolKind: "hdd-1"
@@ -10008,6 +10104,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                Id: 0
                                ColumnCodec: ColumnCodecLZ4
                                ColumnCache: ColumnCacheEver
+                               ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                                StorageConfig {
                                  SysLog {
                                    PreferredPoolKind: "hdd-1"
@@ -10033,6 +10130,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                UNIT_ASSERT_VALUES_EQUAL_C(partConfig.ColumnFamiliesSize(), 1, "ColumnFamilies is uniq");
                                UNIT_ASSERT_VALUES_EQUAL_C(partConfig.GetColumnFamilies(0).GetStorageConfig().GetExternalThreshold(), 5604288, "ExternalThreshold is altered");
                                UNIT_ASSERT_VALUES_EQUAL_C((int)partConfig.GetColumnFamilies(0).GetColumnCache(), (int)NKikimrSchemeOp::EColumnCache::ColumnCacheEver, "ColumnCache is altered");
+                               UNIT_ASSERT_VALUES_EQUAL_C((int)partConfig.GetColumnFamilies(0).GetColumnCacheMode(), (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory, "ColumnCacheMode is altered");
                            }});
 
         TestAlterTable(runtime, ++txId, "/MyRoot/USER_0", R"(
@@ -10042,6 +10140,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                Id: 0
                                ColumnCodec: ColumnCodecLZ4
                                ColumnCache: ColumnCacheEver
+                               ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                                StorageConfig {
                                  ExternalThreshold: 5604289
                                }
@@ -10056,6 +10155,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                UNIT_ASSERT_VALUES_EQUAL_C(partConfig.ColumnFamiliesSize(), 1, "ColumnFamilies is uniq");
                                UNIT_ASSERT_VALUES_EQUAL_C(partConfig.GetColumnFamilies(0).GetStorageConfig().GetExternalThreshold(), 5604289, "ExternalThreshold is altered");
                                UNIT_ASSERT_VALUES_EQUAL_C((int)partConfig.GetColumnFamilies(0).GetColumnCache(), (int)NKikimrSchemeOp::EColumnCache::ColumnCacheEver, "ColumnCache is altered");
+                               UNIT_ASSERT_VALUES_EQUAL_C((int)partConfig.GetColumnFamilies(0).GetColumnCacheMode(), (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory, "ColumnCacheMode is altered");
                                const auto& storageConfig = partConfig.GetColumnFamilies(0).GetStorageConfig();
                                UNIT_ASSERT_VALUES_EQUAL_C(storageConfig.GetSysLog().GetPreferredPoolKind(), "hdd-1", "SysLog pool kind must not be lost");
                                UNIT_ASSERT_VALUES_EQUAL_C(storageConfig.GetLog().GetPreferredPoolKind(), "hdd-1", "Log pool kind must not be lost");
@@ -10070,6 +10170,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                Id: 0
                                ColumnCodec: ColumnCodecLZ4
                                ColumnCache: ColumnCacheEver
+                               ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                                StorageConfig {
                                    SysLog {
                                      PreferredPoolKind: "hdd-1"
@@ -10799,12 +10900,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.DataShardStatsReportIntervalSeconds(1);
 
         TTestEnv env(runtime, opts);
 
         ui64 txId = 100;
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
@@ -10933,6 +11034,21 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         );
         env.TestWaitNotification(runtime, txId);
 
+        // altering non-default column families is not allowed
+        TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
+                Name: "indexImplTable"
+                KeyColumnNames: ["key", "value"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Name: "test1"
+                        ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                    }
+                }
+            )",
+            {TEvSchemeShard::EStatus::StatusNameConflict}
+        );
+        env.TestWaitNotification(runtime, txId);
+
         {
             TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
                         Name: "indexImplTable"
@@ -10944,6 +11060,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                     SizeThreshold: 100500
                                     RowCountThreshold: 100500
                                 }
+                            }
+                            ColumnFamilies {
+                                Name: "default"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
                             }
                         }
                )"
@@ -10993,7 +11113,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
                             NLs::NoMaxPartitionsCount,
-                            NLs::SizeToSplitEqual(100500)});
+                            NLs::SizeToSplitEqual(100500),
+                            NLs::ColumnFamiliesCount(1),
+                            NLs::ColumnFamiliesHas(0),
+                            [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                                const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                                const auto& partConfig = tableDescription.GetPartitionConfig();
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    (int)partConfig.GetColumnFamilies(0).GetColumnCacheMode(),
+                                    (int)NKikimrSchemeOp::EColumnCacheMode::ColumnCacheModeTryKeepInMemory
+                                );
+                            }});
     }
 
     template <typename TCreateFn, typename TDropFn>
@@ -11004,8 +11134,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // disable publications
         {
-            TAtomic unused;
-            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", true, unused);
+            TControlBoard::SetValue(true, runtime.GetAppData().Icb->SchemeShardControls.DisablePublicationsOfDropping);
         }
 
         createFn(runtime, txId);
@@ -11042,8 +11171,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
         // enable publications
         {
-            TAtomic unused;
-            runtime.GetAppData().Icb->SetValue("SchemeShard_DisablePublicationsOfDropping", false, unused);
+            TControlBoard::SetValue(false, runtime.GetAppData().Icb->SchemeShardControls.DisablePublicationsOfDropping);
         }
 
         createFn(runtime, txId);
@@ -12005,5 +12133,274 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
         });
+    }
+
+    Y_UNIT_TEST(DefaultStorageConfig) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                            StoragePools {
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            Name: "MyRoot"
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // pool-kind-1 used in generated default StorageConfig
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table1"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8" FamilyName: "in_memory"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Id: 1
+                                Name: "in_memory"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                              }
+                            })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table1", true), {
+                NLs::ColumnFamiliesCount(2),
+                NLs::ColumnFamiliesHas(0, ""),
+                NLs::ColumnFamiliesHas(1, "in_memory"),
+                [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                    const auto& partConfig = tableDescription.GetPartitionConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 2);
+
+                    const auto& mainFamily = partConfig.GetColumnFamilies(0);
+                    UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0);
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetName(), "");
+
+                    UNIT_ASSERT(!mainFamily.HasStorage());
+
+                    UNIT_ASSERT(mainFamily.HasStorageConfig());
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetSysLog().GetPreferredPoolKind(), "pool-kind-1");
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetLog().GetPreferredPoolKind(), "pool-kind-1");
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetStorageConfig().GetData().GetPreferredPoolKind(), "pool-kind-1");
+                }
+        });
+
+        // Table creation with legacy Storage parameter should not generate default pool
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "TableLegacyStorage"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Storage: ColumnStorage1
+                              }
+                            })");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/TableLegacyStorage", true), {
+                NLs::ColumnFamiliesCount(1),
+                NLs::ColumnFamiliesHas(0, ""),
+                [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const NKikimrSchemeOp::TTableDescription& tableDescription = record.GetPathDescription().GetTable();
+                    const auto& partConfig = tableDescription.GetPartitionConfig();
+                    UNIT_ASSERT_VALUES_EQUAL(partConfig.ColumnFamiliesSize(), 1);
+
+                    const auto& mainFamily = partConfig.GetColumnFamilies(0);
+                    UNIT_ASSERT_VALUES_EQUAL(mainFamily.GetId(), 0);
+                    UNIT_ASSERT_STRINGS_EQUAL(mainFamily.GetName(), "");
+
+                    UNIT_ASSERT_EQUAL(mainFamily.GetStorage(), NKikimrSchemeOp::EColumnStorage::ColumnStorage1);
+
+                    UNIT_ASSERT(!mainFamily.HasStorageConfig());
+                }
+        });
+
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                            StoragePools {
+                              Name: "pool-1"
+                              Kind: "pool-kind-1"
+                            }
+                            StoragePools {
+                              Name: "pool-2"
+                              Kind: "pool-kind-2"
+                            }
+                            Name: "MyRoot"
+                            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Can't infer the one default storage pool, so "Column families require StorageConfig specification"
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                            Name: "Table2"
+                            Columns { Name: "key"    Type: "Uint32" }
+                            Columns { Name: "Value"  Type: "Utf8" FamilyName: "in_memory"}
+                            KeyColumnNames: ["key"]
+                            PartitionConfig {
+                              ColumnFamilies {
+                                Id: 1
+                                Name: "in_memory"
+                                ColumnCacheMode: ColumnCacheModeTryKeepInMemory
+                              }
+                            })", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(DefaultStorageConfigTableWithChannelProfileIdBuildIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Create a legacy table when there are no storage pools yet
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ChannelProfileId: 0
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Add a single storage pool so new tables could have it inferred
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Build index over a legacy table
+        TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/Table1", "Index", {"value"});
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(CannotAddChannelProfileIdToStorageConfigTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Add a single storage pool
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a storage config table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Specifying ChannelProfileId should be an error
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                PartitionConfig {
+                    ChannelProfileId: 0
+                }
+            )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
+    }
+
+    Y_UNIT_TEST(AlterMixedStorageConfigAndChannelProfileIdTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().NStoragePools(1));
+        ui64 txId = 100;
+
+        // Add a single storage pool
+        TestAlterSubDomain(runtime, ++txId,  "/", R"(
+                Name: "MyRoot"
+                StoragePools {
+                    Name: "pool-1"
+                    Kind: "pool-kind-1"
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Create a table that has both default family with both StorageConfig
+        // and ChannelProfileId specified. Historically there is no validation
+        // for such mixed tables (StorageConfig wins out).
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key"   Type: "Uint32" }
+                Columns { Name: "value" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                PartitionConfig {
+                    ChannelProfileId: 0
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // It should be possible to alter tables while specifying the same
+        // exact mixed settings partition config.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "value2" Type: "Uint32" }
+                PartitionConfig {
+                    ChannelProfileId: 0
+                    ColumnFamilies {
+                        Id: 0
+                        StorageConfig {
+                            SysLog {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Log {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                            Data {
+                                PreferredPoolKind: "pool-kind-1"
+                            }
+                        }
+                    }
+                }
+            )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Changing ChannelProfileId should not be allowed
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "value2" Type: "Uint32" }
+                PartitionConfig {
+                    ChannelProfileId: 1
+                }
+            )", {TEvSchemeShard::EStatus::StatusInvalidParameter});
     }
 }

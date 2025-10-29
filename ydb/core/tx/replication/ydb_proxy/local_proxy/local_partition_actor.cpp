@@ -12,14 +12,26 @@ TBaseLocalTopicPartitionActor::TBaseLocalTopicPartitionActor(const std::string& 
 
 void TBaseLocalTopicPartitionActor::Bootstrap() {
     LogPrefix = MakeLogPrefix();
-    DoDescribe();
+    DoDescribe(TopicPath);
 }
 
-void TBaseLocalTopicPartitionActor::DoDescribe() {
-    auto path = TStringBuilder() << "/" << Database << TopicPath;
+TString TBaseLocalTopicPartitionActor::MakeAbsolutePath(TString path) const {
+    if (path.StartsWith(Database + "/")) {
+        return path;
+    }
+
+    if (path.StartsWith("/")) {
+        return TStringBuilder() << Database << path;
+    }
+
+    return TStringBuilder() << Database << "/" << path;
+}
+
+void TBaseLocalTopicPartitionActor::DoDescribe(const TString& topicPath) {
+    auto path = MakeAbsolutePath(topicPath);
     LOG_D("Describe topic '" << path << "'");
     auto request = MakeHolder<TNavigate>();
-    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpTopic));
+    request->ResultSet.emplace_back(MakeNavigateEntry(path, TNavigate::OpPath));
     Send(MakeSchemeCacheID(), new TEvNavigate(request.Release()));
     Become(&TThis::StateDescribe);
 }
@@ -49,6 +61,10 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
         return;
     }
 
+    if (entry.Kind == TNavigate::EKind::KindCdcStream) {
+        return DoDescribe(TStringBuilder() << TopicPath << "/streamImpl");
+    }
+
     if (!CheckEntryKind(errorMarket, entry, TNavigate::EKind::KindTopic, LeaveOnError())) {
         return;
     }
@@ -63,7 +79,7 @@ void TBaseLocalTopicPartitionActor::Handle(TEvTxProxySchemeCache::TEvNavigateKey
 
 void TBaseLocalTopicPartitionActor::HandleOnDescribe(TEvents::TEvWakeup::TPtr& ev) {
     if (static_cast<ui64>(EWakeupType::Describe) == ev->Get()->Tag) {
-        DoDescribe();
+        DoDescribe(TopicPath);
     }
 }
 

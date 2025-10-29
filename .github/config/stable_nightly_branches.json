@@ -3,9 +3,13 @@
     "stable-25-1",
     "stable-24-4-4-hotfix",
     "stable-25-1-1",
-    "stable-25-1-analytics",
     "stable-25-1-2",
     "stable-25-1-3",
-    "prestable-25-2",
-    "prestable-25-3"
+    "stable-25-1-4",
+    "stable-25-2",
+    "stable-25-2-1",
+    "stable-25-3",
+    "stable-25-3-1",
+    "rc-bridge",
+    "stream-nb-25-1"
 ]

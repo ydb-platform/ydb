@@ -32,7 +32,7 @@ public:
             tableData[tablePath] = reinterpret_pointer_cast<arrow::RecordBatch>(batch->ExtractBatch());
         }
 
-        TActivationContext::AsActorContext().RegisterWithSameMailbox(
+        UploaderActorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
             new TTableUploader(SelfId, GetScheme(), std::move(tableData))
         );
 

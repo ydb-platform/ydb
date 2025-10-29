@@ -635,6 +635,15 @@ namespace NTi {
         /// Create a new `Timestamp64` type. See `NTi::TTimestamp64Type` for more info.
         TTimestamp64TypePtr Timestamp64();
 
+        /// Create a new `TzDate32` type. See `NTi::TTzDate32Type` for more info.
+        TTzDate32TypePtr TzDate32();
+
+        /// Create a new `TzDatetime64` type. See `NTi::TTzDatetime64Type` for more info.
+        TTzDatetime64TypePtr TzDatetime64();
+
+        /// Create a new `TzTimestamp64` type. See `NTi::TTzTimestamp64Type` for more info.
+        TTzTimestamp64TypePtr TzTimestamp64();
+
         /// Create a new `Interval64` type. See `NTi::TInterval64Type` for more info.
         TInterval64TypePtr Interval64();
 
@@ -835,6 +844,18 @@ namespace NTi {
         /// Create a new `Timestamp64` type. See `NTi::TTimestamp64Type` for more info.
         /// The returned object will live for as long as this factory lives.
         const TTimestamp64Type* Timestamp64Raw();
+
+        /// Create a new `TzDate32` type. See `NTi::TTzDate32Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TTzDate32Type* TzDate32Raw();
+
+        /// Create a new `TzDatetime64` type. See `NTi::TTzDatetime64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TTzDatetime64Type* TzDatetime64Raw();
+
+        /// Create a new `TzTimestamp64` type. See `NTi::TTzTimestamp64Type` for more info.
+        /// The returned object will live for as long as this factory lives.
+        const TTzTimestamp64Type* TzTimestamp64Raw();
 
         /// Create a new `Interval64` type. See `NTi::TInterval64Type` for more info.
         /// The returned object will live for as long as this factory lives.

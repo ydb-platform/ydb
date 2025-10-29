@@ -70,6 +70,7 @@ void TDriverConfig::Register(TRegistrar registrar)
     registrar.Preprocessor([] (TThis* config) {
         config->ClientCache->Capacity = 1024_KB;
         config->ProxyDiscoveryCache->RefreshTime = TDuration::Seconds(15);
+        config->ProxyDiscoveryCache->ExpirationPeriod = TDuration::Seconds(15);
         config->ProxyDiscoveryCache->ExpireAfterSuccessfulUpdateTime = TDuration::Seconds(15);
         config->ProxyDiscoveryCache->ExpireAfterFailedUpdateTime = TDuration::Seconds(15);
     });

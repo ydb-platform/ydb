@@ -20,7 +20,6 @@
 #include <library/cpp/logger/log.h>
 
 #include <util/string/cast.h>
-#include <util/system/info.h>
 
 #include <atomic>
 #include <stop_token>
@@ -35,10 +34,12 @@ namespace {
 
 //-----------------------------------------------------------------------------
 
-constexpr auto GracefulShutdownTimeout = std::chrono::seconds(5);
-constexpr auto MinWarmupPerTerminal = std::chrono::milliseconds(1);
+constexpr auto GracefulShutdownTimeout = std::chrono::seconds(20);
+constexpr auto MinWarmupPerTerminalMs = std::chrono::milliseconds(1);
 
 constexpr auto MaxPerTerminalTransactionsInflight = 1;
+
+const TDuration SaturatedThreadsWindowDuration = TDuration::Minutes(5);
 
 //-----------------------------------------------------------------------------
 
@@ -112,6 +113,9 @@ private:
     std::shared_ptr<TRunDisplayData> DataToDisplay;
 
     std::unique_ptr<TRunnerTui> Tui;
+
+    Clock::time_point SaturationWindowStartTs{};
+    size_t SaturationWindowMaxSaturatedThreads = 0;
 };
 
 //-----------------------------------------------------------------------------
@@ -125,12 +129,7 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     ConnectionConfig.IsNetworkIntensive = true;
     ConnectionConfig.UsePerChannelTcpConnection = true;
 
-    const size_t cpuCount = NSystemInfo::CachedNumberOfCpus();
-    if (cpuCount == 0) {
-        // dump sanity check
-        std::cerr << "No CPUs" << std::endl;
-        std::exit(1);
-    }
+    const size_t cpuCount = NumberOfMyCpus();
 
     if (Config.WarehouseCount == 0) {
         std::cerr << "Specified zero warehouses" << std::endl;
@@ -141,25 +140,80 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
 
     const size_t terminalsCount = Config.WarehouseCount * TERMINALS_PER_WAREHOUSE;
 
+    // Currently, terminal threads busy wait (for extra efficiency).
+    // That is why we want to avoid thread oversubscription.
+    //
+    // However, note, that we have a very efficient implementation,
+    // and don't need many threads to execute terminals.
+
+    // we don't want to share CPU with SDK threads
+    const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
+    const size_t maxTerminalThreadCountAvailable = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
+
+    // even with high number of terminals, this value is usually low
+    const size_t recommendedThreadCount =
+        (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+
     size_t threadCount = 0;
     if (Config.ThreadCount == 0) {
-        // here we calculate max possible efficient thread number
-        const size_t networkThreadCount = ConnectionConfig.GetNetworkThreadNum();
-        const size_t maxTerminalThreadCount = cpuCount > networkThreadCount ? cpuCount - networkThreadCount : 1;
-        threadCount = std::min(maxTerminalThreadCount, terminalsCount);
-
-        // usually this allows to lower number of threads
-        const size_t recommendedThreadCount =
-            (Config.WarehouseCount + WAREHOUSES_PER_CPU_CORE - 1) / WAREHOUSES_PER_CPU_CORE;
+        threadCount = std::min(maxTerminalThreadCountAvailable, terminalsCount);
         threadCount = std::min(threadCount, recommendedThreadCount);
+
+        // in TUI even number of threads looks cute: increase number of threads
+        // if we have enough CPU cores
+        if (threadCount % 2 != 0 && threadCount < maxTerminalThreadCountAvailable) {
+            ++threadCount;
+        }
     } else {
+        // user provided value: don't give us a chance to break things:
+        // with too many threads, we get poor result
         threadCount = Config.ThreadCount;
+        if (threadCount > maxTerminalThreadCountAvailable) {
+            LOG_I("User provided thread count " << threadCount << " is above max available thread count "
+                << maxTerminalThreadCountAvailable << " (cpu count " << cpuCount << ", network threads "
+                << networkThreadCount << "). Recommended thread count for " << Config.WarehouseCount
+                << " warehouses is " << recommendedThreadCount
+                << ". Setting thread count to " << maxTerminalThreadCountAvailable);
+            threadCount = maxTerminalThreadCountAvailable;
+        }
+    }
+
+    if (threadCount < recommendedThreadCount) {
+        LOG_W("Thread count " << threadCount << " is lower than recommended " << recommendedThreadCount
+            << ". It might affect benchmark results");
     }
 
     // The number of terminals might be hundreds of thousands.
     // For now, we don't have more than 32 network threads (check TClientCommand::TConfig::GetNetworkThreadNum()),
     // so that maxTerminalThreads will be around more or less around 100.
     const size_t driverCount = Config.DriverCount == 0 ? threadCount : Config.DriverCount;
+    Drivers.reserve(driverCount);
+    for (size_t i = 0; i < driverCount; ++i) {
+        Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
+    }
+
+    if (Config.MaxInflight == 0) {
+        int32_t computeCores = 0;
+        std::string reason;
+        try {
+            computeCores = NumberOfComputeCpus(Drivers[0]);
+        } catch (const std::exception& ex) {
+            reason = ex.what();
+        }
+
+        if (computeCores == 0) {
+            std::cerr << "Failed to autodetect max number of sessions";
+            if (!reason.empty()) {
+                std::cerr << ": " << reason;
+            }
+
+            std::cerr << ". Please specify '-m' manually." << std::endl;
+            std::exit(1);
+        }
+
+        Config.MaxInflight = std::min(terminalsCount, computeCores * SESSIONS_PER_COMPUTE_CORE);
+        LOG_I("Set max sessions to " << Config.MaxInflight << ", feel free to manually adjust if needed");
+    }
 
     const size_t maxSessionsPerClient = (Config.MaxInflight + driverCount - 1) / driverCount;
     NQuery::TSessionPoolSettings sessionPoolSettings;
@@ -169,12 +223,10 @@ TPCCRunner::TPCCRunner(const NConsoleClient::TClientCommand::TConfig& connection
     NQuery::TClientSettings clientSettings;
     clientSettings.SessionPoolSettings(sessionPoolSettings);
 
-    Drivers.reserve(driverCount);
     std::vector<std::shared_ptr<NQuery::TQueryClient>> clients;
     clients.reserve(driverCount);
     for (size_t i = 0; i < driverCount; ++i) {
-        auto& driver = Drivers.emplace_back(NConsoleClient::TYdbCommand::CreateDriver(ConnectionConfig));
-        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(driver, clientSettings));
+        clients.emplace_back(std::make_shared<NQuery::TQueryClient>(Drivers[i], clientSettings));
     }
 
     PerThreadTerminalStats.reserve(threadCount);
@@ -259,7 +311,7 @@ void TPCCRunner::Join() {
             auto now = Clock::now();
             auto delta = now - shutdownTs;
             if (delta >= GracefulShutdownTimeout) {
-                LOG_E("Graceful shutdown timeout on terminal " << terminal->GetID());
+                LOG_W("Graceful shutdown timeout on terminal " << terminal->GetID());
                 break;
             }
         }
@@ -291,13 +343,28 @@ void TPCCRunner::RunSync() {
     // We don't want to start all terminals at the same time, because then there will be
     // a huge queue of ready terminals, which we can't handle
     bool forcedWarmup = false;
-    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminal.count() / 1000 + 1;
+    uint32_t minWarmupSeconds = Terminals.size() * MinWarmupPerTerminalMs.count() / 1000 + 1;
+
     uint32_t warmupSeconds;
-    if (Config.WarmupDuration.Seconds() < minWarmupSeconds) {
-        forcedWarmup = true; // we must print log message later after display update
-        warmupSeconds = minWarmupSeconds;
+    if (Config.WarmupDuration == TDuration()) {
+        // adaptive, a very simple heuristic
+        if (Config.WarehouseCount <= 10) {
+            warmupSeconds = 30;
+        } else if (Config.WarehouseCount <= 100) {
+            warmupSeconds = 5 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 10 * 60;
+        } else if (Config.WarehouseCount <= 1000) {
+            warmupSeconds = 30 * 60;
+        }
+        warmupSeconds = std::max(warmupSeconds, minWarmupSeconds);
     } else {
+        // user specified
         warmupSeconds = Config.WarmupDuration.Seconds();
+        if (warmupSeconds < minWarmupSeconds) {
+            forcedWarmup = true; // we must print log message later after display update
+            warmupSeconds = minWarmupSeconds;
+        }
     }
 
     WarmupStartTs = Clock::now();
@@ -312,7 +379,7 @@ void TPCCRunner::RunSync() {
     // produced after this point and before the first screen update
     if (Config.DisplayMode == TRunConfig::EDisplayMode::Tui) {
         LogBackend->StartCapture(); // start earlier?
-        Tui = std::make_unique<TRunnerTui>(*LogBackend, DataToDisplay);
+        Tui = std::make_unique<TRunnerTui>(Log, *LogBackend, DataToDisplay);
     }
 
     if (forcedWarmup) {
@@ -325,7 +392,7 @@ void TPCCRunner::RunSync() {
     for (; startedTerminalId < Terminals.size() && !GetGlobalInterruptSource().stop_requested(); ++startedTerminalId) {
         Terminals[startedTerminalId]->Start();
 
-        std::this_thread::sleep_for(MinWarmupPerTerminal);
+        std::this_thread::sleep_for(MinWarmupPerTerminalMs);
         now = Clock::now();
         UpdateDisplayIfNeeded(now);
     }
@@ -347,7 +414,13 @@ void TPCCRunner::RunSync() {
 
     StopWarmup.store(true, std::memory_order_relaxed);
 
-    LOG_I("Measuring during " << Config.RunDuration);
+    // If warmup was interrupted we don't want to print INFO log about measurements.
+    // However, we still initialize all displayed variables on the screen and used in
+    // final calculations
+
+    if (!GetGlobalInterruptSource().stop_requested()) {
+        LOG_I("Measuring during " << Config.RunDuration);
+    }
 
     MeasurementsStartTs = Clock::now();
     MeasurementsStartTsWall = TInstant::Now();
@@ -389,6 +462,27 @@ void TPCCRunner::UpdateDisplayIfNeeded(Clock::time_point now) {
     firstTime = false;
 
     CollectDataToDisplay(now);
+
+    // Maintain tumbling window for saturated threads
+    if (SaturationWindowStartTs == Clock::time_point{}) {
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
+
+    size_t currentSaturated = DataToDisplay->Statistics.SaturatedThreads;
+    if (currentSaturated > SaturationWindowMaxSaturatedThreads) {
+        SaturationWindowMaxSaturatedThreads = currentSaturated;
+    }
+
+    auto windowElapsedSec = duration_cast<std::chrono::seconds>(now - SaturationWindowStartTs).count();
+    if (windowElapsedSec >= static_cast<long long>(SaturatedThreadsWindowDuration.Seconds())) {
+        if (SaturationWindowMaxSaturatedThreads > 0) {
+            LOG_W("Observed " << SaturationWindowMaxSaturatedThreads << " saturated threads within last "
+                << SaturatedThreadsWindowDuration);
+        }
+        SaturationWindowStartTs = now;
+        SaturationWindowMaxSaturatedThreads = 0;
+    }
 
     switch (Config.DisplayMode) {
     case TRunConfig::EDisplayMode::Text:
@@ -450,7 +544,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         std::stringstream leftLine;
         if (i < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[i];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             leftLine << std::left
                      << std::setw(5) << (i + 1)
                      << std::setw(5) << std::fixed << std::setprecision(2) << load
@@ -466,7 +560,7 @@ void TPCCRunner::UpdateDisplayTextMode() {
         size_t rightIndex = i + halfCount;
         if (rightIndex < threadCount) {
             const auto& stats = DataToDisplay->Statistics.StatVec[rightIndex];
-            double load = stats.ExecutingTime / stats.TotalTime;
+            double load = stats.Load;
             rightLine << std::left
                       << std::setw(5) << (rightIndex + 1)
                       << std::setw(5) << std::fixed << std::setprecision(2) << load
@@ -754,8 +848,13 @@ void TRunConfig::SetDisplay() {
 //-----------------------------------------------------------------------------
 
 void RunSync(const NConsoleClient::TClientCommand::TConfig& connectionConfig, const TRunConfig& runConfig) {
-    TPCCRunner runner(connectionConfig, runConfig);
-    runner.RunSync();
+    try {
+        TPCCRunner runner(connectionConfig, runConfig);
+        runner.RunSync();
+    } catch (const std::exception& ex) {
+        std::cerr << "Exception while execution: " << ex.what() << std::endl;
+        throw NConsoleClient::TNeedToExitWithCode(EXIT_FAILURE);
+    }
 }
 
 } // namespace NYdb::NTPCC

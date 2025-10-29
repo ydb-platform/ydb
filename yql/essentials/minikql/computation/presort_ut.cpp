@@ -17,15 +17,15 @@ namespace NMiniKQL {
 namespace {
 
 #define TYPE_MAP(XX) \
-    XX(bool, Bool) \
-    XX(ui8, Uint8) \
+    XX(bool, Bool)   \
+    XX(ui8, Uint8)   \
     XX(ui16, Uint16) \
     XX(ui32, Uint32) \
     XX(ui64, Uint64) \
-    XX(i8, Int8) \
-    XX(i16, Int16) \
-    XX(i32, Int32) \
-    XX(i64, Int64) \
+    XX(i8, Int8)     \
+    XX(i16, Int16)   \
+    XX(i32, Int32)   \
+    XX(i64, Int64)   \
     XX(float, Float) \
     XX(double, Double)
 
@@ -40,9 +40,8 @@ struct TSimpleTypes {
 #define ADD_TYPE(xType, xName) \
     codec.AddType(NUdf::EDataSlot::xName, isOptional, isDesc);
 
-void AddTypes(TPresortCodec& codec, bool isOptional, bool isDesc) {
-    TYPE_MAP(ADD_TYPE)
-}
+void AddTypes(TPresortCodec& codec, bool isOptional, bool isDesc){
+    TYPE_MAP(ADD_TYPE)}
 #undef ADD_TYPE
 
 #define ENCODE(xType, xName) \
@@ -74,7 +73,8 @@ struct TPresortTest {
     TPresortTest()
         : Alloc(__LOCATION__)
         , MemInfo("Memory")
-    {}
+    {
+    }
 
     template <typename T>
     void ValidateEncoding(bool isDesc, T value, const TString& hex) {
@@ -183,7 +183,7 @@ struct TPresortTest {
     }
 };
 
-}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TPresortCodecTest) {
 
@@ -192,7 +192,7 @@ Y_UNIT_TEST(SimpleTypes) {
 
     TSimpleTypes values = {false, 1u, 2u, 3u, 4u, 5, 6, 7, 8, 9.f, 10.0};
 
-    auto validateSimpleTypes = [&] (bool isOptional, bool isDesc) {
+    auto validateSimpleTypes = [&](bool isOptional, bool isDesc) {
         TPresortEncoder encoder;
         AddTypes(encoder, isOptional, isDesc);
 
@@ -209,29 +209,26 @@ Y_UNIT_TEST(SimpleTypes) {
     validateSimpleTypes(true, true);
 }
 
-
 Y_UNIT_TEST(Bool) {
     const TVector<std::tuple<bool, TString, TString>> values = {
         {false, "00", "FF"},
-        {true, "01", "FE"}
-    };
+        {true, "01", "FE"}};
     TPresortTest().ValidateEncoding(values);
 }
 
 Y_UNIT_TEST(Int8) {
     const TVector<std::tuple<i8, TString, TString>> values = {
         {-0x80, "00", "FF"},
-        {-1,    "7F", "80"},
-        {0,     "80", "7F"},
-        {1,     "81", "7E"},
-        {0x7F,  "FF", "00"}
-    };
+        {-1, "7F", "80"},
+        {0, "80", "7F"},
+        {1, "81", "7E"},
+        {0x7F, "FF", "00"}};
     TPresortTest().ValidateEncoding(values);
 }
 
 Y_UNIT_TEST(Uint8) {
     const TVector<std::tuple<ui8, TString, TString>> values = {
-        {0u,    "00", "FF"},
+        {0u, "00", "FF"},
         {0x80u, "80", "7F"},
         {0xFFu, "FF", "00"},
     };
@@ -241,17 +238,16 @@ Y_UNIT_TEST(Uint8) {
 Y_UNIT_TEST(Int16) {
     const TVector<std::tuple<i16, TString, TString>> values = {
         {-0x8000, "0000", "FFFF"},
-        {-1,      "7FFF", "8000"},
-        {0,       "8000", "7FFF"},
-        {1,       "8001", "7FFE"},
-        {0x7FFF,  "FFFF", "0000"}
-    };
+        {-1, "7FFF", "8000"},
+        {0, "8000", "7FFF"},
+        {1, "8001", "7FFE"},
+        {0x7FFF, "FFFF", "0000"}};
     TPresortTest().ValidateEncoding(values);
 }
 
 Y_UNIT_TEST(Uint16) {
     const TVector<std::tuple<ui16, TString, TString>> values = {
-        {0,       "0000", "FFFF"},
+        {0, "0000", "FFFF"},
         {0x8000u, "8000", "7FFF"},
         {0xFFFFu, "FFFF", "0000"},
     };
@@ -261,17 +257,16 @@ Y_UNIT_TEST(Uint16) {
 Y_UNIT_TEST(Int32) {
     const TVector<std::tuple<i32, TString, TString>> values = {
         {-0x80000000, "00000000", "FFFFFFFF"},
-        {-1,          "7FFFFFFF", "80000000"},
-        {0,           "80000000", "7FFFFFFF"},
-        {1,           "80000001", "7FFFFFFE"},
-        {0x7FFFFFFF,  "FFFFFFFF", "00000000"}
-    };
+        {-1, "7FFFFFFF", "80000000"},
+        {0, "80000000", "7FFFFFFF"},
+        {1, "80000001", "7FFFFFFE"},
+        {0x7FFFFFFF, "FFFFFFFF", "00000000"}};
     TPresortTest().ValidateEncoding(values);
 }
 
 Y_UNIT_TEST(Uint32) {
     const TVector<std::tuple<ui32, TString, TString>> values = {
-        {0u,          "00000000", "FFFFFFFF"},
+        {0u, "00000000", "FFFFFFFF"},
         {0x80000000u, "80000000", "7FFFFFFF"},
         {0xFFFFFFFFu, "FFFFFFFF", "00000000"},
     };
@@ -281,20 +276,18 @@ Y_UNIT_TEST(Uint32) {
 Y_UNIT_TEST(Int64) {
     const TVector<std::tuple<i64, TString, TString>> values = {
         {-0x8000000000000000, "0000000000000000", "FFFFFFFFFFFFFFFF"},
-        {-1,                  "7FFFFFFFFFFFFFFF", "8000000000000000"},
-        {0,                   "8000000000000000", "7FFFFFFFFFFFFFFF"},
-        {1,                   "8000000000000001", "7FFFFFFFFFFFFFFE"},
-        {0x7FFFFFFFFFFFFFFF,  "FFFFFFFFFFFFFFFF", "0000000000000000"}
-    };
+        {-1, "7FFFFFFFFFFFFFFF", "8000000000000000"},
+        {0, "8000000000000000", "7FFFFFFFFFFFFFFF"},
+        {1, "8000000000000001", "7FFFFFFFFFFFFFFE"},
+        {0x7FFFFFFFFFFFFFFF, "FFFFFFFFFFFFFFFF", "0000000000000000"}};
     TPresortTest().ValidateEncoding(values);
 }
 
 Y_UNIT_TEST(Uint64) {
     const TVector<std::tuple<ui64, TString, TString>> values = {
-        {0u,                  "0000000000000000", "FFFFFFFFFFFFFFFF"},
+        {0u, "0000000000000000", "FFFFFFFFFFFFFFFF"},
         {0x8000000000000000u, "8000000000000000", "7FFFFFFFFFFFFFFF"},
-        {0xFFFFFFFFFFFFFFFFu, "FFFFFFFFFFFFFFFF", "0000000000000000"}
-    };
+        {0xFFFFFFFFFFFFFFFFu, "FFFFFFFFFFFFFFFF", "0000000000000000"}};
     TPresortTest().ValidateEncoding(values);
 }
 
@@ -303,16 +296,16 @@ Y_UNIT_TEST(Float) {
 
     const TVector<std::tuple<float, TString, TString>> values = {
         {-TLimits::infinity(), "00", "FF"},
-        {-TLimits::max(),      "0100800000", "FEFF7FFFFF"},
-        {-1.f,                 "01407FFFFF", "FEBF800000"},
-        {-TLimits::min(),      "017F7FFFFF", "FE80800000"},
-        {-TLimits::min()/8.f,  "017FEFFFFF", "FE80100000"},
-        {0.f,                  "02", "FD"},
-        {TLimits::min()/8.f,   "0300100000", "FCFFEFFFFF"},
-        {TLimits::min(),       "0300800000", "FCFF7FFFFF"},
-        {1.f,                  "033F800000", "FCC07FFFFF"},
-        {TLimits::max(),       "037F7FFFFF", "FC80800000"},
-        {TLimits::infinity(),  "04", "FB"},
+        {-TLimits::max(), "0100800000", "FEFF7FFFFF"},
+        {-1.f, "01407FFFFF", "FEBF800000"},
+        {-TLimits::min(), "017F7FFFFF", "FE80800000"},
+        {-TLimits::min() / 8.f, "017FEFFFFF", "FE80100000"},
+        {0.f, "02", "FD"},
+        {TLimits::min() / 8.f, "0300100000", "FCFFEFFFFF"},
+        {TLimits::min(), "0300800000", "FCFF7FFFFF"},
+        {1.f, "033F800000", "FCC07FFFFF"},
+        {TLimits::max(), "037F7FFFFF", "FC80800000"},
+        {TLimits::infinity(), "04", "FB"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -322,16 +315,16 @@ Y_UNIT_TEST(Double) {
 
     const TVector<std::tuple<double, TString, TString>> values = {
         {-TLimits::infinity(), "00", "FF"},
-        {-TLimits::max(),      "010010000000000000", "FEFFEFFFFFFFFFFFFF"},
-        {-1.,                  "01400FFFFFFFFFFFFF", "FEBFF0000000000000"},
-        {-TLimits::min(),      "017FEFFFFFFFFFFFFF", "FE8010000000000000"},
-        {-TLimits::min()/8.,   "017FFDFFFFFFFFFFFF", "FE8002000000000000"},
-        {0.,                   "02", "FD"},
-        {TLimits::min()/8.,    "030002000000000000", "FCFFFDFFFFFFFFFFFF"},
-        {TLimits::min(),       "030010000000000000", "FCFFEFFFFFFFFFFFFF"},
-        {1.,                   "033FF0000000000000", "FCC00FFFFFFFFFFFFF"},
-        {TLimits::max(),       "037FEFFFFFFFFFFFFF", "FC8010000000000000"},
-        {TLimits::infinity(),  "04", "FB"},
+        {-TLimits::max(), "010010000000000000", "FEFFEFFFFFFFFFFFFF"},
+        {-1., "01400FFFFFFFFFFFFF", "FEBFF0000000000000"},
+        {-TLimits::min(), "017FEFFFFFFFFFFFFF", "FE8010000000000000"},
+        {-TLimits::min() / 8., "017FFDFFFFFFFFFFFF", "FE8002000000000000"},
+        {0., "02", "FD"},
+        {TLimits::min() / 8., "030002000000000000", "FCFFFDFFFFFFFFFFFF"},
+        {TLimits::min(), "030010000000000000", "FCFFEFFFFFFFFFFFFF"},
+        {1., "033FF0000000000000", "FCC00FFFFFFFFFFFFF"},
+        {TLimits::max(), "037FEFFFFFFFFFFFFF", "FC8010000000000000"},
+        {TLimits::infinity(), "04", "FB"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -340,23 +333,23 @@ Y_UNIT_TEST(String) {
     const TVector<std::tuple<TStringBuf, TString, TString>> values = {
         {TStringBuf(""), "00", "FF"},
         {"\x00"sv, "1F00000000000000000000000000000001",
-            "E0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "E0FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
         {"\x01", "1F01000000000000000000000000000001",
-            "E0FEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "E0FEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
         {"0", "1F30000000000000000000000000000001",
-            "E0CFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "E0CFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
         {"0123", "1F30313233000000000000000000000004",
-            "E0CFCECDCCFFFFFFFFFFFFFFFFFFFFFFFB"},
+         "E0CFCECDCCFFFFFFFFFFFFFFFFFFFFFFFB"},
         {"0123456789abcde", "1F3031323334353637383961626364650F",
-            "E0CFCECDCCCBCAC9C8C7C69E9D9C9B9AF0"},
+         "E0CFCECDCCCBCAC9C8C7C69E9D9C9B9AF0"},
         {"a", "1F61000000000000000000000000000001",
-            "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
         {"a\x00"sv, "1F61000000000000000000000000000002",
-            "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD"},
+         "E09EFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD"},
         {"abc", "1F61626300000000000000000000000003",
-            "E09E9D9CFFFFFFFFFFFFFFFFFFFFFFFFFC"},
+         "E09E9D9CFFFFFFFFFFFFFFFFFFFFFFFFFC"},
         {"b", "1F62000000000000000000000000000001",
-            "E09DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "E09DFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::String>(values);
 }
@@ -364,14 +357,14 @@ Y_UNIT_TEST(String) {
 Y_UNIT_TEST(Uuid) {
     const TVector<std::tuple<TStringBuf, TString, TString>> values = {
         {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"sv,
-            "00000000000000000000000000000000",
-            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"},
+         "00000000000000000000000000000000",
+         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"},
         {"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1"sv,
-            "00000000000000000000000000000001",
-            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
+         "00000000000000000000000000000001",
+         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE"},
         {"\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff",
-            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
-            "00000000000000000000000000000000"},
+         "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+         "00000000000000000000000000000000"},
     };
     TPresortTest().ValidateEncoding<NUdf::EDataSlot::Uuid>(values);
 }
@@ -442,23 +435,23 @@ Y_UNIT_TEST(TzTimestamp64) {
 Y_UNIT_TEST(Decimal) {
     const TVector<std::tuple<NYql::NDecimal::TInt128, TString, TString>> values = {
         {-NYql::NDecimal::Inf(),
-            "01",
-            "FE"},
+         "01",
+         "FE"},
         {NYql::NDecimal::TInt128(-1),
-            "7F",
-            "8101"},
+         "7F",
+         "8101"},
         {NYql::NDecimal::TInt128(0),
-            "80",
-            "80"},
+         "80",
+         "80"},
         {NYql::NDecimal::TInt128(1),
-            "8101",
-            "7F"},
+         "8101",
+         "7F"},
         {NYql::NDecimal::Inf(),
-            "FE",
-            "01"},
+         "FE",
+         "01"},
         {NYql::NDecimal::Nan(),
-            "FF",
-            "00"},
+         "FF",
+         "00"},
     };
     TPresortTest().ValidateEncoding(values);
 }
@@ -502,7 +495,8 @@ Y_UNIT_TEST(GenericString) {
     NUdf::TUnboxedValue value = MakeString("ALongStringExample");
     TGenericPresortEncoder encoder(type);
     auto buf = encoder.Encode(value, false);
-    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x1F" "ALongStringExam\x1Fple\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03"sv));
+    UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x1F"
+                                        "ALongStringExam\x1Fple\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x03"sv));
 }
 
 Y_UNIT_TEST(GenericOptional) {
@@ -523,7 +517,10 @@ Y_UNIT_TEST(NestedOptional) {
     TTypeEnvironment env(alloc);
     // Int32???
     auto type =
-        TOptionalType::Create(TOptionalType::Create(TOptionalType::Create(TDataType::Create(NUdf::TDataType<i32>::Id, env), env), env), env);
+        TOptionalType::Create(
+            TOptionalType::Create(
+                TOptionalType::Create(
+                    TDataType::Create(NUdf::TDataType<i32>::Id, env), env), env), env);
     TGenericPresortEncoder encoder(type);
 
     NUdf::TUnboxedValue null = {};
@@ -538,12 +535,10 @@ Y_UNIT_TEST(NestedOptional) {
     buf = encoder.Encode(justJustNull, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x00"sv));
 
-
     auto zero = NUdf::TUnboxedValuePod(0).MakeOptional().MakeOptional().MakeOptional();
     buf = encoder.Encode(zero, false);
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x01\x01\x80\x00\x00\x00"sv));
 }
-
 
 Y_UNIT_TEST(GenericList) {
     TScopedAlloc alloc(__LOCATION__);
@@ -645,7 +640,7 @@ Y_UNIT_TEST(GenericDict) {
     TScopedAlloc alloc(__LOCATION__);
     TTypeEnvironment env(alloc);
     auto type = TDictType::Create(TDataType::Create(NUdf::TDataType<ui32>::Id, env),
-        TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
+                                  TDataType::Create(NUdf::TDataType<bool>::Id, env), env);
     TKeyTypes keyTypes;
     bool isTuple;
     bool encoded;
@@ -673,7 +668,7 @@ Y_UNIT_TEST(GenericDict) {
     UNIT_ASSERT_NO_DIFF(buf, TStringBuf("\x01\x00\x00\x04\xD2\x01\x01\x00\x00\x16\x2E\x00\x00"sv));
 }
 
-}
+} // Y_UNIT_TEST_SUITE(TPresortCodecTest)
 
-} // NMiniKQL
-} // NKikimr
+} // namespace NMiniKQL
+} // namespace NKikimr

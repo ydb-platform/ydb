@@ -20,7 +20,9 @@ namespace {
             , Buf(rec.Len + 1)
         {
             Buf.Append(rec.Data, rec.Len);
-            *Buf.Proceed(1) = '\n';
+            if (rec.Len > 0 && rec.Data[rec.Len - 1] != '\n') {
+                *Buf.Proceed(1) = '\n';
+            }
         }
 
         operator TLogRecord() const {

@@ -771,12 +771,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         // 1. Copy table is not compacted until we want to split it
         // 2. After borrow compaction both src and dst tables are background compacted
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -902,12 +904,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
         // I.e. we compact borrowed data ASAP except copy table case, when
         // we don't want to compact at all.
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -976,12 +980,14 @@ Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
 
     Y_UNIT_TEST(SchemeshardShouldNotCompactBorrowedAfterSplitMergeWhenDisabled) {
 
-        NDataShard::gDbStatsReportInterval = TDuration::Seconds(1);
         NDataShard::gDbStatsDataSizeResolution = 10;
         NDataShard::gDbStatsRowCountResolution = 10;
 
+        TTestEnvOptions opts;
+        opts.DataShardStatsReportIntervalSeconds(1);
+
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, opts);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);

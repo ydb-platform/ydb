@@ -114,6 +114,8 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
                     externalStat.SetExternalBytes(stat.ExternalBytes);
                     externalStat.SetFirstMessageMs(stat.FirstMessageMs);
                     externalStat.SetLastMessageMs(stat.LastMessageMs);
+                    externalStat.SetCpuTimeUs(stat.CpuTimeUs);
+                    externalStat.SetWaitInputTimeUs(stat.WaitTimeUs);
                     externalStat.SetWaitOutputTimeUs(stat.WaitOutputTimeUs);
                     externalStat.SetFinished(stat.Finished);
                 }
@@ -188,11 +190,11 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {
 
     auto guard = TaskRunner->BindAllocator();
     if (!!msg.GetArrowBatch()) {
-        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->AddData(NMiniKQL::TBatchDataAccessor(msg.GetArrowBatch(), std::move(msg.MutableDataIndexes()), BlockTrackingMode), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else if (!msg.GetRows().empty()) {
-        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->AddData(std::move(msg.MutableRows()), msg.GetTabletId(), TaskRunner->GetHolderFactory(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     } else {
-        ScanData->UpdateStats(0, 0, msg.GetTabletId(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
+        ScanData->UpdateStats(0, 0, msg.GetTabletId(), msg.GetCpuTimeUs(), msg.GetWaitTimeUs(), msg.GetWaitOutputTimeUs(), msg.GetFinished());
     }
     if (IsQuotingEnabled()) {
         AcquireRateQuota();
@@ -277,9 +279,12 @@ void TKqpScanComputeActor::DoBootstrap() {
     auto taskRunner = MakeDqTaskRunner(GetAllocatorPtr(), execCtx, settings, logger);
     TBase::SetTaskRunner(taskRunner);
 
-    auto wakeup = [this] { ContinueExecute(); };
+    auto selfId = this->SelfId();
+    auto wakeupCallback = [actorSystem, selfId]() {
+        actorSystem->Send(selfId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
+    };
     auto errorCallback = [this](const TString& error){ SendError(error); };
-    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeup), std::move(errorCallback)));
+    TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode());
     ScanData = &ComputeCtx.GetTableScan(0);

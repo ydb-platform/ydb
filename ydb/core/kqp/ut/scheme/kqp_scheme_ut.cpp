@@ -28,6 +28,8 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
+#include <fmt/format.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -35,11 +37,40 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
 using namespace NYdb::NReplication;
+using namespace fmt::literals;
+
+namespace {
+
+template<bool UseQueryService>
+TStatus ExecuteGeneric(NYdb::NQuery::TQueryClient& queryClient, TSession& session, const TString& query) {
+    if constexpr (UseQueryService) {
+        Y_UNUSED(session);
+        return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    } else {
+        Y_UNUSED(queryClient);
+        return session.ExecuteSchemeQuery(query).ExtractValueSync();
+    }
+}
+
+template<bool UseSchemaSecrets>
+void CreateSecret(TString& secretName, const TString& secretValue, TSession& session) {
+    TString query;
+    if constexpr (UseSchemaSecrets) {
+        secretName = "/Root/" + secretName;
+        query = Sprintf("CREATE SECRET `%s` WITH (value=\"%s\")", secretName.c_str(), secretValue.c_str());
+    } else {
+        query = Sprintf("CREATE OBJECT %s (TYPE SECRET) WITH value=\"%s\"", secretName.c_str(), secretValue.c_str());
+    }
+    const auto queryResult = session.ExecuteSchemeQuery(query).GetValueSync();
+    UNIT_ASSERT_EQUAL_C(NYdb::EStatus::SUCCESS, queryResult.GetStatus(), queryResult.GetIssues().ToString());
+}
+
+}
 
 Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(UseUnauthorizedTable) {
-        TKikimrRunner kikimr("test_user@builtin");
-        auto db = kikimr.GetTableClient();
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("test_user@builtin"));
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
@@ -1164,7 +1195,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithPartitionSize(true);
     }
 
-    Y_UNIT_TEST_TWIN(RenameTable, СolumnTable) {
+    Y_UNIT_TEST_TWIN(RenameTable, ColumnTable) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableMoveColumnTable(true);
         TKikimrRunner kikimr(featureFlags);
@@ -1180,7 +1211,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key)
             )
             )")
-            + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -1219,7 +1250,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Value String,
                 PRIMARY KEY (Key)
             )
-            )" + (СolumnTable ? TString("WITH (STORE = COLUMN)") : "");
+            )" + (ColumnTable ? TString("WITH (STORE = COLUMN)") : "");
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -2130,10 +2161,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         uuidInsertAndCheck(session, tableName, inputs);
     }
 
-    Y_UNIT_TEST(CreateTableWithFamiliesRegular) {
+    Y_UNIT_TEST_TWIN(CreateTableWithFamiliesRegular, UseQueryService) {
         TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
         TString tableName = "/Root/TableWithFamiliesRegular";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2144,11 +2178,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key),
                 FAMILY Family1 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 ),
                 FAMILY Family2 ()
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto describeResult = session.DescribeTable(tableName, NYdb::NTable::TDescribeTableSettings()).GetValueSync();
@@ -2159,6 +2194,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             if (family.GetName() == "Family1") {
                 UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                 UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
             } else {
                 UNIT_ASSERT(family.GetName() == "default" || family.GetName() == "Family2");
             }
@@ -2253,10 +2289,99 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Field `COMPRESSION_LEVEL` is not supported for OLTP tables", resultAlter.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(CreateTableWithDefaultFamily) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(CreateFamilyWithCacheModeFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test",
+                     CACHE_MODE = "in_memory"
+                ),
+            );)";
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Setting cache_mode is not allowed", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AlterCacheModeInColumnFamilyFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test"
+                ),
+            );)";
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(` ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
+        auto resultAlter = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter);
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(AddColumnFamilyWithCacheModeFeatureDisabled, UseQueryService) {
+        TKikimrRunner kikimr; // EnableTableCacheModes should be disabled by default
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        TString tableName = "/Root/TableWithWithCacheMode";
+        auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE TABLE `)" << tableName << R"(` (
+                Key Uint64,
+                Value1 String FAMILY Family1,
+                Value2 Uint32,
+                PRIMARY KEY (Key),
+                FAMILY Family1 (
+                     DATA = "test"
+                ),
+            );)";
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto queryAlter = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `)" << tableName << R"(`
+                ADD FAMILY Family2 (
+                     DATA = "test",
+                     CACHE_MODE = "in_memory"
+                );)";
+        auto resultAlter = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter);
+        UNIT_ASSERT_VALUES_EQUAL_C(resultAlter.GetStatus(), EStatus::GENERIC_ERROR, resultAlter.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(resultAlter.GetIssues().ToString(), "Setting cache_mode is not allowed", resultAlter.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableWithDefaultFamily, UseQueryService) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableTableCacheModes(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
         TString tableName = "/Root/TableWithDefaultFamily";
         auto query = TStringBuilder() << R"(
             --!syntax_v1
@@ -2267,14 +2392,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key),
                 FAMILY default (
                      DATA = "test",
-                     COMPRESSION = "lz4"
+                     COMPRESSION = "lz4",
+                     CACHE_MODE = "in_memory"
                 ),
                 FAMILY Family1 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 )
             );)";
-        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         {
@@ -2286,10 +2413,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 }
             }
         }
@@ -2299,14 +2428,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ALTER TABLE `)" << tableName << R"(`
                 ADD FAMILY  Family2 (
                      DATA = "test",
-                     COMPRESSION = "off"
+                     COMPRESSION = "off",
+                     CACHE_MODE = "regular"
                 ),
                 ADD COLUMN Value3 Uint32 FAMILY Family1,
                 ADD COLUMN Value4 Uint32 FAMILY Family2,
                 DROP COLUMN Value2,
                 ALTER COLUMN Value1 SET FAMILY Family2,
-                ALTER FAMILY Family1 SET COMPRESSION "LZ4";)";
-        auto resultAlter1 = session.ExecuteSchemeQuery(queryAlter1).GetValueSync();
+                ALTER FAMILY Family1 SET COMPRESSION "LZ4",
+                ALTER FAMILY Family1 SET CACHE_MODE "in_memory";)";
+        auto resultAlter1 = ExecuteGeneric<UseQueryService>(queryClient, session, queryAlter1);
         UNIT_ASSERT_VALUES_EQUAL_C(resultAlter1.GetStatus(), EStatus::SUCCESS, resultAlter1.GetIssues().ToString());
 
         {
@@ -2318,13 +2449,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 if (family.GetName() == "Family1") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 } else if (family.GetName() == "Family2") {
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::None);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::Regular);
                 } else {
                     UNIT_ASSERT(family.GetName() == "default");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetData(), "test");
                     UNIT_ASSERT_VALUES_EQUAL(family.GetCompression().value(), EColumnFamilyCompression::LZ4);
+                    UNIT_ASSERT_VALUES_EQUAL(family.GetCacheMode().value(), EColumnFamilyCacheMode::InMemory);
                 }
             }
             const auto& columns = describeResult.GetTableDescription().GetColumns();
@@ -2350,7 +2484,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 PRIMARY KEY (Key)
             )
             WITH (
-                STORE_EXTERNAL_BLOBS = ENABLED
+                STORE_EXTERNAL_BLOBS = ENABLED,
+                EXTERNAL_DATA_CHANNELS_COUNT = 7
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -2358,6 +2493,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto describeResult = session.DescribeTable(tableName).GetValueSync();
         UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
         UNIT_ASSERT(describeResult.GetTableDescription().GetStorageSettings().GetStoreExternalBlobs().value_or(false));
+        UNIT_ASSERT_VALUES_EQUAL(describeResult.GetTableDescription().GetStorageSettings().GetExternalDataChannelsCount().value(), 7);
     }
 
     Y_UNIT_TEST(CreateAndAlterTableComplex) {
@@ -2612,7 +2748,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const auto subtypeStr = (type == EIndexTypeSql::GlobalVectorKMeansTree
             ? "USING vector_kmeans_tree" : "");
         const auto withStr = (type == EIndexTypeSql::GlobalVectorKMeansTree
-            ? "WITH (similarity=inner_product, vector_type=uint8, vector_dimension=3)" : "");
+            ? "WITH (similarity=inner_product, vector_type=uint8, vector_dimension=3, levels=1, clusters=2)" : "");
 
         // Non-covered index, single column
         {
@@ -2640,9 +2776,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -2689,11 +2825,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PrefixTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -2738,9 +2874,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/NameIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
            }
         }
@@ -2787,11 +2923,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorType, TVectorIndexSettings::EVectorType::Uint8);
                 UNIT_ASSERT_VALUES_EQUAL(vectorIndexSettings.VectorDimension, 3); // test names are all 4 bytes
 
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::LevelTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::LevelTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PostingTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PostingTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
-                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable).GetValueSync();
+                describe = session.DescribeTable(TString{"/Root/Test/CommentIndex/"} + NTableIndex::NKMeans::PrefixTable).GetValueSync();
                 UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
             }
         }
@@ -2835,19 +2971,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
         CreateSampleTablesWithIndex(session);
 
-        const auto executeGeneric = [&queryClient, &session](const TString& query) -> TStatus {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         constexpr int minPartitionsCount = 10;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET AUTO_PARTITIONING_MIN_PARTITIONS_COUNT %d;
                     )", minPartitionsCount
                 )
@@ -2863,7 +2989,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         constexpr int partitionSizeMb = 555;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET AUTO_PARTITIONING_PARTITION_SIZE_MB %d;
                     )", partitionSizeMb
                 )
@@ -2881,7 +3007,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         constexpr auto readReplicasMode = NYdb::NTable::TReadReplicasSettings::EMode::PerAz;
         constexpr ui64 readReplicasCount = 1;
         {
-            const auto result = executeGeneric(Sprintf(R"(
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, Sprintf(R"(
                         ALTER TABLE `/Root/SecondaryKeys` ALTER INDEX Index SET READ_REPLICAS_SETTINGS "%s:%)" PRIu64 R"(";
                     )", readReplicasModeAsString.data(), readReplicasCount
                 )
@@ -2908,7 +3034,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 INDEX vector_idx
                     GLOBAL USING vector_kmeans_tree
                     ON (Embedding)
-                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
             );
         )";
         auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3487,6 +3613,198 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         BuildingUniqIndexDeniesTableModifications(true);
     }
 
+    void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    TableKey1 Uint64,
+                    TableKey2 String,
+                    IndexKey1 String,
+                    IndexKey2 Int64,
+                    TableDataColumn String,
+                    IndexDataColumn String,
+                    PRIMARY KEY (TableKey1, TableKey2)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey1, TableKey2, IndexKey1, IndexKey2, TableDataColumn, IndexDataColumn)
+                    VALUES
+                        (1, "1", "index_1", 1, "table_data1", "index_data1"),
+                        (2, "2", "index_2", 2, "table_data2", "index_data2"),
+                        (3, "3", "index_3", 3, "table_data3", "index_data3");
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        if (!isUnique) { // insert one more key
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey1, TableKey2, IndexKey1, IndexKey2, TableDataColumn, IndexDataColumn)
+                    VALUES
+                        (4, "4", "index_2", 2, "table_data2", "index_data2");
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        if (sqlInterface) {
+            TString alterQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey1, IndexKey2) COVER (IndexDataColumn);
+            )sql";
+            auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            if (isUnique) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Duplicate key found: (IndexKey1=index_2, IndexKey2=2)");
+            }
+        } else {
+            TAlterTableSettings settings;
+            settings.AppendAddIndexes(TIndexDescription(
+                "uniq_value_idx",
+                EIndexType::GlobalUnique,
+                {"IndexKey1", "IndexKey2"},
+                {"IndexDataColumn"}
+            ));
+            auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+            auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+            NYdb::TOperation::TOperationId alterOpId = op.Id();
+            TMaybe<NYdb::NTable::TBuildIndexOperation> buildOp;
+            do {
+                Sleep(TDuration::MilliSeconds(100));
+                NYdb::NOperation::TOperationClient opClient(kikimr.GetDriver());
+                buildOp = opClient.Get<NYdb::NTable::TBuildIndexOperation>(alterOpId).GetValueSync();
+            } while (!buildOp->Ready());
+
+            if (isUnique) {
+                UNIT_ASSERT_C(buildOp->Status().IsSuccess(), buildOp->Status().GetIssues().ToString());
+            } else {
+                UNIT_ASSERT(!buildOp->Status().IsSuccess());
+                UNIT_ASSERT_STRING_CONTAINS(buildOp->Status().GetIssues().ToString(), "Duplicate key found: (IndexKey1=index_2, IndexKey2=2)");
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSqlSuccess) {
+        ValidatingUniqIndex(true, true);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSdkSuccess) {
+        ValidatingUniqIndex(false, true);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSqlFail) {
+        ValidatingUniqIndex(true, false);
+    }
+
+    Y_UNIT_TEST(ValidatingUniqIndexSdkFail) {
+        ValidatingUniqIndex(false, false);
+    }
+
+    Y_UNIT_TEST(UniqueIndexMultipleNulls) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableAddUniqueIndex(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
+
+        auto db = kikimr.GetQueryClient();
+        {
+            TString createQuery = R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    TableKey Uint64,
+                    IndexKey String,
+                    PRIMARY KEY (TableKey),
+                    INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey)
+                );
+            )sql";
+            auto result = db.ExecuteQuery(createQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            TString upsertQuery = R"sql(
+                UPSERT INTO `/Root/TestTable` (TableKey, IndexKey)
+                    VALUES
+                        (1, "index_1"),
+                        (2, NULL),
+                        (3, NULL);
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto getRowsCount = [&]() {
+            TString selectQuery = R"sql(
+                SELECT COUNT(*) FROM `/Root/TestTable`;
+            )sql";
+            auto result = db.ExecuteQuery(selectQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto parser = result.GetResultSetParser(0);
+            UNIT_ASSERT(parser.TryNextRow());
+            return parser.ColumnParser(0).GetUint64();
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 3);
+
+        {
+            TString dropIndexQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                DROP INDEX uniq_value_idx;
+            )sql";
+            auto result = db.ExecuteQuery(dropIndexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Build the same index and check that the process succeeds
+        {
+            TString addIndexQuery = R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (IndexKey);
+            )sql";
+            auto result = db.ExecuteQuery(addIndexQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 3);
+
+        {
+            TString upsertQuery = R"sql(
+                INSERT INTO `/Root/TestTable` (TableKey, IndexKey)
+                    VALUES
+                        (4, NULL),
+                        (5, NULL);
+            )sql";
+            auto result = db.ExecuteQuery(upsertQuery, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRowsCount(), 5);
+    }
+
     Y_UNIT_TEST(AlterTableAddUniqIndexSqlFeatureOff) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(false);
@@ -3519,7 +3837,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto result = db.ExecuteQuery(alterQuery, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Adding a unique index to an existing table is disabled");
         }
     }
 
@@ -3550,7 +3868,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             ));
             auto op = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(op.Status().GetStatus(), EStatus::BAD_REQUEST, op.Status().GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "unsupported index type to build");
+            UNIT_ASSERT_STRING_CONTAINS(op.Status().GetIssues().ToString(), "Adding a unique index to an existing table is disabled");
         }
     }
 
@@ -3606,7 +3924,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                         GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
                         COVER (Covered)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3650,7 +3968,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     INDEX vector_idx
                         GLOBAL USING vector_KMEANS_tree
                         ON (Embedding)
-                        WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024)
+                        WITH (similarity=COSINE, VECTOR_TYPE=float, vector_DIMENSION=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
@@ -3676,12 +3994,492 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     INDEX vector_idx
                         GLOBAL USING vector_kmeans_tree
                         ON (Embedding)
-                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024)
+                        WITH (similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2)
                 );
             )";
             auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
 
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Vector index support is disabled");
+        }
+    }
+
+    Y_UNIT_TEST(CreateTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // valid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024,
+                }, 10, 3});
+
+            auto result = session.CreateTable("/Root/TestTable1", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key")
+                .AddVectorKMeansTreeIndex("vector_idx", {"Embedding"}, {TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500,
+                }, 10, 3});
+
+            auto result = session.CreateTable("/Root/TestTable2", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
+    Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPublicApi) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create table:
+            auto builder = TTableBuilder()
+                .AddNullableColumn("Key", EPrimitiveType::Uint64)
+                .AddNullableColumn("Embedding", EPrimitiveType::String)
+                .SetPrimaryKeyColumn("Key");
+
+            auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // valid settings:
+            TIndexDescription index("vector_idx1", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    1024
+                }, 10, 3
+            });
+
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // invalid settings:
+            TIndexDescription index("vector_idx2", EIndexType::GlobalVectorKMeansTree, {"Embedding"}, {}, {}, TKMeansTreeSettings{
+                TVectorIndexSettings{
+                    NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
+                    NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
+                    100500
+                }, 10, 3
+            });
+
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ index });
+
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid vector_dimension: 100500 should be between 1 and 16384");
+        }
+
+        // see all validation cases in CreateTableAlterTableVectorIndexInvalidSettings test, here we check only that validation is triggered
+    }
+
+    Y_UNIT_TEST_TWIN(CreateTableAlterTableVectorIndexInvalidSettings, CreateTable) {
+        TKikimrRunner kikimr;
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+        // kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_TRACE);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        ui32 tableId = 0;
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        auto check = [&](const TString& indexSettings, const TString& expectedError) {
+            TStringBuilder explain;
+            explain << (CreateTable ? "CREATE" : "ALTER") <<  " WITH (" << indexSettings << ")" << Endl;
+            Cerr << explain;
+
+            TString query;
+
+            if (CreateTable) {
+                query = Sprintf(R"(
+                    --!syntax_v1
+                    CREATE TABLE `/Root/TestTable%d` (
+                        Key Uint64,
+                        Embedding String,
+                        Covered String,
+                        PRIMARY KEY (Key),
+                        INDEX vector_idx
+                            GLOBAL USING vector_kmeans_tree
+                            ON (Embedding)
+                            WITH (%s)
+                    );
+                )", ++tableId, indexSettings.c_str());
+            } else {
+                query = Sprintf(R"(
+                    --!syntax_v1
+                    ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx%d
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (%s);
+                )", ++tableId, indexSettings.c_str());
+            }
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            explain << result.GetStatus() << Endl;
+            explain << result.GetIssues().ToString() << Endl;
+            Cerr << explain;
+
+            if (expectedError) {
+                UNIT_ASSERT_C(result.GetStatus() == EStatus::GENERIC_ERROR || result.GetStatus() == EStatus::BAD_REQUEST, explain);
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), expectedError, explain);
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, explain);
+            }
+        };
+
+        // valid settings:
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10", "");
+
+        // unknown index setting:
+        check("XxX=YyY, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Unknown index setting: xxx");
+        check("XxX=42, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Unknown index setting: xxx");
+
+        // distance:
+        check("distance=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid distance: xxx");
+        check("distance=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid distance: 42");
+
+        // similarity
+        check("similarity=XxX, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: xxx");
+        check("similarity=42, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: 42");
+        check("similarity=True, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid similarity: true");
+
+        // distance + similarity (none or both)
+        check("distance=manhattan, similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "only one of distance or similarity should be set, not both");
+        check("vector_type=float, vector_dimension=1024, levels=3, clusters=10",
+            "either distance or similarity should be set");
+
+        // vector_type
+        check("similarity=inner_product, vector_type=XxX, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid vector_type: xxx");
+        check("similarity=inner_product, vector_type=42, vector_dimension=1024, levels=3, clusters=10",
+            "Invalid vector_type: 42");
+        check("similarity=inner_product, vector_dimension=1024, levels=3, clusters=10",
+            "vector_type should be set");
+
+        // vector_dimension
+        check("similarity=inner_product, vector_type=float, vector_dimension=XxX, levels=3, clusters=10",
+            "Invalid vector_dimension: xxx");
+        check("similarity=inner_product, vector_type=float, vector_dimension=0, levels=3, clusters=10",
+            "Invalid vector_dimension: 0 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=10, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=16384, levels=3, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=16385, levels=3, clusters=10",
+            "Invalid vector_dimension: 16385 should be between 1 and 16384");
+        check("similarity=inner_product, vector_type=float, vector_dimension=999999999999, levels=3, clusters=10",
+            "Invalid vector_dimension: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=99999999999999999999, levels=3, clusters=10",
+            "Invalid vector_dimension: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, levels=3, clusters=10",
+            "vector_dimension should be set");
+
+        // levels
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=XxX, clusters=2",
+            "Invalid levels: xxx");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=0, clusters=2",
+            "Invalid levels: 0 should be between 1 and 16");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=3, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=17, clusters=2",
+            "Invalid levels: 17 should be between 1 and 16");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=999999999999, clusters=2",
+            "Invalid levels: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=99999999999999999999, clusters=2",
+            "Invalid levels: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, clusters=2",
+            "levels should be set");
+
+        // clusters
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=XxX",
+            "Invalid clusters: xxx");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=0",
+            "Invalid clusters: 0 should be between 2 and 2048");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=1",
+            "Invalid clusters: 1");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=10", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2048", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=2049",
+            "Invalid clusters: 2049 should be between 2 and 2048");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=999999999999",
+            "Invalid clusters: 999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1, clusters=99999999999999999999",
+            "Invalid clusters: 99999999999999999999");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=1",
+            "clusters should be set");
+
+        // clusters^levels
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=10, clusters=10",
+            "Invalid clusters^levels: 10^10 should be less than 1073741824");
+        check("similarity=inner_product, vector_type=float, vector_dimension=1024, levels=16, clusters=1024",
+            "Invalid clusters^levels: 1024^16 should be less than 1073741824");
+
+        // vector_dimension*clusters
+        check("similarity=inner_product, vector_type=float, vector_dimension=2048, levels=1, clusters=2048", "");
+        check("similarity=inner_product, vector_type=float, vector_dimension=2049, levels=1, clusters=2048",
+            "Invalid vector_dimension*clusters: 2049*2048 should be less than 4194304");
+    }
+
+    Y_UNIT_TEST(CreateTableVectorIndexInvalidSettingsPositions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // vector_dimension=asdf --- invalid type
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=asdf,
+                            levels=3,
+                            clusters=10)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: asdf\n");
+        }
+
+        { // vector_dimension=16385 --- out of range
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=16385,
+                            levels=3,
+                            clusters=10)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:14:46: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+        }
+
+        { // vector_dimension=16385 clusters=2048 --- post validation error
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (
+                            similarity=inner_product,
+                            vector_type=float,
+                            vector_dimension=16384,
+                            levels=3,
+                            clusters=2048)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:29: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
+        }
+
+        { // no WITH section
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                );
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:10:29: Error: vector index settings should be set\n");
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableVectorIndexInvalidSettingsPositions) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Embedding String,
+                    Covered String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        { // vector_dimension=asdf --- invalid type
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=asdf,
+                        levels=3,
+                        clusters=10)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: asdf\n");
+        }
+
+        { // vector_dimension=16385 --- out of range
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=16385,
+                        levels=3,
+                        clusters=10)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:9:42: Error: Invalid vector_dimension: 16385 should be between 1 and 16384\n");
+        }
+
+        { // vector_dimension=16385 clusters=2048 --- post validation error
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+                    WITH (
+                        similarity=inner_product,
+                        vector_type=float,
+                        vector_dimension=16384,
+                        levels=3,
+                        clusters=2048)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: Invalid clusters^levels: 2048^3 should be less than 1073741824\n");
+        }
+
+        { // no WITH section
+            TString query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable` ADD INDEX vector_idx
+                    GLOBAL USING vector_kmeans_tree
+                    ON (Embedding)
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+
+            Cout << query << Endl;
+            Cout << result.GetIssues().ToString() << Endl;
+
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "<main>:5:25: Error: vector index settings should be set");
         }
     }
 
@@ -3701,7 +4499,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
-                }});
+                }, 10, 3});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -3741,7 +4539,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     NYdb::NTable::TVectorIndexSettings::EMetric::CosineDistance,
                     NYdb::NTable::TVectorIndexSettings::EVectorType::Float,
                     1024,
-                }});
+                }, 10, 3});
 
             auto result = session.CreateTable("/Root/TestTable", builder.Build()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -4863,16 +5661,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ModifySysViewDirPermissions) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableRealSystemViewPaths(true);
-        TKikimrRunner kikimr(featureFlags);
-        kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
+        TKikimrRunner kikimr(settings);
 
-        auto adminSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings()
-            .AuthToken("root@builtin")).CreateSession().GetValueSync().GetSession();
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
 
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.granular.describe_schema' ON `/Root` TO `root@builtin`;
                 GRANT 'ydb.database.connect' ON `/Root` TO `user@builtin`;
                 )";
             auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
@@ -4950,7 +5749,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.granular.alter_schema' ON `/Root/.sys` TO `root@builtin`;
+                GRANT 'ydb.granular.alter_schema' ON `/Root/.sys` TO `other-user@builtin`;
                 )";
             auto result = userSession.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -4960,35 +5759,49 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(ModifySysViewPermissions) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableRealSystemViewPaths(true);
-        TKikimrRunner kikimr(featureFlags, "root@builtin");
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetFeatureFlags(featureFlags);
+        settings.SetAuthToken("root@builtin");  // root@builtin becomes cluster admin
+        TKikimrRunner kikimr(settings);
 
-        auto userSchemeClient = kikimr.GetSchemeClient();
-        auto db = kikimr.GetTableClient();
-        auto userSession = db.CreateSession().GetValueSync().GetSession();
+        auto adminSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+                --!syntax_v1
+                GRANT 'ydb.database.connect', 'ydb.granular.describe_schema' ON `/Root` TO `user@builtin`;
+                )";
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto userSession = kikimr.GetTableClient(NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
+            .CreateSession().GetValueSync().GetSession();
         auto querySelect = TStringBuilder() << R"(
             --!syntax_v1
-            SELECT * FROM `/Root/.sys/partition_stats`;
+            SELECT * FROM `/Root/.sys/nodes`;
             )";
 
         {
             auto result = userSession.ExecuteDataQuery(querySelect, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
-                "it does not exist or you do not have access permissions",
+                "Failed to resolve table `/Root/.sys/nodes` status: AccessDenied., code: 2028",
                 result.GetIssues().ToString()
             );
         }
         {
             auto query = TStringBuilder() << R"(
                 --!syntax_v1
-                GRANT 'ydb.generic.read' ON `/Root/.sys/partition_stats` TO `root@builtin`;
+                GRANT 'ydb.generic.read' ON `/Root/.sys/nodes` TO `user@builtin`;
                 )";
-            auto result = userSession.ExecuteSchemeQuery(query).GetValueSync();
+            auto result = adminSession.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CheckPermissions(userSession, {
-                                            {.Path = "/Root/.sys/partition_stats",
+                                            {.Path = "/Root/.sys/nodes",
                                                 .Permissions = {
-                                                    {"root@builtin", {"ydb.generic.read"}}
+                                                    {"user@builtin", {"ydb.generic.read"}}
                                                 }
                                             },
                                         });
@@ -4999,8 +5812,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
 
             auto rs = result.GetResultSet(0);
-            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 39);
-            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 30);
+            UNIT_ASSERT_VALUES_EQUAL(rs.RowsCount(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(rs.ColumnsCount(), 9);
         }
     }
 
@@ -5149,6 +5962,55 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
                 auto result = client.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+        }
+    }
+
+    Y_UNIT_TEST(ModifyPermissionsByRelativePathWithoutSlashes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            CREATE USER ydbuser PASSWORD 'password1';
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            {
+                const TString query = R"(
+                    CREATE TABLE Orders (
+                        id Int32 NOT NULL,
+                        value Int32,
+                        PRIMARY KEY (id)
+                    );
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            }
+
+            {
+                const TString query = R"(
+                    GRANT SELECT ON Orders TO ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CheckPermissions(session, {{.Path = "/Root/Orders", .Permissions = {{"ydbuser", {"ydb.generic.read"}}}}});
+            }
+
+            {
+                const TString query = R"(
+                    REVOKE SELECT ON Orders FROM ydbuser;
+                )";
+
+                auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+                CheckPermissions(session, {{.Path = "/Root/Orders", .Permissions = {}}});
             }
         }
     }
@@ -5855,16 +6717,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto executeQuery = [&queryClient, &session](const TString& query) {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
-
         {
             auto query = R"(
                 --!syntax_v1
@@ -5875,7 +6727,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            auto result = executeQuery(query);
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
@@ -5887,7 +6739,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").ExtractValueSync();
@@ -5906,7 +6758,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )";
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             auto describeResult = session.DescribeTable("/Root/table").ExtractValueSync();
@@ -7354,21 +8206,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSourceSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropTableSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSourceSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), "Executing ESchemeOpDropExternalTable");
@@ -7466,7 +8318,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableCreateExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
@@ -7477,8 +8332,28 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 AUTH_METHOD="NONE"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::UNSUPPORTED);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DisableCreateExternalDataSourceByAvailableFlag) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString externalDataSourceName = "/Root/ExternalDataSource";
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL DATA SOURCE `)" << externalDataSourceName << R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="my-bucket",
+                AUTH_METHOD="NONE"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External source with type ObjectStorage is disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(DisableS3ExternalDataSource) {
@@ -7617,7 +8492,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableDropExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         TString externalDataSourceName = "/Root/ExternalDataSource";
@@ -7735,7 +8613,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableCreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"(
@@ -7747,8 +8628,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 LOCATION="/"
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External tables are disabled. Please contact your system administrator to enable it", result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(DisableCreateExternalTableByAvailableFlag) {
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        appCfg.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto query = TStringBuilder() << R"(
+            CREATE EXTERNAL TABLE `/Root/ExternalTable` (
+                Key Uint64,
+                Value String
+            ) WITH (
+                DATA_SOURCE="/Root/ExternalDataSource",
+                LOCATION="/"
+            );)";
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+        UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Check failed: path: '/Root/ExternalDataSource', error: path hasn't been resolved, nearest resolved path: '/Root'", result.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(CreateExternalTableCheckPrimaryKey) {
@@ -7840,7 +8742,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DisableDropExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appCfg;
+        appCfg.MutableFeatureFlags()->SetEnableExternalDataSources(false);
+        TKikimrRunner kikimr(appCfg);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto query = TStringBuilder() << R"( DROP EXTERNAL TABLE `/Root/ExternalDataSource`)";
@@ -8126,7 +9031,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -8189,6 +9094,53 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither PASSWORD nor PASSWORD_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN = "bar",
+                    INITIAL_TOKEN_SECRET_NAME = "baz"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "INITIAL_TOKEN and INITIAL_TOKEN_SECRET_NAME are mutually exclusive", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "Neither INITIAL_TOKEN nor INITIAL_TOKEN_SECRET_NAME are provided", result.GetIssues().ToOneLineString());
+        }
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
+                    INITIAL_TOKEN = "foo"
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "SERVICE_ACCOUNT_ID is not provided", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -8267,10 +9219,13 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST(CreateAsyncReplicationWithTokenSecret) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithTokenSecret, UseSchemaSecrets) {
         using namespace NReplication;
 
         TKikimrRunner kikimr("root@builtin");
+        if (UseSchemaSecrets) {
+            kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        }
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8291,17 +9246,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         // ok
         {
+            TString secretId = "mysecretname";
+            const TString secretValue = "root@builtin";
+            CreateSecret<UseSchemaSecrets>(secretId, secretValue, session);
+
             auto query = Sprintf(R"(
                 --!syntax_v1
-                CREATE OBJECT mysecret (TYPE SECRET) WITH (value = "root@builtin");
                 CREATE ASYNC REPLICATION `/Root/replication` FOR
                     `/Root/table` AS `/Root/replica`
                 WITH (
                     ENDPOINT = "%s",
                     DATABASE = "/Root",
-                    TOKEN_SECRET_NAME = "mysecret"
+                    TOKEN_SECRET_NAME = "%s"
                 );
-            )", kikimr.GetEndpoint().c_str());
+            )", kikimr.GetEndpoint().c_str(), secretId.c_str());
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -8369,7 +9327,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithCaCert, UseQueryService) {
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithIamAuth, UseQueryService) {
         TKikimrRunner kikimr;
         auto queryClient = kikimr.GetQueryClient();
         auto db = kikimr.GetTableClient();
@@ -8385,6 +9343,30 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
         };
 
+        // ok
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                CREATE ASYNC REPLICATION `/Root/replication` FOR
+                    `/Root/table` AS `/Root/replica`
+                WITH (
+                    CONNECTION_STRING = "grpcs://localhost:2135/?database=/Root",
+                    SERVICE_ACCOUNT_ID = "foo",
+                    INITIAL_TOKEN_SECRET_NAME = "bar"
+                );
+            )", kikimr.GetEndpoint().c_str());
+
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CreateAsyncReplicationWithCaCert, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
         // invalid, non-secure mode
         {
             auto query = Sprintf(R"(
@@ -8399,7 +9381,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "CA_CERT has no effect in non-secure mode", result.GetIssues().ToOneLineString());
         }
@@ -8418,7 +9400,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
@@ -8429,16 +9411,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         auto repl = TReplicationClient(kikimr.GetDriver(), TCommonClientSettings().Database("/Root"));
-
-        auto executeQuery = [&queryClient, &session](const TString& query) {
-            if constexpr (UseQueryService) {
-                Y_UNUSED(session);
-                return queryClient.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
-            } else {
-                Y_UNUSED(queryClient);
-                return session.ExecuteSchemeQuery(query).ExtractValueSync();
-            }
-        };
 
         // default
         {
@@ -8452,7 +9424,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto desc = repl.DescribeReplication("/Root/replication1").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetConsistencyLevel(), TReplicationDescription::EConsistencyLevel::Global);
@@ -8472,7 +9444,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );
             )", kikimr.GetEndpoint().c_str());
 
-            const auto result = executeQuery(query);
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             const auto desc = repl.DescribeReplication("/Root/replication2").ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(desc.GetReplicationDescription().GetConsistencyLevel(), TReplicationDescription::EConsistencyLevel::Global);
@@ -8726,7 +9698,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive", result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -9123,7 +10095,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -9319,7 +10291,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer_fi`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
-                    CONNECTION_STRING = "%s",
+                    CONNECTION_STRING = "%s/?database=/Root",
                     FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
@@ -9411,7 +10383,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
         {
             auto query = R"(
@@ -9514,6 +10486,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
+                    CONNECTION_STRING = "grpc://localhost:2135?database=/Root"
+                );
+            )";
+
+            const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Database is not specified");
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TRANSFER `/Root/transfer`
+                  FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
+                WITH (
                     CONNECTION_STRING = "grpc://localhost:2135/?database=/Root",
                     CONSUMER = ''
                 );
@@ -9607,7 +10594,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 CREATE TRANSFER `/Root/transfer_fi`
                   FROM `/Root/topic` TO `/Root/table` USING ($x) -> { RETURN <| id:$x._offset |> }
                 WITH (
-                    CONNECTION_STRING = "%s",
+                    CONNECTION_STRING = "%s/?database=/Root",
                     FLUSH_INTERVAL = Interval('PT1S')
                 );
             )", kikimr.GetEndpoint().c_str());
@@ -9794,7 +10781,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    ENDPOINT = "localhost:2136"
+                    ENDPOINT = "localhost:2136",
+                    DATABASE = "/Root"
                 );
             )";
 
@@ -9829,7 +10817,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -10180,7 +11168,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 --!syntax_v1
                 ALTER TRANSFER `/Root/transfer`
                 SET (
-                    ENDPOINT = "localhost:2136"
+                    ENDPOINT = "localhost:2136",
+                    DATABASE = "/Root"
                 );
             )";
 
@@ -10215,7 +11204,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "TOKEN and USER/PASSWORD are mutually exclusive");
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToOneLineString(), "TOKEN, USER/PASSWORD and SERVICE_ACCOUNT_ID/INITIAL_TOKEN are mutually exclusive", result.GetIssues().ToOneLineString());
         }
 
         // TOKEN and TOKEN_SECRET_NAME are mutually exclusive
@@ -10530,6 +11519,77 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+     Y_UNIT_TEST_TWIN(CreateAndAlterTopicAvailabilityPeriod, UseQueryService) {
+        TKikimrRunner kikimr;
+        auto queryClient = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto executeQuery = [&queryClient, &session](const TString& query) {
+            return ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        };
+
+        // ok
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic` (
+                    CONSUMER cons1 WITH (availability_period = Interval('PT1H'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons1 SET (availability_period = Interval('PT9H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    DROP CONSUMER cons1,
+                    ADD CONSUMER cons2 WITH (availability_period = Interval('PT8H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons2 RESET (availability_period)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        // bad
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                    ALTER CONSUMER cons2 SET (availability_period = 0)
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Interval type is expected", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic`
+                     ADD CONSUMER cons_neg WITH (availability_period = Interval('-PT8H'))
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(DisableResourcePools) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(false);
@@ -10603,19 +11663,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkNotFound(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));
@@ -10931,19 +11991,19 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkNotFound(ydb->ExecuteQuery(dropSql, settings));
@@ -11128,6 +12188,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             .EnableResourcePoolsOnServerless(true)
             .Create();
 
+        const auto nodeIdx = ydb->GetServerlessTenantInfo().NodeIdx;
         const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
         ydb->ExecuteQueryRetry("Wait EnableResourcePoolsOnServerless", R"(
             CREATE RESOURCE POOL CLASSIFIER MyResourcePoolClassifier WITH (
@@ -11137,12 +12198,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             NWorkload::TQueryRunnerSettings()
                 .PoolId("")
                 .Database(serverlessTenant)
-                .NodeIndex(1)
+                .NodeIndex(nodeIdx)
         );
 
         const auto pathId = ydb->FetchDatabase(serverlessTenant)->Get()->PathId;
         UNIT_ASSERT_VALUES_EQUAL(
-            FetchResourcePoolClassifiers(*ydb->GetRuntime(), 1),
+            FetchResourcePoolClassifiers(*ydb->GetRuntime(), nodeIdx),
             TStringBuilder() << "{\"resource_pool_classifiers\":[{\"rank\":20,\"name\":\"MyResourcePoolClassifier\",\"config\":{\"resource_pool\":\"test_pool\"},\"database\":\"" << pathId.OwnerId << ":" << pathId.LocalPathId << ":\\/Root\\/test-serverless\"}]}"
         );
     }
@@ -11321,21 +12382,21 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto settings = NWorkload::TQueryRunnerSettings().PoolId("");
 
         // Dedicated, enabled
-        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(1);
+        settings.Database(ydb->GetSettings().GetDedicatedTenantName()).NodeIndex(ydb->GetDedicatedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Shared, enabled
-        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetSharedTenantName()).NodeIndex(ydb->GetSharedTenantInfo().NodeIdx);
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(createSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(alterSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(upsertSql, settings));
         NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(dropSql, settings));
 
         // Serverless, disabled
-        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(2);
+        settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
         checkDisabled(ydb->ExecuteQuery(alterSql, settings));
         checkDisabled(ydb->ExecuteQuery(upsertSql, settings));
@@ -11553,6 +12614,1236 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         UNIT_FAIL("Temp dir '" << firstDir << "' still exists, last result: " << deleteResult);
     }
+
+    std::unique_ptr<TKikimrRunner> SetupStreamingSource(bool enableStreamingQueries = true) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableFeatureFlags()->SetEnableStreamingQueries(enableStreamingQueries);
+        config.MutableFeatureFlags()->SetEnableExternalDataSources(true);
+        config.MutableFeatureFlags()->SetEnableResourcePools(true);
+
+        auto kikimr = std::make_unique<TKikimrRunner>(NKqp::TKikimrSettings(config)
+            .SetEnableStreamingQueries(enableStreamingQueries)
+            .SetEnableExternalDataSources(true)
+            .SetEnableResourcePools(true)
+            .SetInitFederatedQuerySetupFactory(true));
+
+        const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT)).ExecuteQuery(fmt::format(R"(
+            CREATE TOPIC MyTopic;
+            CREATE EXTERNAL DATA SOURCE MySource WITH (
+                SOURCE_TYPE = "Ydb",
+                LOCATION = "localhost:{port}",
+                DATABASE_NAME = "/Root",
+                AUTH_METHOD = "NONE"
+            );)",
+            "port"_a = kikimr->GetTestServer().GetGRpcServer().GetPort()),
+            NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+        return kikimr;
+    }
+
+    Y_UNIT_TEST(DisableStreamingQueries) {
+        auto kikimr = SetupStreamingSource(/* enableStreamingQueries */ false);
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        auto checkQuery = [&db](const TString& query, EStatus status, const TString& error) {
+            Cerr << "Check query:\n" << query << "\n";
+            const auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), status, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+        };
+
+        auto checkDisabled = [checkQuery](const TString& query) {
+            checkQuery(query, EStatus::UNSUPPORTED, "Streaming queries are disabled. Please contact your system administrator to enable it");
+        };
+
+        // CREATE STREAMING QUERY
+        checkDisabled(R"(
+            CREATE STREAMING QUERY MyQuery WITH (
+                RUN = FALSE
+            ) AS DO BEGIN
+                INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+            END DO)");
+
+        // ALTER STREAMING QUERY
+        checkDisabled(R"(
+            ALTER STREAMING QUERY MyQuery
+            SET (RUN = FALSE);)");
+
+        // DROP STREAMING QUERY
+        checkQuery("DROP STREAMING QUERY MyQuery;",
+            EStatus::NOT_FOUND,
+            "Streaming query /Root/MyQuery not found or you don't have access permissions");
+    }
+
+    Y_UNIT_TEST(StreamingQueriesValidation) {
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        // Test create
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
+                    UNKNOWN_PROPERTY = TRUE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: unknown_property");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
+                    RUN = "yes"
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "RUN property must be 'true' or 'false'");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
+                    FORCE = TRUE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid properties for creation new streaming query");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Got unexpected properties: FORCE");
+        }
+
+        // Test alter
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyQuery` SET (
+                    UNKNOWN_PROPERTY = TRUE
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown property: unknown_property");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyQuery` SET (
+                    FORCE = "yes"
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "FORCE property must be 'true' or 'false'");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyQuery` AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Changing the query text will result in the loss of the checkpoint. Please use FORCE=true to change the request text");
+        }
+    }
+
+    void CheckObjectProperties(TTestActorRuntime& runtime, const TString& path, const std::unordered_map<TString, TString>& expectedProperties) {
+        auto streamingQueryDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindStreamingQuery);
+        UNIT_ASSERT(streamingQuery.StreamingQueryInfo);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.StreamingQueryInfo->Description.GetName(), SplitPath(path).back());
+        const auto& properties = streamingQuery.StreamingQueryInfo->Description.GetProperties().GetProperties();
+        UNIT_ASSERT_GE(properties.size(), expectedProperties.size());
+        for (const auto& [key, value] : expectedProperties) {
+            UNIT_ASSERT_C(properties.contains(key), key);
+            UNIT_ASSERT_VALUES_EQUAL(properties.at(key), value);
+        }
+    }
+
+    void CheckObjectNotFound(TTestActorRuntime& runtime, const TString& path) {
+        auto streamingQueryDesc = Navigate(runtime, runtime.AllocateEdgeActor(), path, NSchemeCache::TSchemeCacheNavigate::EOp::OpUnknown);
+        const auto& streamingQuery = streamingQueryDesc->ResultSet.at(0);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQueryDesc->ErrorCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(streamingQuery.Kind, NSchemeCache::TSchemeCacheNavigate::EKind::KindUnknown);
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryBasic) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << R"(
+                CREATE TABLE test_table (Key Int32 NOT NULL, PRIMARY KEY (Key));
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO /*комментарий*/)" << "\r" << R"(BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "my_pool"},
+                {"__query_text", "\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nINSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic\n"}
+            });
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE OR REPLACE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE,
+                    RESOURCE_POOL = "other_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* other hint */ * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE OR REPLACE STREAMING QUERY IF NOT EXISTS `MyFolder/MyQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* third hint */ * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", NResourcePool::DEFAULT_POOL_ID},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+    }
+
+    void CheckStreamingQueryBodyValidation(TKikimrRunner& kikimr, const TString& prefix) {
+        auto db = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    $x = 1;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query must have at least one streaming read from topic");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query with more than one streaming write to topic is not supported now");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM `MyFolder/MyTable`;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Reading from YDB tables is not supported now for streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    SELECT 42;
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Results is not allowed for streaming queries, please use INSERT to record the query result");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO `MyFolder/MyTable` (Key) VALUES ("1");
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Writing into YDB tables is not supported now for streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    CREATE TABLE `MyFolder/OtherTable` (
+                        Key Int32 NOT NULL,
+                        PRIMARY KEY (Key)
+                    );
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Operations with YDB objects is not allowed inside streaming queries");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MyTable (Key) VALUES ("1")
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot find table 'db.[/Root/MyTable]' because it does not exist or you do not have access permissions.");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << "$x = \"str\";" << prefix << R"(
+                AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT Data || $x FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Unknown name: $x");
+        }
+    }
+
+    Y_UNIT_TEST(CreateStreamingQueryErrors) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+                END DO;
+
+                CREATE TABLE `MyFolder/MyTable` (
+                    Key String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery already exists");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE OR REPLACE STREAMING QUERY `MyFolder/MyTable` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY IF NOT EXISTS `MyFolder/MyTable` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN
+                    INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic
+                END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = FALSE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (RUN = TRUE) ");
+    }
+
+    Y_UNIT_TEST(ParallelCreateStreamingQuery) {
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        constexpr ui64 PARALLEL_QUERIES = 100;
+        std::vector<NQuery::TAsyncExecuteQueryResult> results;
+        results.reserve(PARALLEL_QUERIES);
+        for (ui64 i = 0; i < PARALLEL_QUERIES; ++i) {
+            results.emplace_back(db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()));
+        }
+
+        ui64 successCount = 0;
+        for (auto& resultFeature : results) {
+            const auto result = resultFeature.ExtractValueSync();
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                ++successCount;
+            } else if (result.GetStatus() == EStatus::SCHEME_ERROR) {
+                const auto& issues = result.GetIssues().ToString();
+                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already exists") &&
+                    !issues.contains("Scheme transaction ESchemeOpCreateStreamingQuery failed StatusAlreadyExists: execution completed, streaming query /Root/MyFolder/MyStreamingQuery already exists")) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected GENERIC_ERROR error: " << issues);
+                }
+            } else if (result.GetStatus() == EStatus::ABORTED) {
+                const auto& issues = result.GetIssues().ToString();
+                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation CREATE STREAMING QUERY") &&
+                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                }
+            } else {
+                UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(successCount, 1);
+        CheckObjectProperties(*kikimr->GetTestServer().GetRuntime(), "/Root/MyFolder/MyStreamingQuery", {
+            {"run", "false"},
+            {"resource_pool", "my_pool"},
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+        });
+    }
+
+    Y_UNIT_TEST(AlterStreamingQueryBasic) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(TStringBuilder() << R"(
+                CREATE TABLE test_table (Key Int32 NOT NULL, PRIMARY KEY (Key));
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO /*комментарий*/)" << "\r" << R"(BEGIN
+PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
+INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic
+END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "my_pool"},
+                {"__query_text", "\nPRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;\nINSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic\n"}
+            });
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
+                    FORCE = TRUE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "my_pool"},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
+                    RESOURCE_POOL = "other_pool"
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "other_pool"},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+
+        {
+            CheckObjectNotFound(runtime, "/Root/OtherFolder/MyStreamingQuery");
+
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY IF EXISTS `OtherFolder/MyStreamingQuery` SET (
+                    RESOURCE_POOL = "other_pool"
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "other_pool"},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+    }
+
+    Y_UNIT_TEST(AlterStreamingQueryErrors) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO;
+
+                CREATE TABLE `MyFolder/MyTable` (
+                    Key String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/OtherQuery", {});
+            CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
+                    RUN = FALSE
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyTable` SET (
+                    RUN = FALSE
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY IF EXISTS `MyFolder/MyTable` SET (
+                    RUN = FALSE
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = FALSE) ");
+        CheckStreamingQueryBodyValidation(*kikimr, "ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (FORCE = TRUE, RUN = TRUE) ");
+    }
+
+    Y_UNIT_TEST(ParallelAlterStreamingQuery) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+                {"run", "false"},
+                {"resource_pool", "my_pool"},
+                {"__query_text", " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic "}
+            });
+        }
+
+        constexpr ui64 PARALLEL_QUERIES = 100;
+        std::vector<NQuery::TAsyncExecuteQueryResult> results;
+        results.reserve(PARALLEL_QUERIES);
+        for (ui64 i = 0; i < PARALLEL_QUERIES; ++i) {
+            results.emplace_back(db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/MyStreamingQuery` SET (
+                    FORCE = TRUE,
+                    RESOURCE_POOL = "other_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()));
+        }
+
+        ui64 successCount = 0;
+        for (auto& resultFeature : results) {
+            const auto result = resultFeature.ExtractValueSync();
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                ++successCount;
+            } else if (result.GetStatus() == EStatus::ABORTED) {
+                const auto& issues = result.GetIssues().ToString();
+                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation ALTER STREAMING QUERY") &&
+                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                }
+            } else {
+                UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
+            }
+        }
+
+        UNIT_ASSERT_GE(successCount, 1);
+        CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {
+            {"run", "false"},
+            {"resource_pool", "other_pool"},
+            {"__query_text", " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic "}
+        });
+    }
+
+    Y_UNIT_TEST(DropStreamingQueryBasic) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                DROP STREAMING QUERY IF EXISTS `MyFolder/MyStreamingQuery`;)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
+        }
+    }
+
+    Y_UNIT_TEST(DropStreamingQueryErrors) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `MyFolder/MyTable` (
+                    Key Int32 NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                DROP STREAMING QUERY `MyFolder/MyTable`;)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                DROP STREAMING QUERY IF EXISTS `MyFolder/MyTable`;)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path /Root/MyFolder/MyTable exists, but it is not a streaming query");
+        }
+    }
+
+    Y_UNIT_TEST(ParallelDropStreamingQuery) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {});
+        }
+
+        constexpr ui64 PARALLEL_QUERIES = 100;
+        std::vector<NQuery::TAsyncExecuteQueryResult> results;
+        results.reserve(PARALLEL_QUERIES);
+        for (ui64 i = 0; i < PARALLEL_QUERIES; ++i) {
+            results.emplace_back(db.ExecuteQuery(R"(
+                DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
+                NQuery::TTxControl::NoTx()));
+        }
+
+        ui64 successCount = 0;
+        for (auto& resultFeature : results) {
+            const auto result = resultFeature.ExtractValueSync();
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                ++successCount;
+            } else if (result.GetStatus() == EStatus::NOT_FOUND) {
+                const auto& issues = result.GetIssues().ToString();
+                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions") &&
+                    !issues.contains("Path does not exist")) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
+                }
+            } else if (result.GetStatus() == EStatus::ABORTED) {
+                const auto& issues = result.GetIssues().ToString();
+                if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation DROP STREAMING QUERY") &&
+                    !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
+                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                }
+            } else {
+                UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(successCount, 1);
+        CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
+    }
+
+    Y_UNIT_TEST(StreamingQueriesWithResourcePools) {
+        auto kikimr = SetupStreamingSource();
+        auto& runtime = *kikimr->GetTestServer().GetRuntime();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        {
+            const auto result = kikimr->GetQueryClient().ExecuteQuery(R"(
+                CREATE RESOURCE POOL my_pool WITH (
+                    CONCURRENT_QUERY_LIMIT = 0
+                ))",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/MyStreamingQuery` WITH (
+                    RUN = TRUE,
+                    RESOURCE_POOL = "my_pool"
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/MyStreamingQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                CREATE STREAMING QUERY `MyFolder/OtherQuery` WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+
+            CheckObjectProperties(runtime, "/Root/MyFolder/OtherQuery", {});
+        }
+
+        {
+            const auto result = db.ExecuteQuery(R"(
+                ALTER STREAMING QUERY `MyFolder/OtherQuery` SET (
+                    RUN = TRUE,
+                    RESOURCE_POOL = "my_pool"
+                );)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Resource pool my_pool was disabled due to zero concurrent query limit");
+        }
+    }
+
+    Y_UNIT_TEST(StreamingQueriesAclValidation) {
+        auto kikimr = SetupStreamingSource();
+        auto db = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT));
+
+        constexpr char createUser[] = "create@builtin";
+        constexpr char removeUser[] = "remove@builtin";
+        constexpr char describeUser[] = "describe@builtin";
+        constexpr char alterUser[] = "alter@builtin";
+        constexpr char emptyUser[] = "empty@builtin";
+
+        {
+            const auto result = db.ExecuteQuery(fmt::format(R"(
+                GRANT ALL ON `/Root/MySource` TO `{create_user}`, `{remove_user}`, `{describe_user}`, `{alter_user}`, `{empty_user}`;
+                GRANT CREATE TABLE ON `/Root` TO `{create_user}`;
+                GRANT REMOVE SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{remove_user}`;
+                GRANT DESCRIBE SCHEMA ON `/Root` TO `{describe_user}`;
+                GRANT ALTER SCHEMA, DESCRIBE SCHEMA ON `/Root` TO `{alter_user}`;)",
+                "create_user"_a = createUser,
+                "remove_user"_a = removeUser,
+                "describe_user"_a = describeUser,
+                "alter_user"_a = alterUser,
+                "empty_user"_a = emptyUser),
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        }
+
+        const auto checkNotFound = [&](const char* sql, const char* user) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "not found or you don't have access permissions");
+        };
+
+        const auto checkAccessDenied = [&](const char* sql, const char* user, const TString& error) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToOneLineString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), error);
+        };
+
+        const auto checkSuccess = [&](const char* sql, const char* user) {
+            const auto result = kikimr->GetQueryClient(NQuery::TClientSettings().AuthToken(user))
+                .ExecuteQuery(sql, NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+        };
+
+        {   // Test create permissions
+            constexpr char sql[] = R"(
+                CREATE STREAMING QUERY MyStreamingQuery WITH (
+                    RUN = FALSE
+                ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO)";
+
+            checkAccessDenied(sql, emptyUser, "Access denied");
+            checkAccessDenied(sql, removeUser, "Access denied");
+            checkAccessDenied(sql, describeUser, "Access denied");
+            checkAccessDenied(sql, alterUser, "Access denied");
+            checkSuccess(sql, createUser);
+        }
+
+        {   // Test describe permissions
+            const auto checkDescribeAccessDenied = [&](const char* user) {
+                const auto result = NYdb::NScheme::TSchemeClient(kikimr->GetDriver(), TCommonClientSettings().AuthToken(user))
+                    .DescribePath("/Root/MyStreamingQuery").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToOneLineString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Access denied");
+            };
+
+            const auto checkDescribeSuccess = [&](const char* user) {
+                const auto result = NYdb::NScheme::TSchemeClient(kikimr->GetDriver(), TCommonClientSettings().AuthToken(user))
+                    .DescribePath("/Root/MyStreamingQuery").ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
+            };
+
+            checkDescribeAccessDenied(emptyUser);
+            checkDescribeSuccess(createUser);
+            checkDescribeSuccess(describeUser);
+            checkDescribeSuccess(removeUser);
+            checkDescribeSuccess(alterUser);
+        }
+
+        {   // Test alter permissions
+            constexpr char sql[] = R"(
+                ALTER STREAMING QUERY MyStreamingQuery SET (
+                    RUN = TRUE
+                ))";
+
+            checkNotFound(sql, emptyUser);
+            checkAccessDenied(sql, removeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkAccessDenied(sql, describeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkSuccess(sql, alterUser);
+            checkSuccess(sql, createUser);
+        }
+
+        {   // Test remove permissions
+            constexpr char sql[] = "DROP STREAMING QUERY MyStreamingQuery";
+
+            checkNotFound(sql, emptyUser);
+            checkAccessDenied(sql, alterUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkAccessDenied(sql, describeUser, "You don't have access permissions for streaming query /Root/MyStreamingQuery");
+            checkSuccess(sql, removeUser);
+        }
+    }
+
+    Y_UNIT_TEST(StreamingQueriesOnServerless) {
+        auto ydb = NWorkload::TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .Create();
+
+        const auto& tenantName = ydb->GetSettings().GetServerlessTenantName();
+        const auto settings = NWorkload::TQueryRunnerSettings()
+            .PoolId("")
+            .Database(tenantName)
+            .NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(fmt::format(R"(
+                CREATE TOPIC MyTopic;
+                CREATE EXTERNAL DATA SOURCE MySource WITH (
+                    SOURCE_TYPE = "Ydb",
+                    LOCATION = "localhost:{port}",
+                    DATABASE_NAME = "{database}",
+                    AUTH_METHOD = "NONE"
+                );
+            )",
+            "port"_a = ydb->GetGrpcPort(),
+            "database"_a = tenantName
+        ), settings));
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            CREATE STREAMING QUERY MyStreamingQuery WITH (
+                RUN = TRUE
+            ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic END DO
+        )", settings));
+
+        const auto queryName = TStringBuilder() << tenantName << "/MyStreamingQuery";
+        TString queryText = " INSERT INTO MySource.MyTopic SELECT * FROM MySource.MyTopic ";
+        CheckObjectProperties(*ydb->GetRuntime(), queryName, {
+            {"run", "true"},
+            {"resource_pool", "default"},
+            {"__query_text", queryText}
+        });
+
+        const auto checkSysView = [&](const TString& text, bool expectExistance = true, const TString& filter = "") {
+            const auto& result = ydb->ExecuteQuery(
+                TStringBuilder() << "SELECT * FROM `.sys/streaming_queries` " << filter
+            , settings);
+            NWorkload::TSampleQueries::CheckSuccess(result);
+
+            UNIT_ASSERT_VALUES_EQUAL(result.ResultSets.size(), 1);
+            NYdb::TResultSetParser resultParser(result.ResultSets[0]);
+
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.RowsCount(), expectExistance);
+            UNIT_ASSERT_VALUES_EQUAL(resultParser.ColumnsCount(), 13);
+
+            if (expectExistance) {
+                UNIT_ASSERT(resultParser.TryNextRow());
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Path").GetOptionalUtf8(), queryName);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Status").GetOptionalUtf8(), "RUNNING");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Issues").GetOptionalUtf8(), "{}");
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Plan").GetOptionalUtf8(), "Write MySource");
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("Ast").GetOptionalUtf8(), "/Root/test-serverless/MySource");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Text").GetOptionalUtf8(), text);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("Run").GetOptionalBool(), true);
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("ResourcePool").GetOptionalUtf8(), "default");
+                UNIT_ASSERT_VALUES_EQUAL(*resultParser.ColumnParser("RetryCount").GetOptionalUint64(), 0);
+                UNIT_ASSERT(!resultParser.ColumnParser("LastFailAt").GetOptionalTimestamp());
+                UNIT_ASSERT(!resultParser.ColumnParser("SuspendedUntil").GetOptionalTimestamp());
+                UNIT_ASSERT(!resultParser.ColumnParser("LastExecutionId").GetOptionalUtf8()->empty());
+                UNIT_ASSERT_STRING_CONTAINS(*resultParser.ColumnParser("PreviousExecutionIds").GetOptionalUtf8(), "[");
+            }
+        };
+
+        Sleep(TDuration::Seconds(2));
+        checkSysView(queryText);
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path = '" << queryName << "'");
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path >= '" << queryName << "'");
+        checkSysView(queryText, true, TStringBuilder() << "WHERE Path <= '" << queryName << "'");
+        checkSysView(queryText, false, TStringBuilder() << "WHERE Path > '" << queryName << "'");
+        checkSysView(queryText, false, TStringBuilder() << "WHERE Path < '" << queryName << "'");
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            ALTER STREAMING QUERY MyStreamingQuery SET (
+                FORCE = TRUE
+            ) AS DO BEGIN INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic END DO
+        )", settings));
+
+        queryText = " INSERT INTO MySource.MyTopic SELECT /* hint */ * FROM MySource.MyTopic ";
+        CheckObjectProperties(*ydb->GetRuntime(), queryName, {
+            {"run", "true"},
+            {"resource_pool", "default"},
+            {"__query_text", queryText}
+        });
+
+        Sleep(TDuration::Seconds(2));
+        checkSysView(queryText);
+
+        NWorkload::TSampleQueries::CheckSuccess(ydb->ExecuteQuery(R"(
+            DROP STREAMING QUERY MyStreamingQuery
+        )", settings));
+
+        CheckObjectNotFound(*ydb->GetRuntime(), queryName);
+        checkSysView(queryText, false);
+    }
+
+    Y_UNIT_TEST_TWIN(CreateSecret, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        // fail
+        { // no value
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (secret_value = "secret-value-1");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        { // unknown parameter
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "value", secret_value = "secret-value-1");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        // ok
+        { // least create query
+            const static auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // create dirs, empty value with inherit_permissions
+            const static auto query = R"sql(
+                CREATE SECRET `/Root/secret-dir/secret-name` WITH (value = "", inherit_permissions = True);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterSecret, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        static const auto query = R"sql(
+            CREATE SECRET `/Root/secret-name` WITH (value = "secret-value-1");
+        )sql";
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // fail
+        { // no value
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name` WITH (secret_value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        { // unknown parameter
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2", inherit_permissions = True);
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        { // unexisting secret
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name-another` WITH (value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+
+        // ok
+        {
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name` WITH (value = "secret-value-2");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(DropSecret, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(true);
+        const auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        static const auto query = R"sql(
+            CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
+        )sql";
+        const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // fail
+        { // with params
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name` WITH (value = "secret-value");
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+        { // unexisting secret
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name-another`;
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        // checking setup for the next step
+        {
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret has been dropped somehow");
+        }
+
+        // ok
+        {
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name`;
+            )sql";
+            const auto result = ExecuteGeneric<UseQueryService>(queryClient, session, query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            const auto describeResult = kikimr.GetTestClient().Ls("/Root/secret-name");
+            UNIT_ASSERT_C(!describeResult->Record.GetPathDescription().HasSecretDescription(), "the secret somehow exists");
+        }
+    }
+
+    Y_UNIT_TEST(SecretsEnabledByDefault) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // alter
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name-1` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        { // drop
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name-1`;
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+        Y_UNIT_TEST(SecretsDisabled) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableSchemaSecrets(false);
+        const auto settings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        { // create
+            static const auto query = R"sql(
+                CREATE SECRET `/Root/secret-name` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        }
+        { // alter
+            static const auto query = R"sql(
+                ALTER SECRET `/Root/secret-name` WITH (value = "secret-value");
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        }
+        { // drop
+            static const auto query = R"sql(
+                DROP SECRET `/Root/secret-name`;
+            )sql";
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
+        }
+    }
+}
+
+namespace {
+
+void TestUnsupportedColumnTypeError(NScheme::TTypeId type) {
+    TKikimrSettings runnerSettings;
+    runnerSettings.WithSampleTables = false;
+    TTestHelper testHelper(runnerSettings);
+
+    TVector<TTestHelper::TColumnSchema> schema = {
+        TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
+        TTestHelper::TColumnSchema().SetName("level").SetType(type).SetNullable(true)
+    };
+    TTestHelper::TColumnTable testTable;
+    testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
+    testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
+}
+
 }
 
 Y_UNIT_TEST_SUITE(KqpOlapScheme) {
@@ -11963,8 +14254,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
         {
-            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
-            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull();
+            TVector<TTestHelper::TColumnSchema> newSchema = schema;
+            newSchema.push_back(TTestHelper::TColumnSchema().SetName("new_column").SetType(NScheme::NTypeIds::Uint64));
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(newSchema));
+            tableInserter.AddRow().Add(1).Add("test_res_1").AddNull().AddNull();
             testHelper.BulkUpsert(testTable, tableInserter);
         }
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[[1;#;#;[\"test_res_1\"]]]");
@@ -12182,19 +14475,13 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         testHelper.ReadData("SELECT * FROM `/Root/ColumnTableTest` WHERE id=1", "[]");
     }
 
-    Y_UNIT_TEST(BulkError) {
-        TKikimrSettings runnerSettings;
-        runnerSettings.WithSampleTables = false;
-        TTestHelper testHelper(runnerSettings);
-
-        TVector<TTestHelper::TColumnSchema> schema = {
-            TTestHelper::TColumnSchema().SetName("id").SetType(NScheme::NTypeIds::Int32).SetNullable(false),
-            TTestHelper::TColumnSchema().SetName("level").SetType(NScheme::NTypeIds::Uuid).SetNullable(true)
-        };
-        TTestHelper::TColumnTable testTable;
-        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({"id"}).SetSharding({"id"}).SetSchema(schema);
-        testHelper.CreateTable(testTable, NYdb::EStatus::SCHEME_ERROR);
+    Y_UNIT_TEST(UnsupportedColumnTypes) {
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Bool);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Uuid);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::DyNumber);
+        TestUnsupportedColumnTypeError(NScheme::NTypeIds::Interval);
     }
+
     Y_UNIT_TEST(DropColumn) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
@@ -12600,7 +14887,16 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
             auto alterAddResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryAdd).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterAddResult.GetStatus(), EStatus::SUCCESS, alterAddResult.GetIssues().ToString());
 
-            testHelper.BulkUpsert(testTable, batch);
+            TVector<NConstruction::IArrayBuilder::TPtr> newDataBuilders;
+            newDataBuilders.push_back(
+                NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>::BuildNotNullable("id", false));
+            newDataBuilders.push_back(
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::Int32Type>>>("int_column"));
+            newDataBuilders.push_back(
+                std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("column" + ToString(i)));
+            auto newBatch = NConstruction::TRecordBatchConstructor(newDataBuilders).BuildBatch(100);
+
+            testHelper.BulkUpsert(testTable, newBatch);
             auto alterQueryDrop = TStringBuilder() << "ALTER TABLE `" << testTable.GetName() << "` DROP COLUMN column" << i << ";";
             auto alterDropResult = testHelper.GetSession().ExecuteSchemeQuery(alterQueryDrop).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterDropResult.GetStatus(), EStatus::SUCCESS, alterDropResult.GetIssues().ToString());
@@ -12849,7 +15145,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
     }
 
-    Y_UNIT_TEST(CrateWithWrongCodec) {
+    Y_UNIT_TEST(CreateWithWrongCodec) {
         TKikimrSettings runnerSettings;
         runnerSettings.WithSampleTables = false;
         TTestHelper testHelper(TKikimrSettings().SetWithSampleTables(false));
@@ -14000,6 +16296,97 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         }
 
         testHelper.RebootTablets("/Root/ColumnTableTest");
+    }
+
+    Y_UNIT_TEST(CreateTableWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+        auto session = testHelper.GetSession();
+        auto createQuery = TStringBuilder() << R"(CREATE TABLE `)" << tableName << R"(` (
+            Key Uint64 NOT NULL,
+            Value1 String,
+            Value2 Uint32,
+            PRIMARY KEY (Key),
+            FAMILY family1 (
+                CACHE_MODE = "in_memory"
+            ))
+            WITH (STORE = COLUMN);)";
+        auto result = session.ExecuteSchemeQuery(createQuery).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'family1'",
+            result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AlterTableWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnFamily> families = {
+            TTestHelper::TColumnFamily().SetId(0).SetFamilyName("default"),
+        };
+
+        {
+            TVector<TTestHelper::TColumnSchema> schema = {
+                TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+                TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+                TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+            };
+
+            TTestHelper::TColumnTable testTable;
+            testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema).SetColumnFamilies(families);
+            testHelper.CreateTable(testTable);
+        }
+
+        auto alterFamilyCacheMode = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                    ALTER FAMILY default SET CACHE_MODE "in_memory";)";
+        auto session = testHelper.GetSession();
+        auto result = session.ExecuteSchemeQuery(alterFamilyCacheMode).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'default'",
+            result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(AddColumnFamilyWithCacheModeError) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableTableCacheModes(true);
+        TTestHelper testHelper(settings);
+
+        TString tableName = "/Root/ColumnTableTest";
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("Key").SetType(NScheme::NTypeIds::Uint64).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("Value1").SetType(NScheme::NTypeIds::String).SetNullable(true),
+            TTestHelper::TColumnSchema().SetName("Value2").SetType(NScheme::NTypeIds::Uint32).SetNullable(true)
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName(tableName).SetPrimaryKey({ "Key" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        auto session = testHelper.GetSession();
+        {
+            auto query = TStringBuilder() << R"(ALTER TABLE `)" << tableName << R"(`
+                        ADD FAMILY family1 (CACHE_MODE = "in_memory");)";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(
+            result.GetIssues().ToString(),
+            "Field `CACHE_MODE` is not supported for OLAP tables in column family 'family1'",
+            result.GetIssues().ToString());
+        }
     }
 }
 

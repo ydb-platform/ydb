@@ -33,7 +33,6 @@ struct TKikimrTestSettings {
     static constexpr bool SSL = false;
     static constexpr bool AUTH = false;
     static constexpr bool PrecreatePools = true;
-    static constexpr bool EnableSystemViews = true;
 };
 
 struct TKikimrTestWithAuth : TKikimrTestSettings {
@@ -42,10 +41,6 @@ struct TKikimrTestWithAuth : TKikimrTestSettings {
 
 struct TKikimrTestWithAuthAndSsl : TKikimrTestWithAuth {
     static constexpr bool SSL = true;
-};
-
-struct TKikimrTestNoSystemViews : TKikimrTestSettings {
-    static constexpr bool EnableSystemViews = false;
 };
 
 template <typename TestSettings = TKikimrTestSettings>
@@ -163,7 +158,7 @@ TString NormalizeYaml(const TString& yaml) {
 Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
     template <typename TCtx>
-    void AdjustCtxForDB(TCtx &ctx) {    
+    void AdjustCtxForDB(TCtx &ctx) {
         ctx.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
     }
 
@@ -258,7 +253,7 @@ Y_UNIT_TEST_SUITE(ConfigGRPCService) {
 
         mainConfig = rcvMainConfig;
         storageConfig = rcvStorageConfig;
-    }   
+    }
 
     Y_UNIT_TEST(ReplaceConfig) {
         TKikimrWithGrpcAndRootSchema server;

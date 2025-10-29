@@ -2,29 +2,25 @@
 
 PY3_LIBRARY()
 
-VERSION(1.9.0)
+VERSION(2.1.0)
 
 LICENSE(BSD-3-Clause)
-
-PEERDIR(
-    contrib/python/setuptools
-    contrib/python/six
-)
 
 NO_LINT()
 
 PY_SRCS(
     TOP_LEVEL
     hamcrest/__init__.py
+    hamcrest/_version.py
     hamcrest/core/__init__.py
     hamcrest/core/assert_that.py
     hamcrest/core/base_description.py
     hamcrest/core/base_matcher.py
-    hamcrest/core/compat.py
     hamcrest/core/core/__init__.py
     hamcrest/core/core/allof.py
     hamcrest/core/core/anyof.py
     hamcrest/core/core/described_as.py
+    hamcrest/core/core/future.py
     hamcrest/core/core/is_.py
     hamcrest/core/core/isanything.py
     hamcrest/core/core/isequal.py
@@ -36,6 +32,7 @@ PY_SRCS(
     hamcrest/core/description.py
     hamcrest/core/helpers/__init__.py
     hamcrest/core/helpers/hasmethod.py
+    hamcrest/core/helpers/ismock.py
     hamcrest/core/helpers/wrap_matcher.py
     hamcrest/core/matcher.py
     hamcrest/core/selfdescribing.py
@@ -77,6 +74,7 @@ RESOURCE_FILES(
     PREFIX contrib/python/PyHamcrest/py3/
     .dist-info/METADATA
     .dist-info/top_level.txt
+    hamcrest/py.typed
 )
 
 END()

@@ -93,8 +93,8 @@ TConclusion<bool> TDetectInMemFlag::DoExecuteInplace(
     if (source->HasSourceInMemoryFlag()) {
         return true;
     }
-    const auto& chainProgram = source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified();
-    if (Columns.GetColumnsCount() && !chainProgram->HasAggregations()) {
+    if (Columns.GetColumnsCount() && source->GetContext()->GetReadMetadata()->GetProgram().GetGraphOptional() &&
+        !source->GetContext()->GetReadMetadata()->GetProgram().GetChainVerified()->HasAggregations()) {
         source->SetSourceInMemory(
             source->GetColumnRawBytes(Columns.GetColumnIds()) < NYDBTest::TControllers::GetColumnShardController()->GetMemoryLimitScanPortion());
     } else {
@@ -221,6 +221,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(
         if (sSource->GetIsStartedByCursor() && !context->GetCommonContext()->GetScanCursor()->CheckSourceIntervalUsage(
                                                   source->GetSourceId(), i.GetIndexStart(), i.GetRecordsCount())) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep_SKIP_CURSOR")("source_id", source->GetSourceId());
+            source->MutableStageResult().ExtractPageForResult();
             continue;
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "TPrepareResultStep_ResultStep")("source_id", source->GetSourceId());
@@ -243,9 +244,10 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "fetch_filter")("source", source->GetSourceId())(
             "filter", filter.DebugString())("aborted", source->GetContext()->IsAborted());
         if (source->GetContext()->IsAborted()) {
-            OnDone();
             return;
         }
+        AFL_VERIFY(filter.GetRecordsCountVerified() == source->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
+                                                         "source", source->GetRecordsCount());
         if (const std::shared_ptr<NArrow::TColumnFilter> appliedFilter = source->GetStageData().GetAppliedFilter()) {
             filter = filter.ApplyFilterFrom(*appliedFilter);
         }
@@ -256,14 +258,12 @@ void TDuplicateFilter::TFilterSubscriber::OnFilterReady(NArrow::TColumnFilter&& 
         auto task = std::make_shared<TStepAction>(std::move(source), std::move(Step), scanActorId, false);
         NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, convActorId);
     }
-    OnDone();
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
     if (auto source = Source.lock()) {
         source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter: " + reason);
     }
-    OnDone();
 }
 
 TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<NCommon::IDataSource>& source, const TFetchingScriptCursor& step)

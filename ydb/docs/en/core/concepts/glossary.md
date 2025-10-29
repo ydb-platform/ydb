@@ -102,6 +102,10 @@ Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consist
 
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
+### Implicit Transactions {#implicit-transactions}
+
+An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
+
 ### Interactive transactions {#interactive-transaction}
 
 The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
@@ -111,6 +115,9 @@ The term **interactive transactions** refers to transactions that are split into
 1. Update some data in the database.
 1. Commit the transaction in a separate query.
 
+### Sessions
+
+Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution.md#sessions).
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -194,7 +201,7 @@ A **system view** is for monitoring the DB status. System views are located in t
 
 A **topic** is a persistent queue that can be used for reliable asynchronous communications between various systems via message passing. {{ ydb-short-name }} provides the infrastructure to ensure "exactly once" semantics in such communications, which ensures that there are both no lost messages and no accidental duplicates.
 
-Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](topic.md).
+Several terms related to topics are listed below. How {{ ydb-short-name }} topics work is explained in more detail in a separate article [{#T}](datamodel/topic.md).
 
 #### Partition {#partition}
 
@@ -412,9 +419,9 @@ The **actor system pool** is a [thread pool](https://en.wikipedia.org/wiki/Threa
 
 - **System**: A pool that handles internal operations within {{ ydb-short-name }} node. It serves system [tablets](#tablet), [state storage](#state-storage), [distributed storage](#distributed-storage) I/O, and so on.
 
-- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [KQP](#kqp).
+- **User**: A pool dedicated to user-generated load, such as running non-system tablets or queries executed by the [QP](#kqp).
 
-- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [KQP](#kqp) background operations like backups, data compaction, and garbage collection.
+- **Batch**: A pool for tasks without strict execution deadlines, including heavy queries handled by the [QP](#kqp) background operations like backups, data compaction, and garbage collection.
 
 - **IO**: A pool for tasks involving blocking operations, such as authentication or writing logs to files.
 
@@ -493,7 +500,13 @@ A **shared cache** is an [actor](#actor) that stores data pages recently accesse
 
 ### Memory controller {#memory-controller}
 
-A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/index.md#memory-controller).
+A **memory controller** is an [actor](#actor) that manages {{ ydb-short-name }} [memory limits](../reference/configuration/memory_controller_config.md).
+
+### Spilling {#spilling}
+
+**Spilling** is a memory management mechanism in {{ ydb-short-name }} that temporarily offloads intermediate query data to external storage when such data exceeds the available node RAM capacity. In {{ ydb-short-name }}, disk storage is currently used for spilling.
+
+For more details on spilling, see [{#T}](spilling.md).
 
 ### Tablet types {#tablet-types}
 
@@ -697,7 +710,7 @@ The **read set** or **ReadSet data** is what participating shards forward during
 
 #### Transaction proxy {#transaction-proxy}
 
-The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, KQP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
+The **transaction proxy** or `TX_PROXY` is a service that orchestrates the execution of many [distributed transactions](#transactions): sequential phases, phase execution, planning, and aggregation of results. In the case of direct orchestration by other actors (for example, QP data transactions), it is used for caching and allocation of unique [TxIDs](#txid).
 
 #### Transaction flags {#txflags}
 
@@ -725,9 +738,9 @@ During the distributed query execution, **mediator time** is the logical time be
 
 MiniKQL is a low-level language. The system's end users only see queries in the [YQL](#yql) language, which relies on MiniKQL in its implementation.
 
-#### KQP {#kqp}
+#### Query Processor {#kqp}
 
-**KQP** or **Query Processor** is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
+**QP** or **Query Processor** (previously, **KQP**) is a {{ ydb-short-name }} component responsible for the orchestration of user query execution and generating the final response.
 
 ### Global schema {#global-schema}
 

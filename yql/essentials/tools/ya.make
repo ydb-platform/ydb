@@ -1,6 +1,7 @@
 RECURSE(
     arrow_kernels_dump
     astdiff
+    langver_dump
     minirun
     pg_catalog_dump
     pg-make-test

@@ -80,13 +80,18 @@ private:
         }
         virtual void DoComplete(const NActors::TActorContext& ctx) override {
             if (NeedContinueFlag) {
-                Self->EnqueueProgressTx(ctx, TxId);
+                if (TxId && Self->ProgressTxInFlight && TxId != Self->ProgressTxInFlight) {
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("issue #23402", "TxId != ProgressTxInFlight")("TxId", TxId)("ProgressTxInFlight", Self->ProgressTxInFlight);
+                }
+                else {
+                    Self->EnqueueProgressTx(ctx, TxId);
+                }
             }
         }
 
     public:
         TTxWriteReceivedAck(TColumnShard& owner, const ui64 txId)
-            : TBase(&owner)
+            : TBase(&owner, "write_received_ack")
             , TxId(txId) {
         }
     };
@@ -135,7 +140,7 @@ private:
 
     public:
         TTxWriteReceivedBrokenFlag(TColumnShard* owner, const ui64 txId, const bool broken)
-            : TBase(owner)
+            : TBase(owner, "write_received_broken_flag")
             , TxId(txId)
             , BrokenFlag(broken) {
         }
@@ -191,7 +196,7 @@ private:
 
     public:
         TTxStartPreparation(TColumnShard* owner, const ui64 txId)
-            : TBase(owner)
+            : TBase(owner, "start_preparation")
             , TxId(txId) {
         }
     };

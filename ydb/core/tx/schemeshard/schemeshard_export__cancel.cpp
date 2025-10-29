@@ -78,8 +78,8 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
                     continue;
                 }
 
-                exportInfo->State = TExportInfo::EState::Cancellation;
                 if (item.WaitTxId != InvalidTxId) {
+                    exportInfo->State = TExportInfo::EState::Cancellation;
                     Send(Self->SelfId(), CancelPropose(*exportInfo, item.WaitTxId), 0, exportInfo->Id);
                 }
             }
@@ -108,11 +108,18 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
 }; // TTxCancel
 
 struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBase {
-    TEvSchemeShard::TEvCancelTxResult::TPtr CancelResult;
+    const ui64 ExportId;
+    const TTxId TxId;
 
-    explicit TTxCancelAck(TSelf *self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+    explicit TTxCancelAck(TSelf* self, ui64 exportId, TTxId txId)
         : TXxport::TTxBase(self)
-        , CancelResult(ev)
+        , ExportId(exportId)
+        , TxId(txId)
+    {
+    }
+
+    explicit TTxCancelAck(TSelf* self, TEvSchemeShard::TEvCancelTxResult::TPtr& ev)
+        : TTxCancelAck(self, ev->Cookie, TTxId(ev->Get()->Record.GetTargetTxId()))
     {
     }
 
@@ -121,14 +128,11 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
-        const ui64 id = CancelResult->Cookie;
-        const auto backupTxId = TTxId(CancelResult->Get()->Record.GetTargetTxId());
-
-        if (!Self->Exports.contains(id)) {
+        if (!Self->Exports.contains(ExportId)) {
             return true;
         }
 
-        TExportInfo::TPtr exportInfo = Self->Exports.at(id);
+        TExportInfo::TPtr exportInfo = Self->Exports.at(ExportId);
 
         if (exportInfo->State != TExportInfo::EState::Cancellation) {
             return true;
@@ -150,7 +154,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
                 ++cancellableItems;
             }
 
-            if (item.WaitTxId == backupTxId) {
+            if (item.WaitTxId == TxId) {
                 found = true;
 
                 item.State = TExportInfo::EState::Cancelled;
@@ -166,7 +170,7 @@ struct TSchemeShard::TExport::TTxCancelAck: public TSchemeShard::TXxport::TTxBas
             return true;
         }
 
-        Self->TxIdToExport.erase(backupTxId);
+        Self->TxIdToExport.erase(TxId);
 
         NIceDb::TNiceDb db(txc.DB);
         Self->PersistExportItemState(db, *exportInfo, itemIdx);

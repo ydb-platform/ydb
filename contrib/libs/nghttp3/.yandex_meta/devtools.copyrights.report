@@ -229,7 +229,7 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         COPYING [3:3]
-        README.rst [73:73]
+        README.rst [75:75]
         lib/includes/nghttp3/version.h [4:5]
         lib/nghttp3_buf.c [4:5]
         lib/nghttp3_buf.h [4:5]
@@ -346,3 +346,17 @@ BELONGS ya.make
     Files with this license:
         lib/nghttp3_mem.c [4:6]
         lib/nghttp3_mem.h [4:6]
+
+KEEP     COPYRIGHT_SERVICE_LABEL e1da7d27cd25ca9798a246568e386a9c
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2025 nghttp3 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp3_callbacks.c [4:4]
+        lib/nghttp3_callbacks.h [4:4]
+        lib/nghttp3_settings.c [4:4]
+        lib/nghttp3_settings.h [4:4]

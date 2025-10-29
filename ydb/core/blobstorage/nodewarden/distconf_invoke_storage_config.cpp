@@ -1,8 +1,10 @@
 #include "distconf_invoke.h"
 #include "node_warden_impl.h"
 
+#include <ydb/core/config/validation/validators.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 
+#include <ydb/library/yaml_config/yaml_config.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/library/yaml_config/util.h>
 #include <ydb/library/yaml_json/yaml_to_json.h>
@@ -41,6 +43,40 @@ namespace NKikimr::NStorage {
             }
 
             Y_ABORT();
+        }
+
+        static std::optional<TString> LocalYamlValidate(const TString& yaml, bool allowUnknown = true) {
+            try {
+                auto doc = NFyaml::TDocument::Parse(yaml);
+                TSimpleSharedPtr<NYamlConfig::TBasicUnknownFieldsCollector> unknownCollector =
+                    new NYamlConfig::TBasicUnknownFieldsCollector;
+
+                std::vector<TString> errors;
+                NYamlConfig::ResolveUniqueDocs(
+                    doc,
+                    [&](NYamlConfig::TDocumentConfig&& config) {
+                        auto appCfg = NYamlConfig::YamlToProto(
+                            config.second,
+                            true,   // strict
+                            true,   // merge database config (if any)
+                            unknownCollector);
+                        if (NKikimr::NConfig::ValidateConfig(appCfg, errors) == NKikimr::NConfig::EValidationResult::Error) {
+                            if (!errors.empty()) {
+                                ythrow yexception() << errors.front();
+                            } else {
+                                ythrow yexception() << "unknown validation error";
+                            }
+                        }
+                    });
+
+                if (!allowUnknown && !unknownCollector->GetUnknownKeys().empty()) {
+                    return TString("has forbidden unknown fields");
+                }
+
+                return std::nullopt;
+            } catch (const std::exception& ex) {
+                return TString(ex.what());
+            }
         }
     }
 
@@ -331,9 +367,12 @@ namespace NKikimr::NStorage {
         }
 
         if (request.GetSkipConsoleValidation() || !NewYaml) {
-            StartProposition(&ProposedStorageConfig);
+            StartProposition(&ProposedStorageConfig, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
+                /*mindPrev=*/ true, /*propositionBase=*/ nullptr, enablingDistconf);
         } else if (!Self->EnqueueConsoleConfigValidation(SelfId(), enablingDistconf, *NewYaml)) {
             throw TExRace() << "Console pipe is not available";
+        } else {
+            EnablingDistconf = enablingDistconf;
         }
     }
 
@@ -437,6 +476,7 @@ namespace NKikimr::NStorage {
 
             case EControllerOp::OTHER:
                 record.SetOperation(NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig);
+                record.MutableStorageConfig()->PackFrom(ProposedStorageConfig);
                 break;
 
             case EControllerOp::UNSET:
@@ -529,7 +569,8 @@ namespace NKikimr::NStorage {
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     throw TExError() << "Failed to update config yaml: " << *error;
                 }
-                return StartProposition(&ProposedStorageConfig);
+                return StartProposition(&ProposedStorageConfig, /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
+                    /*mindPrev=*/ true, /*propositionBase=*/ nullptr, EnablingDistconf);
         }
     }
 
@@ -560,8 +601,16 @@ namespace NKikimr::NStorage {
             } else if (auto r = Self->ProcessCollectConfigs(res->MutableCollectConfigs(), selfAssemblyUUID); r.ErrorReason) {
                 throw TExError() << *r.ErrorReason;
             } else if (r.ConfigToPropose) {
-                CheckSyncersAfterCommit = r.CheckSyncersAfterCommit;
-                StartProposition(&r.ConfigToPropose.value());
+                // config validation, which is basically done in Console
+                TString mainYaml;
+                if (auto err = DecomposeConfig(r.ConfigToPropose->GetConfigComposite(), &mainYaml, /*mainConfigVersion=*/ nullptr, /*mainConfigFetchYaml=*/ nullptr)) {
+                    throw TExError() << "Failed to decompose composite config: " << *err;
+                }
+                if (auto err = LocalYamlValidate(mainYaml, /*allowUnknown=*/ true)) {
+                    throw TExError() << "YAML validation failed: " << *err;
+                }
+                StartProposition(&r.ConfigToPropose.value(), /*acceptLocalQuorum=*/ false, /*requireScepter=*/ true,
+                    /*mindPrev=*/ true, /*propositionBase=*/ nullptr, /*fromBootstrap=*/ true);
             } else { // no new proposition has been made
                 Finish(TResult::OK, std::nullopt);
             }

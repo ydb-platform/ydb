@@ -59,7 +59,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
 
-        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, std::optional<bool> allowAutoTopicCreation = std::nullopt);
+        TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 
         TMessagePtr<TSaslHandshakeResponseData> SaslHandshake(const TString& mechanism = "PLAIN");
 
@@ -103,7 +103,7 @@ class TKafkaTestClient {
 
         TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TString groupId, std::map<TString, std::vector<i32>> topicsToPartions);
 
-        TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData request);
+        TMessagePtr<TOffsetFetchResponseData> OffsetFetch(TOffsetFetchRequestData& request);
 
         TMessagePtr<TListGroupsResponseData> ListGroups(TListGroupsRequestData request);
 
@@ -137,18 +137,20 @@ class TKafkaTestClient {
 
         void AuthenticateToKafka();
 
+        void AuthenticateToKafka(const TString& userName, const TString& userPassword);
+
         TRequestHeaderData Header(NKafka::EApiKey apiKey, TKafkaVersion version);
+
+        template <std::derived_from<TApiMessage> T>
+        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
 
     protected:
         ui32 NextCorrelation();
-        template <std::derived_from<TApiMessage> T>
-        TMessagePtr<T> WriteAndRead(TRequestHeaderData& header, TApiMessage& request, bool silent = false);
         void Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent = false);
         void Write(TSocketOutput& so, TRequestHeaderData* header, TApiMessage* request, bool silent = false);
         template <std::derived_from<TApiMessage> T>
         TMessagePtr<T> Read(TSocketInput& si, TRequestHeaderData* requestHeader);
         void Print(const TBuffer& buffer);
-        char Hex0(const unsigned char c);
         void FillTopicsFromJoinGroupMetadata(TKafkaBytes& metadata, THashSet<TString>& topics);
 
     private:

@@ -411,6 +411,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::CombineByKey(TExprBase 
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExprBase node, TExprContext& ctx) const {
     const auto ytMap = node.Cast<TYtMap>();
+    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
 
     {
         static const char optName[] = "KeepPruneKeysOnInputTables";
@@ -419,11 +420,24 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExpr
             const auto pruneKeys = ytMap.Mapper().Body().Maybe<TCoPruneKeysBase>();
 
             if (pruneKeys) {
-                auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
-                return Build<TYtMap>(ctx, node.Pos())
-                    .InitFrom(ytMap)
-                    .Mapper(identityLambda)
-                .Done();
+                bool skipPruneKeys = true;
+                if (pruneKeys.Cast().Input().Ptr() != ytMapInput) {
+                    skipPruneKeys = false;
+                } else if (auto maybePruneAdjacentKeys = pruneKeys.Cast().Maybe<TCoPruneAdjacentKeys>(); maybePruneAdjacentKeys) {
+                    auto pruneAdjacentKeys = maybePruneAdjacentKeys.Cast();
+                    // We cannot remove added unique\distinct constraints added for pruneAdjacentKeys, so we cannot remove pruneAdjacentKeys
+                    if (pruneAdjacentKeys.Input().Ptr()->GetConstraintSet() != pruneAdjacentKeys.Ptr()->GetConstraintSet()) {
+                        skipPruneKeys = false;
+                    }
+                }
+
+                if (skipPruneKeys) {
+                    auto identityLambda = MakeIdentityLambda(node.Pos(), ctx);
+                    return Build<TYtMap>(ctx, node.Pos())
+                        .InitFrom(ytMap)
+                        .Mapper(identityLambda)
+                    .Done();
+                }
             }
         }
     }
@@ -433,7 +447,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::UnessentialFilter(TExpr
         return node;
     }
 
-    auto ytMapInput = ytMap.Mapper().Args().Arg(0).Ptr();
     auto flatMapInput = flatMap.Cast().Input().Ptr();
 
     auto maybePruneKeys = flatMap.Cast().Input().Maybe<TCoPruneKeysBase>();

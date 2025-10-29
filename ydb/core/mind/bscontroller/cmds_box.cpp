@@ -238,7 +238,7 @@ namespace NKikimr::NBsController {
             ui32 targetPDiskId = pdiskId.GetPDiskId();
             if (const auto& hostId = state.HostRecords->GetHostId(targetNodeId)) {
                 TPDiskId target(targetNodeId, targetPDiskId);
-                if (state.PDisks.Find(target) && !state.PDisksToRemove.count(target)) {
+                if (state.PDisks.Find(target) && !state.PDisksToRemove.contains(target)) {
                     return target;
                 }
                 throw TExPDiskNotFound(targetNodeId, targetPDiskId);
@@ -257,7 +257,7 @@ namespace NKikimr::NBsController {
                     return *pdiskId;
                 }
             }
-            
+
             throw TExPDiskNotFound(targetFqdn, targetDiskPath);
         }
         throw TExError() << "Either TargetPDiskId or PDiskLocation must be specified";
@@ -370,11 +370,11 @@ namespace NKikimr::NBsController {
         for (const auto& [id, srcSlot] : sourcePDisk->VSlotsOnPDisk) {
             if (srcSlot->Group) {
                 TVDiskIdShort diskId = srcSlot->GetShortVDiskId();
-                
+
                 TVSlotId newSlotId(destinationPDiskId, srcSlot->VSlotId.VSlotId);
 
                 auto* group = Groups.FindForUpdate(srcSlot->Group->ID);
-                
+
                 // Remove source slot from the group, so ConstructInplaceNewEntry can populate it with the new slot.
                 const ui32 orderNumber = group->Topology->GetOrderNumber(diskId);
                 group->VDisksInGroup[orderNumber] = nullptr;
@@ -394,7 +394,7 @@ namespace NKikimr::NBsController {
                         slot->GroupGeneration = group->Generation;
                     }
                 }
-                
+
                 // Create a new slot on the destination PDisk.
                 TVSlotInfo *dstSlot = VSlots.ConstructInplaceNewEntry(newSlotId, newSlotId, destinationPDisk,
                     srcSlot->GroupId, srcSlot->GroupGeneration, group->Generation, srcSlot->Kind, srcSlot->RingIdx,
@@ -404,7 +404,7 @@ namespace NKikimr::NBsController {
                 dstSlot->VDiskStatusTimestamp = Mono;
 
                 UncommittedVSlots.insert(newSlotId);
-                
+
                 // Remove old slot from the source PDisk.
                 VSlots.DeleteExistingEntry(srcSlot->VSlotId);
             }

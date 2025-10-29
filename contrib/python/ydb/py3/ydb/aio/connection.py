@@ -11,6 +11,7 @@ from ydb.connection import (
     _log_request,
     _log_response,
     _rpc_error_handler,
+    _is_disconnect_needed,
     _get_request_timeout,
     _set_server_timeouts,
     _RpcState as RpcState,
@@ -102,6 +103,33 @@ class _RpcState(RpcState):
         raise NotImplementedError
 
 
+class _SafeAsyncIterator:
+    def __init__(self, resp, rpc_state, on_disconnected_callback):
+        self.resp = resp
+        self.it = resp.__aiter__()
+        self.rpc_state = rpc_state
+        self.on_disconnected_callback = on_disconnected_callback
+
+    def cancel(self):
+        self.resp.cancel()
+        return self
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return await self.it.__anext__()
+        except grpc.RpcError as rpc_error:
+            ydb_error = _rpc_error_handler(self.rpc_state, rpc_error, use_unavailable=True)
+            if _is_disconnect_needed(ydb_error):
+                await self.on_disconnected_callback()
+            raise ydb_error
+
+    def __getattr__(self, item):
+        return getattr(self.resp, item)
+
+
 class Connection:
     __slots__ = (
         "endpoint",
@@ -191,6 +219,11 @@ class Connection:
 
             response = await feature
             _log_response(rpc_state, response)
+
+            if hasattr(response, "__aiter__"):
+                # NOTE(vgvoleg): for stream results we should also be able to handle disconnects
+                response = _SafeAsyncIterator(response, rpc_state, on_disconnected)
+
             return response if wrap_result is None else wrap_result(rpc_state, response, *wrap_args)
         except grpc.RpcError as rpc_error:
             if on_disconnected:
@@ -234,7 +267,7 @@ class Connection:
         been terminated are cancelled. If grace is None, this method will wait until all tasks are finished.
         :return: None
         """
-        logger.info("Closing channel for endpoint %s", self.endpoint)
+        logger.debug("Closing channel for endpoint %s", self.endpoint)
 
         self.closing = True
 

@@ -6,7 +6,7 @@
 #include <ydb/core/memory_controller/memory_controller.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/log_settings.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/util/should_continue.h>
 #include <ydb/library/grpc/server/grpc_server.h>
 #include <ydb/core/base/appdata.h>
@@ -25,6 +25,20 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr {
+
+using TGRpcServers = TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>>;
+using TGRpcServersFactory = std::function<TGRpcServers()>;
+
+struct TGRpcServersWrapper {
+    TGRpcServers Servers;
+    TGRpcServersFactory GrpcServersFactory;
+    TMutex Mutex;
+    std::atomic<bool> IsDisabled = false;
+
+    TGuard<TMutex> Guard() {
+        return TGuard<TMutex>(Mutex);
+    }
+};
 
 class TKikimrRunner : public virtual TThrRefBase, private IGlobalObjectStorage {
 protected:
@@ -56,8 +70,6 @@ protected:
     TIntrusivePtr<NInterconnect::TPollerThreads> PollerThreads;
     TAutoPtr<TAppData> AppData;
 
-    TVector<std::pair<TString, TAutoPtr<NYdbGrpc::TGRpcServer>>> GRpcServers;
-
     TIntrusivePtr<NActors::NLog::TSettings> LogSettings;
     std::shared_ptr<TLogBackend> LogBackend;
     TAutoPtr<TActorSystem> ActorSystem;
@@ -67,6 +79,9 @@ protected:
     TVector<NYdb::NGlobalPlugins::IPlugin::TPtr> Plugins;
 
     TKikimrRunner(std::shared_ptr<TModuleFactories> factories = {});
+
+    std::shared_ptr<TGRpcServersWrapper> GRpcServersWrapper;
+    TActorId GRpcServersManager;
 
     virtual ~TKikimrRunner();
 
@@ -85,6 +100,7 @@ protected:
     void InitializeMonitoringLogin(const TKikimrRunConfig& runConfig);
 
     void InitializeGRpc(const TKikimrRunConfig& runConfig);
+    TGRpcServers CreateGRpcServers(const TKikimrRunConfig& runConfig);
 
     void InitializeKqpController(const TKikimrRunConfig& runConfig);
 

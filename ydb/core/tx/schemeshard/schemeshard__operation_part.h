@@ -6,6 +6,9 @@
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
 
+#include <ydb/core/protos/schemeshard/operations.pb.h>  // for NKikimrSchemeOp::EOperationType
+#include <ydb/core/protos/counters_schemeshard.pb.h>  // for NKikimr::NSchemeShard::ETxTypes, not to be confused with NKikimr::NSchemeShard::ETxType
+
 #include <ydb/core/util/source_location.h>
 
 #include <ydb/library/actors/core/event.h>  // for TEventHandler
@@ -388,17 +391,25 @@ ISubOperation::TPtr CreateDropTable(TOperationId id, TTxState::ETxState state);
 bool CreateDropTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context, TVector<ISubOperation::TPtr>& result);
 
 TVector<ISubOperation::TPtr> CreateBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr DropBuildColumn(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CancelBuildIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr AddDropIndex(TVector<ISubOperation::TPtr>& result, const TOperationId &nextId, const TPath& indexPath);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state);
+
+
+TVector<ISubOperation::TPtr> CreateSetConstraintInitiate(TOperationId, const TTxTransaction&, TOperationContext&);
+ISubOperation::TPtr CreateSetConstraintLock(TOperationId, const TTxTransaction&);
+ISubOperation::TPtr CreateSetConstraintCheck(TOperationId, const TTxTransaction&);
+ISubOperation::TPtr CreateSetConstraintFinalize(TOperationId, const TTxTransaction&);
 
 // External Table
 // Create
@@ -483,11 +494,11 @@ ISubOperation::TPtr CreateDropTableIndex(TOperationId id, TTxState::ETxState sta
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateAlterTableIndex(TOperationId id, TTxState::ETxState state);
 
-bool CreateConsistentCopyTables(
-    TOperationId nextId,
-    const TTxTransaction& tx,
-    TOperationContext& context,
+bool CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
     TVector<ISubOperation::TPtr>& result);
+THashSet<TString> GetLocalSequences(TOperationContext& context, const TPath& srcTable);
+void AddCopySequences(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context,
+    TVector<ISubOperation::TPtr>& result, const TPath& srcTable, const TString& dstPath);
 TVector<ISubOperation::TPtr> CreateConsistentCopyTables(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperation::TPtr CreateNewOlapStore(TOperationId id, const TTxTransaction& tx);
@@ -594,7 +605,7 @@ ISubOperation::TPtr CreateDropSolomon(TOperationId id, TTxState::ETxState state)
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateInitializeBuildIndexMainTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx, const THashSet<TString>& localSequences = {});
 ISubOperation::TPtr CreateInitializeBuildIndexImplTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperation::TPtr CreateFinalizeBuildIndexImplTable(TOperationId id, const TTxTransaction& tx);
@@ -623,6 +634,8 @@ ISubOperation::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+void AddMoveSequences(TOperationId nextId, TVector<ISubOperation::TPtr>& result,
+    const TPath& srcTable, const TString& dstPath, const THashSet<TString>& sequences);
 
 ISubOperation::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);
@@ -720,6 +733,28 @@ ISubOperation::TPtr CreateNewSysView(TOperationId id, TTxState::ETxState state);
 // Drop
 ISubOperation::TPtr CreateDropSysView(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateDropSysView(TOperationId id, TTxState::ETxState state);
+
+// Secret
+// Create
+ISubOperation::TPtr CreateNewSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewSecret(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterSecret(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropSecret(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropSecret(TOperationId id, TTxState::ETxState state);
+
+// Streaming Query
+// Create
+ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+ISubOperation::TPtr CreateNewStreamingQuery(TOperationId id, TTxState::ETxState state);
+// Alter
+ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterStreamingQuery(TOperationId id, TTxState::ETxState state);
+// Drop
+ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropStreamingQuery(TOperationId id, TTxState::ETxState state);
 
 }
 }

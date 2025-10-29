@@ -1,8 +1,8 @@
 package NYql;
 
-message THttpDownloaderConfig {
+message TFetchConfig {
     optional uint32 MaxRedirects = 2 [default = 10];
-    optional uint32 SocketTimeoutMs = 3 [default = 300000];
+    optional uint32 TimeoutMs = 3 [default = 300000];
     optional uint32 MaxRetries = 4 [default = 3];
 
     optional uint32 MinDelayMs = 5 [default = 1000];

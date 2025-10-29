@@ -203,6 +203,10 @@ void TProgramFactory::SetCredentials(TCredentials::TPtr credentials) {
     Credentials_ = std::move(credentials);
 }
 
+void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider) {
+    RemoteLayersProviders_.emplace(alias, std::move(provider));
+}
+
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -281,7 +285,7 @@ TProgramPtr TProgramFactory::Create(
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, gatewaysForMerge);
+                        qContext, gatewaysForMerge, RemoteLayersProviders_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -314,7 +318,8 @@ TProgram::TProgram(
     const IArrowResolver::TPtr& arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    TMaybe<TString> gatewaysForMerge,
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
@@ -347,6 +352,7 @@ TProgram::TProgram(
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , GatewaysForMerge_(gatewaysForMerge)
+    , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -2073,6 +2079,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
+    for (auto& [alias, provider] : RemoteLayersProviders_) {
+        typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
+    }
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning

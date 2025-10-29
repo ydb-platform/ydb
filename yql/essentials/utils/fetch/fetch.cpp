@@ -214,4 +214,20 @@ TFetchResultPtr Fetch(const THttpURL& url, const THttpHeaders& additionalHeaders
     ythrow yexception() << "Failed to fetch url '" << currentUrl.PrintS() << "': too many redirects";
 }
 
+THttpURL AppendUrlPath(const THttpURL& url, const TString& part) {
+    THttpURL resultUrl;
+    if (resultUrl.Parse(part, THttpURL::FeaturesDefault | THttpURL::FeatureSchemeKnown) != THttpURL::ParsedOK) {
+        throw yexception() << "url.Parse finished with not ParsedOK. Tried to parse `" << part << "`";
+    }
+    auto path = TString(url.Get(NUri::TField::FieldPath));
+    if (!path.EndsWith('/')) {
+        auto copy = url;
+        copy.Set(NUri::TField::FieldPath, path + "/");
+        resultUrl.Merge(copy);
+        return resultUrl;
+    }
+    resultUrl.Merge(url);
+    return resultUrl;
+}
+
 } // namespace NYql

@@ -126,6 +126,23 @@ private:
     std::map<std::string, std::string> Values_;
 
 private:
+    static void LTrim(std::string &input) {
+        input.erase(input.begin(), std::find_if(input.begin(), input.end(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }));
+    }
+
+    static void RTrim(std::string &input) {
+        input.erase(std::find_if(input.rbegin(), input.rend(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }).base(), input.end());
+    }
+
+    static void Trim(std::string &input) {
+        LTrim(input);
+        RTrim(input);
+    }
+
     static std::map<std::string, std::string> ParseMap(const std::string& input, char delimiter = ';') {
         std::map<std::string, std::string> result;
         std::stringstream ss(input);
@@ -133,10 +150,14 @@ private:
         std::string entry;
         while (std::getline(ss, entry, delimiter)) {
             // each entry looks like key value pair, e.g. "N=5"
+            Trim(entry);
             size_t pos = entry.find('=');
 
             if (pos != std::string::npos) {
-                result[entry.substr(0, pos)] = entry.substr(pos + 1);
+                std::string key = entry.substr(0, pos);
+                std::string value = entry.substr(pos + 1);
+                Trim(value);
+                result[std::move(key)] = std::move(value);
             }
         }
 

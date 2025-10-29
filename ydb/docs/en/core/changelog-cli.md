@@ -15,7 +15,6 @@ Released on October 30, 2025. To update to version **2.27.0**, select the [Downl
 
 ### Bug fixes
 
-* Fixed a bug where transfers using absolute topic paths did not create a consumer when `CONNECTION_STRING` was not provided.
 * Fixed a bug where the `{{ ydb-cli }} debug ping` command crashed on any error.
 
 ## Version 2.26.0 {#2-26-0}

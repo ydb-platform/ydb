@@ -3247,7 +3247,9 @@ public:
 
     void RollbackAndDie(NWilson::TTraceId traceId) {
         Rollback(std::move(traceId));
-        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
+        Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
+            BuildStats()
+        });
         PassAway();
     }
 
@@ -3724,7 +3726,8 @@ public:
         Rollback(BufferWriteActorSpan.GetTraceId());
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
-            std::move(issues)
+            std::move(issues),
+            BuildStats()
         });
         PassAway();
     }

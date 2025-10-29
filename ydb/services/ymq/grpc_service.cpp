@@ -28,7 +28,7 @@ void TGRpcYmqService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::Ymq::V1::NAME##Request, Ydb::Ymq::V1::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR}));                              \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(LIMIT_TYPE), ATTR}));                              \
             }, &Ydb::Ymq::V1::YmqService::AsyncService::RequestYmq ## NAME,                                            \
             #NAME, logger, getCounterBlock("ymq", #NAME))->Run();
 

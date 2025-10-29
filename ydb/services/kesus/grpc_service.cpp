@@ -651,7 +651,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
                 ActorSystem_->Send(GRpcRequestProxyId_, \
                     new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
-                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
+                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE})); \
             }, \
             &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
             #NAME,  \

@@ -215,9 +215,7 @@ private:
         ui64 targetConsumersConsumption = SafeDiff(targetUtilizationBytes, otherConsumption + externalConsumption);
 
         // want to find maximum possible coefficient in range [0..1] so that
-        // Sum(
-        //     consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes
-        //    ) <= targetConsumersConsumption
+        // Sum(consumers[i].MinBytes + coefficient * (consumers[i].MaxBytes - consumers[i].MinBytes)) <= targetConsumersConsumption
         auto coefficient = BinarySearchCoefficient(consumers, targetConsumersConsumption);
 
         ui64 resultingConsumersConsumption = 0;

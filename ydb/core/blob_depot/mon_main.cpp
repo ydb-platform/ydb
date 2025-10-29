@@ -474,7 +474,7 @@ namespace NKikimr::NBlobDepot {
 
                                 }
 
-                                BD_MON_TABLE_ROW(Endpoint, s3Settings.GetEndpoint());
+                                BD_MON_TABLE_ROW("Endpoint", s3Settings.GetEndpoint());
 
                                 TString schemeStr;
                                 if (s3Settings.HasScheme()) {

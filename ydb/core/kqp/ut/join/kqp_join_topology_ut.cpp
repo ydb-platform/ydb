@@ -155,7 +155,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
     std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
-        Cout << "\n\n";
         Cout << "================================= CREATE =================================\n";
         graph.DumpGraph(Cout);
 
@@ -244,11 +243,14 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
     template <auto Lambda>
-    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config, TArgs::TRangedValue<ui64> numTables, TArgs::TRangedValue<double> sameColumnProbability, unsigned seed = 0) {
-        TRNG mt(seed);
+    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config, TArgs::TRangedValue<ui64> numTables, TArgs::TRangedValue<double> sameColumnProbability, uint64_t state = 0) {
+        TRNG mt = TRNG::Deserialize(state);
 
+        mt.reset();
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTables.GetLast());
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
+
+        mt.Restore(state);
 
         auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(10));
         auto db = kikimr.GetQueryClient();
@@ -259,8 +261,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         for (ui64 n : numTables) {
             for (double probability : sameColumnProbability) {
-                Cout << "Seed: " << mt.Serialize() << "\n";
-
+                Cout << "\n\n";
+                Cout << "================================ REPRODUCE -------------------------------\n";
+                Cout << "KQP_TOPOLOGY='N=" << n << "; P=" << probability << "; seed=" << mt.Serialize() << "'\n";
                 TRelationGraph graph = Lambda(mt, n, probability);
                 auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
                 if (!result) {
@@ -350,10 +353,17 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto config = GetBenchmarkConfig(args);
         DumpBenchmarkConfig(Cout, config);
 
+        uint64_t state = 0;
+        if (args.HasArg("seed")) {
+            state = args.GetArg<uint64_t>("seed").GetValue();
+        }
+
         BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(
             config,
             /*maxNumTables=*/args.GetArg<uint64_t>("N"),
-            /*probabilityStep=*/args.GetArg<double>("P"));
+            /*probabilityStep=*/args.GetArg<double>("P"),
+            state
+        );
     }
 
 }

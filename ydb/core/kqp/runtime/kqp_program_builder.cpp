@@ -373,15 +373,15 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
         || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected string or utf8 for text.");
 
+    // Return type: List<String>
+    auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
+    auto listType = TListType::Create(stringType, Env);
+
     // Validate settings argument - should be a string (serialized proto)
     const auto& settingsType = settings.GetStaticType();
     MKQL_ENSURE(settingsType->IsData(), "Expected data type for settings.");
     const auto& settingsTypeData = static_cast<const TDataType&>(*settingsType);
     MKQL_ENSURE(settingsTypeData.GetSchemeType() == NScheme::NTypeIds::String, "Expected string for settings.");
-
-    // Return type: List<String>
-    auto stringType = TDataType::Create(NScheme::NTypeIds::String, Env);
-    auto listType = TListType::Create(stringType, Env);
 
     TCallableBuilder callableBuilder(Env, __func__, listType);
     callableBuilder.Add(text);

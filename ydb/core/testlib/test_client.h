@@ -186,7 +186,6 @@ namespace Tests {
         bool UseSectorMap = false;
         TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
         bool EnableStorage = true;
-        bool EnableStorageProxy = false;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::function<IActor*(const TTokenManagerSettings&)> CreateTokenManager = NKikimr::CreateTokenManager;
@@ -302,7 +301,6 @@ namespace Tests {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }
-        TServerSettings& SetEnableStorageProxy(bool value) { EnableStorageProxy = value; return *this; }
 
         TServerSettings& SetEnableStorage(bool enable) {
             EnableStorage = enable;

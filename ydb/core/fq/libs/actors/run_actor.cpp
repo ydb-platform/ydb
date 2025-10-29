@@ -1613,18 +1613,11 @@ private:
         }
 
         if (enableCheckpointCoordinator) {
-            NKikimrConfig::TCheckpointsConfig config;
-            const auto& oldConfig = Params.Config.GetCheckpointCoordinator();
-            config.SetEnabled(oldConfig.GetEnabled());
-            config.SetCheckpointingPeriodMillis(oldConfig.GetCheckpointingPeriodMillis());
-            config.SetMaxInflight(oldConfig.GetMaxInflight());
-            config.SetCheckpointingSnapshotRotationPeriod(oldConfig.GetCheckpointingSnapshotRotationPeriod());
-
             CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
                 NYql::NDq::MakeCheckpointStorageID(),
                 SelfId(),
-                config,
+                Params.Config.GetCheckpointCoordinator(),
                 QueryCounters.Counters,
                 dqGraphParams,
                 Params.StateLoadMode,
@@ -2056,7 +2049,15 @@ private:
                 case FederatedQuery::StreamingDisposition::DISPOSITION_NOT_SET:
                     break;
             }
-            dataProvidersInit.push_back(GetPqDataProviderInitializer(pqGateway, false, dbResolver, std::move(disposition), Params.TaskSensorLabels, Params.NodeIds));
+            dataProvidersInit.push_back(GetPqDataProviderInitializer(
+                pqGateway,
+                /* supportRtmrMode */ false,
+                dbResolver,
+                std::move(disposition),
+                Params.TaskSensorLabels,
+                Params.NodeIds,
+                Params.Config.GetCommon().GetUseActorSystemThreadsInTopicClient()
+            ));
         }
 
         {

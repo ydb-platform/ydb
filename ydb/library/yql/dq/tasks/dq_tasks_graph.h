@@ -326,6 +326,9 @@ public:
 
     bool IsIngress(const TTaskType& task) const {
         // No inputs at all or there is no input channels with checkpoints.
+        // We don't want to inject checkpoint into tasks that has checkpointed input channels,
+        // otherwise task can be checkpointed twice;
+        // once checkpoint will arrive from channels, it will pause reading from sources too.
 
         if (!task.Inputs) {
             return true;

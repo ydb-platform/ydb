@@ -2124,6 +2124,7 @@ public:
     void StopFindSubDomainPathId();
     void StartFindSubDomainPathId(bool delayFirstRequest = true);
 
+    bool NeedToWatchSubDomainPathId();
     void StopWatchingSubDomainPathId();
     void StartWatchingSubDomainPathId();
 

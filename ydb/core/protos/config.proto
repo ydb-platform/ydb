@@ -1146,80 +1146,33 @@ message TFinalizeScriptServiceConfig {
     optional uint32 MaxInFlightFinalizationsCount = 2 [default = 10];
 };
 
-message TExternalStorage {
-    optional string Endpoint = 1;
-    optional string Database = 2;
-    optional string OAuthFile = 3;
-    optional string Token = 4;
-    optional string TablePrefix = 5;
-    optional string CertificateFile = 6;
-    optional string IamEndpoint = 7;
-    optional string SaKeyFile = 8;
-    optional bool UseLocalMetadataService = 9;
-    optional uint32 ClientTimeoutSec = 10;
-    optional uint32 OperationTimeoutSec = 11;
-    optional uint32 CancelAfterSec = 12;
-    optional bool UseSsl = 13;
-    optional uint32 TableClientMaxActiveSessions = 14;
-}
-
-message TSharedReadingConfig {
-    message TJsonParserConfig {
-        optional uint64 BatchSizeBytes = 1;  // default 1 MiB
-        optional uint64 BatchCreationTimeoutMs = 2;
-        optional uint64 BufferCellCount = 3;  // (number rows) * (number columns) limit, default 10^6
-    }
-
-    message TCompileServiceConfig {
-        optional uint64 ParallelCompilationLimit = 1;  // 1 by default
-    }
-
-    message TCoordinatorConfig {
-        optional TExternalStorage Database = 1;
-        optional string CoordinationNodePath = 2;
-        optional bool LocalMode = 3;
-    }
-
-    optional bool Enabled = 1;
-    optional uint64 TimeoutBeforeStartSessionSec = 2;
-    optional uint64 SendStatusPeriodSec = 3;
-    optional uint64 MaxSessionUsedMemory = 4; 
-    optional bool WithoutConsumer = 5;
-    optional TJsonParserConfig JsonParser = 7;
-    optional TCompileServiceConfig CompileService = 8;
-    optional TCoordinatorConfig Coordinator = 6;
-}
-
-message TCheckpointsConfig {
-    message TStateStorageLimitsConfig {
-        optional uint64 MaxGraphCheckpointsSizeBytes = 1;
-        optional uint64 MaxTaskStateSizeBytes = 2;
-        optional uint64 MaxRowSizeBytes = 3;
-    }
-
-    message TCheckpointGcConfig {
-        optional bool Enabled = 1;
-    }
-
-    message TLocalStorage {
-        optional string TablePrefix = 1;
-    }
-
-    optional bool Enabled = 1;
-    oneof Storage {
-        TExternalStorage ExternalStorage = 2;
-        TLocalStorage LocalStorage = 3;
-    }
-    optional TCheckpointGcConfig CheckpointGarbageConfig = 4;
-    optional TStateStorageLimitsConfig StateStorageLimits = 5;
-    optional uint64 CheckpointingPeriodMillis = 6 [default = 30000];
-    optional uint64 MaxInflight = 7;
-    optional uint64 CheckpointingSnapshotRotationPeriod = 8; // 0 - All checkpoints are snapshots, 1 - 1 increment/ 1 snapshot, 20 - 20 increment / 1 snapshot.
-}
-
 message TStreamingQueriesConfig {
-    optional uint64 MaxQueryExecutions = 1 [default = 30];
-    optional bool PrivateSystemTables = 2 [default = true];
+    message TExternalStorageConfig {
+        message TConnectionSettings {
+            optional string Endpoint = 1;
+            optional string Database = 2;
+            optional string TokenFile = 3;
+            optional string SaKeyFile = 4;
+            optional bool UseLocalMetadataService = 5;
+            optional bool UseSsl = 6;
+            optional string CaCertFile = 7;
+            optional string IamEndpoint = 8;
+            optional string Login = 9;
+            optional string PasswordFile = 10;
+        }
+
+        optional uint32 QueryTimeoutSec = 1;
+        optional uint32 MaxActiveQuerySessions = 2;
+        optional string PathPrefix = 3;
+        optional TConnectionSettings DatabaseConnection = 4;
+    }
+
+    message TExternalTopicsSettings {
+        optional string DiscoveryCommonHostnamePrefixPatch = 1; // Added to discovered hostnames if original hostname starts with this prefix
+    }
+
+    optional TExternalStorageConfig ExternalStorage = 1;
+    optional TExternalTopicsSettings TopicSdkSettings = 2;
 }
 
 message TQueryServiceConfig {
@@ -1247,9 +1200,10 @@ message TQueryServiceConfig {
     optional bool EnableMatchRecognize = 20 [default = false];
     repeated string AvailableExternalDataSources = 22;                  // Ignored if AllExternalDataSourcesAreAvailable is true
     optional bool AllExternalDataSourcesAreAvailable = 23 [default = true];
-    optional TCheckpointsConfig CheckpointsConfig = 24;
-    optional TStreamingQueriesConfig StreamingQueries = 25;
-    optional TSharedReadingConfig SharedReading = 26;
+    reserved 24;
+    reserved 25;
+    reserved 26;
+    optional TStreamingQueriesConfig StreamingQueries = 27;
 }
 
 // Config describes immediate controls and allows

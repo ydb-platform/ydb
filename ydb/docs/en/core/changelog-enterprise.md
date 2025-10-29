@@ -352,7 +352,7 @@ Release date: October 12, 2023.
 * Excluded unused messages and methods from `QueryService`.
 * Added sorting by `Rack` in /nodes in the `viewer backend`.
 * Fixed an error where sorting queries returned an error in descending order.
-* Improved interaction between `KQP` and `NodeWhiteboard`.
+* Improved interaction between `QP` and `NodeWhiteboard`.
 * Removed support for old parameter formats.
 * Fixed an error where `DefineBox` was not being applied to disks with a static group.
 * Fixed a `SIGSEGV` error in the dinnode during `CSV` import via `YDB CLI`.

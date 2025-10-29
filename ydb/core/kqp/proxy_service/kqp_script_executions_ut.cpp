@@ -14,10 +14,13 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
 
+#include <fmt/format.h>
+
 namespace NKikimr::NKqp {
 
 using namespace Tests;
 using namespace NSchemeShard;
+using namespace fmt::literals;
 
 namespace  {
 
@@ -68,8 +71,8 @@ const TVector<TString> TEST_TABLE_PATH = { "test", "test_table" };
 const TVector<TString> TEST_KEY_COLUMNS = {"col1"};
 
 struct TScriptExecutionsYdbSetup {
-    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false) {
-        Init(enableScriptExecutionBackgroundChecks);
+    explicit TScriptExecutionsYdbSetup(bool enableScriptExecutionBackgroundChecks = false, bool secureScriptExecutions = false) {
+        Init(enableScriptExecutionBackgroundChecks, secureScriptExecutions);
     }
 
     static void BackTraceSignalHandler(int signal) {
@@ -82,7 +85,7 @@ struct TScriptExecutionsYdbSetup {
         abort();
     }
 
-    void Init(bool enableScriptExecutionBackgroundChecks) {
+    void Init(bool enableScriptExecutionBackgroundChecks, bool secureScriptExecutions) {
         EnableYDBBacktraceFormat();
         for (auto sig : {SIGILL, SIGSEGV}) {
             signal(sig, &TScriptExecutionsYdbSetup::BackTraceSignalHandler);
@@ -94,6 +97,7 @@ struct TScriptExecutionsYdbSetup {
         ServerSettings->SetEnableScriptExecutionOperations(true);
         ServerSettings->SetEnableScriptExecutionBackgroundChecks(enableScriptExecutionBackgroundChecks);
         ServerSettings->SetEnableDataShardCreateTableAs(true);
+        ServerSettings->SetEnableSecureScriptExecutions(secureScriptExecutions);
         ServerSettings->SetGrpcPort(GrpcPort);
         Server = MakeHolder<Tests::TServer>(*ServerSettings);
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
@@ -109,12 +113,19 @@ struct TScriptExecutionsYdbSetup {
         NYdb::TDriverConfig driverCfg;
         driverCfg
             .SetEndpoint(TStringBuilder() << "localhost:" << GrpcPort)
-            .SetDatabase(Tests::TestDomainName);
+            .SetDatabase(Tests::TestDomainName)
+            .SetAuthToken(BUILTIN_ACL_ROOT);
         YdbDriver = MakeHolder<NYdb::TDriver>(driverCfg);
         TableClient = MakeHolder<NYdb::NTable::TTableClient>(*YdbDriver);
         auto createSessionResult = TableClient->CreateSession().ExtractValueSync();
         UNIT_ASSERT_C(createSessionResult.IsSuccess(), createSessionResult.GetIssues().ToString());
         TableClientSession = MakeHolder<NYdb::NTable::TSession>(createSessionResult.GetSession());
+
+        const auto result = TableClientSession->ExecuteSchemeQuery(fmt::format(R"(
+                GRANT ALL ON `/dc-1` TO `{user}`;
+            )", "user"_a = BUILTIN_ACL_ROOT
+        )).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToOneLineString());
 
         Cerr << "\n\n\n--------------------------- INIT FINISHED ---------------------------\n\n\n";
     }
@@ -315,7 +326,8 @@ struct TScriptExecutionsYdbSetup {
             edgeActor,
             new TEvGetScriptExecutionOperation(
                 TestDatabase,
-                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId))
+                NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId)),
+                BUILTIN_ACL_ROOT
             )
         );
 
@@ -327,7 +339,7 @@ struct TScriptExecutionsYdbSetup {
 
     TEvFetchScriptResultsResponse::TPtr FetchScriptResults(const TString& executionId, i32 resultSetId) {
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, resultSetId, 0, 0, 0, TInstant::Max()));
+        GetRuntime()->Register(NKikimr::NKqp::CreateGetScriptExecutionResultActor(edgeActor, TestDatabase, executionId, BUILTIN_ACL_ROOT, resultSetId, 0, 0, 0, TInstant::Max()));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvFetchScriptResultsResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "FetchScriptResults response is empty");
@@ -629,6 +641,24 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
         ydb.WaitOperationStatus(executionId, Ydb::StatusIds::UNAVAILABLE);
 
         ydb.CheckLeaseExistence(executionId, false, Ydb::StatusIds::UNAVAILABLE);
+    }
+
+    Y_UNIT_TEST(TestSecureScriptExecutions) {
+        TScriptExecutionsYdbSetup ydb(false, /* secureScriptExecutions */ true);
+        ydb.CreateQueryInDb();
+
+        for (const auto& table : {"script_executions", "script_execution_leases", "result_sets"}) {
+            const TString sql = fmt::format(R"(
+                SELECT
+                    COUNT(*)
+                FROM `.metadata/{table}`
+            )", "table"_a = table);
+
+            const auto result = ydb.TableClientSession->ExecuteDataQuery(sql, NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            const auto& issues = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, issues);
+            UNIT_ASSERT_STRING_CONTAINS(issues, "Cannot find table");
+        }
     }
 }
 

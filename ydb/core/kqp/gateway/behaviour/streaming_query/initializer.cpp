@@ -28,7 +28,7 @@ void TStreamingQueryInitializer::DoPrepare(NMetadata::NInitializer::IInitializer
         result.emplace_back(std::make_shared<NMetadata::NInitializer::TGenericTableModifier<NMetadata::NRequest::TDialogCreateTable>>(request, "create"));
     }
 
-    if (AppData()->QueryServiceConfig.GetStreamingQueries().GetPrivateSystemTables()) {
+    if (AppData()->FeatureFlags.GetEnableSecureScriptExecutions()) {
         result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetNoAccessModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));
     } else {
         result.emplace_back(NMetadata::NInitializer::TACLModifierConstructor::GetReadOnlyModifier(TStreamingQueryConfig::GetBehaviour()->GetStorageTablePath(), "acl"));

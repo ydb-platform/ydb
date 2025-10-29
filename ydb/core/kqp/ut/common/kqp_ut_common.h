@@ -43,6 +43,7 @@ TVector<NKikimrKqp::TKqpSetting> SyntaxV1Settings();
 struct TTestLogSettings {
     NLog::EPriority DefaultLogPriority = NLog::PRI_WARN;
     std::unordered_map<NKikimrServices::EServiceKikimr, NLog::EPriority> LogPriorities;
+    bool Freeze = false;
 
     TTestLogSettings& AddLogPriority(NKikimrServices::EServiceKikimr service, NLog::EPriority priority);
 };

@@ -21,36 +21,35 @@
 #include <ydb/core/fq/libs/row_dispatcher/row_dispatcher_service.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/test_connection/test_connection.h>
-
+#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/protos/config.pb.h>
-
-#include <ydb/library/folder_service/folder_service.h>
-#include <yql/essentials/providers/common/metrics/service_counters.h>
-
 #include <ydb/library/actors/http/http_proxy.h>
-#include <library/cpp/protobuf/json/json2proto.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-
+#include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
-#include <ydb/library/yql/utils/actor_log/log.h>
-#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
-#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_local.h>
 #include <ydb/library/yql/providers/dq/worker_manager/local_worker_manager.h>
 #include <ydb/library/yql/providers/generic/actors/yql_generic_provider_factories.h>
-#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.h>
 #include <ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.h>
 #include <ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
+#include <ydb/library/yql/providers/s3/proto/retry_config.pb.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_read_actor.h>
 #include <ydb/library/yql/providers/solomon/actors/dq_solomon_write_actor.h>
-#include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
+
+#include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
+#include <yql/essentials/providers/common/comp_nodes/yql_factory.h>
+#include <yql/essentials/providers/common/metrics/service_counters.h>
+
+#include <library/cpp/protobuf/json/json2proto.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 
 #include <util/stream/file.h>
 #include <util/system/hostname.h>
@@ -59,21 +58,6 @@
 namespace NFq {
 
 using namespace NKikimr;
-
-NYdb::NTopic::TTopicClientSettings GetCommonTopicClientSettings(const NFq::NConfig::TCommonConfig& config) {
-    NYdb::NTopic::TTopicClientSettings settings;
-    if (auto threadsNum = config.GetTopicClientHandlersExecutorThreadsNum()) {
-        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_client").SetBlocking(true).SetCatching(false));
-        auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
-        settings.DefaultHandlersExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
-    }
-    if (auto threadsNum = config.GetTopicClientCompressionExecutorThreadsNum()) {
-        auto threadPool = CreateThreadPool(threadsNum, 0, IThreadPool::TParams().SetThreadNamePrefix("ydb_sdk_compession").SetBlocking(true).SetCatching(false));
-        auto sharedPool = std::shared_ptr<IThreadPool>(threadPool.Release());
-        settings.DefaultCompressionExecutor(NYdb::NTopic::CreateThreadPoolExecutorAdapter(sharedPool));
-    }
-    return settings;
-}
 
 void Init(
     const NFq::NConfig::TConfig& protoConfig,
@@ -94,6 +78,7 @@ void Init(
 
     auto yqCounters = appData->Counters->GetSubgroup("counters", "yq");
     const auto clientCounters = yqCounters->GetSubgroup("subsystem", "ClientMetrics");
+    const auto& commonConfig = protoConfig.GetCommon();
 
     if (protoConfig.GetControlPlaneStorage().GetEnabled()) {
         const auto counters = yqCounters->GetSubgroup("subsystem", "ControlPlaneStorage");
@@ -101,14 +86,14 @@ void Init(
             ? NFq::CreateInMemoryControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
-                protoConfig.GetCommon(),
+                commonConfig,
                 protoConfig.GetCompute(),
                 counters,
                 tenant)
             : NFq::CreateYdbControlPlaneStorageServiceActor(
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
-                protoConfig.GetCommon(),
+                commonConfig,
                 protoConfig.GetCompute(),
                 counters,
                 yqSharedResources,
@@ -132,7 +117,7 @@ void Init(
             protoConfig.GetControlPlaneProxy(),
             protoConfig.GetControlPlaneStorage(),
             protoConfig.GetCompute(),
-            protoConfig.GetCommon(),
+            commonConfig,
             protoConfig.GetGateways().GetS3(),
             signer,
             yqSharedResources,
@@ -145,7 +130,7 @@ void Init(
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
         auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
                                                                                          NKikimr::CreateYdbCredentialsProviderFactory, 
-                                                                                         protoConfig.GetCommon(), 
+                                                                                         commonConfig, 
                                                                                          signer, 
                                                                                          yqSharedResources, 
                                                                                          yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
@@ -181,34 +166,9 @@ void Init(
     }
 
     if (protoConfig.GetCheckpointCoordinator().GetEnabled()) {
-        NKikimrConfig::TCheckpointsConfig config;
-        const auto& oldConfig = protoConfig.GetCheckpointCoordinator();
-        config.SetEnabled(oldConfig.GetEnabled());
-        auto* storageConfig = config.MutableExternalStorage();
-        storageConfig->SetEndpoint(oldConfig.GetStorage().GetEndpoint());
-        storageConfig->SetDatabase(oldConfig.GetStorage().GetDatabase());
-        storageConfig->SetOAuthFile(oldConfig.GetStorage().GetOAuthFile());
-        storageConfig->SetToken(oldConfig.GetStorage().GetToken());
-        storageConfig->SetTablePrefix(oldConfig.GetStorage().GetTablePrefix());
-        storageConfig->SetCertificateFile(oldConfig.GetStorage().GetCertificateFile());
-        storageConfig->SetIamEndpoint(oldConfig.GetStorage().GetIamEndpoint());
-        storageConfig->SetSaKeyFile(oldConfig.GetStorage().GetSaKeyFile());
-        storageConfig->SetUseLocalMetadataService(oldConfig.GetStorage().GetUseLocalMetadataService());
-        storageConfig->SetClientTimeoutSec(oldConfig.GetStorage().GetClientTimeoutSec());
-        storageConfig->SetOperationTimeoutSec(oldConfig.GetStorage().GetOperationTimeoutSec());
-        storageConfig->SetCancelAfterSec(oldConfig.GetStorage().GetCancelAfterSec());
-        storageConfig->SetUseSsl(oldConfig.GetStorage().GetUseSsl());
-        storageConfig->SetTableClientMaxActiveSessions(oldConfig.GetStorage().GetTableClientMaxActiveSessions());
-        auto* gcConfig = config.MutableCheckpointGarbageConfig();
-        gcConfig->SetEnabled(oldConfig.GetCheckpointGarbageConfig().GetEnabled());
-        auto* limitsConfig = config.MutableStateStorageLimits();
-        limitsConfig->SetMaxGraphCheckpointsSizeBytes(oldConfig.GetStateStorageLimits().GetMaxGraphCheckpointsSizeBytes());
-        limitsConfig->SetMaxTaskStateSizeBytes(oldConfig.GetStateStorageLimits().GetMaxTaskStateSizeBytes());
-        limitsConfig->SetMaxRowSizeBytes(oldConfig.GetStateStorageLimits().GetMaxRowSizeBytes());
-
         auto checkpointStorage = NFq::NewCheckpointStorageService(
-            config,
-            protoConfig.GetCommon().GetIdsPrefix(),
+            protoConfig.GetCheckpointCoordinator(),
+            commonConfig.GetIdsPrefix(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             yqSharedResources->UserSpaceYdbDriver,
             yqCounters->GetSubgroup("subsystem", "checkpoint_storage"));
@@ -252,7 +212,7 @@ void Init(
         credentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
-    auto commonTopicClientSettings = GetCommonTopicClientSettings(protoConfig.GetCommon());
+    auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {
         NYql::TPqGatewayServices pqServices(
@@ -264,38 +224,9 @@ void Init(
             nullptr,
             commonTopicClientSettings
         );
-        auto fqConfig = protoConfig.GetRowDispatcher();
-        NKikimrConfig::TSharedReadingConfig config;
-        config.SetEnabled(fqConfig.GetEnabled());
-        config.SetTimeoutBeforeStartSessionSec(fqConfig.GetTimeoutBeforeStartSessionSec());
-        config.SetSendStatusPeriodSec(fqConfig.GetSendStatusPeriodSec());
-        config.SetMaxSessionUsedMemory(fqConfig.GetMaxSessionUsedMemory());
-        config.SetWithoutConsumer(fqConfig.GetWithoutConsumer());
-        config.MutableJsonParser()->SetBatchSizeBytes(fqConfig.GetJsonParser().GetBatchSizeBytes());
-        config.MutableJsonParser()->SetBatchCreationTimeoutMs(fqConfig.GetJsonParser().GetBatchCreationTimeoutMs());
-        config.MutableJsonParser()->SetBufferCellCount(fqConfig.GetJsonParser().GetBufferCellCount());
-        config.MutableCompileService()->SetParallelCompilationLimit(fqConfig.GetCompileService().GetParallelCompilationLimit());
-        auto* database = config.MutableCoordinator()->MutableDatabase();
-        auto fqDatabase = fqConfig.GetCoordinator().GetDatabase();
-        database->SetEndpoint(fqDatabase.GetEndpoint());
-        database->SetDatabase(fqDatabase.GetDatabase());
-        database->SetOAuthFile(fqDatabase.GetOAuthFile());
-        database->SetToken(fqDatabase.GetToken());
-        database->SetTablePrefix(fqDatabase.GetTablePrefix());
-        database->SetCertificateFile(fqDatabase.GetCertificateFile());
-        database->SetIamEndpoint(fqDatabase.GetIamEndpoint());
-        database->SetSaKeyFile(fqDatabase.GetSaKeyFile());
-        database->SetUseLocalMetadataService(fqDatabase.GetUseLocalMetadataService());
-        database->SetClientTimeoutSec(fqDatabase.GetClientTimeoutSec());
-        database->SetOperationTimeoutSec(fqDatabase.GetOperationTimeoutSec());
-        database->SetCancelAfterSec(fqDatabase.GetCancelAfterSec());
-        database->SetUseSsl(fqDatabase.GetUseSsl());
-        database->SetTableClientMaxActiveSessions(fqDatabase.GetTableClientMaxActiveSessions());
-        config.MutableCoordinator()->SetCoordinationNodePath(fqConfig.GetCoordinator().GetCoordinationNodePath());
-        config.MutableCoordinator()->SetLocalMode(fqConfig.GetCoordinator().GetLocalMode());
 
         auto rowDispatcher = NFq::NewRowDispatcherService(
-            config,
+            protoConfig.GetRowDispatcher(),
             NKikimr::CreateYdbCredentialsProviderFactory,
             credentialsFactory,
             appData->FunctionRegistry,
@@ -328,7 +259,7 @@ void Init(
         );
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
         RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
-            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), protoConfig.GetCommon().GetPqReconnectPeriod());
+            yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod());
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,
             yqCounters->GetSubgroup("subsystem", "S3ReadActor"), protoConfig.GetGateways().GetS3().GetAllowLocalFiles());
@@ -419,7 +350,7 @@ void Init(
                 protoConfig.GetTestConnection(),
                 protoConfig.GetControlPlaneStorage(),
                 protoConfig.GetGateways().GetS3(),
-                protoConfig.GetCommon(),
+                commonConfig,
                 signer,
                 yqSharedResources,
                 credentialsFactory,

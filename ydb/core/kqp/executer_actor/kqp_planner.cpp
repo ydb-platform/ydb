@@ -203,7 +203,6 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     auto result = std::make_unique<TEvKqpNode::TEvStartKqpTasksRequest>(TasksGraph.GetMeta().GetArenaIntrusivePtr());
     auto& request = result->Record;
     request.SetTxId(TxId);
-    request.SetSupportShuttingDown(true);
     const auto& lockTxId = TasksGraph.GetMeta().LockTxId;
     if (lockTxId) {
         request.SetLockTxId(*lockTxId);

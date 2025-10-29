@@ -9,14 +9,14 @@ namespace NKikimr::NKqp {
 
 class TKqpShutdownController {
 public:
-    TKqpShutdownController(ui32 nodeId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool gracefulEnabled);
+    TKqpShutdownController(NActors::TActorId kqpProxyActorId, const NKikimrConfig::TTableServiceConfig& tableServiceConfig, bool gracefulEnabled);
     ~TKqpShutdownController() = default;
 
     void Initialize(NActors::TActorSystem* actorSystem);
     void Stop();
 
 private:
-    ui32 NodeId_;
+    NActors::TActorId KqpProxyActorId_;
     NActors::TActorSystem* ActorSystem_;
     bool EnableGraceful;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;

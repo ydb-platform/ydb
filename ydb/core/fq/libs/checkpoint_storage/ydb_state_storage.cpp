@@ -271,7 +271,7 @@ TStatus ProcessRowState(
 
         // TODO: print status, etc
 
-        // we use GENERIC_ERROR, because not sure if NOT_FOUND non-retrieable
+        // we use GENERIC_ERROR, because not sure if NOT_FOUND non-retriable
         // also severity is error, because user expects checkpoint to be existed
 
         return MakeErrorStatus(EStatus::GENERIC_ERROR, ss.Str());
@@ -284,12 +284,12 @@ TStatus ProcessRowState(
 
 class TStateStorage : public IStateStorage {
     TYdbConnectionPtr YdbConnection;
-    const NKikimrConfig::TExternalStorage StorageConfig;
-    const NKikimrConfig::TCheckpointsConfig Config;
+    const TExternalStorageSettings StorageConfig;
+    const TCheckpointStorageSettings Config;
 
 public:
     explicit TStateStorage(
-        const NKikimrConfig::TCheckpointsConfig& config,
+        const TCheckpointStorageSettings& config,
         const TYdbConnectionPtr& ydbConnection);
     ~TStateStorage() = default;
 
@@ -355,7 +355,7 @@ private:
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStorage::TStateStorage(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TYdbConnectionPtr& ydbConnection)
     : YdbConnection(ydbConnection)
     , StorageConfig(config.GetExternalStorage())
@@ -699,9 +699,9 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(TDuration::Seconds(StorageConfig.GetClientTimeoutSec() * multiplier))
-        .OperationTimeout(TDuration::Seconds(StorageConfig.GetOperationTimeoutSec() * multiplier))
-        .CancelAfter(TDuration::Seconds(StorageConfig.GetCancelAfterSec() * multiplier));
+        .ClientTimeout(StorageConfig.GetClientTimeout() * multiplier)
+        .OperationTimeout(StorageConfig.GetOperationTimeout() * multiplier)
+        .CancelAfter(StorageConfig.GetCancelAfter() * multiplier);
 }
 
 TFuture<TIssues> TStateStorage::DeleteGraph(const TString& graphId) {
@@ -1000,7 +1000,7 @@ std::vector<NYql::NDq::TComputeActorState> TStateStorage::ApplyIncrements(
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStoragePtr NewYdbStateStorage(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TYdbConnectionPtr& ydbConnection) {
     return new TStateStorage(config, ydbConnection);
 }

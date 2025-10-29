@@ -325,13 +325,13 @@ private:
                 *sysViewInfo->MutableSourceObject() = entry.SysViewInfo->Description.GetSourceObject();
             }
             auto tableScanActor = NSysView::CreateSystemViewScan(ctx.SelfID, 0,
+                Request->GetDatabaseName().GetOrElse({}),
+                sysViewInfo,
                 entry.TableId,
                 JoinPath(entry.Path),
-                sysViewInfo,
                 range,
                 columns,
                 Request->GetInternalToken(),
-                Request->GetDatabaseName().GetOrElse({}),
                 false);
 
             if (!tableScanActor) {

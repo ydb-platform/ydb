@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_benches.h>
 #include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
@@ -10,6 +9,7 @@
 #include <library/cpp/testing/common/env.h>
 
 #include "kqp_join_topology_generator.h"
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
     template <auto Lambda>
     void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config, TArgs::TRangedValue<ui64> numTables, TArgs::TRangedValue<double> sameColumnProbability, unsigned seed = 0) {
-        std::mt19937 mt(seed);
+        TRNG mt(seed);
 
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTables.GetLast());
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
@@ -259,6 +259,8 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         for (ui64 n : numTables) {
             for (double probability : sameColumnProbability) {
+                Cout << "Seed: " << mt.Serialize() << "\n";
+
                 TRelationGraph graph = Lambda(mt, n, probability);
                 auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
                 if (!result) {

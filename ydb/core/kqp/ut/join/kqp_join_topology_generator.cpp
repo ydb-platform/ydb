@@ -66,18 +66,18 @@ static std::string getTablePath(unsigned tableID) {
 }
 
 
-static unsigned getRandom(std::mt19937 &mt, unsigned a, unsigned b) {
+static unsigned getRandom(TRNG &mt, unsigned a, unsigned b) {
     std::uniform_int_distribution<> distribution(a, b);
     return distribution(mt);
 }
 
-static unsigned getRandomBool(std::mt19937 &mt, double trueProbability) {
+static unsigned getRandomBool(TRNG &mt, double trueProbability) {
     std::uniform_real_distribution<> distribution(0.0, 1.0);
     return distribution(mt) < trueProbability;
 }
 
 
-unsigned TTable::GetRandomOrNewColumn(std::mt19937 &mt, double newColumnProbability) {
+unsigned TTable::GetRandomOrNewColumn(TRNG &mt, double newColumnProbability) {
     bool generateNewColumn = getRandomBool(mt, newColumnProbability);
     if (generateNewColumn || NumColumns == 0) {
         return NumColumns ++;
@@ -86,7 +86,7 @@ unsigned TTable::GetRandomOrNewColumn(std::mt19937 &mt, double newColumnProbabil
     return GetRandomColumn(mt);
 }
 
-unsigned TTable::GetRandomColumn(std::mt19937 &mt) const {
+unsigned TTable::GetRandomColumn(TRNG &mt) const {
     assert(NumColumns != 0);
     return getRandom(mt, 0, NumColumns - 1);
 }
@@ -132,7 +132,7 @@ void TSchema::Rename(std::vector<int> oldToNew) {
 }
 
 
-TRelationGraph TRelationGraph::FromPrufer(std::mt19937 &mt, const std::vector<unsigned>& prufer, double newColumnProbability) {
+TRelationGraph TRelationGraph::FromPrufer(TRNG &mt, const std::vector<unsigned>& prufer, double newColumnProbability) {
     unsigned n = prufer.size() + 2;
 
     std::vector<int> degree(n, 1);
@@ -170,7 +170,7 @@ TRelationGraph TRelationGraph::FromPrufer(std::mt19937 &mt, const std::vector<un
     return graph;
 }
 
-void TRelationGraph::Connect(std::mt19937 &mt, unsigned lhs, unsigned rhs, double newColumnProbability) {
+void TRelationGraph::Connect(TRNG &mt, unsigned lhs, unsigned rhs, double newColumnProbability) {
     unsigned ColumnLHS = Schema_[lhs].GetRandomOrNewColumn(mt, newColumnProbability);
     unsigned ColumnRHS = Schema_[rhs].GetRandomOrNewColumn(mt, newColumnProbability);
 
@@ -300,7 +300,7 @@ void TRelationGraph::Rename(const std::vector<int> &oldToNew) {
 }
 
 
-TSchemaStats TSchemaStats::MakeRandom(std::mt19937 &mt, const TSchema &schema, unsigned a, unsigned b) {
+TSchemaStats TSchemaStats::MakeRandom(TRNG &mt, const TSchema &schema, unsigned a, unsigned b) {
     std::uniform_int_distribution<> distribution(a, b);
     std::vector<TTableStats> stats(schema.GetSize());
 
@@ -332,7 +332,7 @@ std::string TSchemaStats::ToJSON() const {
     return ss.str();
 }
 
-TRelationGraph GenerateLine(std::mt19937 &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateLine(TRNG &mt, unsigned numNodes, double newColumnProbability) {
     TRelationGraph graph(numNodes);
 
     unsigned lastVertex = 0;
@@ -349,7 +349,7 @@ TRelationGraph GenerateLine(std::mt19937 &mt, unsigned numNodes, double newColum
     return graph;
 }
 
-TRelationGraph GenerateStar(std::mt19937 &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateStar(TRNG &mt, unsigned numNodes, double newColumnProbability) {
     TRelationGraph graph(numNodes);
 
     unsigned root = 0;
@@ -360,7 +360,7 @@ TRelationGraph GenerateStar(std::mt19937 &mt, unsigned numNodes, double newColum
     return graph;
 }
 
-TRelationGraph GenerateFullyConnected(std::mt19937 &mt, unsigned numNodes,
+TRelationGraph GenerateFullyConnected(TRNG &mt, unsigned numNodes,
                                       double newColumnProbability) {
 
     TRelationGraph graph(numNodes);
@@ -374,7 +374,7 @@ TRelationGraph GenerateFullyConnected(std::mt19937 &mt, unsigned numNodes,
     return graph;
 }
 
-static std::vector<unsigned> GenerateRandomPruferSequence(std::mt19937 &mt, unsigned numNodes) {
+static std::vector<unsigned> GenerateRandomPruferSequence(TRNG &mt, unsigned numNodes) {
     assert(numNodes >= 2);
     std::uniform_int_distribution<> distribution(0, numNodes - 1);
 
@@ -386,7 +386,7 @@ static std::vector<unsigned> GenerateRandomPruferSequence(std::mt19937 &mt, unsi
     return prufer;
 }
 
-TRelationGraph GenerateRandomTree(std::mt19937 &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes, double newColumnProbability) {
     auto prufer = GenerateRandomPruferSequence(mt, numNodes);
     return TRelationGraph::FromPrufer(mt, prufer, newColumnProbability);
 }

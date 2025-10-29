@@ -23,8 +23,6 @@ namespace NKikimr {
 TIntrusivePtr<TTabletStorageInfo> TabletStorageInfoFromProto(const NKikimrTabletBase::TTabletStorageInfo &proto);
 void TabletStorageInfoToProto(const TTabletStorageInfo &info, NKikimrTabletBase::TTabletStorageInfo *proto);
 
-TTabletStorageInfo::EBootMode BootModeFromProto(NKikimrConfig::TBootstrap::EBootMode mode);
-
 inline ui64 MakeGenStepPair(ui32 gen, ui32 step) {
     ui64 g = gen;
     ui64 s = step;
@@ -57,6 +55,7 @@ struct TEvTablet {
         EvDropLease,
         EvReady,
         EvFollowerDetached, // from leader to user tablet when a follower is removed
+        EvCompleteRecoveryBoot, // from user tablet to sys tablet
 
         EvCommit = EvBoot + 512,
         EvAux,
@@ -955,6 +954,8 @@ struct TEvTablet {
             return ActorIdFromProto(Record.GetUserActorId());
         }
     };
+
+    struct TEvCompleteRecoveryBoot : public TEventLocal<TEvCompleteRecoveryBoot, EvCompleteRecoveryBoot> {};
 };
 
 IActor* CreateTabletKiller(ui64 tabletId, ui32 nodeId = 0, ui32 maxGeneration = Max<ui32>());

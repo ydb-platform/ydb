@@ -1482,7 +1482,7 @@ static TIntrusivePtr<TTabletSetupInfo> CreateTablet(
         }
     }
 
-    tabletSetup = MakeTabletSetupInfo(tabletType, workPoolId, appData->SystemPoolId);
+    tabletSetup = MakeTabletSetupInfo(tabletType, tabletInfo->BootType, workPoolId, appData->SystemPoolId);
 
     if (tabletInfo->TabletType == TTabletTypes::TypeInvalid) {
         tabletInfo->TabletType = tabletType;
@@ -1511,6 +1511,9 @@ void TBootstrapperInitializer::InitializeServices(
                 const bool standby = boot.HasStandBy() && boot.GetStandBy();
                 if (Find(boot.GetNode(), NodeId) != boot.GetNode().end()) {
                     TIntrusivePtr<TTabletStorageInfo> info(TabletStorageInfoFromProto(boot.GetInfo()));
+                    if (boot.HasBootType()) {
+                        info->BootType = BootTypeFromProto(boot.GetBootType());
+                    }
 
                     auto tabletType = BootstrapperTypeToTabletType(boot.GetType());
 
@@ -1527,9 +1530,6 @@ void TBootstrapperInitializer::InitializeServices(
                         bi->WatchThreshold = TDuration::MilliSeconds(boot.GetWatchThreshold());
                     if (boot.HasStartFollowers())
                         bi->StartFollowers = boot.GetStartFollowers();
-                    if (boot.HasBootMode()) {
-                        info->BootMode = BootModeFromProto(boot.GetBootMode());
-                    }
 
                     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                         MakeBootstrapperID(info->TabletID, NodeId),

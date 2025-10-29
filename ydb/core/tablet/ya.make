@@ -37,8 +37,6 @@ SRCS(
     tablet_pipe_client_cache.h
     tablet_pipe_server.cpp
     tablet_pipecache.cpp
-    tablet_recovery.cpp
-    tablet_recovery.h
     tablet_req_blockbs.cpp
     tablet_req_delete.cpp
     tablet_req_findlatest.cpp

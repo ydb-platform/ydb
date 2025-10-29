@@ -43,9 +43,9 @@ message TBootstrap {
         FAKE_DATASHARD = 700;
     }
 
-    enum EBootMode {
+    enum EBootType {
         NORMAL = 0;
-        RESTORE = 1; // wipe tablet data and restore it from backup
+        RECOVERY = 1;
     }
 
     message TTablet {
@@ -56,7 +56,7 @@ message TBootstrap {
         optional uint64 WatchThreshold = 5;
         optional bool StartFollowers = 6;
         optional bool AllowDynamicConfiguration = 7 [default = false];
-        optional EBootMode BootMode = 8;
+        optional EBootType BootType = 8;
     }
 
     repeated TTablet Tablet = 1;

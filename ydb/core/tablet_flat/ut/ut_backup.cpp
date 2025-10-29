@@ -1,5 +1,6 @@
-#include "flat_executor_ut_common.h"
 #include "flat_cxx_database.h"
+#include "flat_executor_recovery.h"
+#include "flat_executor_ut_common.h"
 
 #include <ydb/core/testlib/actors/block_events.h>
 
@@ -377,15 +378,15 @@ struct TTxCountRows : public ITransaction {
     }
 }; // TTxCountRows
 
-struct TRestoreStarter : public NFake::TStarter {
+struct TRecoveryStarter : public NFake::TStarter {
     using TBase = NFake::TStarter;
 
     NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
         auto* info = TBase::MakeTabletInfo(tablet, channelsCount);
-        info->BootMode = NFake::TStorageInfo::EBootMode::Restore;
+        info->BootMode = NFake::TStorageInfo::EBootMode::Recovery;
         return info;
     }
-}; // TRestoreStarter
+}; // TRecoveryStarter
 
 struct TEnv : public TMyEnvBase {
     TEnv()
@@ -464,18 +465,23 @@ struct TEnv : public TMyEnvBase {
         return handle->Get<TTxCountRows::TEvResult>()->Count;
     }
 
-    void RestartTabletInRestoreMode(ui32 flags = 0)
+    void RestartTabletInRecoveryMode()
     {
         SendSync(new TEvents::TEvPoison, false, true);
 
-        TRestoreStarter starter;
-        FireTablet(Edge, Tablet, [this, &flags](const TActorId &tablet, TTabletStorageInfo *info) {
-            return new NFake::TDummy(tablet, info, Edge, flags);
-        }, 0, &starter);
+        TRecoveryStarter starter;
+        FireTablet(Edge, Tablet, &NRecovery::CreateRecoveryShard, 0, &starter);
 
+        // Wait for connectivity
+        Env.ConnectToPipe(Tablet, Edge, 0, PipeCfgRetries());
         TDispatchOptions options;
-        options.FinalEvents.emplace_back(TEvTablet::EvTabletActive);
+        options.FinalEvents.emplace_back(TEvTabletPipe::EvServerConnected);
         Env.DispatchEvents(options);
+    }
+
+    void RestoreBackup(const TString& backupPath) {
+        SendAsync(new NRecovery::TEvRestoreBackup(backupPath));
+        WaitFor<NRecovery::TEvRestoreCompleted>();
     }
 }; // TEnv
 
@@ -1020,7 +1026,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         );
     }
 
-    Y_UNIT_TEST(RestoreModeDeleteData) {
+    Y_UNIT_TEST(RecoveryModeKeepsData) {
         TEnv env;
 
         Cerr << "...starting tablet" << Endl;
@@ -1036,8 +1042,39 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 3);
 
-        Cerr << "...restarting dummy tablet in restore mode" << Endl;
-        env.RestartTabletInRestoreMode(TestTabletFlags);
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        env.RestartTabletInRecoveryMode();
+
+        Cerr << "...restarting tablet in normal mode" << Endl;
+        env.RestartTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 3);
+    }
+
+    Y_UNIT_TEST(RestoreEmptyBackup) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...writing three rows" << Endl;
+        env.WriteValue(1, 10);
+        env.WriteValue(2, 10);
+        env.WriteValue(3, 10);
+
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows(), 3);
+
+        Cerr << "...restarting dummy tablet in recovery mode" << Endl;
+        env.RestartTabletInRecoveryMode();
+
+        Cerr << "...restoring empty backup" << Endl;
+        env.RestoreBackup("empty");
 
         Cerr << "...restarting tablet in normal mode" << Endl;
         env.RestartTablet(TestTabletFlags);

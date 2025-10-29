@@ -25,6 +25,7 @@
 #include <ydb/core/test_tablet/test_tablet.h>
 #include <ydb/core/blob_depot/blob_depot.h>
 #include <ydb/core/statistics/aggregator/aggregator.h>
+#include <ydb/core/tablet_flat/flat_executor_recovery.h>
 
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -71,6 +72,10 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         const ui32 selfNode = SelfId().NodeId();
         if (Find(config.GetNode(), selfNode) != config.GetNode().end()) {
             TIntrusivePtr<TTabletStorageInfo> storageInfo = TabletStorageInfoFromProto(config.GetInfo());
+            if (config.HasBootType()) {
+                storageInfo->BootType = BootTypeFromProto(config.GetBootType());
+            }
+
             const auto *appData = AppData();
 
             // extract from kikimr_services_initializer
@@ -79,7 +84,8 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
             if (storageInfo->TabletType == TTabletTypes::TypeInvalid)
                 storageInfo->TabletType = tabletType;
 
-            TIntrusivePtr<TTabletSetupInfo> tabletSetupInfo = MakeTabletSetupInfo(tabletType, appData->UserPoolId, appData->SystemPoolId);
+            TIntrusivePtr<TTabletSetupInfo> tabletSetupInfo = MakeTabletSetupInfo(tabletType, storageInfo->BootType,
+                appData->UserPoolId, appData->SystemPoolId);
 
             TIntrusivePtr<TBootstrapperInfo> bi = new TBootstrapperInfo(tabletSetupInfo.Get());
             for (ui32 node : config.GetNode()) {
@@ -89,9 +95,6 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
                 bi->WatchThreshold = TDuration::MilliSeconds(config.GetWatchThreshold());
             if (config.HasStartFollowers())
                 bi->StartFollowers = config.GetStartFollowers();
-            if (config.HasBootMode()) {
-                storageInfo->BootMode = BootModeFromProto(config.GetBootMode());
-            }
 
             BootstrapperInstance = Register(CreateBootstrapper(storageInfo.Get(), bi.Get(), false), TMailboxType::HTSwap, appData->SystemPoolId);
 
@@ -170,6 +173,7 @@ TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type) {
 
 TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         TTabletTypes::EType tabletType,
+        EBootType bootType,
         ui32 poolId, ui32 tabletPoolId)
 {
     TTabletSetupInfo::TTabletCreationFunc createFunc;
@@ -237,6 +241,10 @@ TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(
         break;
     default:
         return nullptr;
+    }
+
+    if (bootType == EBootType::Recovery) {
+        createFunc = &NTabletFlatExecutor::NRecovery::CreateRecoveryShard;
     }
 
     return new TTabletSetupInfo(createFunc, TMailboxType::ReadAsFilled, poolId, TMailboxType::ReadAsFilled, tabletPoolId);

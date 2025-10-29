@@ -79,17 +79,6 @@ void TabletStorageInfoToProto(const TTabletStorageInfo &info, NKikimrTabletBase:
     }
 }
 
-TTabletStorageInfo::EBootMode BootModeFromProto(NKikimrConfig::TBootstrap::EBootMode mode) {
-    switch (mode) {
-        case NKikimrConfig::TBootstrap_EBootMode_NORMAL:
-            return TTabletStorageInfo::EBootMode::Normal;
-        case NKikimrConfig::TBootstrap_EBootMode_RESTORE:
-            return TTabletStorageInfo::EBootMode::Restore;
-        default:
-            return TTabletStorageInfo::EBootMode::Normal;
-    }
-}
-
 const char* TEvTablet::TEvTabletDead::Str(EReason status) {
     switch (status) {
         TABLET_DEAD_REASON_MAP(ENUM_TO_STRING_IMPL_ITEM)
@@ -111,18 +100,4 @@ void TEvTablet::TEvTabletDead::Out(IOutputStream& os, EReason x) {
 
 Y_DECLARE_OUT_SPEC(, NKikimr::TEvTablet::TEvTabletStop::EReason, o, x) {
     o << NKikimrTabletBase::TEvTabletStop::EReason_Name(x);
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::TTabletStorageInfo::EBootMode, o, x) {
-    switch (x) {
-        case NKikimr::TTabletStorageInfo::EBootMode::Normal:
-            o << "Normal";
-            break;
-        case NKikimr::TTabletStorageInfo::EBootMode::Restore:
-            o << "Restore";
-            break;
-        default:
-            o << "Unknown";
-            break;
-    }
 }

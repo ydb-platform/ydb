@@ -37,7 +37,7 @@ const ibv_port_attr& TRdmaCtx::GetPortAttr() const noexcept {
 }
 
 int TRdmaCtx::GetGidIndex() const noexcept {
-    return Impl->DeviceIndex;
+    return Impl->GidIndex;
 }
 
 const ibv_gid& TRdmaCtx::GetGid() const noexcept {

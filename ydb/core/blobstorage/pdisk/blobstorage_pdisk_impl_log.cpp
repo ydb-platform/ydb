@@ -409,7 +409,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             ui64 minSize = noneSize + sizeof(TSysLogFirstNoncesToKeep);
             Y_VERIFY_S(lastSysLogRecord.size() >= minSize, PCtx->PDiskLogPrefix
                     << "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-            memcpy(&SysLogFirstNoncesToKeep, firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
+            memcpy(&SysLogFirstNoncesToKeep, (const ui8*)firstNoncesToKeep, sizeof(TSysLogFirstNoncesToKeep));
         }
     }
 

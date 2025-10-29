@@ -78,7 +78,7 @@ struct TEvPrivate {
         EvReceivedClusters,
         EvDescribeTopicResult,
         EvExecuteTopicEvent,
-        EvWatermarkIdleness,
+        EvPartitionIdleness,
 
         EvEnd
     };
@@ -88,8 +88,8 @@ struct TEvPrivate {
     // Events
 
     struct TEvSourceDataReady : public TEventLocal<TEvSourceDataReady, EvSourceDataReady> {};
-    struct TEvWatermarkIdleness : public TEventLocal<TEvWatermarkIdleness, EvWatermarkIdleness> {
-        explicit TEvWatermarkIdleness(TInstant notifyTime)
+    struct TEvPartitionIdleness : public TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+        explicit TEvPartitionIdleness(TInstant notifyTime)
             : NotifyTime(notifyTime)
         {}
         TInstant NotifyTime;
@@ -340,7 +340,7 @@ public:
 private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvSourceDataReady, Handle);
-        hFunc(TEvPrivate::TEvWatermarkIdleness, Handle);
+        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvReconnectSession, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -369,8 +369,8 @@ private:
         Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
     }
 
-    void Handle(TEvPrivate::TEvWatermarkIdleness::TPtr& ev) {
-        if (RemovePendingWatermarkIdlenessCheck(ev->Get()->NotifyTime)) {
+    void Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
+        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
             NotifyCA();
         }
     }
@@ -587,7 +587,7 @@ private:
                 PushWatermarkToReady(*watermark);
                 recheckBatch = true;
             }
-            MaybeScheduleNextIdleCheck(now);
+            MaybeSchedulePartitionIdlenessCheck(now);
         }
 
         if (recheckBatch) {
@@ -623,8 +623,8 @@ private:
         TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
     }
 
-    void ScheduleSourcesCheck(TInstant at) override {
-        Schedule(at, new TEvPrivate::TEvWatermarkIdleness(at));
+    void SchedulePartitionInlenessCheck(TInstant at) override {
+        Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
     }
 
     NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {

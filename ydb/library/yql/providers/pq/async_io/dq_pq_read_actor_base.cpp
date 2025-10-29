@@ -165,16 +165,16 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
     );
 }
 
-bool TDqPqReadActorBase::HasEarlierWatermarkIdlenessChecks(TInstant notifyTime) {
+bool TDqPqReadActorBase::HasEarlierPartitionIdlenessChecks(TInstant notifyTime) {
     return !InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime;
 }
 
-void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
+void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime) {
     if (!WatermarkTracker) {
         return;
     }
 
-    RemovePendingWatermarkIdlenessCheck(systemTime);
+    RemoveExpiredPartitionIdlenessCheck(systemTime);
 
     const auto nextIdleCheckAt = WatermarkTracker->GetNextIdlenessCheckAt(systemTime);
     if (!nextIdleCheckAt) {
@@ -182,16 +182,19 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
     }
     Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
 
-    if (!HasEarlierWatermarkIdlenessChecks(*nextIdleCheckAt)) {
-        InflyIdlenessChecks.push_front(*nextIdleCheckAt);
-        SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-        ScheduleSourcesCheck(*nextIdleCheckAt);
+    if (HasEarlierPartitionIdlenessChecks(*nextIdleCheckAt)) {
+        // There are already idleness check scheduled at this or earlier time;
+        // Try to minimize infly checks
+        return;
     }
+    InflyIdlenessChecks.push_front(*nextIdleCheckAt);
+    SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
+    ScheduleSourcesCheck(*nextIdleCheckAt);
 }
 
-bool TDqPqReadActorBase::RemovePendingWatermarkIdlenessCheck(TInstant notifyTime) {
+bool TDqPqReadActorBase::RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime) {
     bool removedAny = false;
-    while (HasEarlierWatermarkIdlenessChecks(notifyTime)) {
+    while (HasEarlierPartitionIdlenessChecks(notifyTime)) {
         InflyIdlenessChecks.pop_front();
         removedAny = true;
     }

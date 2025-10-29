@@ -119,15 +119,15 @@ struct TEvPrivate {
         EvRefreshClusters = EvBegin + 23,
         EvReceivedClusters = EvBegin + 24,
         EvDescribeTopicResult = EvBegin + 25,
-        EvWatermarkIdleness = EvBegin + 26,
+        EvPartitionIdleness = EvBegin + 26,
         EvEnd
     };
     static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
     struct TEvPrintState : public NActors::TEventLocal<TEvPrintState, EvPrintState> {};
     struct TEvProcessState : public NActors::TEventLocal<TEvProcessState, EvProcessState> {};
     struct TEvNotifyCA : public NActors::TEventLocal<TEvNotifyCA, EvNotifyCA> {};
-    struct TEvWatermarkIdleness : public NActors::TEventLocal<TEvWatermarkIdleness, EvWatermarkIdleness> {
-        explicit TEvWatermarkIdleness(TInstant notifyTime)
+    struct TEvPartitionIdleness : public NActors::TEventLocal<TEvPartitionIdleness, EvPartitionIdleness> {
+        explicit TEvPartitionIdleness(TInstant notifyTime)
             : NotifyTime(notifyTime)
         {}
         const TInstant NotifyTime;
@@ -363,7 +363,7 @@ public:
     void Handle(TEvPrivate::TEvPrintState::TPtr&);
     void Handle(TEvPrivate::TEvProcessState::TPtr&);
     void Handle(TEvPrivate::TEvNotifyCA::TPtr&);
-    void Handle(TEvPrivate::TEvWatermarkIdleness::TPtr&);
+    void Handle(TEvPrivate::TEvPartitionIdleness::TPtr&);
     void Handle(TEvPrivate::TEvRefreshClusters::TPtr&);
     void Handle(TEvPrivate::TEvReceivedClusters::TPtr&);
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr&);
@@ -388,7 +388,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, Handle);
         hFunc(TEvPrivate::TEvProcessState, Handle);
         hFunc(TEvPrivate::TEvNotifyCA, Handle);
-        hFunc(TEvPrivate::TEvWatermarkIdleness, Handle);
+        hFunc(TEvPrivate::TEvPartitionIdleness, Handle);
         hFunc(TEvPrivate::TEvRefreshClusters, Handle);
         hFunc(TEvPrivate::TEvReceivedClusters, Handle);
         hFunc(TEvPrivate::TEvDescribeTopicResult, Handle);
@@ -417,7 +417,7 @@ public:
         hFunc(TEvPrivate::TEvPrintState, IgnoreEvent);
         hFunc(TEvPrivate::TEvProcessState, IgnoreEvent);
         hFunc(TEvPrivate::TEvNotifyCA, IgnoreEvent);
-        hFunc(TEvPrivate::TEvWatermarkIdleness, IgnoreEvent);
+        hFunc(TEvPrivate::TEvPartitionIdleness, IgnoreEvent);
         hFunc(TEvPrivate::TEvRefreshClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvReceivedClusters, IgnoreEvent);
         hFunc(TEvPrivate::TEvDescribeTopicResult, IgnoreEvent);
@@ -453,7 +453,7 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
-    void ScheduleSourcesCheck(TInstant) override;
+    void SchedulePartitionInlenessCheck(TInstant) override;
     void InitWatermarkTracker() override;
     void SendStartSession(TSession& sessionInfo);
     void Init();
@@ -772,7 +772,7 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
                 ReadyBuffer.back().Watermark = *idleWatermark;
             }
         }
-        MaybeScheduleNextIdleCheck(now);
+        MaybeSchedulePartitionIdlenessCheck(now);
     }
 
     if (freeSpace == 0 || ReadyBuffer.empty()) {
@@ -818,8 +818,8 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
-void TDqPqRdReadActor::ScheduleSourcesCheck(TInstant at) {
-    Schedule(at, new TEvPrivate::TEvWatermarkIdleness(at));
+void TDqPqRdReadActor::SchedulePartitionInlenessCheck(TInstant at) {
+    Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
 }
 
 void TDqPqRdReadActor::InitWatermarkTracker() {
@@ -1539,8 +1539,8 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
     NotifyCA();
 }
 
-void TDqPqRdReadActor::Handle(TEvPrivate::TEvWatermarkIdleness::TPtr& ev) {
-    if (RemovePendingWatermarkIdlenessCheck(ev->Get()->NotifyTime)) {
+void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
+    if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
 }

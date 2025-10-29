@@ -15,6 +15,8 @@ namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_NCountMinSketchTIndexMeta::DoBuildIndexImpl");
+
     auto sketch = std::unique_ptr<TCountMinSketch>(TCountMinSketch::Create());
 
     for (auto& colReader : reader) {

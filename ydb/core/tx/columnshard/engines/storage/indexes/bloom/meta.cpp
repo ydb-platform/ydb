@@ -14,6 +14,8 @@ namespace NKikimr::NOlap::NIndexes {
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TBloomIndexMeta::DoBuildIndexImpl");
+
     std::deque<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> dataOwners;
     ui32 indexHitsCount = 0;
     for (reader.Start(); reader.IsCorrect();) {
@@ -37,7 +39,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TBloomIndexMeta::DoBui
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
             dataOwners.front(),
-            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
+            [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) 
+            {
+                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TBloomIndexMeta::DoBuildIndexImpl calc for arr");
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {

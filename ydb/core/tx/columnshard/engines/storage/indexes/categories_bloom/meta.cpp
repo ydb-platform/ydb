@@ -91,6 +91,8 @@ public:
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 /*recordsCount*/) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_NCategoriesBloomTIndexMeta::DoBuildIndexImpl");
+
     std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
     for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {

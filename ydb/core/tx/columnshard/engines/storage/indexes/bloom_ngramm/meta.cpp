@@ -163,7 +163,10 @@ public:
 
     template <class TFiller>
     void FillNGrammHashes(const ui32 nGrammSize, const std::shared_ptr<arrow::Array>& array, TFiller& fillData) {
-        AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+        AFL_VERIFY(array->type_id() == arrow::binary()->id() || array->type_id() == arrow::utf8()->id())
+                  ("id", array->type()->ToString());
+        // AFL_VERIFY(array->type_id() == arrow::utf8()->id())("id", array->type()->ToString());
+        // TODO: re-check data
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;
             using T = typename TWrap::T;
@@ -176,6 +179,8 @@ public:
                 }
                 if constexpr (arrow::has_string_view<T>()) {
                     auto value = typedArray.GetView(row);
+                    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TNGrammBuilder::FillNGrammHashes_VALUE")
+                            ("value", TString(value.data(), value.size()));
                     BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
                 } else {
                     AFL_VERIFY(false);
@@ -279,6 +284,8 @@ public:
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
     TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_NBloomNGrammTIndexMeta::DoBuildIndexImpl");
+
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount, CaseSensitive);
 
@@ -301,10 +308,12 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
                     r.GetCurrentChunk(),
                     [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
                         builder.FillNGrammHashes(NGrammSize, arr, inserter);
+                        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TIndexMeta::FillNGrammHashes");
                     },
                     [&](const NJson::TJsonValue& data, const ui32 /*hashBase*/) {
                         auto str = data.GetStringRobust();
                         builder.BuildNGramms(str.data(), str.size(), {}, NGrammSize, inserter);
+                        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "VLAD_TIndexMeta::AddNGrammValue");
                     });
             }
             reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());

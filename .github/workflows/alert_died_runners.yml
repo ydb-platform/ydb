@@ -1,0 +1,37 @@
+name: Alert Died Runners
+
+on:
+  schedule:
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
+  # Can also be triggered manually
+  workflow_dispatch:
+
+jobs:
+  check-queued-jobs:
+    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+        
+    - name: Run queued jobs checker and send to Telegram
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
+        GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
+      run: |
+        python .github/scripts/shutdown_runner_alert.py \
+          --chat-id ${{ vars.GH_ALERTS_TG_CHAT }} \
+          --token ${{ secrets.GITHUB_TOKEN }} \
+          --hours-delta 12 \
+          --max-rows 100

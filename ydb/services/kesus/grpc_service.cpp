@@ -651,10 +651,10 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
                 ActorSystem_->Send(GRpcRequestProxyId_, \
                     new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
-                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE})); \
+                        (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE})); \
             }, \
             &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
-            "Coordination/" #NAME,             \
+            #NAME,  \
             logger, \
             getCounterBlock("coordination", #NAME))->Run(); \
     }
@@ -681,7 +681,7 @@ void TKesusGRpcService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
             },
             *ActorSystem_,
-            "Coordination/Session",
+            "Session",
             getCounterBlock("coordination", "Session", true),
             GET_LIMITER_BY_PATH(GRpcControls.RequestConfigs.CoordinationService_Session.MaxInFlight));
     }

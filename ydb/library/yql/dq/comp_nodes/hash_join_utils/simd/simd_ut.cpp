@@ -185,7 +185,7 @@ Y_UNIT_TEST_SUITE(TSimdAVX2) {
 
     Y_UNIT_TEST(UnpackMask) {
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdAVX2Traits>(2, 1, false);
-        unpackMask.Log<i8>(Cerr);
+        unpackMask.Log<i8>(Cout);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5, -1, 6, 7, -1, 8, 9, -1, 10, 11,
                                                     -1, 12, 13, -1, 14, 15, -1, 16, 17, -1, 18, 19, -1, 20, 21)).All(), true);
     }
@@ -437,8 +437,8 @@ Y_UNIT_TEST_SUITE(SimdFallback) {
 
     Y_UNIT_TEST(UnpackMask) {
         TSimd8<i8> unpackMask = NSimd::CreateUnpackMask<NSimd::TSimdFallbackTraits>(2, 1, false);
-        unpackMask.Log<i8>(Cerr);
-        TSimd8<ui8>((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5)).Value).Log<ui8>(Cerr);
+        unpackMask.Log<i8>(Cout);
+        TSimd8<ui8>((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5)).Value).Log<ui8>(Cout);
         UNIT_ASSERT_EQUAL((unpackMask == TSimd8<i8>(0, 1, -1, 2, 3, -1, 4, 5)).All(), true);
     }
 
@@ -454,9 +454,9 @@ Y_UNIT_TEST_SUITE(SimdFallback) {
             to[i] = i;
             from[i] = 8 - i;
         }
-        ui16 need[8];
-        for (ui8 i = 0; i < 8; i += 1) {
-            need[i] = i % 2 == 0 ? ((ui16*)to)[i] : ((ui16*)from)[i];
+        ui16 need[4];
+        for (ui8 i = 0; i < 4; i += 1) {
+            need[i] = (i % 2 == 0) ? ((ui16*)to)[i] : ((ui16*)from)[i];
         }
 
         const int mask = 0b10101010;

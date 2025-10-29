@@ -17,8 +17,12 @@ class TTableUploader : public TActorBootstrapped<TTableUploader<TData>> {
     static constexpr size_t MaxSchemeRetries = 3;
 
 public:
-    TTableUploader(const TActorId& parentActor, const TScheme::TPtr& scheme, std::unordered_map<TString, std::shared_ptr<TData>>&& data)
+    TTableUploader(const TActorId& parentActor,
+        const TString& database, const TScheme::TPtr& scheme,
+        std::unordered_map<TString, std::shared_ptr<TData>>&& data
+    )
         : ParentActor(parentActor)
+        , Database(database)
         , Scheme(scheme)
         , Data(std::move(data))
     {
@@ -36,13 +40,13 @@ private:
         }
     }
 
-    IActor* CreateUploaderInternal(const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
+    IActor* CreateUploaderInternal(const TString& database, const TString& tablePath, const std::shared_ptr<TData>& data, ui64 cookie);
 
     void DoUpload(const TString& tablePath, const std::shared_ptr<TData>& data) {
         auto cookie = ++Cookie;
 
         auto actorId = TActivationContext::AsActorContext().RegisterWithSameMailbox(
-            CreateUploaderInternal(tablePath, data, cookie)
+            CreateUploaderInternal(Database, tablePath, data, cookie)
         );
         CookieMapping[cookie] = {tablePath, actorId};
     }
@@ -97,7 +101,7 @@ private:
 
     void Handle(NTransferPrivate::TEvRetryTable::TPtr& ev) {
         auto& tablePath = ev->Get()->TablePath;
-        
+
         auto it = Data.find(tablePath);
         if (it == Data.end()) {
             return ReplyErrorAndDie(TStringBuilder() << "Unexpected retry for table '" << tablePath << "'");
@@ -144,6 +148,7 @@ private:
 
 private:
     const TActorId ParentActor;
+    const TString Database;
     const TScheme::TPtr Scheme;
     // Table path -> Data
     std::unordered_map<TString, std::shared_ptr<TData>> Data;

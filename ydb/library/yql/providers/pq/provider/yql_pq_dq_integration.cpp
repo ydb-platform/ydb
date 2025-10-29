@@ -291,7 +291,7 @@ public:
                 auto serializedProto = topicSource.FilterPredicate().Ref().Content();
                 YQL_ENSURE (predicateProto.ParseFromString(serializedProto));
 
-                TString predicateSql = NYql::FormatWhere(predicateProto);
+                TString predicateSql = NYql::FormatPredicate(predicateProto);
                 if (sharedReading) {
                     srcDesc.SetPredicate(predicateSql);
                     srcDesc.SetSharedReading(true);

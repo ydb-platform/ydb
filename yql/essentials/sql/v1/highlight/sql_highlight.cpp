@@ -1,10 +1,11 @@
 #include "sql_highlight.h"
 
+#include "data_language_json.h"
+
 #include <yql/essentials/sql/v1/lexer/regex/regex.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
-#include <library/cpp/json/json_reader.h>
 #include <library/cpp/resource/resource.h>
 
 #include <util/generic/algorithm.h>
@@ -104,6 +105,11 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
 
 template <>
 TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
+    TVector<NSQLTranslationV1::TRegexPattern> hints;
+    for (const TString& type : LoadHints()) {
+        hints.emplace_back(CaseInsensitive(type));
+    }
+
     return {
         .Kind = EUnitKind::OptionIdentifier,
         .Patterns = {
@@ -113,25 +119,16 @@ TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
                 .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
                 .IsCaseInsensitive = true,
             },
-            {
-                .Body = s.Get("ID_PLAIN"),
-                .Before = TStringBuilder() << "WITH" << s.Get("WS"),
-                .IsCaseInsensitive = true,
-            },
-            {
-                .Body = s.Get("ID_PLAIN"),
-                .After = " ?" + s.Get("EQUALS"),
-                .IsCaseInsensitive = true,
-            }},
+            {Merged(std::move(hints))},
+        },
     };
 }
 
 template <>
 TUnit MakeUnit<EUnitKind::TypeIdentifier>(Syntax& s) {
     TVector<NSQLTranslationV1::TRegexPattern> types;
-    NJson::TJsonValue json = NJson::ReadJsonFastTree(NResource::Find("types.json"));
-    for (const NJson::TJsonValue& value : json.GetArraySafe()) {
-        types.emplace_back(CaseInsensitive(value["name"].GetStringSafe()));
+    for (const TString& type : LoadTypes()) {
+        types.emplace_back(CaseInsensitive(type));
     }
 
     return {
@@ -182,13 +179,14 @@ template <>
 TUnit MakeUnit<EUnitKind::StringLiteral>(Syntax& s) {
     return {
         .Kind = EUnitKind::StringLiteral,
+        .RangePatterns = {
+            {R"(')", R"(')", R"re(\\.)re"},
+            {R"(")", R"(")", R"re(\\.)re"},
+            {R"(@@)", R"(@@)", R"re(\@\@\@\@)re"},
+        },
         .Patterns = {{s.Get("STRING_VALUE")}},
         .PatternsANSI = TVector<TRegexPattern>{
             TRegexPattern{s.Get("STRING_VALUE", /* ansi = */ true)},
-        },
-        .RangePattern = TRangePattern{
-            .Begin = R"(@@)",
-            .End = R"(@@)",
         },
         .IsPlain = false,
     };
@@ -198,12 +196,9 @@ template <>
 TUnit MakeUnit<EUnitKind::Comment>(Syntax& s) {
     return {
         .Kind = EUnitKind::Comment,
+        .RangePatterns = {{R"(/*)", R"(*/)"}},
         .Patterns = {{s.Get("COMMENT")}},
         .PatternsANSI = Nothing(),
-        .RangePattern = TRangePattern{
-            .Begin = R"(/*)",
-            .End = R"(*/)",
-        },
         .IsPlain = false,
     };
 }

@@ -42,10 +42,6 @@ public:
         return Program ? Program->DebugString() : "NO_PROGRAM";
     }
 
-    bool HasOverridenProcessingColumnIds() const {
-        return !!OverrideProcessingColumnsVector;
-    }
-
     bool HasProcessingColumnIds() const {
         return !!Program || !!OverrideProcessingColumnsVector;
     }

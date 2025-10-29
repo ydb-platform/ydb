@@ -67,6 +67,7 @@ const TString StaticUserFilesLabel = "UserFiles";
 const TString DynamicUserFilesLabel = "DynamicUserFiles";
 const TString StaticCredentialsLabel = "Credentials";
 const TString DynamicCredentialsLabel = "DynamicCredentials";
+const TString FullCaptureLabel = "FullCapture";
 
 class TUrlLoader: public IUrlLoader {
 public:
@@ -359,7 +360,7 @@ TProgram::TProgram(
 
         auto credList = NYT::NodeToYsonString(credListNode, NYT::NYson::EYsonFormat::Binary);
         QContext_.GetWriter()->Put({FacadeComponent, StaticCredentialsLabel}, credList).GetValueSync();
-    } else if (QContext_.CanRead()) {
+    } else if (QContext_.CaptureMode() == EQPlayerCaptureMode::MetaOnly) {
         Credentials_ = MakeIntrusive<TCredentials>();
         Credentials_->SetUserCredentials({.OauthToken = "REPLAY_OAUTH",
                                           .BlackboxSessionIdCookie = "REPLAY_SESSIONID"});
@@ -533,6 +534,30 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 TString TProgram::GetSourceCode() const {
     return SourceCode_;
+}
+
+bool TProgram::IsFullCaptureReady() const {
+    if (!TypeCtx_ || !QContext_.CanWrite() || QContext_.CaptureMode() != EQPlayerCaptureMode::Full) {
+        return false;
+    }
+
+    for (auto& source : TypeCtx_->DataSources) {
+        if (!source->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    for (auto& sink : TypeCtx_->DataSinks) {
+        if (!sink->IsFullCaptureReady()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void TProgram::CommitFullCapture() const {
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+    }
 }
 
 void TProgram::SetParametersYson(const TString& parameters) {
@@ -734,6 +759,11 @@ void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& fl
             AddSqlFlagsFromPatch(flags, *gatewaysPatch);
         }
     }
+}
+
+bool HasFullCapture(const IQReaderPtr& reader) {
+    auto fullCaptureItem = reader->Get({FacadeComponent, FullCaptureLabel}).GetValueSync();
+    return fullCaptureItem.Defined();
 }
 
 void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& loadedSettings,
@@ -1192,7 +1222,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsync(
                        .AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true)
                        .AddPostTypeAnnotation()
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput")
-                       .AddOptimization()
+                       .AddOptimizationWithLineage(EnableLineage_)
                        .Add(TExprOutputTransformer::Sync(ExprRoot_, exprOut, withTypes), "AstOutput")
                        .Build();
 
@@ -1262,7 +1292,7 @@ TProgram::TFutureStatus TProgram::OptimizeAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimization();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1402,7 +1432,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     pipeline.AddTypeAnnotation(TIssuesIds::CORE_TYPE_ANN, true);
     pipeline.AddPostTypeAnnotation();
     pipeline.Add(TExprOutputTransformer::Sync(ExprRoot_, traceOut), "ExprOutput");
-    pipeline.AddOptimizationWithLineage();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1480,7 +1510,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     pipeline.AddPostTypeAnnotation();
     pipelineConf.AfterTypeAnnotation(&pipeline);
 
-    pipeline.AddOptimizationWithLineage();
+    pipeline.AddOptimizationWithLineage(EnableLineage_);
     if (EnableRangeComputeFor_) {
         pipeline.Add(MakeExpandRangeComputeForTransformer(pipeline.GetTypeAnnotationContext()),
                      "ExpandRangeComputeFor", TIssuesIds::CORE_EXEC);
@@ -1836,10 +1866,17 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CalculateLineage");
+        writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
-            writer.OnKeyedItem("Correct");
-            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnEndMap();
+    }
+    if (TypeCtx_->CorrectStandaloneLineage) {
+        writer.OnKeyedItem("CorrectStandaloneLineage");
+        writer.OnBeginMap();
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
         writer.OnEndMap();
     }
 

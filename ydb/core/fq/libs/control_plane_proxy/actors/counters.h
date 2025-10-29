@@ -174,6 +174,7 @@ enum ERequestTypeCommon {
     RTC_LIST_CPS_ENTITY,
     RTC_RATE_LIMITER,
     RTC_DELETE_FOLDER_RESOURCES,
+    RTC_RESOLVE_QUOTAS,
     RTC_MAX,
 };
 
@@ -235,6 +236,7 @@ class TCounters : public virtual TThrRefBase {
         {MakeIntrusive<TRequestCommonCounters>("ListCPSEntities")},
         {MakeIntrusive<TRequestCommonCounters>("RateLimiter")},
         {MakeIntrusive<TRequestCommonCounters>("DeleteFolderResources")},
+        {MakeIntrusive<TRequestCommonCounters>("ResolveQuotas")},
     });
 
     TTtlCache<TMetricsScope, TRequestScopeCountersPtr, TMap> ScopeCounters{

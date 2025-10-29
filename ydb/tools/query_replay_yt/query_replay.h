@@ -21,6 +21,7 @@ struct TQueryReplayConfig {
     TString QueryFile;
     NActors::NLog::EPriority YqlLogLevel = NActors::NLog::EPriority::PRI_ERROR;
     bool EnableOltpSinkSideBySinkCompare = false;
+    bool Antlr4ParserIsAmbiguityError = false;
 
     void ParseConfig(int argc, const char** argv);
 };
@@ -131,4 +132,4 @@ THashMap<TString, NYql::TKikimrTableMetadataPtr> ExtractStaticMetadata(const NJs
 
 NActors::IActor* CreateQueryCompiler(TIntrusivePtr<NKikimr::NKqp::TModuleResolverState> moduleResolverState,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, std::shared_ptr<NYql::IHTTPGateway> httpGateway,
-    bool enableOltpSink);
+    bool enableOltpSink, bool antlr4ParserIsAmbiguityError);

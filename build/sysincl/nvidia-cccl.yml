@@ -76,6 +76,7 @@
   - cuda/__ptx/instructions/generated/cp_reduce_async_bulk_bf16.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/cp_reduce_async_bulk_bf16.h"
   - cuda/__ptx/instructions/generated/cp_reduce_async_bulk_f16.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/cp_reduce_async_bulk_f16.h"
   - cuda/__ptx/instructions/generated/cp_reduce_async_bulk_tensor.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/cp_reduce_async_bulk_tensor.h"
+  - cuda/__ptx/instructions/generated/elect_sync.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/elect_sync.h"
   - cuda/__ptx/instructions/generated/exit.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/exit.h"
   - cuda/__ptx/instructions/generated/fence.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/fence.h"
   - cuda/__ptx/instructions/generated/fence_mbarrier_init.h: "contrib/libs/nvidia/cccl/libcudacxx/include/cuda/__ptx/instructions/generated/fence_mbarrier_init.h"

@@ -507,8 +507,9 @@ public:
     /// @note YT doesn't store all job traces.
     ///
     /// @see [YT doc](https://ytsaurus.tech/docs/en/api/commands.html#get_job_trace)
-    virtual std::vector<TJobTraceEvent> GetJobTrace(
+    virtual IFileReaderPtr GetJobTrace(
         const TOperationId& operationId,
+        const TJobId& jobId,
         const TGetJobTraceOptions& options = TGetJobTraceOptions()) = 0;
 
     ///

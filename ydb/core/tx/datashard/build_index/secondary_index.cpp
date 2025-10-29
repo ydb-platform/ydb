@@ -101,6 +101,7 @@ protected:
     const TIndexBuildScanSettings ScanSettings;
 
     const ui64 BuildIndexId;
+    const TString DatabaseName;
     const TString TargetTable;
     const TScanRecord::TSeqNo SeqNo;
 
@@ -130,6 +131,7 @@ protected:
     TUploadStatus UploadStatus;
 
     TBuildScanUpload(ui64 buildIndexId,
+                     const TString& databaseName,
                      const TString& target,
                      const TScanRecord::TSeqNo& seqNo,
                      ui64 dataShardId,
@@ -140,6 +142,7 @@ protected:
         : TBase(&TThis::StateWork)
         , ScanSettings(scanSettings)
         , BuildIndexId(buildIndexId)
+        , DatabaseName(databaseName)
         , TargetTable(target)
         , SeqNo(seqNo)
         , DataShardId(dataShardId)
@@ -396,7 +399,9 @@ private:
         LOG_D("Upload, last key " << DebugPrintPoint(KeyTypes, WriteBuf.GetLastKey().GetCells(), *AppData()->TypeRegistry) << " " << Debug());
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable,
+            this->SelfId(),
+            DatabaseName,
+            TargetTable,
             UploadColumnsTypes,
             WriteBuf.GetRowsData(),
             UploadMode,
@@ -412,6 +417,7 @@ class TBuildIndexScan final: public TBuildScanUpload<NKikimrServices::TActivity:
 
 public:
     TBuildIndexScan(ui64 buildIndexId,
+                    const TString& databaseName,
                     const TString& target,
                     const TScanRecord::TSeqNo& seqNo,
                     ui64 dataShardId,
@@ -421,7 +427,7 @@ public:
                     TProtoColumnsCRef targetDataColumns,
                     const TUserTable& tableInfo,
                     const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings)
         , TargetDataColumnPos(targetIndexColumns.size()) {
         ScanTags = BuildTags(tableInfo, targetIndexColumns, targetDataColumns);
         UploadColumnsTypes = BuildTypes(tableInfo, targetIndexColumns, targetDataColumns);
@@ -446,6 +452,7 @@ class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivit
 
 public:
     TBuildColumnsScan(ui64 buildIndexId,
+                      const TString& databaseName,
                       const TString& target,
                       const TScanRecord::TSeqNo& seqNo,
                       ui64 dataShardId,
@@ -454,7 +461,7 @@ public:
                       const NKikimrIndexBuilder::TColumnBuildSettings& columnBuildSettings,
                       const TUserTable& tableInfo,
                       const TIndexBuildScanSettings& scanSettings)
-        : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
+        : TBuildScanUpload(buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, tableInfo, scanSettings) {
         Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
@@ -479,7 +486,8 @@ public:
 
 TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     ui64 buildIndexId,
-    TString target,
+    const TString& databaseName,
+    const TString& target,
     const TScanRecord::TSeqNo& seqNo,
     ui64 dataShardId,
     const TActorId& progressActorId,
@@ -491,10 +499,10 @@ TAutoPtr<NTable::IScan> CreateBuildIndexScan(
     const TIndexBuildScanSettings& scanSettings) {
     if (columnsToBuild.columnSize() > 0) {
         return new TBuildColumnsScan(
-            buildIndexId, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
+            buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, columnsToBuild, tableInfo, scanSettings);
     }
     return new TBuildIndexScan(
-        buildIndexId, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
+        buildIndexId, databaseName, target, seqNo, dataShardId, progressActorId, range, targetIndexColumns, targetDataColumns, tableInfo, scanSettings);
 }
 
 class TDataShard::TTxHandleSafeBuildIndexScan: public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -618,6 +626,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, 
 
         // 3. Creating scan
         TAutoPtr<NTable::IScan> scan = CreateBuildIndexScan(id,
+            request.GetDatabaseName(),
             request.GetTargetName(),
             seqNo,
             request.GetTabletId(),

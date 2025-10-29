@@ -37,8 +37,8 @@ namespace NActors {
         explicit TExecutorPoolBaseMailboxed(ui32 poolId);
         ~TExecutorPoolBaseMailboxed();
         TMailbox* ResolveMailbox(ui32 hint) override;
-        bool Send(TAutoPtr<IEventHandle>& ev) override;
-        bool SpecificSend(TAutoPtr<IEventHandle>& ev) override;
+        bool Send(std::unique_ptr<IEventHandle>& ev) override;
+        bool SpecificSend(std::unique_ptr<IEventHandle>& ev) override;
         TActorId Register(IActor* actor, TMailboxType::EType mailboxType, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) override;
         TActorId Register(IActor* actor, TMailbox* mailbox, const TActorId& parentId) override;

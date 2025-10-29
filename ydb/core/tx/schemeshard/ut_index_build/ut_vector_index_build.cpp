@@ -1,3 +1,4 @@
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
@@ -1708,6 +1709,94 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Unknown build kind");
             UNIT_ASSERT_STRING_CONTAINS(buildIndexHtml, "IsBroken: YES");
         }
+    }
+
+    Y_UNIT_TEST(CreateBuildProposeReject) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "vectors"
+            Columns { Name: "id" Type: "Uint64" }
+            Columns { Name: "embedding" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        NYdb::NTable::TGlobalIndexSettings globalIndexSettings;
+
+        std::unique_ptr<NYdb::NTable::TKMeansTreeSettings> kmeansTreeSettings;
+        {
+            Ydb::Table::KMeansTreeSettings proto;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+                settings {
+                    metric: DISTANCE_COSINE
+                    vector_type: VECTOR_TYPE_FLOAT
+                    vector_dimension: 1024
+                }
+                levels: 5
+                clusters: 4
+            )", &proto));
+            using T = NYdb::NTable::TKMeansTreeSettings;
+            kmeansTreeSettings = std::make_unique<T>(T::FromProto(proto));
+        }
+
+        const auto maxShards = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/vectors")
+            .GetPathDescription().GetDomainDescription().GetSchemeLimits().GetMaxShardsInPath();
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> blocker(runtime, [&](auto& ev) {
+            auto& modifyScheme = *ev->Get()->Record.MutableTransaction(0);
+            if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable) {
+                auto& op = *modifyScheme.MutableCreateTable();
+                // make shard count exceed the limit to fail the operation
+                op.SetUniformPartitionsCount(maxShards+1);
+            }
+            return false;
+        });
+
+        const ui64 buildIndexTx = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            Cout << "BuildIndex 1 " << buildIndexOperation.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_REJECTED,
+                buildIndexOperation.DebugString()
+            );
+            UNIT_ASSERT_STRING_CONTAINS(buildIndexOperation.DebugString(), "Invalid partition count specified");
+        }
+
+        blocker.Stop().Unblock();
+
+        {
+            auto result = ReadSystemTable(runtime, TTestTxConfig::SchemeShard, "SnapshotTables", {"Id", "TableOwnerId", "TableLocalId"}, {"Id"});
+            auto value = NClient::TValue::Create(result);
+            auto rowCount = value["Result"]["List"].Size();
+            UNIT_ASSERT_VALUES_EQUAL_C(rowCount, 0, "Snapshot is not removed after rejecting index build");
+        }
+
+        // The next index build should succeed
+
+        const ui64 buildIndexTx2 = ++txId;
+        AsyncBuildVectorIndex(runtime, buildIndexTx2, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/vectors", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx2);
+
+        {
+            auto buildIndexOperation = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx2);
+            Cout << "BuildIndex 2 " << buildIndexOperation.DebugString() << Endl;
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE,
+                buildIndexOperation.DebugString()
+            );
+        }
+
     }
 
 }

@@ -41,6 +41,7 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
 );
 
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev);
+bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev);
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev);
 
 } // namespace NKikimr::NPQ::NMLP

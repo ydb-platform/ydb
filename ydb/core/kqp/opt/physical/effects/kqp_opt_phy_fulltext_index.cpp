@@ -8,7 +8,7 @@ using namespace NYql::NDq;
 using namespace NYql::NNodes;
 
 TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIndexDescription* indexDesc,
-    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, const TVector<TStringBuf>& indexTableColumns,
+    const NNodes::TExprBase& inputRows, const THashSet<TStringBuf>& inputColumns, TVector<TStringBuf>& indexTableColumns, bool includeDataColumns,
     TPositionHandle pos, NYql::TExprContext& ctx)
 {
     // Extract fulltext index settings
@@ -21,27 +21,27 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     const TString textColumn = settings.columns().at(0).column();
     const auto& analyzers = settings.columns().at(0).analyzers();
     
-    // Serialize analyzer settings for runtime usage
-    TString settingsProto;
-    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
-    
     auto inputRowArg = TCoArgument(ctx.NewArgument(pos, "input_row"));
     auto tokenArg = TCoArgument(ctx.NewArgument(pos, "token"));
+
+    auto readInputRows = inputRows.Maybe<TDqPhyPrecompute>()
+        ? inputRows
+        : Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection<TDqCnUnionAll>()
+                .Output()
+                    .Stage(ReadInputToStage(inputRows, ctx))
+                    .Index().Build("0")
+                    .Build()
+                .Build()
+            .Done();
     
     // Build output row structure for each token
     TVector<TExprBase> tokenRowTuples;
     
-    // Add token column (first column in fulltext index)
-    auto tokenTuple = Build<TCoNameValueTuple>(ctx, pos)
-        .Name().Build(NTableIndex::NFulltext::TokenColumn)
-        .Value(tokenArg)
-        .Done();
-    tokenRowTuples.emplace_back(tokenTuple);
-    
-    // Add all other columns (primary key + data columns)
-    for (const auto& column : indexTableColumns) {
+    indexTableColumns.clear();
+    auto addIndexColumn = [&](const TStringBuf& column) {
+        indexTableColumns.emplace_back(column);
         auto columnAtom = ctx.NewAtom(pos, column);
-        
         if (inputColumns.contains(column)) {
             auto tuple = Build<TCoNameValueTuple>(ctx, pos)
                 .Name(columnAtom)
@@ -50,19 +50,36 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
                     .Name(columnAtom)
                     .Build()
                 .Done();
-            
             tokenRowTuples.emplace_back(tuple);
         } else {
             auto columnType = table.GetColumnType(TString(column));
-            
             auto tuple = Build<TCoNameValueTuple>(ctx, pos)
                 .Name(columnAtom)
                 .Value<TCoNothing>()
                     .OptionalType(NCommon::BuildTypeExpr(pos, *columnType, ctx))
                     .Build()
                 .Done();
-            
             tokenRowTuples.emplace_back(tuple);
+        }
+    };
+
+    // Add token column first
+    indexTableColumns.emplace_back(NTableIndex::NFulltext::TokenColumn);
+    auto tokenTuple = Build<TCoNameValueTuple>(ctx, pos)
+        .Name().Build(NTableIndex::NFulltext::TokenColumn)
+        .Value(tokenArg)
+        .Done();
+    tokenRowTuples.emplace_back(tokenTuple);
+
+    // Add primary key columns
+    for (const auto& column : table.Metadata->KeyColumnNames) {
+        addIndexColumn(column);
+    }
+
+    // Add data columns (covered columns)
+    if (includeDataColumns) {
+        for (const auto& column : indexDesc->DataColumns) {
+            addIndexColumn(column);
         }
     }
     
@@ -83,12 +100,15 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
         .Name().Build(textColumn)
         .Done();
     
-    // Create callable for fulltext tokenization
-    // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
+    // Serialize analyzer settings for FulltextAnalyze
+    TString settingsProto;
+    YQL_ENSURE(analyzers.SerializeToString(&settingsProto));
     auto settingsLiteral = Build<TCoString>(ctx, pos)
         .Literal().Build(settingsProto)
         .Done();
     
+    // Create callable for fulltext tokenization
+    // Format: FulltextAnalyze(text: String, settings: String) -> List<String>
     auto analyzeCallable = ctx.Builder(pos)
         .Callable("FulltextAnalyze")
             .Add(0, textMember.Ptr())
@@ -98,7 +118,7 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
     
     auto analyzeStage = Build<TDqStage>(ctx, pos)
         .Inputs()
-            .Add(inputRows)
+            .Add(readInputRows)
             .Build()
         .Program()
             .Args({"rows"})
@@ -124,31 +144,6 @@ TExprBase BuildFulltextIndexRows(const TKikimrTableDescription& table, const TIn
             .Index().Build("0")
             .Build()
         .Done();
-}
-
-TVector<TStringBuf> BuildFulltextIndexColumns(const TKikimrTableDescription& table, const TIndexDescription* indexDesc) {
-    TVector<TStringBuf> indexTableColumns;
-    THashSet<TStringBuf> indexTableColumnSet;
-
-    // Add token column first (replaces the text column)
-    indexTableColumns.emplace_back(NTableIndex::NFulltext::TokenColumn);
-    indexTableColumnSet.insert(NTableIndex::NFulltext::TokenColumn);
-
-    // Add primary key columns
-    for (const auto& column : table.Metadata->KeyColumnNames) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    // Add data columns (covered columns)
-    for (const auto& column : indexDesc->DataColumns) {
-        if (indexTableColumnSet.insert(column).second) {
-            indexTableColumns.emplace_back(column);
-        }
-    }
-
-    return indexTableColumns;
 }
 
 }

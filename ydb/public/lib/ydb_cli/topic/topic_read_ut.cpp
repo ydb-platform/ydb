@@ -154,7 +154,6 @@ namespace NYdb::NConsoleClient {
 
             const TString topicPath = server.GetTopic();
             auto driver = server.Server->AnnoyingClient->GetDriver();
-            server.Server->AnnoyingClient->CreateConsumer("cli");
             NPersQueue::TPersQueueClient persQueueClient(*driver);
 
             WriteTestData(driver, topicPath, dataToWrite);
@@ -179,7 +178,7 @@ namespace NYdb::NConsoleClient {
 
         NTopic::TReadSessionSettings PrepareReadSessionSettings(const std::string& topicPath) {
             NTopic::TReadSessionSettings settings;
-            settings.ConsumerName("cli");
+            settings.ConsumerName("user");
             settings.AppendTopics(topicPath);
 
             return settings;

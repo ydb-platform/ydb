@@ -217,6 +217,8 @@ namespace NKikimr::NStorage {
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;
         TControlWrapper HullCompThrottlerBytesRate;
+        TControlWrapper GarbageThresholdToRunFullCompactionPerMille;
+        TControlWrapper DefragThrottlerBytesRate;
 
         TControlWrapper ThrottlingDryRun;
         TControlWrapper ThrottlingMinLevel0SstCount;
@@ -234,6 +236,7 @@ namespace NKikimr::NStorage {
 
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
+        TControlWrapper CommonStaticLogChunks;
 
         TReplQuoter::TPtr ReplNodeRequestQuoter;
         TReplQuoter::TPtr ReplNodeResponseQuoter;

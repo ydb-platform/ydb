@@ -14,6 +14,9 @@
 #include "simdjson/generic/ondemand/raw_json_string.h"
 #include "simdjson/generic/ondemand/parser.h"
 
+// JSON builder - needed for extract_into functionality
+#include "simdjson/generic/ondemand/json_string_builder.h"
+
 // All other declarations
 #include "simdjson/generic/ondemand/array.h"
 #include "simdjson/generic/ondemand/array_iterator.h"
@@ -45,4 +48,7 @@
 #include "simdjson/generic/ondemand/token_iterator-inl.h"
 #include "simdjson/generic/ondemand/value_iterator-inl.h"
 
+// JSON builder inline definitions
+#include "simdjson/generic/ondemand/json_string_builder-inl.h"
+#include "simdjson/generic/ondemand/json_builder.h"
 

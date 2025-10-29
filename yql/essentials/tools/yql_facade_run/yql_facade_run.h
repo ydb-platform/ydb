@@ -81,6 +81,7 @@ public:
     TString Token;
     ui64 MemLimit = 0;
     EQPlayerMode QPlayerMode = EQPlayerMode::None;
+    EQPlayerCaptureMode QPlayerCaptureMode = EQPlayerCaptureMode::None;
     TString OperationId;
     TQContext QPlayerContext;
 
@@ -141,6 +142,7 @@ public:
     bool EnableQPlayer = false;
     bool OptimizeLibs = true;
     bool CustomTests = false;
+    bool EnableLineage = false;
 
     void Parse(int argc, const char* argv[]);
 

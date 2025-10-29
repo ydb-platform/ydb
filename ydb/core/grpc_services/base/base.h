@@ -353,8 +353,11 @@ enum class TRateLimiterMode : ui8 {
     RuTopic = 5,
 };
 
+#define RLMODE(mode) \
+    ::NKikimr::NGRpcService::TRateLimiterMode::mode
+
 #define RLSWITCH(mode) \
-    IsRlAllowed() ? mode : TRateLimiterMode::Off
+    IsRlAllowed() ? RLMODE(mode) : RLMODE(Off)
 
 struct TAuditMode {
     using TLogClassConfig = NKikimrConfig::TAuditConfig::TLogClassConfig;
@@ -1632,6 +1635,25 @@ using TGrpcRequestOperationCall = TGrpcRequestCall<TReq, TResp, true, RuntimeEve
 
 template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
 using TGrpcRequestNoOperationCall = TGrpcRequestCall<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
+
+
+// Special case: calls without auth
+template <typename TReq, typename TResp, bool IsOperation, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, IsOperation>>
+class TGrpcRequestCallNoAuth : public TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits> {
+public:
+    using TGrpcRequestCall<TReq, TResp, IsOperation, RuntimeEventType, TMethodAccessorTraits>::TGrpcRequestCall;
+
+    const NYdbGrpc::TAuthState& GetAuthState() const override {
+        static NYdbGrpc::TAuthState noAuthState(false);
+        return noAuthState;
+    }
+};
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, true>>
+using TGrpcRequestOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, true, RuntimeEventType, TMethodAccessorTraits>;
+
+template <typename TReq, typename TResp, NRuntimeEvents::EType RuntimeEventType = NRuntimeEvents::EType::COMMON, class TMethodAccessorTraits = TYdbGrpcMethodAccessorTraits<TReq, TResp, false>>
+using TGrpcRequestNoOperationCallNoAuth = TGrpcRequestCallNoAuth<TReq, TResp, false, RuntimeEventType, TMethodAccessorTraits>;
 
 template <ui32 TRpcId, typename TReq, typename TResp, bool IsOperation, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestWrapper

@@ -48,7 +48,6 @@ public:
 private:
     std::unique_ptr<TExecutor> Executor;
     std::uint32_t ObjectIdRange;
-    bool SaveResult;
 };
 
 int CreateTable(TDatabaseOptions& dbOptions);

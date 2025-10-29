@@ -26,8 +26,8 @@ struct TJsonParserBuffer {
     ui16 NumberValues = 0;
     bool Finished = false;
     TInstant CreationStartTime = TInstant::Now();
-    TVector<ui64> Offsets = {};
-    TVector<ui32> MessageOffsets = {};
+    TVector<ui64> Offsets = {};             // Offsets in topics (seqno).
+    TVector<ui32> MessageOffsets = {};      // Message positions in Values.
 
     bool IsReady() const {
         return !Finished && NumberValues > 0;
@@ -545,11 +545,11 @@ private:
         auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
         auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];        
         ui16 parsedNonOptional = 0;
-        TString json{state.InitialBufferPtr, currentJsonOffset, nextJsonOffset - currentJsonOffset};
-        json += TString(simdjson::SIMDJSON_PADDING, ' ');
+        auto len = nextJsonOffset - currentJsonOffset;
 
+        simdjson::padded_string_view view{state.InitialBufferPtr + currentJsonOffset, len, len + simdjson::SIMDJSON_PADDING}; // SIMDJSON_PADDING already was added to Buffer
         simdjson::ondemand::document document;
-        CHECK_JSON_ERROR(Parser.iterate(json.c_str(), json.size(), json.size()).get(document)) {
+        CHECK_JSON_ERROR(Parser.iterate(view).get(document)) {
             return false;
         }
         for (auto item : document.get_object()) {

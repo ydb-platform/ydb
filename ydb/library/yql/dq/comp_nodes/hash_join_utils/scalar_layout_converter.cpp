@@ -38,7 +38,7 @@ struct IColumnDataExtractor {
 template <typename TLayout, bool Nullable>
 class TFixedSizeColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TFixedSizeColumnDataPacker(TType* type)
+    TFixedSizeColumnDataExtractor(TType* type)
         : Type_(type)
     {}
 
@@ -99,7 +99,7 @@ protected:
 template <bool Nullable>
 class TResourceColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TResourceColumnDataPacker(TType* type)
+    TResourceColumnDataExtractor(TType* type)
         : Type_(type)
     {}
 
@@ -158,7 +158,7 @@ protected:
 
 class TSingularColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TSingularColumnDataPacker(TType* type) {
+    TSingularColumnDataExtractor(TType* type) {
         Y_UNUSED(type);
     }
 
@@ -192,7 +192,7 @@ public:
 template <bool Nullable>
 class TStringColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TStringColumnDataPacker(TType* type)
+    TStringColumnDataExtractor(TType* type)
         : Type_(type)
     {}
 
@@ -289,7 +289,7 @@ protected:
 template <bool Nullable>
 class TTupleColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TTupleColumnDataPacker(std::vector<IColumnDataExtractor::TPtr> children, TType* type)
+    TTupleColumnDataExtractor(std::vector<IColumnDataExtractor::TPtr> children, TType* type)
         : Children_(std::move(children))
         , Type_(type)
     {}
@@ -355,26 +355,26 @@ protected:
 
 template<typename TDate, bool Nullable>
 class TTzDateColumnDataExtractor : public TTupleColumnDataExtractor<Nullable> {
-    using TBase = TTupleColumnDataPacker<Nullable>;
+    using TBase = TTupleColumnDataExtractor<Nullable>;
     using TDateLayout = typename NUdf::TDataType<TDate>::TLayout;
 
 private:
     static std::vector<IColumnDataExtractor::TPtr> MakeChildren(TType* type) {
         std::vector<IColumnDataExtractor::TPtr> children;
-        children.push_back(std::make_unique<TFixedSizeColumnDataPacker<TDateLayout, false>>(type));
-        children.push_back(std::make_unique<TFixedSizeColumnDataPacker<ui16, false>>(type));
+        children.push_back(std::make_unique<TFixedSizeColumnDataExtractor<TDateLayout, false>>(type));
+        children.push_back(std::make_unique<TFixedSizeColumnDataExtractor<ui16, false>>(type));
         return children;
     }
 
 public:
-    TTzDateColumnDataPacker(TType* type) 
-        : TTupleColumnDataPacker<Nullable>(MakeChildren(type), type)
+    TTzDateColumnDataExtractor(TType* type) 
+        : TTupleColumnDataExtractor<Nullable>(MakeChildren(type), type)
     {}
 };
 
 class TExternalOptionalColumnDataExtractor : public IColumnDataExtractor {
 public:
-    TExternalOptionalColumnDataPacker(IColumnDataExtractor::TPtr inner, [[maybe_unused]] TType* type)
+    TExternalOptionalColumnDataExtractor(IColumnDataExtractor::TPtr inner, [[maybe_unused]] TType* type)
         : Inner_(std::move(inner))
     {}
 

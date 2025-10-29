@@ -19,7 +19,7 @@ SRCS(
     bsc_cache.cpp
     cancellation.cpp
     counting_events.cpp
-    corrupted_reads.cpp
+    data_corruption.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

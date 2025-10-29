@@ -10,7 +10,8 @@
 #include "indir.h"
 #include "self_heal.h"
 #include "storage_pool_stat.h"
-#include "blob_checker.h"
+
+#include "blob_checker_events.h"
 #include "blob_checker_planner.h"
 
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
@@ -649,6 +650,8 @@ public:
 
         // a reference to proxy group id when this group is a part of Bridge group
         std::optional<TGroupId> BridgeProxyGroupId;
+
+        bool IsCheckInProgress = false;
 
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
@@ -1559,16 +1562,6 @@ private:
             EvUpdateShredState,
             EvCommitMetrics,
             EvCheckSyncerDisconnectedNodes,
-            
-            // BlobCheckerOrchestrator <-> BSC interface
-            EvBlobCheckerUpdateSettings,
-            EvBlobCheckerUpdateGroupStatus,
-            EvBlobCheckerPlanCheck,
-            EvBlobCheckerDecision,
-            EvBlobCheckerUpdateGroupSet,
-
-            // BlobCheckerWorker <-> BlobCheckerOrchestrator interface
-            EvBlobCheckerFinishQuantum,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1918,6 +1911,7 @@ private:
 
     TScrubState ScrubState;
 
+    void HandleScrubTimer();
     void Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerScrubQuantumFinished::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress::TPtr ev);
@@ -1929,16 +1923,19 @@ private:
 
     TDuration BlobCheckerPeriodicity = TDuration::Zero();
     TActorId BlobCheckerOrchestratorId;
-    TBlobCheckerPlanner BlobCheckerPlanner;
+    std::unique_ptr<TBlobCheckerPlanner> BlobCheckerPlanner;
     TMonotonic NextAllowedBlobCheckerTimestamp = TMonotonic::Zero();
-    std::unordered_map<TGroupId, TString> BlobCheckerSerializedGroupStatuses;
+
+    std::unordered_map<TGroupId, TString> BlobCheckerGroupRecords;
 
     void Handle(const TEvBlobCheckerPlanCheck::TPtr& ev);
     void Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev);
-    void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev);
 
+    bool IsBlobCheckerEnabled() const;
     void UpdateBlobCheckerState();
-    void DequeueCheckForGroup(TGroupId groupId);
+    void UpdateBlobCheckerSettings(TDuration periodicity);
+    void DequeueCheckForGroup(TGroupId groupId, bool notifyOrchestrator);
+    void InitializeBlobCheckerOrchestratorActor();
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Metric collection
@@ -2101,12 +2098,6 @@ private:
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev);
 
-    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    // BlobChecker
-
-    using TSerializedBlobCheckerGroupState = std::unordered_map<ui32, TString>;
-    TSerializedBlobCheckerGroupStates SerializedBlobCheckerGroupStates;
-
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_CONTROLLER_ACTOR;
@@ -2235,11 +2226,11 @@ public:
             hFunc(TEvBlobStorage::TEvControllerScrubQuantumFinished, Handle);
             hFunc(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
-            cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
+            cFunc(TEvPrivate::EvScrub, HandleScrubTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
             hFunc(TEvBlobStorage::TEvControllerShredRequest, ShredState.Handle);
-            hFunc(TEvPrivate::TEvBlobCheckerPlanCheck, Handle);
-            hFunc(TEvPrivate::TEvBlobCheckerUpdateGroupStatus, Handle);
+            hFunc(TEvBlobCheckerPlanCheck, Handle);
+            hFunc(TEvBlobCheckerUpdateGroupStatus, Handle);
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {

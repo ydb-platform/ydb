@@ -73,10 +73,10 @@ struct TEnvironmentSetup {
     };
 
     struct TBSCSettings {
-        bool EnableSelfHeal = true;
-        bool EnableDonorMode = true;
-        bool EnableGroupLayoutSanitizer = false;
-        TDuration BlobCheckerPeriodicity = TDuration::Zero();
+        std::optional<bool> EnableSelfHeal = true;
+        std::optional<bool> EnableDonorMode = true;
+        std::optional<bool> EnableGroupLayoutSanitizer = false;
+        std::optional<TDuration> BlobCheckerPeriodicity = TDuration::Zero();
     };
 
     const TSettings Settings;
@@ -1008,10 +1008,18 @@ config:
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand();
         auto *us = cmd->MutableUpdateSettings();
-        us->AddEnableSelfHeal(settings.EnableSelfHeal);
-        us->AddEnableDonorMode(settings.EnableDonorMode);
-        us->AddEnableGroupLayoutSanitizer(settings.EnableGroupLayoutSanitizer);
-        us->AddBlobCheckerPeriodicity(settings.BlobCheckerPeriodicity);
+        if (settings.EnableSelfHeal) {
+            us->AddEnableSelfHeal(*settings.EnableSelfHeal);
+        }
+        if (settings.EnableDonorMode) {
+            us->AddEnableDonorMode(*settings.EnableDonorMode);
+        }
+        if (settings.EnableGroupLayoutSanitizer) {
+            us->AddEnableGroupLayoutSanitizer(*settings.EnableGroupLayoutSanitizer);
+        }
+        if (settings.BlobCheckerPeriodicity) {
+            us->AddBlobCheckerPeriodicitySeconds(settings.BlobCheckerPeriodicity->Seconds());
+        }
         auto response = Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }

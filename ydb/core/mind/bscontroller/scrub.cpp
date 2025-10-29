@@ -748,7 +748,7 @@ public:
             return false;
         }
 
-        if (group->IsScanPlanned()) {
+        if (group->IsCheckInProgress) {
             return true;
         }
 
@@ -792,7 +792,6 @@ TBlobStorageController::TScrubState::~TScrubState()
 void TBlobStorageController::TScrubState::HandleTimer() {
     Impl->OnTimer(TActivationContext::Now());
     TActivationContext::Schedule(TDuration::Minutes(1), new IEventHandle(Impl->SelfId(), {}, new TEvPrivate::TEvScrub));
-    UpdateBlobCheckerState();
 }
 
 void TBlobStorageController::TScrubState::Clear() {
@@ -846,6 +845,11 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerScrubQuantumFin
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress::TPtr ev) {
     ScrubState.Impl->Handle(ev);
+}
+
+void TBlobStorageController::HandleScrubTimer() {
+    UpdateBlobCheckerState();
+    ScrubState.HandleTimer();
 }
 
 }

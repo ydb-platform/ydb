@@ -5,18 +5,18 @@
 
 #include <util/datetime/base.h>
 #include <ydb/core/base/blobstorage_common.h>
-
-#include "impl.h"
  
 namespace NKikimr {
+namespace NBsController {
 
 // TBlobCheckerPlanner gives timestamps when BlobCheckerOrchestrator is allowed to start check routine
 class TBlobCheckerPlanner {
 public:
     TBlobCheckerPlanner(TDuration periodicity, ui32 groupCount);
+    ~TBlobCheckerPlanner();
 
-    void EnqueueCheck(const TBlobStorageGroupInfo* groupInfo);
-    void EnqueueCheck(const NBsController::TGroupInfo* groupInfo);
+    template <class TInfo>
+    void EnqueueCheck(const TInfo* groupInfo);
     // returns whether there was planned check for given group
     bool DequeueCheck(TGroupId groupId);
 
@@ -35,4 +35,5 @@ private:
     std::unique_ptr<TImpl> Impl;
 };
 
+} // namspace NBsController
 } // namespace NKikimr

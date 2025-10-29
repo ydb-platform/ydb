@@ -117,6 +117,7 @@ public:
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
                 Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
+                Self->BlobCheckerPeriodicity = state.GetValue<T::BlobCheckerPeriodicity>();
             }
         }
 
@@ -547,8 +548,8 @@ public:
             }
         }
 
-        // blob scanner state
-        Self->SerializedBlobCheckerGroupStates.clear();
+        // BlobChecker group statuses
+        Self->BlobCheckerGroupRecords.clear();
         {
             using Table = Schema::BlobCheckerGroupStatus;
             auto groupStatuses = db.Table<Table>().Select();
@@ -556,7 +557,8 @@ public:
                 return false;
             }
             while (groupStatuses.IsValid()) {
-                BlobCheckerSerializedGroupStatuses[groupStatuses.GetKey()] = groupStatuses.GetValue<Table::SerializedState>();
+                TGroupId groupId = TGroupId::FromValue(groupStatuses.GetKey());
+                Self->BlobCheckerGroupRecords[groupId] = groupStatuses.GetValue<Table::SerializedStatus>();
                 if (!groupStatuses.Next()) {
                     return false;
                 }
@@ -722,12 +724,29 @@ public:
             selfId.Send(MakeBlobStorageNodeWardenID(selfId.NodeId()), new NStorage::TEvNodeWardenUpdateCache(std::move(m)));
         }
 
-        // create initial empty BlobChecker status for all groups
+        // BlobChecker
         {
-            for (const auto& [groupId, _] : GroupMap) {
-                if (!BlobCheckerSerializedGroupStatuses.contains(groupId)) {
-                    BlobCheckerSerializedGroupStatuses[groupId] = 
+            Self->BlobCheckerPlanner.reset(new TBlobCheckerPlanner(Self->BlobCheckerPeriodicity,
+                    Self->TotalGroupCount()));
+
+            // Create initial empty BlobChecker status for all groups without this status
+            auto createInitial = [&](TGroupId groupId) {
+                if (!Self->BlobCheckerGroupRecords.contains(groupId)) {
+                    TString serialized = TBlobCheckerGroupStatus::CreateInitialSerialized(TMonotonic::Zero());
+                    Self->BlobCheckerGroupRecords[groupId] = serialized;
                 }
+            };
+
+            for (const auto& [groupId, _] : Self->GroupMap) {
+                createInitial(groupId);
+            }
+
+            for (const auto& [groupId, _] : Self->StaticGroups) {
+                createInitial(groupId);
+            }
+
+            if (Self->IsBlobCheckerEnabled()) {
+                Self->InitializeBlobCheckerOrchestratorActor();
             }
         }
 

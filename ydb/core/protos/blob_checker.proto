@@ -1,7 +1,6 @@
 syntax = "proto3";
 
 import "ydb/core/protos/base.proto";
-import "ydb/core/protos/blobstorage.proto";
 
 package NKikimrBlobChecker;
 

@@ -458,8 +458,14 @@ enum EServiceKikimr {
 
     SCHEMA_SECRET_CACHE = 3800;
 
+<<<<<<< HEAD
     NBS_PARTITION = 3900;
     NBS2_LOAD_TEST = 3901;
+=======
+    // BlobChecker
+    BLOB_CHECKER_ORCHESTRATOR = 3900;
+    BLOB_CHECKER_WORKER = 3901;
+>>>>>>> 43f8ce924b7 (Introduce BlobChecker)
 };
 
 message TActivity {
@@ -1145,7 +1151,7 @@ message TActivity {
         BS_SYNC_SST_WRITER = 676;
         BS_ASYNC_SYNC_SST_COMMITTER = 677;
         NBS2_TEST_WORKLOAD = 678;
-        BLOB_SCANNER_ORCHESTRATOR_ACTOR = 679;
-        BLOB_SCANNER_WORKER_ACTOR = 680;
+        BLOB_CHECKER_ORCHESTRATOR_ACTOR = 679;
+        BLOB_CHECKER_WORKER_ACTOR = 680;
     };
 };

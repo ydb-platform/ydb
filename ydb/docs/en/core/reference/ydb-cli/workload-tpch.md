@@ -82,11 +82,9 @@ See the command description:
 
 ### TPC-H-specific options { #run_tpch_options }
 
-| Name                   | Description                                                                                         | Default value |
-|------------------------|-----------------------------------------------------------------------------------------------------|---------------|
-| `--syntax <value>`     | Which query syntax option should be used, `yql` or `pg`.                                            | `yql`         |
-| `--float_mode <value>` | Float mode. Can be `float`, `decimal` or `decimal_ydb`. If set to `float` - float will be used, `decimal` means that decimal will be used with canonical size and `decimal_ydb` means that all floats will be converted to decimal(22,9) because YDB supports only this type. | `float`           |
-| `--scale <value>`      | Scale factor. See specification of TPC-H.                                                           | 1             |
+| Name                       | Description                                                                                         | Default value |
+|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--ext-query-dir <name>`   | Directory with external queries for load execution. Queries should be in files named `q[1-23].sql`. |               |
 
 ## Test data cleaning { #cleanup }
 

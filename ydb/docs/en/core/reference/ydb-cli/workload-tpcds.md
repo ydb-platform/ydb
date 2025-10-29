@@ -81,11 +81,9 @@ See the command description:
 
 ### TPC-DS-specific options { #run_tpcds_options }
 
-| Name                   | Description                                                                                                                                                                                                                                                                               | Default value |
-|------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------|
-| `--syntax <value>`     | Query syntax option to use: `yql` or `pg`.                                                                                                                                                                                                                                                | `yql`         |
-| `--float_mode <value>` | Float mode. Can be `float`, `decimal`, or `decimal_ydb`. If set to `float`, floats will be used. `decimal` means that decimals will be used with canonical size, and `decimal_ydb` means all floats will be converted to `decimal(22,9)` because YDB supports only this type. | `float`       |
-| `--scale <value>`      | Scale factor. See the TPC-DS specification.                                                                                                                                                                                                                                               | `1`           |
+| Name                       | Description                                                                                         | Default value |
+|----------------------------|-----------------------------------------------------------------------------------------------------|---------------|
+| `--ext-query-dir <name>`   | Directory with external queries for load execution. Queries should be in files named `q[1-99].sql`. |               |
 
 ## Test data cleanup { #cleanup }
 

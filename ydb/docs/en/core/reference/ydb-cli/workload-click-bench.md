@@ -64,7 +64,6 @@ For source files, you can use CSV and TSV files, as well as directories containi
 | `--input <path>` or `-i <path>` | Path to the source data files. Both unpacked and packed CSV and TSV files, as well as directories containing such files, are supported. Data can be downloaded from the official ClickBench website: [csv.gz](https://datasets.clickhouse.com/hits_compatible/hits.csv.gz), [tsv.gz](https://datasets.clickhouse.com/hits_compatible/hits.tsv.gz). To speed up the process, these files can be split into smaller parts, allowing parallel downloads. | |
 | `--state <path>`                | Path to the download state file. If the download is interrupted, it will resume from the same point when restarted.                                                                                                                                                                                                                                                                                                                                           | |
 | `--clear-state`                 | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                                                                                                                                                                                                                                                                                                                                          | |
-| `--dry-run`                     | Do not actually perform import, only generate data and message about it. | |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 
@@ -88,9 +87,13 @@ See the command description to run the load:
 
 ### ClickBench-specific options { #run_clickbench_options }
 
-| Name               | Description                                              | Default value |
-|--------------------|----------------------------------------------------------|---------------|
-| `--syntax <value>` | Query syntax option to use: `yql` or `pg`. | `yql` |
+| Name                                        | Description                                                                                                 | Default value |
+|---------------------------------------------|-------------------------------------------------------------------------------------------------------------|---------------|
+| `--ext-queries <queries>` or `-q <queries>` | External queries to execute during the load, separated by semicolons.                                       |               |
+| `--ext-queries-file <name>`                 | Name of the file containing external queries to execute during the load, separated by semicolons.           |               |
+| `--ext-query-dir <name>`                    | Directory containing external queries for the load. Queries should be in files named `q[0-42].sql`.         |               |
+| `--ext-results-dir <name>`                  | Directory containing external query results for comparison. Results should be in files named `q[0-42].sql`. |               |
+| `--check-canonical` or `-c`                 | Use special deterministic internal queries and compare the results against canonical ones.                  |               |
 
 ## Cleanup test data { #cleanup }
 

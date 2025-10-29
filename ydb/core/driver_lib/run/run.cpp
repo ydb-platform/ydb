@@ -1466,10 +1466,6 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
     }
 
-    if (runConfig.AppConfig.HasSystemTabletConfig()) {
-        AppData->SystemTabletConfig = runConfig.AppConfig.GetSystemTabletConfig();
-    }
-
     // setup resource profiles
     AppData->ResourceProfiles = new TResourceProfiles;
     if (runConfig.AppConfig.GetBootstrapConfig().ResourceProfilesSize())

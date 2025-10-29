@@ -656,7 +656,10 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         test("{\"dt\":100,\"value\"}");     // empty value
         test("{\"dt\":100}");               // no field
         test("{\"dt\":400,\"value\":777}"); // wrong value type
+        test("{}\x80");
+        test("}");
         test("{");
+        writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
         PassAway();
     }
 

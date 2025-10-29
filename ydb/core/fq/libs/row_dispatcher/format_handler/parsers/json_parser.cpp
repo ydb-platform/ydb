@@ -464,7 +464,7 @@ protected:
          if (Config.SkipErrors) {
             OutputOffsets = Buffer.Offsets;
         }
-        TParsingState state{.Buffer = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
+        TParsingState state{.InitialBufferPtr = values, .CurrentBufferPtr = values, .Size = size, .SkipErrors = Config.SkipErrors, .Status = TStatus::Success()};
 
         while (true) {
             auto status = ParseRows(state);
@@ -474,7 +474,7 @@ protected:
             size_t inputRowId = state.OutputRowId + state.ErrorsCount; 
             if (inputRowId < Buffer.MessageOffsets.size()) {
                 auto nextJsonOffset = Buffer.MessageOffsets[inputRowId];
-                state.Buffer = values + nextJsonOffset;
+                state.CurrentBufferPtr = values + nextJsonOffset;
                 state.Size = size - nextJsonOffset;
             } else {
                 break;
@@ -519,7 +519,8 @@ protected:
 
 private: 
     struct TParsingState {
-        const char* Buffer;
+        const char* InitialBufferPtr;
+        const char* CurrentBufferPtr;
         size_t Size;
         bool SkipErrors = false;
         TStatus Status;
@@ -533,19 +534,68 @@ private:
     };
 
 private:
-    
+
+    bool TryParseOneJson(TParsingState& state) {
+        size_t inputRowId = state.OutputRowId + state.ErrorsCount;
+
+        if (inputRowId >= Buffer.MessageOffsets.size() - 1) {
+            return false;
+        }
+
+        auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
+        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];        
+        ui16 parsedNonOptional = 0;
+        TString json{state.InitialBufferPtr, currentJsonOffset, nextJsonOffset - currentJsonOffset};
+        json += TString(simdjson::SIMDJSON_PADDING, ' ');
+
+        simdjson::ondemand::document document;
+        CHECK_JSON_ERROR(Parser.iterate(json.c_str(), json.size(), json.size()).get(document)) {
+            return false;
+        }
+        for (auto item : document.get_object()) {
+            CHECK_JSON_ERROR(item.error()) {
+                return false;
+            }
+            const auto it = ColumnsIndex.find(item.escaped_key().value());
+            if (it == ColumnsIndex.end()) {
+                continue;
+            }
+
+            const size_t columnId = it->second;
+            auto& column = Columns[columnId];
+            const ui64 offset = Buffer.Offsets[inputRowId];
+            bool success = column.ParseJsonValue(offset, state.OutputRowId, item.value(), ParsedValues[columnId][state.OutputRowId]);
+            if (NonOptionalColumnsCount && !column.GetIsOptional()) {
+                ++parsedNonOptional;
+            }
+            if (!success) {
+                return false;
+            }
+        }
+        if (NonOptionalColumnsCount && parsedNonOptional != NonOptionalColumnsCount) {
+            ClearRowBuffer(state.OutputRowId);
+            return false;
+        }
+        return true;
+    }
+
+    EParsingStatus TryToParseOneJson(TParsingState& state, const TStatus& status) {
+        if (!state.SkipErrors) {
+            state.Status = status;
+            return EParsingStatus::Finish;
+        }
+        ClearRowBuffer(state.OutputRowId);
+        if (TryParseOneJson(state)) {
+            state.OutputRowId++;
+            return EParsingStatus::RepeatFromNextJson;
+        }
+        ClearRowBuffer(state.OutputRowId);
+        ++state.ErrorsCount;
+        return EParsingStatus::RepeatFromNextJson;
+    };
+
     EParsingStatus ParseRows(TParsingState& state) {
         LOG_ROW_DISPATCHER_TRACE("Init parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << " size " << state.Size);
-
-        auto check = [this, &state](const TStatus& status) mutable {
-            if (!state.SkipErrors) {
-                state.Status = status;
-                return EParsingStatus::Finish;
-            }
-            ++state.ErrorsCount;
-            ClearRowBuffer(state.OutputRowId);
-            return EParsingStatus::RepeatFromNextJson;
-        };
 
         /*
            Batch size must be at least maximum of document size.
@@ -560,17 +610,16 @@ private:
            Then, after parsing maximum document size will be 27 bytes.
         */
         simdjson::ondemand::document_stream documents;
-        CHECK_JSON_ERROR(Parser.iterate_many(state.Buffer, state.Size, state.Size).get(documents)) {
-            auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.Buffer, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-            return check(status);
+        CHECK_JSON_ERROR(Parser.iterate_many(state.CurrentBufferPtr, state.Size, state.Size).get(documents)) {
+            auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse message batch from offset " << Buffer.Offsets.front() << ", json documents was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+            return TryToParseOneJson(state, status);
         }
 
         for (auto document : documents) {
             size_t inputRowId = state.OutputRowId + state.ErrorsCount;
-
             if (Y_UNLIKELY(inputRowId >= Buffer.NumberValues)) {
-                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << inputRowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(state.Buffer, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return check(status);
+                auto status = TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << inputRowId + 1 << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                return TryToParseOneJson(state, status);
             }
 
             if (state.SkipErrors) {
@@ -579,15 +628,15 @@ private:
 
             const ui64 offset = Buffer.Offsets[inputRowId];
             CHECK_JSON_ERROR(document.error()) {
-                auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.Buffer, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                return check(status);
+                auto status = TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json document was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                return TryToParseOneJson(state, status);
             }
 
             ui16 parsedNonOptional = 0;
             for (auto item : document.get_object()) {
                 CHECK_JSON_ERROR(item.error()) {
-                    auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.Buffer, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
-                    return check(status);
+                    auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json item was corrupted: " << simdjson::error_message(error) << " Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                    return TryToParseOneJson(state, status);
                 }
 
                 const auto it = ColumnsIndex.find(item.escaped_key().value());
@@ -603,7 +652,7 @@ private:
                 }
                 if (Config.SkipErrors && !success) {
                     auto status = column.GetStatus();
-                    return check(status);
+                    return TryToParseOneJson(state, status);
                 }
             }
 
@@ -615,10 +664,12 @@ private:
             state.OutputRowId++;
         }
 
-        if (state.OutputRowId + state.ErrorsCount < Buffer.NumberValues) {
+        if (state.SkipErrors && (state.OutputRowId + state.ErrorsCount < Buffer.NumberValues)) {
             if (documents.truncated_bytes()) {
-                ++state.ErrorsCount;
-                return EParsingStatus::RepeatFromNextJson;
+                size_t inputRowId = state.OutputRowId + state.ErrorsCount;
+                const ui64 offset = Buffer.Offsets[inputRowId];
+                auto status =  TStatus::Fail(EStatusId::BAD_REQUEST, TStringBuilder() << "Failed to parse json message for offset " << offset << ", json batch truncated bytes, size " << documents.truncated_bytes() << ". Current data batch: " << TruncateString(std::string_view(state.CurrentBufferPtr, state.Size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
+                return TryToParseOneJson(state, status);
             } else {
                 state.ErrorsCount = Buffer.NumberValues - state.OutputRowId;
                 return EParsingStatus::Finish;

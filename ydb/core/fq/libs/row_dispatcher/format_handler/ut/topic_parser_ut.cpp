@@ -534,11 +534,16 @@ Y_UNIT_TEST_SUITE(TestJsonParser) {
     Y_UNIT_TEST_F(SkipErrors_NoJson, TJsonParserFixtureSkipErrors) {
         ExpectedBatches = 1;
         CheckSuccess(MakeParser({"a1", "a2"}, "[DataType; String]", [&](ui64 numberRows, TVector<std::span<NYql::NUdf::TUnboxedValue>> /*result*/) {
-            UNIT_ASSERT_VALUES_EQUAL(0, numberRows);
+            UNIT_ASSERT_VALUES_EQUAL(2, numberRows);
         }, false));
 
         Parser->ParseMessages({
-            GetMessage(FIRST_OFFSET, R"(lalala)")
+            GetMessage(FIRST_OFFSET,     R"({"a1": "hello0", "a2": "100"})"),
+            GetMessage(FIRST_OFFSET + 1, "\x80"),
+            GetMessage(FIRST_OFFSET + 2, R"(})"),
+            GetMessage(FIRST_OFFSET + 3, R"(lalala)"),
+            GetMessage(FIRST_OFFSET + 4, R"({"a2": "hello2", "a2": "102"})"),
+            GetMessage(FIRST_OFFSET + 5, "\x80"),
         });
     }
     

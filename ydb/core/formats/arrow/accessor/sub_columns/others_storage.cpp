@@ -268,6 +268,9 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
 NJson::TJsonValue TOthersData::TIterator::GetValue() const {
     AFL_VERIFY(IsValid());
     auto view = Values->GetView(CurrentIndex);
+    if (view.empty()) {
+        return NJson::TJsonValue(NJson::JSON_UNDEFINED);
+    }
     auto data = NBinaryJson::SerializeToJson(TStringBuf(view.data(), view.size()));
     NJson::TJsonValue res;
     AFL_VERIFY(NJson::ReadJsonTree(data, &res));

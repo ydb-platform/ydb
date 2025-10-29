@@ -46,13 +46,7 @@ public:
     std::optional<ui32> GetKeyIndexOptional(const std::string_view keyName) const {
         for (ui32 i = 0; i < DataNames->length(); ++i) {
             const auto arrView = DataNames->GetView(i);
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "GetKeyIndexOptional")
-                ("compare_l", std::string_view(arrView.data(), arrView.size()))
-                ("compare_r", keyName)
-                ;
             if (std::string_view(arrView.data(), arrView.size()) == keyName) {
-                AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "GetKeyIndexOptional")
-                    ("compare", "OK");
                 return i;
             }
         }

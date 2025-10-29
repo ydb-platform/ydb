@@ -13,7 +13,6 @@ private:
     ui32 KeyIndex = 0;
     bool IsValidFlag = false;
     bool HasValueFlag = false;
-    NJson::TJsonValue Value;
     std::string_view RawValue;
     bool IsColumnKeyFlag = false;
 
@@ -22,7 +21,6 @@ private:
         KeyIndex = RemappedKey.value_or(iterator.GetKeyIndex());
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        Value = iterator.GetValue();
         RawValue = iterator.GetRawValue();
     }
 
@@ -31,7 +29,6 @@ private:
         KeyIndex = RemapKeys.size() ? RemapKeys[iterator.GetKeyIndex()] : iterator.GetKeyIndex();
         IsValidFlag = true;
         HasValueFlag = iterator.HasValue();
-        Value = iterator.GetValue();
         RawValue = iterator.GetRawValue();
     }
 
@@ -156,10 +153,7 @@ public:
         return RawValue;
     }
 
-    NJson::TJsonValue GetValue() const {
-        AFL_VERIFY(IsValidFlag);
-        return Value;
-    }
+    NJson::TJsonValue GetValue() const;
 
     bool HasValue() const {
         AFL_VERIFY(IsValidFlag);

@@ -23,15 +23,15 @@ public:
 };
 
 TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
-    auto arr = std::static_pointer_cast<arrow::BinaryArray>(sourceArray);
-    // std::optional<bool> isBinaryJson;
-    // if (arr->type()->id() == arrow::binary()->id()) {
-    //     isBinaryJson = false;
-    // }
-    AFL_VERIFY(arr->type()->id() == arrow::binary()->id());
-    if (!arr->length()) {
+    AFL_VERIFY(sourceArray->type()->id() == arrow::binary()->id() ||
+               sourceArray->type()->id() == arrow::utf8()->id())
+              ("sourceArray->type()->id()", (int)sourceArray->type()->id());
+    if (!sourceArray->length()) {
         return TConclusionStatus::Success();
     }
+    const bool isBinary = sourceArray->type()->id() == arrow::binary()->id();
+    auto arr = std::static_pointer_cast<arrow::BinaryArray>(sourceArray);
+
 #if 0
     simdjson::ondemand::parser simdParser;
     std::vector<simdjson::padded_string> paddedStrings;
@@ -50,6 +50,15 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
             TStringBuf sbJson(view.data(), view.size());
+            std::variant<NBinaryJson::TBinaryJson, TString> serializedJson;
+            if (!isBinary) {
+                serializedJson = NBinaryJson::SerializeToBinaryJson(sbJson);
+                if (std::holds_alternative<TString>(serializedJson)) {
+                    return TConclusionStatus::Fail(std::get<TString>(serializedJson));
+                }
+                auto binaryJson = std::get_if<NBinaryJson::TBinaryJson>(&serializedJson);
+                sbJson = TStringBuf(binaryJson->Data(), binaryJson->Size());
+            }
 #if 0
             if (ForceSIMDJsonParsing) {
                 TString json = NBinaryJson::SerializeToJson(sbJson);
@@ -75,11 +84,9 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
                 std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
                 if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
                     iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
+                } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
+                    iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
                 }
-                // TODO: add support for arrays and scalars if needed
-                // } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
-                //     iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
-                // }
                 while (iterators.size()) {
                     const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);
                     if (conclusion.IsFail()) {

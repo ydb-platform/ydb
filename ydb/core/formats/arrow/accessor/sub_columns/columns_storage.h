@@ -76,8 +76,6 @@ public:
             return std::string_view(view.data(), view.size());
         }
 
-        NJson::TJsonValue GetValue() const;
-
         bool HasValue() const {
             return !CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex));
         }

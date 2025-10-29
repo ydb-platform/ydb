@@ -74,7 +74,8 @@ private:
             FirstLevelOnly = *scanFlag;
         }
         if (auto scanFlag = features.Extract<bool>("FORCE_SIMD_PARSING")) {
-            ForceSIMDJsonParsing = *scanFlag;
+            // ForceSIMDJsonParsing = *scanFlag;
+            (void)scanFlag;
         }
         return TConclusionStatus::Success();
     }
@@ -86,7 +87,7 @@ private:
             return true;
         }
         FirstLevelOnly = proto.GetJsonScanner().GetFirstLevelOnly() || proto.GetSIMDJsonScanner().GetFirstLevelOnly();
-        ForceSIMDJsonParsing = proto.GetJsonScanner().GetForceSIMDJsonParsing();
+        // ForceSIMDJsonParsing = proto.GetJsonScanner().GetForceSIMDJsonParsing();
         return true;
     }
     virtual void DoSerializeToProto(TProto& proto) const override {

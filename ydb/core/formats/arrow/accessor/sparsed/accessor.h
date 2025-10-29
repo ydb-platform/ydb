@@ -70,8 +70,18 @@ public:
     TSparsedArrayChunk(TSparsedArrayChunk&&) = default;
 
     void VisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
-        visitor(ColValue);
-        visitor(DefaultsArray);
+        ui32 prevIndex = 0;
+        for (ui32 idx = 0; idx < UI32ColIndex->length(); ++idx) {
+            auto currentIndex = UI32ColIndex->Value(idx);
+            for (ui32 i = prevIndex; i < currentIndex; ++i) {
+                visitor(DefaultsArray);
+            }
+            visitor(ColValue->Slice(idx, 1));
+            prevIndex = currentIndex + 1;
+        }
+        for (; prevIndex < RecordsCount; ++prevIndex) {
+            visitor(DefaultsArray);
+        }
     }
 
     ui32 GetFinishPosition() const {

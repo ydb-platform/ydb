@@ -125,8 +125,7 @@ public:
     }
 
     TConclusion<NBinaryJson::TBinaryJson> Finish() {
-        auto str = Result.GetStringRobust();
-        auto bJson = NBinaryJson::SerializeToBinaryJson(str);
+        auto bJson = NBinaryJson::SerializeToBinaryJson(Result.GetStringRobust());
         if (const TString* val = std::get_if<TString>(&bJson)) {
             return TConclusionStatus::Fail(*val);
         } else if (const NBinaryJson::TBinaryJson* val = std::get_if<NBinaryJson::TBinaryJson>(&bJson)) {
@@ -136,13 +135,13 @@ public:
         }
     }
 
-    void SetValueByPath(const TString& path, const NJson::TJsonValue& valueStr) {
+    void SetValueByPath(const TString& path, const NJson::TJsonValue& jsonValue) {
         ui32 start = 0;
         bool enqueue = false;
         bool wasEnqueue = false;
         NJson::TJsonValue* current = &Result;
         if (path.empty()) {
-            current->InsertValue(path, valueStr);
+            current->InsertValue(path, jsonValue);
             return;
         }
         for (ui32 i = 0; i < path.size(); ++i) {
@@ -196,7 +195,7 @@ public:
         if (wasEnqueue) {
             AFL_VERIFY(path.size() > start + 2)("path", path)("start", start);
             TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
-            current->InsertValue(key, valueStr);
+            current->InsertValue(key, jsonValue);
         } else {
             AFL_VERIFY(path.size() > start)("path", path)("start", start);
             TStringBuf key(path.data() + start, (path.size()) - start);
@@ -208,11 +207,11 @@ public:
                 if (current->GetArraySafe().size() <= keyIndex) {
                     current->GetArraySafe().resize(keyIndex + 1);
                 }
-                current->GetArraySafe()[keyIndex] = valueStr;
+                current->GetArraySafe()[keyIndex] = jsonValue;
             } else {
                 AFL_VERIFY(!current->IsArray())("key", key)("current", current->GetStringRobust())("full", Result.GetStringRobust())(
                     "current_type", current->GetType());
-                current->InsertValue(key, valueStr);
+                current->InsertValue(key, jsonValue);
             }
         }
     }
@@ -245,15 +244,15 @@ std::shared_ptr<arrow::Array> TSubColumnsArray::BuildBJsonArray(const TColumnCon
             }
         };
 
-        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& valueStr) {
-            value.SetValueByPath(path, valueStr);
+        const auto addValueToJson = [&](const TString& path, const NJson::TJsonValue& jsonValue) {
+            value.SetValueByPath(path, jsonValue);
         };
 
-        auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& value, const bool isColumn) {
+        auto onRecordKV = [&](const ui32 index, const NJson::TJsonValue& jsonValue, const bool isColumn) {
             if (isColumn) {
-                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), value);
+                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), jsonValue);
             } else {
-                addValueToJson(OthersData.GetStats().GetColumnNameString(index), value);
+                addValueToJson(OthersData.GetStats().GetColumnNameString(index), jsonValue);
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);

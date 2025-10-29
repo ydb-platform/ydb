@@ -17,8 +17,9 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
     auto recordsBuilder = TSparsedArray::MakeBuilderBinary(RecordIndexes.size(), DataSize);
-    for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) { // TODO
-        recordsBuilder.AddRecord(RecordIndexes[idx], std::string_view(Values[idx].Data(), Values[idx].Size()));
+    for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
+        const auto& rec = Values[idx];
+        recordsBuilder.AddRecord(RecordIndexes[idx], std::string_view(rec.Data(), rec.Size()));
     }
     Accessor = recordsBuilder.Finish(recordsCount);
 }

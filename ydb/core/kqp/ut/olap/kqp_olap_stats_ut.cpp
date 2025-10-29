@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStats) {
             testHelper.BulkUpsert(testTable, tableInserter);
         }
 
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(10));
 
         auto settings = TDescribeTableSettings().WithTableStatistics(true);
         auto describeResult =

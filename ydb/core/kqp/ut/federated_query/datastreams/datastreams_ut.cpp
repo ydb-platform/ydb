@@ -1001,7 +1001,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::GENERIC_ERROR, status.GetIssues().ToOneLineString());
         const auto& issues = status.GetIssues().ToString();
         UNIT_ASSERT_STRING_CONTAINS(issues, "Couldn't determine external YDB entity type");
-        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database 'local'");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "Describe path 'local/topicName' in external YDB database '/local'");
     }
 
     Y_UNIT_TEST_F(ReadTopic, TStreamingTestFixture) {

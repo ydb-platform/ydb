@@ -31,6 +31,7 @@ public:
 
     virtual void AddLookupTask(ui64 cookie, bool uniqueCheck, const std::vector<TConstArrayRef<TCell>>& keys) = 0;
     virtual bool HasResult(ui64 cookie) = 0;
+    virtual bool IsEmpty(ui64 cookie) = 0;
     virtual void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) = 0;
 
     virtual TTableId GetTableId() const = 0;

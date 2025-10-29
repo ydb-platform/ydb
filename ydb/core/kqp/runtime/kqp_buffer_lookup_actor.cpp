@@ -62,6 +62,8 @@ public:
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Settings.Alloc);
             CookieToLookupState.clear();
         }
+
+        TActorBootstrapped<TKqpBufferLookupActor>::PassAway();
     }
 
     void Terminate() override {
@@ -189,7 +191,7 @@ public:
         auto& state = CookieToLookupState.at(cookie);
         auto& worker = state.Worker;
 
-        AFL_ENSURE(state.ReadsInflight == 0);
+        AFL_ENSURE(state.ReadsInflight == 0); // Only one lookup task per cookie is allowed.
         AFL_ENSURE(state.Worker->AllRowsProcessed());
 
         for (const auto& key : keys) {
@@ -211,8 +213,13 @@ public:
         return state.ReadsInflight == 0 && !state.Worker->AllRowsProcessed();
     }
 
+    bool IsEmpty(ui64 cookie) override {
+        const auto& state = CookieToLookupState.at(cookie);
+        return state.ReadsInflight == 0 && state.Worker->AllRowsProcessed();
+    }
+
     void ExtractResult(ui64 cookie, std::function<void(TConstArrayRef<TCell>)>&& callback) override {
-        AFL_ENSURE(HasResult(cookie));
+        AFL_ENSURE(HasResult(cookie) || IsEmpty(cookie));
         auto& worker = CookieToLookupState.at(cookie).Worker;
         // TODO: stats
         worker->ReadAllResult(callback);

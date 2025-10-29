@@ -1574,6 +1574,11 @@ private:
                     for (const auto& row : GetRows(batch)) {
                         cells.emplace_back();
                         for (const auto& index : lookupInfo.KeyIndexes) {
+                            if (row[index].IsNull()) {
+                                // In case on unique indexes NULL != NULL
+                                cells.pop_back();
+                                break;
+                            }
                             cells.back().push_back(row[index]);
                         }
                     }
@@ -1618,7 +1623,7 @@ private:
         AFL_ENSURE(!ProcessCells.empty());
 
         auto& lookupInfo = PathLookupInfo.at(PathId);
-        if (!lookupInfo.Lookup->HasResult(Cookie)) {
+        if (!lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
             return false;
         }
 
@@ -1697,13 +1702,28 @@ private:
                 for (const auto& batch : ProcessBatches) {
                     for (const auto& row : GetRows(batch)) {
                         const auto key = row.first(keyColumnTypes.size());
-                        const auto& joinedRow = writeRows[keyToProcessCellsIndex.at(key)];
-                        AFL_ENSURE(row.size() <= joinedRow.size());
+                        TConstArrayRef<TCell> joinedRow;
+                        if (const auto it = keyToProcessCellsIndex.find(key); it != keyToProcessCellsIndex.end()) {
+                            joinedRow = writeRows[it->second];
+                            AFL_ENSURE(row.size() <= joinedRow.size());
+                        }
 
                         cells.emplace_back();
                         for (const auto& index : lookupInfo.KeyIndexes) {
-                            AFL_ENSURE(index < joinedRow.size());
-                            cells.back().push_back(index < row.size() ? row[index] : joinedRow[index]);
+                            const TCell* cell = nullptr;
+                            if (index < row.size()) {
+                                cell = &row[index];
+                            } else if (index < joinedRow.size()) {
+                                cell = &joinedRow[index];
+                            }
+
+                            if (!cell || cell->IsNull()) {
+                                // In case on unique indexes NULL != NULL
+                                cells.pop_back();
+                                break;
+                            }
+
+                            cells.back().push_back(*cell);
                         }
                     }
                 }
@@ -1742,11 +1762,10 @@ private:
         AFL_ENSURE(!Writes.empty());
 
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
-            if (pathId != PathId && !lookupInfo.Lookup->HasResult(Cookie)) {
+            if (pathId != PathId && !lookupInfo.Lookup->HasResult(Cookie) && !lookupInfo.Lookup->IsEmpty(Cookie)) {
                 return false;
             }
         }
-
         for (auto& [pathId, lookupInfo] : PathLookupInfo) {
             if (pathId != PathId) {
                 lookupInfo.Lookup->ExtractResult(Cookie, [](TConstArrayRef<TCell>) {

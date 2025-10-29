@@ -32,6 +32,24 @@ TValue TValue::Create(const NKikimrMiniKQL::TResult& result) {
     return TValue::Create(result.GetValue(), result.GetType());
 }
 
+static bool ValueProtobufHasEmptyPayload(const NKikimrMiniKQL::TValue& value) {
+    bool emptyPayload = true;
+    emptyPayload &= (value.value_value_case() == value.VALUE_VALUE_NOT_SET);
+    emptyPayload &= value.GetList().empty();
+    emptyPayload &= value.GetTuple().empty();
+    emptyPayload &= value.GetStruct().empty();
+    emptyPayload &= value.GetDict().empty();
+    emptyPayload &= !value.HasHi128();
+    emptyPayload &= !value.HasVariantIndex();
+    // Non-empty unknown fields are a weird case, as they are not accessible through the wrapper and can only be viewed in the debug dump.
+    // If the value is not considered empty, the wrapper will return a non-empty value, for which no accessor can return a meaningful value.
+    constexpr bool checkUnknownFields = false;
+    if (checkUnknownFields) {
+        emptyPayload = emptyPayload && value.unknown_fields().empty();
+    }
+    return emptyPayload;
+}
+
 bool TValue::HaveValue() const {
     return !IsNull();
 }
@@ -40,16 +58,7 @@ bool TValue::IsNull() const {
     if (&Value == &Null)
         return true;
 
-    bool emptyPayload = true;
-    emptyPayload &= (Value.value_value_case() == Value.VALUE_VALUE_NOT_SET);
-    emptyPayload &= Value.GetList().empty();
-    emptyPayload &= Value.GetTuple().empty();
-    emptyPayload &= Value.GetStruct().empty();
-    emptyPayload &= Value.GetDict().empty();
-    emptyPayload &= !Value.HasHi128();
-    emptyPayload &= !Value.HasVariantIndex();
-    emptyPayload &= Value.unknown_fields().empty();
-    return emptyPayload;
+    return ValueProtobufHasEmptyPayload(Value);
 }
 
 TValue TValue::operator [](const char* name) const {

@@ -16,6 +16,8 @@ namespace NKikimr {
 namespace NKqp {
 
 constexpr ui64 MAX_IN_FLIGHT_LIMIT = 500;
+constexpr ui64 SEQNO_SPACE = 40;
+constexpr ui64 MaxTaskId = (1ULL << (64 - SEQNO_SPACE));
 
 namespace {
 std::vector<std::pair<ui64, TOwnedTableRange>> GetRangePartitioning(const TKqpStreamLookupWorker::TPartitionInfo& partitionInfo,
@@ -498,11 +500,15 @@ private:
 
 class TKqpJoinRows : public TKqpStreamLookupWorker {
 public:
-    TKqpJoinRows(TLookupSettings&& settings, const NMiniKQL::TTypeEnvironment& typeEnv,
+    TKqpJoinRows(TLookupSettings&& settings, ui64 taskId,
+        const NMiniKQL::TTypeEnvironment& typeEnv,
         const NMiniKQL::THolderFactory& holderFactory, const NYql::NDqProto::TTaskInput& inputDesc)
         : TKqpStreamLookupWorker(std::move(settings), typeEnv, holderFactory)
-        , InputDesc(inputDesc) {
-
+        , InputDesc(inputDesc)
+        , InputRowSeqNo(taskId << SEQNO_SPACE)
+        , InputRowSeqNoLast((taskId + 1) << SEQNO_SPACE)
+    {
+        YQL_ENSURE(taskId < MaxTaskId);
         // read columns should contain join key and result columns
         for (auto joinKey : Settings.LookupKeyColumns) {
             ReadColumns.emplace(joinKey->Name, *joinKey);
@@ -537,6 +543,7 @@ public:
             lastRow = cookie.LastRow;
         } else {
             rowSeqNo = InputRowSeqNo++;
+            YQL_ENSURE(InputRowSeqNo < InputRowSeqNoLast);
         }
 
         if (joinKey.HasValue()) {
@@ -1193,6 +1200,7 @@ private:
     absl::flat_hash_map<TOwnedCellVec, TJoinKeyInfo, NKikimr::TCellVectorsHash, NKikimr::TCellVectorsEquals> PendingLeftRowsByKey;
     std::unordered_map<ui64, TResultBatch> ResultRowsBySeqNo;
     ui64 InputRowSeqNo = 0;
+    ui64 InputRowSeqNoLast = 0;
     ui64 JoinKeySeqNo = 0;
     ui64 CurrentResultSeqNo = 0;
     NMiniKQL::TStructType* LeftRowType = nullptr;
@@ -1200,6 +1208,7 @@ private:
 };
 
 std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKqpStreamLookupSettings&& settings,
+    ui64 taskId,
     const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory,
     const NYql::NDqProto::TTaskInput& inputDesc) {
 
@@ -1250,7 +1259,7 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             return std::make_unique<TKqpLookupRows>(std::move(preparedSettings), typeEnv, holderFactory);
         case NKqpProto::EStreamLookupStrategy::JOIN:
         case NKqpProto::EStreamLookupStrategy::SEMI_JOIN:
-            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), typeEnv, holderFactory, inputDesc);
+            return std::make_unique<TKqpJoinRows>(std::move(preparedSettings), taskId, typeEnv, holderFactory, inputDesc);
         default:
             return {};
     }

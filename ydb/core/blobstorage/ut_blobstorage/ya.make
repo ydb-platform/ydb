@@ -20,6 +20,7 @@ SRCS(
     block_race.cpp
     bsc_cache.cpp
     counting_events.cpp
+    data_corruption.cpp
     deadlines.cpp
     decommit_3dc.cpp
     defrag.cpp

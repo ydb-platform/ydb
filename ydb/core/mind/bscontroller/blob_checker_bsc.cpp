@@ -1,8 +1,7 @@
 #include "impl.h"
-#include "blob_checker.h"
+#include "blob_checker_actors.h"
 
 namespace NKikimr {
-
 namespace NBsController {
 
 /////////////////////////////////////////////////////////////////////////////////////
@@ -22,9 +21,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         NIceDb::TNiceDb db(txc.DB);
-        const auto it = Self->BlobCheckerSerializedGroupStatuses.find(GroupId);
-        if (it == Self->BlobCheckerSerializedGroupStatuses.end()) {
-            // race occured, group was deleted, nothing to do
+        const auto it = Self->BlobCheckerGroupRecords.find(GroupId);
+        if (it == Self->BlobCheckerGroupRecords.end()) {
+            // nonexistent group, probably deleted due to race, nothing to do
             return true;
         }
 
@@ -40,47 +39,29 @@ public:
 // Event Handlers
 /////////////////////////////////////////////////////////////////////////////////////
 
-void TBlobStorageController::Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev) {
-    TDuration prev = std::exchange(BlobCheckerPeriodicity, ev->Get()->Periodicity);
-    if (prev == TDuration::Zero()) {
-        if (BlobCheckerPeriodicity == TDuration::Zero()) {
-            // BlobChecker is disabled already
-            return;
-        } else {
-            BlobCheckerPlanner.SetPeriodicity(BlobCheckerPeriodicity);
-            BlobCheckerOrchestratorId = Register(new CreateBlobCheckerOrchestratorActor(
-                    SelfId(), BlobCheckerSerializedGroupStatuses, BlobCheckerPeriodicity));
-        }
-    } else {
-        if (BlobCheckerPeriodicity == TDuration::Zero()) {
-            BlobCheckerPlanner.ResetState();
-            Send(BlobCheckerOrchestratorId, new TEvents::TEvPoisonPill);
-            BlobCheckerOrchestratorId = TActorId{};
-        } else {
-            BlobCheckerPlanner.SetPeriodicity(BlobCheckerPeriodicity);
-            Send(ev->Forward(BlobCheckerOrchestratorId));
-        }
-    }
-}
-
 void TBlobStorageController::Handle(const TEvBlobCheckerUpdateGroupStatus::TPtr& ev) {
     TGroupId groupId = ev->Get()->GroupId;
-    const auto it = BlobCheckerSerializedGroupStatuses.find(groupId);
-    if (it != BlobCheckerSerializedGroupStatuses.end()) {
+    const auto it = BlobCheckerGroupRecords.find(groupId);
+    if (it != BlobCheckerGroupRecords.end()) {
         it->second = ev->Get()->SerializedState;
         if (ev->Get()->FinishScan) {
-            // if BlobCheckerPlanner is disabled DequeueCheck() will do nothing
-            BlobCheckerPlanner.DequeueCheck(groupId);
+            DequeueCheckForGroup(groupId, /*notifyOrchestrator=*/false);
         }
-
         Execute(new TTxBlobCheckerUpdateGroupStatus(groupId, this));
     }
 }
 
 void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
     TGroupId groupId = ev->Get()->GroupId;
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC53, "Handle TEvBlobCheckerPlanCheck",
+            (GroupId, groupId));
+    if (!BlobCheckerPlanner) {
+        Send(BlobCheckerOrchestratorId, new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
+        return;
+    }
+
     TGroupInfo::TGroupFinder finder = [this](TGroupId groupId) { return FindGroup(groupId); };
-    TGroupInfo::TStaticTGroupFinder staticFinder = [this](TGroupId groupId) {
+    TStaticGroupInfo::TStaticGroupFinder staticFinder = [this](TGroupId groupId) -> TStaticGroupInfo* {
         const auto it = StaticGroups.find(groupId);
         if (it == StaticGroups.end()) {
             return nullptr;
@@ -91,12 +72,14 @@ void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
     if (const TGroupInfo* groupInfo = finder(groupId)) {
         TGroupInfo::TGroupStatus status = groupInfo->GetStatus(finder, BridgeInfo.get());
         if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
-            BlobCheckerPlanner.EnqueueCheck(groupInfo);
+            BlobCheckerPlanner->EnqueueCheck(groupInfo);
+            UpdateBlobCheckerState();
         }
     } else if (const TStaticGroupInfo* staticGroupInfo = staticFinder(groupId)) {
         TGroupInfo::TGroupStatus status = staticGroupInfo->GetStatus(staticFinder, BridgeInfo.get());
         if (status.OperatingStatus == NKikimrBlobStorage::TGroupStatus::FULL) {
-            BlobCheckerPlanner.EnqueueCheck(staticGroupInfo->Info.get());
+            BlobCheckerPlanner->EnqueueCheck(staticGroupInfo->Info.get());
+            UpdateBlobCheckerState();
         }
     }
 }
@@ -106,27 +89,82 @@ void TBlobStorageController::Handle(const TEvBlobCheckerPlanCheck::TPtr& ev) {
 /////////////////////////////////////////////////////////////////////////////////////
 
 void TBlobStorageController::UpdateBlobCheckerState() {
+    if (!BlobCheckerPlanner) {
+        return;
+    }
+
     TMonotonic now = TActivationContext::Monotonic();
     if (now >= NextAllowedBlobCheckerTimestamp) {
-        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner.GetNextAllowedCheckTimestamp(now);
+        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner->GetNextAllowedCheckTimestamp(now);
 
-        const std::optional<TGroupId> groupToScan = BlobCheckerPlanner.ObtainNextGroupToCheck();
+        const std::optional<TGroupId> groupToScan = BlobCheckerPlanner->ObtainNextGroupToCheck();
         if (groupToScan) {
+            if (TGroupInfo* groupInfo = FindGroup(*groupToScan)) {
+                groupInfo->IsCheckInProgress = true;
+            }
             Send(BlobCheckerOrchestratorId,
                     new TEvBlobCheckerDecision(*groupToScan, NKikimrProto::OK));
         }
     }
 }
 
-void TBlobStorageController::DequeueCheckForGroup(TGroupId groupId) {
-    bool scanWasPlanned = BlobCheckerPlanner.DequeueCheck(groupId);
-    if (scanWasPlanned) {
-        NextAllowedBlobCheckerTimestamp = BlobCheckerPlanner.GetNextAllowedCheckTimestamp(now);
-        Send(BlobCheckerOrchestratorId,
-                new TEvBlobCheckerDecision(*groupToScan, NKikimrProto::ERROR));
+
+void TBlobStorageController::UpdateBlobCheckerSettings(TDuration periodicity) {
+    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC52, "Updating BlobChecker settings",
+            (OldPeriodicity, BlobCheckerPeriodicity),
+            (NewPeriodicity, periodicity));
+    if (!BlobCheckerPlanner) {
+        // if BlobCheckerPlanner is uninitialized, then TxLoadEverything hasn't finished yet
+        return;
+    }
+
+    bool wasEnabled = IsBlobCheckerEnabled();
+    BlobCheckerPeriodicity = periodicity;
+    if (!wasEnabled) {
+        if (IsBlobCheckerEnabled()) {
+            BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
+            InitializeBlobCheckerOrchestratorActor();
+        } else {
+            return;
+        }
+    } else {
+        if (IsBlobCheckerEnabled()) {
+            BlobCheckerPlanner->SetPeriodicity(BlobCheckerPeriodicity);
+            Send(BlobCheckerOrchestratorId, new TEvBlobCheckerUpdateSettings(periodicity));
+        } else {
+            STLOG(PRI_NOTICE, BS_CONTROLLER, BSC51, "Terminating BlobCheckerOrchestrator actor");
+            BlobCheckerPlanner->ResetState();
+            Send(BlobCheckerOrchestratorId, new TEvents::TEvPoisonPill);
+            BlobCheckerOrchestratorId = TActorId{};
+        }
     }
 }
 
-} // namespace NBsController
+void TBlobStorageController::DequeueCheckForGroup(TGroupId groupId, bool notifyOrchestrator) {
+    bool scanWasPlanned = BlobCheckerPlanner->DequeueCheck(groupId);
+    if (scanWasPlanned) {
+        if (TGroupInfo* groupInfo = FindGroup(groupId)) {
+            groupInfo->IsCheckInProgress = false;
+        }
+        if (notifyOrchestrator) {
+            Send(BlobCheckerOrchestratorId,
+                    new TEvBlobCheckerDecision(groupId, NKikimrProto::ERROR));
+        }
+    }
+}
 
+bool TBlobStorageController::IsBlobCheckerEnabled() const {
+    return BlobCheckerPeriodicity != TDuration::Zero();
+}
+
+void TBlobStorageController::InitializeBlobCheckerOrchestratorActor() {
+    STLOG(PRI_NOTICE, BS_CONTROLLER, BSC50, "Initializing BlobCheckerOrchestrator actor",
+            (BlobCheckerGroupRecordsSize, BlobCheckerGroupRecords.size()),
+            (BlobCheckerPeriodicity, BlobCheckerPeriodicity));
+    BlobCheckerOrchestratorId = Register(CreateBlobCheckerOrchestratorActor(
+            SelfId(), BlobCheckerGroupRecords, BlobCheckerPeriodicity,
+            GetServiceCounters(AppData()->Counters, "storage_pool_stat")));
+}
+
+} // namespace NBsController
 } // namespace NKikimr

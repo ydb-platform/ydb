@@ -1,94 +1,61 @@
-#include "blob_scanner.h"
+#include "blob_checker.h"
+#include "blob_checker_events.h"
 #include "impl.h"
 
 namespace NKikimr {
-
-///////////////////////////////////////////////////////////////////////////////////
-// TBlobCheckerGroupStatus
-///////////////////////////////////////////////////////////////////////////////////
+namespace NBsController {
 
 TBlobCheckerGroupStatus::TBlobCheckerGroupStatus(ui64 status, TMonotonic lastScan,
         TLogoBlobID maxChecked)
     : ShortStatus(status)
     , LastScanFinishedTimestamp(lastScan)
-    , MaxCheckedBlob(blob)
+    , MaxCheckedBlob(maxChecked)
 {}
 
-TBlobCheckerGroupStatus TBlobCheckerGroupStatus::Deserialize(
-        NKikimrBlobChecker::TBlobCheckerGroupStatus serializedState) {
-    ui64 status = serializedState.GetShortStatus();
-    TMonotonic timestamp = reinterpret_cast<TMonotonic>(serializedState.GetLastScanFinishedTimestamp());
-    TLogoBlobID blob = LogoBlobIDFromLogoBlobID(serializedState.GetMaxCheckedBlob());
-    return TBlobCheckerGroupStatus(status, timestamp, blob);
+TBlobCheckerGroupStatus TBlobCheckerGroupStatus::Deserialize(TString serializedStatus) {
+    NKikimrBlobChecker::TBlobCheckerGroupStatus status;
+    if (!status.ParseFromString(serializedStatus)) {
+        Y_DEBUG_ABORT_S("Unable to parse TBlobCheckerGroupStatus from string# "
+                << HexEncode(serializedStatus));
+        return TBlobCheckerGroupStatus{};
+    }
+    ui64 shortStatus = status.GetShortStatus();
+    TMonotonic timestamp = TMonotonic::FromValue(status.GetLastScanFinishedTimestamp());
+    TLogoBlobID blob = LogoBlobIDFromLogoBlobID(status.GetMaxCheckedBlob());
+    return TBlobCheckerGroupStatus(shortStatus, timestamp, blob);
 }
 
-TString TBlobCheckerGroupStatus::CreateInitialSerialized() {
+TString TBlobCheckerGroupStatus::CreateInitialSerialized(TMonotonic now) {
     NKikimrBlobChecker::TBlobCheckerGroupStatus proto;
-    proto.SetShortStatus();
+    proto.SetShortStatus(0);
+    proto.SetLastScanFinishedTimestamp(now.GetValue());
+    LogoBlobIDFromLogoBlobID(TLogoBlobID(0, 0, 0), proto.MutableMaxCheckedBlob());
+    TString serialized;
+    bool success = proto.SerializeToString(&serialized);
+    Y_DEBUG_ABORT_UNLESS(success);
+    return serialized;
 }
 
-///////////////////////////////////////////////////////////////////////////////////
-// Events
-///////////////////////////////////////////////////////////////////////////////////
+TString TBlobCheckerGroupStatus::SerializeProto() const {
+    NKikimrBlobChecker::TBlobCheckerGroupStatus proto;
+    proto.SetShortStatus(ShortStatus);
+    proto.SetLastScanFinishedTimestamp(LastScanFinishedTimestamp.GetValue());
+    LogoBlobIDFromLogoBlobID(MaxCheckedBlob, proto.MutableMaxCheckedBlob());
+    TString serialized;
+    bool success = proto.SerializeToString(&serialized);
+    Y_VERIFY_DEBUG_S(success, ToString());
+    return serialized;
+}
 
-TEvBlobCheckerFinishQuantum::TEvBlobCheckerFinishQuantum(TGroupId groupId, EBlobCheckerWorkerQuantumStatus quantumStatus,
-        TLogoBlobID maxCheckedBlob, ui32 unknownDataStatusCount, ui32 unknownPlacementStatusCount,
-        std::vector<TLogoBlobID>&& blobsWithDataIssues, ui32 placementIssuesCount)
-    : GroupId(groupId)
-    , QuantumStatus(quantumStatus)
-    , MaxCheckedBlob(maxCheckedBlob)
-    , UnknownDataStatusCount(unknownDataStatusCount)
-    , UnknownPlacementStatusCount(unknownPlacementStatusCount)
-    , BlobsWithDataIssues(std::forward<std::vector<TLogoBlobID>>(blobsWithDataIssues))
-    , PlacementIssuesCount(placementIssuesCount)
-{}
-
-TString TEvBlobCheckerFinishQuantum::ToString() const {
+TString TBlobCheckerGroupStatus::ToString() const {
     TStringStream str;
-    str << "TEvBlobCheckerFinishQuantum {";
-    str << " GroupId# " << GroupId.GetRawId();
-    str << " QuantumStatus# " << BlobCheckerWorkerQuantumStatusToString(QuantumStatus);
-    str << " MaxCheckedBlob# " << MaxCheckedBlob.ToString();
-    str << " UnknownDataStatusCount# " << UnknownDataStatusCount;
-    str << " UnknownPlacementStatusCount# " << UnknownPlacementStatusCount;
-    str << " BlobsWithDataIssues# " << BlobsWithDataIssues.size();
-    str << " PlacementIssuesCount# " << PlacementIssuesCount;
-    str << " }";
-
+    str << "TBlobCheckerGroupStatus {"
+        << " ShortStatus# " << ShortStatus
+        << " LastScanFinishedTimestamp# " << LastScanFinishedTimestamp
+        << " MaxCheckedBlob# " << MaxCheckedBlob.ToString()
+        << " }";
     return str.Str();
 }
-
-TEvBlobCheckerUpdateGroupStatus::TEvBlobCheckerUpdateGroupStatus(
-        TGroupId groupId, TString serializedState, bool finishScan)
-    : GroupId(groupId)
-    , SerializedState(serializedState)
-    , FinishScan(finishScan)
-{}
-
-TEvBlobCheckerUpdateGroupSet::TEvBlobCheckerUpdateGroupSet(
-        std::unordered_map<TGroupId, TString>&& newGroups,
-        std::vector<TGroupId>&& deletedGroups)
-    : NewGroups(std::forward<std::unordered_map<TGroupId, TString>>(newGroups))
-    , DeletedGroups(std::forward<std::vector<TGroupId>>(deletedGroups))
-{}
-
-TEvBlobCheckerPlanCheck::TEvBlobCheckerPlanCheck(TGroupId groupId)
-    : GroupId(groupId)
-{}
-
-TEvBlobCheckerDecision::TEvBlobCheckerDecision(TGroupId groupId,
-        NKikimrProto::EReplyStatus status)
-    : GroupId(groupId)
-    , Status(status)
-{}
-
-TEvBlobCheckerDecision::TEvBlobCheckerUpdateSettings(TDuration periodicity)
-    : Periodicity(periodicity)
-{}
-
-///////////////////////////////////////////////////////////////////////////////////
-// Misc
-///////////////////////////////////////////////////////////////////////////////////
 
 TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus value) {
     switch (value) {
@@ -101,338 +68,5 @@ TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus v
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////////
-// TBlobCheckerWorker
-///////////////////////////////////////////////////////////////////////////////////
-
-class TBlobCheckerWorker : public TActorBootstrapped<TBlobCheckerWorker> {
-public:
-    TBlobCheckerWorker(TGroupId groupId, TActorId orchestratorActorId)
-        : GroupId(groupId)
-        , OrchestratorActorId(orchestratorActorId)
-    {}
-
-    void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_SCANNER_WORKER_ACTOR, BSW01, "Bootstrapping BlobScannerWorker",
-                (GroupId, GroupId));
-
-        SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvAssimilate(
-                std::nullopt, std::nullopt, std::nullopt, /*ignoreDecommitState=*/true,
-                /*reverse=*/false));
-        Become(TThis::StateAssimilating);
-    }
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BLOB_SCANNER_WORKER_ACTOR;
-    }
-
-private:
-    STRICT_STFUNC(TThis::StateAssimilating, {
-        hFunc(TEvBlobStorage::TEvAssimilateResult, Handle);
-        cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-    });
-
-    STRICT_STFUNC(TThis::StateCheckingIntegrity, {
-        hFunc(TEvBlobStorage::TEvCheckIntegrityResult, Handle);
-        cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
-    });
-
-private:
-    void Handle(const TEvBlobStorage::TEvAssimilateResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BLOB_SCANNER_WORKER_ACTOR, BSW10, "Handle TEvAssimilateResult",
-                (GroupId, GroupId),
-                (Event, ev->Get()->ToString()));
-
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            // Unable to collect blobs to check from group
-            // We terminate worker and try again later
-            FinishQuantum(EBlobCheckerWorkerQuantumStatus::Error);
-        }
-        BlobsToCheck.swap(ev->Get()->Blobs);
-        // assure that BlobsToCheck queue is sorted
-        std::sort(BlobsToCheck.begin(), BlobsToCheck.end());
-        Become(TThis::StateCheckingIntegrity);
-
-        QuantumStart = TActivationContext::Monotonic();
-        CheckNext();
-    }
-
-    void Handle(const TEvBlobStorage::TEvCheckIntegrityResult::TPtr& ev) {
-        STLOG(PRI_DEBUG, BLOB_SCANNER_WORKER_ACTOR, BSW11, "Handle TEvCheckIntegrityResult",
-                (GroupId, GroupId),
-                (Event, ev->Get()->ToString()));
-
-        const TEvBlobStorage::TEvCheckIntegrityResult* res = ev->Get();
-        if (res->Status != NKikimrProto::OK) {
-            // Most likely CheckIntegrity fails when group is in DISINTEGRATED state
-            // or when it is deleted
-            // In either case we should stop worker
-            FinishQuantum(EBlobCheckerWorkerQuantumStatus::Error);
-            return;
-        }
-
-        TLogoBlobId blobId = res->Id;
-        MaxCheckedBlob = std::max(MaxCheckedBlob, blobId);
-
-        switch (res->Get()->PlacementStatus) {
-            case TEvBlobStorage::TEvCheckIntegrityResult::PS_UNKNOWN:
-            case TEvBlobStorage::TEvCheckIntegrityResult::PS_REPLICATION_IN_PROGRESS:
-                ++UnknownPlacementStatusCount;
-                break;
-            case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_LOST:
-            case TEvBlobStorage::TEvCheckIntegrityResult::PS_BLOB_IS_RECOVERABLE:
-                ++PlacementIssuesCount;
-                break;
-            case TEvBlobStorage::TEvCheckIntegrityResult::PS_OK:
-            default:
-                break; // nothing to do
-        }
-
-        switch (res->Get()->DataStatus) {
-            case TEvBlobStorage::TEvCheckIntegrityResult::DS_UNKNOWN:
-                ++UnknownDataStatusCount;
-                break;
-            case TEvBlobStorage::TEvCheckIntegrityResult::DS_ERROR:
-                BlobsWithDataIssues.push_back(blobId);
-                break;
-            case TEvBlobStorage::TEvCheckIntegrityResult::DS_OK:
-            default:
-                break; // nothing to do
-        }
-
-        CheckNext();
-    }
-
-    void CheckNext() {
-        TMonotonic now = TActivationContext::Monotonic();
-
-        if (BlobsToCheck.empty()) {
-            // All blobs successfully checked
-            FinishQuantum(EBlobCheckerWorkerQuantumStatus::FinishOk);
-            return;
-        }
-
-        if (now - QuantumStart > QuantumDuration) {
-            // Report intermeidate status and write MaxCheckedBlob on disk to save checker progress
-            FinishQuantum(EBlobCheckerWorkerQuantumStatus::IntermediateOk);
-        }
-
-        TLogoBlobID blobId = BlobsToCheck.front();
-        BlobsToCheck.pop_front();
-
-        STLOG(PRI_DEBUG, BLOB_SCANNER_WORKER_ACTOR, BSW12, "Send TEvCheckIntegrity",
-                (GroupId, GroupId),
-                (BlobId, blobId.ToString()));
-
-        SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvCheckIntegrity(blobId, TInstant::Max(),
-                NKikimrBlobStorage::EGetHandleClass::LowRead, true));
-    }
-
-    void FinishQuantum(EBlobCheckerWorkerQuantumStatus quantumStatus) {
-        STLOG(PRI_DEBUG, BLOB_SCANNER_WORKER_ACTOR, BSW20, "Finish Quantum",
-                (GroupId, GroupId),
-                (QuantumStatus, BlobCheckerWorkerQuantumStatusToString(quantumStatus)));
-
-        Send(OrchestratorActorId, new TEvBlobCheckerFinishQuantum(GroupId, quantumStatus, MaxCheckedBlob,
-                std::exchange(UnknownDataStatusCount, 0),
-                std::exchange(UnknownPlacementStatusCount, 0),
-                std::move(BlobsWithDataIssues),
-                std::exchange(PlacementIssuesCount, 0)));
-
-        if (quantumStatus != EBlobCheckerWorkerQuantumStatus::IntermediateOk) {
-            PassAway();
-            return;
-        }
-
-        QuantumStart = TActivationContext::Monotonic();
-    }
-
-private:
-    constexpr static TDuration QuantumDuration = TDuration::Minutes(30);
-
-private:
-    TGroupId GroupId;
-    TActorId OrchestratorActorId;
-
-    std::deque<TLogoBlobID> BlobsToCheck;
-
-    // Unable to resolve status, some disks are unavailable or replicating
-    ui32 UnknownDataStatusCount = 0;
-    ui32 UnknownPlacementStatusCount = 0;
-
-    // Certain problems
-    std::vector<TLogoBlobID> BlobsWithDataIssues = {}; // The most severe issue, report full list
-    ui32 PlacementIssuesCount = 0;
-
-    TMonotonic QuantumStart;
-    TLogoBlobID MaxCheckedBlob = TLogoBlobID{};
-};
-
-///////////////////////////////////////////////////////////////////////////////////
-// TBlobCheckerOrchestrator
-///////////////////////////////////////////////////////////////////////////////////
-
-class TBlobCheckerOrchestrator : public TActorBootstrapped<TBlobCheckerOrchestrator> {
-public:
-    TBlobCheckerOrchestrator(TActorId bscActorId,
-            std::unordered_map<TGroupId, TString>&& serializedGroups,
-            TDuration periodicity)
-        : BSCActorId(bscActorId)
-    {
-        AddGroups(serializedGroups)
-    }
-
-    void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO01, "Bootstrapping BlobScannerOrchestrator");
-        Become(TThis::StateFunc);
-        HandleWakeup();
-    }
-
-    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
-        return NKikimrServices::TActivity::BLOB_SCANNER_ORCHESTRATOR_ACTOR;
-    }
-
-private:
-    STRICT_STFUNC(StateFunc, {
-        hFunc(TEvBlobCheckerFinishQuantum, Handle);
-        cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
-        hFunc(TEvBlobCheckerUpdateGroupSet, Handle);
-        hFunc(TEvBlobCheckerDecision, Handle);
-        hFunc(TEvBlobCheckerUpdateSettings, Handle);
-        cFunc(TEvent::TEvWakeup::EventType, HandleWakeup);
-    })
-
-private:
-    void HandlePoison() {
-        STLOG(PRI_NOTICE, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO30, "Received Poison",
-                (ActiveWorkers, ActiveWorkers.size()));
-
-        for (const TActorId& actorId : ActiveWorkers) {
-            Send(actorId, new TEvents::TEvPoisonPill);
-        }
-
-        PassAway();
-    }
-
-    void Handle(const TEvBlobCheckerUpdateGroupSet::TPtr& ev) {
-        AddGroups(std::move(ev->Get()->NewGroups));
-        for (const TGroupId groupId : ev->Get()->DeletedGroups) {
-            const auto it = Groups.find(groupId);
-            if (it != Group.end()) {
-                TGroupCheckStatus& status = it->second;
-                if (status.WorkerId) {
-                    Send(*status.WorkerId, new TEvents::TEvPoisonPill);
-                }
-                Groups.erase(it);
-            }
-        }
-    }
-
-    void Handle(const EvBlobCheckerDecision::TPtr& ev) {
-        TGroupId groupId = ev->Get()->GroupId;
-        STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO21, "Got decision from BSC",
-                (GroupId, groupId),
-                (Status, NKikimrProto::EReplyStatus_Name(ev->Get()->Status)));
-
-        const auto it = Groups.find(groupId);
-        if (it == Groups.end()) {
-            Y_DEBUG_ABORT_S("Unknown GroupId# " << groupId);
-            return;
-        }
-
-        TGroupCheckStatus& status = it->second;
-
-        TMonotonic now = TActivationContext::Monotonic();
-        switch (ev->Get()->Status) {
-        case NKikimrProto::OK: {
-            status.WorkerId.emplace(Register(CreateBlobCheckerWorkerActor(groupId, SelfId())));
-        }
-        case NKikimrProto::ERROR:
-            if (status.WorkerId) {
-                Send(*status.WorkerId, new TEvents::TEvPoisonPill);
-                status.WorkerId.reset();
-            }
-            OutgoingRequests.insert(now + RetryDelay, groupId);
-        }
-    }
-
-    void Handle(const TEvBlobCheckerFinishQuantum::TPtr& ev) {
-        TGroupId groupId = ev->Get()->GroupId;
-        STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO20, "Worker finished quantum",
-                (Event, ev->Get()->ToString()));
-
-        auto it = Groups.find(groupId);
-        if (it == Groups.end()) {
-            // Group was deleted, nothing to do
-            return;
-        }
-
-        Send(BSCActorId, new TEvBlobCheckerUpdateGroupStatus(
-                groupId, ));
-    }
-
-    void Handle(const TEvBlobCheckerUpdateSettings::TPtr& ev) {
-        
-    }
-
-    void HandleWakeup() {
-        if (!OutgoingRequests.empty()) {
-            TMonotonic now = TActivationContext::Monotonic();
-            TGroupId groupId = OutgoingRequests.begin()->second;
-            OutgoingRequests.erase(OutgoingRequests.begin());
-            SendRequest(groupId);
-        }
-        Schedule(BSCRequestDelay, new TEvents::TEvWakeup);
-    }
-
-private:
-    void AddGroups(std::unordered_map<TGroupId, TString>&& newGroups) {
-        STLOG(PRI_DEBUG, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO10, "Adding new groups",
-                (NewGroupsCount, newGroups.size()));
-        for (const auto& [groupId, serializedState] : newGroups) {
-            Groups[groupId].State = TBlobCheckerGroupStatus::Deserialize(serializedState);
-        }
-    }
-
-    void SendRequest(TGroupId groupId) {
-        STLOG(PRI_NOTICE, BLOB_SCANNER_ORCHESTRATOR_ACTOR, BSO22, "Sending request to BSC",
-                (GroupId, groupId));
-        Send(BSCActorId, new TEvBlobCheckerPlanCheck(groupId))
-    }
-
-private:
-    // TODO: set it via ICB or something
-    constexpr static TDuration GroupCheckPeriodicity = TDuration::Days(30);
-    constexpr static TDuration BSCRequestDelay = TDuration::Minutes(1);
-    // TODO: something smarter
-    constexpr static TDuration RetryDelay = TDuration::Hours(1);
-
-private:
-    struct TGroupCheckStatus {
-        TBlobCheckerGroupStatus State;
-        std::optional<TActorId> WorkerId;
-    };
-
-private:
-    TActorId BSCActorId;
-
-    std::unordered_map<TGroupId, TGroupCheckStatus> Groups;
-    std::multimap<TMonotonic, TGroupId> OutgoingRequests;
-};
-
-///////////////////////////////////////////////////////////////////////////////////
-// Actor Creators
-///////////////////////////////////////////////////////////////////////////////////
-
-NActors::IActor* CreateBlobCheckerOrchestratorActor(TActorId bscActorId,
-        std::unordered_map<TGroupId, TString> serializedGroups,
-        TDuration periodicity) {
-    return new TBlobCheckerOrchestrator(bscActorId, std::move(serializedGroups),
-            periodicity);
-}
-
-NActors::IActor* CreateBlobCheckerWorkerActor(TGroupId groupId, TActorId orchestratorId) {
-    return new TBlobCheckerWorker(TGroupId groupId, TActorId orchestratorId);
-}
-
+} // namspace NBsController
 } // namespace NKikimr

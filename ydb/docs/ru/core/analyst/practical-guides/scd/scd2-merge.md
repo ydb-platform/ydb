@@ -1,6 +1,6 @@
 # Использование процесса подмерживания изменения для реализации SCD2 в {{ ydb-full-name }} 
 
-В этой статье описывается реализация паттерна Slowly Changing Dimensions Type 2 (SCD2) в {{ ydb-full-name }} с использованием процесса подмерживания изменений.
+В этой статье описывается реализация паттерна [Slowly Changing Dimensions Type 2 (SCD2)](./index.md#scd2) в {{ ydb-full-name }} с использованием процесса подмерживания изменений.
 
 ## Используемые инструменты
 
@@ -9,7 +9,13 @@
 1. Таблица-источник `dimension_scd_changes`, содержащая информацию об атрибутах, их значениях и моментах изменений данных.
 1. Таблица-приёмник `dimension_scd2_final` для хранения результирующих данных.
 1. Периодически внешнее приложение должно вызывать запрос, который будет подмерживать изменения данных, накопившиеся в таблице `dimension_scd_changes`, в таблицу `dimension_scd2_final`.
-1. Для поставки данных из OLTP-таблиц для хранения их в формате SCD2 удобно использовать встроенный в {{ydb-short-name}} механизм [трансфер](../../../concepts/transfer.md).
+1. Для поставки данных из строковых таблиц для хранения их в формате SCD2 удобно использовать встроенный в {{ydb-short-name}} механизм [трансфера](../../../concepts/transfer.md).
+
+{% note info %}
+
+Таблицы `dimension_scd_changes`, `dimension_scd2_final` приведены для иллюстрации. Для реальных запросов вам нужно скорректировать структуру таблиц и их атрибутов.
+
+{% endnote %}
 
 ## Создание таблицы для приёма всех изменений `dimension_scd_changes`
 
@@ -22,7 +28,7 @@ CREATE TABLE dimension_scd_changes (
     operation Utf8, -- Тип изменений данных
     PRIMARY KEY (change_time, id)
 )
-WITH(
+WITH (
     STORE=COLUMN
 )
 ```
@@ -34,7 +40,7 @@ WITH(
 - `change_time` — момент времени изменения данных;
 - `operation` — тип изменения данных: `CREATE`, `UPDATE`, `DELETE`.
 
-Первичный ключ создается как `PRIMARY KEY (change_time, id)`, так как по одному и тому же ключу данных может происходить множество изменений и все эти изменения по одному ключу важно сохранять.
+Первичный ключ создается как `PRIMARY KEY (change_time, id)`, так как по одному и тому же бизнес-ключу данных может происходить множество изменений и все эти изменения по одному ключу важно сохранять.
 
 ## Создание финальной SCD2 таблицы `dimension_scd2_final`
 
@@ -61,17 +67,11 @@ WITH(
 - `id` — бизнес-ключ записи;
 - `attribute1`, `attribute2` — атрибуты измерения;
 - `valid_from` — момент времени, с которого запись становится актуальной;
-- `valid_to` — момент времени, до которого запись была актуальной (NULL для текущих записей);
-- `is_current` — флаг, указывающий, является ли запись текущей (1) или исторической (0);
-- `is_deleted` — флаг, указывающий, была ли запись удалена (1) или нет (0).
+- `valid_to` — момент времени, до которого запись была актуальной, или `NULL` для текущих записей;
+- `is_current` — флаг, указывающий, является ли запись текущей (1 - текущая запись) или (0 - запись историческая);
+- `is_deleted` — флаг, указывающий, была ли запись удалена (1 - запись была удалена) или (0 - запись не была удалена).
 
 Первичный ключ создается как `PRIMARY KEY (valid_from, id)`, так как по одному и тому же ключу данных может происходить множество изменений и все эти изменения по одному ключу важно сохранять.
-
-{% note info %}
-
-Таблицы `dimension_scd_changes`, `dimension_scd2_final` приведены для иллюстрации. Для реальных запросов вам нужно скорректировать структуру таблиц и их атрибутов.
-
-{% endnote %}
 
 ## Загрузка данных в таблицу изменений
 
@@ -81,16 +81,16 @@ WITH(
 
 ```sql
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', unwrap(cast('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
+VALUES ('CUSTOMER_1001', 'John Doe', 'Los Angeles', Unwrap(CAST('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1002', 'John Doe', 'New York', unwrap(cast('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', Unwrap(CAST('2025-08-22T17:00:00Z' as Timestamp)), 'CREATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1001', 'John Doe', 'San Francisco', unwrap(cast('2025-08-22T19:00:00Z' as Timestamp)), 'UPDATE');
+VALUES ('CUSTOMER_1001', 'John Doe', 'San Francisco', Unwrap(CAST('2025-08-22T19:00:00Z' as Timestamp)), 'UPDATE');
 
 UPSERT INTO dimension_scd_changes (id, attribute1, attribute2, change_time, operation)
-VALUES ('CUSTOMER_1002', 'John Doe', 'New York', unwrap(cast('2025-08-22T21:00:00Z' as Timestamp)), 'DELETE');
+VALUES ('CUSTOMER_1002', 'John Doe', 'New York', Unwrap(CAST('2025-08-22T21:00:00Z' as Timestamp)), 'DELETE');
 ```
 
 
@@ -215,7 +215,7 @@ SELECT id, change_time FROM $changes;
 - бизнес-ключ — поле `id`,
 - атрибуты — `attribute1` (полное имя) и `attribute2` (город).
 
-В момент времени `2025-08-22 17:00` создаются два клиента (John в Los Angeles и Judy в New York), в момент времени `2025-08-22 19:00` клиент `CUSTOMER_1001` меняет город на San Francisco (UPDATE), а в момент `2025-08-22 21:00` клиент `CUSTOMER_1002` удаляется (DELETE).
+В момент времени `2025-08-22 17:00` создаются два клиента (John в Los Angeles и Judy в New York), в момент времени `2025-08-22 19:00` клиент `CUSTOMER_1001` меняет город на San Francisco `UPDATE`, а в момент `2025-08-22 21:00` клиент `CUSTOMER_1002` удаляется `DELETE`.
 
 | id             | attribute1 | attribute2    | change\_time     | operation |
 | -------------- | ---------- | ------------- | ---------------- | --------- |

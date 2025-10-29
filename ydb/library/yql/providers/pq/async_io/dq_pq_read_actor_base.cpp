@@ -189,7 +189,7 @@ void TDqPqReadActorBase::MaybeSchedulePartitionIdlenessCheck(TInstant systemTime
     }
     InflyIdlenessChecks.push_front(*nextIdleCheckAt);
     SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
-    ScheduleSourcesCheck(*nextIdleCheckAt);
+    SchedulePartitionIdlenessCheck(*nextIdleCheckAt);
 }
 
 bool TDqPqReadActorBase::RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime) {

@@ -163,8 +163,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
-        lookupSourceSettings.SetServiceAccountId("testsaid");
-        lookupSourceSettings.SetServiceAccountIdSignature("fake_signature");
+        lookupSourceSettings.SetTokenName("test_token");   
 
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));
@@ -355,8 +354,7 @@ Y_UNIT_TEST_SUITE(GenericProviderLookupActor) {
         NYql::Generic::TLookupSource lookupSourceSettings;
         *lookupSourceSettings.mutable_data_source_instance() = dsi;
         lookupSourceSettings.Settable("lookup_test");
-        lookupSourceSettings.SetServiceAccountId("testsaid");
-        lookupSourceSettings.SetServiceAccountIdSignature("fake_signature");
+        lookupSourceSettings.SetTokenName("test_token");   
 
         google::protobuf::Any packedLookupSource;
         Y_ABORT_UNLESS(packedLookupSource.PackFrom(lookupSourceSettings));

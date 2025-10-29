@@ -29,7 +29,7 @@ void TGRpcDiscoveryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));          \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
                     new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>          \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE}));  \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE}));  \
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                            \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 

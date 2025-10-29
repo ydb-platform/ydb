@@ -20,11 +20,11 @@ private:
     void SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger);
 
 private:
-    NActors::TActorSystem* ActorSystem = nullptr;
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    NActors::TActorId GRpcRequestProxyId;
+    NActors::TActorSystem* ActorSystem_ = nullptr;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
+    NActors::TActorId GRpcRequestProxyId_;
 
-    grpc::ServerCompletionQueue* CQ = nullptr;
+    grpc::ServerCompletionQueue* CQ_ = nullptr;
 };
 
 } // namespace NKikimr::NQuoter

@@ -21,7 +21,7 @@ void TGRpcDynamicConfigService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logge
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                        \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                 \
                     new TGrpcRequestOperationCall<DynamicConfig::NAME##Request, DynamicConfig::NAME##Response>          \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE}));         \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE}));         \
             }, &DynamicConfig::V1::DynamicConfigService::AsyncService::Request ## NAME,                                 \
             #NAME, logger, getCounterBlock("console", #NAME))->Run();
 

@@ -49,7 +49,7 @@ void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
                     new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::LIMIT_TYPE), ATTR, AUDIT_MODE}));                  \
+                        (ctx, CB, TRequestAuxSettings{RLSWITCH(LIMIT_TYPE), ATTR, AUDIT_MODE}));                  \
             }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                            \
             #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 

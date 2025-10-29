@@ -532,6 +532,44 @@ using TAlterConsumerAttributesBuilder = TAlterAttributesBuilderImpl<TAlterConsum
 using TAlterTopicAttributesBuilder = TAlterAttributesBuilderImpl<TAlterTopicSettings>;
 
 template<class TSettings>
+struct TSharedConsumerSettings {
+    TSharedConsumerSettings(TSettings& parent) : Parent_(parent) {}
+
+    TSharedConsumerSettings& KeepMessagesOrder(bool value) {
+        Parent_.KeepMessagesOrder_ = value;
+        return *this;
+    }
+
+    TSharedConsumerSettings& DefaultProcessingTimeout(TDuration value) {
+        Parent_.DefaultProcessingTimeout_ = value;
+        return *this;
+    }
+
+    TSharedConsumerSettings& DisableDeadLetterPolicy() {
+        Parent_.DeadLetterPolicy_ = EDeadLetterPolicy::Disabled;
+        return *this;
+    }
+
+    TSharedConsumerSettings& DeleteDeadLetterPolicy(ui32 maxProcessingAttempts) {
+        Parent_.DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+        Parent_.MaxProcessingAttempts_ = maxProcessingAttempts;
+        return *this;
+    }
+
+    TSharedConsumerSettings& MoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue) {
+        Parent_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.MaxProcessingAttempts_ = maxProcessingAttempts;
+        Parent_.DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+
+    TSettings& EndSharedConsumerType() { return Parent_; };
+
+private:
+    TSettings& Parent_;
+};
+
+template<class TSettings>
 struct TConsumerSettings {
     using TSelf = TConsumerSettings;
 
@@ -544,7 +582,6 @@ struct TConsumerSettings {
     void SerializeTo(Ydb::Topic::Consumer& proto) const;
 
     FLUENT_SETTING(std::string, ConsumerName);
-    FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Streaming);
     FLUENT_SETTING_DEFAULT(bool, Important, false);
     FLUENT_SETTING_DEFAULT(TDuration, AvailabilityPeriod, TDuration::Zero());
     FLUENT_SETTING_DEFAULT(TInstant, ReadFrom, TInstant::Zero());
@@ -552,10 +589,6 @@ struct TConsumerSettings {
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING(TAttributes, Attributes);
-    FLUENT_SETTING(bool, KeepMessagesOrder);
-    FLUENT_SETTING(ui32, MaxProcessingAttempts);
-    FLUENT_SETTING(TDuration, DefaultProcessingTimeout);
-    FLUENT_SETTING(std::string, DeadLetterQueue);
 
     TConsumerSettings& AddAttribute(const std::string& key, const std::string& value) {
         Attributes_[key] = value;
@@ -592,10 +625,25 @@ struct TConsumerSettings {
         return *this;
     }
 
+    TConsumerSettings& StreamingConsumerType() {
+        ConsumerType_ = EConsumerType::Streaming;
+        return *this;
+    }
+
+    TSharedConsumerSettings<TSelf> BeginSharedConsumerType() {
+        return TSharedConsumerSettings<TSelf>(*this);
+    }
+
     TSettings& EndAddConsumer() { return Parent_; };
 
 private:
     TSettings& Parent_;
+    EConsumerType ConsumerType_ = EConsumerType::Streaming;
+    bool KeepMessagesOrder_;
+    TDuration DefaultProcessingTimeout_;
+    EDeadLetterPolicy DeadLetterPolicy_;
+    ui32 MaxProcessingAttempts_;
+    std::string DeadLetterQueue_;
 };
 
 struct TAlterConsumerSettings {

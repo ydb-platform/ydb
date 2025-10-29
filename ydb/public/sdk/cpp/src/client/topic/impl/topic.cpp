@@ -737,8 +737,30 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
-    , Parent_(parent) // TODO
+    , Parent_(parent)
 {
+    if (proto.has_shared_consumer_type()) {
+        ConsumerType_ = EConsumerType::Shared;
+        KeepMessagesOrder_ = proto.shared_consumer_type().keep_messages_order();
+        DefaultProcessingTimeout_ = TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds());
+
+        if (proto.shared_consumer_type().has_move_dead_letter_policy()) {
+            DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+            MaxProcessingAttempts_ = proto.shared_consumer_type().move_dead_letter_policy().max_processing_attempts();
+            DeadLetterQueue_ = proto.shared_consumer_type().move_dead_letter_policy().dead_letter_queue();
+        } else if (proto.shared_consumer_type().has_delete_dead_letter_policy()) {
+            DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+            MaxProcessingAttempts_ = proto.shared_consumer_type().move_dead_letter_policy().max_processing_attempts();
+        } else {
+            DeadLetterPolicy_ = EDeadLetterPolicy::Disabled;
+            MaxProcessingAttempts_ = 0;
+        }
+    } else {
+        ConsumerType_ = EConsumerType::Streaming;
+        KeepMessagesOrder_ = false;
+        DeadLetterPolicy_ = EDeadLetterPolicy::Disabled;
+        MaxProcessingAttempts_ = 0;
+    }
 }
 
 template <typename TSettings>
@@ -754,7 +776,34 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
     proto.mutable_read_from()->set_seconds(ReadFrom_.Seconds());
     *proto.mutable_supported_codecs() = SerializeCodecs(SupportedCodecs_);
     *proto.mutable_attributes() = SerializeAttributes(Attributes_);
-    // TODO
+
+    switch (ConsumerType_) {
+        case EConsumerType::Shared: {
+            auto* type = proto.mutable_shared_consumer_type();
+            type->set_keep_messages_order(KeepMessagesOrder_);
+            type->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.Seconds());
+
+            switch (DeadLetterPolicy_) {
+                case EDeadLetterPolicy::Move:
+                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(MaxProcessingAttempts_);
+                    type->mutable_move_dead_letter_policy()->set_dead_letter_queue(DeadLetterQueue_);
+                    break;
+                case EDeadLetterPolicy::Delete:
+                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(MaxProcessingAttempts_);
+                    break;
+                case EDeadLetterPolicy::Disabled:
+                case EDeadLetterPolicy::Unspecified:
+                    type->mutable_delete_dead_letter_policy();
+                    break;
+            }
+
+            break;
+        }
+        case EConsumerType::Unspecified:
+        case EConsumerType::Streaming:
+            proto.mutable_streaming_consumer_type();
+            break;
+    }
 }
 
 template struct TConsumerSettings<TCreateTopicSettings>;

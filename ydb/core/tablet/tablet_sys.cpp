@@ -1054,7 +1054,7 @@ void TTablet::HandleWriteZeroEntry(TEvTabletBase::TEvWriteLogResult::TPtr &ev) {
     TEvTabletBase::TEvWriteLogResult *msg = ev->Get();
     switch (msg->Status) {
     case NKikimrProto::OK:
-            return StartActivePhase();
+        return StartActivePhase();
     default:
         {
             BLOG_ERROR("HandleWriteZeroEntry, msg->Status: " << NKikimrProto::EReplyStatus_Name(msg->Status), "TSYS23");

@@ -2,8 +2,6 @@
 
 | Name                              | Description                                                                                                                                                                   | Default value                        |
 |------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
-| `--dry-run`                              | Do not actually execute the queries; just print them. |                                     |
-| `--check-canonical` or `-c`              | Use special deterministic internal queries and compare the results against the canonical ones.                                                                                           |                                     |
 | `--output <value>`                       | The name of the file where the query execution results will be saved.                                                                                                                | `results.out`                        |
 | `--iterations <value>`                   | The number of times each load query will be executed.                                                                                                                                 | `1`                                  |
 | `--json <name>`                          | The name of the file where query execution statistics will be saved in `json` format.                                                                                                | Not saved by default                 |

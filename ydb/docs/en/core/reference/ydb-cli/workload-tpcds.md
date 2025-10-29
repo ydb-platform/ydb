@@ -58,7 +58,6 @@ See the command description:
 | `--process-index <value>` or `-i <value>` | Specifies the process number when data generation is split into multiple processes.                                                           | `0`           |
 | `--state <path>`                      | Path to the state file for resuming generation. If the generation is interrupted, it will resume from the same point when restarted.              |               |
 | `--clear-state`                       | Relevant if the `--state` parameter is specified. Clears the state file and restarts the download from the beginning.                             |               |
-| `--dry-run`                           | Do not actually perform import                                                                                                                        |               |
 
 {% include [load_options](./_includes/workload/load_options.md) %}
 

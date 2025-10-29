@@ -635,6 +635,7 @@ struct TConsumerSettings {
     }
 
     TSharedConsumerSettings<TSelf> BeginSharedConsumerType() {
+        ConsumerType_ = EConsumerType::Shared;
         return TSharedConsumerSettings<TSelf>(*this);
     }
 

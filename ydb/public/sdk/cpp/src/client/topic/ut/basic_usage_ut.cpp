@@ -135,10 +135,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType()->GetType(), EConsumerType::Shared);
         auto sharedType = dynamic_pointer_cast<const TSharedConsumerType>(c.GetConsumerType());
         UNIT_ASSERT_VALUES_EQUAL(sharedType->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(13));
+        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
         UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDeadLetterPolicy()->GetPolicy(), EDeadLetterPolicy::Move);
         auto policy = dynamic_pointer_cast<const TMoveDeadLetterPolicy>(sharedType->GetDeadLetterPolicy());
-        UNIT_ASSERT_VALUES_EQUAL(policy->GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetMaxProcessingAttempts(), 11);
         UNIT_ASSERT_VALUES_EQUAL(policy->GetDeadLetterQueue(), "deadLetterQueue-topic");
     }
 

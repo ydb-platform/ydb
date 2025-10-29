@@ -5,12 +5,14 @@
 #include <util/system/types.h>
 #include <util/generic/string.h>
 
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
 extern "C" {
 
 struct ibv_context;
 struct ibv_pd;
+struct ibv_device_attr;
+struct ibv_port_attr;
+union ibv_gid;
 
 }
 
@@ -36,55 +38,38 @@ struct TDeviceCtx : public NNonCopyable::TNonCopyable {
 class TRdmaCtx : public NNonCopyable::TNonCopyable {
     friend class NLinkMgr::TRdmaLinkManager;
     TRdmaCtx(
-        std::shared_ptr<TDeviceCtx> deviceCtx, ibv_device_attr devAttr, const char* deviceName,
-        ui32 portNum, ibv_port_attr portAttr, int gidIndex, ibv_gid gid
+        std::shared_ptr<TDeviceCtx> deviceCtx, const ibv_device_attr& devAttr, const char* deviceName,
+        ui32 portNum, const ibv_port_attr& portAttr, int gidIndex, const ibv_gid& gid
     );
 
+    struct TImpl;
 public:
     static std::shared_ptr<TRdmaCtx> Create(std::shared_ptr<TDeviceCtx> deviceCtx, ui32 portNum, int gidIndex);
 
     ~TRdmaCtx() = default;
 
-    ibv_context* GetContext() const {
+    ibv_context* GetContext() const noexcept {
         return DeviceCtx->Context;
     }
-    ibv_pd* GetProtDomain() const {
+
+    ibv_pd* GetProtDomain() const noexcept {
         return DeviceCtx->ProtDomain;
     }
-    const ibv_device_attr& GetDevAttr() const {
-        return DevAttr;
-    }
-    const char* GetDeviceName() const {
-        return DeviceName;
-    }
-    ui32 GetPortNum() const {
-        return PortNum;
-    }
-    const ibv_port_attr& GetPortAttr() const {
-        return PortAttr;
-    }
-    int GetGidIndex() const {
-        return GidIndex;
-    }
-    const ibv_gid& GetGid() const {
-        return Gid;
-    }
-    size_t GetDeviceIndex() const {
-        return DeviceIndex;
-    }
+
+    const ibv_device_attr& GetDevAttr() const noexcept;
+    const char* GetDeviceName() const noexcept;
+    ui32 GetPortNum() const noexcept;
+    const ibv_port_attr& GetPortAttr() const noexcept;
+    int GetGidIndex() const noexcept;
+    const ibv_gid& GetGid() const noexcept;
+    size_t GetDeviceIndex() const noexcept;
 
     void Output(IOutputStream &str) const;
     TString ToString() const;
 
 private:
     const std::shared_ptr<TDeviceCtx> DeviceCtx;
-    const ibv_device_attr DevAttr;
-    const char* DeviceName;
-    const ui32 PortNum;
-    const ibv_port_attr PortAttr;
-    const int GidIndex;
-    const ibv_gid Gid;
-    size_t DeviceIndex;
+    std::unique_ptr<TImpl> Impl;
 };
 
 }

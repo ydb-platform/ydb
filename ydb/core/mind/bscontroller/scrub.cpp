@@ -749,7 +749,7 @@ public:
         }
 
         if (group->IsCheckInProgress) {
-            return true;
+            return false;
         }
 
         return true;

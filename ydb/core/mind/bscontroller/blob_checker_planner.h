@@ -35,5 +35,5 @@ private:
     std::unique_ptr<TImpl> Impl;
 };
 
-} // namspace NBsController
+} // namespace NBsController
 } // namespace NKikimr

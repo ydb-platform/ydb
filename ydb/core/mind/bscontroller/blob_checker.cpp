@@ -68,5 +68,5 @@ TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus v
     }
 }
 
-} // namspace NBsController
+} // namespace NBsController
 } // namespace NKikimr

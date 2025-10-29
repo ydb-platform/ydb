@@ -120,7 +120,7 @@ private:
         }
 
         if (now - QuantumStart > QuantumDuration) {
-            // Report intermeidate status and write MaxCheckedBlob on disk to save checker progress
+            // Report intermediate status and write MaxCheckedBlob on disk to save checker progress
             FinishQuantum(EBlobCheckerWorkerQuantumStatus::IntermediateOk);
         }
 

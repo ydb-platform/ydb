@@ -1,5 +1,6 @@
 #include "link_manager.h"
 #include "ctx.h"
+#include "ctx_impl.h"
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
@@ -123,7 +124,7 @@ private:
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            ctx->DeviceIndex = i;
+            ctx->Impl->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;

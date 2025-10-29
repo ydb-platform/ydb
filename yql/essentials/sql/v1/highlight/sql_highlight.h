@@ -26,15 +26,17 @@ enum class EUnitKind {
 };
 
 struct TRangePattern {
-    TString Begin;
-    TString End;
+    TString BeginPlain;
+    TString EndPlain;
+    TMaybe<TString> EscapeRegex;
 };
 
+// Range patterns are expected to be matched before others.
 struct TUnit {
     EUnitKind Kind;
+    TVector<TRangePattern> RangePatterns;
     TVector<NSQLTranslationV1::TRegexPattern> Patterns;
     TMaybe<TVector<NSQLTranslationV1::TRegexPattern>> PatternsANSI;
-    TMaybe<TRangePattern> RangePattern;
     bool IsPlain = true;
     bool IsCodeGenExcluded = false;
 };

@@ -56,6 +56,7 @@ public:
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
         Config.MutableJsonParser()->SetSkipErrors(skipErrors);
+        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -661,6 +662,7 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         test("{");
         writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
         writeRead({Json1 + Json1, Json3 }, { JsonMessage(1), JsonMessage(1) });  // not checked 
+        writeRead({Json1.substr(0, 3), Json1.substr(3), Json2, Json3 }, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
         PassAway();
     }
 

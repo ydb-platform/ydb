@@ -280,8 +280,8 @@ private:
         // nothing by default
     }
 
-    virtual TString GetDatabase() = 0;
-    virtual const TString& GetTable() = 0;
+    virtual const TString& GetDatabase() const = 0;
+    virtual const TString& GetTable() const = 0;
     virtual bool CheckAccess(TString& errorMessage) = 0;
     virtual TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const = 0;
     virtual bool ExtractRows(TString& errorMessage) = 0;
@@ -623,6 +623,8 @@ private:
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        request->DatabaseName = std::move(GetDatabase());
+
         NSchemeCache::TSchemeCacheNavigate::TEntry entry;
         entry.Path = ::NKikimr::SplitPath(table);
         if (entry.Path.empty()) {

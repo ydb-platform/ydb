@@ -1690,7 +1690,7 @@ ui64 AsyncSetColumnFamily(
     auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpAlterTable, workingDir);
     auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableAlterTable();
     desc.SetName(name);
-    
+
     auto col = desc.AddColumns();
     col->SetName(colName);
     col->SetFamilyName(family.Name);
@@ -1967,7 +1967,7 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId) {
     WaitTxNotification(server, sender, txId);
 }
 
-void WaitTableStatsImpl(TTestActorRuntime& runtime, 
+void WaitTableStatsImpl(TTestActorRuntime& runtime,
     std::function<void(typename TEvDataShard::TEvPeriodicTableStats::TPtr&)> observerFunc,
     bool& captured) {
 
@@ -1984,8 +1984,8 @@ void WaitTableStatsImpl(TTestActorRuntime& runtime,
     UNIT_ASSERT(captured);
 }
 
-NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 datashardId, 
-    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition) 
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRuntime& runtime, ui64 datashardId,
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition)
 {
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
@@ -1999,7 +1999,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
 
         if (record.GetDatashardId() != datashardId)
             return;
-        
+
         if (!condition(record.GetTableStats()))
             return;
 
@@ -2013,7 +2013,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableFollowerStats(TTestActorRunti
 
 
 NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 datashardId,
-    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition) 
+    std::function<bool(const NKikimrTableStats::TTableStats& stats)> condition)
 {
     NKikimrTxDataShard::TEvPeriodicTableStats stats;
     bool captured = false;
@@ -2027,7 +2027,7 @@ NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runt
 
         if (record.GetDatashardId() != datashardId)
             return;
-        
+
         if (!condition(record.GetTableStats()))
             return;
 
@@ -2339,7 +2339,7 @@ NKikimrDataEvents::TEvWriteResult WaitForWriteCompleted(TTestActorRuntime& runti
     return resultRecord;
 }
 
-void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
+void UploadRows(TTestActorRuntime& runtime, const TString& database, const TString& tablePath, const TVector<std::pair<TString, Ydb::Type_PrimitiveTypeId>>& types, const TVector<TCell>& keys, const TVector<TCell>& values)
 {
     auto txTypes = std::make_shared<NTxProxy::TUploadTypes>();
     std::transform(types.cbegin(), types.cend(), std::back_inserter(*txTypes), [](const auto& iter) {
@@ -2355,7 +2355,7 @@ void UploadRows(TTestActorRuntime& runtime, const TString& tablePath, const TVec
     txRows->emplace_back(serializedKey, serializedValues);
 
     auto uploadSender = runtime.AllocateEdgeActor();
-    auto actor = NTxProxy::CreateUploadRowsInternal(uploadSender, tablePath, txTypes, txRows);
+    auto actor = NTxProxy::CreateUploadRowsInternal(uploadSender, database, tablePath, txTypes, txRows);
     runtime.Register(actor);
 
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvUploadRowsResponse>(uploadSender);

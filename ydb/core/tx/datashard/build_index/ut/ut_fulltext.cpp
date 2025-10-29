@@ -18,13 +18,14 @@ using Ydb::Table::FulltextIndexSettings;
 using namespace NTableIndex::NFulltext;
 
 static std::atomic<ui64> sId = 1;
+static const TString kDatabaseName = "/Root";
 static const TString kMainTable = "/Root/table-main";
 static const TString kIndexTable = "/Root/table-index";
 
 Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
 
     ui64 FillRequest(Tests::TServer::TPtr server, TActorId sender,
-        NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request, 
+        NKikimrTxDataShard::TEvBuildFulltextIndexRequest& request,
         std::function<void(NKikimrTxDataShard::TEvBuildFulltextIndexRequest&)> setupRequest)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -52,6 +53,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         column->mutable_analyzers()->set_tokenizer(FulltextIndexSettings::WHITESPACE);
         *request.MutableSettings() = settings;
 
+        request.SetDatabaseName(kDatabaseName);
         request.SetIndexName(kIndexTable);
 
         setupRequest(request);
@@ -206,7 +208,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildFulltextIndexScan) {
         auto sender = server->GetRuntime()->AllocateEdgeActor();
 
         Setup(server, sender);
-        
+
         auto result = DoBuild(server, sender, [](auto&){});
 
         UNIT_ASSERT_VALUES_EQUAL(result, R"(__ydb_token = apple, key = 1, data = (empty maybe)
@@ -229,7 +231,7 @@ __ydb_token = yellow, key = 3, data = (empty maybe)
         auto sender = server->GetRuntime()->AllocateEdgeActor();
 
         Setup(server, sender);
-        
+
         auto result = DoBuild(server, sender, [](auto& request) {
             request.AddDataColumns("data");
         });
@@ -271,7 +273,7 @@ __ydb_token = yellow, key = 3, data = three
             });
             CreateShardedTable(server, sender, "/Root", "table-index", options);
         }
-        
+
         auto result = DoBuild(server, sender, [](auto& request) {
             request.AddDataColumns("text");
             request.AddDataColumns("data");
@@ -337,7 +339,7 @@ __ydb_token = yellow, key = 3, text = yellow apple, data = three
             });
             CreateShardedTable(server, sender, "/Root", "table-index", options);
         }
-        
+
         auto result = DoBuild(server, sender, [](auto& request) {
             request.AddDataColumns("data");
         });

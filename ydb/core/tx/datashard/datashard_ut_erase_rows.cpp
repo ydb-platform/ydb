@@ -1434,7 +1434,7 @@ tkey = 100, key = 4
                 return TTestActorRuntime::EEventAction::PROCESS;
             });
 
-            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
+            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, "/Root", tableId, indexes));
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetStatus(), status);
             UNIT_ASSERT_STRING_CONTAINS(ev->Get()->Record.GetErrorDescription(), error);
@@ -1549,7 +1549,7 @@ tkey = 100, key = 4
 
         using TRequestMaker = std::function<IEventBase*(void)>;
         auto badRequest = [&](TEvResponse::ProtoRecordType::EStatus status, const TString& error, TRequestMaker maker) {
-            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, tableId, indexes));
+            const auto eraser = runtime.Register(NDataShard::CreateDistributedEraser(sender, "/Root", tableId, indexes));
 
             runtime.Send(new IEventHandle(eraser, sender, maker()), 0, true);
             auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);

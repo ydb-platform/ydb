@@ -8,11 +8,16 @@
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to $arcadia_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
 "{{ arg|replace(export_root, "$output_root")|replace(project_root, "$project_root")|replace(arcadia_root, "$arcadia_root") }}"
 {%-     elif output != "" -%}
-{%-         if arg[0] != '/' -%}
+{%-         if arg|replace(export_root + "/", "") != arg -%}
+{%-             if arg[0] != '/' -%}
+{#                  Complex arg of command - export_root in arg, but not at start of arg, can't use bindir logic #}
+{%-                 set bindir = false -%}
+{%-             else -%}
+{%-                 set bindir = arg|replace(export_root + "/", "") -%}
+{%-             endif -%}
+{%-         elif arg[0] != '/' -%}
 {#-             Relative outputs in buildDir, make relative from baseBuildDir -#}
 {%-             set bindir = curdir + "/" + arg -%}
-{%-         elif arg|replace(export_root + "/", "") != arg -%}
-{%-             set bindir = arg|replace(export_root + "/", "") -%}
 {%-         else -%}
 {%-             set bindir = false -%}
 {%-         endif -%}
@@ -20,12 +25,16 @@
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
 {#-             "_" - don't patch output dir by codegen number -#}
 {%-             if output != "_" -%}
-"{{ (export_root + "/" + bindir)|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+"{{ (export_root + "/" + bindir)|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%-             else -%}
 "{{ (export_root + "/" + bindir)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
 {%-             endif -%}
 {%-         else -%}
-"{{ arg|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{%-             if output != "_" -%}
+"{{ arg|replace(export_root + "/" + curdir, "$projectCodegenDir/" + varprefix + "." + output)|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{%-             else -%}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(project_root, "$project_root")|replace(arcadia_root, "$output_root")|replace(output_root, "$output_root") }}"
+{%-             endif -%}
 {%-         endif -%}
 {%-     else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}

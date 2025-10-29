@@ -1388,7 +1388,10 @@ class GnuToolchain(Toolchain):
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
-        self.c_flags_platform.append('--sysroot={}'.format(var))
+        if is_positive('MUSL'):
+            self.c_flags_platform.append('--sysroot=/nowhere')
+        else:
+            self.c_flags_platform.append('--sysroot={}'.format(var))
         self.swift_flags_platform += ['-sdk', var]
 
     def setup_xcode_sdk(self, project, var):

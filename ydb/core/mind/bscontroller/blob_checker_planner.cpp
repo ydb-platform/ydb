@@ -1,34 +1,37 @@
-#include "group_check_planner.h"
+#include "blob_checker_planner.h"
+#include "impl.h"
 
-#include <ydb/core/util/fast_lookup_unique_list.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
+
+#include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
+#include <ydb/core/util/fast_lookup_unique_list.h>
  
 namespace NKikimr {
+namespace NBsController {
 
 /////////////////////////////////////////////////////////////////////////////////////
 /// TBlobCheckerPlanner implementation
 
 class TBlobCheckerPlanner::TImpl {
 public:
-    TBlobCheckerPlanner::TImpl(TDuration periodicity, ui32 groupCount)
+    TImpl(TDuration periodicity, ui32 groupCount)
         : Periodicity(periodicity)
         , GroupCount(groupCount)
-        , LastPlannedTimestamp(TMonotonic::Zero())
     {}
 
-    void EnqueueCheck(const TGroupId groupId, std::vector<ui32>&& nodes) {
-        if (IsScanEnqueued(groupId)) {
+    void EnqueueCheck(const TGroupId groupId, std::vector<ui32> nodes) {
+        if (IsCheckEnqueued(groupId)) {
             // This group is already planned to scan, no need to re-enqueue it
             return;
         }
 
-        ui32 lockedNodeCount = groupInfo->VDisksInGroup.size();
+        ui32 lockedNodeCount = nodes.size();
         TLockInfo& lock = LocksByGroup[groupId];
 
         for (const ui32 nodeId : nodes) {
             TFastLookupUniqueList<TGroupId>& lockQueue = NodeLockQueues[nodeId];
 
-            if (lockQueue.Contains(nodeId)) {
+            if (lockQueue.Contains(groupId)) {
                 // multiple VDisks of this group on the same node, lock already acquired
                 --lockedNodeCount;
             } else {
@@ -59,14 +62,14 @@ public:
             groupInfo->VDisksEnd(),
             std::back_inserter(nodes),
             [&](const auto& it) {
-                return groupInfo->GetActorId(it->OrderNumber).NodeId();
+                return groupInfo->GetActorId(it.OrderNumber).NodeId();
             }
         );
 
-        EnqueueCheck(groupId, std::move(nodes));
+        EnqueueCheck(groupInfo->GroupID, std::move(nodes));
     }
 
-    void EnqueueCheck(const NBsController::TGroupInfo* groupInfo) {
+    void EnqueueCheck(const TBlobStorageController::TGroupInfo* groupInfo) {
         if (!groupInfo) {
             Y_DEBUG_ABORT();
             return;
@@ -83,7 +86,7 @@ public:
             }
         );
 
-        EnqueueCheck(groupId, std::move(nodes));
+        EnqueueCheck(groupInfo->ID, std::move(nodes));
     }
 
     bool DequeueCheck(const TGroupId groupId) {
@@ -93,7 +96,7 @@ public:
             return false;
         }
 
-        GroupsAllowedToScan.erase(groupId);
+        GroupsAllowedToScan.Erase(groupId);
 
         for (ui32 lockedNodeId : it->second.UsedNodes) {
             TFastLookupUniqueList<TGroupId>& lockQueue = NodeLockQueues[lockedNodeId];
@@ -107,9 +110,9 @@ public:
                     continue;
                 } else {
                     const TGroupId nextGroupId = lockQueue.Front();
-                    TLockInfo& nextLocks = LocksByGroup(lockingGroupId);
+                    TLockInfo& nextLocks = LocksByGroup[nextGroupId];
                     if (--nextLocks.LockedNodeCount == 0) {
-                        GroupsAllowedToScan().PushBack(lockingGroupId);
+                        GroupsAllowedToScan.PushBack(nextGroupId);
                     }
                 }
             }
@@ -125,10 +128,8 @@ public:
         NodeLockQueues.clear();
 
         TimeWasted = TDuration::Zero();
-        LastPlannedTimestamp = TDuration::Zero();
+        LastPlannedTimestamp = TMonotonic::Zero();
     }
-
-    std::optional<TGroupId> ObtainNextGroupToCheck();
 
     void SetGroupCount(ui32 groupCount) {
         GroupCount = groupCount;
@@ -139,7 +140,7 @@ public:
         TimeWasted = std::max(TimeWasted, Periodicity);
     }
 
-    TDuration GetNextAllowedCheckTimestamp(TMonotonic now) {
+    TMonotonic GetNextAllowedCheckTimestamp(TMonotonic now) {
         auto [delay, acceleratedTime] = GetAdjustedDelay();
         if (LastPlannedTimestamp + delay < now) {
             // last planned request was too long ago, allow next scan right now
@@ -169,17 +170,21 @@ public:
 
 public:
     std::pair<TDuration, TDuration> GetAdjustedDelay() {
+        if (Periodicity == TDuration::Zero()) {
+            return { TDuration::Zero(), TDuration::Zero() };
+        }
+
         TDuration targetDelay = GetTargetDelay();
-        float accelerationRatio = TimeWasted / Periodicity + 1;
+        float accelerationRatio = (TimeWasted / Periodicity) + 1;
         TDuration adjustedDelay = targetDelay / accelerationRatio;
-        return std::make_pair<TDuration, TDuration>(adjustedDelay, targetDelay - adjustedDelay);
+        return std::pair<TDuration, TDuration>(adjustedDelay, targetDelay - adjustedDelay);
     }
 
     TDuration GetTargetDelay() {
-        return Periodicity / GroupCount;
+        return Periodicity / std::max(static_cast<ui32>(1), GroupCount);
     }
 
-    bool IsScanEnqueued(TGroupId groupId) const {
+    bool IsCheckEnqueued(TGroupId groupId) const {
         return GroupsAllowedToScan.Contains(groupId) || LocksByGroup.contains(groupId);
     }
 
@@ -196,11 +201,11 @@ private:
 private:
     constexpr static ui32 MaxExpectedNodesInGroup = 9;
 
-    ui32 GroupCount;
     TDuration Periodicity;
+    ui32 GroupCount;
 
-    TMonotonic LastPlannedTimestamp;
-    TDuration TimeWasted;
+    TMonotonic LastPlannedTimestamp = TMonotonic::Zero();
+    TDuration TimeWasted = TDuration::Zero();
 
     TFastLookupUniqueList<TGroupId> GroupsAllowedToScan;
     std::unordered_map<TGroupId, TLockInfo> LocksByGroup;
@@ -210,14 +215,19 @@ private:
 /////////////////////////////////////////////////////////////////////////////////////
 
 TBlobCheckerPlanner::TBlobCheckerPlanner(TDuration periodicity, ui32 groupCount)
-    : Impl(new TBlobCheckerPlanner::TImpl(periodicity, groupCount))
+    : Impl(new TImpl(periodicity, groupCount))
 {}
 
-void TBlobCheckerPlanner::EnqueueCheck(const TBlobStorageGroupInfo* groupInfo) {
+TBlobCheckerPlanner::~TBlobCheckerPlanner() {}
+
+template<>
+void TBlobCheckerPlanner::EnqueueCheck<TBlobStorageGroupInfo>(const TBlobStorageGroupInfo* groupInfo) {
     Impl->EnqueueCheck(groupInfo);
 }
 
-void TBlobCheckerPlanner::EnqueueCheck(const NBsController::TGroupInfo* groupInfo) {
+template<>
+void TBlobCheckerPlanner::EnqueueCheck<TBlobStorageController::TGroupInfo>(
+        const TBlobStorageController::TGroupInfo* groupInfo) {
     Impl->EnqueueCheck(groupInfo);
 }
 
@@ -244,4 +254,5 @@ void TBlobCheckerPlanner::SetPeriodicity(TDuration newPeriodicity) {
     Impl->SetPeriodicity(newPeriodicity);
 }
 
+} // namespace NBsController
 } // namespace NKikimr

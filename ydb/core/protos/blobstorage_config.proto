@@ -588,7 +588,7 @@ message TBscConfig {
     optional bool TryToRelocateBrokenDisksLocallyFirst = 14;
     optional TClusterBalancingSettings ClusterBalancingSettings = 15;
     optional TSelfHealSettings SelfHealSettings = 16;
-    repeated ui64 BlobCheckerPeriodicitySeconds = 17;
+    optional uint64 BlobCheckerPeriodicitySeconds = 17;
 }
 
 message TBoxStoragePoolId {

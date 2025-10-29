@@ -473,6 +473,10 @@ enum EServiceKikimr {
     NBS_VOLUME = 4000;
 
     NBS_SS_PROXY = 4100;
+
+    // BlobChecker
+    BLOB_CHECKER_ORCHESTRATOR = 4200;
+    BLOB_CHECKER_WORKER = 4201;
 };
 
 message TActivity {
@@ -1170,5 +1174,7 @@ message TActivity {
         BS_PHANTOM_FLAG_STORAGE_WRITER = 688;
         BLOB_SCANNER_ORCHESTRATOR_ACTOR = 689;
         BLOB_SCANNER_WORKER_ACTOR = 690;
+        BLOB_CHECKER_ORCHESTRATOR_ACTOR = 691;
+        BLOB_CHECKER_WORKER_ACTOR = 692;
     };
 };

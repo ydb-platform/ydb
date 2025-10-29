@@ -110,7 +110,7 @@ class SolomonEmulator(object):
         return web.json_response({"writtenMetricsCount": shard.add_metrics(metrics_json)})
 
     async def sensor_names(self, request):
-        json = await request.json() 
+        json = await request.json()
         selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
@@ -129,7 +129,7 @@ class SolomonEmulator(object):
         return web.json_response({"names": result})
 
     async def sensor_labels(self, request):
-        json = await request.json() 
+        json = await request.json()
         selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
@@ -148,7 +148,7 @@ class SolomonEmulator(object):
         return web.json_response({"labels": labels, "totalCount": totalCount})
 
     async def sensors(self, request):
-        json = await request.json() 
+        json = await request.json()
         selectors, success = _parse_selectors(json["selectors"])
 
         if not success:

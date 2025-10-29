@@ -10,11 +10,6 @@ IF (OS_LINUX)
         rdma.h
     )
 
-    PEERDIR(
-        contrib/libs/ibdrv
-        contrib/libs/protobuf
-    )
-
 ELSE()
     CXXFLAGS(-DMEM_POOL_DISABLE_RDMA_SUPPORT)
     SRCS(
@@ -23,11 +18,12 @@ ELSE()
         rdma.h
     )
 
-    PEERDIR(
-        contrib/libs/protobuf
-    )
-
 ENDIF()
+
+PEERDIR(
+    contrib/libs/ibdrv
+    contrib/libs/protobuf
+)
 
 END()
 

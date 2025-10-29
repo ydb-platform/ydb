@@ -356,7 +356,7 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
 
 TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings)
 {
-    // Validate text argument - should be a string or optional string
+    // Validate text argument - should be a String or Utf8 or optional String or Utf8
     const auto& textType = text.GetStaticType();
     const TDataType* textDataType = nullptr;
     
@@ -371,9 +371,9 @@ TRuntimeNode TKqpProgramBuilder::FulltextAnalyze(TRuntimeNode text, TRuntimeNode
     }
     
     MKQL_ENSURE(textDataType->GetSchemeType() == NScheme::NTypeIds::String
-        || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected string or utf8 for text.");
+        || textDataType->GetSchemeType() == NScheme::NTypeIds::Utf8, "Expected String or Utf8 for text column.");
 
-    // Return type: List<String>
+    // Return type: List<String or Utf8>
     auto stringType = TDataType::Create(textDataType->GetSchemeType(), Env);
     auto listType = TListType::Create(stringType, Env);
 

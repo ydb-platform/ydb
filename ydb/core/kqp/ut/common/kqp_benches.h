@@ -26,7 +26,7 @@ ui64 MeasureTimeNanos(Lambda &&lambda) {
 
 class TimeFormatter {
 public:
-    static std::string Format(uint64_t valueNs, uint64_t uncertaintyNs) {
+    static std::string Format(uint64_t valueNs, ui64 uncertaintyNs) {
         auto [unit, scale] = SelectUnit(valueNs);
 
         double scaledValue = valueNs / scale;
@@ -55,7 +55,7 @@ public:
     }
 
 private:
-    static std::pair<std::string, double> SelectUnit(uint64_t nanoseconds) {
+    static std::pair<std::string, double> SelectUnit(ui64 nanoseconds) {
         if (nanoseconds >= 1'000'000'000) {
             return {"s", 1e9};
         } else if (nanoseconds >= 1'000'000) {
@@ -404,8 +404,8 @@ void DumpBoxPlotToCSV(IOutputStream &OS, ui32 i, TStatistics<TValue> stat) {
 
 
 struct TRepeatedTestConfig {
-    ui32 MinRepeats;
-    ui32 MaxRepeats;
+    ui64 MinRepeats;
+    ui64 MaxRepeats;
     ui64 Timeout;
 };
 

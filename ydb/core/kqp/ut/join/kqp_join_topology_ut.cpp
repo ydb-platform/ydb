@@ -1,9 +1,13 @@
+#include <cstdint>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_benches.h>
+#include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
+
+#include <library/cpp/testing/common/env.h>
 
 #include "kqp_join_topology_generator.h"
 
@@ -182,9 +186,22 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return resultTime;
     }
 
-    template <auto Lambda>
-    void BenchmarkShuffleEliminationOnTopologies(int maxNumTables, double probabilityStep, unsigned seed = 0) {
-        auto config = TBenchmarkConfig {
+
+    template <typename TValue>
+    void OverrideWithArg(std::string key, TArgs args, auto& value) {
+        if (args.HasArg(key)) {
+            value = args.GetArg<TValue>(key).GetValue();
+        }
+    }
+
+    void OverrideRepeatedTestConfig(std::string prefix, TArgs args, TRepeatedTestConfig &config) {
+        OverrideWithArg<uint64_t>(prefix + ".MinRepeats", args, config.MinRepeats);
+        OverrideWithArg<uint64_t>(prefix + ".MaxRepeats", args, config.MaxRepeats);
+        OverrideWithArg<std::chrono::nanoseconds>(prefix + ".Timeout", args, config.Timeout);
+    }
+
+    TBenchmarkConfig GetBenchmarkConfig(TArgs args, std::string prefix = "config") {
+        TBenchmarkConfig config = /*default=*/{
             .Warmup = {
                 .MinRepeats = 1,
                 .MaxRepeats = 5,
@@ -201,9 +218,36 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             .MADThreshold = 0.05
         };
 
+        OverrideRepeatedTestConfig(prefix + ".Warmup", args, config.Warmup);
+        OverrideRepeatedTestConfig(prefix + ".Bench", args, config.Bench);
+        OverrideWithArg<double>(prefix + ".MADThreshold", args, config.MADThreshold);
+        OverrideWithArg<std::chrono::nanoseconds>(prefix + ".SingleRunTimeout", args, config.SingleRunTimeout);
+
+        return config;
+    }
+
+    void DumpBenchmarkConfig(IOutputStream &OS, TBenchmarkConfig config) {
+        OS << "config = {\n";
+        OS << "    .Warmup = {\n";
+        OS << "         .MinRepeats = " << config.Warmup.MinRepeats << ",\n";
+        OS << "         .MaxRepeats = " << config.Warmup.MaxRepeats << ",\n";
+        OS << "         .Timeout = " << TimeFormatter::Format(config.Warmup.Timeout) << "\n";
+        OS << "    },\n\n";
+        OS << "    .Bench = {\n";
+        OS << "        .MinRepeats = " << config.Bench.MinRepeats << ",\n";
+        OS << "        .MaxRepeats = " << config.Bench.MaxRepeats << ",\n";
+        OS << "        .Timeout = " << TimeFormatter::Format(config.Bench.Timeout) << "\n";
+        OS << "    },\n\n";
+        OS << "    .SingleRunTimeout = " << TimeFormatter::Format(config.SingleRunTimeout) << ",\n";
+        OS << "    .MADThreshold = " << config.MADThreshold << "\n";
+        OS << "}\n";
+    }
+
+    template <auto Lambda>
+    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config, TArgs::TRangedValue<ui64> numTables, TArgs::TRangedValue<double> sameColumnProbability, unsigned seed = 0) {
         std::mt19937 mt(seed);
 
-        TSchema fullSchema = TSchema::MakeWithEnoughColumns(maxNumTables);
+        TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTables.GetLast());
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
 
         auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(10));
@@ -213,17 +257,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto OS = TUnbufferedFileOutput("results.csv");
         DumpBoxPlotCSVHeader(OS);
 
-        for (int i = 2 /* one table is not possible with all topologies, so 2 */; true; i ++) {
-            (void) probabilityStep;
-            double probability = 0.5;
+        for (ui64 n : numTables) {
+            for (double probability : sameColumnProbability) {
+                TRelationGraph graph = Lambda(mt, n, probability);
+                auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
+                if (!result) {
+                    goto stop;
+                }
 
-            TRelationGraph graph = Lambda(mt, i, probability);
-            auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
-            if (!result) {
-                goto stop;
+                DumpBoxPlotToCSV(OS, n, result->GetStatistics());
             }
-
-            DumpBoxPlotToCSV(OS, i, result->GetStatistics());
         }
     stop:;
     }
@@ -283,20 +326,32 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         UNIT_ASSERT_EQUAL(stats.GetN(), 10);
     }
 
-    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
-        BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    }
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
 
-    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
-        BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    }
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
 
-    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
-        BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    }
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
 
-    Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
-        BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
+    // }
+
+    Y_UNIT_TEST(Benchmark) {
+        TArgs args{GetTestParam("TOPOLOGY")};
+
+        auto config = GetBenchmarkConfig(args);
+        DumpBenchmarkConfig(Cout, config);
+
+        BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(
+            config,
+            /*maxNumTables=*/args.GetArg<uint64_t>("N"),
+            /*probabilityStep=*/args.GetArg<double>("P"));
     }
 
 }

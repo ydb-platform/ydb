@@ -1275,7 +1275,7 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
             // One read of main table
             UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/TestTable");
-            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), UseSink ? 0 : 1);
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 1);
 
 
             // One update of index table

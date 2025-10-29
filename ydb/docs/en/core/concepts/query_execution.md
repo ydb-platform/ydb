@@ -71,7 +71,7 @@ YQL supports most common SQL constructs, including:
 - [Data Definition Language (DDL)](https://en.wikipedia.org/wiki/Data_definition_language) — `CREATE`, `ALTER`, `DROP` for tables, indexes, and other schema objects.
 - Joins — all standard `JOIN` types, plus special joins such as `LEFT SEMI`, `RIGHT SEMI`, and `ANY` joins.
 - Aggregations — `GROUP BY` and window functions.
-- Named expressions for better query text organization.
+- [Named expressions](../yql/reference/syntax/expressions.md#named-nodes) for better query text organization.
 - A collection of built-in functions for processing various data types, empowering users to handle complex logic directly in queries.
 - Pragmas and hints to fine-tune execution plans.
 

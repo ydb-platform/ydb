@@ -46,15 +46,15 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
             auto* type = out.mutable_shared_consumer_type();
             type->set_keep_messages_order(in.GetKeepMessageOrder());
-            type->mutable_default_processing_timeout()->set_seconds(in.GetDefaultVisibilityTimeoutSeconds());
+            type->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
 
             switch (in.GetDeadLetterPolicy()) {
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
-                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(in.GetMaxMessageReceiveCount());
+                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
                     type->mutable_move_dead_letter_policy()->set_dead_letter_queue(in.GetDeadLetterQueue());
                     break;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(in.GetMaxMessageReceiveCount());
+                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
                     break;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DISABLED:
                     type->mutable_disabled_dead_letter_policy();

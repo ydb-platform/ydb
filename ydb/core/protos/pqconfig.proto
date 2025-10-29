@@ -391,8 +391,8 @@ message TPQTabletConfig {
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
         optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
         optional EDeadLetterPolicy DeadLetterPolicy = 13 [default = DEAD_LETTER_POLICY_DISABLED]; // For MLP consumers
-        optional uint32 MaxMessageReceiveCount = 14 [default = 1000]; // For MLP consumers
-        optional uint32 DefaultVisibilityTimeoutSeconds = 15 [default = 30]; // For MLP consumers
+        optional uint32 MaxProcessingAttempts = 14 [default = 1000]; // For MLP consumers
+        optional uint32 DefaultProcessingTimeoutSeconds = 15 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 16; // For MLP consumers
     }
 

@@ -230,18 +230,18 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (rr.has_shared_consumer_type()) {
             consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-            consumer->SetDefaultVisibilityTimeoutSeconds(rr.shared_consumer_type().has_default_processing_timeout() ? rr.shared_consumer_type().default_processing_timeout().seconds() : 30);
+            consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().has_default_processing_timeout() ? rr.shared_consumer_type().default_processing_timeout().seconds() : 30);
             consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
 
             if (rr.shared_consumer_type().has_move_dead_letter_policy()) {
                 auto& policy = rr.shared_consumer_type().move_dead_letter_policy();
                 consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-                consumer->SetMaxMessageReceiveCount(policy.max_processing_attempts());
+                consumer->SetMaxProcessingAttempts(policy.max_processing_attempts());
                 consumer->SetDeadLetterQueue(policy.dead_letter_queue());
             } else if (rr.shared_consumer_type().has_delete_dead_letter_policy()) {
                 auto& policy = rr.shared_consumer_type().delete_dead_letter_policy();
                 consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-                consumer->SetMaxMessageReceiveCount(policy.max_processing_attempts());
+                consumer->SetMaxProcessingAttempts(policy.max_processing_attempts());
             } else {
                 consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DISABLED);
             }

@@ -90,11 +90,85 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 {
 }
 
+DeadLetterPolicy::DeadLetterPolicy(EDeadLetterPolicy policy)
+    : Policy_(policy)
+{
+}
+
+EDeadLetterPolicy DeadLetterPolicy::GetPolicy() const {
+    return Policy_;
+}
+
+DisabledDeadLetterPolicy::DisabledDeadLetterPolicy()
+    : DeadLetterPolicy(EDeadLetterPolicy::Disabled)
+{
+}
+
+DeleteDeadLetterPolicy::DeleteDeadLetterPolicy(ui32 maxProcessingAttempts)
+    : DeadLetterPolicy(EDeadLetterPolicy::Delete)
+    , MaxProcessingAttempts_(maxProcessingAttempts)
+{
+}
+
+ui32 DeleteDeadLetterPolicy::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
+}
+
+
+MoveDeadLetterPolicy::MoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue)
+    : DeadLetterPolicy(EDeadLetterPolicy::Move)
+    , MaxProcessingAttempts_(maxProcessingAttempts)
+    , DeadLetterQueue_(deadLetterQueue)
+{
+}
+
+ui32 MoveDeadLetterPolicy::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
+}
+
+const std::string& MoveDeadLetterPolicy::GetDeadLetterQueue() const {
+    return DeadLetterQueue_;
+}
+
+ConsumerType::ConsumerType(EConsumerType type)
+    : Type_(type)
+{
+}
+
+EConsumerType ConsumerType::GetType() const {
+    return Type_;
+}
+
+StreamingConsumerType::StreamingConsumerType()
+    : ConsumerType(EConsumerType::Streaming)
+{
+}
+
+SharedConsumerType::SharedConsumerType(bool keepMessagesOrder, TDuration defaultProcessingTimeout, std::unique_ptr<DeadLetterPolicy>&& deadLetterPolicy)
+    : ConsumerType(EConsumerType::Shared)
+    , KeepMessagesOrder_(keepMessagesOrder)
+    , DefaultProcessingTimeout_(defaultProcessingTimeout)
+    , DeadLetterPolicy_(std::move(deadLetterPolicy))
+{
+}
+
+bool SharedConsumerType::GetKeepMessagesOrder() const {
+    return KeepMessagesOrder_;
+}
+
+TDuration SharedConsumerType::GetDefaultProcessingTimeout() const {
+    return DefaultProcessingTimeout_;
+}
+
+const DeadLetterPolicy* SharedConsumerType::GetDeadLetterPolicy() const {
+    return DeadLetterPolicy_.get();
+}
+
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
     , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
-    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds())) // TODO
+    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
@@ -102,14 +176,32 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     for (const auto& pair : consumer.attributes()) {
         Attributes_[pair.first] = pair.second;
     }
+
+    if (consumer.has_shared_consumer_type()) {
+        auto& sharedType = consumer.shared_consumer_type();
+
+        std::unique_ptr<DeadLetterPolicy> deadLetterPolicy;
+        if (sharedType.has_delete_dead_letter_policy()) {
+            deadLetterPolicy = std::make_unique<DeleteDeadLetterPolicy>(sharedType.delete_dead_letter_policy().max_processing_attempts());
+        } else if (sharedType.has_move_dead_letter_policy()) {
+            deadLetterPolicy = std::make_unique<MoveDeadLetterPolicy>(sharedType.move_dead_letter_policy().max_processing_attempts(), sharedType.move_dead_letter_policy().dead_letter_queue());
+        } else {
+            deadLetterPolicy = std::make_unique<DisabledDeadLetterPolicy>();
+        }
+
+        auto timeout = TDuration::Seconds(sharedType.default_processing_timeout().seconds());
+        ConsumerType_ = std::make_unique<SharedConsumerType>(sharedType.keep_messages_order(), timeout, std::move(deadLetterPolicy));
+    } else {
+        ConsumerType_ = std::make_unique<StreamingConsumerType>();
+    }
 }
 
 const std::string& TConsumer::GetConsumerName() const {
     return ConsumerName_;
 }
 
-EConsumerType TConsumer::GetConsumerType() const {
-    return ConsumerType_;
+const ConsumerType* TConsumer::GetConsumerType() const {
+    return ConsumerType_.get();
 }
 
 bool TConsumer::GetImportant() const {
@@ -130,22 +222,6 @@ const std::vector<ECodec>& TConsumer::GetSupportedCodecs() const {
 
 const std::map<std::string, std::string>& TConsumer::GetAttributes() const {
     return Attributes_;
-}
-
-bool TConsumer::GetKeepMessagesOrder() const {
-    return KeepMessagesOrder_;
-}
-
-ui32 TConsumer::GetMaxProcessingAttempts() const {
-    return MaxProcessingAttempts_;
-}
-
-TDuration TConsumer::GetDefaultProcessingTimeout() const {
-    return DefaultProcessingTimeout_;
-}
-
-const std::string& TConsumer::GetDeadLetterQueue() const {
-    return DeadLetterQueue_;
 }
 
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {

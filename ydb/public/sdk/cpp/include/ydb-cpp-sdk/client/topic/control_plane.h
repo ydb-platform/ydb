@@ -39,7 +39,82 @@ enum class EAutoPartitioningStrategy: uint32_t {
 enum class EConsumerType {
     Unspecified = 0,
     Streaming = 1,
-    Shared = 2
+    Shared = 2,
+};
+
+enum class EDeadLetterPolicy {
+    Unspecified = 0,
+    Disabled = 1,
+    Delete = 2,
+    Move = 3,
+};
+
+class DeadLetterPolicy {
+public:
+    EDeadLetterPolicy GetPolicy() const;
+
+protected:
+    DeadLetterPolicy(EDeadLetterPolicy policy);
+
+private:
+    EDeadLetterPolicy Policy_;
+};
+
+class DisabledDeadLetterPolicy : public DeadLetterPolicy {
+public:
+    DisabledDeadLetterPolicy();
+};
+
+class DeleteDeadLetterPolicy : public DeadLetterPolicy {
+public:
+    DeleteDeadLetterPolicy(ui32 maxProcessingAttempts);
+
+    ui32 GetMaxProcessingAttempts() const;
+
+private:
+    ui32 MaxProcessingAttempts_;
+};
+
+class MoveDeadLetterPolicy : public DeadLetterPolicy {
+public:
+    MoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue);
+
+    ui32 GetMaxProcessingAttempts() const;
+    const std::string& GetDeadLetterQueue() const;
+
+private:
+    ui32 MaxProcessingAttempts_;
+    std::string DeadLetterQueue_;
+};
+
+class ConsumerType {
+public:
+    EConsumerType GetType() const;
+
+protected:
+    ConsumerType(EConsumerType type);
+
+private:
+    EConsumerType Type_;
+};
+
+class StreamingConsumerType : public ConsumerType {
+public:
+    StreamingConsumerType();
+};
+
+class SharedConsumerType : public ConsumerType {
+public:
+    SharedConsumerType(bool keepMessagesOrder, TDuration defaultProcessingTimeout, std::unique_ptr<DeadLetterPolicy>&& deadLetterPolicy);
+
+    bool GetKeepMessagesOrder() const;
+    TDuration GetDefaultProcessingTimeout() const;
+    const DeadLetterPolicy* GetDeadLetterPolicy() const;
+
+private:
+    bool KeepMessagesOrder_;
+    TDuration DefaultProcessingTimeout_;
+    std::unique_ptr<DeadLetterPolicy> DeadLetterPolicy_;
 };
 
 // 0 - unspecified
@@ -54,31 +129,22 @@ public:
     TConsumer(const Ydb::Topic::Consumer&);
 
     const std::string& GetConsumerName() const;
-    EConsumerType GetConsumerType() const;
+    const ConsumerType* GetConsumerType() const;
     bool GetImportant() const;
     TDuration GetAvailabilityPeriod() const;
     const TInstant& GetReadFrom() const;
     const std::vector<ECodec>& GetSupportedCodecs() const;
     const std::map<std::string, std::string>& GetAttributes() const;
-    bool GetKeepMessagesOrder() const;
-    ui32 GetMaxProcessingAttempts() const;
-    TDuration GetDefaultProcessingTimeout() const;
-    const std::string& GetDeadLetterQueue() const;
 
 private:
     std::string ConsumerName_;
-    EConsumerType ConsumerType_;
+    std::unique_ptr<ConsumerType> ConsumerType_;
     bool Important_;
     TDuration AvailabilityPeriod_;
     TInstant ReadFrom_;
     std::map<std::string, std::string> Attributes_;
     std::vector<ECodec> SupportedCodecs_;
-    bool KeepMessagesOrder_;
-    ui32 MaxProcessingAttempts_;
-    TDuration DefaultProcessingTimeout_;
-    std::string DeadLetterQueue_;
 };
-
 
 class TTopicStats {
 public:

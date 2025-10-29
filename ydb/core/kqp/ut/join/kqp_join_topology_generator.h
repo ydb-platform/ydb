@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/stream/output.h>
+#include <ydb/core/kqp/ut/common/kqp_serializable_rng.h>
 
 #include <vector>
 #include <cassert>
@@ -10,6 +11,9 @@
 
 namespace NKikimr::NKqp {
 
+
+using TRNG = TSerializableMT19937;
+
 class TTable {
 public:
     TTable(unsigned numColumns = 0)
@@ -17,14 +21,14 @@ public:
     {
     }
 
-    unsigned GetRandomOrNewColumn(std::mt19937 &mt, double newColumnProbability);
+    unsigned GetRandomOrNewColumn(TRNG &mt, double newColumnProbability);
 
     unsigned GetNumColumns() const {
         return NumColumns;
     }
 
 private:
-    unsigned GetRandomColumn(std::mt19937 &mt) const;
+    unsigned GetRandomColumn(TRNG &mt) const;
 
 private:
     // table has columns from 0..NumColumns
@@ -72,9 +76,9 @@ public:
     {
     }
 
-    static TRelationGraph FromPrufer(std::mt19937 &mt, const std::vector<unsigned>& prufer, double newColumnProbability);
+    static TRelationGraph FromPrufer(TRNG &mt, const std::vector<unsigned>& prufer, double newColumnProbability);
 
-    void Connect(std::mt19937 &mt, unsigned lhs, unsigned rhs, double newColumnProbability);
+    void Connect(TRNG &mt, unsigned lhs, unsigned rhs, double newColumnProbability);
 
     std::string MakeQuery() const;
 
@@ -121,7 +125,7 @@ public:
     {
     }
 
-    static TSchemaStats MakeRandom(std::mt19937 &mt, const TSchema &schema, unsigned a, unsigned b);
+    static TSchemaStats MakeRandom(TRNG &mt, const TSchema &schema, unsigned a, unsigned b);
 
     std::string ToJSON() const;
 
@@ -130,10 +134,10 @@ private:
 };
 
 
-TRelationGraph GenerateLine(std::mt19937 &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateStar(std::mt19937 &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateFullyConnected(std::mt19937 &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateRandomTree(std::mt19937 &mt, unsigned numNodes, double newColumnProbability);
+TRelationGraph GenerateLine(TRNG &mt, unsigned numNodes, double newColumnProbability);
+TRelationGraph GenerateStar(TRNG &mt, unsigned numNodes, double newColumnProbability);
+TRelationGraph GenerateFullyConnected(TRNG &mt, unsigned numNodes, double newColumnProbability);
+TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes, double newColumnProbability);
 
 } // namespace NKikimr::NKqp
 

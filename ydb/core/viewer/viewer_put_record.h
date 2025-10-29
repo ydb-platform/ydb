@@ -33,12 +33,6 @@ public:
         : TViewerPipeClient(viewer, ev)
     {}
 
-    TPutRecord(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
-        : TBase(viewer, ev)
-    {
-        InitConfig(Params);
-    }
-
 private:
     TString TopicPath;
     std::optional<ui32> Partition;
@@ -61,7 +55,6 @@ public:
     }
     void Bootstrap() override {
         if (!Params.Has("path") || !Params.Has("message")) {
-            TBase::Become(&TThis::StateWork);
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "fields 'path' and 'message' are required and should not be empty"));
         }
 

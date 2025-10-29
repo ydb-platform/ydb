@@ -58,9 +58,14 @@ TUnit MakeUnit<EUnitKind::Keyword>(Syntax& s) {
     using NSQLReflect::TLexerGrammar;
 
     TUnit unit = {.Kind = EUnitKind::Keyword};
+
     for (const auto& keyword : s.Grammar->KeywordNames) {
         const TStringBuf content = TLexerGrammar::KeywordBlockByName(keyword);
         unit.Patterns.push_back(CaseInsensitive(content));
+    }
+
+    for (const TString& type : LoadHints()) {
+        unit.Patterns.emplace_back(CaseInsensitive(type));
     }
 
     unit.Patterns = {Merged(std::move(unit.Patterns))};
@@ -105,11 +110,6 @@ TUnit MakeUnit<EUnitKind::BindParameterIdentifier>(Syntax& s) {
 
 template <>
 TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
-    TVector<NSQLTranslationV1::TRegexPattern> hints;
-    for (const TString& type : LoadHints()) {
-        hints.emplace_back(CaseInsensitive(type));
-    }
-
     return {
         .Kind = EUnitKind::OptionIdentifier,
         .Patterns = {
@@ -119,7 +119,6 @@ TUnit MakeUnit<EUnitKind::OptionIdentifier>(Syntax& s) {
                 .Before = TStringBuilder() << "PRAGMA" << s.Get("WS"),
                 .IsCaseInsensitive = true,
             },
-            {Merged(std::move(hints))},
         },
     };
 }

@@ -1,5 +1,3 @@
-
-[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/simdjson.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:simdjson)
 [![][license img]][license] [![][licensemit img]][licensemit]
 
 
@@ -64,6 +62,7 @@ Real-world usage
 - [WasmEdge](https://wasmedge.org)
 - [RonDB](https://github.com/logicalclocks/rondb)
 - [GreptimeDB](https://github.com/GreptimeTeam/greptimedb)
+- [mamba](https://github.com/mamba-org/mamba)
 
 
 If you are planning to use simdjson in a product, please work from one of our releases.
@@ -109,6 +108,7 @@ Documentation
 Usage documentation is available:
 
 * [Basics](doc/basics.md) is an overview of how to use simdjson and its APIs.
+* [Builder](doc/builder.md) is an overview of how to efficiently write JSON strings using simdjson.
 * [Performance](doc/performance.md) shows some more advanced scenarios and how to tune for them.
 * [Implementation Selection](doc/implementation-selection.md) describes runtime CPU detection and
   how you can work with it.
@@ -118,6 +118,7 @@ Godbolt
 -------------
 
 Some users may want to browse code along with the compiled assembly. You want to check out the following lists of examples:
+* [C++26 reflection example](https://godbolt.org/z/K3Px64TqK)
 * [simdjson examples with errors handled through exceptions](https://godbolt.org/z/7G5qE4sr9)
 * [simdjson examples with errors without exceptions](https://godbolt.org/z/e9dWb9E4v)
 

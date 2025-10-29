@@ -55,8 +55,9 @@ namespace {
         const TString& structuredTokenJson,
         const TString& path,
         bool addRoot) {
-        if (!federatedQuerySetup || !federatedQuerySetup->Driver) {
-            return NThreading::MakeFuture<TGetSchemeEntryResult>(); 
+        if (!federatedQuerySetup || !federatedQuerySetup->Driver || !endpoint || !database) {
+            LOG_NOTICE_S(*NActors::TActivationContext::ActorSystem(), NKikimrServices::KQP_GATEWAY, "Skipped describe for path '" << path << "' in external YDB database '" << database << "' with endpoint '" << endpoint << "'");
+            return NThreading::MakeFuture<TGetSchemeEntryResult>(TGetSchemeEntryResult{.EntryType = NYdb::NScheme::ESchemeEntryType::Table}); 
         }
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = NYql::CreateCredentialsProviderFactoryForStructuredToken(nullptr, structuredTokenJson, false);
         auto driver = federatedQuerySetup->Driver;

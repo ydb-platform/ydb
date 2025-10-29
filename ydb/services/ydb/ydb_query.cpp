@@ -46,7 +46,7 @@ void TGRpcYdbQueryService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                     ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()], \
                         new TGrpcRequestNoOperationCall<IN, OUT> \
                             (ctx, &CB, TRequestAuxSettings { \
-                                .RlMode = RLSWITCH(TRateLimiterMode::Rps), \
+                                .RlMode = RLSWITCH(Rps), \
                                 .AuditMode = AUDIT_MODE, \
                                 .RequestType = NJaegerTracing::ERequestType::QUERY_##REQUEST_TYPE, \
                             })); \

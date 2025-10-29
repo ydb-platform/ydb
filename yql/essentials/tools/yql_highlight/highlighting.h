@@ -6,15 +6,12 @@ namespace NSQLHighlight {
 
 bool IsCaseInsensitive(const THighlighting& highlighting);
 
-template <std::invocable<const TUnit&> Action>
+template <std::invocable<const TUnit&, const TRangePattern&> Action>
 void ForEachMultiLine(const THighlighting& highlighting, Action action) {
     for (const TUnit& unit : highlighting.Units) {
-        TMaybe<TRangePattern> range = unit.RangePattern;
-        if (!range) {
-            continue;
+        for (const TRangePattern& range : unit.RangePatterns) {
+            action(unit, range);
         }
-
-        action(unit);
     }
 }
 

@@ -1089,6 +1089,12 @@ private:
                 return false;
             }
             Types_.EnableLineage = ("EnableLineage" == name);
+        } else if (name == "EnableStandaloneLineage" || name == "DisableStandaloneLineage") {
+            if (args.size() != 0) {
+                ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                return false;
+            }
+            Types_.EnableStandaloneLineage = ("EnableStandaloneLineage" == name);
         } else if (name == "Layer") {
             if (args.size() != 1) {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Expected exatly 1 argument, but got " << args.size()));

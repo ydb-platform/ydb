@@ -42,6 +42,7 @@ ydb/core/sys_view/ut AuthSystemView.AuthUsers_Access
 ydb/core/sys_view/ut SystemView.ShowCreateTableChangefeeds
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_LocalRead_TopicAutoPartitioning
 ydb/core/transfer/ut/large TransferLarge.Transfer100KM_10P_RowTable_TopicAutoPartitioning
+ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelOnOnSingleTopic
 ydb/core/tx/schemeshard/ut_export_reboots_s3 TExportToS3WithRebootsTests.CancelShouldSucceedOnSingleShardTableWithUniqueIndex
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_index TAsyncIndexTests.MergeBothWithReboots[TabletReboots]
@@ -51,16 +52,21 @@ ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartit
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioningUniq
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
+ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData
+ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndLocalDBBtreeIndex
+ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithDataAndPersistentPartitionStats
 ydb/core/tx/schemeshard/ut_restore TImportTests.ShouldSucceedOnManyTables
 ydb/core/tx/schemeshard/ut_sequence_reboots TSequenceReboots.CreateSequencesWithIndexedTable
 ydb/core/tx/schemeshard/ut_sequence_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitByLoad.ConcurrentSplitTransactionIgnored
 ydb/core/tx/schemeshard/ut_split_merge TSchemeShardSplitByLoad.DuplicateSplitTransactionIgnored
+ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[PipeResets]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/viewer/tests test.py.TestViewer.test_security
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data
 ydb/core/viewer/tests test.py.TestViewer.test_topic_data_cdc
 ydb/core/viewer/ut Viewer.TabletMerging
@@ -94,10 +100,12 @@ ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/persqueue_v1/ut TPersQueueTest.LOGBROKER_7820
 ydb/services/persqueue_v1/ut TPersQueueTest.TopicServiceCommitOffset
 ydb/services/persqueue_v1/ut unittest.[*/*] chunk
+ydb/services/persqueue_v1/ut/new_schemecache_ut TPersQueueNewSchemeCacheTest.TestReadAtTimestamp_3
 ydb/services/ydb/backup_ut BackupRestore.RestoreReplicationThatDoesNotUseSecret
 ydb/services/ydb/ut TAuthenticationWithSqlExecution.CreateAlterUserWithHash
 ydb/services/ydb/ut TGRpcAuthentication.NoConnectRights
 ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
+ydb/services/ydb/ut TGRpcAuthentication.ValidCredentials
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/compatibility py3test.[test_statistics.py */*] chunk
 ydb/tests/compatibility test_batch_operations.py.TestBatchOperations.test_batch_delete[rolling_stable-25-2-1_to_stable-25-3-1]
@@ -176,6 +184,9 @@ ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secon
 ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-25-2-1_to_stable-25-3-1-True]
 ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-25-3-1_to_current-False]
 ydb/tests/compatibility test_followers.py.TestSecondaryIndexFollowers.test_secondary_index_followers[rolling_stable-25-3-1_to_current-True]
+ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_infer_pdisk_expected_slot_count[restart_stable-25-2-1_to_current]
+ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_infer_pdisk_expected_slot_count[restart_stable-25-2-1_to_stable-25-3-1]
+ydb/tests/compatibility test_infer_pdisk_expected_slot_count.py.TestUpgradeThenRollback.test_infer_pdisk_expected_slot_count[restart_stable-25-3-1_to_current]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_current_and_stable-25-3-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-25-3-1]
 ydb/tests/compatibility test_kafka_topic.py.TestKafkaTopicMixedClusterFixture.test_workload[mixed_stable-25-3-1_and_stable-25-2-1]
@@ -336,6 +347,7 @@ ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
+ydb/tests/fq/yds test_recovery_mz.py.TestRecovery.test_recovery[v1]
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
@@ -464,4 +476,3 @@ ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[row]
 ydb/tests/stress/olap_workload/tests py3test.sole chunk
 ydb/tests/stress/olap_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite
-ydb/core/blobstorage/ut_blobstorage GroupLayoutSanitizer.StressMirror3dc

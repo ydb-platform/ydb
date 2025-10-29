@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
 import argparse
-import configparser
 import datetime
 import os
 import posixpath
 import re
+import sys
 import time
 import ydb
 from get_diff_lines_of_file import get_diff_lines_of_file
 from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
 
+# Add analytics directory to path for ydb_wrapper import
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'analytics'))
+from ydb_wrapper import YDBWrapper
+
 dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../../config/ydb_qa_db.ini"
 repo_path = f"{dir}/../../../"
 muted_ya_path = '.github/config/muted_ya.txt'
-config.read(config_file_path)
-
-DATABASE_ENDPOINT = config["QA_DB"]["DATABASE_ENDPOINT"]
-DATABASE_PATH = config["QA_DB"]["DATABASE_PATH"]
 
 
 def get_all_tests(job_id=None, branch=None, build_type=None):
@@ -28,16 +26,13 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
     print(f'   - branch: {branch}')
     print(f'   - build_type: {build_type}')
 
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=10, fail_fast=True)
-
-        # settings, paths, consts
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-        table_client = ydb.TableClient(driver, tc_settings)
+    script_name = os.path.basename(__file__)
+    
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return []
 
         # geting last date from history
         today = datetime.date.today().strftime('%Y-%m-%d')
@@ -48,131 +43,85 @@ def get_all_tests(job_id=None, branch=None, build_type=None):
             print(f'   - job_id: {job_id}')
             print(f'   - branch: {branch}')
 
-            tests = f"""
-            SELECT * FROM (
-                SELECT 
-                    suite_folder,
-                    test_name,
-                    full_name
-                    from `test_results/analytics/testowners`
-                WHERE  
-                    run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
-                    and run_timestamp_last <= Date('{today}') + Interval("P1D")
-                UNION
-                SELECT DISTINCT
-                    suite_folder,
-                    test_name,
-                    suite_folder || '/' || test_name as full_name
-                FROM `test_results/test_runs_column`
-                WHERE
-                    job_id = {job_id} 
-                    and branch = '{branch}'
-            )
-            """
+            tests_query = f"""
+        SELECT * FROM (
+            SELECT 
+                suite_folder,
+                test_name,
+                full_name
+                from `test_results/analytics/testowners`
+            WHERE  
+                run_timestamp_last >= Date('{today}') - 6*Interval("P1D") 
+                and run_timestamp_last <= Date('{today}') + Interval("P1D")
+            UNION
+            SELECT DISTINCT
+                suite_folder,
+                test_name,
+                suite_folder || '/' || test_name as full_name
+            FROM `test_results/test_runs_column`
+            WHERE
+                job_id = {job_id} 
+                and branch = '{branch}'
+        )
+        """
         else:  # get all tests with run_timestamp_last from test_runs_column for specific branch
             print(f'🎯 Mode: Get all tests with run_timestamp_last from test_runs_column')
             print(f'   - branch: {branch}')
             print(f'   - build_type: {build_type}')
 
             tests_query = f"""
+        SELECT 
+            t.suite_folder as suite_folder,
+            t.test_name as test_name,
+            t.full_name as full_name,
+            t.owners as owners,
+            trc.run_timestamp_last as run_timestamp_last,
+            Date('{today}') as date
+        FROM `test_results/analytics/testowners` t
+        INNER JOIN (
             SELECT 
-                t.suite_folder as suite_folder,
-                t.test_name as test_name,
-                t.full_name as full_name,
-                t.owners as owners,
-                trc.run_timestamp_last as run_timestamp_last,
-                Date('{today}') as date
-            FROM `test_results/analytics/testowners` t
-            INNER JOIN (
-                SELECT 
-                    suite_folder,
-                    test_name,
-                    MAX(run_timestamp) as run_timestamp_last
-                FROM `test_results/test_runs_column`
-                WHERE branch = '{branch}'
-                AND build_type = '{build_type}'
-                GROUP BY suite_folder, test_name
-            ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
-            """
+                suite_folder,
+                test_name,
+                MAX(run_timestamp) as run_timestamp_last
+            FROM `test_results/test_runs_column`
+            WHERE branch = '{branch}'
+            AND build_type = '{build_type}'
+            GROUP BY suite_folder, test_name
+        ) trc ON t.suite_folder = trc.suite_folder AND t.test_name = trc.test_name
+        """
         
         print(f'📝 Executing SQL query:')
         print(tests_query)
         
-        query = ydb.ScanQuery(tests_query, {})
         print(f'⏱️  Starting query execution...')
-        start_time = time.time()
-        it = table_client.scan_query(query)
+        results = ydb_wrapper.execute_scan_query(tests_query)
         
-        results = []
-        batch_count = 0
-        while True:
-            try:
-                result = next(it)
-                batch_count += 1
-                batch_size = len(result.result_set.rows) if result.result_set.rows else 0
-                results = results + result.result_set.rows
-                print(f'📦 Batch {batch_count}: {batch_size} rows')
-            except StopIteration:
-                break
-        
-        end_time = time.time()
-        print(f'✅ Query completed in {end_time - start_time:.2f} seconds')
+        print(f'✅ Query completed successfully')
         print(f'📊 Total results: {len(results)} tests')
-        
         
         return results
 
 
-def create_tables(pool, table_path):
+def create_tables(ydb_wrapper, table_path):
     print(f"> create table if not exists:'{table_path}'")
 
-    def callee(session):
-        session.execute_scheme(
-            f"""
-            CREATE table IF NOT EXISTS `{table_path}` (
-                `date` Date NOT NULL,
-                `test_name` Utf8 NOT NULL,
-                `suite_folder` Utf8 NOT NULL,
-                `full_name` Utf8 NOT NULL,
-                `run_timestamp_last` Timestamp NOT NULL,
-                `owners` Utf8,
-                `branch` Utf8 NOT NULL,
-                `is_muted` Uint32 ,
-                PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
-            )
-                PARTITION BY HASH(date,branch)
-                WITH (STORE = COLUMN)
-            """
+    create_sql = f"""
+        CREATE table IF NOT EXISTS `{table_path}` (
+            `date` Date NOT NULL,
+            `test_name` Utf8 NOT NULL,
+            `suite_folder` Utf8 NOT NULL,
+            `full_name` Utf8 NOT NULL,
+            `run_timestamp_last` Timestamp NOT NULL,
+            `owners` Utf8,
+            `branch` Utf8 NOT NULL,
+            `is_muted` Uint32 ,
+            PRIMARY KEY (`date`,branch, `test_name`, `suite_folder`, `full_name`)
         )
-
-    return pool.retry_operation_sync(callee)
-
-
-def bulk_upsert(table_client, table_path, rows):
-    print(f'📤 Starting bulk upsert to: {table_path}')
-    print(f'   - Rows to upsert: {len(rows)}')
+            PARTITION BY HASH(date,branch)
+            WITH (STORE = COLUMN)
+        """
     
-    column_types = (
-        ydb.BulkUpsertColumns()
-        .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
-        .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
-        .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
-        .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
-    )
-    
-    print(f'🔧 Column types configured')
-    print(f'⏱️  Executing bulk upsert...')
-    
-    start_time = time.time()
-    table_client.bulk_upsert(table_path, rows, column_types)
-    end_time = time.time()
-    
-    print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
-    print(f'📊 Successfully upserted {len(rows)} rows')
+    ydb_wrapper.create_table(table_path, create_sql)
 
 
 def write_to_file(text, file):
@@ -184,36 +133,42 @@ def write_to_file(text, file):
 def upload_muted_tests(tests):
     print(f'💾 Starting upload_muted_tests with {len(tests)} tests')
     
-    with ydb.Driver(
-        endpoint=DATABASE_ENDPOINT,
-        database=DATABASE_PATH,
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        print(f'📡 Connecting to YDB for upload: {DATABASE_ENDPOINT}/{DATABASE_PATH}')
-        driver.wait(timeout=10, fail_fast=True)
-        print(f'✅ YDB connection established for upload')
-
-        # settings, paths, consts
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
-        table_client = ydb.TableClient(driver, tc_settings)
+    script_name = os.path.basename(__file__)
+    
+    # Initialize YDB wrapper with context manager for automatic cleanup
+    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+        # Check credentials
+        if not ydb_wrapper.check_credentials():
+            return
 
         table_path = f'test_results/all_tests_with_owner_and_mute'
         print(f'📋 Target table: {table_path}')
 
-        with ydb.SessionPool(driver) as pool:
-            print(f'🏗️  Creating table if not exists...')
-            create_tables(pool, table_path)
-            
-            full_path = posixpath.join(DATABASE_PATH, table_path)
-            print(f'📤 Starting bulk upsert to: {full_path}')
-            print(f'   - Records to upload: {len(tests)}')
-            
-            start_time = time.time()
-            bulk_upsert(driver.table_client, full_path, tests)
-            end_time = time.time()
-            
-            print(f'✅ Bulk upsert completed in {end_time - start_time:.2f} seconds')
-            print(f'📊 Successfully uploaded {len(tests)} test records')
+        print(f'🏗️  Creating table if not exists...')
+        create_tables(ydb_wrapper, table_path)
+        
+        full_path = f"{ydb_wrapper.database_path}/{table_path}"
+        print(f'📤 Starting bulk upsert to: {full_path}')
+        print(f'   - Records to upload: {len(tests)}')
+        
+        # Подготавливаем column_types
+        column_types = (
+            ydb.BulkUpsertColumns()
+            .add_column("date", ydb.OptionalType(ydb.PrimitiveType.Date))
+            .add_column("test_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("suite_folder", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("full_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("run_timestamp_last", ydb.OptionalType(ydb.PrimitiveType.Timestamp))
+            .add_column("owners", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("branch", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+            .add_column("is_muted", ydb.OptionalType(ydb.PrimitiveType.Uint32))
+        )
+        
+        # Используем bulk_upsert_batches
+        ydb_wrapper.bulk_upsert_batches(full_path, tests, column_types, batch_size=1000)
+        
+        print(f'✅ Bulk upsert completed successfully')
+        print(f'📊 Successfully uploaded {len(tests)} test records')
 
 
 def to_str(data):
@@ -235,17 +190,6 @@ def mute_applier(args):
 
     all_tests_file = os.path.join(output_path, '1_all_tests.txt')
     all_muted_tests_file = os.path.join(output_path, '1_all_muted_tests.txt')
-
-    if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
-        print("❌ Error: Env variable CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS is missing, skipping")
-        return 1
-    else:
-        print("✅ YDB credentials found, setting up environment")
-        # Do not set up 'real' variable from gh workflows because it interfere with ydb tests
-        # So, set up it locally
-        os.environ["YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"] = os.environ[
-            "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"
-        ]
 
     # all muted
     print(f'📋 Loading mute rules from: {muted_ya_path}')

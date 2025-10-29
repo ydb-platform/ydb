@@ -423,11 +423,19 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
                 SET TablePathPrefix = "/Root/";
                 select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
             )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c) from t1 group by t1.b
+                union all
+                select sum(t1.b) from t1;
+            )",
         };
 
         std::vector<std::string> results = {
             R"([["1";"4"];["2";"6"]])",
-            R"([["1";"4"];["2";"6"]])"
+            R"([["1";"4"];["2";"6"]])",
+            R"([["6"];["4"];["8"]])"
         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {

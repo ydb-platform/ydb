@@ -17,7 +17,6 @@ from collections import namedtuple
 from . import _common
 from . import _psposix
 from . import _psutil_aix as cext
-from . import _psutil_posix as cext_posix
 from ._common import NIC_DUPLEX_FULL
 from ._common import NIC_DUPLEX_HALF
 from ._common import NIC_DUPLEX_UNKNOWN
@@ -28,7 +27,6 @@ from ._common import conn_to_ntuple
 from ._common import get_procfs_path
 from ._common import memoize_when_activated
 from ._common import usage_percent
-
 
 __extra__all__ = ["PROCFS_PATH"]
 
@@ -42,8 +40,8 @@ HAS_THREADS = hasattr(cext, "proc_threads")
 HAS_NET_IO_COUNTERS = hasattr(cext, "net_io_counters")
 HAS_PROC_IO_COUNTERS = hasattr(cext, "proc_io_counters")
 
-PAGE_SIZE = cext_posix.getpagesize()
-AF_LINK = cext_posix.AF_LINK
+PAGE_SIZE = cext.getpagesize()
+AF_LINK = cext.AF_LINK
 
 PROC_STATUSES = {
     cext.SIDL: _common.STATUS_IDLE,
@@ -195,7 +193,7 @@ def disk_partitions(all=False):
 # =====================================================================
 
 
-net_if_addrs = cext_posix.net_if_addrs
+net_if_addrs = cext.net_if_addrs
 
 if HAS_NET_IO_COUNTERS:
     net_io_counters = cext.net_io_counters
@@ -234,8 +232,8 @@ def net_if_stats():
     names = {x[0] for x in net_if_addrs()}
     ret = {}
     for name in names:
-        mtu = cext_posix.net_if_mtu(name)
-        flags = cext_posix.net_if_flags(name)
+        mtu = cext.net_if_mtu(name)
+        flags = cext.net_if_flags(name)
 
         # try to get speed and duplex
         # TODO: rewrite this in C (entstat forks, so use truss -f to follow.
@@ -449,11 +447,11 @@ class Process:
 
     @wrap_exceptions
     def nice_get(self):
-        return cext_posix.getpriority(self.pid)
+        return cext.proc_priority_get(self.pid)
 
     @wrap_exceptions
     def nice_set(self, value):
-        return cext_posix.setpriority(self.pid, value)
+        return cext.proc_priority_set(self.pid, value)
 
     @wrap_exceptions
     def ppid(self):

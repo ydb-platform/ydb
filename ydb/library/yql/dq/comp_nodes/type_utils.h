@@ -112,25 +112,54 @@ constexpr bool RightSemiOrOnly(EJoinKind kind) {
     }
 }
 
-enum class JoinSide { kLeft, kRight };
+struct Yield {};
 
-struct TIndexAndSide {
-    int Index;
-    JoinSide Side;
+struct Finish {};
+
+template <typename Payload> struct One {
+    Payload Data;
 };
 
-using TDqRenames = std::vector<TIndexAndSide>;
+template <typename Payload> using FetchResult = std::variant<Finish, Yield, One<Payload>>;
 
-void ValidateRenames(const TDqRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth);
+template <typename Payload> EFetchResult AsResult(const FetchResult<Payload> var) {
+    return static_cast<EFetchResult>(int(var.index()) - 1);
+}
+
+template <typename Payload> NYql::NUdf::EFetchStatus AsStatus(const FetchResult<Payload> var) {
+    int index = var.index();
+    switch (index) {
+    case 0:
+        return NYql::NUdf::EFetchStatus::Finish;
+    case 1:
+        return NYql::NUdf::EFetchStatus::Yield;
+    case 2:
+        return NYql::NUdf::EFetchStatus::Ok;
+    }
+    MKQL_ENSURE(false, "fetchresult is valueless?");
+}
+
+enum class EJoinSide { kLeft, kRight };
+
+template <typename SideEnum> struct TIndexAndSide {
+    int Index;
+    SideEnum Side;
+};
+
+template <typename SideEnum> using TDqRenames = std::vector<TIndexAndSide<SideEnum>>;
+
+using TDqUserRenames = TDqRenames<EJoinSide>;
+
+void ValidateRenames(const TDqUserRenames& renames, EJoinKind kind, int leftTypesWidth, int rightTypesWidth);
 
 struct TGraceJoinRenames {
     TVector<ui32> Left;
     TVector<ui32> Right;
     static TGraceJoinRenames FromRuntimeNodes(TRuntimeNode left, TRuntimeNode right);
-    static TGraceJoinRenames FromDq(const TDqRenames& dqJoinRenames);
+    static TGraceJoinRenames FromDq(const TDqUserRenames& dqJoinRenames);
 };
 
-TDqRenames FromGraceFormat(const TGraceJoinRenames& graceJoinRenames);
+TDqUserRenames FromGraceFormat(const TGraceJoinRenames& graceJoinRenames);
 
 } // namespace NMiniKQL
 } // namespace NKikimr

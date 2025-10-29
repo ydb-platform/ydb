@@ -2,7 +2,6 @@ from aiohttp import web
 import json
 import logging
 import re
-from math import ceil
 from concurrent import futures
 
 from library.python.monlib.encoder import loads
@@ -128,10 +127,8 @@ class SolomonEmulator(object):
 
         return web.json_response({"names": result})
 
-    async def sensors(self, request):
+    async def sensor_labels(self, request):
         selectors, success = _parse_selectors(request.rel_url.query["selectors"])
-        page_size = int(request.rel_url.query['pageSize'])
-        page = int(request.rel_url.query['page'])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
@@ -144,12 +141,30 @@ class SolomonEmulator(object):
         service = selectors["service"]
 
         shard = self._get_shard(project, cluster, service)
-        metrics = shard.get_metrics(selectors)
+        labels, totalCount = shard.get_labels(selectors)
 
-        from_ind = page_size * page
-        to_ind = min(len(metrics), page_size * (page + 1))
+        return web.json_response({"labels": labels, "totalCount": totalCount})
 
-        return web.json_response({"result": metrics[from_ind:to_ind], "page": {"pagesCount": ceil(len(metrics) / page_size), "totalCount": len(metrics)}})
+    async def sensors(self, request):
+        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
+
+        if not success:
+            return web.HTTPBadRequest(text="Invalid selectors")
+
+        if "project" not in selectors or "cluster" not in selectors or "service" not in selectors:
+            return web.HTTPBadRequest(text="project, cluster and service labels must be specified")
+
+        project = selectors["project"]
+        cluster = selectors["cluster"]
+        service = selectors["service"]
+
+        shard = self._get_shard(project, cluster, service)
+        metrics, error = shard.get_metrics(selectors)
+
+        if error is not None:
+            return web.HTTPBadRequest(text=error)
+
+        return web.json_response({"result": metrics, "page": {"pagesCount": 1, "totalCount": len(metrics)}})
 
     async def metrics_get(self, request):
         cluster = request.rel_url.query.get('cluster', None) or request.rel_url.query['folderId']
@@ -294,9 +309,10 @@ class DataService(DataServiceServicer):
 
 
 def create_web_app(emulator):
-    webapp = web.Application()
+    webapp = web.Application(client_max_size=1024**3, handler_args={"max_line_size": 1024**3, "max_field_size": 1024**3})
     webapp.add_routes([
         web.get("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
+        web.get("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
         web.get("/api/v2/projects/{project}/sensors", emulator.sensors),
         web.get("/metrics/get", emulator.metrics_get),
         web.get("/ping", emulator.get_ping),

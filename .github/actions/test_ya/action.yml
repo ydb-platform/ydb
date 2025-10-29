@@ -59,6 +59,18 @@ inputs:
     type: boolean
     default: false
     description: "add ya make vars with git info"
+  telegram_ydbot_token:
+    type: string
+    required: false
+    description: "Telegram bot token"
+  telegram_alert_logins:
+    type: string
+    required: false
+    description: "Telegram alert logins"
+  telegram_alert_chat:
+    type: string
+    required: false
+    description: "Telegram alert chat"
 
 outputs:
   success:
@@ -120,7 +132,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser plotly
 
     - name: Setup cache
       shell: bash
@@ -132,6 +144,10 @@ runs:
     - name: ya build and test
       id: build
       shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
+        GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
+        GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -347,6 +363,12 @@ runs:
           RC=`cat exit_code`
 
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+
+          .github/scripts/report_ram_analyzer.py \
+            --report-file "$CURRENT_REPORT" \
+            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
+            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --memory-threshold 90 || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

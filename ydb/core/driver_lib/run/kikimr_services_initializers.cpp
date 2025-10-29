@@ -267,12 +267,21 @@
 namespace NKikimr::NKikimrServicesInitializers {
 
 struct TAwsApiGuard {
-    TAwsApiGuard() {
-        InitAwsAPI();
+    const TAwsClientConfig Config;
+
+    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
+        : Config{
+            .LogConfig{
+                .LogLevel = config.GetLogConfig().GetLogLevel(),
+                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
+            },
+        }
+    {
+        InitAwsAPI(Config);
     }
 
     ~TAwsApiGuard() {
-        ShutdownAwsAPI();
+        ShutdownAwsAPI(Config);
     }
 };
 
@@ -3123,8 +3132,7 @@ TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
 
 void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
-    Y_UNUSED(appData);
-    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>(appData->AwsClientConfig));
 }
 
 TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)

@@ -1422,6 +1422,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasAwsClientConfig()) {
+        AppData->AwsClientConfig = runConfig.AppConfig.GetAwsClientConfig();
+    }
+
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
     }

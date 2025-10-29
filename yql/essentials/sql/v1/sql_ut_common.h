@@ -8490,6 +8490,9 @@ Y_UNIT_TEST(CreateTopicSimple) {
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metering_mode = "str_value", partition_count_limit = 123, retention_period = Interval('PT1H'));
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = 3);
+        )");
 }
 
 Y_UNIT_TEST(CreateTopicConsumer) {
@@ -8515,7 +8518,13 @@ Y_UNIT_TEST(AlterTopicSimple) {
             ALTER TOPIC topic1 SET (retention_storage_mb = 3, partition_count_limit = 50);
         )");
     TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = 2);
+        )");
+    TestQuery(R"(
             ALTER TOPIC topic1 RESET (supported_codecs, retention_period);
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1 RESET (metrics_level);
         )");
     TestQuery(R"(
             ALTER TOPIC topic1 RESET (partition_write_speed_bytes_per_second),
@@ -8564,6 +8573,10 @@ Y_UNIT_TEST(TopicBadRequests) {
         )", false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
+            CREATE TOPIC topic1 WITH (metrics_level = "1");
+        )", false,
+              {"3:55: Error: METRICS_LEVEL value should be an integer"});
+    TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
         )", false,
               {"3:59: Error: Consumer cons1 defined more than once"});
@@ -8575,6 +8588,10 @@ Y_UNIT_TEST(TopicBadRequests) {
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
         )", false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
+    TestQuery(R"(
+            ALTER TOPIC topic1 SET (metrics_level = "1");
+        )", false,
+              {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
         )", false,

@@ -1403,6 +1403,7 @@ struct TTopicSettings {
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningUpUtilizationPercent;
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningDownUtilizationPercent;
     NYql::TResetableSetting<TNodePtr, void> AutoPartitioningStrategy;
+    NYql::TResetableSetting<TNodePtr, void> MetricsLevel;
 
     bool IsSet() const {
         return MinPartitions ||
@@ -1416,7 +1417,8 @@ struct TTopicSettings {
                AutoPartitioningStabilizationWindow ||
                AutoPartitioningUpUtilizationPercent ||
                AutoPartitioningDownUtilizationPercent ||
-               AutoPartitioningStrategy;
+               AutoPartitioningStrategy ||
+               MetricsLevel;
     }
 };
 

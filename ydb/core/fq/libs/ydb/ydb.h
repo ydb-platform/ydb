@@ -49,7 +49,7 @@ private:
     YDB_ACCESSOR_DEF(TDuration, CancelAfter);
 };
 
-struct TYdbConnection : public TThrRefBase {    // TODO :rm ?
+struct TYdbConnection : public TThrRefBase {
     NYdb::TDriver Driver;
     NYdb::NTable::TTableClient TableClient;
     NYdb::NScheme::TSchemeClient SchemeClient;

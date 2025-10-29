@@ -1786,7 +1786,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                         LAST(V1.key) as v1,
                         LAST(V4.key) as v4
                     ONE ROW PER MATCH
-                    AFTER MATCH SKIP TO NEXT ROW
                     PATTERN (V1 V? V4)
                     DEFINE 
                         V1 as V1.value = "value1",

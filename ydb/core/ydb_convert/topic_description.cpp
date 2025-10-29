@@ -41,6 +41,35 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
         serviceType = pqConfig.GetDefaultClientServiceType().GetName();
     }
     (*out.mutable_attributes())["_service_type"] = serviceType;
+
+    switch (in.GetType()) {
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
+            auto* type = out.mutable_shared_consumer_type();
+            type->set_keep_messages_order(in.GetKeepMessageOrder());
+            type->mutable_default_processing_timeout()->set_seconds(in.GetDefaultVisibilityTimeoutSeconds());
+
+            switch (in.GetDeadLetterPolicy()) {
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(in.GetMaxMessageReceiveCount());
+                    type->mutable_move_dead_letter_policy()->set_dead_letter_queue(in.GetDeadLetterQueue());
+                    break;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(in.GetMaxMessageReceiveCount());
+                    break;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DISABLED:
+                    type->mutable_disabled_dead_letter_policy();
+                    break;
+            }
+
+            break;
+        }
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
+            out.mutable_streaming_consumer_type();
+
+            break;
+        }
+    }
+
     return true;
 }
 

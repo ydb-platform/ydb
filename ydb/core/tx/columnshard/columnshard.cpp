@@ -185,6 +185,7 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 
     if (clientId == StatsReportPipe) {
         StatsReportPipe = {};
+        LastStats = {};
         return;
     }
 

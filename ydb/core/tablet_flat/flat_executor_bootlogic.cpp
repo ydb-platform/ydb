@@ -27,7 +27,6 @@ NBoot::TLoadBlobs::TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeG
     , LargeGlobId(largeGlobId)
     , State(LargeGlobId)
 {
-    Cerr << "LoadBlobs " << TypeName(*owner) << " ";
     Logic->LoadEntry(this);
 }
 
@@ -116,7 +115,6 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
 
         for (const auto &entry : msg->DependencyGraph->Entries) {
             for (const auto &blobId : entry.References) {
-                Cerr << "ReceiveBoot ";
                 SeenBlob(blobId);
             }
         }
@@ -182,7 +180,6 @@ void TExecutorBootLogic::LoadEntry(TIntrusivePtr<NBoot::TLoadBlobs> entry) {
     for (const auto &blobId : entry->Blobs()) {
         EntriesToLoad[blobId] = entry;
         LoadBlobQueue.Enqueue(blobId, group, this);
-        Cerr << "LoadEntry ";
         SeenBlob(blobId);
     }
 }
@@ -192,7 +189,6 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, NTable::TLoade
 
     Y_ENSURE(success, "IPageCollection queued twice for loading");
 
-    Cerr << "LoadPages ";
     SeenBlob(fetch.PageCollection->Label());
 
     Ops->Send(
@@ -334,17 +330,18 @@ TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
                 continue;
             }
             for (const auto& glob : **(part->Blobs)) {
-                Cerr << "TableParts ";
                 SeenBlob(glob.Logo);
             }
         }
-        /*if (table.ColdBorrow) {
+        if (!Result_->Database->GetTableColdParts(tableId).empty()) {
             for (const auto& [_, room] : table.Rooms) {
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Main);
-                Result().GcLogic->HistoryCutter.BecomeUncertain(room.Blobs);
+                for (auto channel : room.Blobs) {
+                    Result().GcLogic->HistoryCutter.BecomeUncertain(channel);
+                }
                 Result().GcLogic->HistoryCutter.BecomeUncertain(room.Outer);
             }
-        }*/
+        }
     }
     return Result_;
 }

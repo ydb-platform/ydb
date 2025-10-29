@@ -73,7 +73,6 @@ namespace NBoot {
 
             if (Logic->Result().GcLogic) {
                 auto& historyCutter = Logic->Result().GcLogic->HistoryCutter;
-                Cerr << "Apply loans ";
                 historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(proto.GetMetaId()));
                 for (const auto& x : proto.GetBorrowKeepList()) {
                     historyCutter.SeenBlob(LogoBlobIDFromLogoBlobID(x));

@@ -7846,7 +7846,6 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
                     UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 2);
                     UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
                     wasCutHistory = true;
-                    Cerr << "!! TEST SHOULD BE FINISHED\n";
                     return TTestActorRuntime::EEventAction::DROP;
                 }
                 default:
@@ -7875,12 +7874,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         }, 0, &starter);
 
         while (!wasCutHistory) {
-            //env.SendSync(data.MakeRows(1000, 255));
             env.Env.DispatchEvents({});
         }
-
-        //env.WaitFor<TEvTablet::TEvCommitResult>();
-        //env.WaitFor<TEvBlobStorage::TEvCollectGarbageResult>();
     }
 }
 

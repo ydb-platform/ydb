@@ -521,8 +521,6 @@ void TExecutor::Active(const TActorContext &ctx) {
     MakeLogSnapshot();
 
     if (loadedState->ShouldSnapshotScheme) {
-        if (auto logl = Logger->Log(ELnLev::Crit))
-            logl << NFmt::Do(*this) << " Rewriting scheme ";
         TTxStamp stamp = Stamp();
         auto alter = Database->GetScheme().GetSnapshot();
         alter->SetRewrite(true);
@@ -2830,10 +2828,6 @@ void TExecutor::MakeLogSnapshot() {
     if (!LogicSnap->MayFlush(true) || PendingPartSwitches)
         return;
 
-    if (auto logl = Logger->Log(ELnLev::Crit)) {
-        logl
-            << NFmt::Do(*this) << " MakeLogSnapshot ";
-    }
     NeedFollowerSnapshot = false;
     THPTimer makeLogSnapTimer;
 
@@ -3229,7 +3223,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 
     const auto cookie = static_cast<ECommit>(ev->Cookie);
 
-    if (auto logl = Logger->Log(ELnLev::Crit)) {
+    if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " commited cookie " << int(cookie)
             << " for step " << step;
@@ -3262,7 +3256,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
         break;
     case ECommit::Snap:
         LogicSnap->Confirm(msg->Step);
-        GcLogic->Confirm(ctx, Launcher);
+        GcLogic->Confirm(ctx);
 
         VacuumLogic->OnSnapshotCommited(Generation(), step);
         if (NeedFollowerSnapshot || VacuumLogic->NeedLogSnaphot())
@@ -3301,7 +3295,7 @@ void TExecutor::Handle(TEvTablet::TEvCommitResult::TPtr &ev, const TActorContext
 }
 
 void TExecutor::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
-    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev)) {
+    if (auto retryDelay = GcLogic->OnCollectGarbageResult(ev, OwnerCtx(), Launcher)) {
         Schedule(retryDelay, new TEvPrivate::TEvRetryGcRequest(ev->Get()->Channel));
     }
     VacuumLogic->OnCollectedGarbage(OwnerCtx());

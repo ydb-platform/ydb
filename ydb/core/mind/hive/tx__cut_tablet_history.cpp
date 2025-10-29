@@ -38,7 +38,6 @@ public:
                 histogram.IncrementFor(channelInfo.History.size());
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::TabletChannelGen>().Key(tabletId, channel, fromGeneration).Update<Schema::TabletChannelGen::DeletedAtGeneration>(tablet->KnownGeneration);
-                Self->UpdateCounterTabletChannelHistorySize();
             }
         }
         return true;

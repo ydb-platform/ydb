@@ -90,78 +90,78 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 {
 }
 
-DeadLetterPolicy::DeadLetterPolicy(EDeadLetterPolicy policy)
+TDeadLetterPolicy::TDeadLetterPolicy(EDeadLetterPolicy policy)
     : Policy_(policy)
 {
 }
 
-EDeadLetterPolicy DeadLetterPolicy::GetPolicy() const {
+EDeadLetterPolicy TDeadLetterPolicy::GetPolicy() const {
     return Policy_;
 }
 
-DisabledDeadLetterPolicy::DisabledDeadLetterPolicy()
-    : DeadLetterPolicy(EDeadLetterPolicy::Disabled)
+TDisabledDeadLetterPolicy::TDisabledDeadLetterPolicy()
+    : TDeadLetterPolicy(EDeadLetterPolicy::Disabled)
 {
 }
 
-DeleteDeadLetterPolicy::DeleteDeadLetterPolicy(ui32 maxProcessingAttempts)
-    : DeadLetterPolicy(EDeadLetterPolicy::Delete)
+TDeleteDeadLetterPolicy::TDeleteDeadLetterPolicy(ui32 maxProcessingAttempts)
+    : TDeadLetterPolicy(EDeadLetterPolicy::Delete)
     , MaxProcessingAttempts_(maxProcessingAttempts)
 {
 }
 
-ui32 DeleteDeadLetterPolicy::GetMaxProcessingAttempts() const {
+ui32 TDeleteDeadLetterPolicy::GetMaxProcessingAttempts() const {
     return MaxProcessingAttempts_;
 }
 
 
-MoveDeadLetterPolicy::MoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue)
-    : DeadLetterPolicy(EDeadLetterPolicy::Move)
+TMoveDeadLetterPolicy::TMoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue)
+    : TDeadLetterPolicy(EDeadLetterPolicy::Move)
     , MaxProcessingAttempts_(maxProcessingAttempts)
     , DeadLetterQueue_(deadLetterQueue)
 {
 }
 
-ui32 MoveDeadLetterPolicy::GetMaxProcessingAttempts() const {
+ui32 TMoveDeadLetterPolicy::GetMaxProcessingAttempts() const {
     return MaxProcessingAttempts_;
 }
 
-const std::string& MoveDeadLetterPolicy::GetDeadLetterQueue() const {
+const std::string& TMoveDeadLetterPolicy::GetDeadLetterQueue() const {
     return DeadLetterQueue_;
 }
 
-ConsumerType::ConsumerType(EConsumerType type)
+TConsumerType::TConsumerType(EConsumerType type)
     : Type_(type)
 {
 }
 
-EConsumerType ConsumerType::GetType() const {
+EConsumerType TConsumerType::GetType() const {
     return Type_;
 }
 
-StreamingConsumerType::StreamingConsumerType()
-    : ConsumerType(EConsumerType::Streaming)
+TStreamingConsumerType::TStreamingConsumerType()
+    : TConsumerType(EConsumerType::Streaming)
 {
 }
 
-SharedConsumerType::SharedConsumerType(bool keepMessagesOrder, TDuration defaultProcessingTimeout, std::unique_ptr<DeadLetterPolicy>&& deadLetterPolicy)
-    : ConsumerType(EConsumerType::Shared)
+TSharedConsumerType::TSharedConsumerType(bool keepMessagesOrder, TDuration defaultProcessingTimeout, std::shared_ptr<TDeadLetterPolicy>&& deadLetterPolicy)
+    : TConsumerType(EConsumerType::Shared)
     , KeepMessagesOrder_(keepMessagesOrder)
     , DefaultProcessingTimeout_(defaultProcessingTimeout)
     , DeadLetterPolicy_(std::move(deadLetterPolicy))
 {
 }
 
-bool SharedConsumerType::GetKeepMessagesOrder() const {
+bool TSharedConsumerType::GetKeepMessagesOrder() const {
     return KeepMessagesOrder_;
 }
 
-TDuration SharedConsumerType::GetDefaultProcessingTimeout() const {
+TDuration TSharedConsumerType::GetDefaultProcessingTimeout() const {
     return DefaultProcessingTimeout_;
 }
 
-const DeadLetterPolicy* SharedConsumerType::GetDeadLetterPolicy() const {
-    return DeadLetterPolicy_.get();
+std::shared_ptr<const TDeadLetterPolicy> TSharedConsumerType::GetDeadLetterPolicy() const {
+    return DeadLetterPolicy_;
 }
 
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
@@ -180,19 +180,19 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     if (consumer.has_shared_consumer_type()) {
         auto& sharedType = consumer.shared_consumer_type();
 
-        std::unique_ptr<DeadLetterPolicy> deadLetterPolicy;
+        std::shared_ptr<TDeadLetterPolicy> deadLetterPolicy;
         if (sharedType.has_delete_dead_letter_policy()) {
-            deadLetterPolicy = std::make_unique<DeleteDeadLetterPolicy>(sharedType.delete_dead_letter_policy().max_processing_attempts());
+            deadLetterPolicy = std::make_shared<TDeleteDeadLetterPolicy>(sharedType.delete_dead_letter_policy().max_processing_attempts());
         } else if (sharedType.has_move_dead_letter_policy()) {
-            deadLetterPolicy = std::make_unique<MoveDeadLetterPolicy>(sharedType.move_dead_letter_policy().max_processing_attempts(), sharedType.move_dead_letter_policy().dead_letter_queue());
+            deadLetterPolicy = std::make_shared<TMoveDeadLetterPolicy>(sharedType.move_dead_letter_policy().max_processing_attempts(), sharedType.move_dead_letter_policy().dead_letter_queue());
         } else {
-            deadLetterPolicy = std::make_unique<DisabledDeadLetterPolicy>();
+            deadLetterPolicy = std::make_shared<TDisabledDeadLetterPolicy>();
         }
 
         auto timeout = TDuration::Seconds(sharedType.default_processing_timeout().seconds());
-        ConsumerType_ = std::make_unique<SharedConsumerType>(sharedType.keep_messages_order(), timeout, std::move(deadLetterPolicy));
+        ConsumerType_ = std::make_shared<TSharedConsumerType>(sharedType.keep_messages_order(), timeout, std::move(deadLetterPolicy));
     } else {
-        ConsumerType_ = std::make_unique<StreamingConsumerType>();
+        ConsumerType_ = std::make_shared<TStreamingConsumerType>();
     }
 }
 
@@ -200,8 +200,8 @@ const std::string& TConsumer::GetConsumerName() const {
     return ConsumerName_;
 }
 
-const ConsumerType* TConsumer::GetConsumerType() const {
-    return ConsumerType_.get();
+std::shared_ptr<const TConsumerType> TConsumer::GetConsumerType() const {
+    return ConsumerType_;
 }
 
 bool TConsumer::GetImportant() const {

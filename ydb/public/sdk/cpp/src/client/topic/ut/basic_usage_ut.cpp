@@ -115,11 +115,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
                 .ConsumerName("shared_consumer_name")
-                .ConsumerType(EConsumerType::Shared)
-                .KeepMessagesOrder(true)
-                .DefaultProcessingTimeout(TDuration::Seconds(13))
-                .MaxProcessingAttempts(17)
-                .DeadLetterQueue("dlq-topic")
+                .BeginSharedConsumerType()
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .MoveDeadLetterPolicy(11, "deadLetterQueue-topic")
+                .EndSharedConsumerType()
             .EndAddConsumer();
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
@@ -132,11 +132,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
-        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(13));
-        UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 17);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dlq-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType()->GetType(), EConsumerType::Shared);
+        auto sharedType = dynamic_pointer_cast<const TSharedConsumerType>(c.GetConsumerType());
+        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(13));
+        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDeadLetterPolicy()->GetPolicy(), EDeadLetterPolicy::Move);
+        auto policy = dynamic_pointer_cast<const TMoveDeadLetterPolicy>(sharedType->GetDeadLetterPolicy());
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(policy->GetDeadLetterQueue(), "deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {

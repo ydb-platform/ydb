@@ -354,6 +354,20 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
+          monitor_memory() {
+              set +x
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage.txt
+                  sleep 3
+              done
+          }
+
+          monitor_memory &
+          MONITOR_PID=$!
+
           set +e
           ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
@@ -362,12 +376,15 @@ runs:
           set -e
           RC=`cat exit_code`
 
+          kill $MONITOR_PID
+
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
 
           .github/scripts/report_ram_analyzer.py \
             --report-file "$CURRENT_REPORT" \
             --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --ram-usage-file ram_usage.txt \
             --chat-id $GH_ALERTS_TG_CHAT \
             --memory-threshold 90 || true
 

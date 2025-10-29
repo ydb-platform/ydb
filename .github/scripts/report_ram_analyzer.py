@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from telegram.alert_queued_jobs import send_telegram_message, get_current_workflow_url, get_alert_logins
 
 
-def timstamp_to_time(ts):
+def timestamp_to_time(ts):
     return datetime.fromtimestamp(ts, timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
 
@@ -24,15 +24,14 @@ def get_total_runner_memory_in_gb():
 
 def calculate_total_memory_consumption(processes):
     """
-    Вычисляет суммарное потребление памяти для каждого момента времени.
-    Корректно работает с несортированными данными.
+    Calculates the total memory consumption of running suites for each moment in time.
 
     Args:
-        processes: список кортежей (rss_consumption, path, start_time, end_time)
+        processes: lis of tuples (rss_consumption, path, start_time, end_time)
 
     Returns:
-        timeline: отсортированный список временных меток
-        memory_usage: список суммарного потребления памяти для каждой метки
+        timeline: sorted list of timestamps
+        memory_usage: list of total memory consumption for each timestamp
     """
     processes = sorted(processes, key=lambda x: x[2])
     events = defaultdict(float)
@@ -55,7 +54,7 @@ def calculate_total_memory_consumption(processes):
 
 def get_active_processes_at_time(processes, target_time):
     """
-    Возвращает список процессов, активных в указанный момент времени
+    Returns a list of tests that were active at the given time.
     """
     active = []
     for rss, path, start, end in processes:
@@ -64,8 +63,7 @@ def get_active_processes_at_time(processes, target_time):
     return active
 
 
-def create_simple_interactive_plot(processes, output_file):
-    """Упрощённая версия с hover-информацией"""
+def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
     timeline, memory_usage = calculate_total_memory_consumption(processes)
 
     # Создаём subplot с дополнительной информацией
@@ -79,7 +77,7 @@ def create_simple_interactive_plot(processes, output_file):
     # Готовим hover-текст с информацией об активных процессах
     hover_texts = []
     process_counts = []
-    timeline_in_time = list(map(timstamp_to_time, timeline))
+    timeline_in_time = list(map(timestamp_to_time, timeline))
     for t, mem in zip(timeline, memory_usage):
         active = get_active_processes_at_time(processes, t)
         process_counts.append(len(active))
@@ -89,8 +87,8 @@ def create_simple_interactive_plot(processes, output_file):
         test_suites = sorted(test_suites.items(),
                              key=lambda x: x[1], reverse=True)
 
-        hover_text = f"<b>Time:</b> {timstamp_to_time(t)}<br>"
-        hover_text += f"<b>Memory:</b> {mem} GB<br>"
+        hover_text = f"<b>Time:</b> {timestamp_to_time(t)}<br>"
+        hover_text += f"<b>Sum of suites:</b> {mem} GB<br>"
         hover_text += f"<b>Processes:</b> {len(active)}<br><br>"
 
         if active:
@@ -100,16 +98,31 @@ def create_simple_interactive_plot(processes, output_file):
 
         hover_texts.append(hover_text)
 
-    # График памяти
+    min_ts = timeline[0]
+    max_ts = timeline[-1]
+    ram_usage_with_ts = list(filter(lambda x: min_ts <= x[0] <= max_ts, ram_usage_with_ts))
+    ram_usage = list(map(lambda x: x[1], ram_usage_with_ts))
+    ts_of_ram_usage = list(map(lambda x: timestamp_to_time(x[0]), ram_usage_with_ts))
+    fig.add_trace(
+        go.Scatter(
+            x=ts_of_ram_usage,
+            y=ram_usage,
+            mode='lines',
+            name='RSS, meminfo',
+            line=dict(shape='hv', width=1, color='rgb(115, 187, 142)'),
+            fill='tozeroy',
+            fillcolor='rgba(115, 187, 142, 0.3)',
+        ),
+        row=1, col=1
+    )
+
     fig.add_trace(
         go.Scatter(
             x=timeline_in_time,
             y=memory_usage,
             mode='lines',
-            name='Total RSS',
+            name='RSS, ya make',
             line=dict(shape='hv', width=1, color='rgb(46, 134, 171)'),
-            fill='tozeroy',
-            fillcolor='rgba(46, 134, 171, 0.3)',
             hovertext=hover_texts,
             hoverinfo='text'
         ),
@@ -121,22 +134,22 @@ def create_simple_interactive_plot(processes, output_file):
             y=process_counts,
             mode='lines',
             name='Active processes',
-            line=dict(shape='hv', width=1, color='rgb(171, 134, 46)'),
+            line=dict(shape='hv', width=1, color='rgb(248, 157, 33)'),
         ),
         row=1, col=1
     )
 
     # Отмечаем пик
-    max_memory = max(memory_usage)
-    max_idx = memory_usage.index(max_memory)
-    max_time = timeline[max_idx]
+    max_memory = max(ram_usage)
+    max_idx = ram_usage.index(max_memory)
+    max_time = ts_of_ram_usage[max_idx]
 
     if not output_file:
         print(hover_texts[max_idx].replace('<br>', '\n'))
 
     fig.add_trace(
         go.Scatter(
-            x=[timstamp_to_time(max_time)],
+            x=[max_time],
             y=[max_memory],
             mode='markers+text',
             marker=dict(size=15, color='red', symbol='star'),
@@ -177,11 +190,24 @@ def parse_report_file(report_json):
     return all
 
 
+def parse_ram_usage_file(ram_usage_file):
+    ram_usage = []
+    for line in ram_usage_file:
+        timestamp, ram = line.strip().split()
+        ram_usage.append((int(timestamp), float(ram) / 1024 / 1024))
+    return ram_usage
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--report-file",
         help="path to file received via 'ya make ... --build-results-report <file>'",
+        type=argparse.FileType("r"),
+    )
+    parser.add_argument(
+        "--ram-usage-file",
+        help="path to file with timestamped RAM consumption",
         type=argparse.FileType("r"),
     )
     parser.add_argument(
@@ -210,13 +236,18 @@ if __name__ == "__main__":
     report_file = args.report_file
     obj = json.load(report_file)
     all = parse_report_file(obj)
+
+    ram_usage = parse_ram_usage_file(args.ram_usage_file)
     output_file = args.output_file
-
+    print(ram_usage)
     # Draw or export fig with RAM usage
-    max_used_ram = create_simple_interactive_plot(all, output_file)
+    create_simple_interactive_plot(all, ram_usage, output_file)
 
+    max_used_ram = max(ram_usage, key=lambda x: x[1])[1]
     max_agent_ram = get_total_runner_memory_in_gb()
     max_agent_ram_with_threshold = max_agent_ram * (args.memory_threshold / 100)
+    print(f"Max used RAM {max_used_ram}, max agent RAM {max_agent_ram}")
+
     if max_used_ram > max_agent_ram_with_threshold:
         print(f"Max used RAM {max_used_ram} is greater than max agent RAM {max_agent_ram}")
 

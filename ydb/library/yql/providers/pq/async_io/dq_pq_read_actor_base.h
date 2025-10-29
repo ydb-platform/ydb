@@ -52,6 +52,8 @@ public:
     virtual TString GetSessionId() const {
         return TString{"empty"};
     }
+private:
+    bool HasEarlierWatermarkIdlenessChecks(TInstant time);
 };
 
 } // namespace NYql::NDq

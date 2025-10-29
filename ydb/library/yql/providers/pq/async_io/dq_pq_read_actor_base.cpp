@@ -165,6 +165,10 @@ void TDqPqReadActorBase::InitWatermarkTracker(TDuration lateArrivalDelay, TDurat
     );
 }
 
+bool TDqPqReadActorBase::HasEarlierWatermarkIdlenessChecks(TInstant notifyTime) {
+    return !InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime;
+}
+
 void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
     if (!WatermarkTracker) {
         return;
@@ -178,7 +182,7 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
     }
     Y_DEBUG_ABORT_UNLESS(*nextIdleCheckAt >= systemTime);
 
-    if (InflyIdlenessChecks.empty() || InflyIdlenessChecks.front() > *nextIdleCheckAt) {
+    if (!HasEarlierWatermarkIdlenessChecks(*nextIdleCheckAt)) {
         InflyIdlenessChecks.push_front(*nextIdleCheckAt);
         SRC_LOG_T("SessionId: " << GetSessionId() << " Next idleness check scheduled at " << *nextIdleCheckAt);
         ScheduleSourcesCheck(*nextIdleCheckAt);
@@ -187,7 +191,7 @@ void TDqPqReadActorBase::MaybeScheduleNextIdleCheck(TInstant systemTime) {
 
 bool TDqPqReadActorBase::RemovePendingWatermarkIdlenessCheck(TInstant notifyTime) {
     bool removedAny = false;
-    while (!InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime) {
+    while (HasEarlierWatermarkIdlenessChecks(notifyTime)) {
         InflyIdlenessChecks.pop_front();
         removedAny = true;
     }

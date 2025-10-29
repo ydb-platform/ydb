@@ -110,7 +110,8 @@ class SolomonEmulator(object):
         return web.json_response({"writtenMetricsCount": shard.add_metrics(metrics_json)})
 
     async def sensor_names(self, request):
-        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
+        json = await request.json() 
+        selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
@@ -128,7 +129,8 @@ class SolomonEmulator(object):
         return web.json_response({"names": result})
 
     async def sensor_labels(self, request):
-        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
+        json = await request.json() 
+        selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
@@ -146,7 +148,8 @@ class SolomonEmulator(object):
         return web.json_response({"labels": labels, "totalCount": totalCount})
 
     async def sensors(self, request):
-        selectors, success = _parse_selectors(request.rel_url.query["selectors"])
+        json = await request.json() 
+        selectors, success = _parse_selectors(json["selectors"])
 
         if not success:
             return web.HTTPBadRequest(text="Invalid selectors")
@@ -311,9 +314,9 @@ class DataService(DataServiceServicer):
 def create_web_app(emulator):
     webapp = web.Application(client_max_size=1024**3, handler_args={"max_line_size": 1024**3, "max_field_size": 1024**3})
     webapp.add_routes([
-        web.get("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
-        web.get("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
-        web.get("/api/v2/projects/{project}/sensors", emulator.sensors),
+        web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
+        web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),
+        web.post("/api/v2/projects/{project}/sensors", emulator.sensors),
         web.get("/metrics/get", emulator.metrics_get),
         web.get("/ping", emulator.get_ping),
         web.post("/api/v2/push", emulator.api_v2_push),

@@ -36,11 +36,11 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
             , TotalInFlight(CountersSubGroup->GetCounter("TotalInflight"))
             , RequestsTime(CountersSubGroup->GetHistogram("RequestTimeMs", NMonitoring::ExponentialHistogram(6, 3, 100)))
             , QueuedTime(CountersSubGroup->GetHistogram("QueuedTimeMs", NMonitoring::ExponentialHistogram(6, 3, 10)))
-            , StatusSubgroup(CountersSubGroup->GetSubgroup("component", "status"))
             , IncomingRate(CountersSubGroup->GetCounter("IncomingRate", true))
             , SessionsCountLimit(CountersSubGroup->GetCounter("SessionsCountLimit"))
             , ActiveTime(CountersSubGroup->GetCounter("ActiveTimeUs", true))
             , TotalQueuedTime(CountersSubGroup->GetCounter("TotalQueuedTimeUs", true))
+            , StatusSubgroup(CountersSubGroup->GetSubgroup("component", "status"))
         {
             SessionsCountLimit->Inc();
         }

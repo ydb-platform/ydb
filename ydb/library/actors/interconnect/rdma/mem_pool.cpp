@@ -3,6 +3,21 @@
 
 #ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
 #include "ctx.h"
+#else
+extern "C" {
+
+struct ibv_mr {
+    struct ibv_context     *context;
+    struct ibv_pd	       *pd;
+    void		       *addr;
+    size_t			length;
+    ui32		handle;
+    ui32		lkey;
+    ui32		rkey;
+};
+
+}
+
 #endif
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>

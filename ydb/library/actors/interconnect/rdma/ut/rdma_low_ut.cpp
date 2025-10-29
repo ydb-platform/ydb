@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <ydb/library/actors/interconnect/rdma/ctx.h>
 #include <ydb/library/actors/interconnect/rdma/events.h>
 #include <ydb/library/actors/interconnect/rdma/rdma.h>

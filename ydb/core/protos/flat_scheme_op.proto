@@ -2318,6 +2318,8 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

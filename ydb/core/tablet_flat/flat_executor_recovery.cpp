@@ -180,8 +180,8 @@ public:
 
                         double p = TotalBytes != 0 ? (100.0 * RestoredBytes / TotalBytes) : 0;
                         DIV_CLASS_ID("progress", "restoreProgress") {
-                            TAG_CLASS_STYLE(TDiv, "progress-bar progress-bar-infp", TStringBuilder() << "width:" << p << "%;") {
-                                str << Sprintf("%.2f%", p);
+                            TAG_CLASS_STYLE(TDiv, "progress-bar progress-bar-info", TStringBuilder() << "width:" << p << "%;") {
+                                str << Sprintf("%.2f%%", p);
                             }
                         }
 

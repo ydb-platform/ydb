@@ -453,7 +453,7 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
-    void SchedulePartitionInlenessCheck(TInstant) override;
+    void SchedulePartitionIdlenessCheck(TInstant) override;
     void InitWatermarkTracker() override;
     void SendStartSession(TSession& sessionInfo);
     void Init();
@@ -818,7 +818,7 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
-void TDqPqRdReadActor::SchedulePartitionInlenessCheck(TInstant at) {
+void TDqPqRdReadActor::SchedulePartitionIdlenessCheck(TInstant at) {
     Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
 }
 

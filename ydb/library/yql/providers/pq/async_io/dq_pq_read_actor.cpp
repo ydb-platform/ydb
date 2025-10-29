@@ -623,7 +623,7 @@ private:
         TDqPqReadActorBase::InitWatermarkTracker(TDuration::MicroSeconds(lateArrivalDelayUs), TDuration::MicroSeconds(idleDelayUs));
     }
 
-    void SchedulePartitionInlenessCheck(TInstant at) override {
+    void SchedulePartitionIdlenessCheck(TInstant at) override {
         Schedule(at, new TEvPrivate::TEvPartitionIdleness(at));
     }
 

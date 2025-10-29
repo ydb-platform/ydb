@@ -41,7 +41,7 @@ public:
     ui64 GetInputIndex() const override;
     const TDqAsyncStats& GetIngressStats() const override;
 
-    virtual void SchedulePartitionInlenessCheck(TInstant) = 0;
+    virtual void SchedulePartitionIdlenessCheck(TInstant) = 0;
 
     virtual void InitWatermarkTracker() = 0;
     void InitWatermarkTracker(TDuration, TDuration);

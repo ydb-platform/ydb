@@ -27,7 +27,7 @@ jobs:
       matrix:
         include:
           - workload: table
-            connection-string: grpc://localhost:2135/?database=/Root/testdb
+            global-args: --connection-string grpc://localhost:2135/?database=/Root/testdb
             run-args: |
               --metrics-push-url http://localhost:9090/api/v1/otlp/v1/metrics \
               --time ${{inputs.slo_workload_duration_seconds || 600}} \
@@ -61,11 +61,11 @@ jobs:
 
       - name: Prepare SLO Database
         run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.connection-string }} create
+          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} create
 
       - name: Run SLO Tests
         run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.connection-string }} run ${{ matrix.run-args }}
+          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} run ${{ matrix.run-args }}
 
       - if: always()
         name: Store ydb chaos testing logs
@@ -82,10 +82,10 @@ jobs:
       - if: always()
         name: Cleanup SLO Database
         run: |
-          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.connection-string }} cleanup
+          ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} cleanup
 
       - name: Publish YDB SLO Report
         uses: ydb-platform/ydb-slo-action/report@main
         with:         
-          github_run_id: ${{ github.event.workflow_run.id }}
+          github_run_id: ${{ github.event.inputs.github_pull_request_number }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

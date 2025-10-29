@@ -1,5 +1,4 @@
 {%- if current_target.runs|length -%}
-{%-     set current_target_object_indexes = current_target_object_indexes + current_target.runs|map(attribute='_object_index') -%}
 {%-     for run in current_target.runs %}
 
 val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ varprefix }}{{ run['_object_index'] }}") {
@@ -8,9 +7,9 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 
 {#- Ignore default CWD to export_root -#}
 {%-        if run.cwd and run.cwd != export_root %}
-    workingDir({{ PatchRoots(run.cwd) }})
+    workingDir({{ PatchRoots(run.cwd, false, run['_object_index']) }})
 {%-        else %}
-    workingDir(layout.buildDirectory)
+    workingDir({{ PatchRoots(codegenBindir, false, run['_object_index']) }})
 {%-        endif -%}
 
 {%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
@@ -37,22 +36,35 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 {%-        endif %}
 
     mainClass.set("{{ run_args[0] }}")
+
+{%-        set run_ins = [] -%}
+{%-        if run.in_dir|length -%}
+{%-            set run_ins = run_ins + run.in_dir -%}
+{%-        endif -%}
+{%-        if run.in|length -%}
+{%-            set run_ins = run_ins + run.in -%}
+{%-        endif -%}
+{%-        if run.in_noparse|length -%}
+{%-            set run_ins = run_ins + run.in_noparse -%}
+{%-        endif -%}
+{%-        if run.tool|length -%}
+{%-            set run_ins = run_ins + run.tool -%}
+{%-        endif -%}
+
+{%-        set run_outs = [] -%}
+{%-        if run.out|length -%}
+{%-            set run_outs = run_outs + run.out -%}
+{%-        endif -%}
+{%-        if run.out_dir|length -%}
+{%-            set run_outs = run_outs + run.out_dir -%}
+{%-        endif -%}
+
 {%-        if run_args|length > 1 %}
 
     args = listOf(
 {%-            for arg in run_args -%}
-{%-                if not loop.first -%}
-{%-                    if (run.out_dir|select("eq", arg)|length) or (run.out_dir[0] == '/' and run.out_dir|select("in", arg)|length) or (run.out|select("eq", arg)|length) or (run.out[0] == '/' and run.out|select("in", arg)|length) -%}
-{%-                        if proto_template %}
-        {{ PatchGeneratedProto(arg) }},
-{%-                        else %}
-        {{ PatchRoots(arg, false, true) }},
-{%-                        endif -%}
-{%-                    elif run.tool|select("in", arg)|length %}
-        {{ PatchRoots(arg, true) }},
-{%-                    else %}
-        {{ PatchRoots(arg) }},
-{%-                    endif -%}
+{%-                if not loop.first %}
+        {{ PatchArg(arg, run['_object_index'], run_ins, run_outs) }},
 {%-                endif -%}
 {%-            endfor %}
     )
@@ -60,28 +72,27 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 
 {%-        if run.in_dir|length -%}
 {%-            for in_dir in run.in_dir|unique %}
-    inputs.files(fileTree({{ PatchRoots(in_dir) }}))
+    inputs.files(fileTree({{ PatchArg(in_dir, run['_object_index'], run_ins, run_outs, true) }}))
 {%-            endfor %}
 {%         endif -%}
 
 {%-        if run.in|length -%}
 {%-            for in_file in run.in|unique %}
-    inputs.files({{ PatchRoots(in_file) }})
+    inputs.files({{ PatchArg(in_file, run['_object_index'], run_ins, run_outs, true) }})
 {%-            endfor %}
 {%         endif -%}
 
 {%-        if run.in_noparse|length -%}
 {%-            for in_file in run.in_noparse|unique %}
-    inputs.files({{ PatchRoots(in_file) }})
+    inputs.files({{ PatchArg(in_file, run['_object_index'], run_ins, run_outs, true) }})
 {%-            endfor %}
 {%         endif -%}
-
 {%-        if run.out_dir|length -%}
-{%-            for out_dir in run.out_dir|unique %}
+{%-            for out_dir in run.out_dir|unique -%}
 {%-                if proto_template %}
-    outputs.files({{ PatchGeneratedProto(out_dir) }})
+    outputs.dir({{ PatchGeneratedProto(out_dir, false, run['_object_index']) }})
 {%-                else %}
-    outputs.dir({{ PatchRoots(out_dir, false, true) }})
+    outputs.dir({{ PatchRoots(out_dir, false, run['_object_index']) }})
 {%-                endif -%}
 {%-            endfor %}
 {%         endif -%}
@@ -89,17 +100,12 @@ val {{ varprefix }}{{ run['_object_index'] }} = tasks.register<JavaExec>("{{ var
 {%-        if run.out|length -%}
 {%-            for out in run.out|unique %}
 {%-                if proto_template %}
-    outputs.files({{ PatchGeneratedProto(out) }})
+    outputs.files({{ PatchGeneratedProto(out, false, run['_object_index']) }})
 {%-                else %}
-    outputs.files({{ PatchRoots(out, false, true) }})
+    outputs.files({{ PatchRoots(out, false, run['_object_index']) }})
 {%-                endif -%}
 {%-            endfor %}
-{%         endif -%}
-
-{#-
-    Не использованы атрибуты
-    run-tool="list"
-#}
+{%         endif %}
 }
 {%-     endfor -%}
 {%- endif -%}

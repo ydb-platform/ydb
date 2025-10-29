@@ -398,6 +398,11 @@ FROM my_table;
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Вызов udf `Foo::Bar` с указанным `RunConfig` и именоваными параметрами.
 * `Udf(Foo::Bar, $parent as Depends)` — Вызов udf `Foo::Bar` с указанием зависимости вычисления от заданного узла - с версии [2025.03](../changelog/2025.03.md).
 
+Также можно задать дополнительные настройки в виде именованных аргументов, их тип должен быть `String`:
+
+* Cpu - фактор, описывающий, насколько много CPU потребляет udf. Значение по умолчанию - "1". Чем оно больше, тем большая параллельность нужна для вызова такой udf.
+* ExtraMem - сколько udf требуется дополнительно памяти в байтах. Значение по умолчанию - "0".
+
 #### Сигнатуры
 
 ```yql
@@ -423,6 +428,10 @@ $config = @@{
     "meta": "..."
 }@@;
 SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
+```
+
+```yql
+SELECT Udf(Foo::Bar, "4" as Cpu, "100000000" as ExtraMem)(1);
 ```
 
 ## CurrentUtc... {#current-utc}

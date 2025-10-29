@@ -28,8 +28,8 @@
 #    pragma warning(push)
 #    pragma warning(disable : 4522)
 #  endif
-#error  include <opentelemetry/trace/provider.h>
-#error  include <opentelemetry/trace/scope.h>
+#  error #include <opentelemetry/trace/provider.h>
+#  error #include <opentelemetry/trace/scope.h>
 #  ifdef _MSC_VER
 #    pragma warning(pop)
 #  endif

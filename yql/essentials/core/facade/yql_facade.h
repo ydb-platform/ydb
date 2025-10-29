@@ -353,6 +353,7 @@ public:
 
     TString GetSourceCode() const;
     bool IsFullCaptureReady() const;
+    void CommitFullCapture() const;
 
     void SetEnableLineage() {
         EnableLineage_ = true;

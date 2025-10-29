@@ -1,0 +1,16 @@
+--- a/include/grpc/event_engine/port.h	(index)
++++ b/include/grpc/event_engine/port.h	(working tree)
+@@ -31,6 +31,13 @@
+ #include <winsock2.h>
+ #include <ws2tcpip.h>
+ // must be included after the above
++
++// For some reason OPTIONAL is not defined and build for window is not OK
++// Let, define it here as empty
++#ifndef OPTIONAL
++#define OPTIONAL
++#endif
++
+ #include <mswsock.h>
+ #else
+ #error UNKNOWN PLATFORM

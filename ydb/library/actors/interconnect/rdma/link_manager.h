@@ -8,7 +8,9 @@
 
 #else
 
+#ifdef __cplusplus
 extern "C" {
+#endif
 
 union ibv_gid {
     ui8 raw[16];
@@ -18,7 +20,9 @@ union ibv_gid {
     } global;
 };
 
+#ifdef __cplusplus
 }
+#endif
 
 #endif
 

@@ -72,14 +72,18 @@ class TGetQuotaActor : public NActors::TActorBootstrapped<TGetQuotaActor<TEventR
     using TBase::Become;
 
     TActorId Sender;
+    TRequestCommonCountersPtr Counters;
     TEventRequest Event;
     ui32 Cookie;
+    TInstant StartTime;
 
 public:
-    TGetQuotaActor(TActorId sender, TEventRequest event, ui32 cookie)
+    TGetQuotaActor(const TRequestCommonCountersPtr& counters, TActorId sender, TEventRequest event, ui32 cookie)
         : Sender(sender)
+        , Counters(counters)
         , Event(event)
         , Cookie(cookie)
+        , StartTime(TInstant::Now())
     {}
 
     static constexpr char ActorName[] = "YQ_CONTROL_PLANE_PROXY_GET_QUOTA";
@@ -87,6 +91,7 @@ public:
     void Bootstrap() {
         CPP_LOG_T("Get quotas bootstrap. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
         Become(&TGetQuotaActor::StateFunc, TDuration::Seconds(10), new NActors::TEvents::TEvWakeup());
+        Counters->InFly->Inc();
         Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId));
     }
 
@@ -96,6 +101,9 @@ public:
     )
 
     void Handle(TEvQuotaService::TQuotaGetResponse::TPtr& ev) {
+        Counters->InFly->Dec();
+        Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
+        Counters->Ok->Inc();
         Event->Get()->Quotas = std::move(ev->Get()->Quotas);
         CPP_LOG_T("Cloud id: " << Event->Get()->CloudId << " Quota count: " << (Event->Get()->Quotas ? TMaybe<size_t>(Event->Get()->Quotas->size()) : Nothing()));
         TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
@@ -104,6 +112,9 @@ public:
 
     void HandleTimeout() {
         CPP_LOG_W("Quota request timeout. Cloud id: " << Event->Get()->CloudId << " Actor id: " << SelfId());
+        Counters->InFly->Dec();
+        Counters->Error->Inc();
+        Counters->Timeout->Inc();
         Send(MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(SUBJECT_TYPE_CLOUD, Event->Get()->CloudId, true));
     }
 };
@@ -266,6 +277,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     ::NFq::TControlPlaneProxyConfig Config;
     TActorId Sender;
     TRequestCommonCountersPtr Counters;
+    TRequestCommonCountersPtr QuotasCounters;
     TString FolderId;
     TString Token;
     std::function<void(const TDuration&, bool, bool)> Probe;
@@ -276,7 +288,7 @@ class TResolveFolderActor : public NActors::TActorBootstrapped<TResolveFolderAct
     IRetryPolicy::IRetryState::TPtr RetryState;
 
 public:
-    TResolveFolderActor(const TRequestCommonCountersPtr& counters,
+    TResolveFolderActor(TCounters& counters,
                         TActorId sender, const ::NFq::TControlPlaneProxyConfig& config,
                         const TString& scope, const TString& token,
                         const std::function<void(const TDuration&, bool, bool)>& probe,
@@ -284,7 +296,8 @@ public:
                         ui32 cookie, bool requestQuotas)
         : Config(config)
         , Sender(sender)
-        , Counters(counters)
+        , Counters(counters.GetCommonCounters(RTC_RESOLVE_FOLDER))
+        , QuotasCounters(requestQuotas ? counters.GetCommonCounters(RTC_RESOLVE_QUOTAS) : nullptr)
         , FolderId(NYdb::NFq::TScope(scope).ParseFolder())
         , Token(token)
         , Probe(probe)
@@ -321,6 +334,7 @@ public:
         NYql::TIssues issues;
         NYql::TIssue issue = MakeErrorIssue(TIssuesIds::TIMEOUT, "Request timeout. Try repeating the request later");
         issues.AddIssue(issue);
+        Counters->InFly->Dec();
         Counters->Error->Inc();
         Counters->Timeout->Inc();
         const TDuration delta = TInstant::Now() - StartTime;
@@ -362,7 +376,7 @@ public:
         CPP_LOG_T("Cloud id: " << cloudId << " Folder id: " << FolderId);
 
         if (RequestQuotas) {
-            Register(new TGetQuotaActor<TEventRequest, TResponseProxy>(Sender, Event, Cookie));
+            Register(new TGetQuotaActor<TEventRequest, TResponseProxy>(QuotasCounters, Sender, Event, Cookie));
         } else {
             TActivationContext::Send(Event->Forward(ControlPlaneProxyActorId()));
         }
@@ -657,7 +671,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvCreateQueryRequest::TPtr,
                                              TEvControlPlaneProxy::TEvCreateQueryResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -727,7 +741,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvListQueriesRequest::TPtr,
                                              TEvControlPlaneProxy::TEvListQueriesResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -792,7 +806,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDescribeQueryRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDescribeQueryResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -859,7 +873,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvGetQueryStatusRequest::TPtr,
                                              TEvControlPlaneProxy::TEvGetQueryStatusResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -925,7 +939,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvModifyQueryRequest::TPtr,
                                              TEvControlPlaneProxy::TEvModifyQueryResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1000,7 +1014,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDeleteQueryRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDeleteQueryResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1065,7 +1079,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvControlQueryRequest::TPtr,
                                              TEvControlPlaneProxy::TEvControlQueryResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1133,7 +1147,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvGetResultDataRequest::TPtr,
                                              TEvControlPlaneProxy::TEvGetResultDataResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -1198,7 +1212,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvListJobsRequest::TPtr,
                                              TEvControlPlaneProxy::TEvListJobsResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -1263,7 +1277,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDescribeJobRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDescribeJobResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -1329,7 +1343,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvCreateConnectionRequest::TPtr,
                                              TEvControlPlaneProxy::TEvCreateConnectionResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1482,7 +1496,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvListConnectionsRequest::TPtr,
                                              TEvControlPlaneProxy::TEvListConnectionsResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -1547,7 +1561,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDescribeConnectionRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDescribeConnectionResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -1612,7 +1626,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvModifyConnectionRequest::TPtr,
                                              TEvControlPlaneProxy::TEvModifyConnectionResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1768,7 +1782,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDeleteConnectionRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDeleteConnectionResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1884,7 +1898,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvTestConnectionRequest::TPtr,
                                              TEvControlPlaneProxy::TEvTestConnectionResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -1944,7 +1958,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvCreateBindingRequest::TPtr,
                                              TEvControlPlaneProxy::TEvCreateBindingResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -2101,7 +2115,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvListBindingsRequest::TPtr,
                                              TEvControlPlaneProxy::TEvListBindingsResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -2166,7 +2180,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDescribeBindingRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDescribeBindingResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, /* requestQuotas */ false));
             return;
@@ -2231,7 +2245,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvModifyBindingRequest::TPtr,
                                              TEvControlPlaneProxy::TEvModifyBindingResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -2377,7 +2391,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDeleteBindingRequest::TPtr,
                                              TEvControlPlaneProxy::TEvDeleteBindingResponse>
-                                             (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                             (Counters, sender,
                                               Config, scope, token,
                                               probe, ev, cookie, QuotaManagerEnabled));
             return;
@@ -2488,7 +2502,7 @@ private:
         if (!cloudId) {
             Register(new TResolveFolderActor<TEvControlPlaneProxy::TEvDeleteFolderResourcesRequest::TPtr,
                                 TEvControlPlaneProxy::TEvDeleteFolderResourcesResponse>
-                                (Counters.GetCommonCounters(RTC_RESOLVE_FOLDER), sender,
+                                (Counters, sender,
                                  Config, scope, token,
                                  probe, ev, cookie, QuotaManagerEnabled));
 
@@ -2577,4 +2591,4 @@ IActor* CreateControlPlaneProxyActor(
         quotaManagerEnabled);
 }
 
-}  // namespace NFq
+} // namespace NFq

@@ -114,14 +114,6 @@ public:
             return TSnapshot(PlanStep, TxId - 1);
         }
     }
-
-    TSnapshot GetNextSnapshot() const {
-        if (TxId == ::Max<ui64>()) {
-            return TSnapshot(PlanStep + 1, 0);
-        } else {
-            return TSnapshot(PlanStep, TxId + 1);
-        }
-    }
 };
 
 } // namespace NKikimr::NOlap

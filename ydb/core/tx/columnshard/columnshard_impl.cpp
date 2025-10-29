@@ -179,9 +179,9 @@ NOlap::TSnapshot TColumnShard::GetMaxReadVersion() const {
         auto firstPlannedSnapshot = NOlap::TSnapshot(plannedTx->Step, plannedTx->TxId);
         return firstPlannedSnapshot.GetPreviousSnapshot();
     } else {
-        // If we use the current snapshot for internal modification, the scan will see portions that are committed with the same snapshot.
-        // So we should use the previous snapshot to avoid this.
-        // Internal modification are, for example, the abort of a transaction and no tx writes (bulk upsert).
+        // the same snapshot is used by bulk upsert and aborts
+        // aborts are fine, but be careful with bulk upsert,
+        // it must correctly break conflicting serializable txs
         return GetCurrentSnapshotForInternalModification();
     }
 }

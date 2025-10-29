@@ -105,12 +105,15 @@ TString ToMonarchStateName(EUnitKind kind) {
     }
 }
 
-NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, bool ansi) {
-    Y_ENSURE(unit.RangePattern);
-
+NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, const TRangePattern& pattern, bool ansi) {
     TString group = ToMonarchSelector(unit.Kind);
-    TString begin = RE2::QuoteMeta(unit.RangePattern->Begin);
-    TString end = RE2::QuoteMeta(unit.RangePattern->End);
+    TString begin = RE2::QuoteMeta(pattern.BeginPlain);
+    TString end = RE2::QuoteMeta(pattern.EndPlain);
+
+    TMaybe<TString> escape;
+    if (pattern.EscapeRegex) {
+        escape = *pattern.EscapeRegex;
+    }
 
     NJson::TJsonValue json;
 
@@ -136,12 +139,18 @@ NJson::TJsonValue ToMonarchMultiLineState(const TUnit& unit, bool ansi) {
         json.AppendValue(NJson::TJsonArray{
             "{",
             NJson::TJsonMap{
-                {"token", "string.json"},
-                {"nextEmbedded", "json"},
+                {"token", "string.js"},
+                {"nextEmbedded", "javascript"},
                 {"next", "@embedded"},
                 {"goBack", 1},
             },
         });
+        if (escape) {
+            json.AppendValue(NJson::TJsonArray{
+                *escape,
+                group + ".escape",
+            });
+        }
     } else if (unit.Kind == EUnitKind::Comment && ansi) {
         json.AppendValue(NJson::TJsonArray{begin, group, "@" + group});
     }
@@ -181,11 +190,11 @@ NJson::TJsonValue ToMonarchWhitespaceState(const THighlighting& highlighting) {
     Y_ENSURE(ws.Patterns.size() == 1);
     json.AppendValue(NJson::TJsonArray{ToMonarchRegex(ws, ws.Patterns.at(0)), "white"});
 
-    ForEachMultiLine(highlighting, [&](const TUnit& unit) {
+    ForEachMultiLine(highlighting, [&](const TUnit& unit, const TRangePattern& pattern) {
         json.AppendValue(NJson::TJsonArray{
-            RE2::QuoteMeta(unit.RangePattern->Begin),
+            RE2::QuoteMeta(pattern.BeginPlain),
             ToMonarchSelector(unit.Kind),
-            "@" + ToMonarchStateName(unit.Kind),
+            "@" + ToMonarchStateName(unit.Kind) + pattern.BeginPlain,
         });
     });
 
@@ -203,7 +212,6 @@ NJson::TJsonValue ToMonarchWhitespaceState(const THighlighting& highlighting) {
 
 NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ansi) {
     NJson::TJsonValue json;
-    json.AppendValue(NJson::TJsonMap{{"include", "@whitespace"}});
     for (const TUnit& unit : highlighting.Units) {
         if (unit.IsCodeGenExcluded) {
             continue;
@@ -225,6 +233,7 @@ NJson::TJsonValue ToMonarchRootState(const THighlighting& highlighting, bool ans
             json.AppendValue(NJson::TJsonArray{regex, group});
         }
     }
+    json.AppendValue(NJson::TJsonMap{{"include", "@whitespace"}});
     return json;
 }
 
@@ -246,8 +255,10 @@ void GenerateMonarch(IOutputStream& out, const THighlighting& highlighting, bool
     buf.BeginObject();
     write_json("root", ToMonarchRootState(highlighting, ansi));
     write_json("whitespace", ToMonarchWhitespaceState(highlighting));
-    ForEachMultiLine(highlighting, [&](const TUnit& unit) {
-        write_json(ToMonarchStateName(unit.Kind), ToMonarchMultiLineState(unit, ansi));
+    ForEachMultiLine(highlighting, [&](const TUnit& unit, const TRangePattern& pattern) {
+        write_json(
+            ToMonarchStateName(unit.Kind) + pattern.BeginPlain,
+            ToMonarchMultiLineState(unit, pattern, ansi));
     });
     write_json("embedded", MonarchEmbeddedState());
     ForEachBeforablePattern(highlighting, [&](const auto& unit, const auto& pattern, auto i) {

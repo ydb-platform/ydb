@@ -56,6 +56,17 @@ void Serialize(const TChunkStripeStatistics& statistics, NYson::IYsonConsumer* c
         .EndMap();
 }
 
+void FormatValue(TStringBuilderBase* builder, const TChunkStripeStatistics& statistics, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("{ChunkCount: %v, DataWeight: %v, RowCount: %v, ValueCount: %v, MaxBlockSize: %v, CompressedDataSize: %v}",
+        statistics.ChunkCount,
+        statistics.DataWeight,
+        statistics.RowCount,
+        statistics.ValueCount,
+        statistics.MaxBlockSize,
+        statistics.CompressedDataSize);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NTableClient

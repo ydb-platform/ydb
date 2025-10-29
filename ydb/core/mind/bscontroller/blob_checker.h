@@ -22,7 +22,7 @@ enum EBlobCheckerWorkerQuantumStatus : ui32 {
 
 TString BlobCheckerWorkerQuantumStatusToString(EBlobCheckerWorkerQuantumStatus value);
 
-// In-memory representation of statu stored in BSC
+// In-memory representation of status stored in BSC
 struct TBlobCheckerGroupStatus {
 public:
     TBlobCheckerGroupStatus() = default;

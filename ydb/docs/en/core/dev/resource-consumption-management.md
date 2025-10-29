@@ -127,7 +127,7 @@ WITH (
 - `RESOURCE_POOL` - the name of the resource pool to which a request that satisfies the requirements specified in the resource pool qualifier will be sent.
 - `MEMBER_NAME` — a group of users or user whose requests will be sent to the specified resource pool.
 
-## Resource pool classifier ACL management 
+## Resource pool classifier ACL management
 
 There are no restrictions on the use of the resource pool classifier - they are global for the entire database and available to all users. To create, delete, or modify a resource pool classifier, you must have `ALL` permission on the entire database, which can be issued with a request like:
 
@@ -153,7 +153,7 @@ WITH (
 );
 ```
 
-Let's say there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` matches both resource pools: `olap1` and `olap2` . If no classifier existed in the system before, then `RANK=1000` is set for `olap1` , and ` RANK =2000` for `olap2` . Resource pool classifiers with lower `RANK` values ​​have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2` , it will be selected.
+Let's say there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` matches both resource pools: `olap1` and `olap2` . If no classifier existed in the system before, then `RANK=1000` is set for `olap1` , and `RANK =2000` for `olap2` . Resource pool classifiers with lower `RANK` values ​​have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2` , it will be selected.
 
 You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction (create-resource-pool-classifier.md), or change `RANK` for existing resource pool classifiers using (alter-resource-pool-classifier.md).
 
@@ -185,14 +185,14 @@ CREATE RESOURCE POOL the_ceo WITH (
 In the example above, two resource pools are created: `olap` for the analyst team and `the_ceo` for the CEO.
 
 - **Resource pool 'olap'**:
-	
-	- Has a weight of 20.
-	- The limit on queries that can be run when the database is overloaded is 80% of available resources.
+
+    - Has a weight of 20.
+    - The limit on queries that can be run when the database is overloaded is 80% of available resources.
 
 - **Resource pool 'the_ceo'**:
-	
-	- Has more weight - 80.
-	- Has no restrictions on queries that can be launched when overloaded.
+
+    - Has more weight - 80.
+    - Has no restrictions on queries that can be launched when overloaded.
 
 ## Diagnostics
 

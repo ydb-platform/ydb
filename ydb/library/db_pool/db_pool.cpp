@@ -22,12 +22,12 @@ class TDbPoolActor : public NActors::TActor<TDbPoolActor> {
         const NMonitoring::TDynamicCounters::TCounterPtr TotalInFlight;
         const NMonitoring::THistogramPtr RequestsTime;
         const NMonitoring::THistogramPtr QueuedTime;
-        const NMonitoring::TDynamicCounterPtr StatusSubgroup;
         const NMonitoring::TDynamicCounters::TCounterPtr IncomingRate;
         const NMonitoring::TDynamicCounters::TCounterPtr SessionsCountLimit;
         const NMonitoring::TDynamicCounters::TCounterPtr ActiveTime;
         const NMonitoring::TDynamicCounters::TCounterPtr TotalQueuedTime;
 
+        const NMonitoring::TDynamicCounterPtr StatusSubgroup;
         TMap<TString, NMonitoring::TDynamicCounters::TCounterPtr> Status;
 
         TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)

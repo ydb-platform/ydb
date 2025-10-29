@@ -2,8 +2,6 @@
 #include "ctx.h"
 #include "ctx_impl.h"
 
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
-
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
 #include <util/stream/output.h>

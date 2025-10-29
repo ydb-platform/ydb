@@ -1,9 +1,28 @@
 #pragma once
 
+#include <util/system/types.h>
+
+#if defined(_linux_)
+
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 
-#include <util/generic/fwd.h>
+#else
 
+extern "C" {
+
+union ibv_gid {
+    ui8 raw[16];
+    struct {
+        ui64 subnet_prefix;
+        ui64 interface_id;
+    } global;
+};
+
+}
+
+#endif
+
+#include <util/generic/fwd.h>
 
 struct in6_addr;
 

@@ -32,5 +32,6 @@ jobs:
       run: |
         python .github/scripts/telegram/alert_queued_jobs.py \
           --chat-id 3017506311 \
-          --send-when-all-good
-          --notify-on-api-errors
+          --send-when-all-good \
+          --notify-on-api-errors \
+          --blacklist "${{ vars.GH_ALERTS_RUNS_BLACK_LIST }}"

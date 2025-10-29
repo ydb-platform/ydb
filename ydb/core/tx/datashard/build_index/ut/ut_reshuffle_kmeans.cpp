@@ -18,6 +18,7 @@ using Ydb::Table::VectorIndexSettings;
 using namespace NTableIndex::NKMeans;
 
 static std::atomic<ui64> sId = 1;
+static constexpr const char* kDatabaseName = "/Root";
 static constexpr const char* kMainTable = "/Root/table-main";
 static constexpr const char* kPostingTable = "/Root/table-posting";
 
@@ -60,10 +61,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         rec.SetParent(0);
         rec.SetChild(1);
 
-        rec.AddClusters("abc");
+        rec.AddClusters("ab\2");
 
         rec.SetEmbeddingColumn("embedding");
 
+        rec.SetDatabaseName(kDatabaseName);
         rec.SetOutputName(kPostingTable);
 
         setupRequest(rec);
@@ -116,6 +118,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                 rec.SetEmbeddingColumn("embedding");
                 rec.AddDataColumns("data");
 
+                rec.SetDatabaseName(kDatabaseName);
                 rec.SetOutputName(kPostingTable);
             };
             fill(ev1);
@@ -217,9 +220,6 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
             request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED);
         }, "{ <main>: Error: vector_type should be set }");
         DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
-            request.MutableSettings()->set_vector_type(VectorIndexSettings::VECTOR_TYPE_BIT);
-        }, "{ <main>: Error: Unsupported vector_type: VECTOR_TYPE_BIT }");
-        DoBadRequest(server, sender, [](NKikimrTxDataShard::TEvReshuffleKMeansRequest& request) {
             request.MutableSettings()->set_metric(VectorIndexSettings::METRIC_UNSPECIFIED);
         }, "{ <main>: Error: either distance or similarity should be set }");
 
@@ -281,11 +281,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (key, embedding, data)
         VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x31\3\", \"two\"),"
-                "(3, \"\x32\x32\3\", \"three\"),"
-                "(4, \"\x65\x65\3\", \"four\"),"
-                "(5, \"\x75\x75\3\", \"five\");");
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x31\2\", \"two\"),"
+                "(3, \"\x32\x32\2\", \"three\"),"
+                "(4, \"\x65\x65\2\", \"four\"),"
+                "(5, \"\x75\x75\2\", \"five\");");
 
         auto create = [&] { CreatePostingTable(server, sender, options); };
         create();
@@ -296,8 +296,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "mm\3",
-                "11\3",
+                "mm\2",
+                "11\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
@@ -311,8 +311,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "11\3",
-                "mm\3",
+                "11\2",
+                "mm\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
-                "II\3",
+                "II\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_POSTING,
@@ -367,11 +367,11 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (key, embedding, data)
         VALUES )"
-                "(1, \"\x30\x30\3\", \"one\"),"
-                "(2, \"\x31\x31\3\", \"two\"),"
-                "(3, \"\x32\x32\3\", \"three\"),"
-                "(4, \"\x65\x65\3\", \"four\"),"
-                "(5, \"\x75\x75\3\", \"five\");");
+                "(1, \"\x30\x30\2\", \"one\"),"
+                "(2, \"\x31\x31\2\", \"two\"),"
+                "(3, \"\x32\x32\2\", \"three\"),"
+                "(4, \"\x65\x65\2\", \"four\"),"
+                "(5, \"\x75\x75\2\", \"five\");");
 
         auto create = [&] { CreateBuildTable(server, sender, options, "table-posting"); };
         create();
@@ -382,48 +382,48 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "mm\3",
-                "11\3",
+                "mm\2",
+                "11\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n"
-                                              "__ydb_parent = 2, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 2, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 2, key = 3, embedding = \x32\x32\3, data = three\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\2, data = five\n"
+                                              "__ydb_parent = 2, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 2, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 2, key = 3, embedding = \x32\x32\2, data = three\n");
             recreate();
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "11\3",
-                "mm\3",
+                "11\2",
+                "mm\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 2, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 2, key = 5, embedding = \x75\x75\3, data = five\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\2, data = three\n"
+                                              "__ydb_parent = 2, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 2, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
         }
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
-                "II\3",
+                "II\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 0, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_MAIN_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 1, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\3, data = five\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 1, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 1, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 1, key = 3, embedding = \x32\x32\2, data = three\n"
+                                              "__ydb_parent = 1, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 1, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
         }
     }
@@ -453,13 +453,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (__ydb_parent, key, embedding, data)
         VALUES )"
-                "(39, 1, \"\x30\x30\3\", \"one\"),"
-                "(40, 1, \"\x30\x30\3\", \"one\"),"
-                "(40, 2, \"\x31\x31\3\", \"two\"),"
-                "(40, 3, \"\x32\x32\3\", \"three\"),"
-                "(40, 4, \"\x65\x65\3\", \"four\"),"
-                "(40, 5, \"\x75\x75\3\", \"five\"),"
-                "(41, 5, \"\x75\x75\3\", \"five\");");
+                "(39, 1, \"\x30\x30\2\", \"one\"),"
+                "(40, 1, \"\x30\x30\2\", \"one\"),"
+                "(40, 2, \"\x31\x31\2\", \"two\"),"
+                "(40, 3, \"\x32\x32\2\", \"three\"),"
+                "(40, 4, \"\x65\x65\2\", \"four\"),"
+                "(40, 5, \"\x75\x75\2\", \"five\"),"
+                "(41, 5, \"\x75\x75\2\", \"five\");");
 
         auto create = [&] { CreatePostingTable(server, sender, options); };
         create();
@@ -470,8 +470,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "mm\3",
-                "11\3",
+                "mm\2",
+                "11\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
@@ -485,8 +485,8 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "11\3",
-                "mm\3",
+                "11\2",
+                "mm\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
@@ -502,7 +502,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
-                "II\3",
+                "II\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                             NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
@@ -541,13 +541,13 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
         UPSERT INTO `/Root/table-main`
             (__ydb_parent, key, embedding, data)
         VALUES )"
-                "(39, 1, \"\x30\x30\3\", \"one\"),"
-                "(40, 1, \"\x30\x30\3\", \"one\"),"
-                "(40, 2, \"\x31\x31\3\", \"two\"),"
-                "(40, 3, \"\x32\x32\3\", \"three\"),"
-                "(40, 4, \"\x65\x65\3\", \"four\"),"
-                "(40, 5, \"\x75\x75\3\", \"five\"),"
-                "(41, 5, \"\x75\x75\3\", \"five\");");
+                "(39, 1, \"\x30\x30\2\", \"one\"),"
+                "(40, 1, \"\x30\x30\2\", \"one\"),"
+                "(40, 2, \"\x31\x31\2\", \"two\"),"
+                "(40, 3, \"\x32\x32\2\", \"three\"),"
+                "(40, 4, \"\x65\x65\2\", \"four\"),"
+                "(40, 5, \"\x75\x75\2\", \"five\"),"
+                "(41, 5, \"\x75\x75\2\", \"five\");");
 
         auto create = [&] { CreateBuildTable(server, sender, options, "table-posting"); };
         create();
@@ -558,48 +558,48 @@ Y_UNIT_TEST_SUITE (TTxDataShardReshuffleKMeansScan) {
 
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "mm\3",
-                "11\3",
+                "mm\2",
+                "11\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 41, key = 5, embedding = \x75\x75\3, data = five\n"
-                                              "__ydb_parent = 42, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 42, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 42, key = 3, embedding = \x32\x32\3, data = three\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 41, key = 5, embedding = \x75\x75\2, data = five\n"
+                                              "__ydb_parent = 42, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 42, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 42, key = 3, embedding = \x32\x32\2, data = three\n");
             recreate();
         }
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
             std::vector<TString> level = {
-                "11\3",
-                "mm\3",
+                "11\2",
+                "mm\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, distance);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 42, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 42, key = 5, embedding = \x75\x75\3, data = five\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 41, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 41, key = 3, embedding = \x32\x32\2, data = three\n"
+                                              "__ydb_parent = 42, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 42, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
         }
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE,
                                 VectorIndexSettings::DISTANCE_COSINE})
         {
             std::vector<TString> level = {
-                "II\3",
+                "II\2",
             };
             auto posting = DoReshuffleKMeans(server, sender, 40, level,
                                              NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                                              VectorIndexSettings::VECTOR_TYPE_UINT8, similarity);
-            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\3, data = one\n"
-                                              "__ydb_parent = 41, key = 2, embedding = \x31\x31\3, data = two\n"
-                                              "__ydb_parent = 41, key = 3, embedding = \x32\x32\3, data = three\n"
-                                              "__ydb_parent = 41, key = 4, embedding = \x65\x65\3, data = four\n"
-                                              "__ydb_parent = 41, key = 5, embedding = \x75\x75\3, data = five\n");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "__ydb_parent = 41, key = 1, embedding = \x30\x30\2, data = one\n"
+                                              "__ydb_parent = 41, key = 2, embedding = \x31\x31\2, data = two\n"
+                                              "__ydb_parent = 41, key = 3, embedding = \x32\x32\2, data = three\n"
+                                              "__ydb_parent = 41, key = 4, embedding = \x65\x65\2, data = four\n"
+                                              "__ydb_parent = 41, key = 5, embedding = \x75\x75\2, data = five\n");
             recreate();
         }
     }

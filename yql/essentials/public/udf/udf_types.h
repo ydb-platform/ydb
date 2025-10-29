@@ -16,128 +16,127 @@ using TType = void;
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)                \
-    XX(Null)                  \
-    XX(EmptyList)             \
-    XX(EmptyDict)             \
-    XX(Tagged)                \
-    XX(Pg)                    \
-    XX(Block)                 \
-    XX(Linear)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)                \
+        XX(Null)                  \
+        XX(EmptyList)             \
+        XX(EmptyDict)             \
+        XX(Tagged)                \
+        XX(Pg)                    \
+        XX(Block)                 \
+        XX(Linear)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)                \
-    XX(Null)                  \
-    XX(EmptyList)             \
-    XX(EmptyDict)             \
-    XX(Tagged)                \
-    XX(Pg)                    \
-    XX(Block)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)                \
+        XX(Null)                  \
+        XX(EmptyList)             \
+        XX(EmptyDict)             \
+        XX(Tagged)                \
+        XX(Pg)                    \
+        XX(Block)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)                \
-    XX(Null)                  \
-    XX(EmptyList)             \
-    XX(EmptyDict)             \
-    XX(Tagged)                \
-    XX(Pg)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)                \
+        XX(Null)                  \
+        XX(EmptyList)             \
+        XX(EmptyDict)             \
+        XX(Tagged)                \
+        XX(Pg)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)                \
-    XX(Null)                  \
-    XX(EmptyList)             \
-    XX(EmptyDict)             \
-    XX(Tagged)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)                \
+        XX(Null)                  \
+        XX(EmptyList)             \
+        XX(EmptyDict)             \
+        XX(Tagged)
 
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 18)
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)                \
-    XX(Null)                  \
-    XX(EmptyList)             \
-    XX(EmptyDict)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)                \
+        XX(Null)                  \
+        XX(EmptyList)             \
+        XX(EmptyDict)
 #else
 
-#define UDF_TYPE_KIND_MAP(XX) \
-    XX(Unknown)               \
-    XX(Data)                  \
-    XX(Struct)                \
-    XX(List)                  \
-    XX(Optional)              \
-    XX(Tuple)                 \
-    XX(Dict)                  \
-    XX(Callable)              \
-    XX(Resource)              \
-    XX(Void)                  \
-    XX(Variant)               \
-    XX(Stream)
+    #define UDF_TYPE_KIND_MAP(XX) \
+        XX(Unknown)               \
+        XX(Data)                  \
+        XX(Struct)                \
+        XX(List)                  \
+        XX(Optional)              \
+        XX(Tuple)                 \
+        XX(Dict)                  \
+        XX(Callable)              \
+        XX(Resource)              \
+        XX(Void)                  \
+        XX(Variant)               \
+        XX(Stream)
 
 #endif
 
-enum ETypeKind
-{
+enum ETypeKind {
     UDF_TYPE_KIND_MAP(ENUM_VALUE_GEN_NO_VALUE)
 };
 
@@ -146,8 +145,7 @@ ENUM_TO_STRING(ETypeKind, UDF_TYPE_KIND_MAP)
 //////////////////////////////////////////////////////////////////////////////
 // ICallablePayload
 //////////////////////////////////////////////////////////////////////////////
-class ICallablePayload
-{
+class ICallablePayload {
 public:
     virtual ~ICallablePayload() = default;
 
@@ -170,12 +168,13 @@ UDF_ASSERT_TYPE_SIZE(ICallablePayload, 8);
 //////////////////////////////////////////////////////////////////////////////
 // ITypeVisitor
 //////////////////////////////////////////////////////////////////////////////
-class ITypeVisitor1
-{
+class ITypeVisitor1 {
 protected:
     ITypeVisitor1(ui16 compatibilityVersion)
         : AbiCompatibility_(compatibilityVersion)
-    {}
+    {
+    }
+
 public:
     inline bool IsCompatibleTo(ui16 compatibilityVersion) const {
         return AbiCompatibility_ >= compatibilityVersion;
@@ -185,19 +184,20 @@ public:
 
     virtual void OnDataType(TDataTypeId typeId) = 0;
     virtual void OnStruct(
-            ui32 membersCount,
-            TStringRef* membersNames,
-            const TType** membersTypes) = 0;
+        ui32 membersCount,
+        TStringRef* membersNames,
+        const TType** membersTypes) = 0;
     virtual void OnList(const TType* itemType) = 0;
     virtual void OnOptional(const TType* itemType) = 0;
     virtual void OnTuple(ui32 elementsCount, const TType** elementsTypes) = 0;
     virtual void OnDict(const TType* keyType, const TType* valueType) = 0;
     virtual void OnCallable(
-            const TType* returnType,
-            ui32 argsCount, const TType** argsTypes,
-            ui32 optionalArgsCount, const ICallablePayload* payload) = 0;
+        const TType* returnType,
+        ui32 argsCount, const TType** argsTypes,
+        ui32 optionalArgsCount, const ICallablePayload* payload) = 0;
     virtual void OnVariant(const TType* underlyingType) = 0;
     virtual void OnStream(const TType* itemType) = 0;
+
 private:
     ui16 AbiCompatibility_ = 0;
     ui16 Reserved1_ = 0;
@@ -258,43 +258,43 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 44)
-class ITypeVisitor : public ITypeVisitor7 {
+class ITypeVisitor: public ITypeVisitor7 {
 protected:
     using TBase = ITypeVisitor7;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-class ITypeVisitor : public ITypeVisitor6 {
+class ITypeVisitor: public ITypeVisitor6 {
 protected:
     using TBase = ITypeVisitor6;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-class ITypeVisitor : public ITypeVisitor5 {
+class ITypeVisitor: public ITypeVisitor5 {
 protected:
     using TBase = ITypeVisitor5;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
-class ITypeVisitor : public ITypeVisitor4 {
+class ITypeVisitor: public ITypeVisitor4 {
 protected:
     using TBase = ITypeVisitor4;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
-class ITypeVisitor : public ITypeVisitor3 {
+class ITypeVisitor: public ITypeVisitor3 {
 protected:
     using TBase = ITypeVisitor3;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)
-class ITypeVisitor : public ITypeVisitor2 {
+class ITypeVisitor: public ITypeVisitor2 {
 protected:
     using TBase = ITypeVisitor2;
     ITypeVisitor(ui16 compatibilityVersion);
 };
 #else
-class ITypeVisitor : public ITypeVisitor1 {
+class ITypeVisitor: public ITypeVisitor1 {
 protected:
     using TBase = ITypeVisitor1;
     ITypeVisitor(ui16 compatibilityVersion);
@@ -306,8 +306,7 @@ UDF_ASSERT_TYPE_SIZE(ITypeVisitor, 16);
 //////////////////////////////////////////////////////////////////////////////
 // ITypeInfoHelper
 //////////////////////////////////////////////////////////////////////////////
-class ITypeInfoHelper1
-{
+class ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper1>;
 
@@ -344,7 +343,7 @@ private:
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-class ITypeInfoHelper2 : public ITypeInfoHelper1 {
+class ITypeInfoHelper2: public ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper2>;
 
@@ -356,8 +355,7 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 // IArrowType
 //////////////////////////////////////////////////////////////////////////////
-class IArrowType
-{
+class IArrowType {
 public:
     using TPtr = TUniquePtr<IArrowType>;
 
@@ -369,7 +367,7 @@ public:
 UDF_ASSERT_TYPE_SIZE(IArrowType, 8);
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-class ITypeInfoHelper3 : public ITypeInfoHelper2 {
+class ITypeInfoHelper3: public ITypeInfoHelper2 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper3>;
 
@@ -382,7 +380,7 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 29)
-class ITypeInfoHelper4 : public ITypeInfoHelper3 {
+class ITypeInfoHelper4: public ITypeInfoHelper3 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper4>;
 
@@ -393,25 +391,25 @@ public:
 #endif
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 29)
-class ITypeInfoHelper : public ITypeInfoHelper4 {
+class ITypeInfoHelper: public ITypeInfoHelper4 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper>;
     ITypeInfoHelper();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 26)
-class ITypeInfoHelper : public ITypeInfoHelper3 {
+class ITypeInfoHelper: public ITypeInfoHelper3 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper>;
     ITypeInfoHelper();
 };
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
-class ITypeInfoHelper : public ITypeInfoHelper2 {
+class ITypeInfoHelper: public ITypeInfoHelper2 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper>;
     ITypeInfoHelper();
 };
 #else
-class ITypeInfoHelper : public ITypeInfoHelper1 {
+class ITypeInfoHelper: public ITypeInfoHelper1 {
 public:
     using TPtr = TRefCountedPtr<ITypeInfoHelper>;
     ITypeInfoHelper();
@@ -421,5 +419,5 @@ public:
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper, 16);
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper::TPtr, 8);
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

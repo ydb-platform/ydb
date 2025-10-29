@@ -3,25 +3,25 @@
 
 #include <ydb/core/base/statestorage.h>
 #include <ydb/core/base/nodestate.h>
-
+#include <ydb/core/config/validation/validators.h>
 
 namespace NKikimr::NStorage {
 
     using TInvokeRequestHandlerActor = TDistributedConfigKeeper::TInvokeRequestHandlerActor;
 
-    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount) {
+    bool TInvokeRequestHandlerActor::GetRecommendedStateStorageConfig(NKikimrBlobStorage::TStateStorageConfig* currentConfig, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume) {
         const NKikimrBlobStorage::TStorageConfig& config = *Self->StorageConfig;
         bool result = true;
         std::unordered_set<ui32> usedNodes;
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes, config.GetStateStorageConfig(), overrideReplicasInRingCount, overrideRingsCount);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageConfig(), config, usedNodes, config.GetStateStorageConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         if (pileupReplicas) {
             usedNodes.clear();
         }
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes, config.GetStateStorageBoardConfig(), overrideReplicasInRingCount, overrideRingsCount);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableStateStorageBoardConfig(), config, usedNodes, config.GetStateStorageBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         if (pileupReplicas) {
             usedNodes.clear();
         }
-        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes, config.GetSchemeBoardConfig(), overrideReplicasInRingCount, overrideRingsCount);
+        result &= Self->GenerateStateStorageConfig(currentConfig->MutableSchemeBoardConfig(), config, usedNodes, config.GetSchemeBoardConfig(), overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         return result;
     }
 
@@ -97,7 +97,7 @@ namespace NKikimr::NStorage {
             auto* currentConfig = record->MutableStateStorageConfig();
 
             if (cmd.GetRecommended()) {
-                GetRecommendedStateStorageConfig(currentConfig, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount());
+                GetRecommendedStateStorageConfig(currentConfig, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
                 AdjustRingGroupActorIdOffsetInRecommendedStateStorageConfig(currentConfig);
             } else {
                 GetCurrentStateStorageConfig(currentConfig, cmd.GetNodesState());
@@ -112,20 +112,22 @@ namespace NKikimr::NStorage {
             Self->SelfHealNodesState[node.GetNodeId()] = node.GetState();
         }
         if (cmd.GetEnableSelfHealStateStorage()) {
-            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount());
+            SelfHealStateStorage(cmd.GetWaitForConfigStep(), true, cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
+        } else {
+            Finish(TResult::OK, std::nullopt);
         }
     }
 
     void TInvokeRequestHandlerActor::SelfHealStateStorage(const TQuery::TSelfHealStateStorage& cmd) {
-        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal(), cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount());
+        SelfHealStateStorage(cmd.GetWaitForConfigStep(), cmd.GetForceHeal(), cmd.GetPileupReplicas(), cmd.GetOverrideReplicasInRingCount(), cmd.GetOverrideRingsCount(), cmd.GetReplicasSpecificVolume());
     }
 
-    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount) {
+    void TInvokeRequestHandlerActor::SelfHealStateStorage(ui32 waitForConfigStep, bool forceHeal, bool pileupReplicas, ui32 overrideReplicasInRingCount, ui32 overrideRingsCount, ui32 replicasSpecificVolume) {
         RunCommonChecks();
         STLOG(PRI_DEBUG, BS_NODE, NW105, "TInvokeRequestHandlerActor::SelfHealStateStorage", (waitForConfigStep, waitForConfigStep),
-            (forceHeal, forceHeal), (pileupReplicas, pileupReplicas), (overrideReplicasInRingCount, overrideReplicasInRingCount), (overrideRingsCount, overrideRingsCount));
+            (forceHeal, forceHeal), (pileupReplicas, pileupReplicas), (overrideReplicasInRingCount, overrideReplicasInRingCount), (overrideRingsCount, overrideRingsCount), (replicasSpecificVolume, replicasSpecificVolume));
         NKikimrBlobStorage::TStateStorageConfig targetConfig;
-        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount) && !forceHeal) {
+        if (!GetRecommendedStateStorageConfig(&targetConfig, pileupReplicas, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume) && !forceHeal) {
             throw TExError() << "Recommended configuration has faulty nodes and can not be applyed";
         }
 
@@ -324,7 +326,7 @@ namespace NKikimr::NStorage {
             if (newSSConfig.HasRing()) {
                 throw TExError() << "New " << name << " configuration Ring option is not allowed, use RingGroups";
             }
-            const auto error = VerifyConfigCompatibility(name, *(config.*configMutableFunc)(), newSSConfig);
+            const auto error = NKikimr::NConfig::ValidateStateStorageConfig(name, *(config.*configMutableFunc)(), newSSConfig);
             if(!error.empty()) {
                 throw TExError() << error;
             }

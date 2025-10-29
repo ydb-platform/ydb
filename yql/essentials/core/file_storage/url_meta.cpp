@@ -23,7 +23,6 @@ void TUrlMeta::SaveTo(const TString& path) {
         headers.AddHeader(THttpInputHeader("LastModified", LastModified));
     }
 
-
     TFile outFile(path, CreateAlways | ARW | AX);
     TUnbufferedFileOutput out(outFile);
     headers.OutTo(&out);
@@ -65,4 +64,4 @@ void TUrlMeta::TryReadFrom(const TString& path) {
     }
 }
 
-} // NYql
+} // namespace NYql

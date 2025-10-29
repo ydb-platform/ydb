@@ -1053,7 +1053,7 @@ struct TEvBlobStorage {
             }
         };
         const TLogoBlobID Id;
-        const TRcBuf Buffer; //FIXME(innokentii) const members prevent usage of move-semantics elsewhere
+        TRope Buffer;
         const TInstant Deadline;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
@@ -1073,7 +1073,7 @@ struct TEvBlobStorage {
             , ExtraBlockChecks(origin.ExtraBlockChecks)
         {}
 
-        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+        TEvPut(const TLogoBlobID &id, TRope &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false, bool ignoreBlock = false)
             : Id(id)
@@ -1098,17 +1098,23 @@ struct TEvBlobStorage {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
+        TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
+               NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
+               ETactic tactic = TacticDefault, bool issueKeepFlag = false)
+            : TEvPut(id, TRope(std::move(buffer)), deadline, handleClass, tactic, issueKeepFlag)
+        {}
+
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
 
         TEvPut(const TLogoBlobID &id, const TSharedData &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, bool issueKeepFlag = false)
-            : TEvPut(id, TRcBuf(buffer), deadline, handleClass, tactic, issueKeepFlag)
+            : TEvPut(id, TRope(buffer), deadline, handleClass, tactic, issueKeepFlag)
         {}
 
         TString Print(bool isFull) const {

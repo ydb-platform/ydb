@@ -41,6 +41,7 @@ public:
         AddHandler(0, &TCoTake::Match, HNDL(RewriteTakeSortToTopSort));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInToEquiJoin));
         AddHandler(0, &TCoFlatMap::Match, HNDL(RewriteSqlInCompactToJoin));
+        AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteStreamEquiJoinWithLookup));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(OptimizeEquiJoinWithCosts));
         AddHandler(0, &TCoEquiJoin::Match, HNDL(RewriteEquiJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(JoinToIndexLookup));
@@ -164,6 +165,12 @@ protected:
     TMaybeNode<TExprBase> RewriteSqlInCompactToJoin(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpRewriteSqlInCompactToJoin(node, ctx);
         DumpAppliedRule("KqpRewriteSqlInCompactToJoin", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
+        DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

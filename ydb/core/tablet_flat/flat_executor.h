@@ -386,6 +386,8 @@ class TExecutor
     // Counts the number of times LeaseDuration was increased
     size_t LeaseDurationIncreases = 0;
 
+    const ui64 MaxTxInFly;
+
     struct TLeaseCommit : public TIntrusiveListItem<TLeaseCommit> {
         using TByEndMap = std::multimap<TMonotonic, TLeaseCommit*>;
 
@@ -602,6 +604,7 @@ class TExecutor
     void Handle(TEvBlobStorage::TEvGetResult::TPtr&, const TActorContext&);
     void Handle(TEvTablet::TEvGcForStepAckResponse::TPtr &ev);
     void Handle(NBackup::TEvSnapshotCompleted::TPtr &ev);
+    void Handle(NBackup::TEvChangelogFailed::TPtr &ev);
 
     void UpdateUsedTabletMemory();
     void UpdateCounters(const TActorContext &ctx);

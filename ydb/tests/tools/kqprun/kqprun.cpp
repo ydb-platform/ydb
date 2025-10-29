@@ -93,6 +93,10 @@ struct TExecutionOptions {
         return GetValue(index, ScriptQueryActions, NKikimrKqp::EQueryAction::QUERY_ACTION_EXECUTE);
     }
 
+    TString GetUserSID(size_t index) const {
+        return GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT));
+    }
+
     TRequestOptions GetSchemeQueryOptions() const {
         TString sql = SchemeQuery;
 
@@ -121,7 +125,7 @@ struct TExecutionOptions {
             .Action = GetScriptQueryAction(index),
             .TraceId = TStringBuilder() << GetValue(index, TraceIds, DefaultTraceId) << "-" << startTime.ToString(),
             .PoolId = GetValue(index, PoolIds, TString()),
-            .UserSID = GetValue(index, UserSIDs, TString(BUILTIN_ACL_ROOT)),
+            .UserSID = GetUserSID(index),
             .Database = GetValue(index, Databases, TString()),
             .Timeout = GetValue(index, Timeouts, TDuration::Zero()),
             .QueryId = queryId,
@@ -290,12 +294,12 @@ void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant star
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
-            if (!runner.FetchScriptResults()) {
+            if (!runner.FetchScriptResults(executionOptions.GetUserSID(index))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Fetch script results failed";
             }
             if (executionOptions.ForgetExecution) {
                 Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Forgetting script execution operation..." << colors.Default() << Endl;
-                if (!runner.ForgetExecutionOperation()) {
+                if (!runner.ForgetExecutionOperation(executionOptions.GetUserSID(index))) {
                     ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Forget script execution operation failed";
                 }
             }

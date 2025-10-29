@@ -62,7 +62,6 @@ def process_file(orig_filename: str, ruff_bin: str, orig_config: Path, source_ro
 
     if file_path.startswith(('fintech/uservices', 'taxi', 'sdg', 'electro')):
         # TODO(alevitskii) TPS-28865, TPS-31380. Run checks for fintech and taxi in build root too.
-        # TODO(alevitskii): have to give a pass for sdg, because they started using `extend`...
         filename = os.path.realpath(orig_filename) if os.path.islink(orig_filename) else orig_filename
         config = orig_config.resolve() if orig_config.is_symlink() else orig_config
     else:
@@ -110,8 +109,6 @@ def main():
     # otherwise we risk allowing to steal from arcadia. To do that we need to mark modules 1st-party/3rd-party
     # in pyproject.toml.
     extend_option_present = check_extend_option_present(style_config_path)
-    # TODO(alevitskii): sdg is an unfortunate victim of an oversight, we need to fix it
-    is_sdg = str(style_config_path.relative_to(params.source_root)).startswith('sdg')
 
     ruff_bin = get_ruff_bin(params)
 
@@ -119,7 +116,7 @@ def main():
     for file_name in params.files:
         start_time = time.perf_counter()
 
-        if extend_option_present and not is_sdg:
+        if extend_option_present:
             elapsed = time.perf_counter() - start_time
             report.add(
                 file_name,

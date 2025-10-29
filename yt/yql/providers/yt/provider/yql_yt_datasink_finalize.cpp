@@ -16,11 +16,17 @@ public:
     std::pair<TStatus, TAsyncTransformCallbackFuture> CallbackTransform(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         Y_UNUSED(ctx);
         output = input;
+
+        bool fullCaptureReady = false;
+        if (State_->FullCapture_) {
+            fullCaptureReady = State_->FullCapture_->Seal();
+        }
         auto future = State_->Gateway->Finalize(
             IYtGateway::TFinalizeOptions(State_->SessionId)
                 .Config(State_->Configuration->Snapshot())
-                .Abort(State_->Types->HiddenMode == EHiddenMode::Force)
+                .Abort(State_->Types->HiddenMode == EHiddenMode::Force || State_->Types->QContext.CanRead())
                 .DetachSnapshotTxs(State_->PassiveExecution)
+                .CommitDumpTxs(fullCaptureReady)
         );
         return WrapFuture(future, [](const IYtGateway::TFinalizeResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
             Y_UNUSED(res);

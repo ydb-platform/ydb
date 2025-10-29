@@ -107,6 +107,9 @@ struct TBatch {
 
 };
 
+void Serialize(const TClientBlob& blob, TBuffer& res);
+TClientBlob DeserializeClientBlob(const char *data, ui32 size);
+
 class TBlobIterator {
 public:
     TBlobIterator(const TKey& key, const TString& blob);

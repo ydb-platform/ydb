@@ -26,14 +26,15 @@ struct TNodeFlags {
 };
 
 struct TAstNode {
+    // clang-format off
 #define YQL_AST_NODE_TYPE_MAP(xx) \
-    xx(List, 0) \
-    xx(Atom, 1) \
+    xx(List, 0)                   \
+    xx(Atom, 1)
+    // clang-format on
 
-    enum EType : ui32 {
+    enum EType: ui32 {
         YQL_AST_NODE_TYPE_MAP(ENUM_VALUE_GEN)
     };
-
 
     static const ui32 SmallListCount = 2;
 
@@ -137,14 +138,14 @@ struct TAstNode {
     static inline TAstNode* NewAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto poolContent = pool.AppendString(content);
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, poolContent, flags);
+        ::new (ret) TAstNode(position, poolContent, flags);
         return ret;
     }
 
     // atom with non-owning content, useful for literal strings
     static inline TAstNode* NewLiteralAtom(TPosition position, TStringBuf content, TMemoryPool& pool, ui32 flags = TNodeFlags::Default) {
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, content, flags);
+        ::new (ret) TAstNode(position, content, flags);
         return ret;
     }
 
@@ -164,13 +165,13 @@ struct TAstNode {
         }
 
         auto ret = pool.Allocate<TAstNode>();
-        ::new(ret) TAstNode(position, poolChildren, childrenCount);
+        ::new (ret) TAstNode(position, poolChildren, childrenCount);
         return ret;
     }
 
     template <typename... TNodes>
     static inline TAstNode* NewList(TPosition position, TMemoryPool& pool, TNodes... nodes) {
-        TAstNode* children[] = { nodes... };
+        TAstNode* children[] = {nodes...};
         return NewList(position, children, sizeof...(nodes), pool);
     }
 
@@ -184,7 +185,8 @@ struct TAstNode {
         return NewList(position, pool, &QuoteAtom, node);
     }
 
-    inline ~TAstNode() {}
+    inline ~TAstNode() {
+    }
 
     void Destroy() {
         TString().swap(Position_.File);
@@ -291,7 +293,7 @@ public:
     virtual IAutoParamBuilder& FinishData() = 0;
 };
 
-class IAutoParamBuilder : public TThrRefBase {
+class IAutoParamBuilder: public TThrRefBase {
 public:
     virtual ~IAutoParamBuilder() = default;
 
@@ -351,5 +353,5 @@ TAstParseResult ParseAst(const TStringBuf& str, TMemoryPool* externalPool = null
 
 } // namespace NYql
 
-template<>
-void Out<NYql::TAstNode::EType>(class IOutputStream &o, NYql::TAstNode::EType x);
+template <>
+void Out<NYql::TAstNode::EType>(class IOutputStream& o, NYql::TAstNode::EType x);

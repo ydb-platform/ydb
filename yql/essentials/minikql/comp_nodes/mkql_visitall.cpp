@@ -1,5 +1,5 @@
 #include "mkql_visitall.h"
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <util/string/cast.h>
 
@@ -9,20 +9,23 @@ namespace NMiniKQL {
 namespace {
 
 class TVisitAllWrapper: public TMutableCodegeneratorNode<TVisitAllWrapper> {
-using TBaseComputation = TMutableCodegeneratorNode<TVisitAllWrapper>;
+    using TBaseComputation = TMutableCodegeneratorNode<TVisitAllWrapper>;
+
 public:
     TVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
         : TBaseComputation(mutables, kind)
         , VarNode(varNode)
         , Args(std::move(args))
         , NewNodes(std::move(newNodes))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& var = VarNode->GetValue(ctx);
         const auto currentIndex = var.GetVariantIndex();
-        if (currentIndex >= Args.size())
+        if (currentIndex >= Args.size()) {
             return NUdf::TUnboxedValuePod();
+        }
         Args[currentIndex]->SetValue(ctx, var.GetVariantItem());
         return NewNodes[currentIndex]->GetValue(ctx).Release();
     }
@@ -65,20 +68,22 @@ private:
         std::for_each(NewNodes.cbegin(), NewNodes.cend(), std::bind(&TVisitAllWrapper::DependsOn, this, std::placeholders::_1));
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
     const TComputationExternalNodePtrVector Args;
     const TComputationNodePtrVector NewNodes;
 };
 
 class TFlowVisitAllWrapper: public TStatefulFlowCodegeneratorNode<TFlowVisitAllWrapper> {
-using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowVisitAllWrapper>;
+    using TBaseComputation = TStatefulFlowCodegeneratorNode<TFlowVisitAllWrapper>;
+
 public:
     TFlowVisitAllWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationNodePtrVector&& newNodes)
         : TBaseComputation(mutables, nullptr, kind, EValueRepresentation::Embedded)
         , VarNode(varNode)
         , Args(std::move(args))
         , NewNodes(std::move(newNodes))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
         if (state.IsInvalid()) {
@@ -160,22 +165,24 @@ private:
         std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependence, VarNode, std::placeholders::_1));
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
     const TComputationExternalNodePtrVector Args;
     const TComputationNodePtrVector NewNodes;
 };
 
 class TWideVisitAllWrapper: public TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper>;
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideVisitAllWrapper>;
+
 public:
     TWideVisitAllWrapper(TComputationMutables& mutables, IComputationNode* varNode, TComputationExternalNodePtrVector&& args, TComputationWideFlowNodePtrVector&& newNodes)
         : TBaseComputation(mutables, nullptr, EValueRepresentation::Embedded)
         , VarNode(varNode)
         , Args(std::move(args))
         , NewNodes(std::move(newNodes))
-    {}
+    {
+    }
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsInvalid()) {
             const auto& var = VarNode->GetValue(ctx);
             const auto index = var.GetVariantIndex();
@@ -253,7 +260,7 @@ public:
         std::generate_n(std::back_inserter(getters), allGetters.front().size(), [&]() {
             TGettersList slice;
             slice.reserve(allGetters.size());
-            std::transform(allGetters.begin(), allGetters.end(), std::back_inserter(slice), [j = idx++](TGettersList& list) { return std::move(list[j]);});
+            std::transform(allGetters.begin(), allGetters.end(), std::back_inserter(slice), [j = idx++](TGettersList& list) { return std::move(list[j]); });
             return [index, slice = std::move(slice)](const TCodegenContext& ctx, BasicBlock*& block) {
                 auto& context = ctx.Codegen.GetContext();
 
@@ -298,12 +305,12 @@ private:
         std::for_each(Args.cbegin(), Args.cend(), std::bind(&IComputationNode::AddDependence, VarNode, std::placeholders::_1));
     }
 
-    IComputationNode *const VarNode;
+    IComputationNode* const VarNode;
     const TComputationExternalNodePtrVector Args;
     const TComputationWideFlowNodePtrVector NewNodes;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 3, "Expected at least 3 arguments");
@@ -327,17 +334,19 @@ IComputationNode* WrapVisitAll(TCallable& callable, const TComputationNodeFactor
     if (const auto type = callable.GetType()->GetReturnType(); type->IsFlow()) {
         TComputationWideFlowNodePtrVector wideNodes;
         wideNodes.reserve(newNodes.size());
-        std::transform(newNodes.cbegin(), newNodes.cend(), std::back_inserter(wideNodes), [](IComputationNode* node){ return dynamic_cast<IComputationWideFlowNode*>(node); });
+        std::transform(newNodes.cbegin(), newNodes.cend(), std::back_inserter(wideNodes), [](IComputationNode* node) { return dynamic_cast<IComputationWideFlowNode*>(node); });
         wideNodes.erase(std::remove_if(wideNodes.begin(), wideNodes.end(), std::logical_not<IComputationWideFlowNode*>()), wideNodes.cend());
-        if (wideNodes.empty())
+        if (wideNodes.empty()) {
             return new TFlowVisitAllWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), variant, std::move(args), std::move(newNodes));
-        else if (wideNodes.size() == newNodes.size())
+        } else if (wideNodes.size() == newNodes.size()) {
             return new TWideVisitAllWrapper(ctx.Mutables, variant, std::move(args), std::move(wideNodes));
-    } else
+        }
+    } else {
         return new TVisitAllWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), variant, std::move(args), std::move(newNodes));
+    }
 
     THROW yexception() << "Wrong signature.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

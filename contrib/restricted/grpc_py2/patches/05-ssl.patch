@@ -1,0 +1,57 @@
+diff --git a/include/grpc/grpc.h b/include/grpc/grpc.h
+index fec7f52..be0ede8 100644
+--- a/include/grpc/grpc.h
++++ b/include/grpc/grpc.h
+@@ -48,6 +48,9 @@
+ GRPCAPI void grpc_call_details_init(grpc_call_details* details);
+ GRPCAPI void grpc_call_details_destroy(grpc_call_details* details);
+ 
++GRPCAPI void grpc_init_openssl(void);
++GRPCAPI void grpc_dont_init_openssl(void);
++
+ /** Initialize the grpc library.
+ 
+     After it's called, a matching invocation to grpc_shutdown() is expected
+diff --git a/src/core/tsi/ssl_transport_security.cc b/src/core/tsi/ssl_transport_security.cc
+index 2107bca..7326d11 100644
+--- a/src/core/tsi/ssl_transport_security.cc
++++ b/src/core/tsi/ssl_transport_security.cc
+@@ -201,6 +201,16 @@
+   GPR_ASSERT(g_ssl_ex_verified_root_cert_index != -1);
+ }
+ 
++static void do_nothing(void) {}
++
++extern "C" void grpc_dont_init_openssl(void) {
++  gpr_once_init(&g_init_openssl_once, do_nothing);
++}
++
++extern "C" void grpc_init_openssl(void) {
++  gpr_once_init(&g_init_openssl_once, init_openssl);
++}
++
+ // --- Ssl utils. ---
+ 
+ // TODO(jboeuf): Remove when we are past the debugging phase with this code
+diff --git a/src/core/lib/security/security_connector/ssl_utils.cc b/src/core/lib/security/security_connector/ssl_utils.cc
+index 29030f0..317651c 100644
+--- a/src/core/lib/security/security_connector/ssl_utils.cc
++++ b/src/core/lib/security/security_connector/ssl_utils.cc
+@@ -47,6 +47,8 @@
+ #include "src/core/tsi/ssl_transport_security.h"
+ #include "src/core/tsi/transport_security.h"
+ 
++#include "add_arcadia_root_certs.h"
++
+ // -- Constants. --
+ 
+ #if defined(GRPC_ROOT_PEM_PATH)
+@@ -584,6 +586,8 @@
+   if (GRPC_SLICE_IS_EMPTY(result) &&
+       !ConfigVars::Get().NotUseSystemSslRoots()) {
+     result = LoadSystemRootCerts();
++    // Merge with Arcadia certs.
++    result = AddArcadiaRootCerts(result);
+   }
+   // Fallback to roots manually shipped with gRPC.
+   if (GRPC_SLICE_IS_EMPTY(result) &&

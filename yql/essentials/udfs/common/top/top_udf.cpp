@@ -71,11 +71,13 @@ class TTopKeeperContainer {
     size_t MaxSize_ = 0;
     bool Finalized_ = false;
     TCompare Compare_;
+
 public:
     explicit TTopKeeperContainer(TCompare compare)
         : Keeper_(0, compare)
         , Compare_(compare)
-    {}
+    {
+    }
 
     TVector<TValue, TAllocator> GetInternal() {
         if (OrderedSet_) {
@@ -152,7 +154,8 @@ protected:
 protected:
     explicit TTopKeeperWrapperBase(TCompare compare)
         : Keeper_(compare)
-    {}
+    {
+    }
 
     void Init(const TUnboxedValuePod& value, ui32 maxSize) {
         Keeper_.SetMaxSize(maxSize);
@@ -220,7 +223,8 @@ protected:
 protected:
     explicit TTopKeeperPairWrapperBase(TCompare compare)
         : Keeper_(compare)
-    {}
+    {
+    }
 
     void Init(const TUnboxedValuePod& key, const TUnboxedValuePod& payload, ui32 maxSize) {
         Keeper_.SetMaxSize(maxSize);
@@ -284,14 +288,12 @@ public:
     }
 };
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopKeeperDataWrapper;
 
 template <EDataSlot Slot, bool IsTop>
 class TTopKeeperDataWrapper<Slot, false, IsTop>
-    : public TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>>
-{
+    : public TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>> {
 public:
     using TBase = TTopKeeperWrapperBase<TDataCompare<Slot, IsTop>>;
 
@@ -316,8 +318,7 @@ public:
 
 template <EDataSlot Slot, bool IsTop>
 class TTopKeeperDataWrapper<Slot, true, IsTop>
-    : public TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>>
-{
+    : public TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>> {
 public:
     using TBase = TTopKeeperPairWrapperBase<TDataPairCompare<Slot, IsTop>>;
 
@@ -345,8 +346,7 @@ class TTopKeeperWrapper;
 
 template <bool IsTop>
 class TTopKeeperWrapper<false, IsTop>
-    : public TTopKeeperWrapperBase<TGenericCompare<IsTop>>
-{
+    : public TTopKeeperWrapperBase<TGenericCompare<IsTop>> {
 public:
     using TBase = TTopKeeperWrapperBase<TGenericCompare<IsTop>>;
 
@@ -371,8 +371,7 @@ public:
 
 template <bool IsTop>
 class TTopKeeperWrapper<true, IsTop>
-    : public TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>>
-{
+    : public TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>> {
 public:
     using TBase = TTopKeeperPairWrapperBase<TGenericPairCompare<IsTop>>;
 
@@ -395,7 +394,6 @@ public:
     }
 };
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
 class TTopResourceData;
 
@@ -414,9 +412,8 @@ TTopResource<HasKey, IsTop>* GetTopResource(const TUnboxedValuePod& arg) {
     return static_cast<TTopResource<HasKey, IsTop>*>(arg.AsBoxed().Get());
 }
 
-
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopCreateData : public TBoxedValue {
+class TTopCreateData: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -436,7 +433,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopCreate : public TBoxedValue {
+class TTopCreate: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -457,14 +454,15 @@ private:
 public:
     explicit TTopCreate(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopAddValueData : public TBoxedValue {
+class TTopAddValueData: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -486,7 +484,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopAddValue : public TBoxedValue {
+class TTopAddValue: public TBoxedValue {
 private:
     template <bool HasKey_ = HasKey, typename std::enable_if_t<!HasKey_>* = nullptr>
     TUnboxedValue RunImpl(const TUnboxedValuePod* args) const {
@@ -508,11 +506,12 @@ private:
 
 public:
     explicit TTopAddValue(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopSerializeData : public TBoxedValue {
+class TTopSerializeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -521,7 +520,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopSerialize : public TBoxedValue {
+class TTopSerialize: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
@@ -530,11 +529,12 @@ private:
 
 public:
     explicit TTopSerialize(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopDeserializeData : public TBoxedValue {
+class TTopDeserializeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResourceData<Slot, HasKey, IsTop>(args[0]));
@@ -542,7 +542,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopDeserialize : public TBoxedValue {
+class TTopDeserialize: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         return TUnboxedValuePod(new TTopResource<HasKey, IsTop>(args[0], Compare_));
@@ -551,14 +551,15 @@ private:
 public:
     explicit TTopDeserialize(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopMergeData : public TBoxedValue {
+class TTopMergeData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -568,7 +569,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopMerge : public TBoxedValue {
+class TTopMerge: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder*, const TUnboxedValuePod* args) const override {
         auto left = GetTopResource<HasKey, IsTop>(args[0]);
@@ -579,14 +580,15 @@ private:
 public:
     explicit TTopMerge(ICompare::TPtr compare)
         : Compare_(compare)
-    {}
+    {
+    }
 
 private:
     ICompare::TPtr Compare_;
 };
 
 template <EDataSlot Slot, bool HasKey, bool IsTop>
-class TTopGetResultData : public TBoxedValue {
+class TTopGetResultData: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResourceData<Slot, HasKey, IsTop>(args[0]);
@@ -595,7 +597,7 @@ private:
 };
 
 template <bool HasKey, bool IsTop>
-class TTopGetResult : public TBoxedValue {
+class TTopGetResult: public TBoxedValue {
 private:
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const override {
         auto resource = GetTopResource<HasKey, IsTop>(args[0]);
@@ -604,25 +606,24 @@ private:
 
 public:
     explicit TTopGetResult(ICompare::TPtr)
-    {}
+    {
+    }
 };
 
-
-#define RESOURCE(slot, hasKey, isTop)                             \
-extern const char TopResourceName_##slot##_##hasKey##_##isTop[] = \
-    "Top.TopResource."#slot"."#hasKey"."#isTop;                   \
-template <>                                                       \
-class TTopResourceData<EDataSlot::slot, hasKey, isTop>:           \
-    public TBoxedResource<                                        \
-        TTopKeeperDataWrapper<EDataSlot::slot, hasKey, isTop>,    \
-        TopResourceName_##slot##_##hasKey##_##isTop>              \
-{                                                                 \
-public:                                                           \
-    template <typename... Args>                                   \
-    inline TTopResourceData(Args&&... args)                       \
-        : TBoxedResource(std::forward<Args>(args)...)             \
-    {}                                                            \
-};
+#define RESOURCE(slot, hasKey, isTop)                                                                                  \
+    extern const char TopResourceName_##slot##_##hasKey##_##isTop[] =                                                  \
+        "Top.TopResource." #slot "." #hasKey "." #isTop;                                                               \
+    template <>                                                                                                        \
+    class TTopResourceData<EDataSlot::slot, hasKey, isTop>: public TBoxedResource<                                     \
+                                                                TTopKeeperDataWrapper<EDataSlot::slot, hasKey, isTop>, \
+                                                                TopResourceName_##slot##_##hasKey##_##isTop> {         \
+    public:                                                                                                            \
+        template <typename... Args>                                                                                    \
+        inline TTopResourceData(Args&&... args)                                                                        \
+            : TBoxedResource(std::forward<Args>(args)...)                                                              \
+        {                                                                                                              \
+        }                                                                                                              \
+    };
 
 #define RESOURCE_00(slot, ...) RESOURCE(slot, false, false)
 #define RESOURCE_01(slot, ...) RESOURCE(slot, false, true)
@@ -679,52 +680,50 @@ UDF_TYPE_ID_MAP(RESOURCE_11)
 #define TYPE_10(slot, ...) MAKE_TYPE(slot, true, false)
 #define TYPE_11(slot, ...) MAKE_TYPE(slot, true, true)
 
-#define PARAMETRIZE(action)              \
-    if (hasKey) {                        \
-        if (isTop) {                     \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_11) \
-            }                            \
-        } else {                         \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_10) \
-            }                            \
-        }                                \
-    } else {                             \
-        if (isTop) {                     \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_01) \
-            }                            \
-        } else {                         \
-            switch (*slot) {             \
-            UDF_TYPE_ID_MAP(action##_00) \
-            }                            \
-        }                                \
+#define PARAMETRIZE(action)                  \
+    if (hasKey) {                            \
+        if (isTop) {                         \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_11) \
+            }                                \
+        } else {                             \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_10) \
+            }                                \
+        }                                    \
+    } else {                                 \
+        if (isTop) {                         \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_01) \
+            }                                \
+        } else {                             \
+            switch (*slot) {                 \
+                UDF_TYPE_ID_MAP(action##_00) \
+            }                                \
+        }                                    \
     }
 
-
-#define RESOURCE_GENERIC(hasKey, isTop)                           \
-extern const char TopResourceName_Generic_##hasKey##_##isTop[] =  \
-    "Top.TopResource.Generic."#hasKey"."#isTop;                   \
-template <>                                                       \
-class TTopResource<hasKey, isTop>:                                \
-    public TBoxedResource<                                        \
-        TTopKeeperWrapper<hasKey, isTop>,                         \
-        TopResourceName_Generic_##hasKey##_##isTop>               \
-{                                                                 \
-public:                                                           \
-    template <typename... Args>                                   \
-    inline TTopResource(Args&&... args)                           \
-        : TBoxedResource(std::forward<Args>(args)...)             \
-    {}                                                            \
-};
+#define RESOURCE_GENERIC(hasKey, isTop)                                                  \
+    extern const char TopResourceName_Generic_##hasKey##_##isTop[] =                     \
+        "Top.TopResource.Generic." #hasKey "." #isTop;                                   \
+    template <>                                                                          \
+    class TTopResource<hasKey, isTop>: public TBoxedResource<                            \
+                                           TTopKeeperWrapper<hasKey, isTop>,             \
+                                           TopResourceName_Generic_##hasKey##_##isTop> { \
+    public:                                                                              \
+        template <typename... Args>                                                      \
+        inline TTopResource(Args&&... args)                                              \
+            : TBoxedResource(std::forward<Args>(args)...)                                \
+        {                                                                                \
+        }                                                                                \
+    };
 
 RESOURCE_GENERIC(false, false)
 RESOURCE_GENERIC(false, true)
 RESOURCE_GENERIC(true, false)
 RESOURCE_GENERIC(true, true)
 
-#define MAKE_IMPL_GENERIC(operation, hasKey, isTop)                 \
+#define MAKE_IMPL_GENERIC(operation, hasKey, isTop) \
     builder.Implementation(new operation<hasKey, isTop>(compare));
 
 #define CREATE_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopCreate, hasKey, isTop)
@@ -734,7 +733,7 @@ RESOURCE_GENERIC(true, true)
 #define DESERIALIZE_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopDeserialize, hasKey, isTop)
 #define GET_RESULT_GENERIC(hasKey, isTop) MAKE_IMPL_GENERIC(TTopGetResult, hasKey, isTop)
 
-#define TYPE_GENERIC(hasKey, isTop)                                         \
+#define TYPE_GENERIC(hasKey, isTop) \
     topType = builder.Resource(TopResourceName_Generic_##hasKey##_##isTop);
 
 #define PARAMETRIZE_GENERIC(action) \
@@ -752,7 +751,6 @@ RESOURCE_GENERIC(true, true)
         }                           \
     }
 
-
 static const auto CreateName = TStringRef::Of("Create");
 static const auto AddValueName = TStringRef::Of("AddValue");
 static const auto SerializeName = TStringRef::Of("Serialize");
@@ -760,7 +758,7 @@ static const auto DeserializeName = TStringRef::Of("Deserialize");
 static const auto MergeName = TStringRef::Of("Merge");
 static const auto GetResultName = TStringRef::Of("GetResult");
 
-class TTopModule : public IUdfModule {
+class TTopModule: public IUdfModule {
 public:
     TStringRef Name() const {
         return TStringRef::Of("Top");
@@ -783,8 +781,7 @@ public:
         TType* userType,
         const TStringRef& typeConfig,
         ui32 flags,
-        IFunctionTypeInfoBuilder& builder) const final
-    {
+        IFunctionTypeInfoBuilder& builder) const final {
         Y_UNUSED(typeConfig);
 
         try {
@@ -951,4 +948,3 @@ public:
 } // namespace
 
 REGISTER_MODULES(TTopModule)
-

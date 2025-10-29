@@ -1,4 +1,5 @@
 #include "user_info.h"
+#include <ydb/core/persqueue/pqtablet/common/constants.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -434,8 +435,7 @@ void TUsersInfoStorage::Remove(const TString& user, const TActorContext&) {
 }
 
 TUserInfo& TUsersInfoStorage::GetOrCreate(const TString& user, const TActorContext& ctx, TMaybe<ui64> readRuleGeneration) {
-    AFL_ENSURE(!user.empty());
-    auto it = UsersInfo.find(user);
+    auto it = UsersInfo.find(user.empty() ? CLIENTID_WITHOUT_CONSUMER : user);
     if (it == UsersInfo.end()) {
         return Create(
                 ctx, user, readRuleGeneration ? *readRuleGeneration : ++CurReadRuleGeneration, false, TDuration::Zero(), "", 0,
@@ -500,7 +500,7 @@ void TUsersInfoStorage::ResetDetailedMetrics() {
 }
 
 bool TUsersInfoStorage::DetailedMetricsAreEnabled() const {
-    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == Ydb::MetricsLevel::Detailed);
+    return AppData()->FeatureFlags.GetEnableMetricsLevel() && (Config.HasMetricsLevel() && Config.GetMetricsLevel() == METRICS_LEVEL_DETAILED);
 }
 
 const TUserInfo* TUsersInfoStorage::GetIfExists(const TString& user) const {

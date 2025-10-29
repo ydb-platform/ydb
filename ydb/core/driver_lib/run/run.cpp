@@ -1,5 +1,6 @@
 #include "auto_config_initializer.h"
 #include "run.h"
+#include "grpc_servers_manager.h"
 #include "service_initializer.h"
 #include "kikimr_services_initializers.h"
 
@@ -21,7 +22,7 @@
 #include <ydb/library/actors/core/scheduler_basic.h>
 
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_server.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
@@ -66,6 +67,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -175,10 +177,16 @@ namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
+    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
         auto wrapper = grpcServersWrapper.lock();
         if (!wrapper) {
             return;
+        }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
+        if (isDisabled) {
+            wrapper->IsDisabled.store(true, std::memory_order_release);
         }
         TGuard<TMutex> guard = wrapper->Guard();
         for (auto& [name, server] : wrapper->Servers) {
@@ -189,13 +197,14 @@ namespace {
         }
         wrapper->Servers.clear();
     }
-
 }
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
     std::weak_ptr<TGRpcServersWrapper> GRpcServersWrapper;
     TIntrusivePtr<NMemory::IProcessMemoryInfoProvider> ProcessMemoryInfoProvider;
     bool Started = false;
+    bool StopScheduled = false;
+    bool WaitingForDisconnectRequest = false;
 
 public:
     enum {
@@ -227,9 +236,26 @@ public:
         if (const auto& bridgeInfo = ev->Get()->BridgeInfo) {
             if (NBridge::PileStateTraits(bridgeInfo->SelfNodePile->State).RequiresConfigQuorum) {
                 Start();
-            } else {
-                Stop();
+            } else if (!StopScheduled) {
+                StopScheduled = true;
+                CheckAndExecuteStop();
             }
+        }
+    }
+
+    void HandleDisconnectRequestStarted() {
+        WaitingForDisconnectRequest = true;
+    }
+
+    void HandleDisconnectRequestFinished() {
+        WaitingForDisconnectRequest = false;
+        CheckAndExecuteStop();
+    }
+
+    void CheckAndExecuteStop() {
+        if (StopScheduled && !WaitingForDisconnectRequest) {
+            StopScheduled = false;
+            Stop();
         }
     }
 
@@ -238,8 +264,13 @@ public:
             return;
         }
         Started = true;
+        StopScheduled = false;
+        WaitingForDisconnectRequest = false;
         auto wrapper = GRpcServersWrapper.lock();
         if (!wrapper) {
+            return;
+        }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
             return;
         }
         TGuard<TMutex> guard = wrapper->Guard();
@@ -292,6 +323,9 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvNodeWardenStorageConfig, Handle)
         hFunc(TEvStop, HandleStop)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
+        cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
+        cFunc(TEvents::TSystem::PoisonPill, PassAway)
     )
 };
 
@@ -737,7 +771,7 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         names["object_storage"] = &hasObjectStorage;
         TServiceCfg hasClickhouseInternal = services.empty();
         names["clickhouse_internal"] = &hasClickhouseInternal;
-        TServiceCfg hasRateLimiter = false;
+        TServiceCfg hasRateLimiter = services.empty();
         names["rate_limiter"] = &hasRateLimiter;
         TServiceCfg hasExport = services.empty();
         names["export"] = &hasExport;
@@ -1388,6 +1422,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasAwsClientConfig()) {
+        AppData->AwsClientConfig = runConfig.AppConfig.GetAwsClientConfig();
+    }
+
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
     }
@@ -1435,6 +1473,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasSystemTabletBackupConfig()) {
         AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
+    }
+
+    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
+        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
     }
 
     // setup resource profiles
@@ -1815,6 +1857,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCountersInfoProvider) {
+        sil->AddServiceInitializer(new TCountersInfoProviderInitializer(runConfig));
+    }
+
     if (serviceMask.EnableGRpcService) {
         sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
     }
@@ -2015,6 +2061,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(GRpcServersWrapper, ProcessMemoryInfoProvider));
+        ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 
     if (SqsHttp) {
@@ -2119,14 +2166,13 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp.Destroy();
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     if (GRpcServersManager) {
-        StopGRpcServers(GRpcServersWrapper);
-        GRpcServersWrapper->Servers.clear();
+        StopGRpcServers(GRpcServersWrapper, true);
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (YqSharedResources) {

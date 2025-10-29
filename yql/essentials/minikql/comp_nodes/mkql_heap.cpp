@@ -1,7 +1,7 @@
 #include "mkql_heap.h"
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 
@@ -12,16 +12,18 @@ namespace NMiniKQL {
 
 namespace {
 using TComparator = std::function<bool(const NUdf::TUnboxedValuePod l, const NUdf::TUnboxedValuePod r)>;
-using TAlgorithm = void(*)(NUdf::TUnboxedValuePod*, NUdf::TUnboxedValuePod*, TComparator);
+using TAlgorithm = void (*)(NUdf::TUnboxedValuePod*, NUdf::TUnboxedValuePod*, TComparator);
 using TArgsPlace = std::array<NUdf::TUnboxedValuePod, 2U>;
 using TComparePtr = bool (*)(TComputationContext& ctx, const NUdf::TUnboxedValuePod l, const NUdf::TUnboxedValuePod r);
 
-class THeapWrapper : public TMutableCodegeneratorNode<THeapWrapper>
+class THeapWrapper: public TMutableCodegeneratorNode<THeapWrapper>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                    public ICodegeneratorRootNode
 #endif
 {
     typedef TMutableCodegeneratorNode<THeapWrapper> TBaseComputation;
+
 public:
     THeapWrapper(TAlgorithm algorithm, TComputationMutables& mutables, IComputationNode* list, IComputationExternalNode* left, IComputationExternalNode* right, IComputationNode* compare)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -30,17 +32,19 @@ public:
         , Left(left)
         , Right(right)
         , Compare(compare)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
 
         const auto size = list.GetListLength();
 
-        if (size < 2U)
+        if (size < 2U) {
             return list.Release();
+        }
 
-        NUdf::TUnboxedValue *items = nullptr;
+        NUdf::TUnboxedValue* items = nullptr;
         const auto next = ctx.HolderFactory.CloneArray(list.Release(), items);
 
         NUdf::TUnboxedValuePod *const begin = items, *const end = items + size;
@@ -58,7 +62,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>()); // TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
 
@@ -77,9 +81,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(itemsType, 0U, "items_ptr", block);
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
 
         const auto idxType = Type::getInt32Ty(context);
 
@@ -178,14 +180,16 @@ IComputationNode* WrapHeap(TAlgorithm algorithm, TCallable& callable, const TCom
     return new THeapWrapper(algorithm, ctx.Mutables, list, left, right, compare);
 }
 
-using TNthAlgorithm = void(*)(NUdf::TUnboxedValuePod*, NUdf::TUnboxedValuePod*,  NUdf::TUnboxedValuePod*, TComparator);
+using TNthAlgorithm = void (*)(NUdf::TUnboxedValuePod*, NUdf::TUnboxedValuePod*, NUdf::TUnboxedValuePod*, TComparator);
 
-class TNthWrapper : public TMutableCodegeneratorNode<TNthWrapper>
+class TNthWrapper: public TMutableCodegeneratorNode<TNthWrapper>
 #ifndef MKQL_DISABLE_CODEGEN
-    , public ICodegeneratorRootNode
+    ,
+                   public ICodegeneratorRootNode
 #endif
 {
     typedef TMutableCodegeneratorNode<TNthWrapper> TBaseComputation;
+
 public:
     TNthWrapper(TNthAlgorithm algorithm, TComputationMutables& mutables, IComputationNode* list, IComputationNode* middle, IComputationExternalNode* left, IComputationExternalNode* right, IComputationNode* compare)
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
@@ -195,7 +199,8 @@ public:
         , Left(left)
         , Right(right)
         , Compare(compare)
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
@@ -205,10 +210,11 @@ public:
 
         middle = std::min(middle, size);
 
-        if (middle == 0U || size < 2U)
+        if (middle == 0U || size < 2U) {
             return list.Release();
+        }
 
-        NUdf::TUnboxedValue *items = nullptr;
+        NUdf::TUnboxedValue* items = nullptr;
         const auto next = ctx.HolderFactory.CloneArray(list.Release(), items);
 
         NUdf::TUnboxedValuePod *const begin = items, *const mid = items + middle, *const end = items + size;
@@ -226,7 +232,7 @@ public:
 
         const auto fact = ctx.GetFactory();
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>());// TODO: Generate code instead of call CloneArray.
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::CloneArray>()); // TODO: Generate code instead of call CloneArray.
 
         const auto list = GetNodeValue(List, ctx, block);
         const auto midv = GetNodeValue(Middle, ctx, block);
@@ -253,9 +259,7 @@ public:
         block = work;
 
         const auto itemsType = PointerType::getUnqual(valueType);
-        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ?
-            new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()):
-            new AllocaInst(itemsType, 0U, "items_ptr", block);
+        const auto itemsPtr = *Stateless_ || ctx.AlwaysInline ? new AllocaInst(itemsType, 0U, "items_ptr", &ctx.Func->getEntryBlock().back()) : new AllocaInst(itemsType, 0U, "items_ptr", block);
 
         const auto idxType = Type::getInt32Ty(context);
 
@@ -288,7 +292,7 @@ public:
     }
 #endif
 private:
-    void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* nth,  NUdf::TUnboxedValuePod* end) const {
+    void Do(TComputationContext& ctx, NUdf::TUnboxedValuePod* begin, NUdf::TUnboxedValuePod* nth, NUdf::TUnboxedValuePod* end) const {
         if (ctx.ExecuteLLVM && Comparator) {
             return Algorithm(begin, nth, end, std::bind(Comparator, std::ref(ctx), std::placeholders::_1, std::placeholders::_2));
         }
@@ -358,7 +362,7 @@ IComputationNode* WrapNth(TNthAlgorithm algorithm, TCallable& callable, const TC
     return new TNthWrapper(algorithm, ctx.Mutables, list, middle, left, right, compare);
 }
 
-}
+} // namespace
 
 IComputationNode* WrapMakeHeap(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapHeap(&std::make_heap<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
@@ -387,5 +391,5 @@ IComputationNode* WrapNthElement(TCallable& callable, const TComputationNodeFact
 IComputationNode* WrapPartialSort(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     return WrapNth(&NYql::FastPartialSort<NUdf::TUnboxedValuePod*, TComparator>, callable, ctx);
 }
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

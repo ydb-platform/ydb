@@ -4,15 +4,13 @@
 #include <yql/essentials/utils/log/log.h>
 #include <typeinfo>
 
-
-
 using namespace NYql::NNodes;
 
 namespace {
 using namespace NKikimr;
-using namespace NKikimr::NKqp; 
+using namespace NKikimr::NKqp;
 
-TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
+TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
         // clang-format off
@@ -21,8 +19,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Name(member.Name())
         .Done().Ptr();
         // clang-format on
-    }
-    else if (input->IsCallable()){
+    } else if (input->IsCallable()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
@@ -34,8 +31,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Seal()
         .Build();
         // clang-format on
-    }
-    else if(input->IsList()){
+    } else if (input->IsList()) {
         TVector<TExprNode::TPtr> newChildren;
         for (auto c : input->Children()) {
             newChildren.push_back(ReplaceArg(c, arg, ctx));
@@ -47,8 +43,7 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             .Seal()
         .Build();
         // clang-format on
-    }
-    else {
+    } else {
         return input;
     }
 }
@@ -57,14 +52,12 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
         return member.Struct().Ptr();
-    }
-    else if (input->IsCallable()){
+    } else if (input->IsCallable()) {
         for (auto c : input->Children()) {
             if (auto arg = FindMemberArg(c))
                 return arg;
         }
-    }
-    else if(input->IsList()){
+    } else if (input->IsList()) {
         for (auto c : input->Children()) {
             if (auto arg = FindMemberArg(c)) {
                 return arg;
@@ -74,18 +67,15 @@ TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     return TExprNode::TPtr();
 }
 
-TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext& ctx) {
+TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFilterInfo> conjuncts, TExprContext &ctx) {
     auto arg = Build<TCoArgument>(ctx, pos).Name("lambda_arg").Done();
     TExprNode::TPtr lambda;
 
-    if (conjuncts.size()==1) {
+    if (conjuncts.size() == 1) {
         auto filterInfo = conjuncts[0];
         auto body = ReplaceArg(filterInfo.FilterBody, arg.Ptr(), ctx);
         if (!filterInfo.FromPg) {
-            body = ctx.Builder(body->Pos())
-                .Callable("FromPg")
-                .Add(0, body)
-                .Seal().Build();
+            body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
         }
 
         // clang-format off
@@ -94,19 +84,15 @@ TExprNode::TPtr BuildFilterLambdaFromConjuncts(TPositionHandle pos, TVector<TFil
             .Body(body)
         .Done().Ptr();
         // clang-format on
-    }
-    else {
+    } else {
         TVector<TExprNode::TPtr> newConjuncts;
 
-        for (auto c : conjuncts ) {
+        for (auto c : conjuncts) {
             auto body = ReplaceArg(c.FilterBody, arg.Ptr(), ctx);
             if (!c.FromPg) {
-                body = ctx.Builder(body->Pos())
-                    .Callable("FromPg")
-                    .Add(0, body)
-                    .Seal().Build();
+                body = ctx.Builder(body->Pos()).Callable("FromPg").Add(0, body).Seal().Build();
             }
-            newConjuncts.push_back( ReplaceArg(body, arg.Ptr(), ctx));
+            newConjuncts.push_back(ReplaceArg(body, arg.Ptr(), ctx));
         }
 
         // clang-format off
@@ -129,7 +115,24 @@ TExprNode::TPtr PruneCast(TExprNode::TPtr node) {
     return node;
 }
 
-bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
+TVector<TInfoUnit> GetHashableKeys(const std::shared_ptr<IOperator> &input) {
+    if (!input->Type) {
+        return input->GetOutputIUs();
+    }
+
+    const auto *inputType = input->Type;
+    TVector<TInfoUnit> hashableKeys;
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+    for (const auto &item : structType->GetItems()) {
+        if (item->GetItemType()->IsHashable()) {
+            hashableKeys.push_back(TInfoUnit(TString(item->GetName())));
+        }
+    }
+
+    return hashableKeys;
+}
+
+bool IsNullRejectingPredicate(const TFilterInfo &filter, TExprContext &ctx) {
     Y_UNUSED(ctx);
 #ifdef DEBUG_PREDICATE
     YQL_CLOG(TRACE, CoreDq) << "IsNullRejectingPredicate: " << NYql::KqpExprToPrettyString(TExprBase(filter.FilterBody), ctx);
@@ -142,21 +145,14 @@ bool IsNullRejectingPredicate(const TFilterInfo& filter, TExprContext& ctx) {
     }
     return false;
 }
-}  // namespace
+} // namespace
 
 namespace NKikimr {
 namespace NKqp {
 
 // Currently we only extract simple expressions where there is only one variable on either side
 
-bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
-
-    Y_UNUSED(kqpCtx);
-    Y_UNUSED(config);
+bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
     if (input->Kind != EOperator::Filter) {
         return false;
@@ -193,7 +189,7 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
                 GetAllMembers(leftSide, leftIUs);
                 GetAllMembers(rightSide, rightIUs);
 
-                if (leftIUs.size()==1 && rightIUs.size()==1) {
+                if (leftIUs.size() == 1 && rightIUs.size() == 1) {
                     matchedConjuncts.push_back(std::make_pair(idx, f.FilterBody));
                 }
             }
@@ -201,9 +197,8 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
     }
 
     if (matchedConjuncts.size()) {
-        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> mapElements;
+        TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> mapElements;
         TNodeOnNodeOwnedMap replaceMap;
-
 
         for (auto [idx, conj] : matchedConjuncts) {
             if (conj->IsCallable("FromPg")) {
@@ -217,19 +212,19 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
 
             if (!leftSide->IsCallable("Member")) {
                 TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
-                auto lambda_arg = Build<TCoArgument>(ctx, leftSide->Pos()).Name("arg").Done().Ptr();
+                auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, leftSide->Pos()).Name("arg").Done().Ptr();
 
                 // clang-format off
-                auto mapLambda = Build<TCoLambda>(ctx, leftSide->Pos())
+                auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, leftSide->Pos())
                     .Args({lambda_arg})
-                    .Body(ReplaceArg(leftSide, lambda_arg, ctx))
+                    .Body(ReplaceArg(leftSide, lambda_arg, ctx.ExprCtx))
                     .Done().Ptr();
                 // clang-format on
 
                 mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
 
                 // clang-format off
-                auto newLeftSide = Build<TCoMember>(ctx, leftSide->Pos())
+                auto newLeftSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
                     .Struct(memberArg)
                     .Name().Value(newName).Build()
                     .Done().Ptr();
@@ -240,19 +235,19 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
 
             if (!rightSide->IsCallable("Member")) {
                 TString newName = "_rbo_arg_" + std::to_string(props.InternalVarIdx++);
-                auto lambda_arg = Build<TCoArgument>(ctx, rightSide->Pos()).Name("arg").Done().Ptr();
+                auto lambda_arg = Build<TCoArgument>(ctx.ExprCtx, rightSide->Pos()).Name("arg").Done().Ptr();
 
                 // clang-format off
-                auto mapLambda = Build<TCoLambda>(ctx, rightSide->Pos())
+                auto mapLambda = Build<TCoLambda>(ctx.ExprCtx, rightSide->Pos())
                     .Args({lambda_arg})
-                    .Body(ReplaceArg(rightSide, lambda_arg, ctx))
+                    .Body(ReplaceArg(rightSide, lambda_arg, ctx.ExprCtx))
                     .Done().Ptr();
                 // clang-format on
 
                 mapElements.push_back(std::make_pair(TInfoUnit(newName), mapLambda));
 
                 // clang-format off
-                auto newRightSide = Build<TCoMember>(ctx, leftSide->Pos())
+                auto newRightSide = Build<TCoMember>(ctx.ExprCtx, leftSide->Pos())
                     .Struct(memberArg)
                     .Name().Value(newName).Build()
                     .Done().Ptr();
@@ -262,12 +257,12 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
             }
         }
 
-        TOptimizeExprSettings settings(&typeCtx);
+        TOptimizeExprSettings settings(&ctx.TypeCtx);
         TExprNode::TPtr newFilterLambda;
-        RemapExpr(filter->FilterLambda, newFilterLambda, replaceMap, ctx, settings);
+        RemapExpr(filter->FilterLambda, newFilterLambda, replaceMap, ctx.ExprCtx, settings);
         filter->FilterLambda = newFilterLambda;
 
-        auto newMap = std::make_shared<TOpMap>(filter->GetInput(), mapElements, false);
+        auto newMap = std::make_shared<TOpMap>(filter->GetInput(), input->Pos, mapElements, false);
         filter->Children[0] = newMap;
         return true;
     }
@@ -275,17 +270,9 @@ bool TExtractJoinExpressionsRule::TestAndApply(std::shared_ptr<IOperator> & inpu
     return false;
 }
 
-// Currently we push map operator 
-std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
-
+// Currently we push map operator
+std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(ctx);
-    Y_UNUSED(kqpCtx);
-    Y_UNUSED(typeCtx);
-    Y_UNUSED(config);
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
@@ -298,14 +285,13 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
     }
 
     // Don't handle renames at this point, just expressions that acutally compute something
-    for (auto & [var, body] : map->MapElements ) {
+    for (auto &[var, body] : map->MapElements) {
         if (!std::holds_alternative<TExprNode::TPtr>(body)) {
             return input;
         }
     }
 
-    if (map->GetInput()->Kind != EOperator::Join)
-    {
+    if (map->GetInput()->Kind != EOperator::Join) {
         return input;
     }
 
@@ -316,13 +302,13 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
         return input;
     }
 
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> leftMapElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> rightMapElements;
-    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit,TExprNode::TPtr>>> topMapElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> leftMapElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> rightMapElements;
+    TVector<std::pair<TInfoUnit, std::variant<TInfoUnit, TExprNode::TPtr>>> topMapElements;
 
     TVector<int> removeElements;
 
-    for (size_t i=0; i < map->MapElements.size(); i++ ) {
+    for (size_t i = 0; i < map->MapElements.size(); i++) {
         auto mapElement = map->MapElements[i];
 
         TVector<TInfoUnit> mapElIUs;
@@ -330,14 +316,12 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
 
         if (!IUSetDiff(mapElIUs, join->GetLeftInput()->GetOutputIUs()).size()) {
             leftMapElements.push_back(mapElement);
-        }
-        else if (!IUSetDiff(mapElIUs, join->GetRightInput()->GetOutputIUs()).size()) {
+        } else if (!IUSetDiff(mapElIUs, join->GetRightInput()->GetOutputIUs()).size()) {
             rightMapElements.push_back(mapElement);
-        }
-        else {
+        } else {
             topMapElements.push_back(mapElement);
         }
-    }    
+    }
 
     if (!leftMapElements.size() && !rightMapElements.size()) {
         return input;
@@ -346,33 +330,30 @@ std::shared_ptr<IOperator> TPushMapRule::SimpleTestAndApply(const std::shared_pt
     std::shared_ptr<IOperator> output;
     if (!topMapElements.size()) {
         output = join;
-    }
-    else {
-        output = std::make_shared<TOpMap>(join, topMapElements, false);
+    } else {
+        output = std::make_shared<TOpMap>(join, input->Pos, topMapElements, false);
     }
 
     if (leftMapElements.size()) {
         auto leftInput = join->GetLeftInput();
-        join->Children[0] = std::make_shared<TOpMap>(leftInput, leftMapElements, false);
+        join->Children[0] = std::make_shared<TOpMap>(leftInput, input->Pos, leftMapElements, false);
     }
 
     if (rightMapElements.size()) {
         auto rightInput = join->GetRightInput();
-        join->Children[1] = std::make_shared<TOpMap>(rightInput, rightMapElements, false);
+        join->Children[1] = std::make_shared<TOpMap>(rightInput, input->Pos, rightMapElements, false);
+    }
+
+    // If there was an enforcer on the input map, move it to the output
+    if (input->Props.OrderEnforcer.has_value()) {
+        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
     }
 
     return output;
 }
 
-std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
+std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
 
-    Y_UNUSED(kqpCtx);
-    Y_UNUSED(typeCtx);
-    Y_UNUSED(config);
     Y_UNUSED(props);
 
     if (input->Kind != EOperator::Filter) {
@@ -397,13 +378,15 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
         return input;
     }
 
+    auto output = input;
+
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
     // Break the filter into join conditions and other conjuncts
     // Join conditions can be pushed into the join operator and conjucts can either be pushed
     // or left on top of the join
-    
+
     auto conjunctInfo = filter->GetConjunctInfo();
 
     // Check if we need a top level filter
@@ -415,29 +398,24 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     for (auto f : conjunctInfo.Filters) {
         if (!IUSetDiff(f.FilterIUs, leftIUs).size()) {
             pushLeft.push_back(f);
-        }
-        else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
+        } else if (!IUSetDiff(f.FilterIUs, rightIUs).size()) {
             pushRight.push_back(f);
-        }
-        else {
+        } else {
             topLevelPreds.push_back(f);
         }
     }
 
-    for (auto c: conjunctInfo.JoinConditions) {
+    for (auto c : conjunctInfo.JoinConditions) {
         if (!IUSetDiff({c.LeftIU}, leftIUs).size() && !IUSetDiff({c.RightIU}, rightIUs).size()) {
             joinConditions.push_back(std::make_pair(c.LeftIU, c.RightIU));
-        }
-        else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
+        } else if (!IUSetDiff({c.LeftIU}, rightIUs).size() && !IUSetDiff({c.RightIU}, leftIUs).size()) {
             joinConditions.push_back(std::make_pair(c.RightIU, c.LeftIU));
-        }
-        else {
+        } else {
             TVector<TInfoUnit> vars = {c.LeftIU};
             vars.push_back(c.RightIU);
             if (!IUSetDiff(vars, leftIUs).size()) {
                 pushLeft.push_back(TFilterInfo(c.ConjunctExpr, vars));
-            }
-            else {
+            } else {
                 pushRight.push_back(TFilterInfo(c.ConjunctExpr, vars));
             }
         }
@@ -453,30 +431,30 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     auto rightInput = join->GetRightInput();
 
     if (pushLeft.size()) {
-        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Node->Pos(), pushLeft, ctx);
-        leftInput = std::make_shared<TOpFilter>(leftInput, leftLambda);
+        auto leftLambda = BuildFilterLambdaFromConjuncts(leftInput->Pos, pushLeft, ctx.ExprCtx);
+        leftInput = std::make_shared<TOpFilter>(leftInput, input->Pos, leftLambda);
     }
 
     if (pushRight.size()) {
         if (join->JoinKind == "Left") {
             TVector<TFilterInfo> predicatesForRightSide;
-            for (const auto& predicate : pushRight) {
-                if (IsNullRejectingPredicate(predicate, ctx)) {
+            for (const auto &predicate : pushRight) {
+                if (IsNullRejectingPredicate(predicate, ctx.ExprCtx)) {
                     predicatesForRightSide.push_back(predicate);
                 } else {
                     topLevelPreds.push_back(predicate);
                 }
             }
             if (predicatesForRightSide.size()) {
-                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
-                rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda);
+                auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+                rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
                 join->JoinKind = "Inner";
             } else {
                 return input;
             }
         } else {
-            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Node->Pos(), pushRight, ctx);
-            rightInput = std::make_shared<TOpFilter>(rightInput, rightLambda);
+            auto rightLambda = BuildFilterLambdaFromConjuncts(rightInput->Pos, pushRight, ctx.ExprCtx);
+            rightInput = std::make_shared<TOpFilter>(rightInput, input->Pos, rightLambda);
         }
     }
 
@@ -488,27 +466,23 @@ std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared
     join->Children[1] = rightInput;
 
     if (topLevelPreds.size()) {
-        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Node->Pos(), topLevelPreds, ctx);
-        return std::make_shared<TOpFilter>(join, topFilterLambda);
+        auto topFilterLambda = BuildFilterLambdaFromConjuncts(join->Pos, topLevelPreds, ctx.ExprCtx);
+        output =  std::make_shared<TOpFilter>(join, input->Pos, topFilterLambda);
     } else {
-        return join;
+        output = join;
     }
+
+    if (input->Props.OrderEnforcer.has_value()) {
+        output->Props.OrderEnforcer = input->Props.OrderEnforcer;
+    }
+
+    return output;
 }
 
-bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
-    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
-    TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config,
-    TPlanProps& props) {
-
-    Y_UNUSED(ctx);
-    Y_UNUSED(kqpCtx);
-    Y_UNUSED(typeCtx);
-    Y_UNUSED(config);
+bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
     Y_UNUSED(props);
 
-    auto nodeName = input->Node->Content();
-
+    auto nodeName = input->ToString(ctx.ExprCtx);
     YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
 
     if (input->Props.StageId.has_value()) {
@@ -516,31 +490,27 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         return false;
     }
 
-    for (auto & c : input->Children) {
-        if (!c->Props.StageId.has_value()) {
+    for (auto &child : input->Children) {
+        if (!child->Props.StageId.has_value()) {
             YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
             return false;
         }
     }
 
     if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
-
         TString readName;
         if (input->Kind == EOperator::Source) {
             auto opRead = CastOperator<TOpRead>(input);
             auto newStageId = props.StageGraph.AddSourceStage(opRead->GetOutputIUs());
             input->Props.StageId = newStageId;
             readName = opRead->Alias;
-        }
-        else {
+        } else {
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages source: " << readName;
 
-    }
-
-    else if (input->Kind == EOperator::Join) {
+    } else if (input->Kind == EOperator::Join) {
         auto join = CastOperator<TOpJoin>(input);
         auto leftStage = join->GetLeftInput()->Props.StageId;
         auto rightStage = join->GetRightInput()->Props.StageId;
@@ -556,23 +526,22 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TMapConnection>(isLeftSourceStage));
             props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TBroadcastConnection>(isRightSourceStage));
         }
-        
+
         // For inner join (we don't support other joins yet) we build a new stage
         // with GraceJoinCore and connect inputs via Shuffle connections
         else {
             TVector<TInfoUnit> leftShuffleKeys;
             TVector<TInfoUnit> rightShuffleKeys;
-            for (auto k : join->JoinKeys) {
-                leftShuffleKeys.push_back(k.first);
-                rightShuffleKeys.push_back(k.second);
+            for (auto key : join->JoinKeys) {
+                leftShuffleKeys.push_back(key.first);
+                rightShuffleKeys.push_back(key.second);
             }
 
             props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TShuffleConnection>(leftShuffleKeys, isLeftSourceStage));
             props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TShuffleConnection>(rightShuffleKeys, isRightSourceStage));
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
-    }
-    else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
+    } else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
         auto childOp = input->Children[0];
         auto prevStageId = *(childOp->Props.StageId);
 
@@ -582,27 +551,61 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
             auto newStageId = props.StageGraph.AddStage();
             input->Props.StageId = newStageId;
             props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TSourceConnection>());
+        } 
+        // If the child operator is not single use, we also need to create a new stage
+        // for current operator with a map connection
+        else if (!childOp->IsSingleConsumer()) {
+            auto newStageId = props.StageGraph.AddStage();
+            input->Props.StageId = newStageId;
+            props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TMapConnection>(false));
         }
         else {
             input->Props.StageId = prevStageId;
         }
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
-    }
-    else if (input->Kind == EOperator::Limit) {
+    } else if (input->Kind == EOperator::Limit) {
+        auto limit = CastOperator<TOpLimit>(input);
         auto newStageId = props.StageGraph.AddStage();
         input->Props.StageId = newStageId;
-        auto prevStageId = *(input->Children[0]->Props.StageId);
-        props.StageGraph.Connect(prevStageId, newStageId, std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId)));
-    }
-    else {
-        Y_ENSURE(true, "Unknown operator encountered");
+        auto prevStageId = *(limit->GetInput()->Props.StageId);
+        auto conn = std::make_shared<TUnionAllConnection>(props.StageGraph.IsSourceStage(prevStageId));
+        props.StageGraph.Connect(prevStageId, newStageId,conn);
+    } else if (input->Kind == EOperator::UnionAll) {
+        auto unionAll = CastOperator<TOpUnionAll>(input);
+
+        auto leftStage = unionAll->GetLeftInput()->Props.StageId;
+        auto rightStage = unionAll->GetRightInput()->Props.StageId;
+
+        bool isLeftSourceStage = props.StageGraph.IsSourceStage(*leftStage);
+        bool isRightSourceStage = props.StageGraph.IsSourceStage(*rightStage);
+
+        auto newStageId = props.StageGraph.AddStage();
+        unionAll->Props.StageId = newStageId;
+
+        props.StageGraph.Connect(*leftStage, newStageId, std::make_shared<TUnionAllConnection>(isLeftSourceStage));
+        props.StageGraph.Connect(*rightStage, newStageId, std::make_shared<TUnionAllConnection>(isRightSourceStage));
+
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages union_all";
+    } else if (input->Kind == EOperator::Aggregate) {
+        auto aggregate = CastOperator<TOpAggregate>(input);
+        const auto inputStageId = *(aggregate->GetInput()->Props.StageId);
+
+        const auto newStageId = props.StageGraph.AddStage();
+        aggregate->Props.StageId = newStageId;
+        const bool isInputSourceStage = props.StageGraph.IsSourceStage(inputStageId);
+        const auto shuffleKeys = aggregate->KeyColumns.size() ? aggregate->KeyColumns : GetHashableKeys(aggregate->GetInput());
+
+        props.StageGraph.Connect(inputStageId, newStageId, std::make_shared<TShuffleConnection>(shuffleKeys, isInputSourceStage));
+        YQL_CLOG(TRACE, CoreDq) << "Assign stage to Aggregation ";
+    } else {
+        Y_ENSURE(false, "Unknown operator encountered");
     }
 
     return true;
 }
 
 struct Scope {
-    Scope(){}
+    Scope() {}
 
     TVector<int> ParentScopes;
     bool TopScope = false;
@@ -611,67 +614,63 @@ struct Scope {
     TVector<TInfoUnit> OutputIUs;
     TVector<std::shared_ptr<IOperator>> Operators;
 
-    TString ToString() {
-        auto res = TStringBuilder() <<  "{parents: [";
+    TString ToString(TExprContext &ctx) {
+        auto res = TStringBuilder() << "{parents: [";
         for (int p : ParentScopes) {
             res << p << ",";
         }
         res << "], Identity: " << IdentityMap << ", TopScope: " << TopScope << ", Unrenameable: {";
-        for (auto & iu : Unrenameable) {
+        for (auto &iu : Unrenameable) {
             res << iu.GetFullName() << ",";
         }
         res << "}, Output: {";
-        for (auto & iu : OutputIUs) {
+        for (auto &iu : OutputIUs) {
             res << iu.GetFullName() << ",";
         }
         res << "}, Operators: [";
-        for (auto & op : Operators) {
-            res << op->ToString() << ",";
+        for (auto &op : Operators) {
+            res << op->ToString(ctx) << ",";
         }
         res << "]}";
         return res;
     }
 };
 
-struct TIOperatorSharedPtrHash
-{
-    size_t operator()(const std::shared_ptr<IOperator>& p) const
-    {
-        return p ? THash<int64_t>{}((int64_t)p.get()) : 0; 
-    }
+struct TIOperatorSharedPtrHash {
+    size_t operator()(const std::shared_ptr<IOperator> &p) const { return p ? THash<int64_t>{}((int64_t)p.get()) : 0; }
 };
 
 class Scopes {
-    public:
-    void ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope);
-    void ComputeScopes(std::shared_ptr<IOperator> & op);
+  public:
+    void ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope);
+    void ComputeScopes(std::shared_ptr<IOperator> &op);
 
     THashMap<int, Scope> ScopeMap;
     THashMap<std::shared_ptr<IOperator>, int, TIOperatorSharedPtrHash> RevScopeMap;
 };
 
-void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope) {
+void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> &op, int &currScope) {
     if (RevScopeMap.contains(op)) {
         return;
     }
-    bool makeNewScope = (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || (op->Kind == EOperator::Project) || (op->Parents.size() >= 2);
-    
-    YQL_CLOG(TRACE, CoreDq) << "Op: " << op->ToString() << ", nparents = " << op->Parents.size();
+    bool makeNewScope =
+        (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) || (op->Kind == EOperator::Project) || (op->Parents.size() >= 2);
+
+    //YQL_CLOG(TRACE, CoreDq) << "Op: " << op->ToString() << ", nparents = " << op->Parents.size();
 
     if (makeNewScope) {
         currScope++;
         auto newScope = Scope();
-        //FIXME: The top scope is a scope with id=1
-        if (currScope==1) {
-            newScope.TopScope=true;
+        // FIXME: The top scope is a scope with id=1
+        if (currScope == 1) {
+            newScope.TopScope = true;
         }
 
         if (op->Kind == EOperator::Map && CastOperator<TOpMap>(op)->Project) {
             auto map = CastOperator<TOpMap>(op);
             newScope.OutputIUs = map->GetOutputIUs();
             newScope.IdentityMap = false;
-        } 
-        else if (op->Kind == EOperator::Project) {
+        } else if (op->Kind == EOperator::Project) {
             auto project = CastOperator<TOpProject>(op);
             newScope.OutputIUs = project->GetOutputIUs();
             newScope.IdentityMap = false;
@@ -692,18 +691,18 @@ void Scopes::ComputeScopesRec(std::shared_ptr<IOperator> & op, int & currScope) 
     }
 }
 
-void Scopes::ComputeScopes(std::shared_ptr<IOperator> & op) {
+void Scopes::ComputeScopes(std::shared_ptr<IOperator> &op) {
     int currScope = 0;
     ScopeMap[0] = Scope();
     ComputeScopesRec(op, currScope);
-    for (auto & [id, sc] : ScopeMap) {
+    for (auto &[id, sc] : ScopeMap) {
         auto topOp = sc.Operators[0];
-        for ( auto & p : topOp->Parents) {
+        for (auto &p : topOp->Parents) {
             auto parentScopeId = RevScopeMap.at(p.lock());
             sc.ParentScopes.push_back(parentScopeId);
-            if (topOp->Parents.size()>=2) {
-                auto & parentScope = ScopeMap.at(parentScopeId);
-                for ( auto iu : sc.OutputIUs) {
+            if (topOp->Parents.size() >= 2) {
+                auto &parentScope = ScopeMap.at(parentScopeId);
+                for (auto iu : sc.OutputIUs) {
                     parentScope.Unrenameable.insert(iu);
                 }
             }
@@ -711,24 +710,18 @@ void Scopes::ComputeScopes(std::shared_ptr<IOperator> & op) {
     }
 }
 
-struct TIntTUnitPairHash
-{
-    size_t operator()(const std::pair<int, TInfoUnit>& p) const
-    {
-        return THash<int>{}(p.first) ^ TInfoUnit::THashFunction{}(p.second);  
-    }
+struct TIntTUnitPairHash {
+    size_t operator()(const std::pair<int, TInfoUnit> &p) const { return THash<int>{}(p.first) ^ TInfoUnit::THashFunction{}(p.second); }
 };
 
-void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExprContext& ctx) {
-    Y_UNUSED(optimizer);
-    Y_UNUSED(ctx);
+void TRenameStage::RunStage(TOpRoot &root, TRBOContext &ctx) {
 
     YQL_CLOG(TRACE, CoreDq) << "Before compute parents";
 
     for (auto it : root) {
-        YQL_CLOG(TRACE, CoreDq) << "Iterator: " << it.Current->ToString();
+        YQL_CLOG(TRACE, CoreDq) << "Iterator: " << it.Current->ToString(ctx.ExprCtx);
         for (auto c : it.Current->Children) {
-            YQL_CLOG(TRACE, CoreDq) << "Child: " << c->ToString();
+            YQL_CLOG(TRACE, CoreDq) << "Child: " << c->ToString(ctx.ExprCtx);
         }
     }
 
@@ -739,8 +732,8 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
     auto scopes = Scopes();
     scopes.ComputeScopes(root.GetInput());
 
-    for (auto & [id, sc] : scopes.ScopeMap) {
-        YQL_CLOG(TRACE, CoreDq) << "Scope map: " << id << ": " << sc.ToString();
+    for (auto &[id, sc] : scopes.ScopeMap) {
+        YQL_CLOG(TRACE, CoreDq) << "Scope map: " << id << ": " << sc.ToString(ctx.ExprCtx);
     }
 
     // Build a rename map by startingg at maps that rename variables and project
@@ -751,7 +744,7 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
 
     int newAliasId = 1;
 
-    for (auto iter : root ) {
+    for (auto iter : root) {
         if (iter.Current->Kind == EOperator::Map && CastOperator<TOpMap>(iter.Current)->Project) {
             auto map = CastOperator<TOpMap>(iter.Current);
 
@@ -775,9 +768,9 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
                 auto target = std::make_pair(parentScopes[0], exportTo);
                 renameMap[source].push_back(target);
 
-                //if (parentScopes.size()==1) {
-                //    renameMap[source].push_back(target);
-                //}
+                // if (parentScopes.size()==1) {
+                //     renameMap[source].push_back(target);
+                // }
 
                 // If the map element is a rename, record the rename in the map within the same scope
                 // However skip all unrenamable uis
@@ -793,12 +786,13 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
         }
     }
 
-    for (auto & [key, value] : renameMap) {
-        if (value.size()==1) {
-            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> " << value[0].second.GetFullName() << "," << value[0].first;
+    for (auto &[key, value] : renameMap) {
+        if (value.size() == 1) {
+            YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> "
+                                    << value[0].second.GetFullName() << "," << value[0].first;
         } else {
             YQL_CLOG(TRACE, CoreDq) << "Rename map: " << key.second.GetFullName() << "," << key.first << " -> ";
-            for (auto v : value ) {
+            for (auto v : value) {
                 YQL_CLOG(TRACE, CoreDq) << v.second.GetFullName() << "," << v.first;
             }
         }
@@ -806,17 +800,17 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
 
     // Make a transitive closure of rename map
     THashMap<std::pair<int, TInfoUnit>, std::pair<int, TInfoUnit>, TIntTUnitPairHash> closedMap;
-    for (auto & [k, v] : renameMap) {
-        if (v.size()==1) {
+    for (auto &[k, v] : renameMap) {
+        if (v.size() == 1) {
             closedMap[k] = v[0];
         }
     }
 
     bool fixpointReached = false;
-    while(! fixpointReached) {
+    while (!fixpointReached) {
 
         fixpointReached = true;
-        for (auto & [k,v] : closedMap) {
+        for (auto &[k, v] : closedMap) {
             if (closedMap.contains(v)) {
                 fixpointReached = false;
             }
@@ -828,17 +822,17 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
         }
     }
 
-    // Add unique aliases 
+    // Add unique aliases
 
     // Iterate through the plan, applying renames to one operator at a time
 
-    for (auto it : root ) {
+    for (auto it : root) {
         // Build a subset of the map for the current scope only
         auto scopeId = scopes.RevScopeMap.at(it.Current);
 
         // Exclude all IUs from OpReads in this scope
-        //THashSet<TInfoUnit, TInfoUnit::THashFunction> exclude;
-        //for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
+        // THashSet<TInfoUnit, TInfoUnit::THashFunction> exclude;
+        // for (auto & op : scopes.ScopeMap.at(scopeId).Operators) {
         //    if (op->Kind == EOperator::Source) {
         //        for (auto iu : op->GetOutputIUs()) {
         //            exclude.insert(iu);
@@ -847,25 +841,25 @@ void TRenameStage::RunStage(TRuleBasedOptimizer* optimizer, TOpRoot & root, TExp
         //}
 
         auto scopedRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>();
-        for (auto & [k,v] : closedMap) {
-            //if (k.first == scopeId && !exclude.contains(k.second)) {
+        for (auto &[k, v] : closedMap) {
+            // if (k.first == scopeId && !exclude.contains(k.second)) {
             if (k.first == scopeId) {
                 scopedRenameMap.emplace(k.second, v.second);
             }
         }
 
-        YQL_CLOG(TRACE, CoreDq) << "Applying renames to operator: " << scopeId << ":" << it.Current->ToString();
-        for (auto & [k,v] : scopedRenameMap ) {
+        YQL_CLOG(TRACE, CoreDq) << "Applying renames to operator: " << scopeId << ":" << it.Current->ToString(ctx.ExprCtx);
+        for (auto &[k, v] : scopedRenameMap) {
             YQL_CLOG(TRACE, CoreDq) << "From " << k.GetFullName() << ", To " << v.GetFullName();
         }
 
-        it.Current->RenameIUs(scopedRenameMap, ctx);
+        it.Current->RenameIUs(scopedRenameMap, ctx.ExprCtx);
     }
-
 }
 
-TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TExtractJoinExpressionsRule>(), std::make_shared<TPushMapRule>(), std::make_shared<TPushFilterRule>()}, true);
-TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()}, false);
+TRuleBasedStage RuleStage1 = TRuleBasedStage(
+    {std::make_shared<TExtractJoinExpressionsRule>(), std::make_shared<TPushMapRule>(), std::make_shared<TPushFilterRule>()});
+TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()});
 
-}
-}  // namespace NKikimr
+} // namespace NKqp
+} // namespace NKikimr

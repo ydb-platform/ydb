@@ -8,15 +8,17 @@ namespace NMiniKQL {
 
 namespace {
 
-template<bool IsOptional>
-class TFromYsonSimpleTypeWrapper : public TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>> {
+template <bool IsOptional>
+class TFromYsonSimpleTypeWrapper: public TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>> {
     typedef TMutableComputationNode<TFromYsonSimpleTypeWrapper<IsOptional>> TBaseComputation;
+
 public:
     TFromYsonSimpleTypeWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
         : TBaseComputation(mutables)
         , Data(data)
         , SchemeType(NUdf::GetDataSlot(schemeType))
-    {}
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         const auto& data = Data->GetValue(ctx);
@@ -36,7 +38,7 @@ private:
     const NUdf::EDataSlot SchemeType;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapFromYsonSimpleType(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 2, "Expected 2 args");
@@ -45,7 +47,7 @@ IComputationNode* WrapFromYsonSimpleType(TCallable& callable, const TComputation
     const auto dataType = UnpackOptionalData(callable.GetInput(0), isOptional);
     const auto dataSchemeType = dataType->GetSchemeType();
     MKQL_ENSURE(dataSchemeType == NUdf::TDataType<char*>::Id || dataSchemeType == NUdf::TDataType<NUdf::TYson>::Id,
-        "Expected String or Yson");
+                "Expected String or Yson");
 
     const auto schemeTypeData = AS_VALUE(TDataLiteral, callable.GetInput(1));
     const auto schemeType = schemeTypeData->AsValue().Get<ui32>();
@@ -58,5 +60,5 @@ IComputationNode* WrapFromYsonSimpleType(TCallable& callable, const TComputation
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

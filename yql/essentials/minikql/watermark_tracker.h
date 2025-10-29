@@ -21,5 +21,5 @@ private:
     const ui64 Granularity_;
 };
 
-} // NMiniKQL
-} // NKikimr
+} // namespace NMiniKQL
+} // namespace NKikimr

@@ -12,11 +12,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TString InterruptInheritanceExceptDescribe(const TString& initialAcl, const bool inheritPermissions) {
-    if (inheritPermissions) { // don't change parent ACL
-        return initialAcl;
-    }
-
+TString InterruptInheritanceExceptDescribe(const TString& initialAcl) {
     NACLib::TACL secObj(initialAcl);
     NACLib::TACL resultSecObj;
     resultSecObj.SetInterruptInheritance(true);
@@ -255,8 +251,10 @@ public:
               * However, the DescribeSchema grant is quite harmless and allows users to view the object's ACL to request access from the owner.
               * There is also an inherit_permissions flag, which, when set, allows grant inheritance similarly to all other schema objects.
               */
-            secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL(), createSecretProto.GetInheritPermissions());
-            secretPath->ACLVersion++;
+            if (!createSecretProto.GetInheritPermissions()) {
+                secretPath->ACL = InterruptInheritanceExceptDescribe(dstPath.GetEffectiveACL());
+                secretPath->ACLVersion++;
+            }
         }
 
         NKikimrSchemeOp::TSecretDescription secretDescription;

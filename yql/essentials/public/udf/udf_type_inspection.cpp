@@ -128,5 +128,5 @@ TLinearTypeInspector::TLinearTypeInspector(const ITypeInfoHelper1& typeHelper, c
     }
 }
 
-} // namspace NUdf
-} // namspace NYql
+} // namespace NUdf
+} // namespace NYql

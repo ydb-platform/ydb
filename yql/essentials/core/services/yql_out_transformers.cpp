@@ -59,9 +59,10 @@ IGraphTransformer::TStatus TExprLogTransformer::operator()(
         auto ast = ConvertToAst(*input, ctx, settings);
         TStringStream out;
         ast.Root->PrettyPrintTo(out, TAstPrintFlags::ShortQuote | TAstPrintFlags::PerLine);
-        YQL_CVLOG(Level_, Component_) << Description_ << ":\n" << out.Str();
+        YQL_CVLOG(Level_, Component_) << Description_ << ":\n"
+                                      << out.Str();
     }
     return IGraphTransformer::TStatus::Ok;
 }
 
-}
+} // namespace NYql

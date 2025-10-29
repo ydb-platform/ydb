@@ -150,6 +150,12 @@ public:
             ConvertAlterConsumerToProto(consumer, consumerProto);
         }
 
+        if (auto level = std::get_if<EMetricsLevel>(&settings.MetricsLevel_)) {
+            request.set_set_metrics_level(*level);
+        } else if (auto reset = std::get_if<bool>(&settings.MetricsLevel_); *reset) {
+            request.mutable_reset_metrics_level();
+        }
+
         return request;
     }
 

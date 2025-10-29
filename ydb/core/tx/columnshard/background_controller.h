@@ -12,7 +12,7 @@ namespace NKikimr::NColumnShard {
 
 class TBackgroundController {
 private:
-    using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
+    using TCurrentCompaction = THashMap<std::pair<TInternalPathId, TString>, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
 
@@ -60,7 +60,7 @@ public:
     void CheckDeadlines();
 
     bool StartCompaction(const TInternalPathId pathId, const TString& taskId);
-    void FinishCompaction(const TInternalPathId pathId);
+    void FinishCompaction(const TInternalPathId pathId, const TString& taskId);
 
     ui32 GetCompactionsCount() const {
         return ActiveCompactionInfo.size();

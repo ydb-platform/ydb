@@ -134,7 +134,7 @@ void TKesusQuoterTestSetup::SendGetQuotaRequest(const std::vector<std::tuple<TSt
     TVector<TEvQuota::TResourceLeaf> res;
     res.reserve(resources.size());
     for (auto&& [kesusPath, resourcePath, amount] : resources) {
-        res.emplace_back(kesusPath, resourcePath, amount);
+        res.emplace_back("/" + DEFAULT_KESUS_PARENT_PATH, kesusPath, resourcePath, amount);
     }
     GetServer().GetRuntime()->Send(new IEventHandle(MakeQuoterServiceID(), GetEdgeActor(), new TEvQuota::TEvRequest(operation, std::move(res), deadline)));
 }

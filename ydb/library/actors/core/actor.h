@@ -323,30 +323,6 @@ namespace NActors {
 
     };
 
-    template<bool>
-    struct TActorUsageImpl {
-        void OnEnqueueEvent(ui64 /*time*/) {} // called asynchronously when event is put in the mailbox
-        void OnDequeueEvent() {} // called when processed by Executor
-        double GetUsage(ui64 /*time*/) { return 0; } // called from collector thread
-        void DoActorInit() {}
-    };
-
-    template<>
-    struct TActorUsageImpl<true> {
-        static constexpr int TimestampBits = 40;
-        static constexpr int CountBits = 24;
-        static constexpr ui64 TimestampMask = ((ui64)1 << TimestampBits) - 1;
-        static constexpr ui64 CountMask = ((ui64)1 << CountBits) - 1;
-
-        std::atomic_uint64_t QueueSizeAndTimestamp = 0;
-        std::atomic_uint64_t UsedTime = 0; // how much time did we consume since last GetUsage() call
-        ui64 LastUsageTimestamp = 0; // when GetUsage() was called the last time
-
-        void OnEnqueueEvent(ui64 time);
-        void OnDequeueEvent();
-        double GetUsage(ui64 time);
-        void DoActorInit() { LastUsageTimestamp = GetCycleCountFast(); }
-    };
 
     /**
      * Optional interface for actors with exception handling
@@ -562,7 +538,6 @@ namespace NActors {
 
     class IActor
         : protected IActorOps
-        , public TActorUsageImpl<ActorLibCollectUsageStats>
     {
     private:
         TActorIdentity SelfActorId;
@@ -1048,6 +1023,13 @@ namespace NActors {
                 send = decorator->BeforeSending(ev);
             }
             return send && ev && DoBeforeSending(ev);
+        }
+
+        bool BeforeSending(std::unique_ptr<IEventHandle>& ev) {
+            TAutoPtr<IEventHandle> evPtr = ev.release();
+            bool result = BeforeSending(evPtr);
+            ev.reset(evPtr.Release());
+            return result;
         }
 
         virtual bool DoBeforeSending(TAutoPtr<IEventHandle>& /*ev*/) {

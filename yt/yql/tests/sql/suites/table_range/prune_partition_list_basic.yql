@@ -1,0 +1,13 @@
+/* postgres can not */
+/* kikimr can not */
+/* dqfile can not - missing langver support */
+/* hybridfile can not - missing langver support */
+pragma yt.EarlyPartitionPruning;
+
+$l = [
+<|TablePath:"Input", x:1, text:2|>,       -- access to column 'text' will produce SqlColumnOrType instead of plain Member
+<|TablePath:"NotExisting", x:3, text:4|>, -- will be pruned
+];
+
+select * from plato.partition_list($l)
+where x + text < 4 or key > "150" and text < 3;

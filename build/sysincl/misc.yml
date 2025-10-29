@@ -427,17 +427,6 @@
         - contrib/libs/glibcasm/glibc/include/stdint.h
         - contrib/libs/cxxsupp/libcxx/include/stdint.h
 
-# protoc uses raw string literals with #include statements, which drive our include parser crazy
-- source_filter: "^contrib/libs/protoc"
-  includes:
-    - "$base$google/protobuf/$path$"
-    - "google/protobuf/$path$"
-    - "$fwd_to$.$fwd_to_suffix$.h"
-    - "$fwd_to$.proto.h"
-    - "$name$.proto.h"
-    - "$path$"
-    - "$h_include$"
-
 - source_filter: "^contrib/tools/bison/data"
   includes:
     - "]b4_location_include["

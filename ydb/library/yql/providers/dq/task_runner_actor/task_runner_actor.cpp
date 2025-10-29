@@ -521,8 +521,8 @@ private:
             ev->Get()->Index,
             std::move(batch),
             std::move(ev->Get()->Checkpoint),
-            ev->Get()->CheckpointSize,
             ev->Get()->Size,
+            ev->Get()->CheckpointSize,
             ev->Get()->Finished,
             ev->Get()->Changed);
     }

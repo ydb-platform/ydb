@@ -1,20 +1,17 @@
 #pragma once
 
 #include "state_storage.h"
+#include "storage_settings.h"
 
-#include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
-
-namespace NKikimrConfig {
-class TCheckpointsConfig;
-} // namespace NKikimrConfig
+#include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 namespace NFq {
 
 ////////////////////////////////////////////////////////////////////////////////
 
 TStateStoragePtr NewYdbStateStorage(
-    const NKikimrConfig::TCheckpointsConfig& config,
+    const TCheckpointStorageSettings& config,
     const TYdbConnectionPtr& ydbConnection);
 
 } // namespace NFq

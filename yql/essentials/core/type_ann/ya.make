@@ -1,5 +1,7 @@
 LIBRARY()
 
+ENABLE(SKIP_YQL_STYLE_CPP)
+
 SRCS(
     type_ann_blocks.cpp
     type_ann_blocks.h

@@ -193,4 +193,19 @@ TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>&
     return NArrow::NSerialization::TNativeSerializer().SerializeFull(SerializeToRecordBatch(pkSchema));
 }
 
+TConclusion<TPKRangesFilter> TPKRangesFilter::BuildFromProto(
+    const NKikimrTxDataShard::TEvKqpScan& proto, const std::vector<TNameTypeInfo>& ydbPk, const std::shared_ptr<arrow::Schema>& arrPk) {
+    TPKRangesFilter result;
+    for (auto& protoRange : proto.GetRanges()) {
+        auto fromPredicate = std::make_shared<TPredicate>();
+        auto toPredicate = std::make_shared<TPredicate>();
+        std::tie(*fromPredicate, *toPredicate) = TPredicate::DeserializePredicatesRange(TSerializedTableRange{ protoRange }, ydbPk, arrPk);
+        auto status = result.Add(fromPredicate, toPredicate, arrPk);
+        if (status.IsFail()) {
+            return status;
+        }
+    }
+    return result;
+}
+
 }   // namespace NKikimr::NOlap

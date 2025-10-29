@@ -15,5 +15,5 @@ IComputationNode* WrapAsScalar(TCallable& callable, const TComputationNodeFactor
 IComputationNode* WrapReplicateScalar(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapBlockExpandChunked(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

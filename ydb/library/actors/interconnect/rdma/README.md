@@ -1,0 +1,13 @@
+*This directory contains rdma (RoCEv2) related IC code
+
+  link_manager.* - The component which scans all devices and ports during startup
+and allows to get ibv context associated with given ip address.
+
+  mem_pool.* - Rdma aware momory pool. Allows to allocate the memory region
+registered in the RDMA hardware.
+
+  rdma.* - Primitives to perform RDMA ops.
+
+  cq_actor/ - The actor interface into rdma CQ
+
+  dummy.cpp - Some dummy implementation for unsupported from RDMA perspective platforms.

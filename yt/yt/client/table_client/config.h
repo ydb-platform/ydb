@@ -415,6 +415,7 @@ struct TChunkWriterOptions
     bool EnableSkynetSharing;
     bool ReturnBoundaryKeys;
     bool CastAnyToComposite = false;
+    bool CastCompositeToAny;
     bool SingleColumnGroupByDefault = false;
     bool EnableColumnarValueStatistics;
     bool EnableRowCountInColumnarStatistics;

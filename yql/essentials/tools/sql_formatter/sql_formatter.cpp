@@ -24,12 +24,11 @@ int RunFormat(int argc, char* argv[]) {
     opts.AddLongOption('p', "print-query", "print given query before parsing").NoArgument();
     opts.AddLongOption('f', "obfuscate", "obfuscate query").NoArgument();
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
-    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER")
-        .Handler1T<TString>([&](const TString& str) {
-            if (!NYql::ParseLangVersion(str, langver)) {
-                throw yexception() << "Failed to parse language version: " << str;
-            }
-        });
+    opts.AddLongOption("langver", "Set current language version").Optional().RequiredArgument("VER").Handler1T<TString>([&](const TString& str) {
+        if (!NYql::ParseLangVersion(str, langver)) {
+            throw yexception() << "Failed to parse language version: " << str;
+        }
+    });
 
     opts.SetFreeArgsNum(0);
     opts.AddHelpOption();
@@ -73,8 +72,7 @@ int RunFormat(int argc, char* argv[]) {
     TString frm_query;
     TString error;
     NYql::TIssues issues;
-    if (!formatter->Format(queryString, frm_query, issues, res.Has("obfuscate") ?
-        NSQLFormat::EFormatMode::Obfuscate : NSQLFormat::EFormatMode::Pretty)) {
+    if (!formatter->Format(queryString, frm_query, issues, res.Has("obfuscate") ? NSQLFormat::EFormatMode::Obfuscate : NSQLFormat::EFormatMode::Pretty)) {
         ++errors;
         Cerr << "Error formatting query: " << issues.ToString() << Endl;
     } else {

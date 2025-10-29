@@ -15,6 +15,24 @@ def test_build_simple():
     assert str(u) == "http://127.0.0.1"
 
 
+@pytest.mark.skip
+def test_url_build_ipv6():
+    u = URL.build(scheme="http", host="::1")
+    assert str(u) == "http://::1"
+
+
+@pytest.mark.skip
+def test_url_build_ipv6_brackets():
+    u = URL.build(scheme="http", host="[::1]")
+    assert str(u) == "http://::1"
+
+
+@pytest.mark.skip
+def test_url_ipv4_in_ipv6():
+    u = URL.build(scheme="http", host="2001:db8:122:344::192.0.2.33")
+    assert str(u) == "http://2001:db8:122:344::c000:221"
+
+
 def test_build_with_scheme():
     u = URL.build(scheme="blob", path="path")
     assert str(u) == "blob:path"

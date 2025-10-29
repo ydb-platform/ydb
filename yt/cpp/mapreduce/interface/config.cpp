@@ -395,7 +395,6 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
     BuildYsonFluently(consumer).BeginMap()
         .Item("hosts").Value(config.Hosts)
         .Item("pool").Value(config.Pool)
-        .Item("token").Value(config.Token)
         .Item("prefix").Value(config.Prefix)
         .Item("api_version").Value(config.ApiVersion)
         .Item("log_level").Value(config.LogLevel)
@@ -475,6 +474,7 @@ void Serialize(const TConfig& config, NYson::IYsonConsumer* consumer)
         .Item("table_writer_version").Value(::ToString(config.TableWriterVersion))
         .Item("redirect_stdout_to_stderr").Value(config.RedirectStdoutToStderr)
         .Item("enable_debug_command_line_arguments").Value(config.EnableDebugCommandLineArguments)
+        .Item("config_remote_patch_path").Value(config.ConfigRemotePatchPath)
     .EndMap();
 }
 
@@ -483,7 +483,6 @@ void Deserialize(TConfig& config, const TNode& node)
     const auto& nodeMap = node.AsMap();
     DESERIALIZE_ITEM("hosts", config.Hosts);
     DESERIALIZE_ITEM("pool", config.Pool);
-    DESERIALIZE_ITEM("token", config.Token);
     DESERIALIZE_ITEM("prefix", config.Prefix);
     DESERIALIZE_ITEM("api_version", config.ApiVersion);
     DESERIALIZE_ITEM("log_level", config.LogLevel);
@@ -545,6 +544,7 @@ void Deserialize(TConfig& config, const TNode& node)
     DESERIALIZE_ITEM("table_writer_version", config.TableWriterVersion);
     DESERIALIZE_ITEM("redirect_stdout_to_stderr", config.RedirectStdoutToStderr);
     DESERIALIZE_ITEM("enable_debug_command_line_arguments", config.EnableDebugCommandLineArguments);
+    DESERIALIZE_ITEM("config_remote_patch_path", config.ConfigRemotePatchPath);
 }
 
 #undef DESERIALIZE_ITEM

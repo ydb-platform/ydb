@@ -4,26 +4,43 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
 namespace NKikimr::NPQ {
-using namespace NPersQueue;
+using namespace ::NPersQueue;
 //using namespace NYdb::NTopic;
 using namespace NYdb::NTopic::NTests;
 
+using namespace NYdb;
+using namespace NYdb::NQuery;
 
 Y_UNIT_TEST_SUITE(TFetchRequestTests) {
     void StartSchemeCache(TTestActorRuntime& runtime) {
         for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
             auto* appData = &runtime.GetAppData(nodeIndex);
 
-            auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, new NMonitoring::TDynamicCounters());
+            auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, new ::NMonitoring::TDynamicCounters());
 
             IActor* schemeCache = CreateSchemeBoardSchemeCache(cacheConfig.Get());
             TActorId schemeCacheId = runtime.Register(schemeCache, nodeIndex);
             runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId, nodeIndex);
         }
     }
+
+    void ExecuteDDL(TTopicSdkTestSetup& setup, const TString& query) {
+        TDriver driver(setup.MakeDriverConfig());
+        TQueryClient client(driver);
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        Cerr << "DDL: " << query << Endl << Flush;
+        auto res = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        driver.Stop(true);
+    }
+
+
 
     Y_UNIT_TEST(HappyWay) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
@@ -63,8 +80,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             auto& result = ev->Response.GetPartResult(0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::OK));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 3);
         }
 
@@ -72,8 +89,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             auto& result = ev->Response.GetPartResult(1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic2");
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::OK));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
         }
 
@@ -81,9 +98,46 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
             auto& result = ev->Response.GetPartResult(2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/topic2");
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::READ_ERROR_TOO_BIG_OFFSET));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(CDC) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        setup->GetServer().EnableLogs(
+                { NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_FETCH_REQUEST },
+                NActors::NLog::PRI_DEBUG
+        );
+        auto& runtime = setup->GetRuntime();
+        StartSchemeCache(runtime);
+
+        ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+        ExecuteDDL(*setup, "INSERT INTO table1 (id) VALUES (1)");
+
+
+        auto edgeId = runtime.AllocateEdgeActor();
+        TPartitionFetchRequest p1{"/Root/table1/feed", 0, 0, 10000};
+
+        TFetchRequestSettings settings{{}, NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER, {p1}, 1000, 1000};
+        auto fetchId = runtime.Register(CreatePQFetchRequestActor(settings, MakeSchemeCacheID(), edgeId));
+        runtime.EnableScheduleForActor(fetchId);
+        runtime.DispatchEvents();
+
+        auto ev = runtime.GrabEdgeEvent<TEvPQ::TEvFetchResponse>();
+        UNIT_ASSERT_C(ev->Status == Ydb::StatusIds::SUCCESS, ev->Message);
+        Cerr << "Got event: " << ev->Response.DebugString() << Endl;
+        UNIT_ASSERT_VALUES_EQUAL(ev->Response.PartResultSize(), 1);
+
+        {
+            auto& result = ev->Response.GetPartResult(0);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetTopic(), "/Root/table1/feed");
+            UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 0);
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 1);
         }
     }
 
@@ -124,8 +178,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         {
             auto& result = ev->Response.GetPartResult(0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::OK));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::OK));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetResult(0).GetUncompressedSize(), 2_KB);
@@ -134,8 +188,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         {
             auto& result = ev->Response.GetPartResult(1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
         }
@@ -177,8 +231,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         {
             auto& result = ev->Response.GetPartResult(0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 0);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
         }
@@ -186,8 +240,8 @@ Y_UNIT_TEST_SUITE(TFetchRequestTests) {
         {
             auto& result = ev->Response.GetPartResult(1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetPartition(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
-                NPersQueue::NErrorCode::EErrorCode_Name(NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
+            UNIT_ASSERT_VALUES_EQUAL(::NPersQueue::NErrorCode::EErrorCode_Name(result.GetReadResult().GetErrorCode()),
+                ::NPersQueue::NErrorCode::EErrorCode_Name(::NPersQueue::NErrorCode::EErrorCode::READ_NOT_DONE));
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().GetMaxOffset(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetReadResult().ResultSize(), 0);
         }

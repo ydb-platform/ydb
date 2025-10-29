@@ -529,6 +529,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ForceTransform(TExprBas
     return node;
 }
 
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtReadTable>(TExprBase node, TExprContext& ctx) const;
+template TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic<TYtTransientOpBase>(TExprBase node, TExprContext& ctx) const;
+
+template <class TNodeType>
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToStatic(TExprBase node, TExprContext& ctx) const {
     const auto convertDynamicTablesToStatic = State_->Configuration->ConvertDynamicTablesToStatic.Get().GetOrElse(EConvertDynamicTablesToStatic::Disable);
     if (convertDynamicTablesToStatic == EConvertDynamicTablesToStatic::Disable) {
@@ -543,14 +547,14 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
         return node;
     }
 
-    auto op = node.Cast<TYtTransientOpBase>();
+    auto op = node.Cast<TNodeType>();
 
     TVector<TYtSection> newInputs;
     newInputs.reserve(op.Input().Size());
     bool hasChanges = false;
 
     for (const auto& input : op.Input()) {
-        auto section = input.Cast<TYtSection>();
+        auto section = input.template Cast<TYtSection>();
 
         TVector<TYtPath> dynamicTableInputs;
         dynamicTableInputs.reserve(section.Paths().Size());
@@ -566,13 +570,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
             }
         }
 
+        TMaybeNode<NNodes::TYtDSink> dataSink;
+        if constexpr (std::is_same_v<TNodeType, TYtReadTable>) {
+            dataSink = TYtDSink(ctx.RenameNode(op.DataSource().Ref(), "DataSink"));
+        } else {
+            dataSink = op.DataSink();
+        }
+
         if (!dynamicTableInputs.empty()) {
             otherInputs.push_back(
                 CopyOrTrivialMap(
                     section.Pos(),
                     op.World(),
-                    op.DataSink(),
-                    *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(),
+                    dataSink.Cast(),
+                    *section.Ref().GetTypeAnn()->template Cast<TListExprType>()->GetItemType(),
                     Build<TYtSection>(ctx, section.Pos())
                         .Paths()
                             .Add(dynamicTableInputs)
@@ -602,7 +613,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ConvertDynamicTablesToS
     if (hasChanges) {
         return ctx.ChangeChild(
             node.Ref(),
-            TYtTransientOpBase::idx_Input,
+            TNodeType::idx_Input,
             Build<TYtSectionList>(ctx, op.Input().Pos())
                 .Add(newInputs)
                 .Done()

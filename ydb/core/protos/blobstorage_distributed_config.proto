@@ -227,6 +227,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool NodesState = 3;
         optional uint32 OverrideReplicasInRingCount = 4;
         optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
     }
 
     message TSelfHealStateStorage {
@@ -235,6 +236,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool PileupReplicas = 3;
         optional uint32 OverrideReplicasInRingCount = 4;
         optional uint32 OverrideRingsCount = 5;
+        optional uint32 ReplicasSpecificVolume = 6;
     }
 
     message TSelfHealNodesStateUpdate {
@@ -248,6 +250,7 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool PileupReplicas = 4;
         optional uint32 OverrideReplicasInRingCount = 5;
         optional uint32 OverrideRingsCount = 6;
+        optional uint32 ReplicasSpecificVolume = 7;
     }
 
     message TAdvanceGeneration

@@ -22,9 +22,22 @@ public:
     Ydb::Monitoring::SelfCheckResult Result;
 };
 
+class TClusterStateResult::TImpl {
+public:
+    TImpl(Ydb::Monitoring::ClusterStateResult&& result)
+        : Result(std::move(result))
+    {}
+    Ydb::Monitoring::ClusterStateResult Result;
+};
+
 TSelfCheckResult::TSelfCheckResult(TStatus&& status, Ydb::Monitoring::SelfCheckResult&& result)
     : TStatus(std::move(status))
     , Impl_(std::make_shared<TSelfCheckResult::TImpl>(std::move(result)))
+{}
+
+TClusterStateResult::TClusterStateResult(TStatus&& status, Ydb::Monitoring::ClusterStateResult&& result)
+    : TStatus(std::move(status))
+    , Impl_(std::make_shared<TClusterStateResult::TImpl>(std::move(result)))
 {}
 
 class TMonitoringClient::TImpl : public TClientImplCommon<TMonitoringClient::TImpl> {
@@ -87,6 +100,45 @@ public:
 
         return promise.GetFuture();
     }
+
+    TAsyncClusterStateResult ClusterState(const TClusterStateSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Monitoring::ClusterStateRequest>(settings);
+
+        if (settings.DurationSeconds_) {
+            request.set_duration_seconds(settings.DurationSeconds_.value());
+        }
+
+        if (settings.PeriodSeconds_) {
+            request.set_period_seconds(settings.PeriodSeconds_.value());
+        }
+        auto promise = NThreading::NewPromise<TClusterStateResult>();
+
+        auto extractor = [promise]
+            (google::protobuf::Any* any, TPlainStatus status) mutable {
+                Ydb::Monitoring::ClusterStateResult result;
+                if (any) {
+                    any->UnpackTo(&result);
+                }
+                TClusterStateResult val(
+                    TStatus(std::move(status)),
+                    std::move(result));
+
+                promise.SetValue(std::move(val));
+        };
+
+        using Ydb::Monitoring::ClusterStateRequest;
+        using Ydb::Monitoring::ClusterStateResponse;
+
+        Connections_->RunDeferred<Ydb::Monitoring::V1::MonitoringService, ClusterStateRequest, ClusterStateResponse>(
+            std::move(request),
+            extractor,
+            &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncClusterState,
+            DbDriverState_,
+            INITIAL_DEFERRED_CALL_DELAY,
+            TRpcRequestSettings::Make(settings));
+
+        return promise.GetFuture();
+    }
 };
 
 TMonitoringClient::TMonitoringClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -97,10 +149,17 @@ TAsyncSelfCheckResult TMonitoringClient::SelfCheck(const TSelfCheckSettings& set
     return Impl_->SelfCheck(settings);
 }
 
+TAsyncClusterStateResult TMonitoringClient::ClusterState(const TClusterStateSettings& settings) {
+    return Impl_->ClusterState(settings);
+}
+
 }
 
 const Ydb::Monitoring::SelfCheckResult& TProtoAccessor::GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult) {
     return selfCheckResult.Impl_->Result;
 }
 
+const Ydb::Monitoring::ClusterStateResult& TProtoAccessor::GetProto(const NYdb::NMonitoring::TClusterStateResult& clusterStateResult) {
+    return clusterStateResult.Impl_->Result;
+}
 }

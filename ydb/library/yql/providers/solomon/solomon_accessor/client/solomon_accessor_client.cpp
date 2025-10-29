@@ -74,67 +74,70 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Issues.ToOneLineString());
+        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetLabelsResponse(TStringBuilder{} << "Error while sending list metric names request to monitoring api: " << response.Content.data());
+        return TGetLabelsResponse(TStringBuilder{} << "Monitoring api get labels response: " << response.Content.data() <<
+            ", internal code: " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetLabelsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+        return TGetLabelsResponse("Monitoring api get labels response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("names") || !json["names"].IsArray()) {
-        return TGetLabelsResponse("Invalid result from monitoring api");
+        return TGetLabelsResponse("Monitoring api get labels response doesn't contain requested info");
     }
 
     const auto names = json["names"].GetArray();
 
     for (const auto& name : names) {
         if (!name.IsString()) {
-            return TGetLabelsResponse("Invalid label names from monitoring api");
-        } else {
-            result.Labels.push_back(name.GetString());
+            return TGetLabelsResponse("Monitoring api get labels response contains invalid label names");
         }
+        result.Labels.push_back(name.GetString());
     }
     for (const auto& [key, selector] : knownSelectors) {
         result.Labels.push_back(key);
     }
 
-    return TGetLabelsResponse(std::move(result));
+    return TGetLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response) {
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
-        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Issues.ToOneLineString());
+        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TListMetricsResponse(TStringBuilder{} << "Error while sending list metrics request to monitoring api: " << response.Content.data());
+        return TListMetricsResponse(TStringBuilder{} << "Monitoring api list metrics response: " << response.Content.data() <<
+            ", internal code: " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TListMetricsResponse(TStringBuilder{} << "Failed to parse response from monitoring api: " << e.what());
+        return TListMetricsResponse("Monitoring api list metrics response is not a valid json" );
     }
 
     if (!json.IsMap() || !json.Has("result") || !json.Has("page")) {
-        return TListMetricsResponse("Invalid list metrics result from monitoring api");
+        return TListMetricsResponse("Monitoring api list metrics response doesn't contain requested info");
     }
 
     const auto pagesInfo = json["page"];
     if (!pagesInfo.IsMap() || 
         !pagesInfo.Has("pagesCount") || !pagesInfo["pagesCount"].IsInteger() || 
         !pagesInfo.Has("totalCount") || !pagesInfo["totalCount"].IsInteger()) {
-        return TListMetricsResponse("Invalid paging info from monitoring api");
+        return TListMetricsResponse("Monitoring api list metrics response doesn't contain paging info");
     }
 
     result.PagesCount = pagesInfo["pagesCount"].GetInteger();
@@ -142,7 +145,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
 
     for (const auto& metricObj : json["result"].GetArray()) {
         if (!metricObj.IsMap() || !metricObj.Has("labels") || !metricObj["labels"].IsMap() || !metricObj.Has("type") || !metricObj["type"].IsString()) {
-            return TListMetricsResponse("Invalid list metrics result from monitoring api");
+            return TListMetricsResponse("Monitoring api list metrics response contains invalid metrics");
         }
 
         TSelectors selectors;
@@ -153,7 +156,63 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
         result.Metrics.emplace_back(std::move(selectors), metricObj["type"].GetString());
     }
 
-    return TListMetricsResponse(std::move(result));
+    return TListMetricsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
+}
+
+TListMetricsLabelsResponse ProcessListMetricsLabelsResponse(NYql::IHTTPGateway::TResult&& response) {
+    TListMetricsLabelsResult result;
+
+    if (response.CurlResponseCode != CURLE_OK) {
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Issues.ToOneLineString() <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
+    }
+
+    if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response: " << response.Content.data() <<
+            ", internal code: " << response.Content.HttpResponseCode);
+    }
+
+    NJson::TJsonValue json;
+    try {
+        NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
+    } catch (const std::exception& e) {
+        return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response is not a valid json: " << e.what());
+    }
+
+    if (!json.IsMap() || !json.Has("labels") || !json.Has("totalCount")) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response doesn't contain requested info");
+    }
+
+    if (!json["totalCount"].IsInteger() || !json["labels"].IsArray()) {
+        return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid data");
+    }
+
+    result.TotalCount = json["totalCount"].GetInteger();
+
+    for (const auto& label : json["labels"].GetArray()) {
+        try {
+            TString name = label["name"].GetStringSafe();
+            bool absent = label["absent"].GetBooleanSafe();
+            bool truncated = label["truncated"].GetBooleanSafe();
+            const auto& jsonValues = label["values"].GetArraySafe();
+            std::vector<TString> values;
+    
+            values.reserve(jsonValues.size());
+            for (const auto& labelValue : jsonValues) {
+                if (!labelValue.IsString()) {
+                    return TListMetricsLabelsResponse("Monitoring api list metrics labels response contains invalid label values");
+                }
+                values.push_back(labelValue.GetString());
+            }
+    
+            result.Labels.emplace_back(name, absent, truncated, std::move(values));
+        } catch (const NJson::TJsonException& e) {
+            return TListMetricsLabelsResponse(TStringBuilder{} << "Monitoring api list metrics labels response contains invalid labels: " << e.what());
+        }
+
+    }
+
+    return TListMetricsLabelsResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, ui64 downsampledPointsCount) {
@@ -169,38 +228,40 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
         for (const auto& whitelistIssue : whitelistIssues) {
             if (issues.find(whitelistIssue) != issues.npos) {
                 result.PointsCount = 0;
-                return TGetPointsCountResponse(std::move(result));
+                return TGetPointsCountResponse(std::move(result), 0);
             }
         }
 
-        return TGetPointsCountResponse(TStringBuilder() << "Error while sending points count request to monitoring api: " << issues);
+        return TGetPointsCountResponse(TStringBuilder() << "Monitoring api points count response: " << issues <<
+            ", internal code: " << static_cast<int>(response.CurlResponseCode));
     }
 
     if (response.Content.HttpResponseCode < 200 || response.Content.HttpResponseCode >= 300) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Error while sending points count request to monitoring api: " << response.Content.data());
+        return TGetPointsCountResponse(TStringBuilder{} << "Monitoring api points count response: " << response.Content.data() <<
+            ", internal code: " << response.Content.HttpResponseCode);
     }
 
     NJson::TJsonValue json;
     try {
         NJson::ReadJsonTree(response.Content.data(), &json, /*throwOnError*/ true);
     } catch (const std::exception& e) {
-        return TGetPointsCountResponse(TStringBuilder{} << "Failed to parse points count response from monitoring api: " << e.what());
+        return TGetPointsCountResponse("Monitoring api points count response is not a valid json");
     }
 
     if (!json.IsMap() || !json.Has("scalar") || !json["scalar"].IsInteger()) {
-        return TGetPointsCountResponse("Invalid points count result from monitoring api");
+        return TGetPointsCountResponse("Monitoring api points count response doesn't contain requested info");
     }
 
     result.PointsCount = json["scalar"].GetInteger() + downsampledPointsCount;
 
-    return TGetPointsCountResponse(std::move(result));
+    return TGetPointsCountResponse(std::move(result), response.Content.size() + response.Content.Headers.size());
 }
 
 TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) {
     TGetDataResult result;
 
     if (!status.Ok()) {
-        TString error = TStringBuilder{} << "Error while sending data request to monitoring api: " << status.Msg;
+        TString error = TStringBuilder{} << "Monitoring api get data response: " << status.Msg;
         if (status.GRpcStatusCode == grpc::StatusCode::RESOURCE_EXHAUSTED || status.GRpcStatusCode == grpc::StatusCode::UNAVAILABLE) {
             return TGetDataResponse(error, EStatus::STATUS_RETRIABLE_ERROR);
         }
@@ -208,7 +269,7 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     }
 
     if (response.response_per_query_size() != 1) {
-        return TGetDataResponse("Invalid get data repsonse size from monitoring api");
+        return TGetDataResponse("Monitoring api get data response is invalid");
     }
 
     const auto& responseValue = response.response_per_query()[0];
@@ -235,17 +296,19 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
         result.Timeseries.emplace_back(std::move(metric), std::move(timestamps), std::move(values));
     }
 
-    return TGetDataResponse(std::move(result));
+    return TGetDataResponse(std::move(result), response.ByteSize());
 }
 
 class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
+        ui64 maxListingPageSize,
         ui64 maxApiInflight,
         NYql::NSo::NProto::TDqSolomonSource&& settings,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
+        , MaxListingPageSize(maxListingPageSize)
         , Settings(std::move(settings))
         , CredentialsProvider(credentialsProvider) {
 
@@ -264,7 +327,7 @@ public:
 
 public:
     NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TSelectors& selectors, TInstant from, TInstant to) const override final {
-        auto requestUrl = BuildGetLabelsUrl(selectors, from, to);
+        auto url = BuildGetLabelsUrl(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
@@ -274,14 +337,14 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url)
         );
 
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const override final {
-        auto requestUrl = BuildListMetricsUrl(selectors, from, to, pageSize, page);
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsHttpParams(selectors, from, to);
 
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
@@ -291,7 +354,26 @@ public:
 
         DoHttpRequest(
             std::move(cb),
-            std::move(requestUrl)
+            std::move(url),
+            std::move(body)
+        );
+
+        return resultPromise.GetFuture();
+    }
+
+    NThreading::TFuture<TListMetricsLabelsResponse> ListMetricsLabels(const TSelectors& selectors, TInstant from, TInstant to) const override final {
+        auto [url, body] = BuildListMetricsLabelsHttpParams(selectors, from, to);
+
+        auto resultPromise = NThreading::NewPromise<TListMetricsLabelsResponse>();
+        
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
+            resultPromise.SetValue(ProcessListMetricsLabelsResponse(std::move(result)));
+        };
+
+        DoHttpRequest(
+            std::move(cb),
+            std::move(url),
+            std::move(body)
         );
 
         return resultPromise.GetFuture();
@@ -312,8 +394,7 @@ public:
             auto fullSelectors = AddRequiredLabels(selectors);
             TString program = TStringBuilder() << "count(" << BuildSelectorsProgram(fullSelectors) << ")";
             
-            auto requestUrl = BuildGetPointsCountUrl();
-            auto requestBody = BuildGetPointsCountBody(program, downsamplingTo, to);
+            auto [url, body] = BuildGetPointsCountHttpParams(program, downsamplingTo, to);
             
             auto cb = [resultPromise, downsampledPointsCount](NYql::IHTTPGateway::TResult&& response) mutable {
                 resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), downsampledPointsCount));
@@ -321,15 +402,15 @@ public:
     
             DoHttpRequest(
                 std::move(cb),
-                std::move(requestUrl),
-                std::move(requestBody)
+                std::move(url),
+                std::move(body)
             );
 
         } else {
             TGetPointsCountResult result;
             result.PointsCount = downsampledPointsCount;
 
-            resultPromise.SetValue(TGetPointsCountResponse(std::move(result)));
+            resultPromise.SetValue(TGetPointsCountResponse(std::move(result), 0));
         }
 
         return resultPromise.GetFuture();
@@ -477,14 +558,13 @@ private:
 
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
         builder.AddUrlParam("to", to.ToString());
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const TSelectors& selectors, TInstant from, TInstant to, int pageSize, int page) const {
+    std::tuple<TString, TString> BuildListMetricsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -495,16 +575,33 @@ private:
 
         builder.AddUrlParam("projectId", GetProjectId());
         builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
-        builder.AddUrlParam("forceCluster", DefaultReplica);
         builder.AddUrlParam("from", from.ToString());
         builder.AddUrlParam("to", to.ToString());
-        builder.AddUrlParam("pageSize", std::to_string(pageSize));
-        builder.AddUrlParam("page", std::to_string(page));
+        builder.AddUrlParam("pageSize", ToString(MaxListingPageSize));
 
-        return builder.Build();
+        return { builder.Build(), "" };
     }
 
-    TString BuildGetPointsCountUrl() const {
+    std::tuple<TString, TString> BuildListMetricsLabelsHttpParams(const TSelectors& selectors, TInstant from, TInstant to) const {
+        TUrlBuilder builder(GetHttpSolomonEndpoint());
+
+        builder.AddPathComponent("api");
+        builder.AddPathComponent("v2");
+        builder.AddPathComponent("projects");
+        builder.AddPathComponent(Settings.GetProject());
+        builder.AddPathComponent("sensors");
+        builder.AddPathComponent("labels");
+
+        builder.AddUrlParam("projectId", GetProjectId());
+        builder.AddUrlParam("selectors", BuildSelectorsProgram(selectors));
+        builder.AddUrlParam("from", from.ToString());
+        builder.AddUrlParam("to", to.ToString());
+        builder.AddUrlParam("limit", "100000");
+
+        return { builder.Build(), "" };
+    }
+
+    std::tuple<TString, TString> BuildGetPointsCountHttpParams(const TString& program, TInstant from, TInstant to) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -516,17 +613,12 @@ private:
 
         builder.AddUrlParam("projectId", GetProjectId());
 
-        return builder.Build();
-    }
-
-    TString BuildGetPointsCountBody(const TString& program, TInstant from, TInstant to) const {
         const auto& ds = Settings.GetDownsampling();
         NJsonWriter::TBuf w;
         w.BeginObject()
             .UnsafeWriteKey("from").WriteString(from.ToString())
             .UnsafeWriteKey("to").WriteString(to.ToString())
             .UnsafeWriteKey("program").WriteString(program)
-            .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
                     .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
@@ -539,7 +631,7 @@ private:
         }
         w.EndObject().EndObject();
 
-        return w.Str();
+        return { builder.Build(), w.Str() };
     }
 
     ReadRequest BuildGetDataRequest(const TString& program, TInstant from, TInstant to) const {
@@ -579,7 +671,7 @@ private:
                 fullSelectors[labelName] = {"=", "-"};
             }
         }
-        return selectors;
+        return fullSelectors;
     }
 
     TString BuildSelectorsProgram(const TSelectors& selectors, bool useNewFormat = false) const {
@@ -601,7 +693,8 @@ private:
 
 private:
     const TString DefaultReplica;
-    const ui64 ListSizeLimit = 1ull << 20;
+    const ui64 MaxListingPageSize;
+    const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
@@ -625,12 +718,17 @@ ISolomonAccessorClient::Make(
         defaultReplica = it->second;
     }
 
+    ui64 maxListingPageSize = 20000;
+    if (auto it = settings.find("maxListingPageSize"); it != settings.end()) {
+        maxListingPageSize = FromString<ui64>(it->second);
+    }
+
     ui64 maxApiInflight = 40;
     if (auto it = settings.find("maxApiInflight"); it != settings.end()) {
         maxApiInflight = FromString<ui64>(it->second);
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxApiInflight, std::move(source), credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, maxListingPageSize, maxApiInflight, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

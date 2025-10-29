@@ -39,8 +39,12 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
     const auto providerArg = node->ChildPtr(1);
     if (const auto maybeDataSource = TMaybeNode<TCoDataSource>(providerArg)) {
         const auto dataSourceCategory = maybeDataSource.Cast().Category().Value();
-        if (IsIn({NYql::PqProviderName, NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
-            res.StreamingReads += dataSourceCategory == NYql::PqProviderName;
+        if (dataSourceCategory == NYql::PqProviderName) {
+            ++res.StreamingReads;
+            return true;
+        }
+
+        if (IsIn({NYql::S3ProviderName, NYql::GenericProviderName}, dataSourceCategory)) {
             return true;
         }
 
@@ -57,6 +61,10 @@ bool ExploreStreamingQueryNode(TExprNode::TPtr node, TStreamingExploreCtx& res) 
         const auto dataSinkCategory = maybeDataSink.Cast().Category().Value();
         if (dataSinkCategory == NYql::PqProviderName) {
             ++res.StreamingWrites;
+            return true;
+        }
+
+        if (dataSinkCategory == NYql::SolomonProviderName) {
             return true;
         }
 

@@ -11,14 +11,16 @@
 namespace {
 using namespace NYql;
 
-class TUdfResolverWithLoggerDecorator : public IUdfResolver {
+class TUdfResolverWithLoggerDecorator: public IUdfResolver {
 public:
     TUdfResolverWithLoggerDecorator(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-                        IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
+                                    IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId)
         : FunctionRegistry_(functionRegistry)
         , Underlying_(underlying)
         , Out_(TFile(path, WrOnly | ForAppend | OpenAlways))
-        , SessionId_(sessionId) {}
+        , SessionId_(sessionId)
+    {
+    }
 
     TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const override {
         return Underlying_->GetSystemModulePath(moduleName);
@@ -27,16 +29,22 @@ public:
     void LogImport(NJson::TJsonArray& result, const TImport& import) const {
         auto currImport = NJson::TJsonMap();
         switch (import.Block->Type) {
-        case NYql::EUserDataType::PATH:             currImport["type"] = "PATH"; break;
-        case NYql::EUserDataType::URL:              currImport["type"] = "URL"; break;
-        case NYql::EUserDataType::RAW_INLINE_DATA:  currImport["type"] = "RAW_INLINE_DATA"; break;
+            case NYql::EUserDataType::PATH:
+                currImport["type"] = "PATH";
+                break;
+            case NYql::EUserDataType::URL:
+                currImport["type"] = "URL";
+                break;
+            case NYql::EUserDataType::RAW_INLINE_DATA:
+                currImport["type"] = "RAW_INLINE_DATA";
+                break;
         };
         currImport["alias"] = import.FileAlias;
         auto modulesJson = NJson::TJsonArray();
         bool isTrusted = false;
         if (import.Modules) {
             TSet<TString> modules(import.Modules->begin(), import.Modules->end());
-            for (auto& e: modules) {
+            for (auto& e : modules) {
                 modulesJson.AppendValue(import.Block->CustomUdfPrefix + e);
                 isTrusted |= FunctionRegistry_->IsLoadedUdfModule(e);
             }
@@ -59,8 +67,7 @@ public:
 
     bool LoadMetadata(
         const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
-        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override
-    {
+        TExprContext& ctx, NUdf::ELogLevel logLevel, THoldingFileStorage& storage) const override {
         TSimpleTimer t;
         auto result = Underlying_->LoadMetadata(imports, functions, ctx, logLevel, storage);
         auto runningTime = t.Get().MilliSeconds();
@@ -75,14 +82,14 @@ public:
         logEntry["method"] = "LoadMetadata";
         logEntry["duration"] = runningTime;
         auto importsJson = NJson::TJsonArray();
-        for (auto& e: imports) {
+        for (auto& e : imports) {
             if (!e || !e->Block) {
                 continue;
             }
             LogImport(importsJson, *e);
         }
         auto fnsJson = NJson::TJsonArray();
-        for (auto& e: functions) {
+        for (auto& e : functions) {
             if (!e) {
                 continue;
             }
@@ -110,7 +117,7 @@ public:
         logEntry["method"] = "LoadRichMetadata";
         logEntry["duration"] = runningTime;
         auto importsJson = NJson::TJsonArray();
-        for (auto& e: imports) {
+        for (auto& e : imports) {
             if (!e.Block) {
                 continue;
             }
@@ -125,6 +132,7 @@ public:
     bool ContainsModule(const TStringBuf& moduleName) const override {
         return Underlying_->ContainsModule(moduleName);
     }
+
 private:
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry_;
     IUdfResolver::TPtr Underlying_;
@@ -132,10 +140,10 @@ private:
     TString SessionId_;
 };
 
-}
+} // namespace
 
 namespace NYql::NCommon {
 IUdfResolver::TPtr CreateUdfResolverDecoratorWithLogger(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry, IUdfResolver::TPtr underlying, const TString& path, const TString& sessionId) {
     return new TUdfResolverWithLoggerDecorator(functionRegistry, underlying, path, sessionId);
 }
-}
+} // namespace NYql::NCommon

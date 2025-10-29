@@ -132,6 +132,10 @@ public:
     // used to store valid value in ICB if SectorMapFirstSector*Rate < SectorMapLastSector*Rate
     TString LastSectorReadRateControlName;
     TString LastSectorWriteRateControlName;
+    TControlWrapper SectorMapWriteErrorProbability;
+    TControlWrapper SectorMapReadErrorProbability;
+    TControlWrapper SectorMapSilentWriteFailProbability;
+    TControlWrapper SectorMapReadReplayProbability;
 
     ui64 ForsetiMinLogCostNs = 2000000ull;
     i64 ForsetiMaxLogBatchNsCached;

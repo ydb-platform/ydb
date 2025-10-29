@@ -46,6 +46,26 @@
             "uri": "https://{canondata_backend}/995452/085d43bbd16f44afc51d6cafed42465a3d20215c/resource.tar.gz#test.test_GreedyInputContainers_/results.txt"
         }
     ],
+    "test.test[LinearDynamicFail1]": [
+        {
+            "uri": "file://test.test_LinearDynamicFail1_/extracted"
+        }
+    ],
+    "test.test[LinearDynamicFail2]": [
+        {
+            "uri": "file://test.test_LinearDynamicFail2_/extracted"
+        }
+    ],
+    "test.test[LinearDynamic]": [
+        {
+            "uri": "file://test.test_LinearDynamic_/results.txt"
+        }
+    ],
+    "test.test[Linear]": [
+        {
+            "uri": "file://test.test_Linear_/results.txt"
+        }
+    ],
     "test.test[OptionalNested]": [
         {
             "uri": "file://test.test_OptionalNested_/extracted"
@@ -56,6 +76,11 @@
             "checksum": "e60320702512bdcecd5c663f387ee939",
             "size": 9172,
             "uri": "https://{canondata_backend}/1130705/493ee46b1e8f2e848ab928f97913d332cb4fffc7/resource.tar.gz#test.test_Switch_/results.txt"
+        }
+    ],
+    "test.test[Tagged]": [
+        {
+            "uri": "file://test.test_Tagged_/results.txt"
         }
     ]
 }

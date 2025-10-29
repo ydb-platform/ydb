@@ -7,7 +7,6 @@
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
-#include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
@@ -225,7 +224,6 @@ private:
     NActors::TActorId LocalRowDispatcherActorId;
     // Set on Children
     std::queue<TReadyBatch> ReadyBuffer;
-    TMaybe<TDqSourceWatermarkTracker<TPartitionKey>> WatermarkTracker;
     // Set on Parent
     EState State = EState::INIT;
     bool Inited = false;
@@ -428,12 +426,10 @@ public:
 
     static constexpr char ActorName[] = "DQ_PQ_READ_ACTOR";
 
-    void LoadState(const TSourceState& state) override;
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override;
     void PassAway() override;
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& buffer, TMaybe<TInstant>& watermark, bool&, i64 freeSpace) override;
     TDuration GetCpuTime() override;
-    void InitWatermarkTracker();
     std::vector<ui64> GetPartitionsToRead() const;
     void AddMessageBatch(TRope&& serializedBatch, NKikimr::NMiniKQL::TUnboxedValueBatch& buffer);
     void ProcessState();
@@ -447,6 +443,8 @@ public:
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);
     void NotifyCA();
+    void ScheduleSourcesCheck(TInstant) override;
+    void InitWatermarkTracker() override;
     void SendStartSession(TSession& sessionInfo);
     void Init();
     void InitChild();
@@ -623,10 +621,11 @@ void TDqPqRdReadActor::ProcessGlobalState() {
         }
         auto partitionToRead = GetPartitionsToRead();
         if (WatermarkTracker) {
+            auto now = TInstant::Now();
             TPartitionKey partitionKey { .Cluster = Cluster };
             for (auto partitionId: partitionToRead) {
                 partitionKey.PartitionId = partitionId;
-                WatermarkTracker->RegisterPartition(partitionKey);
+                WatermarkTracker->RegisterPartition(partitionKey, now);
             }
         }
         auto cookie = ++CoordinatorRequestCookie;
@@ -707,11 +706,6 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     sessionInfo.EventsQueue.Send(event, sessionInfo.Generation);
 }
 
-void TDqPqRdReadActor::LoadState(const TSourceState& state) {
-    TDqPqReadActorBase::LoadState(state);
-    InitWatermarkTracker();
-}
-
 void TDqPqRdReadActor::CommitState(const NDqProto::TCheckpoint& /*checkpoint*/) {
 }
 
@@ -754,6 +748,23 @@ i64 TDqPqRdReadActor::GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& b
     InFlyAsyncInputData = false;
     buffer.clear();
     watermark = Nothing();
+
+    if (WatermarkTracker) {
+        const auto now = TInstant::Now();
+        MaybeScheduleNextIdleCheck(now);
+
+        const auto idleWatermark = WatermarkTracker->HandleIdleness(now);
+
+        if (idleWatermark) {
+            SRC_LOG_D("SessionId: " << GetSessionId() << " Fake watermark " << idleWatermark << " was produced");
+            if (ReadyBuffer.empty()) {
+                watermark = *idleWatermark;
+            } else {
+                Y_ENSURE(ReadyBuffer.back().Watermark < *idleWatermark);
+                ReadyBuffer.back().Watermark = *idleWatermark;
+            }
+        }
+    }
 
     if (freeSpace == 0 || ReadyBuffer.empty()) {
         return 0;
@@ -798,20 +809,16 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
     return TDuration::MicroSeconds(CpuMicrosec);
 }
 
+void TDqPqRdReadActor::ScheduleSourcesCheck(TInstant at) {
+    Schedule(at, new TEvPrivate::TEvNotifyCA());
+}
+
 void TDqPqRdReadActor::InitWatermarkTracker() {
-    SRC_LOG_D("SessionId: " << GetSessionId() << " Watermarks enabled: " << SourceParams.GetWatermarks().GetEnabled() << " granularity: "
-        << SourceParams.GetWatermarks().GetGranularityUs() << " microseconds");
-
-    if (!SourceParams.GetWatermarks().GetEnabled()) {
-        return;
-    }
-
-    WatermarkTracker.ConstructInPlace(
-        TDuration::MicroSeconds(SourceParams.GetWatermarks().GetGranularityUs()),
-        SourceParams.GetWatermarks().GetIdlePartitionsEnabled(),
-        TDuration::Zero(),
-        TInstant::Now()
-    );
+    auto lateArrivalDelayUs = SourceParams.GetWatermarks().GetLateArrivalDelayUs();
+    auto idleDelayUs = lateArrivalDelayUs; // TODO disentangle
+    TDqPqReadActorBase::InitWatermarkTracker(
+            TDuration::Zero(), // lateArrivalDelay is embedded into calculation of WatermarkExpr
+            TDuration::MicroSeconds(idleDelayUs));
 }
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {

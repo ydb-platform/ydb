@@ -1,6 +1,6 @@
 #include "mkql_lazy_list.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/minikql/mkql_node_cast.h>
 
 namespace NKikimr {
@@ -9,13 +9,15 @@ namespace NMiniKQL {
 namespace {
 
 template <bool IsOptional>
-class TLazyListWrapper : public TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> {
+class TLazyListWrapper: public TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> {
     typedef TMutableCodegeneratorNode<TLazyListWrapper<IsOptional>> TBaseComputation;
-public:
 
+public:
     TLazyListWrapper(TComputationMutables& mutables, IComputationNode* list)
-        : TBaseComputation(mutables, EValueRepresentation::Boxed), List(list)
-    {}
+        : TBaseComputation(mutables, EValueRepresentation::Boxed)
+        , List(list)
+    {
+    }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
         auto list = List->GetValue(ctx);
@@ -79,7 +81,7 @@ private:
     IComputationNode* const List;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() == 1U, "Expected single arg, got " << callable.GetInputsCount());
@@ -92,5 +94,5 @@ IComputationNode* WrapLazyList(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

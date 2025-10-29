@@ -44,7 +44,8 @@ template <typename TType>
 class TDatumStorageView {
 public:
     TDatumStorageView(const arrow::Datum& datum)
-        : Datum_(datum) {
+        : Datum_(datum)
+    {
     }
 
     TType* data() {

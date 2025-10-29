@@ -541,11 +541,27 @@ private:
 
     ICompositeNode* Parent_ = nullptr;
 
+    // TODO(babenko): hotfix for YT-26432
+    std::atomic<IAttributeDictionary*> CustomAttributes_ = nullptr;
+    NThreading::TSpinLock CustomAttributesSpinLock_;
+
     // TSupportsAttributes members
 
-    IAttributeDictionary* GetCustomAttributes() override
+    const IAttributeDictionary& CustomAttributes() const override
     {
-        return MutableAttributes();
+        return Attributes();
+    }
+
+    IAttributeDictionary* MutableCustomAttributesOrNull() override
+    {
+        if (auto* result = CustomAttributes_.load()) {
+            return result;
+        }
+        auto guard = Guard(CustomAttributesSpinLock_);
+        if (!CustomAttributes_.load()) {
+            CustomAttributes_.store(MutableAttributes());
+        }
+        return CustomAttributes_.load();
     }
 };
 

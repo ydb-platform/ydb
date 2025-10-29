@@ -9,5 +9,5 @@ IComputationNode* WrapOr(TCallable& callable, const TComputationNodeFactoryConte
 IComputationNode* WrapXor(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 IComputationNode* WrapNot(TCallable& callable, const TComputationNodeFactoryContext& ctx);
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

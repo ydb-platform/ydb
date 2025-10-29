@@ -108,7 +108,15 @@ bool TNodeFilter::IsAllowedDataCenter(TDataCenterId dc) const {
 }
 
 bool TNodeFilter::IsAllowedPile(TBridgePileId pile) const {
-    return Hive->IsAllowedPile(pile);
+    if (MustBePrimaryPile) {
+        return Hive->IsPrimaryPile(pile);
+    } else {
+        const auto* pileInfo = Hive->FindPile(pile);
+        if (!pileInfo) {
+            return false;
+        }
+        return pileInfo->State == NKikimrBridge::TClusterState::SYNCHRONIZED;
+    }
 }
 
 template <typename K, typename V>

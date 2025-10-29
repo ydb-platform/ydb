@@ -23,7 +23,7 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
-    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0) {
+    NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;
         NKikimrBlobStorage::TStorageConfig config;
@@ -31,7 +31,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             auto *node = config.AddAllNodes();
             node->SetNodeId(i + 1);
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, {}, overrideReplicasInRingCount, overrideRingsCount);
+        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, {}, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         return ss;
     }
 
@@ -45,6 +45,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         , ui32 oldNToSelect = 9
         , ui32 overrideReplicasInRingCount = 0
         , ui32 overrideRingsCount = 0
+        , ui32 replicasSpecificVolume = 1000
     ) {
         NKikimrBlobStorage::TStorageConfig config;
         ui32 nodeId = 1;
@@ -73,7 +74,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         for (auto [nodeId, state] : nodesState) {
             keeper.SelfHealNodesState[nodeId] = state;
         }
-        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, oldSS, overrideReplicasInRingCount, overrideRingsCount);
+        keeper.GenerateStateStorageConfig(&ss, config, usedNodes, oldSS, overrideReplicasInRingCount, overrideRingsCount, replicasSpecificVolume);
         return ss;
     }
 
@@ -184,7 +185,7 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
         CheckStateStorage(GenerateDCStateStorage(3, 3, 3, { {10, 2}, {11, 4}, {13, 3}, {14, 4}, {15, 2} }, {}, {1, 5, 8, 10, 14, 17, 19, 22, 25}, 9), 9, {1, 4, 7, 10, 14, 17, 19, 22, 25});
     }
 
-    Y_UNIT_TEST(GenerateConfigReplicasDensity) {
+    Y_UNIT_TEST(GenerateConfigReplicasOverrides) {
         CheckStateStorage(GenerateSimpleStateStorage(100, {}, 0, 0), 5, {1, 2, 3, 4, 5, 6, 7, 8});
         CheckStateStorage(GenerateSimpleStateStorage(100, {}, 1, 1), 1, {1});
         CheckStateStorage2(GenerateSimpleStateStorage(100, {}, 3, 3),
@@ -200,6 +201,13 @@ Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
             "Ring { Node: 1 Node: 2 } Ring { Node: 4 Node: 5 } Ring { Node: 7 Node: 8 } "
             "Ring { Node: 10 Node: 11 } Ring { Node: 13 Node: 14 } Ring { Node: 16 Node: 17 } "
             "Ring { Node: 19 Node: 20 } Ring { Node: 22 Node: 23 } Ring { Node: 25 Node: 26 } } }");
+    }
+
+    Y_UNIT_TEST(GenerateConfigReplicasSpecificVolume) {
+        CheckStateStorage2(GenerateSimpleStateStorage(100, {}, 0, 3, 35),
+            "{ RingGroups { NToSelect: 3 Ring { Node: 1 Node: 2 Node: 3 }"
+            " Ring { Node: 4 Node: 5 Node: 6 } Ring { Node: 7 Node: 8 Node: 9 } } }");
+        CheckStateStorage2(GenerateSimpleStateStorage(16, {}, 0, 2, 5), "{ RingGroups { NToSelect: 1 Ring { Node: 1 Node: 2 Node: 3 Node: 4 } Ring { Node: 5 Node: 6 Node: 7 Node: 8 } } }");
     }
 }
 }

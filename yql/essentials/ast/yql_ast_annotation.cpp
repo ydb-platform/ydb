@@ -26,11 +26,13 @@ TAstNode* AnnotateNodePosition(TAstNode& node, TMemoryPool& pool) {
 }
 
 TAstNode* RemoveNodeAnnotations(TAstNode& node, TMemoryPool& pool) {
-    if (!node.IsList())
+    if (!node.IsList()) {
         return nullptr;
+    }
 
-    if (node.GetChildrenCount() == 0)
+    if (node.GetChildrenCount() == 0) {
         return nullptr;
+    }
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
     auto res = lastNode;
@@ -38,8 +40,9 @@ TAstNode* RemoveNodeAnnotations(TAstNode& node, TMemoryPool& pool) {
         TSmallVec<TAstNode*> listChildren(lastNode->GetChildrenCount());
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             auto item = RemoveNodeAnnotations(*lastNode->GetChild(index), pool);
-            if (!item)
+            if (!item) {
                 return nullptr;
+            }
 
             listChildren[index] = item;
         }
@@ -51,11 +54,13 @@ TAstNode* RemoveNodeAnnotations(TAstNode& node, TMemoryPool& pool) {
 }
 
 TAstNode* ExtractNodeAnnotations(TAstNode& node, TAnnotationNodeMap& annotations, TMemoryPool& pool) {
-    if (!node.IsList())
+    if (!node.IsList()) {
         return nullptr;
+    }
 
-    if (node.GetChildrenCount() == 0)
+    if (node.GetChildrenCount() == 0) {
         return nullptr;
+    }
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
     auto res = lastNode;
@@ -63,8 +68,9 @@ TAstNode* ExtractNodeAnnotations(TAstNode& node, TAnnotationNodeMap& annotations
         TSmallVec<TAstNode*> listChildren(lastNode->GetChildrenCount());
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
             auto item = ExtractNodeAnnotations(*lastNode->GetChild(index), annotations, pool);
-            if (!item)
+            if (!item) {
                 return nullptr;
+            }
 
             listChildren[index] = item;
         }
@@ -82,11 +88,13 @@ TAstNode* ExtractNodeAnnotations(TAstNode& node, TAnnotationNodeMap& annotations
 }
 
 TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMemoryPool& pool) {
-    if (!node.IsList())
+    if (!node.IsList()) {
         return nullptr;
+    }
 
-    if (node.GetChildrenCount() < annotationIndex + 2)
+    if (node.GetChildrenCount() < annotationIndex + 2) {
         return nullptr;
+    }
 
     auto annotation = node.GetChild(annotationIndex);
     auto str = annotation->GetContent();
@@ -98,8 +106,9 @@ TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMe
     filePart = str;
 
     ui32 row = 0, col = 0;
-    if (!TryFromString(rowPart, row) || !TryFromString(colPart, col))
+    if (!TryFromString(rowPart, row) || !TryFromString(colPart, col)) {
         return nullptr;
+    }
 
     TSmallVec<TAstNode*> listChildren(node.GetChildrenCount());
     for (ui32 index = 0; index < node.GetChildrenCount() - 1; ++index) {
@@ -124,11 +133,13 @@ TAstNode* ApplyNodePositionAnnotations(TAstNode& node, ui32 annotationIndex, TMe
 }
 
 bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
-    if (!node.IsList())
+    if (!node.IsList()) {
         return false;
+    }
 
-    if (node.GetChildrenCount() < annotationIndex + 2)
+    if (node.GetChildrenCount() < annotationIndex + 2) {
         return false;
+    }
 
     auto annotation = node.GetChild(annotationIndex);
     TStringBuf str = annotation->GetContent();
@@ -139,22 +150,24 @@ bool ApplyNodePositionAnnotationsInplace(TAstNode& node, ui32 annotationIndex) {
     GetNext(str, ':', colPart);
     filePart = str;
     ui32 row = 0, col = 0;
-    if (!TryFromString(rowPart, row) || !TryFromString(colPart, col))
+    if (!TryFromString(rowPart, row) || !TryFromString(colPart, col)) {
         return false;
+    }
 
     auto lastNode = node.GetChild(node.GetChildrenCount() - 1);
     lastNode->SetPosition(TPosition(col, row, filePart));
     if (lastNode->IsList()) {
         for (ui32 index = 0; index < lastNode->GetChildrenCount(); ++index) {
-            if (!ApplyNodePositionAnnotationsInplace(*lastNode->GetChild(index), annotationIndex))
+            if (!ApplyNodePositionAnnotationsInplace(*lastNode->GetChild(index), annotationIndex)) {
                 return false;
+            }
         }
     }
 
     return true;
 }
 
-}
+} // namespace
 
 TAstNode* AnnotatePositions(TAstNode& root, TMemoryPool& pool) {
     return AnnotateNodePosition(root, pool);
@@ -186,4 +199,4 @@ TAstNode* ExtractAnnotations(TAstNode& root, TAnnotationNodeMap& annotations, TM
     return ExtractNodeAnnotations(root, annotations, pool);
 }
 
-}
+} // namespace NYql

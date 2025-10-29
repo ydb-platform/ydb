@@ -49,6 +49,7 @@ SRCS(
     ut_pages.cpp
     ut_redo.cpp
     ut_rename_table_column.cpp
+    ut_rowlocks.cpp
     ut_other.cpp
     ut_forward.cpp
     ut_screen.cpp

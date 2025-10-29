@@ -157,6 +157,7 @@ void MultiTxStatsFull(
         std::function<Iterator(TKikimrRunner&, ECollectQueryStatsMode, const TString&)> getResult) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
+    app.MutableTableServiceConfig()->SetEnableSimpleProgramsSinglePartitionOptimization(true);
     TKikimrRunner kikimr(app);
     auto it = getResult(kikimr, ECollectQueryStatsMode::Full, R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
@@ -177,9 +178,9 @@ void MultiTxStatsFull(
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*res.PlanJson, &plan, true);
-    Cout << plan;
+    Cerr << plan << Endl;
     auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort");
-    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 2);
+    UNIT_ASSERT_EQUAL(node.GetMap().at("Stats").GetMapSafe().at("Tasks").GetIntegerSafe(), 1);
 }
 
 Y_UNIT_TEST(MultiTxStatsFullYql) {

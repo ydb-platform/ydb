@@ -6,8 +6,8 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
-import "google/protobuf/empty.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 package Ydb.Topic;
@@ -156,7 +156,7 @@ message StreamWriteMessage {
             // Message sequence number, provided by client for deduplication.
             // Starts at 1
             int64 seq_no = 1;
-            // Creation timestamp
+            // Creation timestamp.
             google.protobuf.Timestamp created_at = 2;
             // Compressed client message body.
             bytes data = 3;
@@ -1002,6 +1002,9 @@ message CreateTopicRequest {
 
     // Metering mode for the topic in a serverless database.
     MeteringMode metering_mode = 12;
+
+    // Metrics level. If the level is unset, use database setting.
+    optional uint32 metrics_level = 13;
 }
 
 // Create topic response sent from server to client.
@@ -1135,6 +1138,9 @@ message DescribeTopicResult {
         // How much bytes were written statistics.
         MultipleWindowsStat bytes_written = 4;
     }
+
+    // Metrics level.
+    optional uint32 metrics_level = 16;
 }
 
 // Describe partition request sent from client to server.
@@ -1262,7 +1268,6 @@ message PartitionStats {
     int32 partition_node_id = 8 [deprecated=true]; //Use PartitionLocation
 }
 
-
 // Update existing topic request sent from client to server.
 message AlterTopicRequest {
     Ydb.Operations.OperationParams operation_params = 1;
@@ -1307,6 +1312,12 @@ message AlterTopicRequest {
 
     // Set metering mode for topic in serverless database.
     MeteringMode set_metering_mode = 14;
+
+    // Set or reset metrics level.
+    oneof metrics_level {
+        uint32 set_metrics_level = 15;
+        google.protobuf.Empty reset_metrics_level = 16;
+    }
 }
 
 // Update topic response sent from server to client.

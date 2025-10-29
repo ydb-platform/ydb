@@ -5,8 +5,7 @@ PUREBENCH = yatest.common.build_path('yql/essentials/tools/purebench/purebench')
 
 
 def test_purebench_smoke():
-    result = yatest.common.execute([PUREBENCH, '--ndebug', '-r', '1'],
-                                   text=True, check_exit_code=True)
+    result = yatest.common.execute([PUREBENCH, '--ndebug', '-r', '1'], text=True, check_exit_code=True)
     # Mask elapsed time and duration, since both can change in
     # different environments.
     stdout = result.stdout

@@ -3,7 +3,7 @@
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
 #include <yql/essentials/utils/cast.h>
 
 namespace NKikimr {
@@ -14,27 +14,30 @@ using NYql::EnsureDynamicCast;
 namespace {
 
 template <bool Interruptable, bool UseCtx>
-class TWideCondense1Wrapper : public TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>> {
-using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>>;
-public:
-     TWideCondense1Wrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
-        TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& initState,
-        TComputationExternalNodePtrVector&& state, IComputationNode* outSwitch, TComputationNodePtrVector&& updateState)
-            : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow)
-            , Items(std::move(items))
-            , InitState(std::move(initState))
-            , State(std::move(state))
-            , Switch(outSwitch)
-            , UpdateState(std::move(updateState))
-            , SwitchItem(IsPasstrought(Switch, Items))
-            , ItemsOnInit(GetPasstroughtMap(Items, InitState))
-            , ItemsOnUpdate(GetPasstroughtMap(Items, UpdateState))
-            , UpdateOnItems(GetPasstroughtMap(UpdateState, Items))
-            , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
-            , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + State.size()))
-    {}
+class TWideCondense1Wrapper: public TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>> {
+    using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideCondense1Wrapper<Interruptable, UseCtx>>;
 
-    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+public:
+    TWideCondense1Wrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
+                          TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& initState,
+                          TComputationExternalNodePtrVector&& state, IComputationNode* outSwitch, TComputationNodePtrVector&& updateState)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Items(std::move(items))
+        , InitState(std::move(initState))
+        , State(std::move(state))
+        , Switch(outSwitch)
+        , UpdateState(std::move(updateState))
+        , SwitchItem(IsPasstrought(Switch, Items))
+        , ItemsOnInit(GetPasstroughtMap(Items, InitState))
+        , ItemsOnUpdate(GetPasstroughtMap(Items, UpdateState))
+        , UpdateOnItems(GetPasstroughtMap(UpdateState, Items))
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+        , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + State.size()))
+    {
+    }
+
+    EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         if (state.IsFinish()) {
             return EFetchResult::Finish;
         } else if (state.HasValue() && state.Get<bool>()) {
@@ -43,16 +46,19 @@ public:
             }
 
             state = NUdf::TUnboxedValuePod(false);
-            for (ui32 i = 0U; i < State.size(); ++i)
+            for (ui32 i = 0U; i < State.size(); ++i) {
                 State[i]->SetValue(ctx, InitState[i]->GetValue(ctx));
+            }
         }
 
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (true) {
-            for (auto i = 0U; i < Items.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem)
+            for (auto i = 0U; i < Items.size(); ++i) {
+                if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem) {
                     fields[i] = &Items[i]->RefValue(ctx);
+                }
+            }
 
             switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Yield:
@@ -62,8 +68,9 @@ public:
                 case EFetchResult::One:
                     if (state.IsInvalid()) {
                         state = NUdf::TUnboxedValuePod(false);
-                        for (ui32 i = 0U; i < State.size(); ++i)
+                        for (ui32 i = 0U; i < State.size(); ++i) {
                             State[i]->SetValue(ctx, InitState[i]->GetValue(ctx));
+                        }
                     } else {
                         const auto& reset = Switch->GetValue(ctx);
                         if (Interruptable && !reset) {
@@ -81,10 +88,12 @@ public:
                             return EFetchResult::One;
                         }
 
-                        for (ui32 i = 0U; i < State.size(); ++i)
+                        for (ui32 i = 0U; i < State.size(); ++i) {
                             ctx.MutableValues[TempStateIndex + i] = UpdateState[i]->GetValue(ctx);
-                        for (ui32 i = 0U; i < State.size(); ++i)
+                        }
+                        for (ui32 i = 0U; i < State.size(); ++i) {
                             State[i]->SetValue(ctx, std::move(ctx.MutableValues[TempStateIndex + i]));
+                        }
                     }
                     continue;
             }
@@ -93,8 +102,9 @@ public:
 
         const bool empty = state.IsInvalid();
         state = NUdf::TUnboxedValuePod::MakeFinish();
-        if (empty)
+        if (empty) {
             return EFetchResult::Finish;
+        }
 
         for (const auto state : State) {
             if (const auto out = *output++) {
@@ -159,10 +169,11 @@ public:
 
         std::vector<Value*> items(Items.size(), nullptr);
         for (ui32 i = 0U; i < items.size(); ++i) {
-            if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i])
+            if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(Items[i])->CreateSetValue(ctx, block, items[i] = getres.second[i](ctx, block));
-            else if (ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem)
+            } else if (ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem) {
                 items[i] = getres.second[i](ctx, block);
+            }
         }
 
         BranchInst::Create(init, next, empty, block);
@@ -193,15 +204,17 @@ public:
 
         std::vector<Value*> updates(State.size(), nullptr);
         for (ui32 i = 0U; i < State.size(); ++i) {
-            if (const auto map = UpdateOnItems[i])
+            if (const auto map = UpdateOnItems[i]) {
                 updates[i] = items[*map];
-            else if (State[i] != UpdateState[i])
+            } else if (State[i] != UpdateState[i]) {
                 updates[i] = GetNodeValue(UpdateState[i], ctx, block);
+            }
         }
 
         for (ui32 i = 0U; i < updates.size(); ++i) {
-            if (const auto s = updates[i])
+            if (const auto s = updates[i]) {
                 EnsureDynamicCast<ICodegeneratorExternalNode*>(State[i])->CreateSetValue(ctx, block, s);
+            }
         }
 
         empty->addIncoming(ConstantInt::getFalse(context), block);
@@ -218,7 +231,7 @@ public:
         ICodegeneratorInlineWideNode::TGettersList getters;
         getters.reserve(State.size());
         std::transform(State.cbegin(), State.cend(), std::back_inserter(getters), [&](IComputationNode* node) {
-            return [node](const TCodegenContext& ctx, BasicBlock*& block){ return GetNodeValue(node, ctx, block); };
+            return [node](const TCodegenContext& ctx, BasicBlock*& block) { return GetNodeValue(node, ctx, block); };
         });
         return {result, std::move(getters)};
     }
@@ -249,7 +262,7 @@ private:
     ui32 TempStateIndex;
 };
 
-}
+} // namespace
 
 IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
     MKQL_ENSURE(callable.GetInputsCount() >= 2U, "Expected at least two args.");
@@ -265,7 +278,7 @@ IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeF
 
     ui32 index = inputWidth;
 
-    std::generate_n(std::back_inserter(initState), outputWidth, [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(initState), outputWidth, [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
     index += outputWidth;
 
@@ -275,7 +288,7 @@ IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeF
     const auto dataType = UnpackOptionalData(callable.GetInput(index), isOptional);
     MKQL_ENSURE(dataType->GetSchemeType() == NUdf::TDataType<bool>::Id, "Expected bool.");
 
-    std::generate_n(std::back_inserter(updateState), outputWidth, [&](){ return LocateNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(updateState), outputWidth, [&]() { return LocateNode(ctx.NodeLocator, callable, ++index); });
 
     TComputationExternalNodePtrVector items, state;
     items.reserve(inputWidth);
@@ -283,11 +296,11 @@ IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeF
 
     index = 0U;
 
-    std::generate_n(std::back_inserter(items), inputWidth, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(items), inputWidth, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     index += outputWidth;
 
-    std::generate_n(std::back_inserter(state), outputWidth, [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); } );
+    std::generate_n(std::back_inserter(state), outputWidth, [&]() { return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
     index = 2 + inputWidth + 3 * outputWidth;
     bool useCtx = false;
@@ -317,5 +330,5 @@ IComputationNode* WrapWideCondense1(TCallable& callable, const TComputationNodeF
     THROW yexception() << "Expected wide flow.";
 }
 
-}
-}
+} // namespace NMiniKQL
+} // namespace NKikimr

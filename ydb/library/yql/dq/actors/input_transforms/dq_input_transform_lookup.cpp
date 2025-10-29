@@ -47,6 +47,7 @@ public:
         const NMiniKQL::TStructType* lookupPayloadType,
         const NMiniKQL::TMultiType* outputRowType,
         TOutputRowColumnOrder&& outputRowColumnOrder,
+        const THashMap<TString, TString>& secureParams,
         size_t maxDelayedRows,
         size_t cacheLimit,
         std::chrono::seconds cacheTtl
@@ -61,6 +62,7 @@ public:
         , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
+        , SecureParams(secureParams)
         , LookupInputIndexes(std::move(lookupInputIndexes))
         , OtherInputIndexes(std::move(otherInputIndexes))
         , InputRowType(inputRowType)
@@ -157,6 +159,7 @@ private: //IDqComputeActorAsyncInput
                 .PayloadType = LookupPayloadType,
                 .TypeEnv = TypeEnv,
                 .HolderFactory = HolderFactory,
+                .SecureParams = SecureParams,
                 .MaxKeysInRequest = 1000 // TODO configure me
             };
             auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
@@ -221,6 +224,7 @@ protected:
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;
+    const THashMap<TString, TString> SecureParams;
 protected:
     NActors::TActorId LookupSourceId;
     size_t MaxKeysInRequest;
@@ -1094,6 +1098,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
+                args.SecureParams,
                 settings.GetMaxDelayedRows(),
                 settings.GetCacheLimit(),
                 std::chrono::seconds(settings.GetCacheTtlSeconds())
@@ -1115,6 +1120,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
                 lookupPayloadType,
                 outputRowType,
                 std::move(outputColumnsOrder),
+                args.SecureParams,
                 settings.GetMaxDelayedRows(),
                 settings.GetCacheLimit(),
                 std::chrono::seconds(settings.GetCacheTtlSeconds())
@@ -1139,6 +1145,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            args.SecureParams,
             settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())
@@ -1160,6 +1167,7 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
             lookupPayloadType,
             outputRowType,
             std::move(outputColumnsOrder),
+            args.SecureParams,
             settings.GetMaxDelayedRows(),
             settings.GetCacheLimit(),
             std::chrono::seconds(settings.GetCacheTtlSeconds())

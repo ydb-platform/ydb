@@ -751,6 +751,7 @@ public:
             << ": path# " << id);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheNavigate>();
+        request->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
 
         auto& entry = request->ResultSet.emplace_back();
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;

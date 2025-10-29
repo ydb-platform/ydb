@@ -281,8 +281,8 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
     TString userToken;
     {
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database,
             .Ticket = token,
+            .Database = database,
             .PeerName = "test",
         })), 0);
 
@@ -328,8 +328,8 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
     TString userToken;
     {
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
-            .Database = database,
             .Ticket = token,
+            .Database = database,
             .PeerName = "test",
         })), 0);
 

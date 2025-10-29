@@ -1173,7 +1173,7 @@ TFuture<T> TFutureBase<T>::ToUncancelable() const
 }
 
 template <class T>
-TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
+TFuture<T> TFutureBase<T>::ToImmediatelyCancelable(bool propagateCancelation) const
 {
     if (!Impl_) {
         return TFuture<T>();
@@ -1185,8 +1185,10 @@ TFuture<T> TFutureBase<T>::ToImmediatelyCancelable() const
         promise.TrySet(value);
     }));
 
-    promise.OnCanceled(BIND_NO_PROPAGATE([=, cancelable = AsCancelable()] (const TError& error) {
-        cancelable.Cancel(error);
+    promise.OnCanceled(BIND_NO_PROPAGATE([=, cancelable = propagateCancelation ? AsCancelable() : TCancelable()] (const TError& error) {
+        if (propagateCancelation) {
+            cancelable.Cancel(error);
+        }
         promise.TrySet(NYT::NDetail::WrapIntoCancelationError(error));
     }));
 

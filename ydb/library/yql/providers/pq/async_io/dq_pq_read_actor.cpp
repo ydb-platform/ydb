@@ -582,8 +582,7 @@ private:
             const auto watermark = WatermarkTracker->HandleIdleness(now);
 
             if (watermark) {
-                const auto t = watermark;
-                SRC_LOG_T("SessionId: " << GetSessionId() << " Idleness watermark " << t << " was produced");
+                SRC_LOG_T("SessionId: " << GetSessionId() << " Idleness watermark " << *watermark << " was produced");
                 PushWatermarkToReady(*watermark);
                 recheckBatch = true;
             }

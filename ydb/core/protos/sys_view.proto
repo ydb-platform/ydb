@@ -188,6 +188,7 @@ message TPDiskInfo {
     optional string State = 19;
     optional uint32 SlotSizeInUnits = 20; // either inferred or user-defined
     optional uint64 InferPDiskSlotCountFromUnitSize = 21;
+    optional double Occupancy = 22;
     // metrics ?
     // physical location ?
     // config ?
@@ -235,6 +236,10 @@ message TVSlotInfo {
     optional string State = 17;
     optional bool IsThrottling = 18;
     optional uint32 ThrottlingRate = 19;
+    optional double QuotaUtilization = 20;
+    optional double NormalizedOccupancy = 21;
+    optional double FairOccupancy = 22;
+    optional string CapacityAlertLevel = 34;
 }
 
 message TVSlotEntry {
@@ -294,6 +299,12 @@ message TGroupInfo {
     optional uint64 BridgeSyncFirstErrorTimestamp = 27; // first error timestamp
     optional uint32 BridgeSyncErrorCount = 28; // number of errors reported during this stage
     optional bool BridgeSyncRunning = 29; // is the syncer running right now?
+
+    optional double MaxPDiskOccupancy = 30; // across PDisks hosting VDisks of this group
+    optional double MaxVDiskQuotaUtilization = 31; // across VDisks in this group
+    optional double MaxNormalizedOccupancy = 32; // across VDisks in this group and underlying PDisks
+    optional double MaxVDiskFairOccupancy = 33; // across VDisks in this group
+    optional string CapacityAlertLevel = 34; // the highest across VDisks in this group, represents MaxNormalizedOccupancy
 }
 
 message TGroupEntry {

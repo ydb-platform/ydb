@@ -1030,6 +1030,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             UNIT_ASSERT(pdiskInfo.HasTotalSize());
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetExpectedSlotCount(), expectedSlotCount);
             UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetSlotSizeInUnits(), expectedSlotSizeInUnits);
+            UNIT_ASSERT(pdiskInfo.HasOccupancy());
+            UNIT_ASSERT_VALUES_EQUAL(pdiskInfo.GetOccupancy(), 0.0);
             break;
         }
 

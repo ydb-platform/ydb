@@ -19,6 +19,14 @@ using TRNG = TSerializableMT19937;
 struct TPitmanYorConfig {
     double Alpha;
     double Theta;
+
+    void DumpParamsHeader(IOutputStream &OS) {
+        OS << "alpha,theta";
+    }
+
+    void DumpParams(IOutputStream &OS) {
+        OS << Alpha << "," << Theta;
+    }
 };
 
 
@@ -209,14 +217,17 @@ private:
     std::vector<TTableStats> Stats_;
 };
 
+
 void NormalizeProbabilities(std::vector<double>& probabilities);
 
-std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
-                               int numVertices, int minDegree);
+std::vector<int> SampleFromPMF(
+    const std::vector<double>& probabilities,
+    int numVertices, int minDegree);
 
-std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean = 1.0,
-                                          double logStdDev = 0.5, int minDegree = 1,
-                                          int maxDegree = -1);
+std::vector<int> GenerateLogNormalDegrees(
+    int numVertices, double logMean = 1.0, double logStdDev = 0.5,
+    int minDegree = 1, int maxDegree = -1
+);
 
 TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
 
@@ -224,12 +235,9 @@ std::vector<int> MakeGraphicConnected(std::vector<int> degrees);
 
 void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps);
 
-
-
-
-TRelationGraph GenerateLine(unsigned numNodes);
-TRelationGraph GenerateStar(unsigned numNodes);
-TRelationGraph GenerateFullyConnected(unsigned numNodes);
+TRelationGraph GenerateLine(TRNG &rng, unsigned numNodes);
+TRelationGraph GenerateStar(TRNG &rng, unsigned numNodes);
+TRelationGraph GenerateFullyConnected(TRNG &rng, unsigned numNodes);
 TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes);
 
 TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degrees);

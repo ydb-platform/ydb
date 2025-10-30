@@ -394,12 +394,12 @@ static std::string joinVector(const std::vector<TValue> &data) {
 
 
 void DumpBoxPlotCSVHeader(IOutputStream &OS) {
-    OS << "N,median,Q1,Q3,IQR,MAD,outliers\n";
+    OS << "median,Q1,Q3,IQR,MAD,min,max";
 }
 
 template <typename TValue>
-void DumpBoxPlotToCSV(IOutputStream &OS, ui32 i, TStatistics<TValue> stat) {
-    OS << i << "," << stat.Median << "," << stat.Q1  << "," << stat.Q3 << "," << stat.IQR << "," << stat.MAD << "," << joinVector(stat.Outliers) << "\n";
+void DumpBoxPlotToCSV(IOutputStream &OS, TStatistics<TValue> stat) {
+    OS << stat.Median << "," << stat.Q1  << "," << stat.Q3 << "," << stat.IQR << "," << stat.MAD << "," << stat.Min << "," << stat.Max;
 }
 
 

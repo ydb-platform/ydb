@@ -112,12 +112,24 @@ public:
     {
     }
 
-    template <typename TValue>
-    auto GetArg(std::string key) {
+    std::string GetString(std::string key) {
         if (!HasArg(key)) {
             throw std::out_of_range("arg not provided: '" + key + "'");
         }
-        return ParseRangedValue<TValue>(Values_[key]);
+        return Values_[key];
+    }
+
+    template <typename TValue>
+    auto GetArg(std::string key) {
+        return ParseRangedValue<TValue>(GetString(key));
+    }
+
+    template <typename TValue>
+    auto GetArgOrDefault(std::string key, std::string defaultSerialized) {
+        if (HasArg(key)) {
+            return GetArg<TValue>(key);
+        }
+        return ParseRangedValue<TValue>(defaultSerialized);
     }
 
     bool HasArg(std::string key) {

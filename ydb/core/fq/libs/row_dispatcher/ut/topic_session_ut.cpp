@@ -48,12 +48,14 @@ public:
         RowDispatcherActorId = Runtime.AllocateEdgeActor();
     }
 
-    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max()) {
+    void Init(const TString& topicPath, ui64 maxSessionUsedMemory = std::numeric_limits<ui64>::max(), bool skipErrors = false) {
         TopicPath = topicPath;
         Config.SetTimeoutBeforeStartSessionSec(TimeoutBeforeStartSessionSec);
         Config.SetMaxSessionUsedMemory(maxSessionUsedMemory);
         Config.SetSendStatusPeriodSec(2);
         Config.SetWithoutConsumer(false);
+        Config.MutableJsonParser()->SetSkipErrors(skipErrors);
+        Config.MutableJsonParser()->SetBatchCreationTimeoutMs(100);
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
@@ -144,7 +146,7 @@ public:
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event.release()));
     }
 
-    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected) {
+    void ExpectMessageBatch(NActors::TActorId readActorId, const TBatch& expected, const std::vector<ui64>& expectedLastOffset = {}) {
         Runtime.Send(new IEventHandle(TopicSession, readActorId, new TEvRowDispatcher::TEvGetNextBatch()));
 
         auto eventHolder = Runtime.GrabEdgeEvent<TEvRowDispatcher::TEvMessageBatch>(RowDispatcherActorId, TDuration::Seconds(GrabTimeoutSec));
@@ -154,6 +156,12 @@ public:
 
         NFq::NRowDispatcherProto::TEvMessage message = eventHolder->Get()->Record.GetMessages(0);
         UNIT_ASSERT_VALUES_EQUAL(message.OffsetsSize(), expected.Rows.size());
+        if (!expectedLastOffset.empty()) {
+            UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset.size(), message.OffsetsSize());
+            for (size_t i =0; i < expectedLastOffset.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(expectedLastOffset[i], message.GetOffsets().Get(i));
+            }
+        }
         CheckMessageBatch(eventHolder->Get()->GetPayload(message.GetPayloadId()), expected);
     }
 
@@ -634,6 +642,58 @@ Y_UNIT_TEST_SUITE(TopicSessionTests) {
         ExpectNewDataArrived({ReadActorId1});
         ExpectMessageBatch(ReadActorId1, { JsonMessage(4) });
 
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WrongJson, TRealTopicFixture) {
+        const TString topicName = "wrong_json";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+        
+        auto writeRead = [&](const std::vector<TString>& input, const TBatch& output) {
+            PQWrite(input);
+            if (output.Rows.empty()) {
+                return;
+            }
+            ExpectNewDataArrived({ReadActorId1});
+            ExpectMessageBatch(ReadActorId1, output);
+        };
+        
+        auto test = [&](const TString& wrongJson) {
+            writeRead({ wrongJson }, { });
+            Sleep(TDuration::MilliSeconds(100));
+            writeRead({ Json1, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
+            writeRead({ wrongJson, Json2, Json3 }, { JsonMessage(2), JsonMessage(3) });
+            writeRead({ Json1, Json2 , wrongJson }, { JsonMessage(1), JsonMessage(2) });
+            writeRead({ Json1, wrongJson, wrongJson, Json3 }, { JsonMessage(1), JsonMessage(3) });
+        };
+
+        test("wrong");                      // not json
+        test("{\"dt\":100,\"value\"}");     // empty value
+        test("{\"dt\":100}");               // no field
+        test("{\"dt\":400,\"value\":777}"); // wrong value type
+        test("{}\x80");
+        test("}");
+        test("{");
+        writeRead({ "{\"dt\":100}", "{}\x80", Json3 }, { JsonMessage(3) });
+        writeRead({Json1 + Json1, Json3 }, { JsonMessage(1), JsonMessage(1) });  // not checked 
+        writeRead({Json1.substr(0, 3), Json1.substr(3), Json2, Json3 }, { JsonMessage(1), JsonMessage(2), JsonMessage(3) });
+        PassAway();
+    }
+
+    Y_UNIT_TEST_F(WrongJsonOffset, TRealTopicFixture) {
+        const TString topicName = "wrong_json_offset";
+        PQCreateStream(topicName);
+        Init(topicName, std::numeric_limits<ui64>::max(), true);
+        auto source = BuildSource();
+        StartSession(ReadActorId1, source);
+
+        TString wrongJson{"wrong"};
+        PQWrite({ Json1, wrongJson, wrongJson, Json3 });
+        ExpectNewDataArrived({ReadActorId1});
+        ExpectMessageBatch(ReadActorId1, { JsonMessage(1), JsonMessage(3) }, {0, 3});
         PassAway();
     }
 }

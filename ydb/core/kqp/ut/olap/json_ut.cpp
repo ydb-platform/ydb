@@ -1140,7 +1140,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
             TString result = FormatResultSetYson(status.GetResultSet(0));
 
-            CompareYson(result, R"([[1u;["{\"\":\"NULL\"}"]]])");
+            CompareYson(result, R"([[1u;["{\"\":null}"]]])");
 
         }
     }

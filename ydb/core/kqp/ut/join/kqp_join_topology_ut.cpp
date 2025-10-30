@@ -242,12 +242,13 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         OS << "}\n";
     }
 
-    template <auto Lambda>
-        void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config,
-                                                     TArgs::TRangedValue<double> thetaRanged,
-                                                     TArgs::TRangedValue<double> alphaRanged,
-                                                     TArgs::TRangedValue<ui64> numTablesRanged,
-                                                     uint64_t state = 0) {
+    template <typename Lambda>
+    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config,
+                                                 TArgs::TRangedValue<double> thetaRanged,
+                                                 TArgs::TRangedValue<double> alphaRanged,
+                                                 TArgs::TRangedValue<ui64> numTablesRanged,
+                                                 uint64_t state,
+                                                 Lambda &&lambda) {
 
         TRNG mt = TRNG::Deserialize(state);
 
@@ -269,8 +270,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 for (ui64 numTables : numTablesRanged) {
                     Cout << "\n\n";
                     Cout << "================================ REPRODUCE -------------------------------\n";
-                    Cout << "KQP_TOPOLOGY='N=" << numTables << "; theta=" << theta << "; alpha=" << alpha << "; seed=" << mt.Serialize() << "'\n";
-                    TRelationGraph graph = Lambda(mt, numTables);
+                    Cout << "TOPOLOGY='N=" << numTables << "; theta=" << theta << "; alpha=" << alpha << "; seed=" << mt.Serialize() << "'\n";
+
+                    TRelationGraph graph = lambda(mt, numTables);
                     graph.SetupKeysPitmanYor(mt, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
                     auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
@@ -283,6 +285,50 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             }
         }
     stop:;
+    }
+
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
+
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
+
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
+    // }
+
+    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
+    //     BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
+    // }
+
+
+
+    Y_UNIT_TEST(Benchmark) {
+        TArgs args{GetTestParam("TOPOLOGY")};
+
+        auto config = GetBenchmarkConfig(args);
+        DumpBenchmarkConfig(Cout, config);
+
+        uint64_t state = 0;
+        if (args.HasArg("seed")) {
+            state = args.GetArg<uint64_t>("seed").GetValue();
+        }
+
+
+        auto GenerateTopology = [](TRNG &mt, uint64_t n) {
+            return GenerateRandomChungLuGraph(mt, GenerateLogNormalDegrees(n));
+        };
+
+        BenchmarkShuffleEliminationOnTopologies(
+            config,
+            /*theta=*/args.GetArg<double>("theta"),
+            /*alpha=*/args.GetArg<double>("alpha"),
+            /*maxNumTables=*/args.GetArg<uint64_t>("N"),
+            state,
+            GenerateTopology
+        );
     }
 
 
@@ -338,42 +384,6 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         UNIT_ASSERT_EQUAL(stats.GetMedian(), (3 + 5) / 2.0);
         UNIT_ASSERT_EQUAL(stats.GetMean(), 134 / 10.0);
         UNIT_ASSERT_EQUAL(stats.GetN(), 10);
-    }
-
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
-
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
-
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
-
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
-    // }
-
-    Y_UNIT_TEST(Benchmark) {
-        TArgs args{GetTestParam("TOPOLOGY")};
-
-        auto config = GetBenchmarkConfig(args);
-        DumpBenchmarkConfig(Cout, config);
-
-        uint64_t state = 0;
-        if (args.HasArg("seed")) {
-            state = args.GetArg<uint64_t>("seed").GetValue();
-        }
-
-        BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(
-            config,
-            /*theta=*/args.GetArg<double>("theta"),
-            /*alpha=*/args.GetArg<double>("alpha"),
-            /*maxNumTables=*/args.GetArg<uint64_t>("N"),
-            state
-        );
     }
 
 }

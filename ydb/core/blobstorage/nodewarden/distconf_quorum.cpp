@@ -187,7 +187,7 @@ namespace NKikimr::NStorage {
         return true;
     }
 
-    bool HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
+    std::optional<bool> HasStorageQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             const THashMap<TString, TBridgePileId>& /*bridgePileNameMap*/, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool allowUnformatted, IOutputStream *out, const char *name) {
         auto makeError = [&](TString error) -> bool {
@@ -323,17 +323,23 @@ namespace NKikimr::NStorage {
             }
         }
 
-        return true; // all group meet their quorums
+        return groups.empty()
+            ? std::nullopt // we don't know about quorum -- no static groups defined
+            : std::make_optional(true); // all groups meet their quorums
     }
 
     bool HasConfigQuorum(const NKikimrBlobStorage::TStorageConfig& config, std::span<TSuccessfulDisk> successful,
             const THashMap<TString, TBridgePileId>& bridgePileNameMap, TBridgePileId singleBridgePileId,
             const TNodeWardenConfig& nwConfig, bool mindPrev, TStringStream *out) {
-        return HasDiskQuorum(config, successful, bridgePileNameMap, singleBridgePileId, out, "new") &&
-            HasStorageQuorum(config, successful, bridgePileNameMap, singleBridgePileId, nwConfig, true, out, "new") &&
-            (!mindPrev || !config.HasPrevConfig() ||
-                HasDiskQuorum(config.GetPrevConfig(), successful, bridgePileNameMap, singleBridgePileId, out, "prev") &&
-                HasStorageQuorum(config.GetPrevConfig(), successful, bridgePileNameMap, singleBridgePileId, nwConfig, false, out, "prev"));
+        auto getQuorum = [&](auto& config, const char *name, bool allowUnformatted) {
+            // config quorum goes first -- if we have (or don't have one) -- we return it; if we don't know (because
+            // we have no static groups) -- then we use disk-wise quorum (more than 1/2 nodes with more than 1/2 disks)
+            auto q = HasStorageQuorum(config, successful, bridgePileNameMap, singleBridgePileId, nwConfig,
+                allowUnformatted, out, name);
+            return q ? *q : HasDiskQuorum(config, successful, bridgePileNameMap, singleBridgePileId, out, name);
+        };
+        return getQuorum(config, "new", true) && (!mindPrev || !config.HasPrevConfig() ||
+            getQuorum(config.GetPrevConfig(), "prev", false));
     }
 
 } // NKikimr::NStorage

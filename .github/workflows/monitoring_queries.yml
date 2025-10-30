@@ -28,6 +28,5 @@ jobs:
       run: |
         python3 -m pip install ydb ydb[yc]
     - name: Execute monitoring queries
-      continue-on-error: true
       run: python3 .github/scripts/analytics/monitoring_queries_executor.py
 

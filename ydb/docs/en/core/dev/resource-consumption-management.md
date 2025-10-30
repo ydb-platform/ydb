@@ -1,6 +1,6 @@
-# Workload Manager — recource consumption management
+# Workload Manager — resource consumption management
 
-[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (querying more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
+[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (allocating more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
 
 For example, one typical resource isolation scenario is to separate two classes of consumers (customer/client/user):
 
@@ -45,9 +45,9 @@ For one query in this resource pool the following will be allocated:
 
 $\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} \cdot \frac{QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 \cdot 0.5 = 3.5 vCPU$
 
-### How works CONCURRENT_QUERY_LIMIT и QUEUE_SIZE {#concurrent_query_limit}
+### How CONCURRENT_QUERY_LIMIT и QUEUE_SIZE {#concurrent_query_limit} works
 
-Let's say there are already 9 querys running in the `olap` resource pool . When a new query arrives, it will immediately begin to be executed in parallel with the other 9 querys. Now there will be 10 querys running in the pool. If the 11th query arrives in the pool, it will not start executing, but will be placed in a waiting queue. When at least one of the 10 running querys completes, the 11th query will be removed from the queue and begin executing.
+Let's say there are already 9 querys running in the `olap` resource pool . When a new query arrives, its execution will immediately start in parallel with the other 9 queries. Now there will be 10 querys running in the pool. If the 11th query arrives in the pool, it will not start executing, but will be placed in a waiting queue. When at least one of the 10 running querys completes, the 11th query will be removed from the queue and begin executing.
 
 If there are already $QUEUE\_SIZE = 1000$ querys in the queue , then when sending the 1001st query, the client will immediately receive an error in response, and this query will not be executed. Error example:
 
@@ -61,7 +61,7 @@ The number of concurrently executed queries is affected not only by `CONCURRENT_
 
 ### How works DATABASE_LOAD_CPU_THRESHOLD {#database_load_cpu_threshold}
 
-When a query enters a resource pool that has `DATABASE_LOAD_CPU_THRESHOLD` set , 10% of the available CPU on the node is immediately reserved, based on the assumption that the query will at least require that amount of resources. Then, every 10 seconds, resource consumption across the entire database is recalculated, allowing the initial 10% estimate to be refined. This means that if more than 10 querys simultaneously arrive at a cluster node, then no more than 10 querys will be launched for execution, and the rest will wait for clarification of the actual CPU consumption.
+When a query enters a resource pool that has `DATABASE_LOAD_CPU_THRESHOLD` set, 10% of the available CPU on the node is immediately reserved, based on the assumption that the query will at least require that amount of resources. Then, every 10 seconds, resource consumption across the entire database is recalculated, allowing the initial 10% estimate to be refined. This means that if more than 10 querys simultaneously arrive at a cluster node, then no more than 10 querys will be launched for execution, and the rest will wait for clarification of the actual CPU consumption.
 
 As with `CONCURRENT_QUERY_LIMIT` , when the specified load threshold is exceeded, querys are sent to a waiting queue.
 
@@ -69,9 +69,9 @@ As with `CONCURRENT_QUERY_LIMIT` , when the specified load threshold is exceeded
 
 ![resource_pools](../_assets/resources_weight.png)
 
-The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and if there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources . When querys appear in the resource pool, it begins to participate in resource allocation. To do this, the limits in the pools are recalculated according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed on each computing node individually, as shown in the figure above.
+The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and if there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources. When querys appear in the resource pool, it begins to participate in resource allocation. To do this, the limits in the pools are recalculated according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed on each computing node individually, as shown in the figure above.
 
-Let's say we have a node on the system with $10 vCPU$ available. Limitations set:
+Let's say we have a node on the system with $10 vCPU$ available. Limitations are set to:
 
 - $TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 30$,
 - $QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 50$.
@@ -106,7 +106,7 @@ This means that the `default` resource pool does not have any restrictions appli
 
 ## Resource pool ACL management
 
-To create, modify, or delete a resource pool, you must grant access rights in accordance with the permissions described in the reference for (link). For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a query like this:
+Access rights must be granted according to the permissions described in the reference for (link) to create, modify, or delete a resource pool. For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a query like this:
 
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
@@ -114,7 +114,7 @@ GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
 
 ## Creating a resource pool classifier
 
-[Resorce pool classifier](../concepts/glossary.md#resource-pool-classifier) allow you to set rules by which querys will be distributed between resource pools. The example below is a resource pool qualifier that sends querys from all users to a resource pool named `olap`:
+[Resorce pool classifier](../concepts/glossary.md#resource-pool-classifier) allows you to set rules by which querys will be distributed between resource pools. The example below is a resource pool qualifier that sends querys from all users to a resource pool named `olap`:
 
 ```yql
 CREATE RESOURCE POOL CLASSIFIER olap_classifier
@@ -124,7 +124,7 @@ WITH (
 );
 ```
 
-- `RESOURCE_POOL` - the name of the resource pool to which a query that satisfies the requirements specified in the resource pool qualifier will be sent.
+- `RESOURCE_POOL` - the name of the resource pool to which a query that satisfies the requirements specified in the resource pool classifier will be sent.
 - `MEMBER_NAME` — a group of users or user whose querys will be sent to the specified resource pool.
 
 ## Resource pool classifier ACL management
@@ -198,7 +198,7 @@ In the example above, two resource pools are created: `olap` for the analyst tea
 
 ### Query plan
 
-Detailed information about query plans can be found on the page [ structure of query plans ]( ../yql/query_plans.md ). To obtain information about the resource pool used, you need to run a command to obtain statistics in the `json-unicode` format . Example command:
+Detailed information about query plans can be found on the page [ structure of query plans ]( ../yql/query_plans.md ). To get information about the resource pool used, you need to run a command to obtain statistics in the `json-unicode` format . Example command:
 
 ```bash
 ydb -p <profile_name> sql -s 'select 1' --stats full --format json-unicode

@@ -83,3 +83,90 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TKMeansTreeSettings, stream, value) {
         ", levels: " << value.Levels << 
         " }";
 }
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ELayout, stream, value) {
+    switch (value) {
+        case NYdb::NTable::TFulltextIndexSettings::ELayout::Flat:
+            stream << "flat";
+            break;
+        case NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified:
+            stream << "unspecified";
+            break;
+    }
+}
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, value) {
+    switch (value) {
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Whitespace:
+            stream << "whitespace";
+            break;
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Standard:
+            stream << "standard";
+            break;
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Keyword:
+            stream << "keyword";
+            break;
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified:
+            stream << "unspecified";
+            break;
+    }
+}
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TAnalyzers, stream, value) {
+    stream << "{ tokenizer: " << value.Tokenizer.value_or(NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified);
+    if (value.Language.has_value()) {
+        stream << ", language: " << *value.Language;
+    }
+    if (value.UseFilterLowercase.has_value()) {
+        stream << ", use_filter_lowercase: " << (*value.UseFilterLowercase ? "true" : "false");
+    }
+    if (value.UseFilterStopwords.has_value()) {
+        stream << ", use_filter_stopwords: " << (*value.UseFilterStopwords ? "true" : "false");
+    }
+    if (value.UseFilterNgram.has_value()) {
+        stream << ", use_filter_ngram: " << (*value.UseFilterNgram ? "true" : "false");
+    }
+    if (value.UseFilterEdgeNgram.has_value()) {
+        stream << ", use_filter_edge_ngram: " << (*value.UseFilterEdgeNgram ? "true" : "false");
+    }
+    if (value.FilterNgramMinLength.has_value()) {
+        stream << ", filter_ngram_min_length: " << *value.FilterNgramMinLength;
+    }
+    if (value.FilterNgramMaxLength.has_value()) {
+        stream << ", filter_ngram_max_length: " << *value.FilterNgramMaxLength;
+    }
+    if (value.UseFilterLength.has_value()) {
+        stream << ", use_filter_length: " << (*value.UseFilterLength ? "true" : "false");
+    }
+    if (value.FilterLengthMin.has_value()) {
+        stream << ", filter_length_min: " << *value.FilterLengthMin;
+    }
+    if (value.FilterLengthMax.has_value()) {
+        stream << ", filter_length_max: " << *value.FilterLengthMax;
+    }
+    stream << " }";
+}
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::TColumnAnalyzers, stream, value) {
+    stream << "{ ";
+    if (value.Column.has_value()) {
+        stream << "column: " << *value.Column << ", ";
+    }
+    if (value.Analyzers.has_value()) {
+        stream << "analyzers: " << *value.Analyzers;
+    }
+    stream << " }";
+}
+
+Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings, stream, value) {
+    stream << "{ layout: " << value.Layout.value_or(NYdb::NTable::TFulltextIndexSettings::ELayout::Unspecified);
+    if (!value.Columns.empty()) {
+        stream << ", columns: [";
+        for (size_t i = 0; i < value.Columns.size(); ++i) {
+            if (i > 0) stream << ", ";
+            stream << value.Columns[i];
+        }
+        stream << "]";
+    }
+    stream << " }";
+}

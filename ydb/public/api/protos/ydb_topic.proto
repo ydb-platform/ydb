@@ -35,6 +35,12 @@ message SupportedCodecs {
     repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
 }
 
+enum ConsumerType {
+    CONSUMER_TYPE_UNSPECIFIED = 0;
+    CONSUMER_TYPE_STREAMING = 1;
+    CONSUMER_TYPE_SHARED = 2;
+}
+
 // Represents range [start, end).
 // I.e. (end - 1) is the greatest of offsets, included in non-empty range.
 message OffsetsRange {
@@ -786,30 +792,30 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
-message ProcessingAttemptsDeadLetterPolicyCondition {
+
+message DeadLetterPolicyCondition {
     uint32 max_processing_attempts = 1;
 }
 
-message AlterProcessingAttemptsDeadLetterPolicyCondition {
-    uint32 set_max_processing_attempts = 1;
+message AlterDeadLetterPolicyCondition {
+    optional uint32 set_max_processing_attempts = 1;
 }
 
 message DeleteDeadLetterPolicyAction {
 }
 
-message AlterDeadLetterPolicyAction {
+message MoveDeadLetterPolicyAction {
+    string dead_letter_queue = 1;
 }
 
 message AlterMoveDeadLetterPolicyAction {
-    string set_dead_letter_queue = 1;
+    optional string set_dead_letter_queue = 1;
 }
 
 message DeadLetterPolicy {
     bool enabled = 1;
 
-    oneof condition {
-        ProcessingAttemptsDeadLetterPolicyCondition processing_attempts_condition = 2;
-    }
+    DeadLetterPolicyCondition condition = 2;
 
     oneof action {
         DeleteDeadLetterPolicyAction delete_action = 3;
@@ -818,44 +824,15 @@ message DeadLetterPolicy {
 }
 
 message AlterDeadLetterPolicy {
-    bool set_enabled = 1;
+    optional bool set_enabled = 1;
 
-    oneof condition {
-        AlterProcessingAttemptsDeadLetterPolicyCondition alter_processing_attempts_condition = 2;
-    }
+    optional AlterDeadLetterPolicyCondition alter_condition = 2;
 
     oneof action {
-        AlterDeleteDeadLetterPolicyAction alter_delete_action = 3;
-        AlterMoveDeadLetterPolicyAction alter_move_action = 4;
-        DeleteDeadLetterPolicyAction set_delete_action = 5;
-        MoveDeadLetterPolicyAction set_move_action = 6;
+        AlterMoveDeadLetterPolicyAction alter_move_action = 3;
+        DeleteDeadLetterPolicyAction set_delete_action = 4;
+        MoveDeadLetterPolicyAction set_move_action = 5;
     }
-}
-
-message StreamingConsumerType {
-}
-
-message SharedConsumerType {
-    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
-    // For streaming consumers, the order of messages is always preserved.
-    bool keep_messages_order = 1;
-    // The duration of blocking messages for its processing. If the message is not committed during this time,
-    // it will be returned to the queue and sent for re-processing.
-    google.protobuf.Duration default_processing_timeout = 2;
-
-    DeadLetterPolicy dead_letter_policy = 3;
-}
-
-message AlterStreamingConsumerType {
-
-}
-
-message AlterSharedConsumerType {
-    // The duration of blocking messages for its processing. If the message is not committed during this time,
-    // it will be returned to the queue and sent for re-processing.
-    google.protobuf.Duration set_default_processing_timeout = 1;
-
-    AlterDeadLetterPolicy alter_dead_letter_policy = 2;
 }
 
 // Consumer description.
@@ -897,10 +874,16 @@ message Consumer {
     // Message for this consumer will not expire due to retention for at least `availability_period` if they aren't commited.
     optional google.protobuf.Duration availability_period = 8;
 
-    oneof consumer_type {
-        StreamingConsumerType streaming_consumer_type = 9;
-        SharedConsumerType shared_consumer_type = 10;
-    }
+    optional ConsumerType consumer_type = 9;
+
+    // If this is a shared consumer, then the value true means that the order of messages within the same message group will be preserved.
+    // For streaming consumers, the order of messages is always preserved.
+    optional bool keep_messages_order = 10;
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    optional google.protobuf.Duration default_processing_timeout = 11;
+
+    optional DeadLetterPolicy dead_letter_policy = 12;
 }
 
 // Consumer alter description.
@@ -930,10 +913,13 @@ message AlterConsumer {
         google.protobuf.Empty reset_availability_period = 8;
     }
 
-    oneof consumer_type {
-        AlterStreamingConsumerType set_streaming_consumer_type = 9;
-        AlterSharedConsumerType set_shared_consumer_type = 10;
-    }
+    optional ConsumerType set_consumer_type = 9;
+
+    // The duration of blocking messages for its processing. If the message is not committed during this time,
+    // it will be returned to the queue and sent for re-processing.
+    google.protobuf.Duration set_default_processing_timeout = 10;
+
+    AlterDeadLetterPolicy alter_dead_letter_policy = 11;
 }
 
 enum AutoPartitioningStrategy {

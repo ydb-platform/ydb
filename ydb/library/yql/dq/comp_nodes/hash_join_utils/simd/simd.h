@@ -6,6 +6,10 @@
 #include <stdlib.h>
 
 #if defined(__x86_64__)
+    #define USE_X86_SIMD 1
+#endif
+
+#ifdef USE_X86_SIMD
 #include "simd_avx2.h"
 #include "simd_sse42.h"
 #endif
@@ -22,7 +26,7 @@ struct TSimdTraits {
     static constexpr int Size = RegisterSize;
 };
 
-#if defined(__x86_64__)
+#ifdef USE_X86_SIMD
 using TSimdAVX2Traits = TSimdTraits<32, __m256i, NSimd::NAVX2::TSimd8>;
 using TSimdSSE42Traits = TSimdTraits<16, __m128i, NSimd::NSSE42::TSimd8>;
 #endif
@@ -31,7 +35,7 @@ using TSimdFallbackTraits = TSimdTraits<8, ui64, NSimd::NFallback::TSimd8>;
 
 template<typename TFactory>
 auto SelectSimdTraits(const TFactory& factory) {
-#if defined(__x86_64__)
+#ifdef USE_X86_SIMD
     if (NX86::HaveAVX2()) {
         return factory.template Create<TSimdAVX2Traits>();
     } else {
@@ -80,7 +84,7 @@ auto CreateUnpackMask(ui32 dataSize, ui32 stripeSize, bool needOffset) {
     return TSimdI8(indexes);
 }
 
-#if defined(__x86_64__)
+#ifdef USE_X86_SIMD
 template
 __attribute__((target("avx2")))
 auto CreateUnpackMask<NSimd::TSimdAVX2Traits>(ui32, ui32, bool);
@@ -106,7 +110,7 @@ template<typename TTraits> auto AdvanceBytesMask(const int N) {
     return typename TTraits::TSimdI8(positions);
 }
 
-#if defined(__x86_64__)
+#ifdef USE_X86_SIMD
 template
 __attribute__((target("avx2")))
 auto AdvanceBytesMask<NSimd::TSimdAVX2Traits>(const int);
@@ -124,7 +128,7 @@ void PrepareMergeMasks( ui32 col1Bytes, ui32 col2Bytes, typename TTraits::TSimdI
     unpackMask2 = CreateUnpackMask<TTraits>(col2Bytes, col1Bytes, true);
 }
 
-#if defined(__x86_64__)
+#ifdef USE_X86_SIMD
 template
 __attribute__((target("avx2")))
 void PrepareMergeMasks<NSimd::TSimdAVX2Traits>(ui32, ui32, NSimd::TSimdAVX2Traits::TSimdI8 &, NSimd::TSimdAVX2Traits::TSimdI8 &);

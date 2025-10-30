@@ -11,6 +11,7 @@ ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
+IF (ARCH_X86_64 AND OS_LINUX)
 
 SRCS(
     accumulator_ut.cpp
@@ -41,6 +42,8 @@ IF (MKQL_RUNTIME_VERSION)
     CFLAGS(
         -DMKQL_RUNTIME_VERSION=$MKQL_RUNTIME_VERSION
     )
+ENDIF()
+
 ENDIF()
 
 END()

@@ -745,7 +745,7 @@ TJsonParserConfig CreateJsonParserConfig(const NConfig::TJsonParserConfig& parse
         result.BufferCellCount = bufferCellCount;
     }
     result.LatencyLimit = TDuration::MilliSeconds(parserConfig.GetBatchCreationTimeoutMs());
-    resutl.SkipErrors = parserConfig.GetSkipErrors();
+    result.SkipErrors = parserConfig.GetSkipErrors();
     return result;
 }
 

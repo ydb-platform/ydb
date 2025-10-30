@@ -166,7 +166,7 @@ struct TTestCtx : public TTestCtxBase {
         
         {
             TAppData* appData = Env->Runtime->GetNode(Env->Settings.ControllerNodeId)->AppData.get();
-            ui64 groupsCheceked = GetServiceCounters(appData->Counters, "storage_pool_stat")
+            ui64 groupsChecked = GetServiceCounters(appData->Counters, "storage_pool_stat")
                     ->GetSubgroup("subsystem", "blob_checker")
                     ->GetCounter("ChecksCompleted", false)->Val();
 
@@ -174,7 +174,7 @@ struct TTestCtx : public TTestCtxBase {
                     ->GetSubgroup("subsystem", "blob_checker")
                     ->GetCounter("DataIssues", false)->Val();
 
-            UNIT_ASSERT_VALUES_UNEQUAL_C(groupsCheceked, 0, MakePrefix());
+            UNIT_ASSERT_VALUES_UNEQUAL_C(groupsChecked, 0, MakePrefix());
             UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, MakePrefix());
         }
     }

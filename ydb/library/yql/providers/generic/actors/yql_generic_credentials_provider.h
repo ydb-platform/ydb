@@ -25,8 +25,6 @@ namespace NYql::NDq {
         TString FillCredentials(NYql::TGenericDataSourceInstance& dsi) const;
 
     private:
-        std::optional<TString> StaticIAMToken_;
-
         struct BasicAuthCredentials {
             TString Username;
             TString Password;

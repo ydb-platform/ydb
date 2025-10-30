@@ -40,12 +40,6 @@ namespace NYql::NDq {
 
         *dsi.mutable_credentials()->mutable_token()->mutable_type() = "IAM";
 
-        // 2. If static IAM-token has been provided, use it
-        if (StaticIAMToken_) {
-            *dsi.mutable_credentials()->mutable_token()->mutable_value() = *StaticIAMToken_;
-            return {};
-        }
-
         // 3. Otherwise use credentials provider to get token from Token Accessor
         Y_ENSURE(CredentialsProvider_, "CredentialsProvider is not initialized");
 

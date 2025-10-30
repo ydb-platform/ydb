@@ -60,6 +60,11 @@ struct TTestCtx : public TTestCtxBase {
         AllocateEdgeActor(true);
         GetGroupStatus(GroupId);
 
+        SetScrubbingPeriodicity(0);
+        Env->UpdateSettings({
+            .BlobCheckerPeriodicity = TDuration::Seconds(0),
+        });
+
         ui64 tabletId = 5000;
         ui32 channel = 1;
         ui32 generation = 1;
@@ -108,15 +113,16 @@ struct TTestCtx : public TTestCtxBase {
         Env->Runtime->FilterFunction = {};
     }
 
+    void SetScrubbingPeriodicity(ui32 seconds) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto* setPeriod = request.AddCommand()->MutableSetScrubPeriodicity();
+        setPeriod->SetScrubPeriodicity(seconds);
+        auto response = Env->Invoke(request);
+        UNIT_ASSERT(response.GetSuccess());
+    }
+
     void TestDeepScrubbing() {
-        Initialize();
-        {
-            NKikimrBlobStorage::TConfigRequest request;
-            auto* setPeriod = request.AddCommand()->MutableSetScrubPeriodicity();
-            setPeriod->SetScrubPeriodicity(1);
-            auto response = Env->Invoke(request);
-            UNIT_ASSERT(response.GetSuccess());
-        };
+        SetScrubbingPeriodicity(1);
 
         // wait for full scrub cycle to finish
         for (ui32 orderNumber = 0; orderNumber < Erasure.BlobSubgroupSize(); ++orderNumber) {
@@ -157,7 +163,6 @@ struct TTestCtx : public TTestCtxBase {
     }
 
     void TestBlobChecker() {
-        Initialize();
         Env->UpdateSettings({
             .BlobCheckerPeriodicity = TDuration::Seconds(10),
         });
@@ -177,6 +182,9 @@ struct TTestCtx : public TTestCtxBase {
             UNIT_ASSERT_VALUES_UNEQUAL_C(groupsChecked, 0, MakePrefix());
             UNIT_ASSERT_VALUES_UNEQUAL_C(dataIssues, 0, MakePrefix());
         }
+
+        // check that blob checker doesn't break scrubbing
+        TestDeepScrubbing();
     }
 
 private:
@@ -191,6 +199,7 @@ private:
 Y_UNIT_TEST(Test##detector##erasure##blobSize##corruptionMask) {                \
     TTestCtx ctx(TBlobStorageGroupType::Erasure##erasure,                       \
             EBlobSize::Val_##blobSize, ECorruptionMask::Val_##corruptionMask);  \
+    ctx.Initialize();                                                           \
     ctx.Test##detector();                                                       \
 }
 

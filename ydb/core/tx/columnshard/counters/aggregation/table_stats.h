@@ -19,7 +19,7 @@ private:
     }
 
 public:
-    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor)
+    TTableStatsBuilder(TCountersManager& counters, const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* executor = nullptr)
         : Counters(counters)
         , Executor(executor) {
     }

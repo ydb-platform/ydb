@@ -189,9 +189,6 @@ namespace NKikimr::NGRpcProxy::V1 {
     }
 
     TString ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
-
-        Cerr << (TStringBuilder() << ">>>>> " << alter.ShortDebugString() << Endl);
-
         if (alter.has_set_important()) {
             consumer.set_important(alter.set_important());
         }
@@ -211,55 +208,38 @@ namespace NKikimr::NGRpcProxy::V1 {
             consumer.clear_availability_period();
         }
 
-        if (alter.has_set_shared_consumer_type()) {
-            if (!consumer.has_shared_consumer_type()) {
-                return "Cannot alter consumer type";
+        if (consumer.consumer_type() == Ydb::Topic::CONSUMER_TYPE_SHARED) {
+            if (alter.has_set_default_processing_timeout()) {
+                consumer.mutable_default_processing_timeout()->CopyFrom(alter.set_default_processing_timeout());
             }
 
-            auto* oldType = consumer.mutable_shared_consumer_type();
-            auto& newType = alter.set_shared_consumer_type();
-
-            if (newType.has_set_default_processing_timeout()) {
-                oldType->mutable_default_processing_timeout()->set_seconds(newType.set_default_processing_timeout().seconds());
-            }
-            if (newType.has_set_disabled_dead_letter_policy()) {
-                if (!oldType->has_disabled_dead_letter_policy()) {
-                    oldType->mutable_delete_dead_letter_policy()->Clear();
-                    oldType->mutable_move_dead_letter_policy()->Clear();
-                }
-                oldType->mutable_disabled_dead_letter_policy();
-            } else if (newType.has_set_delete_dead_letter_policy()) {
-                if (!oldType->has_delete_dead_letter_policy()) {
-                    oldType->mutable_disabled_dead_letter_policy()->Clear();
-                    oldType->mutable_move_dead_letter_policy()->Clear();
+            if (alter.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alter.alter_dead_letter_policy();
+                auto* policy = consumer.mutable_dead_letter_policy();
+                if (alterPolicy.has_set_enabled()) {
+                    policy->set_enabled(alterPolicy.set_enabled());
                 }
 
-                auto* oldPolicy = oldType->mutable_delete_dead_letter_policy();
-                auto& newPolicy = newType.set_delete_dead_letter_policy();
-
-                if (newType.set_delete_dead_letter_policy().has_set_max_processing_attempts()) {
-                    oldPolicy->set_max_processing_attempts(newPolicy.set_max_processing_attempts());
-                }
-            } else if (newType.has_set_move_dead_letter_policy()) {
-                if (!oldType->has_move_dead_letter_policy()) {
-                    oldType->mutable_disabled_dead_letter_policy()->Clear();
-                    oldType->mutable_delete_dead_letter_policy()->Clear();
+                if (alterPolicy.has_alter_condition()) {
+                    policy->mutable_condition()->set_max_processing_attempts(alterPolicy.alter_condition().set_max_processing_attempts());
                 }
 
-                auto* oldPolicy = oldType->mutable_move_dead_letter_policy();
-                auto& newPolicy = newType.set_move_dead_letter_policy();
- 
-                if (newPolicy.has_set_max_processing_attempts()) {
-                    oldPolicy->set_max_processing_attempts(newPolicy.set_max_processing_attempts());
+                if (alterPolicy.has_alter_move_action()) {
+                    if (!policy->has_move_action()) {
+                        return "Cannot alter move action";
+                    }
+                    if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
+                        // TODO check dlq not empty
+                        policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                    }
+                } else if (alterPolicy.has_set_move_action()) {
+                    policy->clear_action();
+                    // TODO check dlq not empty
+                    policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
+                } else if (alterPolicy.has_set_delete_action()) {
+                    policy->clear_action();
+                    policy->mutable_delete_action();
                 }
-                if (newPolicy.has_set_dead_letter_queue()) {
-                    oldPolicy->set_dead_letter_queue(newPolicy.set_dead_letter_queue());
-                }
-            }
-        }
-        if (alter.has_set_streaming_consumer_type()) {
-            if (!consumer.has_streaming_consumer_type()) {
-                return "Cannot alter consumer type";
             }
         }
 
@@ -286,25 +266,32 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         consumer->SetName(consumerName);
 
-        if (rr.has_shared_consumer_type()) {
-            consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
-            consumer->SetDefaultProcessingTimeoutSeconds(rr.shared_consumer_type().has_default_processing_timeout() ? rr.shared_consumer_type().default_processing_timeout().seconds() : 30);
-            consumer->SetKeepMessageOrder(rr.shared_consumer_type().keep_messages_order());
+        switch(rr.consumer_type()) {
+            case Ydb::Topic::CONSUMER_TYPE_STREAMING:
+            case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+                break;
+            case Ydb::Topic::CONSUMER_TYPE_SHARED: {
+                consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
 
-            if (rr.shared_consumer_type().has_move_dead_letter_policy()) {
-                auto& policy = rr.shared_consumer_type().move_dead_letter_policy();
-                consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
-                consumer->SetMaxProcessingAttempts(policy.max_processing_attempts());
-                consumer->SetDeadLetterQueue(policy.dead_letter_queue());
-            } else if (rr.shared_consumer_type().has_delete_dead_letter_policy()) {
-                auto& policy = rr.shared_consumer_type().delete_dead_letter_policy();
-                consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
-                consumer->SetMaxProcessingAttempts(policy.max_processing_attempts());
-            } else {
-                consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DISABLED);
+                consumer->SetKeepMessageOrder(rr.keep_messages_order());
+                consumer->SetDefaultProcessingTimeoutSeconds(rr.default_processing_timeout().seconds());
+
+                consumer->SetDeadLetterPolicyEnabled(rr.dead_letter_policy().enabled());
+                consumer->SetMaxProcessingAttempts(rr.dead_letter_policy().condition().max_processing_attempts());
+
+                if (rr.dead_letter_policy().has_move_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+                    consumer->SetDeadLetterQueue(rr.dead_letter_policy().move_action().dead_letter_queue());
+                } else if (rr.dead_letter_policy().has_delete_action()) {
+                    consumer->SetDeadLetterPolicy(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE);
+                }
+
+                break;
             }
-        } else {
-            consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+            case Ydb::Topic::ConsumerType::ConsumerType_INT_MAX_SENTINEL_DO_NOT_USE_:
+            case Ydb::Topic::ConsumerType::ConsumerType_INT_MIN_SENTINEL_DO_NOT_USE_:
+                return TMsgPqCodes(TStringBuilder() << "Unsupported consumer type", Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
         }
 
         if (rr.read_from().seconds() < 0) {

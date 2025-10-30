@@ -138,11 +138,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetMaxProcessingAttempts(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetDeadLetterQueue(), "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterPolicy::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DeleteDeadLetterPolicy) {
@@ -176,10 +177,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Delete);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeleteDeadLetterPolicy()->GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterPolicy::Delete);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DisabledDeadLetterPolicy) {
@@ -206,9 +209,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Disabled);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), false);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterPolicy::Unspecified);
     }
 
     Y_UNIT_TEST(AlterTopicWithSharedConsumer_MoveDeadLetterPolicy) {
@@ -241,10 +245,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
                     .ConsumerType(EConsumerType::Shared)
-                    .DeadLetterPolicy(EDeadLetterPolicy::Move)
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
-                    .MaxProcessingAttempts(17)
-                    .DeadLetterQueue("deadLetterQueue-topic-new")
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(17)
+                        .EndCondition()
+                        .AlterMoveAction("deadLetterQueue-topic-new")
+                    .EndDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -258,11 +266,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(13));
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Move);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetMaxProcessingAttempts(), 17);
-        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetDeadLetterQueue(), "deadLetterQueue-topic-new");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(13));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 17);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterPolicy::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "deadLetterQueue-topic");
     }
 
 

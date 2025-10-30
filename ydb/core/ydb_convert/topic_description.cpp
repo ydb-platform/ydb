@@ -43,31 +43,29 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     (*out.mutable_attributes())["_service_type"] = serviceType;
 
     switch (in.GetType()) {
-        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
-            auto* type = out.mutable_shared_consumer_type();
-            type->set_keep_messages_order(in.GetKeepMessageOrder());
-            type->mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
+            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_STREAMING);
 
-            switch (in.GetDeadLetterPolicy()) {
+            out.set_keep_messages_order(in.GetKeepMessageOrder());
+            out.mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
+
+            auto* deadLetterPolicy = out.mutable_dead_letter_policy();
+            deadLetterPolicy->set_enabled(in.GetDeadLetterPolicyEnabled());
+            deadLetterPolicy->mutable_condition()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
+
+            switch(in.GetDeadLetterPolicy()) {
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
-                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
-                    type->mutable_move_dead_letter_policy()->set_dead_letter_queue(in.GetDeadLetterQueue());
+                    deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(in.GetDeadLetterQueue());
                     break;
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
-                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(in.GetMaxProcessingAttempts());
-                    break;
-                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DISABLED:
-                    type->mutable_disabled_dead_letter_policy();
+                    deadLetterPolicy->mutable_delete_action();
                     break;
             }
-
             break;
         }
-        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
-            out.mutable_streaming_consumer_type();
-
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP:
+            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
             break;
-        }
     }
 
     return true;

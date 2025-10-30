@@ -90,68 +90,12 @@ TPartitionDescription::TPartitionDescription(Ydb::Topic::DescribePartitionResult
 {
 }
 
-
-TDeleteDeadLetterPolicySettings::TDeleteDeadLetterPolicySettings(ui32 maxProcessingAttempts)
-    : MaxProcessingAttempts_(maxProcessingAttempts)
-{
-}
-
-ui32 TDeleteDeadLetterPolicySettings::GetMaxProcessingAttempts() const {
-    return MaxProcessingAttempts_;
-}
-
-
-TMoveDeadLetterPolicySettings::TMoveDeadLetterPolicySettings(ui32 maxProcessingAttempts, const std::string& deadLetterQueue)
-    : MaxProcessingAttempts_(maxProcessingAttempts)
-    , DeadLetterQueue_(deadLetterQueue)
-{
-}
-
-ui32 TMoveDeadLetterPolicySettings::GetMaxProcessingAttempts() const {
-    return MaxProcessingAttempts_;
-}
-
-const std::string& TMoveDeadLetterPolicySettings::GetDeadLetterQueue() const {
-    return DeadLetterQueue_;
-}
-
-TSharedConsumer::TSharedConsumer(bool keepMessagesOrder, TDuration defaultProcessingTimeout,
-        EDeadLetterPolicy deadLetterPolicy,
-        std::shared_ptr<TDeleteDeadLetterPolicySettings>&& deleteDeadLetterPolicySettings,
-        std::shared_ptr<TMoveDeadLetterPolicySettings>&& moveDeadLetterPolicySettings)
-    : KeepMessagesOrder_(keepMessagesOrder)
-    , DefaultProcessingTimeout_(defaultProcessingTimeout)
-    , DeadLetterPolicy_(deadLetterPolicy)
-    , DeleteDeadLetterPolicySettings_(std::move(deleteDeadLetterPolicySettings))
-    , MoveDeadLetterPolicySettings_(std::move(moveDeadLetterPolicySettings))
-{
-}
-
-bool TSharedConsumer::GetKeepMessagesOrder() const {
-    return KeepMessagesOrder_;
-}
-
-TDuration TSharedConsumer::GetDefaultProcessingTimeout() const {
-    return DefaultProcessingTimeout_;
-}
-
-EDeadLetterPolicy TSharedConsumer::GetDeadLetterPolicy() const {
-    return DeadLetterPolicy_;
-}
-
-std::shared_ptr<const TDeleteDeadLetterPolicySettings> TSharedConsumer::GetDeleteDeadLetterPolicy() const {
-    return DeleteDeadLetterPolicySettings_;
-}
-
-std::shared_ptr<const TMoveDeadLetterPolicySettings> TSharedConsumer::GetMoveDeadLetterPolicy() const {
-    return MoveDeadLetterPolicySettings_;
-}
-
 TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     : ConsumerName_(consumer.name())
     , Important_(consumer.important())
     , AvailabilityPeriod_(ConvertPositiveDuration(consumer.availability_period()))
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+    , DeadLetterPolicy_(consumer.dead_letter_policy())
 {
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
@@ -160,29 +104,23 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
         Attributes_[pair.first] = pair.second;
     }
 
-    if (consumer.has_shared_consumer_type()) {
-        ConsumerType_ = EConsumerType::Shared;
-        auto& sharedType = consumer.shared_consumer_type();
+    switch(consumer.consumer_type()) {
+        case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
+        case Ydb::Topic::CONSUMER_TYPE_STREAMING:
+            ConsumerType_ = EConsumerType::Streaming;
+            break;
+        case Ydb::Topic::CONSUMER_TYPE_SHARED:
+            ConsumerType_ = EConsumerType::Shared;
+            break;
+        case Ydb::Topic::ConsumerType::ConsumerType_INT_MAX_SENTINEL_DO_NOT_USE_:
+        case Ydb::Topic::ConsumerType::ConsumerType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            ConsumerType_ = EConsumerType::Unspecified;
+            break;
+    }
 
-        EDeadLetterPolicy deadLetterPolicyType;
-        std::shared_ptr<TDeleteDeadLetterPolicySettings> deleteDeadLetterPolicySettings;
-        std::shared_ptr<TMoveDeadLetterPolicySettings> moveDeadLetterPolicySettings;
-
-        if (sharedType.has_delete_dead_letter_policy()) {
-            deadLetterPolicyType = EDeadLetterPolicy::Delete;
-            deleteDeadLetterPolicySettings = std::make_shared<TDeleteDeadLetterPolicySettings>(sharedType.delete_dead_letter_policy().max_processing_attempts());
-        } else if (sharedType.has_move_dead_letter_policy()) {
-            deadLetterPolicyType = EDeadLetterPolicy::Move;
-            moveDeadLetterPolicySettings = std::make_shared<TMoveDeadLetterPolicySettings>(sharedType.move_dead_letter_policy().max_processing_attempts(), sharedType.move_dead_letter_policy().dead_letter_queue());
-        } else {
-            deadLetterPolicyType = EDeadLetterPolicy::Disabled;
-        }
-
-        auto timeout = TDuration::Seconds(sharedType.default_processing_timeout().seconds());
-        SharedConsumerSettings_ = std::make_shared<TSharedConsumer>(sharedType.keep_messages_order(), timeout, deadLetterPolicyType,
-            std::move(deleteDeadLetterPolicySettings), std::move(moveDeadLetterPolicySettings));
-    } else {
-        ConsumerType_ = EConsumerType::Streaming;
+    if (ConsumerType_ == EConsumerType::Shared) {
+        KeepMessagesOrder_ = consumer.keep_messages_order();
+        DefaultProcessingTimeout_ = TDuration::Seconds(consumer.default_processing_timeout().seconds());
     }
 }
 
@@ -192,10 +130,6 @@ const std::string& TConsumer::GetConsumerName() const {
 
 EConsumerType TConsumer::GetConsumerType() const {
     return ConsumerType_;
-}
-
-std::shared_ptr<const TSharedConsumer> TConsumer::GetSharedConsumerSettings() const {
-    return SharedConsumerSettings_;
 }
 
 bool TConsumer::GetImportant() const {
@@ -723,6 +657,32 @@ std::vector<TConsumerSettings<TSettings>> DeserializeConsumers(TSettings& parent
 
 }
 
+TDeadLetterPolicyCondition::TDeadLetterPolicyCondition(const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+{
+}
+
+TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(proto.condition())
+{
+    if (proto.has_delete_action()) {
+        Action_ = EDeadLetterPolicy::Delete;
+    } else if (proto.has_move_action()) {
+        Action_ = EDeadLetterPolicy::Move;
+        DeadLetterQueue_ = proto.move_action().dead_letter_queue();
+    } else {
+        Action_ = EDeadLetterPolicy::Unspecified;
+    }
+}
+
+template<typename TConsumerSettings>
+TDeadLetterPolicySettings<TConsumerSettings>::TDeadLetterPolicySettings(TConsumerSettings& parent)
+    : Condition_(*this)
+    , Parent_(parent)
+{
+}
+
 template <typename TSettings>
 TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto)
     : ConsumerName_(proto.name())
@@ -730,31 +690,26 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , AvailabilityPeriod_(ConvertPositiveDuration(proto.availability_period()))
     , ReadFrom_(TInstant::Seconds(proto.read_from().seconds()))
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
+    , KeepMessagesOrder_(proto.keep_messages_order())
+    , DefaultProcessingTimeout_(TDuration::Seconds(proto.default_processing_timeout().seconds()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
-    , DeadLetterPolicySettings_(*this)
+    , DeadLetterPolicySettings_(*this, proto.dead_letter_policy())
 {
-    if (proto.has_shared_consumer_type()) {
-        ConsumerType_ = EConsumerType::Shared;
-        KeepMessagesOrder_ = proto.shared_consumer_type().keep_messages_order();
-        DefaultProcessingTimeout_ = TDuration::Seconds(proto.shared_consumer_type().default_processing_timeout().seconds());
-
-        if (proto.shared_consumer_type().has_move_dead_letter_policy()) {
-            DeadLetterPolicy_ = EDeadLetterPolicy::Move;
-            MaxProcessingAttempts_ = proto.shared_consumer_type().move_dead_letter_policy().max_processing_attempts();
-            DeadLetterQueue_ = proto.shared_consumer_type().move_dead_letter_policy().dead_letter_queue();
-        } else if (proto.shared_consumer_type().has_delete_dead_letter_policy()) {
-            DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
-            MaxProcessingAttempts_ = proto.shared_consumer_type().move_dead_letter_policy().max_processing_attempts();
-        } else {
-            DeadLetterPolicy_ = EDeadLetterPolicy::Disabled;
-            MaxProcessingAttempts_ = 0;
-        }
-    } else {
-        ConsumerType_ = EConsumerType::Streaming;
-        KeepMessagesOrder_ = false;
-        DeadLetterPolicy_ = EDeadLetterPolicy::Disabled;
-        MaxProcessingAttempts_ = 0;
+    switch(proto.consumer_type()) {
+        case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
+            ConsumerType_ = EConsumerType::Streaming;
+            break;
+        case Ydb::Topic::CONSUMER_TYPE_STREAMING:
+            ConsumerType_ = EConsumerType::Streaming;
+            break;
+        case Ydb::Topic::CONSUMER_TYPE_SHARED:
+            ConsumerType_ = EConsumerType::Shared;
+            break;
+        case Ydb::Topic::ConsumerType::ConsumerType_INT_MAX_SENTINEL_DO_NOT_USE_:
+        case Ydb::Topic::ConsumerType::ConsumerType_INT_MIN_SENTINEL_DO_NOT_USE_:
+            ConsumerType_ = EConsumerType::Unspecified;
+            break;
     }
 }
 
@@ -774,31 +729,108 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
 
     switch (ConsumerType_) {
         case EConsumerType::Shared: {
-            auto* type = proto.mutable_shared_consumer_type();
-            type->set_keep_messages_order(KeepMessagesOrder_);
-            type->mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.Seconds());
+            proto.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
+            if (KeepMessagesOrder_) {
+                proto.set_keep_messages_order(KeepMessagesOrder_.value());
+            }
+            if (DefaultProcessingTimeout_) {
+                proto.mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+            }
+            if (DeadLetterPolicySettings_.Enabled_) {
+                proto.mutable_dead_letter_policy()->set_enabled(DeadLetterPolicySettings_.Enabled_.value());
+            }
+            if (DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_) {
+                proto.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(
+                    DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_.value());
+            }
 
-            switch (DeadLetterPolicy_) {
+            switch(DeadLetterPolicySettings_.DeadLetterPolicy_) {
                 case EDeadLetterPolicy::Move:
-                    type->mutable_move_dead_letter_policy()->set_max_processing_attempts(MaxProcessingAttempts_);
-                    type->mutable_move_dead_letter_policy()->set_dead_letter_queue(DeadLetterQueue_);
+                    proto.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
+                        DeadLetterPolicySettings_.DeadLetterQueue_.value());
                     break;
                 case EDeadLetterPolicy::Delete:
-                    type->mutable_delete_dead_letter_policy()->set_max_processing_attempts(MaxProcessingAttempts_);
+                    proto.mutable_dead_letter_policy()->mutable_delete_action();
                     break;
-                case EDeadLetterPolicy::Disabled:
                 case EDeadLetterPolicy::Unspecified:
-                    type->mutable_disabled_dead_letter_policy();
                     break;
             }
 
             break;
         }
         case EConsumerType::Streaming:
-            proto.mutable_streaming_consumer_type();
+        case EConsumerType::Unspecified:
+            proto.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
+            break;
+    }
+}
+
+void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const {
+    proto.set_name(TStringType{ConsumerName_});
+    if (SetImportant_) {
+        proto.set_set_important(*SetImportant_);
+    }
+    if (SetAvailabilityPeriod_) {
+        if (SetAvailabilityPeriod_ != TDuration::Zero()) {
+            proto.mutable_set_availability_period()->set_seconds(SetAvailabilityPeriod_->Seconds());
+            proto.mutable_set_availability_period()->set_nanos((SetAvailabilityPeriod_->MicroSeconds() % 1'000'000) * 1'000);
+        } else {
+            proto.mutable_reset_availability_period();
+        }
+    }
+    if (SetReadFrom_) {
+        proto.mutable_set_read_from()->set_seconds(SetReadFrom_->Seconds());
+    }
+    if (SetSupportedCodecs_) {
+        for (const auto& codec : *SetSupportedCodecs_) {
+            proto.mutable_set_supported_codecs()->add_codecs((static_cast<Ydb::Topic::Codec>(codec)));
+        }
+    }
+
+    for (auto& pair : AlterAttributes_) {
+        (*proto.mutable_alter_attributes())[pair.first] = pair.second;
+    }
+
+    switch (ConsumerType_) {
+        case EConsumerType::Shared:
+            proto.set_set_consumer_type(::Ydb::Topic::ConsumerType::CONSUMER_TYPE_SHARED);
+            break;
+        case EConsumerType::Streaming:
+            proto.set_set_consumer_type(::Ydb::Topic::ConsumerType::CONSUMER_TYPE_STREAMING);
             break;
         case EConsumerType::Unspecified:
             break;
+    }
+
+    if (DefaultProcessingTimeout_) {
+        proto.mutable_set_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
+    }
+
+    auto* deadLetterPolicy = proto.mutable_alter_dead_letter_policy();
+    if (DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_) {
+        deadLetterPolicy->mutable_alter_condition()->set_set_max_processing_attempts(
+            DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_.value());
+    }
+
+    if (DeadLetterPolicySettings_.DeadLetterPolicy_) {
+        switch (DeadLetterPolicySettings_.DeadLetterPolicy_.value()) {
+            case EDeadLetterPolicy::Move:
+                if (DeadLetterPolicySettings_.DeadLetterQueue_) {
+                    if (DeadLetterPolicySettings_.DeadLetterPolicyChanged_) {
+                        deadLetterPolicy->mutable_set_move_action()->set_dead_letter_queue(
+                            DeadLetterPolicySettings_.DeadLetterQueue_.value());
+                    } else {
+                        deadLetterPolicy->mutable_alter_move_action()->set_set_dead_letter_queue(
+                            DeadLetterPolicySettings_.DeadLetterQueue_.value());
+                    }
+                }
+                break;
+            case EDeadLetterPolicy::Delete:
+                deadLetterPolicy->mutable_set_delete_action();
+                break;
+            case EDeadLetterPolicy::Unspecified:
+                break;
+        }
     }
 }
 

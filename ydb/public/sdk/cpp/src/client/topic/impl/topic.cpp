@@ -732,6 +732,7 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
+    , DeadLetterPolicySettings_(*this)
 {
     if (proto.has_shared_consumer_type()) {
         ConsumerType_ = EConsumerType::Shared;

@@ -115,11 +115,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
                 .ConsumerName("shared_consumer_name")
-                .BeginSharedConsumerType()
-                    .DefaultProcessingTimeout(TDuration::Seconds(7))
-                    .KeepMessagesOrder(true)
-                    .MoveDeadLetterPolicy(11, "deadLetterQueue-topic")
-                .EndSharedConsumerType()
+                .ConsumerType(EConsumerType::Shared)
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
+                .BeginDeadLetterPolicy()
+                    .Enabled(true)
+                    .BeginCondition()
+                        .MaxProcessingAttempts(11)
+                    .EndCondition()
+                    .MoveAction("deadLetterQueue-topic")
+                .EndDeadLetterPolicy()
             .EndAddConsumer();
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
@@ -148,11 +153,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
                 .ConsumerName("shared_consumer_name")
-                .BeginSharedConsumerType()
-                    .DefaultProcessingTimeout(TDuration::Seconds(7))
-                    .KeepMessagesOrder(true)
-                    .DeleteDeadLetterPolicy(11)
-                .EndSharedConsumerType()
+                .ConsumerType(EConsumerType::Shared)
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
+                .BeginDeadLetterPolicy()
+                    .Enabled(true)
+                    .BeginCondition()
+                        .MaxProcessingAttempts(11)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
             .EndAddConsumer();
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
@@ -180,10 +190,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TCreateTopicSettings topics;
         topics.BeginAddConsumer()
                 .ConsumerName("shared_consumer_name")
-                .BeginSharedConsumerType()
-                    .DefaultProcessingTimeout(TDuration::Seconds(7))
-                    .KeepMessagesOrder(true)
-                .EndSharedConsumerType()
+                .ConsumerType(EConsumerType::Shared)
+                .DefaultProcessingTimeout(TDuration::Seconds(7))
+                .KeepMessagesOrder(true)
             .EndAddConsumer();
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
@@ -211,11 +220,16 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             TCreateTopicSettings topics;
             topics.BeginAddConsumer()
                     .ConsumerName("shared_consumer_name")
-                    .BeginSharedConsumerType()
-                        .DefaultProcessingTimeout(TDuration::Seconds(7))
-                        .KeepMessagesOrder(true)
-                        .MoveDeadLetterPolicy(11, "deadLetterQueue-topic")
-                    .EndSharedConsumerType()
+                    .ConsumerType(EConsumerType::Shared)
+                    .DefaultProcessingTimeout(TDuration::Seconds(7))
+                    .KeepMessagesOrder(true)
+                    .BeginDeadLetterPolicy()
+                        .Enabled(true)
+                        .BeginCondition()
+                            .MaxProcessingAttempts(11)
+                        .EndCondition()
+                        .MoveAction("deadLetterQueue-topic")
+                    .EndDeadLetterPolicy()
                 .EndAddConsumer();
 
             auto status = client.CreateTopic("topic_name", topics).GetValueSync();

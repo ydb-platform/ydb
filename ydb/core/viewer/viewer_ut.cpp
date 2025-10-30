@@ -2120,8 +2120,7 @@ Y_UNIT_TEST_SUITE(Viewer) {
         NJson::TJsonValue header2;
         header1["key"] = "grey";
         header1["value"] = "bird";
-        header2["key"] = "brown";
-        header2["value"] = "dog";
+        header2["key"] = "only_key";
         metadataArray.AppendValue(header1);
         metadataArray.AppendValue(header2);
 
@@ -2256,8 +2255,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     UNIT_ASSERT_EQUAL(key, "grey");
                     UNIT_ASSERT_EQUAL(value, "bird");
                 } else if (j == 1) {
-                    UNIT_ASSERT_EQUAL(key, "brown");
-                    UNIT_ASSERT_EQUAL(value, "dog");
+                    UNIT_ASSERT_EQUAL(key, "only_key");
+                    UNIT_ASSERT_EQUAL(value, "");
                 } else {
                     UNIT_ASSERT_EQUAL(key, "__key");
                     UNIT_ASSERT_EQUAL(value, "some_key");

@@ -35,7 +35,7 @@ public:
 
 private:
     TString TopicPath;
-    std::optional<ui32> Partition;
+    std::optional<i64> Partition;
     TString Message;
     TString Key;
     ui32 Cookie = 1;
@@ -48,43 +48,45 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
-            HFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
+            hFunc(NPQ::TEvPartitionWriter::TEvWriteResponse, Handle);
+            hFunc(NPQ::TEvPartitionWriter::TEvInitResult, Handle);
+            hFunc(NPQ::TEvPartitionWriter::TEvWriteAccepted, HandleAccepting);
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
         }
     }
     void Bootstrap() override {
-        if (!Params.Has("path") || !Params.Has("message")) {
+        if (!PostData.Has("path") || !PostData.Has("message")) {
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "fields 'path' and 'message' are required and should not be empty"));
         }
 
-        TopicPath = Params.Get("path");
+        TopicPath = PostData["path"].GetString();
 
-        Message = Params.Get("message");
+        Message = PostData["message"].GetString();
 
-        if (Params.Has("partition")) {
-            Partition = std::stoi(Params.Get("partition"));
+        if (PostData.Has("partition")) {
+            Partition = PostData["partition"].GetInteger();
         }
 
-        if (Params.Has("key")) {
-            Key = TStringBuf(Params.Get("key").data(), Params.Get("key").size());
+        if (PostData.Has("key")) {
+            Key = PostData["key"].GetString();
         }
-
-        if (Params.Has("metadata")) {
+        if (PostData.Has("metadata")) {
             int num = Params.NumOfValues("metadata");
             for (int i = 0; i < num; i++) {
-                NJson::TJsonValue metadataJson;
-                NJson::ReadJsonTree(Params.Get("metadata", i), &metadataJson, true);
-                auto& metadataMap = metadataJson.GetMap();
-                if (!metadataMap.contains("key") || !metadataMap.contains("value")) {
-                    return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "field 'metadata' must be key-value pairs"));
+                TString key;
+                TString value;
+                if (PostData["metadata"][i].Has("key")) {
+                    key = PostData["metadata"][i]["key"].GetStringRobust();
                 }
-                Metadata.emplace_back(metadataMap.at("key").GetStringRobust(), metadataMap.at("value").GetStringRobust());
+                if (PostData["metadata"][i].Has("value")) {
+                    value = PostData["metadata"][i]["value"].GetStringRobust();
+                }
+                Metadata.emplace_back(key, value);
             }
         }
 
         ResultSchemeCache = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow, 1);
-        TBase::Become(&TThis::StateWork);
+        TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
     THolder<NPQ::TEvPartitionWriter::TEvWriteRequest> FormWriteRequest() {
@@ -127,15 +129,15 @@ public:
         w->SetExternalOperation(true);
         ui64 totalSize = Message ? Message.size() : 0;
         partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
-        return std::move(ev);
+        return ev;
     }
 
-     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         if (!ResultSchemeCache->Set(std::move(ev))) {
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
         }
         if (ResultSchemeCache->IsError()) {
-            return ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + ResultSchemeCache->GetError()));
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + ResultSchemeCache->GetError()));
         }
         auto navigate = *ResultSchemeCache->Get()->Request;
         auto& info = navigate.ResultSet.front();
@@ -145,7 +147,7 @@ public:
 
         const auto& pqDescription = info.PQGroupInfo->Description;
 
-        if (!Params.Has("partition")) {
+        if (!PostData.Has("partition")) {
             auto chooser = NPQ::CreatePartitionChooser(pqDescription, false);
             if (!Key.empty()) {
                 auto* partition = chooser->GetPartition(Key);
@@ -178,11 +180,11 @@ public:
         Send(WriteActorId, std::move(writeEvent));
     }
 
-    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr request, const TActorContext& /*ctx*/) {
-        Cerr << "Produce actor: Init " << request->Get()->ToString();
+    void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr) {
+        return;
     }
 
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr request, const TActorContext&) {
+    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr request) {
         auto r = request->Get();
         const auto& resp = r->Record.GetPartitionResponse();
         auto cookie = resp.GetCookie();
@@ -194,12 +196,11 @@ public:
         } else {
             auto error = r->GetError();
             TString reason = r->GetError().Reason;
-            Cerr << reason << Endl;
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", reason));
         }
     }
 
-    void HandleAccepting(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr request, const TActorContext&) {
+    void HandleAccepting(NPQ::TEvPartitionWriter::TEvWriteAccepted::TPtr request) {
         auto r = request->Get();
         auto cookie = r->Cookie;
         if (cookie != Cookie) {
@@ -213,7 +214,7 @@ public:
 
     void ReplyAndPassAway() override {
         TStringStream jsonBody;
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(jsonBody.Str()));
+        TBase::ReplyAndPassAway(TBase::GetHTTPOKJSON(jsonBody.Str()));
     }
 
     void PassAway() override {
@@ -260,7 +261,7 @@ public:
                 type: array
                 items:
                     type: object
-                    title: MetadataItem
+                    title: TMetadataItem
                     properties:
                         key:
                             type: string

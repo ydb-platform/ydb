@@ -41,7 +41,7 @@ def calculate_total_memory_consumption(processes):
     Calculates the total memory consumption of running suites for each moment in time.
 
     Args:
-        processes: lis of tuples (rss_consumption, path, start_time, end_time)
+        processes: list of tuples (rss_consumption, path, start_time, end_time)
 
     Returns:
         timeline: sorted list of timestamps
@@ -220,19 +220,23 @@ if __name__ == "__main__":
         "--report-file",
         help="path to file received via 'ya make ... --build-results-report <file>'",
         type=argparse.FileType("r"),
+        required=True
     )
     parser.add_argument(
         "--ram-usage-file",
         help="path to file with timestamped RAM consumption",
         type=argparse.FileType("r"),
+        required=True
     )
     parser.add_argument(
         "--output-file",
-        help="path to graph file"
+        help="path to graph file",
+        required=True
     )
     parser.add_argument(
         "--output-file-url",
-        help="Path to graph file in run artifacts"
+        help="Path to graph file in run artifacts",
+        required=True
     )
     parser.add_argument('--dry-run', action='store_true',
                         help='Debug mode without sending to Telegram')

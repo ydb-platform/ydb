@@ -125,6 +125,9 @@ sourceSets {
         // Preventing automatic search for tests
         java.setSrcDirs(emptyList<Any>())
         resources.setSrcDirs(emptyList<Any>())
+{%-         if with_kotlin %}
+        kotlin.setSrcDirs(emptyList<Any>())
+{%-         endif %}
     }
 {%      endif -%}
 {%- endif -%}

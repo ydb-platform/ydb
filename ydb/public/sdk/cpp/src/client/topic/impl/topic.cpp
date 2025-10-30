@@ -787,15 +787,16 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                     break;
                 case EDeadLetterPolicy::Disabled:
                 case EDeadLetterPolicy::Unspecified:
-                    type->mutable_delete_dead_letter_policy();
+                    type->mutable_disabled_dead_letter_policy();
                     break;
             }
 
             break;
         }
-        case EConsumerType::Unspecified:
         case EConsumerType::Streaming:
             proto.mutable_streaming_consumer_type();
+            break;
+        case EConsumerType::Unspecified:
             break;
     }
 }

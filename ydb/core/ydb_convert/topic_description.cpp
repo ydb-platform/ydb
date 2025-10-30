@@ -11,7 +11,7 @@
 namespace NKikimr {
 
 bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TConsumer& in,
-    Ydb::StatusIds_StatusCode& status, TString& error)
+    Ydb::StatusIds_StatusCode& status, TString& error, bool checkServiceType)
 {
     const NKikimrPQ::TPQConfig pqConfig = AppData()->PQConfig;
     auto consumerName = NPersQueue::ConvertOldConsumerName(in.GetName(), pqConfig);
@@ -32,7 +32,7 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     TString serviceType = "";
     if (in.HasServiceType()) {
         serviceType = in.GetServiceType();
-    } else {
+    } else if (checkServiceType) {
         if (pqConfig.GetDisallowDefaultClientServiceType()) {
             error = "service type must be set for all read rules";
             status = Ydb::StatusIds::INTERNAL_ERROR;

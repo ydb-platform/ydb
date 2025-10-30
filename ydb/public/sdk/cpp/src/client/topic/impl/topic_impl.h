@@ -67,7 +67,42 @@ public:
             (*consumerProto.mutable_alter_attributes())[pair.first] = pair.second;
         }
 
-        // TODO 
+        switch (settings.ConsumerType_) {
+            case EConsumerType::Shared: {
+                auto* type = consumerProto.mutable_set_shared_consumer_type();
+                if (settings.DefaultProcessingTimeout_) {
+                    type->mutable_set_default_processing_timeout()->set_seconds(settings.DefaultProcessingTimeout_.value().Seconds());
+                }
+
+                switch (settings.DeadLetterPolicy_) {
+                    case EDeadLetterPolicy::Move:
+                        if (settings.MaxProcessingAttempts_) {
+                            type->mutable_set_move_dead_letter_policy()->set_set_max_processing_attempts(settings.MaxProcessingAttempts_.value());
+                        }
+                        if (settings.DeadLetterQueue_) {
+                            type->mutable_set_move_dead_letter_policy()->set_set_dead_letter_queue(settings.DeadLetterQueue_.value());
+                        }
+                        break;
+                    case EDeadLetterPolicy::Delete:
+                        if (settings.MaxProcessingAttempts_) {
+                            type->mutable_set_delete_dead_letter_policy()->set_set_max_processing_attempts(settings.MaxProcessingAttempts_.value());
+                        }
+                        break;
+                    case EDeadLetterPolicy::Disabled:
+                        type->mutable_set_disabled_dead_letter_policy();
+                        break;
+                    case EDeadLetterPolicy::Unspecified:
+                        break;
+                }
+
+                break;
+            }
+            case EConsumerType::Streaming:
+                consumerProto.mutable_set_streaming_consumer_type();
+                break;
+            case EConsumerType::Unspecified:
+                break;
+        }
     }
 
 

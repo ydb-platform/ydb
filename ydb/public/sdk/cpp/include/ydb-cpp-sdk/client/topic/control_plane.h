@@ -626,7 +626,7 @@ private:
     EConsumerType ConsumerType_ = EConsumerType::Streaming;
     bool KeepMessagesOrder_;
     TDuration DefaultProcessingTimeout_;
-    EDeadLetterPolicy DeadLetterPolicy_;
+    EDeadLetterPolicy DeadLetterPolicy_ = EDeadLetterPolicy::Unspecified;
     ui32 MaxProcessingAttempts_;
     std::string DeadLetterQueue_;
 };
@@ -647,8 +647,12 @@ struct TAlterConsumerSettings {
     FLUENT_SETTING_OPTIONAL_VECTOR(ECodec, SetSupportedCodecs);
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
-    FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
+
+    FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Unspecified);
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING_DEFAULT(EDeadLetterPolicy, DeadLetterPolicy, EDeadLetterPolicy::Unspecified);
+    FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
+    FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);
@@ -668,6 +672,16 @@ struct TAlterConsumerSettings {
         SetAvailabilityPeriod_ = availabilityPeriod;
         return *this;
     }
+
+    TAlterConsumerSettings& StreamingConsumerType() {
+        ConsumerType_ = EConsumerType::Streaming;
+        return *this;
+    }
+
+    // TSharedConsumerSettings<TSelf> BeginSharedConsumerType() {
+    //     ConsumerType_ = EConsumerType::Shared;
+    //     return TSharedConsumerSettings<TSelf>(*this);
+    // }
 
     TAlterTopicSettings& EndAlterConsumer() { return Parent_; };
 

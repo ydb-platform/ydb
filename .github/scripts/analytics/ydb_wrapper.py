@@ -196,8 +196,12 @@ class YDBWrapper:
     
     def _log_statistics(self, operation_type: str, query: str, duration: float, 
                        status: str, error: str = None, rows_affected: int = None,
-                       cluster_version: str = None, table_path: str = None):
-        """Логирование статистики выполнения операций (синхронно)"""
+                       cluster_version: str = None, table_path: str = None, query_name: str = None):
+        """Log operation statistics (synchronously)
+        
+        Args:
+            query_name: Optional name for the query (e.g., monitoring query filename)
+        """
         # Проверяем, нужно ли логировать статистику
         if not self._enable_statistics or not self._stats_available:
             return
@@ -216,6 +220,7 @@ class YDBWrapper:
             'error': error,
             'rows_affected': rows_affected,
             'script_name': self._script_name,
+            'query_name': query_name,
             'cluster_version': cluster_version,
             'database_endpoint': self.database_endpoint,
             'database_path': self.database_path,
@@ -271,6 +276,7 @@ class YDBWrapper:
                     .add_column("error", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("rows_affected", ydb.OptionalType(ydb.PrimitiveType.Uint64))
                     .add_column("script_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
+                    .add_column("query_name", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("cluster_version", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("database_endpoint", ydb.OptionalType(ydb.PrimitiveType.Utf8))
                     .add_column("database_path", ydb.OptionalType(ydb.PrimitiveType.Utf8))
@@ -312,6 +318,7 @@ class YDBWrapper:
                     `error` Utf8,
                     `rows_affected` Uint64,
                     `script_name` Utf8 NOT NULL,
+                    `query_name` Utf8,
                     `cluster_version` Utf8,
                     `database_endpoint` Utf8,
                     `database_path` Utf8,
@@ -330,7 +337,7 @@ class YDBWrapper:
             pool.retry_operation_sync(create_stats_table)
     
     def _execute_with_logging(self, operation_type: str, operation_func: Callable, 
-                             query: str = None, table_path: str = None) -> Any:
+                             query: str = None, table_path: str = None, query_name: str = None) -> Any:
         """Универсальный метод выполнения операций с логированием"""
         start_time = time.time()
         
@@ -392,7 +399,8 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return results
@@ -421,7 +429,8 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return result
@@ -454,7 +463,8 @@ class YDBWrapper:
                         status=status,
                         rows_affected=rows_affected,
                         cluster_version=cluster_version,
-                        table_path=table_path
+                        table_path=table_path,
+                        query_name=query_name
                     )
                     
                     return result
@@ -467,23 +477,27 @@ class YDBWrapper:
             
             self._log("error", f"{operation_type} failed", f"Error: {error}, Duration: {duration:.2f}s")
             
-            # Логируем статистику ошибки
+            # Normalize operation_type for statistics (use "scan_query" for both scan operations)
+            stats_operation_type = "scan_query" if operation_type == "scan_query_with_metadata" else operation_type
+            
+            # Log error statistics
             self._log_statistics(
-                operation_type=operation_type,
+                operation_type=stats_operation_type,
                 query=query or f"{operation_type} operation",
                 duration=duration,
                 status=status,
                 error=error,
                 cluster_version=cluster_version,
-                table_path=table_path if operation_type == "bulk_upsert" else None
+                table_path=table_path if operation_type == "bulk_upsert" else None,
+                query_name=query_name
             )
             
             raise
     
     
-    def execute_scan_query(self, query: str) -> List[Dict[str, Any]]:
+    def execute_scan_query(self, query: str, query_name: str = None) -> List[Dict[str, Any]]:
         """Выполнение scan query с логированием"""
-        return self._execute_with_logging("scan_query", None, query, None)
+        return self._execute_with_logging("scan_query", None, query, None, query_name)
     
     def execute_scan_query_with_metadata(self, query: str) -> tuple[List[Dict[str, Any]], List[tuple[str, Any]]]:
         """Выполнение scan query с возвратом данных и метаданных колонок"""

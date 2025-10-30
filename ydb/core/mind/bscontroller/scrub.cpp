@@ -745,20 +745,25 @@ public:
         }
         if (group->Topology->QuorumChecker->OneStepFromDegradedOrWorse(~working)) {
             // prohibited by DEGRADED logic
-            return false;
+            return true;
         }
 
         if (group->IsCheckInProgress) {
-            return false;
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     void UpdateVDiskState(const TVSlotInfo *slot, TInstant now) {
         if (slot->Group) {
             UpdateGroupProhibition(slot->Group);
         }
+        ProcessQueue(now);
+    }
+
+    void UpdateGroupState(const TGroupInfo* group, TInstant now) {
+        UpdateGroupProhibition(group);
         ProcessQueue(now);
     }
 
@@ -833,6 +838,10 @@ void TBlobStorageController::TScrubState::OnMaxScrubbedDisksAtOnceChange() {
 
 void TBlobStorageController::TScrubState::UpdateVDiskState(const TVSlotInfo *slot) {
     Impl->UpdateVDiskState(slot, TActivationContext::Now());
+}
+
+void TBlobStorageController::TScrubState::UpdateGroupState(const TGroupInfo *group) {
+    Impl->UpdateGroupState(group, TActivationContext::Now());
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerScrubQueryStartQuantum::TPtr ev) {

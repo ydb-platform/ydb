@@ -101,6 +101,7 @@ void TBlobStorageController::UpdateBlobCheckerState() {
         if (groupToScan) {
             if (TGroupInfo* groupInfo = FindGroup(*groupToScan)) {
                 groupInfo->IsCheckInProgress = true;
+                ScrubState.UpdateGroupState(groupInfo);
             }
             Send(BlobCheckerOrchestratorId,
                     new TEvBlobCheckerDecision(*groupToScan, NKikimrProto::OK));
@@ -145,6 +146,7 @@ void TBlobStorageController::DequeueCheckForGroup(TGroupId groupId, bool notifyO
     if (scanWasPlanned) {
         if (TGroupInfo* groupInfo = FindGroup(groupId)) {
             groupInfo->IsCheckInProgress = false;
+            ScrubState.UpdateGroupState(groupInfo);
         }
         if (notifyOrchestrator) {
             Send(BlobCheckerOrchestratorId,

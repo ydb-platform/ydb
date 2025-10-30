@@ -1,7 +1,7 @@
 #include "env.h"
 
 const std::initializer_list<ui32> TEnvironmentSetup::DebugLogComponents{
-    NKikimrServices::BS_CONTROLLER,
+//    NKikimrServices::BS_CONTROLLER,
 //    NKikimrServices::BS_SELFHEAL,
 //    NKikimrServices::BS_PDISK,
 //    NKikimrServices::BS_SKELETON,
@@ -33,6 +33,6 @@ const std::initializer_list<ui32> TEnvironmentSetup::DebugLogComponents{
 //    NActorsServices::INTERCONNECT,
 //    NActorsServices::INTERCONNECT_SESSION,
 //    NKikimrServices::BS_VDISK_BALANCING,
-    NKikimrServices::BLOB_CHECKER_ORCHESTRATOR,
-    NKikimrServices::BLOB_CHECKER_WORKER,
+//    NKikimrServices::BLOB_CHECKER_ORCHESTRATOR,
+//    NKikimrServices::BLOB_CHECKER_WORKER,
 };

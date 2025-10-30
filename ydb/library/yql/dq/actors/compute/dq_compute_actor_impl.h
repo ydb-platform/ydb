@@ -1602,15 +1602,28 @@ protected:
         InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
     }
 
+    bool HasEarlierChannelIdlenessChecks(TInstant notifyTime) {
+        return !InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime;
+    }
+
+    bool RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime) {
+        bool removedAny = false;
+        while (HasEarlierChannelIdlenessChecks(notifyTime)) {
+            InflyIdlenessChecks.pop_front();
+            removedAny = true;
+        }
+        return removedAny;
+    }
+
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
         auto now = TInstant::Now();
         auto checkTime = Max(ev->Get()->CheckTime, now);
-        auto removed = InflightIdlenessCheck.erase(ev->Get()->CheckTime);
-        Y_DEBUG_ABORT_UNLESS(removed);
-        auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
-        if (idleWatermark) {
-            CA_LOG_T("Idleness watermark " << idleWatermark);
-            ResumeExecution(EResumeSource::CAWatermarkIdleness);
+        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->CheckTime)) {
+            auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
+            if (idleWatermark) {
+                CA_LOG_T("Idleness watermark " << idleWatermark);
+                ResumeExecution(EResumeSource::CAWatermarkIdleness);
+            }
         }
         ScheduleIdlenessCheck();
     }
@@ -1618,10 +1631,9 @@ protected:
     void ScheduleIdlenessCheck() {
         auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
         // only schedule new check if nothing scheduled at same or earlier time
-        if (checkTime && (InflightIdlenessCheck.empty() || *InflightIdlenessCheck.cbegin() > *checkTime)) {
-            CA_LOG_T("Schedule next idleness check from {" << JoinSeq(',', InflightIdlenessCheck) << "} to " << checkTime);
-            auto [_, inserted] = InflightIdlenessCheck.emplace(*checkTime);
-            Y_DEBUG_ABORT_UNLESS(inserted);
+        if (checkTime && !HasEarlierChannelIdlenessChecks(*checkTime)) {
+            CA_LOG_T("Schedule next idleness check from {" << JoinSeq(',', InflyIdlenessChecks) << "} to " << checkTime);
+            InflyIdlenessChecks.emplace_front(*checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
     }
@@ -2135,7 +2147,7 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
-    TSet<TInstant> InflightIdlenessCheck;
+    std::deque<TInstant> InflyIdlenessChecks;
 };
 
 } // namespace NYql

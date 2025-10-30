@@ -1299,7 +1299,7 @@ message TEvControllerSelectGroupsResult {
             optional double IOPS = 2; // operations per second
             optional uint64 ReadThroughput = 3; // bytes per second
             optional uint64 WriteThroughput = 4; // bytes per second
-            optional double Occupancy = 5; // the worst occupancy among all VDisks in group
+            optional double Occupancy = 5; // max VDisk.NormalizedOccupancy across VDisks in group
         }
 
         // assured part of group metrics -- when the underlying PDisks have all possible VSlots created; these metrics

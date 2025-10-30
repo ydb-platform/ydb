@@ -728,7 +728,7 @@ private:
     }
 
 private:
-    const bool EnableSolomonClientPostApi = false;
+    const bool EnableSolomonClientPostApi;
     const ui64 MaxListingPageSize;
     const ui64 ListSizeLimit = 100 * 1024 * 1024 * 8;
     const NYql::NSo::NProto::TDqSolomonSource Settings;

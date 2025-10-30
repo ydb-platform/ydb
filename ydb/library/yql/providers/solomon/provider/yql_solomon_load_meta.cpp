@@ -93,6 +93,9 @@ public:
                     return TStatus::Error;
                 }
 
+                auto enableSolomonClientPostApi = State_->Configuration->_EnableSolomonClientPostApi.Get().OrElse(false);
+                source.MutableSettings()->insert({ "enableSolomonClientPostApi", ToString(enableSolomonClientPostApi) });
+
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
 

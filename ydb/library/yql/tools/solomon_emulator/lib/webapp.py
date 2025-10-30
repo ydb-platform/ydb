@@ -312,7 +312,7 @@ class DataService(DataServiceServicer):
 
 
 def create_web_app(emulator):
-    webapp = web.Application(client_max_size=1024**3, handler_args={"max_line_size": 1024**3, "max_field_size": 1024**3})
+    webapp = web.Application()
     webapp.add_routes([
         web.post("/api/v2/projects/{project}/sensors/names", emulator.sensor_names),
         web.post("/api/v2/projects/{project}/sensors/labels", emulator.sensor_labels),

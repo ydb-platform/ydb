@@ -1,6 +1,6 @@
 # Workload Manager — recource consumption management
 
-[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (requesting more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
+[Resource pools](../concepts/glossary.md#) allow you to isolate [database](../concepts/glossary.md#database ) resources between running queries or configure resource allocation strategies in case of oversubscription (querying more resources than are available in system). All resource pools are equal, without any hierarchy, and influence each other only when there is a general shortage of resources.
 
 For example, one typical resource isolation scenario is to separate two classes of consumers (customer/client/user):
 
@@ -29,7 +29,7 @@ CREATE RESOURCE POOL olap WITH (
 )
 ```
 
-For a complete list of resource pool parameters, see the help for (create-resource-pool.md#parameters). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT` , `QUEUE_SIZE` , `DATABASE_LOAD_CPU_THRESHOLD` ), while others apply only to one compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE` , `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` , `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` ). CPU can be shared between all pools in case of oversubscription on one compute node using `RESOURCES_WEIGHT` .
+For a complete list of resource pool parameters, see the help for (link). Some parameters are global for the entire database (for example, `CONCURRENT_QUERY_LIMIT` , `QUEUE_SIZE` , `DATABASE_LOAD_CPU_THRESHOLD` ), while others apply only to one compute node (for example, `QUERY_CPU_LIMIT_PERCENT_PER_NODE` , `TOTAL_CPU_LIMIT_PERCENT_PER_NODE` , `QUERY_MEMORY_LIMIT_PERCENT_PER_NODE` ). CPU can be shared between all pools in case of oversubscription on one compute node using `RESOURCES_WEIGHT` .
 
 ![resource_pools](../_assets/resource_pool.png)
 
@@ -41,19 +41,19 @@ In total, with an even distribution of resources across the entire database, the
 
 $7 vCPU \cdot 10 \text{ (nodes)} = 70 vCPU$
 
-For one request in this resource pool the following will be allocated:
+For one query in this resource pool the following will be allocated:
 
 $\frac{10 vCPU \cdot TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} \cdot \frac{QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE}{100} = 10 vCPU \cdot 0.7 \cdot 0.5 = 3.5 vCPU$
 
 ### How works CONCURRENT_QUERY_LIMIT и QUEUE_SIZE {#concurrent_query_limit}
 
-Let's say there are already 9 requests running in the `olap` resource pool . When a new request arrives, it will immediately begin to be executed in parallel with the other 9 requests. Now there will be 10 requests running in the pool. If the 11th request arrives in the pool, it will not start executing, but will be placed in a waiting queue. When at least one of the 10 running requests completes, the 11th request will be removed from the queue and begin executing.
+Let's say there are already 9 querys running in the `olap` resource pool . When a new query arrives, it will immediately begin to be executed in parallel with the other 9 querys. Now there will be 10 querys running in the pool. If the 11th query arrives in the pool, it will not start executing, but will be placed in a waiting queue. When at least one of the 10 running querys completes, the 11th query will be removed from the queue and begin executing.
 
-If there are already $QUEUE\_SIZE = 1000$ requests in the queue , then when sending the 1001st request, the client will immediately receive an error in response, and this request will not be executed. Error example:
+If there are already $QUEUE\_SIZE = 1000$ querys in the queue , then when sending the 1001st query, the client will immediately receive an error in response, and this query will not be executed. Error example:
 
 ```text
 Issues:
-<main>: Error: Request was rejected, number of local pending requests is 20, number of global delayed/running requests is 0, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool olap
+<main>: Error: Request was rejected, number of local pending querys is 20, number of global delayed/running querys is 0, sum of them is larger than allowed limit 1 (including concurrent query limit 1) for pool olap
 <main>: Error: Query failed during adding/waiting in workload pool olap
 ```
 
@@ -61,22 +61,22 @@ The number of concurrently executed queries is affected not only by `CONCURRENT_
 
 ### How works DATABASE_LOAD_CPU_THRESHOLD {#database_load_cpu_threshold}
 
-When a request enters a resource pool that has `DATABASE_LOAD_CPU_THRESHOLD` set , 10% of the available CPU on the node is immediately reserved, based on the assumption that the request will at least require that amount of resources. Then, every 10 seconds, resource consumption across the entire database is recalculated, allowing the initial 10% estimate to be refined. This means that if more than 10 requests simultaneously arrive at a cluster node, then no more than 10 requests will be launched for execution, and the rest will wait for clarification of the actual CPU consumption.
+When a query enters a resource pool that has `DATABASE_LOAD_CPU_THRESHOLD` set , 10% of the available CPU on the node is immediately reserved, based on the assumption that the query will at least require that amount of resources. Then, every 10 seconds, resource consumption across the entire database is recalculated, allowing the initial 10% estimate to be refined. This means that if more than 10 querys simultaneously arrive at a cluster node, then no more than 10 querys will be launched for execution, and the rest will wait for clarification of the actual CPU consumption.
 
-As with `CONCURRENT_QUERY_LIMIT` , when the specified load threshold is exceeded, requests are sent to a waiting queue.
+As with `CONCURRENT_QUERY_LIMIT` , when the specified load threshold is exceeded, querys are sent to a waiting queue.
 
 ### Resource allocation according to RESOURCES_WEIGHT {#resources_weight}
 
 ![resource_pools](../_assets/resources_weight.png)
 
-The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and if there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources . When requests appear in the resource pool, it begins to participate in resource allocation. To do this, the limits in the pools are recalculated according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed on each computing node individually, as shown in the figure above.
+The `RESOURCES_WEIGHT` parameter starts working only in case of oversubscription and if there is more than one resource pool in the system. In the current implementation, `RESOURCES_WEIGHT` only affects the allocation of `vCPU` resources . When querys appear in the resource pool, it begins to participate in resource allocation. To do this, the limits in the pools are recalculated according to the [Max-min fairness](https://en.wikipedia.org/wiki/Max-min_fairness) algorithm. The redistribution of resources itself is performed on each computing node individually, as shown in the figure above.
 
 Let's say we have a node on the system with $10 vCPU$ available. Limitations set:
 
 - $TOTAL\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 30$,
 - $QUERY\_CPU\_LIMIT\_PERCENT\_PER\_NODE = 50$.
 
-In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per request in that pool (Figure *a*). If there are 4 such pools on the system and they are all trying to use the maximum resources, that would be $12 vCPU$, which is more than the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` comes into effect, and each pool will be allocated $2.5 vCPU$ (Figure *b*).
+In this case, the resource pool will have a limit of $3 vCPU$ per node and $1.5 vCPU$ per query in that pool (Figure *a*). If there are 4 such pools on the system and they are all trying to use the maximum resources, that would be $12 vCPU$, which is more than the limit of available resources on the node ($10 vCPU$). In this case, `RESOURCES_WEIGHT` comes into effect, and each pool will be allocated $2.5 vCPU$ (Figure *b*).
 
 If you need to increase the allocated resources for a particular pool, you can change its weight, for example, to 200. Then this pool will receive $3 vCPU$, and the other pools will equally share the remaining $7 vCPU$, which will be $\frac{7}{3} vCPU$ per pool (Figure *c*).
 
@@ -88,7 +88,7 @@ The current resource allocation algorithm may change in the future without maint
 
 ## Default resource pool
 
-Even if no resource pool has been created, there is always a `default` resource pool in the system that cannot be deleted. Any request running in the system always belongs to some pool - there is no situation where a request is not tied to any resource pool. By default, the `default` resource pool settings look like this:
+Even if no resource pool has been created, there is always a `default` resource pool in the system that cannot be deleted. Any query running in the system always belongs to some pool - there is no situation where a query is not tied to any resource pool. By default, the `default` resource pool settings look like this:
 
 ```yql
 CREATE RESOURCE POOL default WITH (
@@ -102,11 +102,11 @@ CREATE RESOURCE POOL default WITH (
 )
 ```
 
-This means that the `default` resource pool does not have any restrictions applied: it operates independently of other pools and has no restrictions on the resources it can consume. In the `default` resource pool , you can change parameters using the query (alter-resource-pool.md), with the exception of the parameters `CONCURRENT_QUERY_LIMIT`, `DATABASE_LOAD_CPU_THRESHOLD` and `QUEUE_SIZE` . This limitation is intentional to minimize the risks associated with incorrectly configuring the default resource pool.
+This means that the `default` resource pool does not have any restrictions applied: it operates independently of other pools and has no restrictions on the resources it can consume. In the `default` resource pool , you can change parameters using the query (link), with the exception of the parameters `CONCURRENT_QUERY_LIMIT`, `DATABASE_LOAD_CPU_THRESHOLD` and `QUEUE_SIZE` . This limitation is intentional to minimize the risks associated with incorrectly configuring the default resource pool.
 
 ## Resource pool ACL management
 
-To create, modify, or delete a resource pool, you must grant access rights in accordance with the permissions described in the reference for (create-resource-pool.md). For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a request like this:
+To create, modify, or delete a resource pool, you must grant access rights in accordance with the permissions described in the reference for (link). For example, to create resource pools, you need to have `CREATE TABLE` permission to the `.metadata/workload_manager/pools` directory , which can be issued with a query like this:
 
 ```yql
 GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
@@ -114,7 +114,7 @@ GRANT CREATE TABLE ON `.metadata/workload_manager/pools` TO user1;
 
 ## Creating a resource pool classifier
 
-[Resorce pool classifier](../concepts/glossary.md#resource-pool-classifier) allow you to set rules by which requests will be distributed between resource pools. The example below is a resource pool qualifier that sends requests from all users to a resource pool named `olap`:
+[Resorce pool classifier](../concepts/glossary.md#resource-pool-classifier) allow you to set rules by which querys will be distributed between resource pools. The example below is a resource pool qualifier that sends querys from all users to a resource pool named `olap`:
 
 ```yql
 CREATE RESOURCE POOL CLASSIFIER olap_classifier
@@ -124,12 +124,12 @@ WITH (
 );
 ```
 
-- `RESOURCE_POOL` - the name of the resource pool to which a request that satisfies the requirements specified in the resource pool qualifier will be sent.
-- `MEMBER_NAME` — a group of users or user whose requests will be sent to the specified resource pool.
+- `RESOURCE_POOL` - the name of the resource pool to which a query that satisfies the requirements specified in the resource pool qualifier will be sent.
+- `MEMBER_NAME` — a group of users or user whose querys will be sent to the specified resource pool.
 
 ## Resource pool classifier ACL management
 
-There are no restrictions on the use of the resource pool classifier - they are global for the entire database and available to all users. To create, delete, or modify a resource pool classifier, you must have `ALL` permission on the entire database, which can be issued with a request like:
+There are no restrictions on the use of the resource pool classifier - they are global for the entire database and available to all users. To create, delete, or modify a resource pool classifier, you must have `ALL` permission on the entire database, which can be issued with a query like:
 
 ```yql
 GRANT ALL ON `/my_db` TO user1;
@@ -155,7 +155,7 @@ WITH (
 
 Let's say there are two resource pool classifiers with conflicting conditions, and the user `user1@domain` matches both resource pools: `olap1` and `olap2` . If no classifier existed in the system before, then `RANK=1000` is set for `olap1` , and `RANK =2000` for `olap2` . Resource pool classifiers with lower `RANK` values ​​have higher priority. In this example, since `olap1` has a higher priority `RANK` than `olap2` , it will be selected.
 
-You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction (create-resource-pool-classifier.md), or change `RANK` for existing resource pool classifiers using (alter-resource-pool-classifier.md).
+You can also independently set `RANK` for resource pool classifiers when creating using the syntactic construction (link), or change `RANK` for existing resource pool classifiers using (link).
 
 There cannot be two classifiers with the same `RANK` value in the system , which makes it possible to unambiguously determine which resource pool will be selected in the event of conflicting conditions.
 
@@ -224,9 +224,9 @@ In the body of the query plan obtained using the above command, you can find use
 
 Useful attributes:
 
-- `TotalDurationUs` — total request execution time, including queue time;
-- `ResourcePoolId` — the name of the resource pool to which the request was bound;
-- `QueuedTimeUs` — total time the request waited in the queue.
+- `TotalDurationUs` — total query execution time, including queue time;
+- `ResourcePoolId` — the name of the resource pool to which the query was bound;
+- `QueuedTimeUs` — total time the query waited in the queue.
 
 ### Metrics
 
@@ -234,7 +234,7 @@ Information about resource pool metrics can be found in [metrics reference](../r
 
 ### System Views
 
-Information about system views related to resource pools and resource pool qualifiers can be found at (system-views.md#resource_pools).
+Information about system views related to resource pools and resource pool qualifiers can be found at (link).
 
 ### See also
 

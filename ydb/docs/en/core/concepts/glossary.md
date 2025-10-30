@@ -248,9 +248,10 @@ A **semaphore** is an object within a [coordination node](#coordination-node) th
 
 {% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
 
-**Resource pool** — a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing requests in this resource pool. A request is always executed in some resource pool. By default, all requests are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article
+**Resource pool** — a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing querys in this resource pool. A query is always executed in some resource pool. By default, all querys are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article (link)
 
-**Resource pool classifier** — an object designed to manage the distribution of requests between resource pools(link). It describes the rules by which a pool of resources is selected for each request. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article
+**Resource pool classifier** — an object designed to manage the distribution of querys between resource pools(link). It describes the rules by which a pool of resources is selected for each query. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article (link)
+
 {% endif %}
 
 ### YQL {#yql}

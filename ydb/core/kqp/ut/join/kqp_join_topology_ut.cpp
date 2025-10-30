@@ -1,7 +1,11 @@
+#include <util/generic/ptr.h>
+#include <util/stream/file.h>
+#include <util/stream/output.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/ut/common/kqp_benches.h>
 #include <ydb/core/kqp/ut/common/kqp_arg_parser.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -132,7 +136,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return result.WithShuffleElimination / result.WithoutShuffleElimination;
     }
 
-    TKikimrRunner GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
+    std::unique_ptr<TKikimrRunner> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
         TVector<NKikimrKqp::TKqpSetting> settings;
 
         assert(!stats.empty());
@@ -151,7 +155,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         serverSettings.SetWithSampleTables(false);
         serverSettings.SetKqpSettings(settings);
 
-        return TKikimrRunner(serverSettings);
+        return std::make_unique<TKikimrRunner>(serverSettings);
     }
 
     std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
@@ -242,71 +246,190 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         OS << "}\n";
     }
 
-    template <typename Lambda>
-    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config,
-                                                 TArgs::TRangedValue<double> thetaRanged,
-                                                 TArgs::TRangedValue<double> alphaRanged,
-                                                 TArgs::TRangedValue<ui64> numTablesRanged,
-                                                 uint64_t state,
-                                                 Lambda &&lambda) {
 
-        TRNG mt = TRNG::Deserialize(state);
+    class TDegreeDistributionGenerator {
+    public:
+        virtual std::vector<int> Initialize(TArgs args) = 0;
+        virtual std::vector<int> GenerateDegreeSequence(TRNG &rng) = 0;
 
-        mt.reset();
+        virtual ~TDegreeDistributionGenerator() = default;
+    };
+
+    class TTopologyTester {
+    public:
+        virtual void Initialize(TArgs args) = 0;
+        virtual TRelationGraph ProduceGraph(TRNG &rng) = 0;
+        virtual void DumpParamsHeader(IOutputStream &OS) = 0;
+        virtual void DumpParams(IOutputStream &OS) = 0;
+        virtual void Loop(std::function<void()>) {}
+
+        virtual ~TTopologyTester() = default;
+    };
+
+
+    TPitmanYorConfig GetPitmanYorConfig(TArgs args) {
+        return TPitmanYorConfig{
+            .Alpha = args.GetArgOrDefault<double>("alpha", "0.5").GetValue(),
+            .Theta = args.GetArgOrDefault<double>("theta", "1.0").GetValue()
+        };
+    }
+
+    class TMCMCTester : public TTopologyTester {
+    public:
+        void Initialize(TArgs args) override {
+            N_ = args.GetArg<ui64>("N").GetValue();
+
+            auto initialDegrees = GenerateLogNormalDegrees(N_);
+            auto fixedDegrees = MakeGraphicConnected(initialDegrees);
+            InitialGraph_ = ConstructGraphHavelHakimi(fixedDegrees);
+        }
+
+        TRelationGraph ProduceGraph(TRNG &rng) override {
+            TRelationGraph graph = InitialGraph_;
+            MCMCRandomize(rng, graph, /*MCMCSteps*/100);
+            return graph;
+        }
+
+        void DumpParamsHeader(IOutputStream &OS) override {
+            OS << "N,";
+        }
+
+        void DumpParams(IOutputStream &OS) override {
+            OS << N_ << ",";
+        }
+
+    private:
+        TRelationGraph InitialGraph_;
+        ui32 N_;
+    };
+
+    struct TTestContext {
+        std::unique_ptr<TKikimrRunner> Runner;
+        NYdb::NQuery::TQueryClient QueryClient;
+        NYdb::NQuery::TSession Session;
+
+        TRNG RNG;
+        std::optional<TUnbufferedFileOutput> OS;
+    };
+
+    TTestContext CreateTestContext(TArgs args, uint64_t state = 0, std::string outputFile = "") {
+        TRNG rng = TRNG::Deserialize(state);
+
+        auto numTablesRanged = args.GetArg<uint64_t>("N");
+
+        rng.reset(); // ensure this setup is always the same
         TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTablesRanged.GetLast());
-        TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
+        TString stats = TSchemaStats::MakeRandom(rng, fullSchema, 7, 10).ToJSON();
 
-        mt.Restore(state);
+        rng.Restore(state);
 
         auto kikimr = GetCBOTestsYDB(stats, TDuration::Seconds(10));
-        auto db = kikimr.GetQueryClient();
+        auto db = kikimr->GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
-        auto OS = TUnbufferedFileOutput("results.csv");
-        DumpBoxPlotCSVHeader(OS);
+        std::optional<TUnbufferedFileOutput> os = std::nullopt;
+        if (!outputFile.empty()) {
+            os = TUnbufferedFileOutput(outputFile);
+        }
 
-        for (double alpha : alphaRanged) {
-            for (double theta : thetaRanged) {
-                for (ui64 numTables : numTablesRanged) {
-                    Cout << "\n\n";
-                    Cout << "================================ REPRODUCE -------------------------------\n";
-                    Cout << "TOPOLOGY='N=" << numTables << "; theta=" << theta << "; alpha=" << alpha << "; seed=" << mt.Serialize() << "'\n";
+        return { std::move(kikimr), std::move(db), std::move(session), std::move(rng), std::move(os) };
+    }
 
-                    TRelationGraph graph = lambda(mt, numTables);
-                    graph.SetupKeysPitmanYor(mt, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
+    void RunMCMC(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
+        if (ctx.OS) {
+            (*ctx.OS) << "N,alpha,theta,logStdDev,logMean,repeats,seed,";
+            DumpBoxPlotCSVHeader(*ctx.OS);
+            (*ctx.OS) << "\n";
+        }
 
-                    auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
-                    if (!result) {
-                        goto stop;
+        ui64 mcmcSteps = args.GetArgOrDefault<uint64_t>("mcmcSteps", "100").GetValue();
+        for (ui64 n : args.GetArg<uint64_t>("N")) {
+            for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
+                for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
+                    for (double logStdDev : args.GetArgOrDefault<double>("logStdDev", "0.5")) {
+                        for (double logMean : args.GetArgOrDefault<double>("logMean", "1.0")) {
+                            auto initialDegrees = GenerateLogNormalDegrees(n, logMean, logStdDev);
+                            auto fixedDegrees = MakeGraphicConnected(initialDegrees);
+                            auto initialGraph = ConstructGraphHavelHakimi(fixedDegrees);
+
+                            ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
+                            for (ui64 i = 0; i < repeats; ++ i) {
+                                Cout << "Reproduce: 'N=" << n << "; alpha=" << alpha << "; theta="
+                                     << theta << "; logStdDev=" << logStdDev << "; logMean=" << logMean
+                                     << "; seed=" << ctx.RNG.Serialize() << "'\n";
+
+                                ui64 seed = ctx.RNG.Serialize();
+
+                                TRelationGraph graph = initialGraph;
+                                MCMCRandomize(ctx.RNG, graph, mcmcSteps);
+                                graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
+
+                                auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, graph);
+                                if (!result) {
+                                    goto stop;
+                                }
+
+
+                                if (ctx.OS) {
+                                    (*ctx.OS) << n << "," << alpha << "," << theta << "," << logStdDev
+                                              << "," << logMean << "," << repeats << "," << seed << ",";
+                                    DumpBoxPlotToCSV(*ctx.OS, result->GetStatistics());
+                                    (*ctx.OS) << "\n";
+                                }
+                            }
+                        }
                     }
-
-                    DumpBoxPlotToCSV(OS, numTables, result->GetStatistics());
                 }
             }
         }
     stop:;
     }
 
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnStar) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateStar>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
+    template <auto TrivialTopology>
+    void RunTrivialTopology(TTestContext &ctx, TBenchmarkConfig config, TArgs args) {
+        if (ctx.OS) {
+            (*ctx.OS) << "N,alpha,theta,seed,";
+            DumpBoxPlotCSVHeader(*ctx.OS);
+            (*ctx.OS) << "\n";
+        }
 
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnLine) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateLine>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
+        for (ui64 n : args.GetArg<uint64_t>("N")) {
+            for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
+                for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
+                    ui64 seed = ctx.RNG.Serialize();
 
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnFullyConnected) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateFullyConnected>(/*maxNumTables=*/15, /*probabilityStep=*/0.2);
-    // }
+                    Cout << "Reproduce: 'N=" << n << "; alpha=" << alpha << "; theta="
+                         << theta << "; seed=" << seed << "'\n";
 
-    // Y_UNIT_TEST(ShuffleEliminationBenchmarkOnRandomTree) {
-    //     BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(/*maxNumTables=*/25, /*probabilityStep=*/0.2);
-    // }
+                    TRelationGraph graph = TrivialTopology(ctx.RNG, n);
+                    graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
+                    auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, graph);
+                    if (!result) {
+                        goto stop;
+                    }
 
+                    if (ctx.OS) {
+                        (*ctx.OS) << n << "," << alpha << "," << theta << "," << seed << ",";
+                        DumpBoxPlotToCSV(*ctx.OS, result->GetStatistics());
+                        (*ctx.OS) << "\n";
+                    }
+                }
+            }
+        }
+    stop:;
+    }
 
     Y_UNIT_TEST(Benchmark) {
         TArgs args{GetTestParam("TOPOLOGY")};
+        if (!args.HasArg("N")) {
+            return;
+        }
+
+        std::string topology = "star";
+        if (args.HasArg("type")) {
+            topology = args.GetString("type");
+        }
 
         auto config = GetBenchmarkConfig(args);
         DumpBenchmarkConfig(Cout, config);
@@ -316,25 +439,17 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             state = args.GetArg<uint64_t>("seed").GetValue();
         }
 
-        auto initialDegrees = GenerateLogNormalDegrees(15);
-        auto fixedDegrees = MakeGraphicConnected(initialDegrees);
-        auto graph = ConstructGraphHavelHakimi(fixedDegrees);
+        TTestContext ctx = CreateTestContext(args, state, GetTestParam("SAVE_FILE"));
 
-        auto GenerateTopology = [&](TRNG &mt, uint64_t n) {
-            (void) n;
-            MCMCRandomize(mt, graph, 50);
-
-            return graph;
-        };
-
-        BenchmarkShuffleEliminationOnTopologies(
-            config,
-            /*theta=*/args.GetArg<double>("theta"),
-            /*alpha=*/args.GetArg<double>("alpha"),
-            /*maxNumTables=*/args.GetArg<uint64_t>("N"),
-            state,
-            GenerateTopology
-        );
+        if (topology == "mcmc") {
+            RunMCMC(ctx, config, args);
+        } else if (topology == "star") {
+            RunTrivialTopology<GenerateStar>(ctx, config, args);
+        } else if (topology == "path") {
+            RunTrivialTopology<GenerateLine>(ctx, config, args);
+        } else if (topology == "clique") {
+            RunTrivialTopology<GenerateFullyConnected>(ctx, config, args);
+        }
     }
 
 

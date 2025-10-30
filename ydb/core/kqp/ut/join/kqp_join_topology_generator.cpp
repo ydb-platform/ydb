@@ -393,7 +393,7 @@ std::string TSchemaStats::ToJSON() const {
     return ss.str();
 }
 
-TRelationGraph GenerateLine(unsigned numNodes) {
+TRelationGraph GenerateLine([[maybe_unused]] TRNG &rng, unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     unsigned lastVertex = 0;
@@ -410,7 +410,7 @@ TRelationGraph GenerateLine(unsigned numNodes) {
     return graph;
 }
 
-TRelationGraph GenerateStar(unsigned numNodes) {
+TRelationGraph GenerateStar([[maybe_unused]] TRNG &rng, unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     unsigned root = 0;
@@ -421,7 +421,7 @@ TRelationGraph GenerateStar(unsigned numNodes) {
     return graph;
 }
 
-TRelationGraph GenerateFullyConnected(unsigned numNodes) {
+TRelationGraph GenerateFullyConnected([[maybe_unused]] TRNG &rng, unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     for (unsigned i = 0; i < numNodes; ++ i) {

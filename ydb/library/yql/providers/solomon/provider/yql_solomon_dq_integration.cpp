@@ -349,16 +349,14 @@ public:
             source.AddRequiredLabelNames(labelAsString);
         }
 
-        auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
-
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
 
         auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
-        auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
-        sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
+        sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
 
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});

@@ -668,6 +668,7 @@ public:
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         if (metadata && seqNo + 1 == metadata->NextOverloadSeqNo) {
             CA_LOG_D("Retry Overloaded ShardID=" << shardId);
+            ResetShardRetries(shardId, metadata->Cookie);
             SendDataToShard(shardId);
         }
     }
@@ -1077,6 +1078,7 @@ public:
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
         YQL_ENSURE(metadata);
+        YQL_ENSURE(metadata->SendAttempts == 0 || InconsistentTx);
         if (metadata->SendAttempts >= MessageSettings.MaxWriteAttempts) {
             CA_LOG_W("ShardId=" << shardId
                     << " for table '" << TablePath

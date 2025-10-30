@@ -14,25 +14,26 @@ namespace NKikimr::NKqp {
 
 using TRNG = TSerializableMT19937;
 
+
+struct TPitmanYorConfig {
+    double Alpha;
+    double Theta;
+};
+
+
 class TTable {
 public:
     TTable(unsigned numColumns = 0)
-        : NumColumns(numColumns)
+        : NumColumns_(numColumns)
     {
     }
 
-    unsigned GetRandomOrNewColumn(TRNG &mt, double newColumnProbability);
-
     unsigned GetNumColumns() const {
-        return NumColumns;
+        return NumColumns_;
     }
 
 private:
-    unsigned GetRandomColumn(TRNG &mt) const;
-
-private:
-    // table has columns from 0..NumColumns
-    unsigned NumColumns;
+    unsigned NumColumns_;
 };
 
 
@@ -76,9 +77,9 @@ public:
     {
     }
 
-    static TRelationGraph FromPrufer(TRNG &mt, const std::vector<unsigned>& prufer, double newColumnProbability);
+    static TRelationGraph FromPrufer(const std::vector<unsigned>& prufer);
 
-    void Connect(TRNG &mt, unsigned lhs, unsigned rhs, double newColumnProbability);
+    void Connect(unsigned lhs, unsigned rhs);
 
     std::string MakeQuery() const;
 
@@ -97,6 +98,8 @@ public:
     void ReorderDFS();
 
     void Rename(const std::vector<int> &oldToNew);
+
+    void SetupKeysPitmanYor(TRNG &mt, TPitmanYorConfig config);
 
 
 private:
@@ -134,10 +137,10 @@ private:
 };
 
 
-TRelationGraph GenerateLine(TRNG &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateStar(TRNG &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateFullyConnected(TRNG &mt, unsigned numNodes, double newColumnProbability);
-TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes, double newColumnProbability);
+TRelationGraph GenerateLine(unsigned numNodes);
+TRelationGraph GenerateStar(unsigned numNodes);
+TRelationGraph GenerateFullyConnected(unsigned numNodes);
+TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes);
 
 } // namespace NKikimr::NKqp
 

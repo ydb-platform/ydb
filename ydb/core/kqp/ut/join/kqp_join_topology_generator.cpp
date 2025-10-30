@@ -1,9 +1,11 @@
 #include "kqp_join_topology_generator.h"
 
+#include <cstdint>
 #include <vector>
 #include <cassert>
 #include <sstream>
 #include <random>
+#include <set>
 
 
 namespace NKikimr::NKqp {
@@ -65,30 +67,92 @@ static std::string getTablePath(unsigned tableID) {
     return "/Root/" + getTableName(tableID);
 }
 
-
-static unsigned getRandom(TRNG &mt, unsigned a, unsigned b) {
-    std::uniform_int_distribution<> distribution(a, b);
+static double getRandomNormalizedDouble(TRNG &mt) {
+    std::uniform_real_distribution<> distribution(0.0, 1.0);
     return distribution(mt);
 }
 
-static unsigned getRandomBool(TRNG &mt, double trueProbability) {
-    std::uniform_real_distribution<> distribution(0.0, 1.0);
-    return distribution(mt) < trueProbability;
-}
+static std::vector<ui32> GetPitmanYor(TRNG &mt, ui32 sum, TPitmanYorConfig config) {
+    std::vector<ui32> keyCounts{/*initial key=*/1};
 
+    for (ui32 column = 1; column < sum; ++ column) {
+        double random = getRandomNormalizedDouble(mt);
 
-unsigned TTable::GetRandomOrNewColumn(TRNG &mt, double newColumnProbability) {
-    bool generateNewColumn = getRandomBool(mt, newColumnProbability);
-    if (generateNewColumn || NumColumns == 0) {
-        return NumColumns ++;
+        double cumulative = 0.0;
+        int chosenTableIndex = -1;
+
+        for (ui32 i = 0; i < keyCounts.size(); ++ i) {
+            cumulative += (keyCounts[i] - config.Alpha) / (column + config.Theta);
+            if (random < cumulative) {
+                chosenTableIndex = i;
+                break;
+            }
+        }
+
+        if (chosenTableIndex == -1) {
+            keyCounts.push_back(1);
+        } else {
+            ++ keyCounts[chosenTableIndex];
+        }
     }
 
-    return GetRandomColumn(mt);
+    std::sort(keyCounts.begin(), keyCounts.end(), std::greater<int>{});
+    return keyCounts;
 }
 
-unsigned TTable::GetRandomColumn(TRNG &mt) const {
-    assert(NumColumns != 0);
-    return getRandom(mt, 0, NumColumns - 1);
+void TRelationGraph::SetupKeysPitmanYor(TRNG &mt, TPitmanYorConfig config) {
+    std::vector<std::pair<std::vector<ui32>, /*last index*/ui32>> distributions(GetN());
+    for (ui32 i = 0; i < GetN(); ++ i) {
+        auto distribution = GetPitmanYor(mt, AdjacencyList_[i].size(), config);
+        Schema_[i] = TTable{static_cast<ui32>(distribution.size())};
+        distributions[i] = {std::move(distribution), /*initial index=*/0};
+    }
+
+    auto GetKey = [&](ui32 node) {
+        auto &[nodeDistribution, lastIndex] = distributions[node];
+        ui32 key = lastIndex;
+
+        assert(lastIndex < nodeDistribution.size());
+        assert(nodeDistribution[lastIndex] != 0);
+        if (-- nodeDistribution[lastIndex] == 0) {
+            ++ lastIndex;
+        }
+
+        return key;
+    };
+
+    std::set<std::pair<uint32_t, uint32_t>> visited;
+
+    for (ui32 u = 0; u < GetN(); ++ u) {
+        for (ui32 i = 0; i < AdjacencyList_[u].size(); ++ i) {
+            TEdge* forwardEdge = &AdjacencyList_[u][i];
+            ui32 v = forwardEdge->Target;
+
+            if (visited.contains({v, u}) || visited.contains({u, v})) {
+                continue;
+            }
+
+            visited.insert({u, v});
+
+            // find backward edge
+            TEdge* backwardEdge = nullptr;
+            std::vector<TEdge>& targetAdjacency = AdjacencyList_[forwardEdge->Target];
+            for (ui32 k = 0; k < targetAdjacency.size(); ++ k) {
+                if (targetAdjacency[k].Target == u) {
+                    backwardEdge = &targetAdjacency[k];
+                }
+            }
+
+            ui32 ColumnLHS = GetKey(u);
+            ui32 ColumnRHS = GetKey(v);
+
+            forwardEdge->ColumnLHS = ColumnLHS;
+            forwardEdge->ColumnRHS = ColumnRHS;
+            backwardEdge->ColumnLHS = ColumnRHS;
+            backwardEdge->ColumnRHS = ColumnLHS;
+        }
+    }
+
 }
 
 
@@ -132,7 +196,7 @@ void TSchema::Rename(std::vector<int> oldToNew) {
 }
 
 
-TRelationGraph TRelationGraph::FromPrufer(TRNG &mt, const std::vector<unsigned>& prufer, double newColumnProbability) {
+TRelationGraph TRelationGraph::FromPrufer(const std::vector<unsigned>& prufer) {
     unsigned n = prufer.size() + 2;
 
     std::vector<int> degree(n, 1);
@@ -145,7 +209,7 @@ TRelationGraph TRelationGraph::FromPrufer(TRNG &mt, const std::vector<unsigned>&
     for (unsigned u : prufer) {
         for (unsigned v = 0; v < n; ++ v) {
             if (degree[v] == 1) {
-                graph.Connect(mt, u, v, newColumnProbability);
+                graph.Connect(u, v);
 
                 -- degree[v];
                 -- degree[u];
@@ -159,7 +223,7 @@ TRelationGraph TRelationGraph::FromPrufer(TRNG &mt, const std::vector<unsigned>&
     for (; v < n; ++ v) {
         if (degree[v] == 1) {
             if (u != -1) {
-                graph.Connect(mt, u, v, newColumnProbability);
+                graph.Connect(u, v);
                 break;
             }
 
@@ -170,12 +234,9 @@ TRelationGraph TRelationGraph::FromPrufer(TRNG &mt, const std::vector<unsigned>&
     return graph;
 }
 
-void TRelationGraph::Connect(TRNG &mt, unsigned lhs, unsigned rhs, double newColumnProbability) {
-    unsigned ColumnLHS = Schema_[lhs].GetRandomOrNewColumn(mt, newColumnProbability);
-    unsigned ColumnRHS = Schema_[rhs].GetRandomOrNewColumn(mt, newColumnProbability);
-
-    AdjacencyList_[lhs].push_back({rhs, ColumnLHS, ColumnRHS});
-    AdjacencyList_[rhs].push_back({lhs, ColumnRHS, ColumnLHS});
+void TRelationGraph::Connect(unsigned lhs, unsigned rhs) {
+    AdjacencyList_[lhs].push_back({/*Target=*/rhs, 0, 0});
+    AdjacencyList_[rhs].push_back({/*Target=*/lhs, 0, 0});
 }
 
 std::string TRelationGraph::MakeQuery() const {
@@ -332,14 +393,14 @@ std::string TSchemaStats::ToJSON() const {
     return ss.str();
 }
 
-TRelationGraph GenerateLine(TRNG &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateLine(unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     unsigned lastVertex = 0;
     bool first = true;
     for (unsigned i = 0; i < numNodes; ++ i) {
         if (!first) {
-            graph.Connect(mt, lastVertex, i, newColumnProbability);
+            graph.Connect(lastVertex, i);
         }
 
         first = false;
@@ -349,25 +410,23 @@ TRelationGraph GenerateLine(TRNG &mt, unsigned numNodes, double newColumnProbabi
     return graph;
 }
 
-TRelationGraph GenerateStar(TRNG &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateStar(unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     unsigned root = 0;
     for (unsigned i = 1; i < numNodes; ++ i) {
-        graph.Connect(mt, root, i, newColumnProbability);
+        graph.Connect(root, i);
     }
 
     return graph;
 }
 
-TRelationGraph GenerateFullyConnected(TRNG &mt, unsigned numNodes,
-                                      double newColumnProbability) {
-
+TRelationGraph GenerateFullyConnected(unsigned numNodes) {
     TRelationGraph graph(numNodes);
 
     for (unsigned i = 0; i < numNodes; ++ i) {
         for (unsigned j = i + 1; j < numNodes; ++ j) {
-            graph.Connect(mt, i, j, newColumnProbability);
+            graph.Connect(i, j);
         }
     }
 
@@ -386,9 +445,9 @@ static std::vector<unsigned> GenerateRandomPruferSequence(TRNG &mt, unsigned num
     return prufer;
 }
 
-TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes, double newColumnProbability) {
+TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes) {
     auto prufer = GenerateRandomPruferSequence(mt, numNodes);
-    return TRelationGraph::FromPrufer(mt, prufer, newColumnProbability);
+    return TRelationGraph::FromPrufer(prufer);
 }
 
 }

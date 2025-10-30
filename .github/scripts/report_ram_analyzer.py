@@ -8,7 +8,21 @@ import subprocess
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime, timezone
-from telegram.alert_queued_jobs import send_telegram_message, get_current_workflow_url, get_alert_logins
+from telegram.send_telegram_message import send_telegram_message
+
+
+def get_alert_logins() -> str:
+    logins = os.getenv('GH_ALERTS_TG_LOGINS')
+    return logins.strip() if logins else "@empEfarinov"
+
+
+def get_current_workflow_url() -> str:
+    github_repository = os.getenv('GITHUB_REPOSITORY', 'ydb-platform/ydb')
+    github_run_id = os.getenv('GITHUB_RUN_ID')
+
+    if github_run_id:
+        return f"https://github.com/{github_repository}/actions/runs/{github_run_id}"
+    return ""
 
 
 def timstamp_to_time(ts):

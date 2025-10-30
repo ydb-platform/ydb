@@ -21,19 +21,29 @@ namespace NKikimr {
     class TFreshAppendix {
     public:
         struct TRecord {
+        private:
             TKey Key;
             TMemRec MemRec;
 
+        public:
+            TKey GetKey() const {
+                return ReadUnaligned<TKey>(&Key);
+            }
+
+            TMemRec GetMemRec() const {
+                return ReadUnaligned<TMemRec>(&MemRec);
+            }
+
             bool operator <(const TKey &key) const {
-                return Key < key;
+                return GetKey() < key;
             }
 
             bool operator <(const TRecord &rec) const {
-                return Key < rec.Key;
+                return GetKey() < rec.GetKey();
             }
 
             bool operator ==(const TRecord &rec) const {
-                return Key == rec.Key;
+                return GetKey() == rec.GetKey();
             }
 
             TRecord(const TKey &key, const TMemRec &memRec)
@@ -62,7 +72,7 @@ namespace NKikimr {
         TFreshAppendix &operator=(TFreshAppendix &&) = default;
 
         void Add(const TKey &key, const TMemRec &memRec) {
-            Y_DEBUG_ABORT_UNLESS(SortedRecs.empty() || SortedRecs.back().Key < key);
+            Y_DEBUG_ABORT_UNLESS(SortedRecs.empty() || SortedRecs.back().GetKey() < key);
             SortedRecs.push_back({key, memRec});
             MemConsumed.Add(sizeof(TRecord));
         }
@@ -139,12 +149,12 @@ namespace NKikimr {
 
         TKey GetCurKey() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return It->Key;
+            return It->GetKey();
         }
 
         TMemRec GetMemRec() const {
             Y_DEBUG_ABORT_UNLESS(Valid());
-            return It->MemRec;
+            return It->GetMemRec();
         }
 
         void SeekToFirst() {
@@ -166,7 +176,7 @@ namespace NKikimr {
         void PutToMerger(TRecordMerger *merger) {
             // because fresh appendix doesn't have data we don't care about exact circaLsn value
             const ui64 circaLsn = 0;
-            merger->AddFromFresh(It->MemRec, nullptr, It->Key, circaLsn);
+            merger->AddFromFresh(It->GetMemRec(), nullptr, It->GetKey(), circaLsn);
         }
 
         template <class THeap>
@@ -467,4 +477,3 @@ namespace NKikimr {
     };
 
 } // NKikimr
-

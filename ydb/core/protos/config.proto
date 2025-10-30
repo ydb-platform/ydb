@@ -2697,6 +2697,28 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TAwsClientConfig {
+    message TLogConfig {
+        // Equivalent of Aws::Utils::Logging::LogLevel.
+        // Off = 0 (default)
+        // Fatal = 1
+        // Error = 2
+        // Warn = 3
+        // Info = 4
+        // Debug = 5
+        // Trace = 6
+        optional int32 LogLevel = 1;
+
+        // By default, logs will be written to standard output if they are enabled.
+        // To write to a file in the format YYYY-MM-DD-HH.log, specify the filename prefix.
+        // The resulting log file is '<FilenamePrefix> + YYYY-MM-DD-HH.log'
+        optional string FilenamePrefix = 2;
+    }
+
+    // Logging options
+    optional TLogConfig LogConfig = 1;
+}
+
 message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
@@ -2854,6 +2876,9 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+
+    // Built-in AWS client options (used, for example, to interact with S3).
+    optional TAwsClientConfig AwsClientConfig = 116;
 }
 
 message TYdbVersion {

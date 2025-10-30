@@ -61,7 +61,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                          \
                             new TGrpcRequestOperationCall<Ydb::Table::NAME##Request, Ydb::Table::NAME##Response>      \
                                 (ctx, &CB, TRequestAuxSettings {                                                      \
-                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                 \
+                                    .RlMode = RLSWITCH(LIMIT_TYPE),                                 \
                                     .AuditMode = AUDIT_MODE,                                                          \
                                     .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                \
                                 }));                                                                                  \
@@ -87,7 +87,7 @@ void TGRpcYdbTableService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                         ActorSystem_->Send(GRpcProxies_[proxyCounter % GRpcProxies_.size()],                                            \
                             new TGrpcRequestNoOperationCall<Ydb::Table::IN, Ydb::Table::OUT>                                            \
                                 (ctx, &CB, TRequestAuxSettings {                                                                        \
-                                    .RlMode = RLSWITCH(TRateLimiterMode::LIMIT_TYPE),                                                   \
+                                    .RlMode = RLSWITCH(LIMIT_TYPE),                                                   \
                                     .AuditMode = AUDIT_MODE,                                                                            \
                                     .RequestType = NJaegerTracing::ERequestType::TABLE_##REQUEST_TYPE,                                  \
                                 }));                                                                                                    \

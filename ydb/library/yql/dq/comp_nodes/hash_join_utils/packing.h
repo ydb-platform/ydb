@@ -5,6 +5,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 static void
 PackTupleFallbackRowImpl(const ui8 *const src_cols[], ui8 *const dst_rows,
                          const size_t cols, const size_t size,
@@ -276,6 +277,7 @@ UnpackTupleFallbackColImpl(const ui8 *const src_rows, ui8 *const dst_cols[],
                                col_sizes, offsets, padded_size,
                                start + block_size * block_rows);
 }
+#endif
 
 template <class TTraits> struct SIMDPack {
     template <class T> using TSimd = typename TTraits::template TSimd8<T>;
@@ -285,9 +287,11 @@ template <class TTraits> struct SIMDPack {
 
     /// 128-bit lane iters
     static const ui8 LaneIters = [] {
+#if YDB_HASH_JOIN_SIMD_ENABLED
         if constexpr (std::is_same_v<TTraits, NSimd::TSimdAVX2Traits>) {
             return 1;
         }
+#endif
         return 0;
     }();
 

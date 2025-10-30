@@ -23,6 +23,7 @@ namespace NPackedTuple {
 
 namespace {
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 // Transpose 8x8 bit-matrix packed in ui64 integer
 Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     /// fast path
@@ -90,6 +91,7 @@ void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
         x >>= 8;
     }
 }
+#endif
 
 } // namespace
 

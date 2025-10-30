@@ -22,8 +22,10 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 static volatile bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
+#endif
 
 namespace {
 
@@ -131,6 +133,7 @@ class TRepeatDistribution : public IDistribution {
 
 namespace {
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 template <size_t Batch, typename... Args> class TBenchmark {
     struct TResult {
         ui64 coldBuildTime = 0;
@@ -462,6 +465,7 @@ template <size_t Batch, typename... Args> class TBenchmark {
 
     std::vector<TConfig> Configs_;
 };
+#endif
 
 } // namespace
 
@@ -477,22 +481,27 @@ using TNeumannTableSeq = TNeumannHashTable<true, false>;
 using TNeumannTablePref = TNeumannHashTable<false, true>;
 using TNeumannTableSeqPref = TNeumannHashTable<true, true>;
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 using TPageTableSSE = TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>;
 using TPageTableSSEPref = TPageHashTableImpl<NSimd::TSimdSSE42Traits, true>;
 
 using TPageTableAVX2 = TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>;
 using TPageTableAVX2Pref = TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>;
+#endif
 
 // -----------------------------------------------------------------
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 template <typename... Args> struct TTablesCase {
     template <size_t Batch> using TBenchmark = TBenchmark<Batch, Args...>;
 };
 using TTablesBenchmark =
     TTablesCase<TPageTableSSEPref, TRobinHoodTableSeqPref, TNeumannTablePref>;
+#endif
 
 // -----------------------------------------------------------------
 
+#if YDB_HASH_JOIN_SIMD_ENABLED
 Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
 
     static constexpr size_t batchSize = 16;
@@ -528,7 +537,8 @@ Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
         benchmark.Run(toCSV);
     }
 
-} // Y_UNIT_TEST_SUITE(RobinHoodCheck)
+} // Y_UNIT_TEST_SUITE(HashTablesBenchmark)
+#endif
 
 } // namespace NPackedTuple
 } // namespace NMiniKQL

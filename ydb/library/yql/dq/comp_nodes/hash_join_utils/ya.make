@@ -13,6 +13,11 @@ IF (ARCH_X86_64 AND OS_LINUX)
     PEERDIR(
         ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
     )
+
+    CFLAGS(
+        -mprfchw
+        -mavx2
+    )
 ENDIF()
 
 SRCS(
@@ -22,12 +27,6 @@ SRCS(
     page_hash_table.cpp
 )
 
-IF (ARCH_X86_64 AND OS_LINUX)
-    CFLAGS(
-        -mprfchw
-        -mavx2
-    )
-ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

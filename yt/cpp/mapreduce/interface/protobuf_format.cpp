@@ -237,7 +237,6 @@ EWrapperOneofFlag::Enum OptionToOneofFlag(TOneofOption option)
     return std::visit(TVisitor(), option);
 }
 
-
 template <typename T, typename TOptionToFlag>
 void SetOption(TMaybe<T>& option, T newOption, TOptionToFlag optionToFlag)
 {
@@ -493,6 +492,18 @@ private:
     THashSet<const Descriptor*> ActiveVertices_;
     TStack<const Descriptor*> Stack_;
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+TString GetOneofName(const ::google::protobuf::OneofDescriptor* descriptor)
+{
+    auto nameFromExtension = descriptor->options().GetExtension(variant_field_name);
+    if (nameFromExtension.empty()) {
+        return FromProto<TString>(descriptor->name());
+    } else {
+        return nameFromExtension;
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1126,6 +1137,12 @@ TMaybe<TVector<TString>> InferColumnFilter(const ::google::protobuf::Descriptor&
             result.push_back(GetColumnName(*field));
         }
     }
+
+    for (int i = 0; i < descriptor.real_oneof_decl_count(); ++i) {
+        const auto* oneof = descriptor.oneof_decl(i);
+        result.push_back(GetOneofName(oneof));
+    }
+
     return result;
 }
 

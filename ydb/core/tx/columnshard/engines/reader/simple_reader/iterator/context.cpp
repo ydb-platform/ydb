@@ -103,7 +103,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         }
         if (needConflictDetector || GetFFColumns()->Cross(*GetSpecColumns())) {
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", NArrow::NSSA::IMemoryCalculationPolicy::EStage::Filter, false);
-            acc.AddStep(std::make_shared<TSnapshotFilter>());
+            acc.AddStep(std::make_shared<TConflictDetector>());
         }
         if (preventDuplicates) {
             acc.AddStep(std::make_shared<TDuplicateFilter>());

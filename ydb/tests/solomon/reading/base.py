@@ -73,6 +73,10 @@ class SolomonReadingTestBase(object):
                     "value": "true"
                 },
                 {
+                    "name": "_EnableSolomonClientPostApi",
+                    "value": "true"
+                },
+                {
                     "name": "_MaxListingPageSize",
                     "value": 1000
                 },

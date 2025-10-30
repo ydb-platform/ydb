@@ -133,12 +133,12 @@ TExecutor::TExecutor(
     , Time(TAppData::TimeProvider)
     , Owner(owner)
     , OwnerActorId(ownerActorId)
-    , MaxTxInFly(AppData()->MemoryControllerConfig.GetMaxTxInFly())
     , Emitter(new TIdEmitter)
     , CounterEventsInFlight(new TEvTabletCounters::TInFlightCookie)
     , Stats(new TExecutorStatsImpl())
     , LogFlushDelayOverrideUsec(-1, -1, 60*1000*1000)
     , MaxCommitRedoMB(256, 1, 4096)
+    , MaxTxInFly(10000, 0, 1000000)
 {}
 
 TExecutor::~TExecutor() {
@@ -181,6 +181,7 @@ void TExecutor::Registered(TActorSystem *sys, const TActorId&)
     TString myTabletType = TTabletTypes::TypeToStr(Owner->TabletType());
     AppData()->Icb->RegisterSharedControl(LogFlushDelayOverrideUsec, myTabletType + "_LogFlushDelayOverrideUsec");
     AppData()->Icb->RegisterSharedControl(MaxCommitRedoMB, "TabletControls.MaxCommitRedoMB");
+    AppData()->Icb->RegisterSharedControl(MaxTxInFly, "TabletControls.MaxTxInFly");
 
     // instantiate alert counters so even never reported alerts are created
     GetServiceCounters(AppData()->Counters, "tablets")->GetCounter("alerts_pending_nodata", true);
@@ -4073,8 +4074,7 @@ void TExecutor::ForceSendCounters() {
 
 float TExecutor::GetRejectProbability() const {
     // Limit number of in-flight TXs
-    // TODO: make configurable
-    if (Stats->TxInFly > MaxTxInFly) {
+    if (Stats->TxInFly > ui64(MaxTxInFly)) {
         HadRejectProbabilityByTxInFly = true;
         return 1.0;
     }
@@ -4110,7 +4110,7 @@ float TExecutor::GetRejectProbability() const {
 }
 
 void TExecutor::MaybeRelaxRejectProbability() {
-    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= MaxTxInFly ||
+    if (HadRejectProbabilityByTxInFly && Stats->TxInFly <= ui64(MaxTxInFly) ||
         HadRejectProbabilityByOverload)
     {
         HadRejectProbabilityByTxInFly = false;

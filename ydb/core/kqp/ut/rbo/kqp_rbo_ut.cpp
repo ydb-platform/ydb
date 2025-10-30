@@ -355,6 +355,97 @@ Y_UNIT_TEST_SUITE(KqpRbo) {
         UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(Aggregation) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/t1` (
+                a Int64 NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            );
+
+            CREATE TABLE `/Root/t2` (
+                a Int64	NOT NULL,
+	            b Int64,
+                c Int64,
+                primary key(a)
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        NYdb::TValueBuilder rowsTableT1;
+        rowsTableT1.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            rowsTableT1.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i & 1 ? 1 : 2)
+                .AddMember("c").Int64(2)
+                .EndStruct();
+        }
+        rowsTableT1.EndList();
+
+        auto resultUpsert = db.BulkUpsert("/Root/t1", rowsTableT1.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+        NYdb::TValueBuilder rowsTableT2;
+        rowsTableT2.BeginList();
+        for (size_t i = 0; i < 5; ++i) {
+            rowsTableT2.AddListItem()
+                .BeginStruct()
+                .AddMember("a").Int64(i)
+                .AddMember("b").Int64(i & 1 ? 1 : 2)
+                .AddMember("c").Int64(2)
+                .EndStruct();
+        }
+        rowsTableT2.EndList();
+
+        resultUpsert = db.BulkUpsert("/Root/t2", rowsTableT2.Build()).GetValueSync();
+        UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
+
+
+        std::vector<std::string> queries = {
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select t1.b, sum(t1.c) from t1 group by t1.b order by t1.b;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select t1.b, sum(t1.c) from t1 inner join t2 on t1.a = t2.a group by t1.b order by t1.b;
+            )",
+            R"(
+                --!syntax_pg
+                SET TablePathPrefix = "/Root/";
+                select sum(t1.c) from t1 group by t1.b
+                union all
+                select sum(t1.b) from t1;
+            )",
+        };
+
+        std::vector<std::string> results = {
+            R"([["1";"4"];["2";"6"]])",
+            R"([["1";"4"];["2";"6"]])",
+            R"([["6"];["4"];["8"]])"
+        };
+
+        for (ui32 i = 0; i < queries.size(); ++i) {
+            const auto &query = queries[i];
+            auto result = session2.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), results[i]);
+        }
+    }
+
     Y_UNIT_TEST(UnionAll) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

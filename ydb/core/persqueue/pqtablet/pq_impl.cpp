@@ -1333,25 +1333,16 @@ void TPersQueue::UpdateConsumers(NKikimrPQ::TPQTabletConfig& cfg)
     const int curConfigVersion = cfg.GetVersion();
 
     THashMap<TString, NKikimrPQ::TPQTabletConfig::TConsumer> existedConsumers;
-    std::unordered_set<ui32> existedId;
     for (const auto& c : Config.GetConsumers()) {
         existedConsumers[c.GetName()] = c;
-        existedId.insert(c.GetId());
     }
 
-    ui32 nextConsumerId = 0;
     for (auto& c : *cfg.MutableConsumers()) {
         auto it = existedConsumers.find(c.GetName());
         if (it != existedConsumers.end() && it->second.GetVersion() == c.GetVersion()) {
             c.SetGeneration(it->second.GetGeneration());
-            c.SetId(it->second.GetId());
         } else {
             c.SetGeneration(curConfigVersion);
-            for (++nextConsumerId; existedId.contains(nextConsumerId); ++nextConsumerId) {
-                AFL_ENSURE(nextConsumerId < Max<ui32>());
-            }
-            c.SetId(nextConsumerId);
-            existedId.insert(nextConsumerId);
         }
     }
 }
@@ -2607,7 +2598,6 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TStringBuilder log; log << "PQ - create read proxy" << Endl;
         TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {

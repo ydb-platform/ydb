@@ -1,7 +1,6 @@
 #include "link_manager.h"
 #include "ctx.h"
-
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include "ctx_impl.h"
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -58,7 +57,6 @@ public:
         try {
             IbvDlOpen();
         } catch (std::exception& ex) {
-            Cerr << "Unalbe to load ibverbs library: " << ex.what() << Endl;
             return;
         }
         ScanDevices();
@@ -124,7 +122,7 @@ private:
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            ctx->DeviceIndex = i;
+            ctx->Impl->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;

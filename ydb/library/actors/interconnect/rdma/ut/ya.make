@@ -20,7 +20,9 @@ PEERDIR(
     contrib/libs/ibdrv
     ydb/library/actors/core
     ydb/library/actors/interconnect
+    ydb/library/actors/interconnect/address
     ydb/library/actors/interconnect/rdma
+    ydb/library/actors/interconnect/rdma/cq_actor
     ydb/library/actors/testlib
 )
 

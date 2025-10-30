@@ -1654,6 +1654,7 @@ TNodePtr TColumnNode::DoClone() const {
     copy->Reliable_ = Reliable_;
     copy->UseSource_ = UseSource_;
     copy->UseSourceAsColumn_ = UseSourceAsColumn_;
+    copy->IsYqlRef_ = IsYqlRef_;
     return copy;
 }
 
@@ -3157,7 +3158,7 @@ bool TUdfNode::DoInit(TContext& ctx, ISource* src) {
                 if (!IsBackwardCompatibleFeatureAvailable(ctx.Settings.LangVer,
                                                           NYql::MakeLangVersion(2025, 4), ctx.Settings.BackportMode))
                 {
-                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.03";
+                    ctx.Error() << "Udf: named argument Layers is not available before version 2025.04";
                     return false;
                 }
                 Layers_ = arg;

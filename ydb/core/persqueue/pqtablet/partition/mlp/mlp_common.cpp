@@ -21,7 +21,7 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(
         TString{},
         consumerName,
         0,
-        std::numeric_limits<ui32>::max(),
+        8_MB,
         0,
         0,
         "unknown",
@@ -51,6 +51,11 @@ std::unique_ptr<TEvPQ::TEvSetClientInfo> MakeEvCommit(
 bool IsSucess(const TEvPQ::TEvProxyResponse::TPtr& ev) {
     return ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
         ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK;
+}
+
+bool IsSucess(const TEvPersQueue::TEvResponse::TPtr& ev) {
+    return ev->Get()->Record.GetStatus() == NMsgBusProxy::MSTATUS_OK &&
+        ev->Get()->Record.GetErrorCode() == NPersQueue::NErrorCode::OK;
 }
 
 ui64 GetCookie(const TEvPQ::TEvProxyResponse::TPtr& ev) {

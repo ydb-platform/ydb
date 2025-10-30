@@ -668,6 +668,48 @@ TString TOpLimit::ToString(TExprContext& ctx) {
     return TStringBuilder() << "Limit: " << PrintRBOExpression(LimitCond, ctx); 
 }
 
+TOpAggregate::TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggTraitsList, TVector<TInfoUnit>& keyColumns,
+                           EAggregationPhase aggPhase, TPositionHandle pos)
+    : IUnaryOperator(EOperator::Aggregate, pos, input), AggregationTraitsList(aggTraitsList), KeyColumns(keyColumns), AggregationPhase(aggPhase) {}
+
+TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
+    // We assume that aggregation returns column is order [keys, states]
+    TVector<TInfoUnit> outputIU = KeyColumns;
+    for (const auto& aggTraits : AggregationTraitsList) {
+        outputIU.push_back(aggTraits.ResultColName);
+    }
+    return outputIU;
+}
+
+TString TOpAggregate::ToString(TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    TStringBuilder strBuilder;
+    strBuilder << "Aggregate (";
+    for (ui32 i = 0; i < AggregationTraitsList.size(); ++i) {
+        strBuilder << AggregationTraitsList[i].AggFunction << "(" << AggregationTraitsList[i].OriginalColName.GetFullName() << ")";
+        if (i + 1 != AggregationTraitsList.size()) {
+            strBuilder << ", ";
+        }
+    }
+
+    strBuilder << " [";
+    for (ui32 i = 0; i < KeyColumns.size(); ++i) {
+        strBuilder << KeyColumns[i].GetFullName();
+        if (i + 1 != KeyColumns.size()) {
+            strBuilder << ", ";
+        }
+    }
+    strBuilder << "] : ";
+    if (AggregationPhase == EAggregationPhase::Intermediate) {
+        strBuilder << "Initial";
+    } else {
+        strBuilder << "Final";
+    }
+    strBuilder << ")";
+    return strBuilder;
+}
+
 TOpRoot::TOpRoot(std::shared_ptr<IOperator> input, TPositionHandle pos) : IUnaryOperator(EOperator::Root, pos, input) {}
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() { return GetInput()->GetOutputIUs(); }

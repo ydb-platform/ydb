@@ -224,6 +224,7 @@ class PnpmPackageManager(BasePackageManager):
                 "--no-verify-store-integrity",
                 "--prefer-offline" if local_cli else "--offline",
                 "--config.confirmModulesPurge=false",  # hack for https://st.yandex-team.ru/FBP-1295
+                "--config.preferSymlinkedExecutables=true",
                 "--package-import-method",
                 "hardlink",
                 # "--registry" will be set later inside self._exec_command()

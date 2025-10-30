@@ -9,7 +9,7 @@ namespace NKikimr::NPQ::NMLP {
 namespace {
 
 void ReplyError(const TActorIdentity selfActorId, const TActorId& sender, ui64 cookie, TString&& error) {
-    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::INTERNAL_ERROR, std::move(error)), 0, cookie);
+    selfActorId.Send(sender, new TEvPQ::TEvMLPErrorResponse(Ydb::StatusIds::UNAVAILABLE, std::move(error)), 0, cookie);
 }
 
 template<typename T>
@@ -38,11 +38,11 @@ void ReplyOk(const TActorIdentity selfActorId, std::deque<T>& queue) {
 
 }
 
+TString MakeSnapshotKey(ui32 partitionId, const TString& consumerName) {
+    TKeyPrefix ikey(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId), TKeyPrefix::EMark::MarkMLPSnapshot);
+    ikey.Append(consumerName.c_str(), consumerName.size());
 
-
-TString MakeSnapshotKey(ui32 partitionId, ui32 consumerId) {
-    return TStringBuilder() << TKeyPrefix(TKeyPrefix::EType::TypeMLPConsumerData, TPartitionId(partitionId)).ToString()
-        << "_" << Sprintf("%.10" PRIu32, consumerId);
+    return ikey.ToString();
 }
 
 TConsumerActor::TConsumerActor(ui64 tabletId, const TActorId& tabletActorId, ui32 partitionId, const TActorId& partitionActorId, const NKikimrPQ::TPQTabletConfig_TConsumer& config)
@@ -60,7 +60,7 @@ void TConsumerActor::Bootstrap() {
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxMessageReceiveCount());
 
-    auto key = MakeSnapshotKey(PartitionId, Config.GetId());
+    auto key = MakeSnapshotKey(PartitionId, Config.GetName());
     LOG_D("Reading snapshot " << key << " from " << TabletActorId.ToString());
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     request->Record.AddCmdRead()->SetKey(key);
@@ -151,8 +151,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                 return Restart(TStringBuilder() << "Parse snapshot error");
             }
 
-            if (Config.GetId() != snapshot.GetConfiguration().GetConsumerId()) {
-                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetId() << " vs " << snapshot.GetConfiguration().GetConsumerId());
+            if (Config.GetName() != snapshot.GetConfiguration().GetConsumerName()) {
+                return Restart(TStringBuilder() << "Snapshot consumer id mismatch: " << Config.GetName() << " vs " << snapshot.GetConfiguration().GetConsumerName());
             }
 
             if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
@@ -170,6 +170,8 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
         default:
             return Restart(TStringBuilder() << "Received KV response error on initialization: " << readResult.GetStatus());
     }
+
+    CommitIfNeeded();
 
     if (!FetchMessagesIfNeeded()) {
         LOG_D("Initialized");
@@ -219,7 +221,7 @@ void TConsumerActor::HandleOnWrite(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!PendingReadQueue.empty()) {
         auto msgs = std::exchange(PendingReadQueue, {});
-        RegisterWithSameMailbox(new TMessageEnricherActor(PartitionId, PartitionActorId, Config.GetName(), std::move(msgs))); // TODO excahnge
+        RegisterWithSameMailbox(new TMessageEnricherActor(TabletActorId, PartitionId, Config.GetName(), std::move(msgs)));
     }
     ReplyOk<TEvPQ::TEvMLPCommitResponse>(SelfId(), PendingCommitQueue);
     ReplyOk<TEvPQ::TEvMLPUnlockResponse>(SelfId(), PendingUnlockQueue);
@@ -272,12 +274,7 @@ STFUNC(TConsumerActor::StateWrite) {
 void TConsumerActor::Restart(TString&& error) {
     LOG_E(error);
 
-    Send(PartitionActorId, new TEvPQ::TEvMLPRestartActor());
-
-    ReplyErrorAll(SelfId(), ReadRequestsQueue);
-    ReplyErrorAll(SelfId(), CommitRequestsQueue);
-    ReplyErrorAll(SelfId(), UnlockRequestsQueue);
-    ReplyErrorAll(SelfId(), ChangeMessageDeadlineRequestsQueue);
+    Send(TabletActorId, new TEvents::TEvPoison());
 
     PassAway();
 }
@@ -377,13 +374,13 @@ void TConsumerActor::PersistSnapshot() {
     NKikimrPQ::TMLPStorageSnapshot snapshot;
 
     auto* config = snapshot.MutableConfiguration();
-    config->SetConsumerId(Config.GetId());
+    config->SetConsumerName(Config.GetName());
     config->SetGeneration(Config.GetGeneration());
     Storage->CreateSnapshot(snapshot);
 
     auto request = std::make_unique<TEvKeyValue::TEvRequest>();
     auto* write = request->Record.AddCmdWrite();
-    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetId()));
+    write->SetKey(MakeSnapshotKey(PartitionId, Config.GetName()));
     write->SetValue(snapshot.SerializeAsString());
 
     Send(TabletActorId, std::move(request));
@@ -408,11 +405,12 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
     FetchInProgress = true;
 
-    auto maxMessages = std::min(metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount,
-        TStorage::MaxMessages - metrics.InflyMessageCount);
-    if (metrics.InflyMessageCount < TStorage::MinMessages) {
-        maxMessages = std::max(maxMessages, TStorage::MinMessages - metrics.InflyMessageCount);
+    auto maxMessages = TStorage::MinMessages;
+    if (metrics.LockedMessageCount * 2 > metrics.UnprocessedMessageCount) {
+        maxMessages = std::max<size_t>(maxMessages, metrics.LockedMessageCount * 2 - metrics.UnprocessedMessageCount);
     }
+    maxMessages = std::min(maxMessages, TStorage::MaxMessages - metrics.InflyMessageCount);
+
     LOG_D("Fetching " << maxMessages << " messages from offset " << Storage->GetLastOffset() << " from " << PartitionActorId);
     Send(PartitionActorId, MakeEvRead(SelfId(), Config.GetName(), Storage->GetLastOffset(), maxMessages, ++FetchCookie));
 
@@ -440,6 +438,7 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
         return;
     }
 
+    size_t messageCount = 0;
     auto& response = ev->Get()->Response;
     if (response->GetPartitionResponse().HasCmdReadResult()) {
         auto lastOffset = Storage->GetLastOffset();
@@ -452,8 +451,11 @@ void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
                 continue;
             }
 
-            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), Hash(result.GetSourceId()));
+            Storage->AddMessage(result.GetOffset(), result.HasSourceId() && !result.GetSourceId().empty(), static_cast<ui32>(Hash(result.GetSourceId())));
+            ++messageCount;
         }
+
+        LOG_D("Fetched " << messageCount << " messages");
 
         ProcessEventQueue();
     }

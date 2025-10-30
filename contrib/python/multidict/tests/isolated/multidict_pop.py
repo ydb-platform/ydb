@@ -23,13 +23,15 @@ def get_memory_usage() -> int:
     return memory_info.rss / (1024 * 1024)  # type: ignore[no-any-return]
 
 
+initial_memory_usage = get_memory_usage()
+
 keys = [f"X-Any-{i}" for i in range(100)]
 headers = {key: key * 2 for key in keys}
 
 
 def check_for_leak() -> None:
     trim_ram()
-    usage = get_memory_usage()
+    usage = get_memory_usage() - initial_memory_usage
     assert usage < 50, f"Memory leaked at: {usage} MB"
 
 

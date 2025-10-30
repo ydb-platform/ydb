@@ -114,7 +114,9 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
         auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
         UNIT_ASSERT(failureProbs != nullptr);
-        failureProbs->WriteErrorProbability.store(1.0);
+        while (failureProbs->WriteErrorProbability.load() < 0.99) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
 
         TString data = PrepareData(4096);
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
@@ -146,7 +148,9 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
 
         auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
         UNIT_ASSERT(failureProbs != nullptr);
-        failureProbs->ReadErrorProbability.store(1.0);
+        while (failureProbs->ReadErrorProbability.load() < 0.99) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
 
         TString data = PrepareData(4096);
         TString originalData = data;
@@ -182,6 +186,12 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
             appData.Dcb->SetValue(controlName, oneProb, prevValue);
         }
 
+        auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
+        UNIT_ASSERT(failureProbs != nullptr);
+        while (failureProbs->SilentWriteFailProbability.load() < 0.99) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+
         TString data = PrepareData(4096);
         TString originalData = data;
         testCtx.TestResponse<NPDisk::TEvChunkWriteResult>(
@@ -194,11 +204,7 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
                     reservedChunk, 0, 4096, NPriRead::HullOnlineOther, nullptr),
                 NKikimrProto::OK);
 
-        TString expectedData(4096, '\x33');
-        if (res->Data.IsReadable()) {
-            UNIT_ASSERT_EQUAL(res->Data.ToString(), expectedData);
-            UNIT_ASSERT_UNEQUAL(res->Data.ToString(), originalData);
-        }
+        UNIT_ASSERT(!res->Data.IsReadable());
     }
 
     Y_UNIT_TEST(TestReadReplayPDisk) {
@@ -228,7 +234,19 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
  
         auto* failureProbs = testCtx.TestCtx.SectorMap->GetFailureProbabilities();
         UNIT_ASSERT(failureProbs != nullptr);
-        failureProbs->ReadReplayProbability.store(1.0);
+
+        {
+            auto *runtime = testCtx.GetRuntime();
+            auto &appData = runtime->GetAppData();
+            TAtomic prevValue = 0;
+            const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
+            TString controlName = Sprintf("PDisk_%u_SectorMapReadReplayProbability", pdiskId);
+            const TAtomicBase oneProb = 1000000000;
+            appData.Dcb->SetValue(controlName, oneProb, prevValue);
+        }
+        while (failureProbs->ReadReplayProbability.load() < 0.99) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
 
         const auto& res = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                 new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
@@ -236,7 +254,19 @@ Y_UNIT_TEST_SUITE(TPDiskFailureInjection) {
                 NKikimrProto::OK);
         UNIT_ASSERT_EQUAL(res->Data.ToString(), originalData1);
 
-        failureProbs->ReadReplayProbability.store(0.0);
+        {
+            auto *runtime = testCtx.GetRuntime();
+            auto &appData = runtime->GetAppData();
+            TAtomic prevValue = 0;
+            const ui32 pdiskId = testCtx.GetPDisk()->PCtx->PDiskId;
+            TString controlName = Sprintf("PDisk_%u_SectorMapReadReplayProbability", pdiskId);
+            const TAtomicBase zeroProb = 0;
+            appData.Dcb->SetValue(controlName, zeroProb, prevValue);
+        }
+        while (failureProbs->ReadReplayProbability.load() > 0.01) {
+            Sleep(TDuration::MilliSeconds(10));
+        }
+
         const auto& res2 = testCtx.TestResponse<NPDisk::TEvChunkReadResult>(
                 new NPDisk::TEvChunkRead(vdisk.PDiskParams->Owner, vdisk.PDiskParams->OwnerRound,
                     reservedChunk, 0, 4096, NPriRead::HullOnlineOther, nullptr),

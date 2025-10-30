@@ -2139,7 +2139,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             Ydb::Topic::CommitOffsetRequest req;
             Ydb::Topic::CommitOffsetResponse resp;
 
-            req.set_path("acc/topic1");
+            req.set_path("/Root/PQ/rt3.dc1--acc--topic1");
             req.set_consumer("user");
             req.set_offset(5);
             grpc::ClientContext rcontext;
@@ -2520,9 +2520,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
             request.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_CUSTOM + 42);
 
-            auto consumer = request.add_consumers();
-            consumer->set_name("first-consumer");
-            consumer->set_important(false);
+            {
+                auto consumer = request.add_consumers();
+                consumer->set_name("first-consumer");
+                consumer->set_important(false);
+            }
+            {
+                auto consumer = request.add_consumers();
+                consumer->set_name("user");
+                consumer->set_important(false);
+            }
             grpc::ClientContext rcontext;
 
             auto status = TopicStubP_->CreateTopic(&rcontext, request, &response);
@@ -4416,7 +4423,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto checkCounters = [](auto monPort, const TString& session,
                                     const std::set<std::string>& canonicalSensorNames,
                                     const TString& clientDc, const TString& originDc,
-                                    const TString& client, const TString& consumerPath) {
+                                    const TString& client,
+                                    const TString& consumerPath) {
                 NJson::TJsonValue counters;
 
                 if (clientDc.empty() && originDc.empty()) {
@@ -4492,7 +4500,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             GetClassifierUpdate(*server.CleverServer, sender); //wait for initializing
 
-            server.AnnoyingClient->CreateTopic("rt3.dc1--account--topic1", 10, 10000, 10000, 2000);
+            server.AnnoyingClient->CreateTopic(
+                "rt3.dc1--account--topic1",
+                10,
+                10000,
+                10000,
+                2000,
+                "",
+                200000000,
+                { consumerName }
+            );
 
             auto driver = server.AnnoyingClient->GetDriver();
 
@@ -4568,7 +4585,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             {
                 NYdb::NPersQueue::TReadSessionSettings settings;
                 settings.ConsumerName(originallyProvidedConsumerName)
-                    .AppendTopics(std::string{"account/topic1"}).ReadOriginal({"dc1"})
+                    .AppendTopics(std::string{"account/topic1"})
+                    .ReadOriginal({"dc1"})
                     .Header({{NYdb::YDB_APPLICATION_NAME, userAgent}});
 
                 auto reader = CreateReader(*driver, settings);
@@ -5877,7 +5895,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ServiceType: "data-streams"
       Version: 0
       Type: CONSUMER_TYPE_STREAMING
-      Id: 1
     }
     Consumers {
       Name: "consumer"
@@ -5893,7 +5910,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Version: 567
       Important: true
       Type: CONSUMER_TYPE_STREAMING
-      Id: 2
     }
   }
   ErrorCode: OK

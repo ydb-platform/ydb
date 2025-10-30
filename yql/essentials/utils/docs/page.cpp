@@ -42,10 +42,24 @@ TString ExtendedSyntaxRemoved(TString text) {
     return text;
 }
 
+TString CodeListingsTagRemoved(TString text) {
+    static const RE2 regex(R"re(```[a-z0-9]{1,16})re");
+    RE2::GlobalReplace(&text, regex, "```");
+    return text;
+}
+
 TMarkdownPage ExtendedSyntaxRemoved(TMarkdownPage page) {
     page.Text = ExtendedSyntaxRemoved(page.Text);
     for (auto& [_, section] : page.SectionsByAnchor) {
         section.Body = ExtendedSyntaxRemoved(std::move(section.Body));
+    }
+    return page;
+}
+
+TMarkdownPage CodeListingsTagRemoved(TMarkdownPage page) {
+    page.Text = CodeListingsTagRemoved(page.Text);
+    for (auto& [_, section] : page.SectionsByAnchor) {
+        section.Body = CodeListingsTagRemoved(std::move(section.Body));
     }
     return page;
 }
@@ -69,6 +83,13 @@ TPages Resolved(TPages pages, TStringBuf baseURL) {
 TPages ExtendedSyntaxRemoved(TPages pages) {
     for (auto& [_, page] : pages) {
         page = ExtendedSyntaxRemoved(std::move(page));
+    }
+    return pages;
+}
+
+TPages CodeListingsTagRemoved(TPages pages) {
+    for (auto& [_, page] : pages) {
+        page = CodeListingsTagRemoved(std::move(page));
     }
     return pages;
 }

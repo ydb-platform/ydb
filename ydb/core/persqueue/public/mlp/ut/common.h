@@ -110,4 +110,25 @@ inline void AssertReadError(NActors::TTestActorRuntime& runtime, Ydb::StatusIds:
     UNIT_ASSERT_VALUES_EQUAL(response->ErrorDescription, message);
 }
 
+inline void WriteMany(std::shared_ptr<TTopicSdkTestSetup> setup, const std::string& topic, ui32 partitionId, size_t messageSize, size_t messageCount) {
+    TTopicClient client(setup->MakeDriver());
+
+    TWriteSessionSettings settings;
+    settings.Path(topic);
+    settings.PartitionId(partitionId);
+    settings.Codec(NYdb::NTopic::ECodec::RAW);
+    settings.DeduplicationEnabled(true);
+    settings.ProducerId("test-producer")
+        .MessageGroupId("test-producer");
+    auto session = client.CreateSimpleBlockingWriteSession(settings);
+
+    for(; messageCount; --messageCount) {
+        auto message = NUnitTest::RandomString(messageSize);
+        UNIT_ASSERT(session->Write(message));
+    }
+
+    session->Close();
+
+}
+
 }

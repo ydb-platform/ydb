@@ -1,5 +1,7 @@
 #include "purecalc_filter.h"
 
+#include <fmt/format.h>
+
 #include <ydb/core/fq/libs/actors/logging/log.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -10,6 +12,7 @@ namespace NFq::NRowDispatcher {
 
 namespace {
 
+constexpr std::string_view FILTER_FIELD_NAME = "_filter";
 constexpr std::string_view OFFSET_FIELD_NAME = "_offset";
 constexpr std::string_view WATERMARK_FIELD_NAME = "_watermark";
 
@@ -41,41 +44,26 @@ NYT::TNode CreateColumnNode(const TSchemaColumn& column) {
         throw yexception() << "Failed to parse column '" << column.Name << "' type yson " << column.TypeYson << ", error: " << parseTypeError;
     }
 
-
     return CreateNamedNode(column.Name, std::move(parsedType));
 }
 
-NYT::TNode MakeFilterInputSchema(const TVector<TSchemaColumn>& columns) {
-    auto structMembers = NYT::TNode::CreateList()
-        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
-    for (const auto& column : columns) {
-        structMembers.Add(CreateColumnNode(column));
-    }
-    return CreateStructTypeNode(std::move(structMembers));
-}
-
-NYT::TNode MakeFilterOutputSchema() {
-    return CreateStructTypeNode(
-        NYT::TNode::CreateList()
-            .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
-    );
-}
-
-NYT::TNode MakeWatermarkInputSchema(const TVector<TSchemaColumn>& columns) {
+NYT::TNode MakeInputSchema(IProcessedDataConsumer::TPtr consumer) {
     auto membersNode = NYT::TNode::CreateList()
         .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
-    for (const auto& column : columns) {
+    for (const auto& column : consumer->GetColumns()) {
         membersNode.Add(CreateColumnNode(column));
     }
     return CreateStructTypeNode(std::move(membersNode));
 }
 
-NYT::TNode MakeWatermarkOutputSchema() {
-    return CreateStructTypeNode(
-        NYT::TNode::CreateList()
-            .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")))
-            .Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))))
-    );
+NYT::TNode MakeOutputSchema(IProcessedDataConsumer::TPtr consumer) {
+    auto membersNode = NYT::TNode::CreateList()
+        .Add(CreateFieldNode(FILTER_FIELD_NAME, CreateTypeNode("Bool")))
+        .Add(CreateFieldNode(OFFSET_FIELD_NAME, CreateTypeNode("Uint64")));
+    if (consumer->GetWatermarkExpr()) {
+        membersNode.Add(CreateFieldNode(WATERMARK_FIELD_NAME, CreateOptionalTypeNode(CreateTypeNode("Timestamp"))));
+    }
+    return CreateStructTypeNode(std::move(membersNode));
 }
 
 struct TInputType {
@@ -329,7 +317,6 @@ private:
 class TProgramCompileHandler final : public IProgramCompileHandler, public TNonCopyable {
 public:
     TProgramCompileHandler(
-        TString name,
         IProcessedDataConsumer::TPtr consumer,
         IProgramHolder::TPtr programHolder,
         ui64 cookie,
@@ -337,8 +324,7 @@ public:
         NActors::TActorId owner,
         NMonitoring::TDynamicCounterPtr counters
     )
-        : IProgramCompileHandler(std::move(name), std::move(consumer), std::move(programHolder), cookie)
-        , LogPrefix(TStringBuilder() << "TProgramCompileHandler [" << GetName() << "]: ")
+        : IProgramCompileHandler(std::move(consumer), std::move(programHolder), cookie)
         , CompileServiceId_(compileServiceId)
         , Owner_(owner)
         , InFlightCompileRequests_(counters->GetCounter("InFlightCompileRequests", false))
@@ -393,7 +379,7 @@ public:
 
 private:
     // NOLINTNEXTLINE(readability-identifier-naming)
-    TString LogPrefix;
+    static constexpr std::string_view LogPrefix = "TProgramCompileHandler: ";
     NActors::TActorId CompileServiceId_;
     NActors::TActorId Owner_;
 
@@ -404,13 +390,11 @@ private:
 class TProgramRunHandler final : public IProgramRunHandler, public TNonCopyable {
 public:
     TProgramRunHandler(
-        TString name,
         IProcessedDataConsumer::TPtr consumer,
         IProgramHolder::TPtr programHolder,
         NMonitoring::TDynamicCounterPtr counters
     )
-        : IProgramRunHandler(std::move(name), std::move(consumer), std::move(programHolder))
-        , LogPrefix(TStringBuilder() << "TProgramRunHandler [" << GetName() << "]: ")
+        : IProgramRunHandler(std::move(consumer), std::move(programHolder))
         , ActiveFilters_(counters->GetCounter("ActiveFilters", false))
     {
         ActiveFilters_->Inc();
@@ -439,66 +423,63 @@ public:
 
 private:
     // NOLINTNEXTLINE(readability-identifier-naming)
-    TString LogPrefix;
+    static constexpr std::string_view LogPrefix = "TProgramRunHandler: ";
 
     NMonitoring::TDynamicCounters::TCounterPtr ActiveFilters_;
 };
 
-[[nodiscard]] TString GenerateFilterSql(TString whereFilter, const TPurecalcCompileSettings& settings) {
-    TStringBuf LogPrefix = "GenerateFilterSql: ";
+[[nodiscard]] TString GenerateSql(IProcessedDataConsumer::TPtr consumer) {
+    static constexpr std::string_view LogPrefix = "GenerateSql: ";
 
-    TStringBuilder sb;
-    sb << R"(PRAGMA config.flags("LLVM", ")" << (settings.EnabledLLVM ? "ON" : "OFF") << R"(");)" << '\n';
-    sb << "SELECT " << OFFSET_FIELD_NAME << " FROM Input " << whereFilter << ";\n";
+    const auto& settings = consumer-> GetPurecalcSettings();
+    auto filterExpr = TStringBuf(consumer->GetFilterExpr());
+    const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
-    TString result = sb;
-    LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
-    return result;
-}
+    if (!filterExpr && !watermarkExpr) {
+        LOG_ROW_DISPATCHER_TRACE("No sql was generated");
+        return {};
+    }
 
-[[nodiscard]] TString GenerateWatermarkSql(TString watermarkExpr, const TPurecalcCompileSettings& settings) {
-    TStringBuf LogPrefix = "GenerateWatermarkSql: ";
+    constexpr auto wherePrefix = "WHERE "sv;
+    if (filterExpr.starts_with(wherePrefix)) { // workaround for YQ-4827
+        filterExpr.remove_prefix(wherePrefix.size());
+    }
 
-    TStringBuilder sb;
-    sb << R"(PRAGMA config.flags("LLVM", ")" << (settings.EnabledLLVM ? "ON" : "OFF") << R"(");)" << '\n';
-    sb << "SELECT "
-        << OFFSET_FIELD_NAME << ", "
-        << watermarkExpr << " AS " << WATERMARK_FIELD_NAME
-    << " FROM Input;\n";
+    using namespace fmt::literals;
+    auto result = fmt::format(
+        R"sql(
+            PRAGMA config.flags("LLVM", "{enabled_llvm}");
+            SELECT COALESCE({filter_expr}, FALSE) AS {filter_field_name}, {offset_field_name}{watermark_expr} FROM Input;
+        )sql",
+        "enabled_llvm"_a = settings.EnabledLLVM ? "ON" : "OFF",
+        "filter_expr"_a = filterExpr ? filterExpr : "TRUE",
+        "filter_field_name"_a = FILTER_FIELD_NAME,
+        "offset_field_name"_a = OFFSET_FIELD_NAME,
+        "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
+    );
 
-    TString result = sb;
     LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
     return result;
 }
 
 }  // anonymous namespace
 
-IProgramHolder::TPtr CreateFilterProgramHolder(IProcessedDataConsumer::TPtr consumer) {
-    const auto& columns = consumer->GetColumns();
-    auto query = GenerateFilterSql(consumer->GetWhereFilter(), consumer->GetPurecalcSettings());
+IProgramHolder::TPtr CreateProgramHolder(IProcessedDataConsumer::TPtr consumer) {
+    auto query = GenerateSql(consumer);
+
+    if (!query) {
+        return {};
+    }
 
     return MakeIntrusive<TProgramHolder>(
-        std::move(consumer),
-        MakeFilterInputSchema(columns),
-        MakeFilterOutputSchema(),
-        std::move(query)
-    );
-}
-
-IProgramHolder::TPtr CreateWatermarkProgramHolder(IProcessedDataConsumer::TPtr consumer) {
-    const auto& columns = consumer->GetColumns();
-    auto query = GenerateWatermarkSql(consumer->GetWatermarkExpr(), consumer->GetPurecalcSettings());
-
-    return MakeIntrusive<TProgramHolder>(
-        std::move(consumer),
-        MakeWatermarkInputSchema(columns),
-        MakeWatermarkOutputSchema(),
+        consumer,
+        MakeInputSchema(consumer),
+        MakeOutputSchema(consumer),
         std::move(query)
     );
 }
 
 IProgramCompileHandler::TPtr CreateProgramCompileHandler(
-    TString name,
     IProcessedDataConsumer::TPtr consumer,
     IProgramHolder::TPtr programHolder,
     ui64 cookie,
@@ -506,16 +487,15 @@ IProgramCompileHandler::TPtr CreateProgramCompileHandler(
     NActors::TActorId owner,
     NMonitoring::TDynamicCounterPtr counters
 ) {
-    return MakeIntrusive<TProgramCompileHandler>(std::move(name), std::move(consumer), std::move(programHolder), cookie, compileServiceId, owner, std::move(counters));
+    return MakeIntrusive<TProgramCompileHandler>(std::move(consumer), std::move(programHolder), cookie, compileServiceId, owner, std::move(counters));
 }
 
 IProgramRunHandler::TPtr CreateProgramRunHandler(
-    TString name,
     IProcessedDataConsumer::TPtr consumer,
     IProgramHolder::TPtr programHolder,
     NMonitoring::TDynamicCounterPtr counters
 ) {
-    return MakeIntrusive<TProgramRunHandler>(std::move(name), std::move(consumer), std::move(programHolder), std::move(counters));
+    return MakeIntrusive<TProgramRunHandler>(std::move(consumer), std::move(programHolder), std::move(counters));
 }
 
 }  // namespace NFq::NRowDispatcher

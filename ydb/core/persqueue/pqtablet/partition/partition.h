@@ -35,7 +35,9 @@ static const ui32 MAX_USER_ACTS = 1000;
 static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
 static const ui32 MAX_INLINE_SIZE = 1000;
 
-using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+using TPartitionLabeledCounters =
+    TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
+using TPartitionExtendedLabeledCounters = TProtobufTabletLabeledCounters<EPartitionExtendedLabeledCounters_descriptor>;
 
 ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 TMaybe<ui64> GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp);
@@ -672,7 +674,6 @@ private:
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
             hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
             hFuncTraced(TEvPQ::TEvForceCompaction, Handle);
-            hFuncTraced(TEvPQ::TEvMLPRestartActor, Handle);
             hFuncTraced(TEvPQ::TEvMLPReadRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPCommitRequest, Handle);
             hFuncTraced(TEvPQ::TEvMLPUnlockRequest, Handle);
@@ -929,6 +930,7 @@ private:
 
     TTabletCountersBase TabletCounters;
     THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
+    THolder<TPartitionExtendedLabeledCounters> PartitionCountersExtended;
 
     THolder<TPartitionKeyCompactionCounters> PartitionCompactionCounters;
 
@@ -1146,7 +1148,6 @@ private:
     size_t GetBodyKeysCountLimit() const;
     ui64 GetCumulativeSizeLimit() const;
 
-    void UpdateCompactionCounters();
     bool ThereIsUncompactedData() const;
     TInstant GetFirstUncompactedBlobTimestamp() const;
 
@@ -1198,8 +1199,6 @@ private:
     void Handle(TEvPQ::TEvMLPCommitRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPUnlockRequest::TPtr&);
     void Handle(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr&);
-
-    void Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev);
 
     void ProcessMLPPendingEvents();
     template<typename TEventHandle>

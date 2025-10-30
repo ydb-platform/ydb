@@ -122,6 +122,40 @@ public:
         return NThreading::MakeFuture(TDeleteOperationResponse(EOperationStatus::Aborted));
     }
 
+    NThreading::TFuture<TDropTablesResponse> DropTables(const TDropTablesRequest& request) override {
+        std::vector<TString> groupsToClear;
+
+        with_lock(Mutex_) {
+            std::vector<TString> tableIds = request.TableIds;
+
+            YQL_ENSURE(!tableIds.empty(), "TableIds list is empty");
+
+            for (const auto& tableId : tableIds) {
+                if (!PartIdsForTables_.contains(tableId)) {
+                    YQL_CLOG(TRACE, FastMapReduce) << "Table " << tableId  << " not found in PartIdsForTables_";
+                    continue;
+                }
+
+                const auto& partIds = PartIdsForTables_[tableId];
+                YQL_CLOG(TRACE, FastMapReduce) << "Dropping table " << tableId << " from TDS with " << partIds.size() << " partitions";
+
+                for (const auto& partId : partIds) {
+                    groupsToClear.emplace_back(GetTableDataServiceGroup(tableId, partId));
+                }
+
+                PartIdsForTables_.erase(tableId);
+                OperationTableStats_.erase(tableId);
+            }
+
+            YQL_CLOG(TRACE, FastMapReduce) << "Dropping " << tableIds.size() << " FMR tables";
+        }
+
+        return GcService_->ClearGarbage(groupsToClear).Apply([](const auto& f) {
+            f.GetValue();
+            return NThreading::MakeFuture<TDropTablesResponse>();
+        });
+    }
+
     NThreading::TFuture<THeartbeatResponse> SendHeartbeatResponse(const THeartbeatRequest& request) override {
         TGuard<TMutex> guard(Mutex_);
 

@@ -31,7 +31,8 @@ public:
         MarkUser = 'c',
         MarkProtoSourceId = 'p',
         MarkSourceId = 's',
-        MarkUserDeprecated = 'u'
+        MarkUserDeprecated = 'u',
+        MarkMLPSnapshot = 'S',
     };
 
     enum EServiceType : char {

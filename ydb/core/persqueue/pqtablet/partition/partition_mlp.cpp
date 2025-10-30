@@ -113,18 +113,4 @@ void TPartition::InitializeMLPConsumers() {
     }
 }
 
-void TPartition::Handle(TEvPQ::TEvMLPRestartActor::TPtr& ev) {
-    // TODO Add backoff of restart
-    for (auto it = MLPConsumers.begin(); it != MLPConsumers.end(); ++it) {
-        auto& [name, consumerInfo] = *it;
-        if (consumerInfo.ActorId == ev->Sender) {
-            LOG_W("Restarting MLP consumer '" << name << "'");
-
-            MLPConsumers.erase(it);
-            InitializeMLPConsumers();
-            return;
-        }
-    }
-}
-
 } // namespace NKikimr::NPQ

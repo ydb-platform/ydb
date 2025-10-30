@@ -1409,16 +1409,13 @@ IFileReaderPtr TClient::GetJobStderr(
     return RawClient_->GetJobStderr(operationId, jobId, options);
 }
 
-std::vector<TJobTraceEvent> TClient::GetJobTrace(
+IFileReaderPtr TClient::GetJobTrace(
     const TOperationId& operationId,
+    const TJobId& jobId,
     const TGetJobTraceOptions& options)
 {
     CheckShutdown();
-    return RequestWithRetry<std::vector<TJobTraceEvent>>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &operationId, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->GetJobTrace(operationId, options);
-        });
+    return RawClient_->GetJobTrace(operationId, jobId, options);
 }
 
 TNode::TListType TClient::SkyShareTable(

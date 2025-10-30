@@ -476,7 +476,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     ReadSession.reset();
     PartitionStream.Reset();
 
-    auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
+    auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
 
     TLog log(MakeHolder<TDeferredActorLogBackend>(

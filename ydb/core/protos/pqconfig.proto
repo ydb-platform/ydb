@@ -383,7 +383,6 @@ message TPQTabletConfig {
         optional bool Important = 9 [default = false];
         optional uint64 AvailabilityPeriodMs = 10 [default = 0];
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
-        optional uint32 Id = 12; // Filled in pq tablet
         optional bool KeepMessageOrder = 13 [default = false]; // For MLP consumers
         optional uint32 MaxMessageReceiveCount = 14 [default = 1000]; // For MLP consumers
         optional uint32 DefaultVisibilityTimeoutSeconds = 15 [default = 30]; // For MLP consumers
@@ -755,12 +754,17 @@ message TAggregatedCounters {
     repeated uint64 Values = 1;
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
+    optional TExtendedCounters ExtendedCounters = 4;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
     }
     message TCompactionCounters {
+        repeated uint64 Values = 1;
+    }
+
+    message TExtendedCounters {
         repeated uint64 Values = 1;
     }
 }
@@ -1349,7 +1353,7 @@ message TEvMLPChangeMessageDeadlineResponse {
 
 message TMLPStorageSnapshot {
     message TConfiguration {
-        optional uint32 ConsumerId = 1;
+        optional string ConsumerName = 1;
         optional uint64 Generation = 2;
     }
     optional TConfiguration Configuration = 1;
@@ -1357,7 +1361,7 @@ message TMLPStorageSnapshot {
     message TMeta {
         optional uint64 FirstOffset = 1;
         optional uint64 FirstUncommittedOffset = 2;
-        optional uint64 BaseDeadlineMilliseconds = 3; 
+        optional uint64 BaseDeadlineMilliseconds = 3;
     }
     optional TMeta Meta = 2;
 

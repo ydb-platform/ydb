@@ -255,6 +255,8 @@ BELONGS ya.make
     Files with this license:
         lib/ngtcp2_callbacks.c [4:4]
         lib/ngtcp2_callbacks.h [4:4]
+        lib/ngtcp2_conn_info.c [4:4]
+        lib/ngtcp2_conn_info.h [4:4]
         lib/ngtcp2_dcidtr.c [4:4]
         lib/ngtcp2_dcidtr.h [4:4]
         lib/ngtcp2_pcg.c [4:4]

@@ -212,7 +212,7 @@ class TestLogScenario(object):
     def tune_icb(self):
         response = requests.post(
             self.mon_url + "/actors/icb",
-            data = "TabletControls.MaxTxInFly=0"
+            data="TabletControls.MaxTxInFly=0"
         )
         response.raise_for_status()
 

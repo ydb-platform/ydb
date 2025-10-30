@@ -2363,8 +2363,8 @@ Y_UNIT_TEST_SUITE(Viewer) {
                     UNIT_ASSERT_EQUAL(key, "grey");
                     UNIT_ASSERT_EQUAL(value, "bird");
                 } else if (j == 1) {
-                    UNIT_ASSERT_EQUAL(key, "brown");
-                    UNIT_ASSERT_EQUAL(value, "dog");
+                    UNIT_ASSERT_EQUAL(key, "only_key");
+                    UNIT_ASSERT_EQUAL(value, "");
                 } else {
                     UNIT_ASSERT_EQUAL(key, "__key");
                     UNIT_ASSERT_EQUAL(value, "some_key");

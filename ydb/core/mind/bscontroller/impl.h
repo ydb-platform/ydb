@@ -1907,6 +1907,7 @@ private:
         void OnScrubPeriodicityChange();
         void OnMaxScrubbedDisksAtOnceChange();
         void UpdateVDiskState(const TVSlotInfo *vslot);
+        void UpdateGroupState(const TGroupInfo *group);
     };
 
     TScrubState ScrubState;

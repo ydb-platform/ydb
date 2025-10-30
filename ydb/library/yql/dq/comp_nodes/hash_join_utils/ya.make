@@ -18,6 +18,7 @@ PEERDIR(
 SRCS(
     tuple.cpp
     accumulator.cpp
+    scalar_layout_converter.cpp
     block_layout_converter.cpp
     page_hash_table.cpp
 )

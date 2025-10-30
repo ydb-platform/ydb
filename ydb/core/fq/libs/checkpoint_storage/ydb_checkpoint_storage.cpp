@@ -1132,9 +1132,6 @@ TFuture<TIssues> TCheckpointStorage::DeleteMarkedCheckpoints(
 }
 
 TFuture<ICheckpointStorage::TGetTotalCheckpointsStateSizeResult> TCheckpointStorage::GetTotalCheckpointsStateSize(const TString& graphId) {
-    
-            Cerr << "GetTotalCheckpointsStateSize " << Endl; 
-
     auto result = MakeIntrusive<TGetTotalCheckpointsStateSizeContext>();
     auto future = YdbConnection->GetTableClient()->RetryOperation(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, thisPtr = TIntrusivePtr(this), result,

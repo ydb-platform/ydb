@@ -99,11 +99,12 @@ TQueryBase::TEvQueryBasePrivate::TEvCommitTransactionResponse::TEvCommitTransact
 
 //// TQueryBase
 
-TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser)
+TQueryBase::TQueryBase(ui64 logComponent, TString sessionId, TString database, bool isSystemUser, bool isStreamingMode)
     : LogComponent(logComponent)
     , Database(std::move(database))
     , SessionId(std::move(sessionId))
     , IsSystemUser(isSystemUser)
+    , IsStreamingMode(isStreamingMode)
 {}
 
 void TQueryBase::Registered(NActors::TActorSystem* sys, const NActors::TActorId& owner) {
@@ -156,7 +157,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvCreateSessionResult::TPtr& ev) {
 
         DeleteSession = true;
         RunQuery();
-   //     Y_ABORT_UNLESS(Finished || RunningQuery);
+        Y_ABORT_UNLESS(Finished || RunningQuery || IsStreamingMode);
     } else {
         LOG_W("Failed to create session: " << ev->Get()->Status << ". Issues: " << ev->Get()->Issues.ToOneLineString());
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
@@ -253,7 +254,7 @@ void TQueryBase::Handle(TEvQueryBasePrivate::TEvDataQueryResult::TPtr& ev) {
         } catch (const std::exception& ex) {
             Finish(StatusIds::INTERNAL_ERROR, ex.what());
         }
-        //Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit);
+        Y_ABORT_UNLESS(Finished || RunningQuery || RunningCommit || IsStreamingMode);
     } else {
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }

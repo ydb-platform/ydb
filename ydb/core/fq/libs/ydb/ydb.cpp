@@ -90,7 +90,6 @@ TFuture<TStatus> CheckGeneration(
     }
 
     context->Session->UpdateTransaction(selectResult.GetTransaction());
-    Cerr << "UpdateTransaction " << Endl;
     selectResult.GetTransaction().reset();
 
     if (!isOk) {

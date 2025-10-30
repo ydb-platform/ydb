@@ -24,7 +24,7 @@ class TQuerySession final : public NKikimr::TQueryBase {
 
 public:
     TQuerySession()
-        : NKikimr::TQueryBase(NKikimrServices::STREAMS_STORAGE_SERVICE) {
+        : NKikimr::TQueryBase(NKikimrServices::STREAMS_STORAGE_SERVICE, {}, {}, false, true) {
     }
 
 private:
@@ -113,8 +113,8 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        LOG_T("Run query " << DataQuery->Sql << " tx.Begin " << tx.Begin_ << " tx.Commit " << tx.Commit_); 
-        RunDataQuery(DataQuery->Sql, DataQuery->Params.get()/*, tx*/);
+        LOG_T("Run query " << DataQuery->Sql << " commit " << tx.Commit_);
+        RunDataQuery(DataQuery->Sql, DataQuery->Params.get(), tx);
     }
 
     void DoPassAway() {

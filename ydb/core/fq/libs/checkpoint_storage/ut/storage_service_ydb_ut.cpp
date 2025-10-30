@@ -569,7 +569,6 @@ public:
 
         TCheckpoints checkpoints;
         DoWithRetry<yexception>([&]() {
-            Cerr << "GetCheckpoints 0 " << Endl;
             checkpoints = GetCheckpoints(GraphId);
             if (checkpoints.size() != 1) {
                 throw yexception() << "gc not finished yet";

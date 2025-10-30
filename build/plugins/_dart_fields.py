@@ -697,6 +697,10 @@ class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
     _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps')
+    # HACK: Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
+    # it makes it difficult to run ruff checks in build root - it complains
+    # about unsorted imports a lot. Let them run in source root instead.
+    _RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS = ('fintech/uservices', 'taxi', 'electro')
 
     @classmethod
     def from_macro_args(cls, unit, flat_args, spec_args):
@@ -709,6 +713,11 @@ class LintExtraParams:
                 upath = unit.path()[3:]
                 if not upath.startswith(cls._CUSTOM_CLANG_FORMAT_ALLOWED_PATHS):
                     message = f'Custom clang-format is not allowed in upath: {upath}'
+                    raise DartValueError(message)
+            if 'run_in_source_root=yes' == arg:
+                upath = unit.path()[3:]
+                if not upath.startswith(cls._RUFF_RUN_IN_SOURCE_ROOT_ALLOWED_PATHS):
+                    message = f'Running ruff in source root instead of build root is not allowed in upath: {upath}'
                     raise DartValueError(message)
         return serialize_list(extra_params)
 

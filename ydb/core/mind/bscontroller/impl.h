@@ -642,6 +642,15 @@ public:
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
 
+        // Capacity metrics aggregated from VDisks and PDisks
+        struct TCapacityMetrics {
+            double MaxPDiskOccupancy = 0.0;
+            double MaxVDiskQuotaUtilization = 0.0;
+            double MaxNormalizedOccupancy = 0.0;
+            double MaxVDiskFairOccupancy = 0.0;
+            NKikimrBlobStorage::TPDiskSpaceColor::E CapacityAlertLevel = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
+        } CapacityMetrics;
+
         TActorId VirtualGroupSetupMachineId;
 
         // nodes waiting for this group to become listable
@@ -896,6 +905,8 @@ public:
         }
 
         TGroupStatus GetStatus(const TGroupFinder& finder, const TBridgeInfo *bridgeInfo) const;
+
+        void CalculateCapacityMetrics();
 
         void OnCommit();
     };
@@ -1545,7 +1556,7 @@ private:
             = NKikimrBlobStorage::TPDiskSpaceColor::GREEN;
 
     TSelfHealSettings SelfHealSettings;
-    
+
     TClusterBalancingSettings ClusterBalancingSettings;
 
     TActorId SystemViewsCollectorId;

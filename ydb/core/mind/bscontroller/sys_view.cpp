@@ -332,6 +332,9 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
     info->SetSlotSizeInUnits(slotSizeInUnits);
     info->SetInferPDiskSlotCountFromUnitSize(pDiskInfo->InferPDiskSlotCountFromUnitSize);
+    if (pDiskInfo->Metrics.HasOccupancy()) {
+        info->SetOccupancy(pDiskInfo->Metrics.GetOccupancy());
+    }
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -366,6 +369,18 @@ void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId,
     }
     if (m.GetThrottlingRate()) {
         pb->SetThrottlingRate(m.GetThrottlingRate());
+    }
+    if (m.HasQuotaUtilization()) {
+        pb->SetQuotaUtilization(m.GetQuotaUtilization());
+    }
+    if (m.HasNormalizedOccupancy()) {
+        pb->SetNormalizedOccupancy(m.GetNormalizedOccupancy());
+    }
+    if (m.HasFairOccupancy()) {
+        pb->SetFairOccupancy(m.GetFairOccupancy());
+    }
+    if (m.HasSpaceColor()) {
+        pb->SetCapacityAlertLevel(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(m.GetSpaceColor()));
     }
     pb->SetKind(NKikimrBlobStorage::TVDiskKind::EVDiskKind_Name(kind));
     if (isBeingDeleted) {
@@ -421,6 +436,22 @@ void CopyInfo(NKikimrSysView::TGroupInfo* info, const THolder<TBlobStorageContro
     info->SetOperatingStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus));
     info->SetExpectedStatus(NKikimrBlobStorage::TGroupStatus::E_Name(status.ExpectedStatus));
     info->SetGroupSizeInUnits(groupInfo->GroupSizeInUnits);
+
+    // Use pre-calculated capacity metrics from TGroupInfo
+    const auto& cm = groupInfo->CapacityMetrics;
+    if (cm.MaxPDiskOccupancy > 0.0) {
+        info->SetMaxPDiskOccupancy(cm.MaxPDiskOccupancy);
+    }
+    if (cm.MaxVDiskQuotaUtilization > 0.0) {
+        info->SetMaxVDiskQuotaUtilization(cm.MaxVDiskQuotaUtilization);
+    }
+    if (cm.MaxNormalizedOccupancy > 0.0) {
+        info->SetMaxNormalizedOccupancy(cm.MaxNormalizedOccupancy);
+    }
+    if (cm.MaxVDiskFairOccupancy > 0.0) {
+        info->SetMaxVDiskFairOccupancy(cm.MaxVDiskFairOccupancy);
+    }
+    info->SetCapacityAlertLevel(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(cm.CapacityAlertLevel));
 }
 
 void CopyInfo(NKikimrSysView::TStoragePoolInfo* info, const TBlobStorageController::TStoragePoolInfo& poolInfo,
@@ -528,6 +559,14 @@ void TBlobStorageController::UpdateSystemViews() {
         auto& state = update->State;
         CopyInfo(state.PDisks, update->DeletedPDisks, PDisks, SysViewChangedPDisks, finder, BridgeInfo.get());
         CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots, finder, BridgeInfo.get());
+
+        // Calculate capacity metrics for changed groups before copying
+        for (TGroupId groupId : SysViewChangedGroups) {
+            if (TGroupInfo *group = FindGroup(groupId)) {
+                group->CalculateCapacityMetrics();
+            }
+        }
+
         CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups, finder, BridgeInfo.get());
         CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools, finder,
             BridgeInfo.get());
@@ -548,6 +587,9 @@ void TBlobStorageController::UpdateSystemViews() {
                     pb->SetState(NKikimrBlobStorage::TPDiskState::E_Name(pdisk.PDiskMetrics->GetState()));
                     if (pdisk.PDiskMetrics->HasEnforcedDynamicSlotSize()) {
                         pb->SetEnforcedDynamicSlotSize(pdisk.PDiskMetrics->GetEnforcedDynamicSlotSize());
+                    }
+                    if (pdisk.PDiskMetrics->HasOccupancy()) {
+                        pb->SetOccupancy(pdisk.PDiskMetrics->GetOccupancy());
                     }
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
@@ -619,6 +661,42 @@ void TBlobStorageController::UpdateSystemViews() {
                 if (const auto& proxyGroupId = info->GetBridgeProxyGroupId()) {
                     proxyGroupId->CopyToProto(pb, &NKikimrSysView::TGroupInfo::SetProxyGroupId);
                 }
+
+                // Calculate capacity metrics for static group
+                TGroupInfo::TCapacityMetrics cm;
+                for (const auto& d : disks) {
+                    const auto& vm = *d.VDiskMetrics;
+                    if (vm.HasQuotaUtilization()) {
+                        cm.MaxVDiskQuotaUtilization = Max(cm.MaxVDiskQuotaUtilization, vm.GetQuotaUtilization());
+                    }
+                    if (vm.HasNormalizedOccupancy()) {
+                        cm.MaxNormalizedOccupancy = Max(cm.MaxNormalizedOccupancy, vm.GetNormalizedOccupancy());
+                    }
+                    if (vm.HasFairOccupancy()) {
+                        cm.MaxVDiskFairOccupancy = Max(cm.MaxVDiskFairOccupancy, vm.GetFairOccupancy());
+                    }
+                    if (vm.HasSpaceColor()) {
+                        cm.CapacityAlertLevel = Max(cm.CapacityAlertLevel, vm.GetSpaceColor());
+                    }
+                    const auto& pm = *d.PDiskMetrics;
+                    if (pm.HasOccupancy()) {
+                        cm.MaxPDiskOccupancy = Max(cm.MaxPDiskOccupancy, pm.GetOccupancy());
+                    }
+                }
+
+                if (cm.MaxPDiskOccupancy > 0.0) {
+                    pb->SetMaxPDiskOccupancy(cm.MaxPDiskOccupancy);
+                }
+                if (cm.MaxVDiskQuotaUtilization > 0.0) {
+                    pb->SetMaxVDiskQuotaUtilization(cm.MaxVDiskQuotaUtilization);
+                }
+                if (cm.MaxNormalizedOccupancy > 0.0) {
+                    pb->SetMaxNormalizedOccupancy(cm.MaxNormalizedOccupancy);
+                }
+                if (cm.MaxVDiskFairOccupancy > 0.0) {
+                    pb->SetMaxVDiskFairOccupancy(cm.MaxVDiskFairOccupancy);
+                }
+                pb->SetCapacityAlertLevel(NKikimrBlobStorage::TPDiskSpaceColor::E_Name(cm.CapacityAlertLevel));
             }
         }
 

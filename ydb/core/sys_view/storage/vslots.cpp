@@ -40,6 +40,10 @@ public:
             {T::Kind::ColumnId, {E::kInfoFieldNumber, V::kKindFieldNumber}},
             {T::Replicated::ColumnId, {E::kInfoFieldNumber, V::kReplicatedFieldNumber}},
             {T::DiskSpace::ColumnId, {E::kInfoFieldNumber, V::kDiskSpaceFieldNumber}},
+            {T::QuotaUtilization::ColumnId, {E::kInfoFieldNumber, V::kQuotaUtilizationFieldNumber}},
+            {T::NormalizedOccupancy::ColumnId, {E::kInfoFieldNumber, V::kNormalizedOccupancyFieldNumber}},
+            {T::FairOccupancy::ColumnId, {E::kInfoFieldNumber, V::kFairOccupancyFieldNumber}},
+            {T::CapacityAlertLevel::ColumnId, {E::kInfoFieldNumber, V::kCapacityAlertLevelFieldNumber}},
         };
         return fieldMap;
     }

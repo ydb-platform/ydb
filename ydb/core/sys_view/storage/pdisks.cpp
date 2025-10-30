@@ -43,6 +43,7 @@ public:
             {T::DecommitStatus::ColumnId, {E::kInfoFieldNumber, V::kDecommitStatusFieldNumber}},
             {T::SlotSizeInUnits::ColumnId, {E::kInfoFieldNumber, V::kSlotSizeInUnitsFieldNumber}},
             {T::InferPDiskSlotCountFromUnitSize::ColumnId, {E::kInfoFieldNumber, V::kInferPDiskSlotCountFromUnitSizeFieldNumber}},
+            {T::Occupancy::ColumnId, {E::kInfoFieldNumber, V::kOccupancyFieldNumber}},
         };
         return fieldMap;
     }

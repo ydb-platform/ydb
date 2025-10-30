@@ -575,8 +575,8 @@
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
         },
         "cluster_nodes_monitoring": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -592,8 +592,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_root": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -609,8 +609,8 @@
             "TotalNodes": "3"
         },
         "cluster_nodes_viewer": {
-            "FieldsAvailable": "10000000000000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000000000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -626,8 +626,8 @@
             "TotalNodes": "3"
         },
         "database_nodes_database": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -637,8 +637,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_monitoring": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -648,8 +648,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_root": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -659,8 +659,8 @@
             "TotalNodes": "1"
         },
         "database_nodes_viewer": {
-            "FieldsAvailable": "10000000010000000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000001",
+            "FieldsAvailable": "00010000000010000000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000001",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -703,8 +703,8 @@
             "text": "<html><body><h1>403 Forbidden</h1></body></html>"
         },
         "storage_nodes_database": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "11110000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -716,8 +716,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_monitoring": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "11110000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -729,8 +729,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_root": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "11110000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -742,8 +742,8 @@
             "TotalNodes": "1"
         },
         "storage_nodes_viewer": {
-            "FieldsAvailable": "10000000110011000000110100000011",
-            "FieldsRequired": "00000000000000000000000000000011",
+            "FieldsAvailable": "11110000000110011000000110100000011",
+            "FieldsRequired": "00000000000000000000000000000000011",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -756,13 +756,14 @@
         }
     },
     "test.TestViewer.test_storage_groups": {
-        "FieldsAvailable": "0111111111111111111111",
-        "FieldsRequired": "1111111111111111111111",
+        "FieldsAvailable": "111110111111111111111111111",
+        "FieldsRequired": "111111111111111111111111111",
         "FoundGroups": 5,
         "StorageGroups": [
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlertLevel": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -772,6 +773,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": 0,
+                "MaxPDiskOccupancy": 0,
+                "MaxVDiskFairOccupancy": 0,
+                "MaxVDiskQuotaUtilization": 0,
                 "MissingDisks": "0",
                 "Overall": "Green",
                 "PoolName": "static",
@@ -855,6 +860,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlertLevel": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -865,6 +871,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": 0,
+                "MaxPDiskOccupancy": 0,
+                "MaxVDiskFairOccupancy": 0,
+                "MaxVDiskQuotaUtilization": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -949,6 +959,7 @@
             {
                 "AllocationUnits": "0",
                 "Available": "not-zero-number-text",
+                "CapacityAlertLevel": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -959,6 +970,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": 0,
+                "MaxPDiskOccupancy": 0,
+                "MaxVDiskFairOccupancy": 0,
+                "MaxVDiskQuotaUtilization": 0,
                 "MediaType": "ROT,Kind:0",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -1043,6 +1058,7 @@
             {
                 "AllocationUnits": "32",
                 "Available": "not-zero-number-text",
+                "CapacityAlertLevel": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -1053,6 +1069,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": 0,
+                "MaxPDiskOccupancy": 0,
+                "MaxVDiskFairOccupancy": 0,
+                "MaxVDiskQuotaUtilization": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -1137,6 +1157,7 @@
             {
                 "AllocationUnits": "52",
                 "Available": "not-zero-number-text",
+                "CapacityAlertLevel": "GREEN",
                 "DiskSpace": "Green",
                 "DiskSpaceUsage": "not-zero-number",
                 "ErasureSpecies": "none",
@@ -1147,6 +1168,10 @@
                 "LatencyPutTabletLog": "accepted-value",
                 "LatencyPutUserData": "accepted-value",
                 "Limit": "not-zero-number-text",
+                "MaxNormalizedOccupancy": 0,
+                "MaxPDiskOccupancy": 0,
+                "MaxVDiskFairOccupancy": 0,
+                "MaxVDiskQuotaUtilization": 0,
                 "MediaType": "ROT",
                 "MissingDisks": "0",
                 "Overall": "Green",
@@ -3885,6 +3910,107 @@
             "Status": "StatusSuccess"
         }
     },
+    "test.TestViewer.test_viewer_groups_group_by_capacity_alert": [
+        {
+            "FieldsAvailable": "111110100000000000000010001",
+            "FieldsRequired": "100000000000000000000000001",
+            "FoundGroups": 5,
+            "StorageGroupGroups": [
+                {
+                    "GroupCount": "5",
+                    "GroupName": "GREEN",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                }
+            ],
+            "TotalGroups": 5
+        },
+        {
+            "FieldsAvailable": "111110100000000000000010001",
+            "FieldsRequired": "100000000000000000000000001",
+            "FoundGroups": 5,
+            "StorageGroups": [
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "GroupGeneration": "1",
+                    "GroupId": "0"
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "GroupGeneration": "1",
+                    "GroupId": "2181038080"
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "GroupGeneration": "1",
+                    "GroupId": "2181038081"
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "GroupGeneration": "2",
+                    "GroupId": "2181038082"
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "GroupGeneration": "2",
+                    "GroupId": "2181038083"
+                }
+            ],
+            "TotalGroups": 5
+        }
+    ],
+    "test.TestViewer.test_viewer_groups_group_by_pool_name": [
+        {
+            "FieldsAvailable": "111110100000000000100011111",
+            "FieldsRequired": "000000000000000000000000011",
+            "FoundGroups": 5,
+            "StorageGroupGroups": [
+                {
+                    "GroupCount": "1",
+                    "GroupName": "/Root/dedicated_db:hdd",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "1",
+                    "GroupName": "/Root/shared_db:hdd",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "2",
+                    "GroupName": "dynamic_storage_pool:1",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                },
+                {
+                    "GroupCount": "1",
+                    "GroupName": "static",
+                    "LatencyGetFast": "accepted-value",
+                    "LatencyPutTabletLog": "accepted-value",
+                    "LatencyPutUserData": "accepted-value"
+                }
+            ],
+            "TotalGroups": 5
+        },
+        {
+            "FieldsAvailable": "111110100000000000100011111",
+            "FieldsRequired": "000000000000000000000000011",
+            "FoundGroups": 1,
+            "StorageGroups": [
+                {
+                    "GroupGeneration": "1",
+                    "GroupId": "0",
+                    "PoolName": "static"
+                }
+            ],
+            "TotalGroups": 5
+        }
+    ],
     "test.TestViewer.test_viewer_healthcheck": {
         "/Root": {
             "location": {
@@ -4046,8 +4172,8 @@
     },
     "test.TestViewer.test_viewer_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "00010000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4124,8 +4250,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "00010000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4200,8 +4326,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "00010000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4279,8 +4405,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000010000110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000101",
+            "FieldsAvailable": "00010000000010000110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000101",
             "FoundNodes": "1",
             "Nodes": [
                 {
@@ -4355,8 +4481,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000010100110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000101",
+            "FieldsAvailable": "00010000000010100110111111100000111",
+            "FieldsRequired": "00000000000000100000000000000000101",
             "FoundNodes": "3",
             "Nodes": [
                 {
@@ -4571,13 +4697,14 @@
     },
     "test.TestViewer.test_viewer_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -4586,6 +4713,8 @@
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -4602,6 +4731,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -4763,8 +4893,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -4772,7 +4904,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -4798,8 +4932,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -4807,7 +4943,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -4833,8 +4971,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -4842,7 +4982,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -4868,8 +5010,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -4877,7 +5021,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -4903,8 +5049,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -4912,7 +5060,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -4941,13 +5091,14 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -4955,6 +5106,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/dedicated_db",
+                    "MaxPDiskOccupancy": 0,
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5147,13 +5300,14 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5161,6 +5315,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxPDiskOccupancy": 0,
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5343,13 +5499,14 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5357,6 +5514,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxPDiskOccupancy": 0,
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5549,13 +5708,14 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5563,6 +5723,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -5579,6 +5741,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -5792,8 +5955,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -5801,7 +5966,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -5827,8 +5994,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -5836,7 +6005,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -5862,8 +6033,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -5871,7 +6044,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -5897,8 +6072,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -5906,7 +6083,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -5932,8 +6111,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -5941,7 +6122,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -5967,6 +6150,7 @@
                     ]
                 },
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -5974,6 +6158,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/shared_db",
+                    "MaxPDiskOccupancy": 0,
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -6163,6 +6349,7 @@
                     "UptimeSeconds": "number"
                 },
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -6170,6 +6357,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root/dedicated_db",
+                    "MaxPDiskOccupancy": 0,
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -6362,10 +6551,244 @@
             "TotalNodes": "3"
         }
     },
+    "test.TestViewer.test_viewer_nodes_group": [
+        {
+            "FieldsAvailable": "11010000000110100110111111100010111",
+            "FieldsRequired": "10000000000000100000000000000010101",
+            "FoundNodes": "3",
+            "MaximumSlotsPerDisk": "5",
+            "NodeGroups": [
+                {
+                    "GroupName": "GREEN",
+                    "NodeCount": "3"
+                }
+            ],
+            "TotalNodes": "3"
+        },
+        {
+            "FieldsAvailable": "11010000000110100110111111100010111",
+            "FieldsRequired": "10000000000000100000000000000010101",
+            "FoundNodes": "3",
+            "MaximumSlotsPerDisk": "5",
+            "Nodes": [
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "NodeId": 1,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {
+                            "DataCenter": "1",
+                            "Module": "1",
+                            "Rack": "1",
+                            "Unit": "1"
+                        },
+                        "MaxDiskUsage": "not-zero-number",
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 1,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "TotalSessions": "number"
+                    }
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "NodeId": 50001,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50001,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/shared_db"
+                        ],
+                        "TotalSessions": "number"
+                    }
+                },
+                {
+                    "CapacityAlertLevel": "GREEN",
+                    "NodeId": 50000,
+                    "SystemState": {
+                        "ChangeTime": "not-zero-number-text",
+                        "CoresTotal": "not-zero-number",
+                        "CoresUsed": "not-zero-number",
+                        "Endpoints": [
+                            {
+                                "Address": "text",
+                                "Name": "grpc"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "http-mon"
+                            },
+                            {
+                                "Address": "text",
+                                "Name": "ic"
+                            }
+                        ],
+                        "Host": "text",
+                        "LoadAverage": "not-empty-array",
+                        "Location": {},
+                        "MemoryLimit": "not-zero-number-text",
+                        "NodeId": 50000,
+                        "NumberOfCpus": "not-zero-number",
+                        "PoolStats": [
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "System",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "User",
+                                "Threads": 3,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "Batch",
+                                "Threads": 2,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IO",
+                                "Threads": 1,
+                                "Usage": "number"
+                            },
+                            {
+                                "Limit": "not-zero-number",
+                                "Name": "IC",
+                                "Threads": 1,
+                                "Usage": "number"
+                            }
+                        ],
+                        "RealNumberOfCpus": "not-zero-number",
+                        "Roles": "not-empty-array",
+                        "StartTime": "not-zero-number-text",
+                        "SystemState": "Green",
+                        "Tenants": [
+                            "/Root/dedicated_db"
+                        ],
+                        "TotalSessions": "number"
+                    }
+                }
+            ],
+            "TotalNodes": "3"
+        }
+    ],
     "test.TestViewer.test_viewer_nodes_issue_14992": {
         "response_group": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "00110000000110111110111111100000111",
+            "FieldsRequired": "00000000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -6582,8 +7005,8 @@
             "TotalNodes": "3"
         },
         "response_group_by": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000001100000010000000000101",
+            "FieldsAvailable": "00110000000110111110111111100000111",
+            "FieldsRequired": "00000000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [
@@ -7421,8 +7844,8 @@
     },
     "test.TestViewer.test_viewer_storage_nodes": {
         "/Root": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "11110000000110011110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7501,8 +7924,8 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "11110000000110011110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7581,8 +8004,8 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "11110000000110011110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7664,8 +8087,8 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "10000000110011110111111100000111",
-            "FieldsRequired": "00000000000000000000000000000111",
+            "FieldsAvailable": "11110000000110011110111111100000111",
+            "FieldsRequired": "00000000000000000000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
@@ -7744,8 +8167,8 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "10000000110111110111111100000111",
-            "FieldsRequired": "00000000000100000000000000000111",
+            "FieldsAvailable": "00110000000110111110111111100000111",
+            "FieldsRequired": "00000000000000100000000000000000111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -7825,13 +8248,14 @@
     },
     "test.TestViewer.test_viewer_storage_nodes_all": {
         "/Root": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -7840,6 +8264,8 @@
                     "CpuUsage": "not-zero-number",
                     "Database": "/Root",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -7856,6 +8282,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -8017,8 +8444,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8026,7 +8455,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8052,8 +8483,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8061,7 +8494,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8087,8 +8522,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8096,7 +8533,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8122,8 +8561,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8131,7 +8572,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8157,8 +8600,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8166,7 +8611,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8195,13 +8642,14 @@
             "TotalNodes": "1"
         },
         "/Root/dedicated_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8209,6 +8657,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8225,6 +8675,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -8386,8 +8837,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8395,7 +8848,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8421,8 +8876,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8430,7 +8887,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8456,8 +8915,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8465,7 +8926,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8491,8 +8954,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8500,7 +8965,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8526,8 +8993,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8535,7 +9004,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8564,13 +9035,14 @@
             "TotalNodes": "1"
         },
         "/Root/serverless_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8578,6 +9050,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8594,6 +9068,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -8755,8 +9230,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8764,7 +9241,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8790,8 +9269,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8799,7 +9280,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8825,8 +9308,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8834,7 +9319,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8860,8 +9347,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8869,7 +9358,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8895,8 +9386,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -8904,7 +9397,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -8933,13 +9428,14 @@
             "TotalNodes": "1"
         },
         "/Root/shared_db": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -8947,6 +9443,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -8963,6 +9461,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -9124,8 +9623,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9133,7 +9634,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9159,8 +9662,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9168,7 +9673,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9194,8 +9701,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9203,7 +9712,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9229,8 +9740,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9238,7 +9751,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9264,8 +9779,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9273,7 +9790,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9302,13 +9821,14 @@
             "TotalNodes": "1"
         },
         "no-database": {
-            "FieldsAvailable": "11111111110111111111111111111111",
-            "FieldsRequired": "11111111111111111111111111111111",
+            "FieldsAvailable": "11111111111110111111111111111111111",
+            "FieldsRequired": "11111111111111111111111111111111111",
             "FoundNodes": "1",
             "MaximumDisksPerNode": "1",
             "MaximumSlotsPerDisk": "5",
             "Nodes": [
                 {
+                    "CapacityAlertLevel": "GREEN",
                     "ClockSkewMaxUs": "text",
                     "ClockSkewMinUs": "text",
                     "ClockSkewUs": "text",
@@ -9316,6 +9836,8 @@
                     "Connections": "not-zero-number",
                     "CpuUsage": "not-zero-number",
                     "DiskSpaceUsage": "not-zero-number",
+                    "MaxPDiskOccupancy": "not-zero-number",
+                    "MaxVDiskQuotaUtilization": 0,
                     "NetworkUtilization": "number",
                     "NetworkUtilizationMax": "number",
                     "NetworkUtilizationMin": "number",
@@ -9332,6 +9854,7 @@
                             "LogUsedSize": "not-zero-number-text",
                             "NodeId": 1,
                             "NumActiveSlots": 5,
+                            "Occupancy": "not-zero-number",
                             "PDiskId": 1,
                             "Path": "SectorMap:1:64",
                             "Realtime": "Green",
@@ -9545,8 +10068,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9554,7 +10079,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9580,8 +10107,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9589,7 +10118,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9615,8 +10146,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9624,7 +10157,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9650,8 +10185,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9659,7 +10196,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9685,8 +10224,10 @@
                         {
                             "AllocatedSize": "0",
                             "AvailableSize": "not-zero-number-text",
+                            "CapacityAlertLevel": "GREEN",
                             "ChangeTime": "not-zero-number-text",
                             "DiskSpace": "Green",
+                            "FairOccupancy": 0,
                             "FrontQueues": "Green",
                             "Guid": "1",
                             "HasUnreadableBlobs": false,
@@ -9694,7 +10235,9 @@
                             "InstanceGuid": "not-zero-number-text",
                             "Kind": "0",
                             "NodeId": 1,
+                            "NormalizedOccupancy": "not-zero-number",
                             "PDiskId": 1,
+                            "QuotaUtilization": 0,
                             "Replicated": true,
                             "ReplicationProgress": 1,
                             "ReplicationSecondsRemaining": 0,
@@ -9724,8 +10267,8 @@
         }
     },
     "test.TestViewer.test_viewer_storage_nodes_no_database": {
-        "FieldsAvailable": "10000000110111110111111100000111",
-        "FieldsRequired": "00000000000100000000000000000111",
+        "FieldsAvailable": "00110000000110111110111111100000111",
+        "FieldsRequired": "00000000000000100000000000000000111",
         "FoundNodes": "1",
         "MaximumDisksPerNode": "1",
         "Nodes": [
@@ -9803,8 +10346,8 @@
         "TotalNodes": "1"
     },
     "test.TestViewer.test_viewer_storage_nodes_no_database_filter_node_id": {
-        "FieldsAvailable": "10000000110111110111111100000111",
-        "FieldsRequired": "00000000000100000000000000000111",
+        "FieldsAvailable": "00110000000110111110111111100000111",
+        "FieldsRequired": "00000000000000100000000000000000111",
         "FoundNodes": "1",
         "MaximumDisksPerNode": "1",
         "Nodes": [

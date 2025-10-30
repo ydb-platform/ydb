@@ -316,9 +316,15 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             state = args.GetArg<uint64_t>("seed").GetValue();
         }
 
+        auto initialDegrees = GenerateLogNormalDegrees(15);
+        auto fixedDegrees = MakeGraphicConnected(initialDegrees);
+        auto graph = ConstructGraphHavelHakimi(fixedDegrees);
 
-        auto GenerateTopology = [](TRNG &mt, uint64_t n) {
-            return GenerateRandomChungLuGraph(mt, GenerateLogNormalDegrees(n));
+        auto GenerateTopology = [&](TRNG &mt, uint64_t n) {
+            (void) n;
+            MCMCRandomize(mt, graph, 50);
+
+            return graph;
         };
 
         BenchmarkShuffleEliminationOnTopologies(

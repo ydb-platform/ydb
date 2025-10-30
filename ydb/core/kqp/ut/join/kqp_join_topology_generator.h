@@ -7,6 +7,7 @@
 #include <cassert>
 #include <random>
 #include <set>
+#include <queue>
 
 
 namespace NKikimr::NKqp {
@@ -81,6 +82,73 @@ public:
 
     void Connect(unsigned lhs, unsigned rhs);
 
+    void Disconnect(unsigned u, unsigned v) {
+        auto& adjacencyU = AdjacencyList_[u];
+        auto& adjacencyV = AdjacencyList_[v];
+        adjacencyU.erase(std::remove_if(adjacencyU.begin(), adjacencyU.end(), [v](TEdge edge) { return edge.Target == v; }), adjacencyU.end());
+        adjacencyV.erase(std::remove_if(adjacencyV.begin(), adjacencyV.end(), [u](TEdge edge) { return edge.Target == u; }), adjacencyV.end());
+
+    }
+
+    bool HasEdge(unsigned u, unsigned v) const {
+        for (ui32 i = 0; i < AdjacencyList_[u].size(); ++i) {
+            if (AdjacencyList_[u][i].Target == v) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    std::vector<int> FindComponents() const {
+        std::vector<int> component(GetN(), -1);
+        int numComponents = 0;
+
+        for (unsigned start = 0; start < GetN(); ++ start) {
+            if (component[start] != -1) {
+                continue;
+            }
+
+            std::queue<int> queue;
+            queue.push(start);
+            component[start] = numComponents;
+
+            while (!queue.empty()) {
+                unsigned u = queue.front();
+                queue.pop();
+                for (TEdge edge : AdjacencyList_[u]) {
+                    unsigned v = edge.Target;
+                    if (component[v] == -1) {
+                        component[v] = numComponents;
+                        queue.push(v);
+                    }
+                }
+            }
+
+            ++ numComponents;
+        }
+
+        return component;
+    }
+
+    int NumComponents() const {
+        auto comp = FindComponents();
+        return comp.empty() ? 0 : *std::max_element(comp.begin(), comp.end()) + 1;
+    }
+
+    bool IsConnected() const {
+        return NumComponents() == 1;
+    }
+
+    int NumEdges() const {
+        int count = 0;
+        for (const auto& adjacency : AdjacencyList_) {
+            count += adjacency.size();
+        }
+        return count / 2;
+    }
+
+
     std::string MakeQuery() const;
 
     void DumpGraph(IOutputStream &OS) const;
@@ -101,8 +169,7 @@ public:
 
     void SetupKeysPitmanYor(TRNG &mt, TPitmanYorConfig config);
 
-
-private:
+public:
     struct TEdge {
         unsigned Target;
         unsigned ColumnLHS, ColumnRHS;
@@ -110,6 +177,12 @@ private:
 
     using TAdjacencyList = std::vector<std::vector<TEdge>>;
 
+public:
+    TAdjacencyList& GetAdjacencyList() {
+        return AdjacencyList_;
+    }
+
+private:
     TAdjacencyList AdjacencyList_;
     TSchema Schema_;
 };
@@ -136,9 +209,6 @@ private:
     std::vector<TTableStats> Stats_;
 };
 
-
-
-
 void NormalizeProbabilities(std::vector<double>& probabilities);
 
 std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
@@ -147,6 +217,16 @@ std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
 std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean = 1.0,
                                           double logStdDev = 0.5, int minDegree = 1,
                                           int maxDegree = -1);
+
+TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees);
+
+std::vector<int> MakeGraphicConnected(std::vector<int> degrees);
+
+void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps);
+
+
+
+
 TRelationGraph GenerateLine(unsigned numNodes);
 TRelationGraph GenerateStar(unsigned numNodes);
 TRelationGraph GenerateFullyConnected(unsigned numNodes);

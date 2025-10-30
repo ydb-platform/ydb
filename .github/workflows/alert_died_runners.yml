@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  check-queued-jobs:
+  check-died-runners:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     
     steps:
@@ -25,7 +25,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests
         
-    - name: Run queued jobs checker and send to Telegram
+    - name: Run dead runner checker and send to Telegram
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_YDBOT_TOKEN }}
         GH_ALERTS_TG_LOGINS: ${{ vars.GH_ALERTS_TG_LOGINS }}
@@ -33,5 +33,5 @@ jobs:
         python .github/scripts/shutdown_runner_alert.py \
           --chat-id ${{ vars.GH_ALERTS_TG_CHAT }} \
           --token ${{ secrets.GITHUB_TOKEN }} \
-          --hours-delta 12 \
+          --hours-delta 3 \
           --max-rows 100

@@ -3,29 +3,26 @@
 #include <ydb/core/grpc_services/service_export.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/base/base.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace NKikimr {
 namespace NGRpcService {
 
 void TGRpcYdbExportService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
+    using namespace Ydb::Export;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_EXPORT_METHOD
+#error SETUP_EXPORT_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, CB, AUDIT_MODE) \
-    MakeIntrusive<TGRpcRequest<Ydb::Export::IN, Ydb::Export::OUT, TGRpcYdbExportService>>(this, &Service_, CQ_, \
-        [this](NYdbGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ActorSystem_->Send(GRpcRequestProxyId_, \
-                new NGRpcService::TGrpcRequestOperationCall<Ydb::Export::IN, Ydb::Export::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Off, nullptr, AUDIT_MODE})); \
-        }, &Ydb::Export::V1::ExportService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("export", #NAME))->Run();
 
-    ADD_REQUEST(ExportToYt, ExportToYtRequest, ExportToYtResponse, DoExportToYtRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
-    ADD_REQUEST(ExportToS3, ExportToS3Request, ExportToS3Response, DoExportToS3Request, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
-#undef ADD_REQUEST
+#define SETUP_EXPORT_METHOD(methodName, methodCallback, rlMode, requestType, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, rlMode, requestType, export, auditMode)
+
+    SETUP_EXPORT_METHOD(ExportToYt, DoExportToYtRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+    SETUP_EXPORT_METHOD(ExportToS3, DoExportToS3Request, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::ExportImport));
+
+#undef SETUP_EXPORT_METHOD
 }
 
 } // namespace NGRpcService

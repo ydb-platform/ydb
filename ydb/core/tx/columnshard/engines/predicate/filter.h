@@ -53,6 +53,9 @@ public:
     }
 
     std::optional<ui32> GetFilteredCountLimit(const std::shared_ptr<arrow::Schema>& pkSchema) {
+        if (SortedRanges.empty()) {
+            return std::nullopt;
+        }
         ui32 result = 0;
         for (auto&& i : SortedRanges) {
             if (i.IsPointRange(pkSchema)) {

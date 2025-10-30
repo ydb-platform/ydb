@@ -386,7 +386,7 @@ runs:
             --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
             --ram-usage-file ram_usage.txt \
             --chat-id "$GH_ALERTS_TG_CHAT" \
-            --memory-threshold 10 || true
+            --memory-threshold 90 || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

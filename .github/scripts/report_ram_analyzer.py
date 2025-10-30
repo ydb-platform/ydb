@@ -280,7 +280,7 @@ if __name__ == "__main__":
             dry_run = True
 
         message = f"""🚨 *Possible OOM*
-During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM under threshold *{round(max_agent_ram_with_threshold, 1)}GB*
+During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM under threshold - *{round(max_agent_ram_with_threshold, 1)}GB*
 {max_agent_ram}GB total available
 Threshold is {args.memory_threshold}%
 

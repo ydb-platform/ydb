@@ -85,8 +85,6 @@ TClusterId SetPostingParentFlag(TClusterId parent);
 }
 
 namespace NFulltext {
-    inline constexpr const char* TokenTypeName = "String";
-
     inline constexpr const char* TokenColumn = "__ydb_token";
 }
 

@@ -341,7 +341,7 @@ auto CalcFulltextImplTableDescImpl(
     {
         auto tokenColumn = implTableDesc.AddColumns();
         tokenColumn->SetName(NFulltext::TokenColumn);
-        tokenColumn->SetType(NFulltext::TokenTypeName);
+        tokenColumn->SetType(NScheme::TypeName(textColumnInfo.GetTypeId()));
         tokenColumn->SetTypeId(textColumnInfo.GetTypeId());
         tokenColumn->SetNotNull(true);
     }

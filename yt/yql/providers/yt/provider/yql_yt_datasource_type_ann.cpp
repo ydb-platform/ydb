@@ -32,6 +32,7 @@ public:
         : TVisitorTransformerBase(true)
         , State_(state)
     {
+        AddHandler({TStringBuf("Result"), TStringBuf("Pull")}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleResOrPull));
         AddHandler({TEpoch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TEpochInfo>));
         AddHandler({TYtMeta::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TYtTableMetaInfo>));
         AddHandler({TYtStat::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleAux<TYtTableStatInfo>));
@@ -56,6 +57,11 @@ public:
         AddHandler({TYtTableIndex::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Uint32>));
         AddHandler({TYtIsKeySwitch::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableProp<EDataSlot::Bool>));
         AddHandler({TYtTableName::CallableName()}, Hndl(&TYtDataSourceTypeAnnotationTransformer::HandleTableName));
+    }
+
+    TStatus HandleResOrPull(TExprBase input, TExprContext& ctx) {
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TWorldExprType>());
+        return TStatus::Ok;
     }
 
     TStatus HandleUnit(TExprBase input, TExprContext& ctx) {

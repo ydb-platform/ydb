@@ -30,12 +30,6 @@ struct IColumnDataExtractor {
     virtual NPackedTuple::EColumnSizeType GetElementSizeType() = 0;
     // Ugly interface, but I dont care
     virtual void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& extractors) = 0;
-    
-    // Returns number of pointers that ExtractForPack adds to columnsData
-    // (for fixed types it's 1, for strings it's 2: offset + data)
-    virtual ui32 GetPointersCount() const {
-        return 1;
-    }
 };
 
 // ------------------------------------------------------------
@@ -279,10 +273,6 @@ public:
         return NPackedTuple::EColumnSizeType::Variable;
     }
 
-    ui32 GetPointersCount() const override {
-        return 2; // offset buffer + data buffer
-    }
-
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
     }
@@ -353,14 +343,6 @@ public:
         }
     }
 
-    ui32 GetPointersCount() const override {
-        ui32 total = 0;
-        for (const auto& child : Children_) {
-            total += child->GetPointersCount();
-        }
-        return total;
-    }
-
 protected:
     std::vector<IColumnDataExtractor::TPtr> Children_;
     TType* Type_;
@@ -409,10 +391,6 @@ public:
 
     void AppendInnerExtractors(std::vector<IColumnDataExtractor*>& packers) override {
         packers.push_back(this);
-    }
-
-    ui32 GetPointersCount() const override {
-        return Inner_->GetPointersCount();
     }
 
 private:

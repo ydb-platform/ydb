@@ -19,9 +19,6 @@ jobs:
   ydb-slo-action:
     name: Run YDB SLO Tests
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
 
     strategy:
       matrix:
@@ -83,9 +80,3 @@ jobs:
         name: Cleanup SLO Database
         run: |
           ./ydb/public/sdk/cpp/tests/slo_workloads/key_value/key_value ${{ matrix.global-args }} cleanup
-
-      - name: Publish YDB SLO Report
-        uses: ydb-platform/ydb-slo-action/report@main
-        with:         
-          github_run_id: ${{ github.event.inputs.github_pull_request_number }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}

@@ -233,8 +233,12 @@ public:
         , Flushed(false)
         , OutputBufferBytes(outputBufferBytes)
         , OutputBufferChunks(outputBufferChunks)
+        , BufferPopBytes(0)
+        , BufferPopChunks(0)
+        , BufferPopRows(0)
     {}
     void AddPushBytes(ui64 bytes);
+    void AddPopChunk(ui64 bytes, ui64 rows);
     void UpdatePopBytes(ui64 bytes);
     bool TryPushToWaitQueue(TDataChunk&& data);
     bool CheckGenMajor(ui64 genMajor);
@@ -267,6 +271,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr OutputBufferChunks;
     ui64 PushBytesDelta = 0;
     ui64 PushChunksDelta = 0;
+    std::atomic<ui64> BufferPopBytes;
+    std::atomic<ui64> BufferPopChunks;
+    std::atomic<ui64> BufferPopRows;
 };
 
 struct TOutputDescriptorCompare {
@@ -306,6 +313,7 @@ public:
     EDqFillLevel GetFillLevel() const override;
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator>aggregator) override;
     void Push(TDataChunk&& data) override;
+    void UpdatePopStats() override;
     bool IsEarlyFinished() override;
     bool IsFlushed() override;
     bool IsEmpty() override;
@@ -344,7 +352,10 @@ public:
         , EarlyFinished(false)
         , PopBytes(0)
         , InputBufferBytes(inputBufferBytes)
-        , InputBufferChunks(inputBufferChunks) {
+        , InputBufferChunks(inputBufferChunks)
+        , PushBytes(0)
+        , PushChunks(0)
+        , PushRows(0) {
         PushStats.ChannelId = info.ChannelId;
         PopStats.ChannelId = info.ChannelId;
     }
@@ -376,6 +387,7 @@ public:
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
     void Terminate() {}
+    void UpdatePushStats() override;
 
     ui64 GetPopBytes();
 
@@ -395,6 +407,9 @@ public:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputBufferChunks;
     ui64 PushBytesDelta = 0;
     ui64 PushChunksDelta = 0;
+    std::atomic<ui64> PushBytes;
+    std::atomic<ui64> PushChunks;
+    std::atomic<ui64> PushRows;
 };
 
 class TInputBufferProxy : public IChannelBuffer {
@@ -413,6 +428,7 @@ public:
     bool IsFlushed() override;
     bool Pop(TDataChunk& data) override;
     void EarlyFinish() override;
+    void UpdatePushStats() override;
 
     std::shared_ptr<TNodeState> NodeState;
     std::shared_ptr<TInputBuffer> Buffer;
@@ -714,6 +730,7 @@ public:
     }
 
     const TDqOutputChannelStats& GetPopStats() const override {
+        Serializer->Buffer->UpdatePopStats();
         return Serializer->Buffer->PopStats;
     }
 
@@ -835,6 +852,7 @@ public:
     }
 
     const TDqInputChannelStats& GetPushStats() const override {
+        Buffer->UpdatePushStats();
         return Buffer->PushStats;
     }
 

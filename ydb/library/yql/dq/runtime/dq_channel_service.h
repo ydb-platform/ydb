@@ -90,11 +90,13 @@ public:
     virtual bool IsEarlyFinished() = 0;
     virtual bool IsFlushed() = 0;
     virtual void PushTerminated() {}
+    virtual void UpdatePopStats() {}
 
     virtual bool IsEmpty() = 0;
     virtual bool Pop(TDataChunk& data) = 0;
     virtual void EarlyFinish() = 0;
     virtual void PopTerminated() {}
+    virtual void UpdatePushStats() {}
 
     void SendFinish();
     bool GetLeading();

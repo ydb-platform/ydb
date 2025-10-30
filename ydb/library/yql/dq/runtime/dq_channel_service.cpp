@@ -171,6 +171,12 @@ void TOutputDescriptor::AddPushBytes(ui64 bytes) {
     }
 }
 
+void TOutputDescriptor::AddPopChunk(ui64 bytes, ui64 rows) {
+    BufferPopBytes += bytes;
+    BufferPopChunks++;
+    BufferPopRows += rows;
+}
+
 void TOutputDescriptor::UpdatePopBytes(ui64 bytes) {
     // lock expected here
 
@@ -293,6 +299,12 @@ void TOutputBuffer::Push(TDataChunk&& data) {
     NodeState->Push(std::move(data), Descriptor);
 }
 
+void TOutputBuffer::UpdatePopStats() {
+    PopStats.Bytes += Descriptor->BufferPopBytes.exchange(0);
+    PopStats.Chunks += Descriptor->BufferPopChunks.exchange(0);
+    PopStats.Rows += Descriptor->BufferPopRows.exchange(0);
+}
+
 bool TOutputBuffer::IsEarlyFinished() {
     return Descriptor->EarlyFinished.load();
 }
@@ -325,6 +337,10 @@ bool TInputBuffer::IsEmpty() {
 void TInputBuffer::PushDataChunk(TDataChunk&& data) {
     std::lock_guard lock(Mutex);
 
+    PushChunks++;
+    PushBytes += data.Bytes;
+    PushRows += data.Rows;
+
     PushChunksDelta++;
     PushBytesDelta += data.Bytes;
     if (PushChunksDelta >= 100 || data.Finished) {
@@ -339,6 +355,12 @@ void TInputBuffer::PushDataChunk(TDataChunk&& data) {
         NeedToNotify = false;
         ActorSystem->Send(Info.InputActorId, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback});
     }
+}
+
+void TInputBuffer::UpdatePushStats() {
+    PushStats.Bytes += PushBytes.exchange(0);
+    PushStats.Chunks += PushChunks.exchange(0);
+    PushStats.Rows += PushRows.exchange(0);
 }
 
 bool TInputBuffer::IsEarlyFinished() {
@@ -410,6 +432,10 @@ void TInputBufferProxy::EarlyFinish() {
     Buffer->EarlyFinish();
 }
 
+void TInputBufferProxy::UpdatePushStats() {
+    Buffer->UpdatePushStats();
+}
+
 TLocalBufferRegistry::~TLocalBufferRegistry() {
     {
         std::lock_guard lock(Mutex);
@@ -452,6 +478,7 @@ TNodeState::~TNodeState() {
 
 void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> descriptor) {
     auto bytes = data.Bytes;
+    auto rows = data.Rows;
 
     if (descriptor->TryPushToWaitQueue(std::move(data))) {
         return;
@@ -463,6 +490,7 @@ void TNodeState::Push(TDataChunk&& data, std::shared_ptr<TOutputDescriptor> desc
         if (InflightBytes < MaxInflightBytes && Queue.size() < MaxInflightMessages) {
             if (descriptor->CheckGenMajor(GenMajor)) {
                 descriptor->AddPushBytes(bytes);
+                descriptor->AddPopChunk(bytes, rows);
                 auto item = std::make_shared<TOutputItem>(std::move(data), descriptor);
                 item->SeqNo = ++SeqNo;
                 Queue.push_back(item);
@@ -753,6 +781,7 @@ void TNodeState::SendFromWaiters(ui64 deltaBytes) {
 
         auto& data = waiter->WaitQueue.front();
         waiter->CheckGenMajor(GenMajor);
+        waiter->AddPopChunk(data.Bytes, data.Rows);
         auto item = std::make_shared<TOutputItem>(std::move(data), waiter);
         item->SeqNo = ++SeqNo;
         InflightBytes += data.Bytes;
@@ -1176,13 +1205,19 @@ std::shared_ptr<IChannelBuffer> TDqChannelService::GetLocalBuffer(const TChannel
 IDqOutputChannel::TPtr TDqChannelService::GetOutputChannel(const TDqChannelParams& params) {
     Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
             || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
-    return new TFastDqOutputChannel(Self, params, GetOutputBuffer(params.Desc.ChannelId), false);
+    auto buffer  = GetOutputBuffer(params.Desc.ChannelId);
+    buffer->PushStats.Level = params.Level;
+    buffer->PopStats.Level = params.Level;
+    return new TFastDqOutputChannel(Self, params, buffer, false);
 }
 
 IDqInputChannel::TPtr TDqChannelService::GetInputChannel(const TDqChannelParams& params) {
     Y_ENSURE(params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_FAST_PICKLE_1_0
             || params.TransportVersion == NDqProto::EDataTransportVersion::DATA_TRANSPORT_OOB_FAST_PICKLE_1_0);
-    return new TFastDqInputChannel(Self, params, GetInputBuffer(params.Desc.ChannelId));
+    auto buffer = GetInputBuffer(params.Desc.ChannelId);
+    buffer->PushStats.Level = params.Level;
+    buffer->PopStats.Level = params.Level;
+    return new TFastDqInputChannel(Self, params, buffer);
 }
 
 void TDqChannelService::CleanupUnbindedInputs() {
@@ -1235,6 +1270,8 @@ bool TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
         if (Aggregator) {
             buffer->SetFillAggregator(Aggregator);
         }
+        buffer->PushStats.Level = Serializer->Buffer->PushStats.Level;
+        buffer->PopStats.Level = Serializer->Buffer->PopStats.Level;
         Serializer->Buffer = buffer;
         Service.reset();
         return true;
@@ -1244,7 +1281,10 @@ bool TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
 
 bool TFastDqInputChannel::Bind(NActors::TActorId outputActorId, NActors::TActorId inputActorId) {
     if (auto service = Service.lock()) {
-        Buffer = service->GetInputBuffer(TChannelInfo(Desc.ChannelId, outputActorId, inputActorId));
+        auto buffer = service->GetInputBuffer(TChannelInfo(Desc.ChannelId, outputActorId, inputActorId));
+        buffer->PushStats.Level = Buffer->PushStats.Level;
+        buffer->PopStats.Level = Buffer->PopStats.Level;
+        Buffer = buffer;
         Service.reset();
         return true;
     }

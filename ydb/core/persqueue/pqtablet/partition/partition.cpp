@@ -486,8 +486,6 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         avg.Update(now);
     }
 
-    UpdateCompactionCounters();
-
     TryRunCompaction();
 
     AutopartitioningManager->CleanUp();
@@ -1008,6 +1006,11 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
         if (PartitionCompactionCounters) {
             for (ui32 i = 0; i < PartitionCompactionCounters->GetCounters().Size(); ++i) {
                 ac->MutableCompactionCounters()->AddValues(PartitionCompactionCounters->GetCounters()[i].Get());
+            }
+        }
+        if (PartitionCountersExtended) {
+            for (ui32 i = 0; i < PartitionCountersExtended->GetCounters().Size(); ++i) {
+                ac->MutableExtendedCounters()->AddValues((PartitionCountersExtended->GetCounters()[i].Get()));
             }
         }
 
@@ -1795,6 +1798,26 @@ ui64 TPartition::GetSizeLag(i64 offset) {
 }
 
 
+#define SET_METRIC_VALUE(scope, name, newValue)             \
+    scope->GetCounters()[name].Set(newValue);
+
+#define SET_METRIC(scope, name, newValue)                   \
+    if (scope->GetCounters()[name].Get() != newValue) {     \
+        SET_METRIC_VALUE(scope, name, newValue);            \
+        haveChanges = true;                                 \
+    }
+
+#define SET_METRICS_COUPLE_IMPL(scope, name, newValue, secondName, secondValue)     \
+    if (scope->GetCounters()[name].Get() != newValue) {                             \
+        SET_METRIC_VALUE(scope, name, newValue);                                    \
+        SET_METRIC_VALUE(scope, secondName, secondValue);                           \
+        haveChanges = true;                                                         \
+    }
+
+#define SET_METRICS_COUPLE(scope, name, newValue, secondName)                       \
+    SET_METRICS_COUPLE_IMPL(scope, name, newValue, secondName, newValue);
+
+
 bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
     if (!PartitionCountersLabeled) {
         return false;
@@ -1824,48 +1847,30 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (userInfo.WriteTimeLagMsByCommittedPerPartition) {
             userInfo.WriteTimeLagMsByCommittedPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Get() != ts) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_WRITE_TIME].Set(ts);
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_WRITE_TIME, ts);
 
         ts = snapshot.LastCommittedMessage.CreateTimestamp.MilliSeconds();
         if (ts < MIN_TIMESTAMP_MS) {
             ts = Max<i64>();
         }
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Get() != ts) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_CREATE_TIME].Set(ts);
-        }
-        auto readWriteTimestamp = snapshot.LastReadMessage.WriteTimestamp;
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Get() != readWriteTimestamp.MilliSeconds()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_WRITE_TIME].Set(readWriteTimestamp.MilliSeconds());
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_CREATE_TIME, ts);
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Get() != snapshot.TotalLag.MilliSeconds()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_TIME].Set(snapshot.TotalLag.MilliSeconds());
-        }
+        auto readWriteTimestamp = snapshot.LastReadMessage.WriteTimestamp;
+        SET_METRIC(userInfo.LabeledCounters, METRIC_READ_WRITE_TIME, readWriteTimestamp.MilliSeconds());
+        SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TOTAL_TIME, snapshot.TotalLag.MilliSeconds());
 
         ts = snapshot.LastReadTimestamp.MilliSeconds();
         if (userInfo.TimeSinceLastReadMsPerPartition) {
             userInfo.TimeSinceLastReadMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Get() != ts) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_LAST_READ_TIME].Set(ts);
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_LAST_READ_TIME, ts);
 
         {
             ui64 timeLag = userInfo.GetWriteLagMs();
             if (userInfo.WriteTimeLagMsByLastReadPerPartition) {
                 userInfo.WriteTimeLagMsByLastReadPerPartition->Set(timeLag);
             }
-            if (userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Get() != timeLag) {
-                haveChanges = true;
-                userInfo.LabeledCounters->GetCounters()[METRIC_WRITE_TIME_LAG].Set(timeLag);
-            }
+            SET_METRIC(userInfo.LabeledCounters, METRIC_WRITE_TIME_LAG, timeLag);
         }
 
         {
@@ -1873,10 +1878,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             if (userInfo.ReadTimeLagMsPerPartition) {
                 userInfo.ReadTimeLagMsPerPartition->Set(lag);
             }
-            if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Get() != lag) {
-                haveChanges = true;
-                userInfo.LabeledCounters->GetCounters()[METRIC_READ_TIME_LAG].Set(lag);
-            }
+            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_TIME_LAG, lag);
         }
 
         {
@@ -1884,45 +1886,28 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
             if (userInfo.MessageLagByCommittedPerPartition) {
                 userInfo.MessageLagByCommittedPerPartition->Set(lag);
             }
-            if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Get() != lag) {
-                haveChanges = true;
-                userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_MESSAGE_LAG].Set(lag);
-            }
+
+            SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_MESSAGE_LAG, lag);
         }
 
         ui64 readMessageLag = GetEndOffset() - snapshot.ReadOffset;
         if (userInfo.MessageLagByLastReadPerPartition) {
             userInfo.MessageLagByLastReadPerPartition->Set(readMessageLag);
         }
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Get() != readMessageLag) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_MESSAGE_LAG].Set(readMessageLag);
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_MESSAGE_LAG].Set(readMessageLag);
-        }
+
+        SET_METRICS_COUPLE(userInfo.LabeledCounters, METRIC_READ_MESSAGE_LAG, readMessageLag, METRIC_READ_TOTAL_MESSAGE_LAG);
 
         ui64 sizeLag = GetSizeLag(userInfo.Offset);
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_SIZE_LAG].Get() != sizeLag) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_COMMIT_SIZE_LAG].Set(sizeLag);
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_COMMIT_SIZE_LAG, sizeLag);
 
         ui64 sizeLagRead = GetSizeLag(userInfo.ReadOffset);
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_SIZE_LAG].Get() != sizeLagRead) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_SIZE_LAG].Set(sizeLagRead);
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_TOTAL_SIZE_LAG].Set(sizeLag);
-        }
+        SET_METRICS_COUPLE_IMPL(userInfo.LabeledCounters, METRIC_READ_SIZE_LAG, sizeLagRead,
+            METRIC_READ_TOTAL_SIZE_LAG, sizeLag);
 
-        if (userInfo.LabeledCounters->GetCounters()[METRIC_USER_PARTITIONS].Get() == 0) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_USER_PARTITIONS].Set(1);
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_USER_PARTITIONS, 1);
 
         ui64 readOffsetRewindSum = userInfo.ReadOffsetRewindSum;
-        if (readOffsetRewindSum != userInfo.LabeledCounters->GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Get()) {
-            haveChanges = true;
-            userInfo.LabeledCounters->GetCounters()[METRIC_READ_OFFSET_REWIND_SUM].Set(readOffsetRewindSum);
-        }
+        SET_METRIC(userInfo.LabeledCounters, METRIC_READ_OFFSET_REWIND_SUM, readOffsetRewindSum);
 
         ui32 id = METRIC_TOTAL_READ_SPEED_1;
         for (ui32 i = 0; i < userInfo.AvgReadBytes.size(); ++i) {
@@ -1937,15 +1922,16 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         PQ_ENSURE(id == METRIC_MAX_READ_SPEED_4 + 1);
         if (userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get()) {
             ui64 quotaUsage = ui64(userInfo.AvgReadBytes[1].GetValue()) * 1000000 / userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get() / 60;
-            if (quotaUsage != userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Get()) {
-                haveChanges = true;
-                userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Set(quotaUsage);
-            }
+
+            SET_METRIC(userInfo.LabeledCounters, METRIC_READ_QUOTA_PER_CONSUMER_USAGE, quotaUsage);
         }
 
         if (userInfoPair.first == CLIENTID_WITHOUT_CONSUMER ) {
-            PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_NO_CONSUMER_BYTES].Set(userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get());
-            PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_NO_CONSUMER_USAGE].Set(userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Get());
+            SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_BYTES,
+                userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_BYTES].Get());
+
+            SET_METRIC_VALUE(PartitionCountersLabeled, METRIC_READ_QUOTA_NO_CONSUMER_USAGE,
+                userInfo.LabeledCounters->GetCounters()[METRIC_READ_QUOTA_PER_CONSUMER_USAGE].Get());
         }
 
         if (haveChanges) {
@@ -1961,38 +1947,20 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (SourceIdCountPerPartition) {
             SourceIdCountPerPartition->Set(count);
         }
-        if (count != PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Set(count);
-            PartitionCountersLabeled->GetCounters()[METRIC_NUM_SIDS].Set(count);
-        }
+        SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_MAX_NUM_SIDS, count, METRIC_NUM_SIDS);
     }
 
     TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
-    if (lifetimeNow.MilliSeconds() != PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
-    }
+    SET_METRIC(PartitionCountersLabeled, METRIC_MIN_SID_LIFETIME, lifetimeNow.MilliSeconds());
 
     const ui64 headGapSize = BlobEncoder.GetHeadGapSize();
     const ui64 gapSize = GapSize + headGapSize;
-    if (gapSize != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_GAPS_SIZE].Set(gapSize);
-        PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Set(gapSize);
-    }
+    SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_SIZE, gapSize, METRIC_MAX_GAPS_SIZE);
 
     const ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
-    if (gapsCount != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_COUNT].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_GAPS_COUNT].Set(gapsCount);
-        PartitionCountersLabeled->GetCounters()[METRIC_GAPS_COUNT].Set(gapsCount);
-    }
+    SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_GAPS_COUNT, gapsCount, METRIC_MAX_GAPS_COUNT);
 
-    if (TotalPartitionWriteSpeed != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Set(TotalPartitionWriteSpeed);
-    }
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_BYTES, TotalPartitionWriteSpeed);
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
@@ -2021,31 +1989,18 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
 
     if (TotalPartitionWriteSpeed) {
         ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / TotalPartitionWriteSpeed / 60;
-        if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_QUOTA_USAGE, quotaUsage);
     }
 
     ui64 storageSize = StorageSize(ctx);
-    if (storageSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(storageSize);
-        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(storageSize);
-    }
+    SET_METRICS_COUPLE(PartitionCountersLabeled, METRIC_TOTAL_PART_SIZE, storageSize, METRIC_MAX_PART_SIZE);
 
     if (NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY == Config.GetMeteringMode()) {
         ui64 reserveSize = ReserveSize();
-        if (reserveSize != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_LIMIT_BYTES].Set(reserveSize);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_RESERVE_LIMIT_BYTES, reserveSize);
 
         ui64 reserveUsed = UsedReserveSize(ctx);
-        if (reserveUsed != PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_RESERVE_USED_BYTES].Set(reserveUsed);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_RESERVE_USED_BYTES, reserveUsed);
     }
 
     {
@@ -2054,76 +2009,55 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         if (TimeSinceLastWriteMsPerPartition) {
             TimeSinceLastWriteMsPerPartition->Set(nowMs < ts ? 0 : nowMs - ts);
         }
-
-        if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_LAST_WRITE_TIME, ts);
     }
 
     ui64 timeLag = WriteLagMs.GetValue();
     if (WriteTimeLagMsByLastWritePerPartition) {
         WriteTimeLagMsByLastWritePerPartition->Set(timeLag);
     }
-    if (PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Get() != timeLag) {
-        haveChanges = true;
-        PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
-    }
+    SET_METRIC(PartitionCountersLabeled, METRIC_WRITE_TIME_LAG_MS, timeLag);
 
     if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get()) {
         ui64 quotaUsage = ui64(AvgReadBytes.GetValue()) * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get() / 60;
-        if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
     }
 
     if (PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_NO_CONSUMER_BYTES].Get()) {
         ui64 quotaUsage = ui64(AvgReadBytes.GetValue()) * 1000000 / PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_BYTES].Get() / 60;
-        if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Get()) {
-            haveChanges = true;
-            PartitionCountersLabeled->GetCounters()[METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE].Set(quotaUsage);
-        }
+        SET_METRIC(PartitionCountersLabeled, METRIC_READ_QUOTA_PARTITION_TOTAL_USAGE, quotaUsage);
     }
     if (PartitionCompactionCounters) {
         Y_ENSURE(Compacter);
         auto counters = Compacter->GetCounters();
-        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_MAX].Set(counters.UncompactedSize);
-            haveChanges = true;
-        }
-        if (counters.UncompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_SIZE_SUM].Set(counters.UncompactedSize);
-            haveChanges = true;
-        }
-        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_MAX].Set(counters.CompactedSize);
-            haveChanges = true;
-        }
-        if (counters.CompactedSize != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_SIZE_SUM].Set(counters.CompactedSize);
-            haveChanges = true;
-        }
-        if (counters.UncompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_COUNT].Set(counters.UncompactedCount);
-            haveChanges = true;
-        }
-        if (counters.CompactedCount != PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_COMPACTED_COUNT].Set(counters.CompactedCount);
-            haveChanges = true;
-        }
+        SET_METRIC(PartitionCompactionCounters, METRIC_UNCOMPACTED_SIZE_MAX, counters.UncompactedSize);
+        SET_METRIC(PartitionCompactionCounters, METRIC_UNCOMPACTED_SIZE_SUM, counters.UncompactedSize);
+
+        SET_METRIC(PartitionCompactionCounters, METRIC_COMPACTED_SIZE_MAX, counters.CompactedSize);
+        SET_METRIC(PartitionCompactionCounters, METRIC_COMPACTED_SIZE_SUM, counters.CompactedSize);
+
+        SET_METRIC(PartitionCompactionCounters, METRIC_UNCOMPACTED_COUNT, counters.UncompactedCount);
+        SET_METRIC(PartitionCompactionCounters, METRIC_COMPACTED_COUNT, counters.CompactedCount);
+
         // if (counters.GetUncompactedRatio() != PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Get()) {
         //     PartitionCompactionCounters->GetCounters()[METRIC_UNCOMPACTED_RATIO].Set(counters.GetUncompactedRatio());
         //     haveChanges = true;
         // }
-        if (counters.CurrReadCycleDuration.MilliSeconds() != PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_CURR_CYCLE_DURATION].Set(counters.CurrReadCycleDuration.MilliSeconds());
-            haveChanges = true;
+        SET_METRIC(PartitionCompactionCounters, METRIC_CURR_CYCLE_DURATION, counters.CurrReadCycleDuration.MilliSeconds());
+        SET_METRIC(PartitionCompactionCounters, METRIC_CURR_READ_CYCLE_KEYS, counters.CurrentReadCycleKeys);
+    }
+
+    if (PartitionCountersExtended && InitDone) {
+        ui64 lag = 0;
+        if (ThereIsUncompactedData()) {
+            auto now = ctx.Now();
+            auto begin = GetFirstUncompactedBlobTimestamp();
+            lag = (now - begin).MilliSeconds();
         }
-        if (counters.CurrentReadCycleKeys != PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Get()) {
-            PartitionCompactionCounters->GetCounters()[METRIC_CURR_READ_CYCLE_KEYS].Set(counters.CurrentReadCycleKeys);
-            haveChanges = true;
-        }
+        SET_METRIC(PartitionCountersExtended, METRIC_BLOB_UNCOMPACTED_LAG_MAX, lag);
+        SET_METRIC(PartitionCountersExtended, METRIC_BLOB_UNCOMPACTED_SIZE_MAX, BlobEncoder.BodySize);
+        SET_METRIC(PartitionCountersExtended, METRIC_BLOB_UNCOMPACTED_COUNT_MAX, BlobEncoder.DataKeysBody.size());
+
     }
     return haveChanges;
 }

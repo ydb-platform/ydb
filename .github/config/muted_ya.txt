@@ -1,5 +1,7 @@
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
+ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroup
 ydb/core/blobstorage/ut_blobstorage GroupReconfiguration.BsControllerDoesNotDisableGroupNoRequestsToNodesWVDisks
+ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
 ydb/core/blobstorage/ut_blobstorage/ut_huge unittest.[*/*] chunk
@@ -11,22 +13,23 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.ReadSmall
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteHuge
 ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/indexes KqpMultishardIndex.WriteIntoRenamingAsyncIndex
+ydb/core/kqp/ut/olap KqpOlapJson.BloomNGrammIndexesVariants[true,false,0,0,0,0]
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewColumns
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewTable
+ydb/core/kqp/ut/opt KqpExtractPredicateLookup.SqlInJoin
 ydb/core/kqp/ut/opt KqpKv.ReadRows_TimeoutCancelsReads
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
+ydb/core/kqp/ut/query KqpStats.DeferredEffects+UseSink
 ydb/core/kqp/ut/scheme KqpOlapScheme.AddPgColumnWithStore
-ydb/core/kqp/ut/service KqpService.TwoNodeOneShuttingDown
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
+ydb/core/kqp/ut/service KqpQueryService.LargeUpsert-UseSink
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
-ydb/core/sys_view/ut SystemView.AuthGroupMembers_Access
-ydb/core/sys_view/ut SystemView.AuthGroups_Access
-ydb/core/sys_view/ut SystemView.AuthUsers_Access
 ydb/core/tx/schemeshard/ut_export_reboots_s3 unittest.[*/*] chunk
+ydb/core/tx/schemeshard/ut_restore TImportWithRebootsTests.ShouldSucceedOnSingleTableWithUniqueIndex
+ydb/core/tx/schemeshard/ut_restore unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase+Prefixed[TabletReboots]
-ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase-Prefixed[TabletReboots]
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots unittest.[*/*] chunk
+ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-true
 ydb/core/viewer/tests test.py.test_topic_data
 ydb/core/viewer/tests test.py.test_topic_data_cdc
 ydb/library/yql/dq/actors/compute/ut TAsyncComputeActorTest.InputTransformMultichannel
@@ -37,18 +40,20 @@ ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/ydb/ut TGRpcAuthentication.NoDescribeRights
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
-ydb/tests/fq/multi_plane test_retry_high_rate.py.TestRetry.test_high_rate[kikimr0]
 ydb/tests/fq/s3 test_bindings_0.py.TestBindings.test_modify_connection_with_a_lot_of_bindings[v2-kikimr_settings0-client0]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
+ydb/tests/fq/yds test_delete_read_rules_after_abort_by_system.py.TestDeleteReadRulesAfterAbortBySystem.test_delete_read_rules_after_abort_by_system
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/fq/yds test_yq_streaming.py.TestYqStreaming.test_early_finish_case1[v1]
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
+ydb/tests/functional/cms test_cms_restart.py.TestCmsStateStorageRestartsMirrorKeep.test_restart_as_much_as_can
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/postgresql test_postgres.py.TestPostgresSuite.test_postgres_suite[select_1]
+ydb/tests/functional/restarts test_restarts.py.TestRestartClusterBlock42.test_when_create_many_tablets_and_restart_cluster_then_every_thing_is_ok
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_tenants[enable_alter_database_create_hive_first--false]

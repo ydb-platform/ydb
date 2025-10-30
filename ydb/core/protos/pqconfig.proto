@@ -744,12 +744,17 @@ message TAggregatedCounters {
     repeated uint64 Values = 1;
     repeated TConsumerAggregatedCounters ConsumerAggregatedCounters = 2;
     optional TCompactionCounters CompactionCounters = 3;
+    optional TExtendedCounters ExtendedCounters = 4;
 
     message TConsumerAggregatedCounters {
         optional string Consumer = 1;
         repeated uint64 Values = 2;
     }
     message TCompactionCounters {
+        repeated uint64 Values = 1;
+    }
+
+    message TExtendedCounters {
         repeated uint64 Values = 1;
     }
 }

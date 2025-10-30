@@ -234,4 +234,8 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(EnableDqHashCombineByDefault);
 }
+
+bool TKikimrConfiguration::GetDqHashCombineUsesBlocks() const {
+    return DqHashCombineUsesBlocks.Get().GetOrElse(true);
+}
 }

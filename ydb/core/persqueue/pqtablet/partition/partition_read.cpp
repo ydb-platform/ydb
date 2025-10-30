@@ -652,7 +652,10 @@ TReadAnswer TReadInfo::FormAnswer(
 
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
+                PartNo = 0;
                 ++Offset;
+            } else {
+                ++PartNo;
             }
             if (updateUsage(writeBlob)) {
                 break;

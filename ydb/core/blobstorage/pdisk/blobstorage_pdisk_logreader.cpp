@@ -133,12 +133,13 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                         }
                     }
                     if (ownerData.VDiskId != TVDiskID::InvalidId) {
-                        if (ownerData.CurrentFirstLsnToKeep < footer->FirstLsnToKeep) {
+                        ui64 firstLsnToKeep = ReadUnaligned<ui64>(&footer->FirstLsnToKeep);
+                        if (ownerData.CurrentFirstLsnToKeep < firstLsnToKeep) {
                             P_LOG(PRI_INFO, BPD01, "ProcessReadLogRecord set new FirstLsnToKeep for Owner caused by Lsn",
                                     (OwnerId, (ui32)header.OwnerId),
-                                    (FirstLsnToKeep, footer->FirstLsnToKeep),
+                                    (FirstLsnToKeep, firstLsnToKeep),
                                     (Lsn, header.OwnerLsn));
-                            ownerData.CurrentFirstLsnToKeep = footer->FirstLsnToKeep;
+                            ownerData.CurrentFirstLsnToKeep = firstLsnToKeep;
                         }
                         ownerData.LogRecordsInitiallyRead++;
                     }

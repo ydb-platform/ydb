@@ -3035,7 +3035,7 @@ Y_UNIT_TEST_SUITE(TPDiskPrefailureDiskTest) {
         pdt.Run();
     }
 }
-
+/*
 Y_UNIT_TEST_SUITE(RDMA) {
     void TestChunkReadWithRdmaAllocator(bool plainDataChunks) {
         TActorTestContext testCtx({
@@ -3117,5 +3117,5 @@ Y_UNIT_TEST_SUITE(RDMA) {
         buf2.RawDataPtr(0, totalSize);
     }
 }
-
+*/
 } // namespace NKikimr

@@ -87,14 +87,6 @@ private:
         IRequestProxyCtx* requestBaseCtx = event->Get();
         if (ValidateAndReplyOnError(requestBaseCtx)) {
             requestBaseCtx->FinishSpan();
-            TGRpcRequestProxyHandleMethods::Handle(event, ctx);
-        }
-    }
-
-    void Handle(TEvListEndpointsRequest::TPtr& event, const TActorContext& ctx) {
-        IRequestProxyCtx* requestBaseCtx = event->Get();
-        if (ValidateAndReplyOnError(requestBaseCtx)) {
-            requestBaseCtx->FinishSpan();
             TGRpcRequestProxy::Handle(event, ctx);
         }
     }
@@ -678,10 +670,7 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev) {
         HFunc(TEvStreamTopicWriteRequest, PreHandle);
         HFunc(TEvStreamTopicReadRequest, PreHandle);
         HFunc(TEvStreamTopicDirectReadRequest, PreHandle);
-        HFunc(TEvPQReadInfoRequest, PreHandle);
-        HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
-        HFunc(TEvNodeCheckRequest, PreHandle);
         HFunc(TEvProxyRuntimeEvent, PreHandle);
         HFunc(TEvRequestAuthAndCheck, PreHandle);
 

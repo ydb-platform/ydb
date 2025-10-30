@@ -59,6 +59,18 @@ inputs:
     type: boolean
     default: false
     description: "add ya make vars with git info"
+  telegram_ydbot_token:
+    type: string
+    required: false
+    description: "Telegram bot token"
+  telegram_alert_logins:
+    type: string
+    required: false
+    description: "Telegram alert logins"
+  telegram_alert_chat:
+    type: string
+    required: false
+    description: "Telegram alert chat"
 
 outputs:
   success:
@@ -120,7 +132,7 @@ runs:
         echo "SUMMARY_LINKS=$PUBLIC_DIR/summary_links.txt" >> $GITHUB_ENV
         echo "BUILD_PRESET=${{ inputs.build_preset }}" >> $GITHUB_ENV
 
-        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser
+        python3 -m pip install ydb ydb[yc] codeowners humanize junitparser plotly
 
     - name: Setup cache
       shell: bash
@@ -132,39 +144,15 @@ runs:
     - name: ya build and test
       id: build
       shell: bash
+      env:
+        TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
+        GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
+        GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
-
-        if [ "${{ inputs.increment }}" = "true" ]; then
-          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
-          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
-
-          set +e
-          ./.github/scripts/graph_compare.sh $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
-          RC=${PIPESTATUS[0]}
-          set -e
-
-          if [ $RC -ne 0 ]; then
-            echo "graph_compare.sh returned $RC, build failed"
-            echo "status=failed" >> $GITHUB_OUTPUT
-            BUILD_FAILED=1
-            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
-            exit $RC
-          fi
-
-          git checkout $ORIGINAL_HEAD
-          YA_MAKE_TARGET=.
-        else
-          YA_MAKE_TARGET=""
-          for TARGET in ${{ inputs.build_target }}; do
-             if [ -e $TARGET ]; then
-                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
-             fi
-          done
-        fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
         readarray -d ',' -t test_type < <(printf "%s" "${{ inputs.test_type }}")
@@ -236,22 +224,6 @@ runs:
           params+=(${{ inputs.additional_ya_make_args }})
         fi
 
-        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
-          params+=(--bazel-remote-store)
-          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
-        fi
-
-        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
-          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
-          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
-          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
-        fi
-
-        if [ true = ${{ inputs.run_tests }} ]; then
-          params+=(-A)
-          params+=(--retest)
-        fi
-
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
           --test-failure-code 0 --build-all
@@ -279,6 +251,53 @@ runs:
 
         echo "::debug::get version"
         ./ya --version
+
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
+        if [ "${{ inputs.increment }}" = "true" ]; then
+          GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
+          GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
+
+          set +e
+          ./.github/scripts/graph_compare.py $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          RC=${PIPESTATUS[0]}
+          set -e
+
+          if [ $RC -ne 0 ]; then
+            echo "graph_compare.py returned $RC, build failed"
+            echo "status=failed" >> $GITHUB_OUTPUT
+            BUILD_FAILED=1
+            echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
+            exit $RC
+          fi
+
+          git checkout $ORIGINAL_HEAD
+          YA_MAKE_TARGET=.
+        else
+          YA_MAKE_TARGET=""
+          for TARGET in ${{ inputs.build_target }}; do
+             if [ -e $TARGET ]; then
+                YA_MAKE_TARGET="$YA_MAKE_TARGET $TARGET"
+             fi
+          done
+        fi
+
+        if [ ! -z "${{ inputs.bazel_remote_uri }}" ]; then
+          params+=(--bazel-remote-store)
+          params+=(--bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+        fi
+
+        if [ "${{ inputs.put_build_results_to_cache }}" = "true" ]; then
+          params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+          params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+          params+=(--bazel-remote-put --dist-cache-max-file-size=209715200)
+        fi
+
+        if [ true = ${{ inputs.run_tests }} ]; then
+          params+=(-A)
+          params+=(--retest)
+        fi
+
+        export YA_MAKE_COMMAND="./ya make ${params[@]}"
 
         YA_MAKE_OUT_DIR=$TMP_DIR/out
 
@@ -335,15 +354,39 @@ runs:
 
           CURRENT_JUNIT_XML_PATH=$CURRENT_PUBLIC_DIR/junit.xml
           CURRENT_REPORT=$CURRENT_PUBLIC_DIR/report.json
+
+          monitor_memory() {
+              set +x
+              while true; do
+                  used_kb=$(grep -E 'MemTotal|MemAvailable' /proc/meminfo | 
+                            awk 'NR==1{t=$2} NR==2{a=$2} END{print t - a}')
+                  echo "$(date +%s) $used_kb" >> ram_usage.txt
+                  sleep 3
+              done
+          }
+
+          monitor_memory &
+          MONITOR_PID=$!
+
           set +e
-          (./ya make $YA_MAKE_TARGET "${params[@]}" \
+          ($YA_MAKE_COMMAND $YA_MAKE_TARGET \
             $RERUN_FAILED_OPT --log-file "$PUBLIC_DIR/ya_log.txt"  \
             --evlog-file "$CURRENT_PUBLIC_DIR/ya_evlog.jsonl" \
             --junit "$CURRENT_JUNIT_XML_PATH" --build-results-report "$CURRENT_REPORT" --output "$YA_MAKE_OUT_DIR"; echo $? > exit_code) |& cat >> $YA_MAKE_OUTPUT
           set -e
           RC=`cat exit_code`
 
+          kill $MONITOR_PID
+
           .github/scripts/tests/report_analyzer.py --report_file "$CURRENT_REPORT" --summary_file $CURRENT_PUBLIC_DIR/summary_report.txt || true
+
+          .github/scripts/report_ram_analyzer.py \
+            --report-file "$CURRENT_REPORT" \
+            --output-file $CURRENT_PUBLIC_DIR/ram_report.html \
+            --output-file-url $CURRENT_PUBLIC_DIR_URL/ram_report.html \
+            --ram-usage-file ram_usage.txt \
+            --chat-id "$GH_ALERTS_TG_CHAT" \
+            --memory-threshold 90 || true
 
           # convert to chromium trace
           # seems analyze-make don't have simple "output" parameter, so change cwd

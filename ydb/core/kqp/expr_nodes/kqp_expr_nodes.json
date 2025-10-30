@@ -761,6 +761,15 @@
             ]
         },
         {
+            "Name": "TFulltextAnalyze",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},
+            "Children": [
+                {"Index": 0, "Name": "Text", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoAtom"}
+            ]
+        },
+        {
             "Name": "TKqpOpRead",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "KqpOpRead"},
@@ -892,7 +901,31 @@
             "Children": [
                 {"Index": 0, "Name": "Input", "Type": "TExprBase"}
             ]
+        },
+        {
+            "Name": "TKqpOpAggregationTraits",
+            "Base": "TExprBase",
+            "Match": {"Type": "Tuple"},
+            "Children": [
+                {"Index": 0, "Name": "OriginalColName", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "AggregationFunction", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "ResultColName", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "AggregationFunctionResultType", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TKqpOpAggregationTraitsList",
+            "ListBase" : "TKqpOpAggregationTraits"
+        },
+        {
+            "Name": "TKqpOpAggregate",
+            "Base": "TCallable",
+            "Match" : {"Type": "Callable", "Name": "KqpOpAggregate"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "AggregationTraitsList", "Type": "TKqpOpAggregationTraitsList"},
+                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"}
+            ]
         }
-
     ]
 }

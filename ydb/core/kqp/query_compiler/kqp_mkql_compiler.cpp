@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/base/fulltext.h>
 
 #include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
@@ -474,12 +475,12 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 auto wideStreamComponentsSize = [](TRuntimeNode node)->int {
                     return AS_TYPE(TMultiType, AS_TYPE(TStreamType,node.GetStaticType())->GetItemType())->GetElementsCount();
                 };
-                TDqRenames renames{};
+                TDqUserRenames renames{};
                 for(int index = 0; index < wideStreamComponentsSize(leftInput) - 1; ++index) {
-                    renames.emplace_back(index, JoinSide::kLeft);       
+                    renames.emplace_back(index, EJoinSide::kLeft);       
                 }
                 for(int index = 0; index < wideStreamComponentsSize(rightInput) - 1; ++index) {
-                    renames.emplace_back(index, JoinSide::kRight);       
+                    renames.emplace_back(index, EJoinSide::kRight);       
                 }
                 return TGraceJoinRenames::FromDq(renames);    
             }();
@@ -514,6 +515,16 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
         };
         return ctx.PgmBuilder().DqHashCombine(flow, memLimit, keyExtractor, init, update, finish);
     });
+
+    compiler->AddCallable("FulltextAnalyze",
+        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
+            YQL_ENSURE(node.ChildrenSize() == 2, "FulltextAnalyze should have 2 arguments: text and settings");
+            
+            auto textArg = MkqlBuildExpr(*node.Child(0), buildCtx);
+            auto settingsArg = MkqlBuildExpr(*node.Child(1), buildCtx);
+            
+            return ctx.PgmBuilder().FulltextAnalyze(textArg, settingsArg);
+        });
 
     return compiler;
 }

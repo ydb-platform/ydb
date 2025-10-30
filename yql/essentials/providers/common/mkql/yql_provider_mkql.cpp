@@ -656,6 +656,15 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"NextValue", &TProgramBuilder::NextValue},
     });
 
+    AddCallable("SqlConcat", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        TVector<TRuntimeNode> args;
+        for (const auto& child : node.Children()) {
+            args.push_back(MkqlBuildExpr(*child, ctx));
+        }
+
+        return ctx.ProgramBuilder.ConcatMany(args);
+    });
+
     AddCallable({"MultiMap", "OrderedMultiMap"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto arg = MkqlBuildExpr(node.Head(), ctx);
         const auto lambda = [&](TRuntimeNode item) { return MkqlBuildWideLambda(node.Tail(), ctx, {item}); };

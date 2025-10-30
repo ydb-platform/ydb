@@ -67,6 +67,7 @@
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/protos/stream.pb.h>
 #include <ydb/core/protos/workload_manager_config.pb.h>
+#include <ydb/core/protos/data_integrity_trails.pb.h>
 
 #include <ydb/core/mind/local.h>
 #include <ydb/core/mind/tenant_pool.h>
@@ -176,10 +177,16 @@ namespace NKikimr {
 
 namespace {
 
-    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper) {
+    void StopGRpcServers(std::weak_ptr<TGRpcServersWrapper> grpcServersWrapper, bool isDisabled = false) {
         auto wrapper = grpcServersWrapper.lock();
         if (!wrapper) {
             return;
+        }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
+        if (isDisabled) {
+            wrapper->IsDisabled.store(true, std::memory_order_release);
         }
         TGuard<TMutex> guard = wrapper->Guard();
         for (auto& [name, server] : wrapper->Servers) {
@@ -190,7 +197,6 @@ namespace {
         }
         wrapper->Servers.clear();
     }
-
 }
 
 class TGRpcServersManager : public TActorBootstrapped<TGRpcServersManager> {
@@ -264,6 +270,9 @@ public:
         if (!wrapper) {
             return;
         }
+        if (wrapper->IsDisabled.load(std::memory_order_acquire)) {
+            return;
+        }
         TGuard<TMutex> guard = wrapper->Guard();
         wrapper->Servers = wrapper->GrpcServersFactory();
         for (auto& [name, server] : wrapper->Servers) {
@@ -316,6 +325,7 @@ public:
         hFunc(TEvStop, HandleStop)
         cFunc(TEvGRpcServersManager::EvDisconnectRequestStarted, HandleDisconnectRequestStarted)
         cFunc(TEvGRpcServersManager::EvDisconnectRequestFinished, HandleDisconnectRequestFinished)
+        cFunc(TEvents::TSystem::PoisonPill, PassAway)
     )
 };
 
@@ -669,12 +679,16 @@ static TString ReadFile(const TString& fileName) {
 void TKikimrRunner::InitializeGracefulShutdown(const TKikimrRunConfig& runConfig) {
     GracefulShutdownSupported = true;
     DrainTimeout = TDuration::Seconds(30);
+    CheckForStopInterval = TDuration::MilliSeconds(100);
     const auto& config = runConfig.AppConfig.GetShutdownConfig();
     if (config.HasMinDelayBeforeShutdownSeconds()) {
         MinDelayBeforeShutdown = TDuration::Seconds(config.GetMinDelayBeforeShutdownSeconds());
     }
     if (config.HasDrainTimeoutSeconds()) {
         DrainTimeout = TDuration::Seconds(config.GetDrainTimeoutSeconds());
+    }
+    if (config.HasCheckForStopIntervalMilliseconds()) {
+        CheckForStopInterval = TDuration::MilliSeconds(config.GetCheckForStopIntervalMilliseconds());
     }
 }
 
@@ -1412,6 +1426,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->AwsCompatibilityConfig = runConfig.AppConfig.GetAwsCompatibilityConfig();
     }
 
+    if (runConfig.AppConfig.HasAwsClientConfig()) {
+        AppData->AwsClientConfig = runConfig.AppConfig.GetAwsClientConfig();
+    }
+
     if (runConfig.AppConfig.HasS3ProxyResolverConfig()) {
         AppData->S3ProxyResolverConfig = runConfig.AppConfig.GetS3ProxyResolverConfig();
     }
@@ -1459,6 +1477,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasSystemTabletBackupConfig()) {
         AppData->SystemTabletBackupConfig = runConfig.AppConfig.GetSystemTabletBackupConfig();
+    }
+
+    if (runConfig.AppConfig.HasDataIntegrityTrailsConfig()) {
+        AppData->DataIntegrityTrailsConfig = runConfig.AppConfig.GetDataIntegrityTrailsConfig();
     }
 
     // setup resource profiles
@@ -1839,6 +1861,10 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new THealthCheckInitializer(runConfig));
     }
 
+    if (serviceMask.EnableCountersInfoProvider) {
+        sil->AddServiceInitializer(new TCountersInfoProviderInitializer(runConfig));
+    }
+
     if (serviceMask.EnableGRpcService) {
         sil->AddServiceInitializer(new TGRpcServicesInitializer(runConfig, ModuleFactories));
     }
@@ -2144,14 +2170,13 @@ void TKikimrRunner::KikimrStop(bool graceful) {
         SqsHttp.Destroy();
     }
 
-    if (ActorSystem) {
-        ActorSystem->Stop();
-    }
-
     // stop processing grpc requests/response - we must stop feeding ActorSystem
     if (GRpcServersManager) {
-        StopGRpcServers(GRpcServersWrapper);
-        GRpcServersWrapper->Servers.clear();
+        StopGRpcServers(GRpcServersWrapper, true);
+    }
+
+    if (ActorSystem) {
+        ActorSystem->Stop();
     }
 
     if (YqSharedResources) {
@@ -2180,8 +2205,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 void TKikimrRunner::BusyLoop() {
     auto shouldContinueState = KikimrShouldContinue.PollState();
     while (shouldContinueState == TProgramShouldContinue::Continue) {
-        // TODO make this interval configurable
-        Sleep(TDuration::MilliSeconds(10));
+        Sleep(CheckForStopInterval);
         shouldContinueState = KikimrShouldContinue.PollState();
     }
 }

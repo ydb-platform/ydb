@@ -1,5 +1,6 @@
 #pragma once
 
+#include "kqp_rbo_context.h"
 #include <cstddef>
 #include <iterator>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -11,7 +12,10 @@ namespace NKqp {
 
 using namespace NYql;
 
-enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Limit, UnionAll, Root };
+enum EOperator : ui32 { EmptySource, Source, Map, Project, Filter, Join, Aggregate, Limit, UnionAll, Root };
+
+/* Represents aggregation phases. */
+enum EAggregationPhase : ui32 {Intermediate, Final};
 
 /**
  * Info Unit is a reference to a column in the plan
@@ -236,6 +240,7 @@ class IOperator {
     const EOperator Kind;
     TPhysicalOpProps Props;
     TPositionHandle Pos;
+    const TTypeAnnotationNode* Type = nullptr;
     TVector<std::shared_ptr<IOperator>> Children;
     TVector<std::weak_ptr<IOperator>> Parents;
 };
@@ -319,6 +324,29 @@ class TOpProject : public IUnaryOperator {
     TVector<TInfoUnit> ProjectList;
 };
 
+struct TOpAggregationTraits {
+    TOpAggregationTraits() = default;
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName)
+        : OriginalColName(originalColName), AggFunction(aggFunction), ResultColName(resultColName) {}
+
+    TInfoUnit OriginalColName;
+    TString AggFunction;
+    TInfoUnit ResultColName;
+};
+
+class TOpAggregate : public IUnaryOperator {
+  public:
+    TOpAggregate(std::shared_ptr<IOperator> input, TVector<TOpAggregationTraits>& aggFunctions, TVector<TInfoUnit>& keyColumns,
+                 EAggregationPhase aggPhase, TPositionHandle pos);
+    virtual TVector<TInfoUnit> GetOutputIUs() override;
+
+    virtual TString ToString(TExprContext& ctx) override;
+
+    TVector<TOpAggregationTraits> AggregationTraitsList;
+    TVector<TInfoUnit> KeyColumns;
+    EAggregationPhase AggregationPhase;
+};
+
 class TOpFilter : public IUnaryOperator {
   public:
     TOpFilter(std::shared_ptr<IOperator> input, TPositionHandle pos, TExprNode::TPtr filterLambda);
@@ -367,6 +395,8 @@ class TOpRoot : public IUnaryOperator {
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TString ToString(TExprContext& ctx) override;
     void ComputeParents();
+    IGraphTransformer::TStatus ComputeTypes(TRBOContext & ctx);
+
 
     TString PlanToString(TExprContext& ctx);
     void PlanToStringRec(std::shared_ptr<IOperator> op, TExprContext& ctx, TStringBuilder &builder, int ntabs);

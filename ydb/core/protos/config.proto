@@ -130,7 +130,7 @@ message TActorSystemConfig {
     optional ENodeType NodeType = 14 [default = COMPUTE];
     optional uint32 ForceIOPoolThreads = 17;
     optional bool UseSharedThreads = 18;
-    optional bool UseRingQueue = 19;
+    optional bool UseRingQueue = 19 [default = true];
 
     optional bool MonitorStuckActors = 15;
     optional EActorSystemProfile ActorSystemProfile = 16;
@@ -146,6 +146,11 @@ message TStaticNameserviceConfig {
         NS_FIXED = 1;       // static table lookup
         NS_NODE_BROKER = 2; // nodebroker based
         NS_EXTERNAL = 3;    // may be paired with external discovery
+    }
+
+    enum EDnsResolverType {
+        ARES = 0;
+        LIBC = 1;
     }
 
     message TEndpoint {
@@ -177,6 +182,7 @@ message TStaticNameserviceConfig {
     optional ENameserviceType Type = 5;
     optional bool KeepSocket = 6 [default = true];
     optional bool ForceTcp = 7 [default = false];
+    optional EDnsResolverType DnsResolverType = 8 [default = ARES];
 }
 
 message TDynamicNameserviceConfig {
@@ -1621,6 +1627,11 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 50,
             DefaultValue: 10 }];
+        optional uint64 GarbageThresholdToRunFullCompactionPerMille = 36 [(ControlOptions) = {
+            Description: "Maximal allowed fraction from vdisk fare share of garbage before compaction would be triggered. If value = 0 - compaction would run after every defragmentation quantum",
+            MinValue: 0,
+            MaxValue: 300,
+            DefaultValue: 0 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -1728,6 +1739,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 10000000000, // 10 GB/s
             DefaultValue: 0 }];
+
+        optional uint64 DefragThrottlerBytesRate = 37 [(ControlOptions) = {
+            Description: "Rate bytes in 1 second for requests (sum of write and read) in defragmentation throttler",
+            MinValue: 0,
+            MaxValue: 10000000000, // 10 GB/s
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1736,6 +1753,12 @@ message TImmediateControlsConfig {
             MinValue: 8,
             MaxValue: 4096,
             DefaultValue: 256 }];
+
+        optional uint64 MaxTxInFly = 2 [(ControlOptions) = {
+            Description: "Maximum tx queue size for all tablets",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 10000 }];
     }
 
     message TDSProxyControls {
@@ -1840,7 +1863,11 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 2,
             DefaultValue: 0 }];
-
+        optional uint64 CommonStaticLogChunks = 6 [(ControlOptions) = {
+            Description: "Special reserve of log chunks on the PDisk with static groups",
+            MinValue: 1,
+            MaxValue: 1000000,
+            DefaultValue: 70 }];
     }
 
     message TBlobStorageControllerControls {
@@ -2234,8 +2261,8 @@ message THiveConfig {
     optional string CutHistoryDenyList = 76 [default = "ColumnShard,KeyValue,PersQueue,BlobDepot"];
     optional string CutHistoryAllowList = 79 [default = "DataShard"];
     optional uint64 ScaleRecommendationRefreshFrequency = 80 [default = 60000]; // calculate scale recommendation every x milliseconds
-    optional uint64 ScaleOutWindowSize = 81 [default = 15]; // buckets
-    optional uint64 ScaleInWindowSize = 82 [default = 5]; // buckets
+    optional uint64 ScaleOutWindowSize = 81 [default = 10]; // buckets
+    optional uint64 ScaleInWindowSize = 82 [default = 60]; // buckets
     optional double TargetTrackingCPUMargin = 83 [default = 0.1]; // percent
     optional double DryRunTargetTrackingCPU = 84; // percent
     optional uint64 NodeRestartsForPenalty = 85 [default = 3];
@@ -2344,6 +2371,8 @@ message TColumnShardConfig {
     optional uint64 BadPortionsLimit = 52;
     optional uint64 InFlightLocksRangesBytesLimit = 53 [default = 1073741824];
     optional bool CombineChunksInResult = 54 [default = true];
+    optional bool EnableDiagnostics = 55 [default = true];
+    optional bool EnableParallelCompaction = 56 [default = true];
 }
 
 message TSchemeShardConfig {
@@ -2674,6 +2703,28 @@ message TAwsCompatibilityConfig {
     optional string AwsRegion = 1;
 }
 
+message TAwsClientConfig {
+    message TLogConfig {
+        // Equivalent of Aws::Utils::Logging::LogLevel.
+        // Off = 0 (default)
+        // Fatal = 1
+        // Error = 2
+        // Warn = 3
+        // Info = 4
+        // Debug = 5
+        // Trace = 6
+        optional int32 LogLevel = 1;
+
+        // By default, logs will be written to standard output if they are enabled.
+        // To write to a file in the format YYYY-MM-DD-HH.log, specify the filename prefix.
+        // The resulting log file is '<FilenamePrefix> + YYYY-MM-DD-HH.log'
+        optional string FilenamePrefix = 2;
+    }
+
+    // Logging options
+    optional TLogConfig LogConfig = 1;
+}
+
 message TMetadataCacheConfig {
     optional uint64 RefreshPeriodMs = 1 [default = 15000];
 }
@@ -2681,6 +2732,7 @@ message TMetadataCacheConfig {
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
     optional uint32 DrainTimeoutSeconds = 2;
+    optional uint32 CheckForStopIntervalMilliseconds = 3;
 }
 
 message TBridgeConfig {
@@ -2831,6 +2883,9 @@ message TAppConfig {
     optional TStatisticsConfig StatisticsConfig = 113;
     optional TMetricsConfig MetricsConfig = 114;
     optional TSystemTabletBackupConfig SystemTabletBackupConfig = 115;
+
+    // Built-in AWS client options (used, for example, to interact with S3).
+    optional TAwsClientConfig AwsClientConfig = 116;
 }
 
 message TYdbVersion {

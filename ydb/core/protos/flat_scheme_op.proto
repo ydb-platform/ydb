@@ -540,6 +540,7 @@ message TCompactionLevelConstructorContainer {
         optional uint64 PortionsCountAvailable = 3;
         optional uint64 PortionsCountLimit = 4;
         optional uint64 PortionsSizeLimit = 5;
+        optional uint64 Concurrency = 6;
     }
 
     message TOneLayer {
@@ -2325,6 +2326,8 @@ message TBackupCollectionDescription {
     oneof Storage {
         google.protobuf.Empty Cluster = 7;
     }
+
+    optional bool OmitIndexes = 9 [default = false];
 }
 
 message TBackupBackupCollection {

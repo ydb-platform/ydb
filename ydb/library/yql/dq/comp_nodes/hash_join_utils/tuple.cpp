@@ -1627,6 +1627,29 @@ void TTupleLayout::TupleDeepCopy(
     }
 }
 
+void TTupleLayout::TupleDeepCopy(
+    const ui8* inTuple, const ui8* inOverflow,
+    TTupleData& outTuple, TTupleData& outOverflow) const
+{
+    auto appendRange = [](TTupleData& to, std::span<const ui8> range) {
+        int offset = std::ssize(to);
+        int writeSize = std::ssize(range);    
+        to.resize( offset + writeSize);
+        std::memcpy(to.data() + offset, range.data(), writeSize);
+    };
+    appendRange(outTuple, {inTuple, TotalRowSize});
+    for (const auto& col: VariableColumns) {
+        ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
+        if (size == 255) { // overflow buffer used
+            auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
+            auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
+            int outOverflowOffset = std::ssize(outOverflow);
+            appendRange(outOverflow, {inOverflow + overflowOffset, overflowSize});
+            WriteUnaligned<ui32>(outTuple.data() + col.Offset + 1 + 0 * sizeof(ui32), outOverflowOffset);
+        }
+    }
+}
+
 /// TODO: write unit tests
 void TTupleLayout::Concat(
     std::vector<ui8, TMKQLAllocator<ui8>>& dst,

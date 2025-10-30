@@ -621,7 +621,7 @@ public:
 
     void SendRequest() {
         UnsafeBecome(&TAcquireRateLimiterResourceRPC::StateFunc);
-        const TString database = Request().GetDatabaseName().GetOrElse("");
+        const TString database = ""; // to allow access to shared database
 
         if (GetProtoRequest()->units_case() == Ydb::RateLimiter::AcquireResourceRequest::UnitsCase::kRequired) {
             SendLeaf(

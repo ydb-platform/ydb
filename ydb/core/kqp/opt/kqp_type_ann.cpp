@@ -1760,6 +1760,54 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 2, ctx)) {
+        return TStatus::Error;
+    }
+
+    // First argument: text (should be String or Utf8)
+    const auto* textArg = node->Child(0);
+    if (!EnsureComputable(*textArg, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TDataExprType* textDataType;
+    bool isOptional;
+    if (!EnsureDataOrOptionalOfData(*textArg, isOptional, textDataType, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (textDataType->GetSlot() != EDataSlot::String && textDataType->GetSlot() != EDataSlot::Utf8) {
+        ctx.AddError(TIssue(ctx.GetPosition(textArg->Pos()), TStringBuilder()
+            << "Expected String or Utf8 for text argument, but got: " << *textArg->GetTypeAnn()));
+        return TStatus::Error;
+    }
+
+    // Second argument: settings (should be String - serialized proto)
+    const auto* settingsArg = node->Child(1);
+    if (!EnsureComputable(*settingsArg, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TDataExprType* settingsDataType;
+    if (!EnsureDataOrOptionalOfData(*settingsArg, isOptional, settingsDataType, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (settingsDataType->GetSlot() != EDataSlot::String) {
+        ctx.AddError(TIssue(ctx.GetPosition(settingsArg->Pos()), TStringBuilder()
+            << "Expected String for settings argument, but got: " << *settingsArg->GetTypeAnn()));
+        return TStatus::Error;
+    }
+
+    // Return type: List<String>
+    auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    auto listType = ctx.MakeType<TListExprType>(stringType);
+    node->SetTypeAnn(listType);
+    
+    return TStatus::Ok;
+}
+
 TStatus AnnotateSequencerConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
@@ -2408,6 +2456,33 @@ TStatus AnnotateOpSort(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateOpAggregate(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto* inputType = input->ChildPtr(TKqpOpAggregate::idx_Input)->GetTypeAnn();
+    const auto* structType = inputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    THashMap<TStringBuf, std::pair<TStringBuf, const TTypeAnnotationNode*>> aggTraitsMap;
+    for (const auto& item : TExprBase(input->ChildPtr(TKqpOpAggregate::idx_AggregationTraitsList)).Cast<TExprList>()) {
+        const auto aggTrait = TExprBase(item).Cast<TKqpOpAggregationTraits>();
+        const auto originalColName = aggTrait.OriginalColName();
+        const auto resultColName = aggTrait.ResultColName();
+        const auto* resultType = aggTrait.AggregationFunctionResultType().Ptr()->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+        aggTraitsMap[originalColName] = {resultColName, resultType};
+    }
+
+    TVector<const TItemExprType*> newItemTypes;
+    for (const auto* itemType : structType->GetItems()) {
+        if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
+            newItemTypes.push_back(ctx.MakeType<TItemExprType>(it->second.first, it->second.second));
+        } else {
+            newItemTypes.push_back(itemType);
+        }
+    }
+
+    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    input->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateOpRoot(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
     const TTypeAnnotationNode* inputType = input->ChildPtr(TKqpOpRoot::idx_Input)->GetTypeAnn();
@@ -2577,6 +2652,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
                 return AnnotateKqpEnsure(input, ctx);
             }
 
+            if (TFulltextAnalyze::Match(input.Get())) {
+                return AnnotateFulltextAnalyze(input, ctx);
+            }
+
             if (TKqpReadRangesSourceSettings::Match(input.Get())) {
                 return AnnotateKqpSourceSettings(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
@@ -2643,6 +2722,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpOpSort::Match(input.Get())) {
                 return AnnotateOpSort(input, ctx);
+            }
+
+            if (TKqpOpAggregate::Match(input.Get())) {
+                return AnnotateOpAggregate(input, ctx);
             }
 
             if (TKqpOpRoot::Match(input.Get())) {

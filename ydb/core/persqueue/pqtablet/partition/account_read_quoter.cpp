@@ -34,7 +34,7 @@ TBasicAccountQuoter::TBasicAccountQuoter(
     const TTabletCountersBase& counters,
     const TDuration& doNotQuoteAfterErrorPeriod
 )
-        : TBaseActor(tabletId, tabletActor, NKikimrServices::PQ_RATE_LIMITER)
+        : TBaseTabletActor(tabletId, tabletActor, NKikimrServices::PQ_RATE_LIMITER)
         , KesusPath(params.KesusPath)
         , ResourcePath(params.ResourcePath)
         , TopicConverter(topicConverter)

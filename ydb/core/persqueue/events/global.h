@@ -15,9 +15,7 @@
 
 #include <ydb/core/protos/pqconfig.pb.h>
 
-namespace NKikimr {
-
-namespace TEvPersQueue {
+namespace NKikimr::TEvPersQueue {
     enum EEv {
         EvRequest = InternalEventSpaceBegin(NPQ::NEvents::EServices::GLOBAL),
         EvUpdateConfig, //change config for all partitions and count of partitions
@@ -309,5 +307,5 @@ namespace TEvPersQueue {
             Record.SetStatus(status);
         }
     };
-};
-} //NKikimr
+
+} // namespace NKikimr::TEvPersQueue

@@ -1,6 +1,24 @@
 #include "mem_pool.h"
 #include "link_manager.h"
+
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
 #include "ctx.h"
+#else
+extern "C" {
+
+struct ibv_mr {
+    struct ibv_context     *context;
+    struct ibv_pd	       *pd;
+    void		       *addr;
+    size_t			length;
+    ui32		handle;
+    ui32		lkey;
+    ui32		rkey;
+};
+
+}
+
+#endif
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -12,18 +30,30 @@
 #include <vector>
 #include <list>
 
-#include <unistd.h>
-#include <sys/syscall.h>
 #include <mutex>
 #include <thread>
 
-#include <sys/mman.h>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
+
+#if defined(_win_)
+#include <malloc.h> // _aligned_malloc, _aligned_free
+#else
+#include <sys/mman.h>   // madvise
+#include <unistd.h>
+#include <sys/syscall.h>
+#endif
 
 static constexpr size_t HPageSz = (1 << 21);
 
 using ::NMonitoring::TDynamicCounters;
 
 namespace NInterconnect::NRdma {
+
+    // Cross-platform memory management
+    static void* allocateMemory(size_t size, size_t alignment, bool hp);
+    static void freeMemory(void* ptr) noexcept;
 
     class TChunk: public NNonCopyable::TMoveOnly, public TAtomicRefCount<TChunk> {
     public:
@@ -40,10 +70,14 @@ namespace NInterconnect::NRdma {
             return;
         }
         auto addr = MRs.front()->addr;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
         for (auto& m: MRs) {
             ibv_dereg_mr(m);
         }
-        std::free(addr);
+#else
+        free(MRs.front());
+#endif
+        freeMemory(addr);
         MRs.clear();
     }
 
@@ -60,6 +94,10 @@ namespace NInterconnect::NRdma {
 
     bool Empty() const noexcept {
         return MRs.empty();
+    }
+
+    TMemRegionPtr AllocMr(int size, ui32 flags) noexcept {
+        return MemPool->Alloc(size, flags);
     }
 
     private:
@@ -115,14 +153,26 @@ namespace NInterconnect::NRdma {
     TContiguousSpan TMemRegion::GetData() const {
         return TContiguousSpan(static_cast<const char*>(GetAddr()), GetSize());
     }
-    TMutableContiguousSpan TMemRegion::GetDataMut() {
+
+    TMutableContiguousSpan TMemRegion::UnsafeGetDataMut() {
         return TMutableContiguousSpan(static_cast<char*>(GetAddr()), GetSize());
     }
+
     size_t TMemRegion::GetOccupiedMemorySize() const {
         return GetSize();
     }
+
     IContiguousChunk::EInnerType TMemRegion::GetInnerType() const noexcept {
         return EInnerType::RDMA_MEM_REG;
+    }
+
+    IContiguousChunk::TPtr TMemRegion::Clone() noexcept {
+        static const ui64 pageAlign = NSystemInfo::GetPageSize() - 1;
+        const IMemPool::Flags flag = (((ui64)GetAddr() & pageAlign) == 0) ? IMemPool::PAGE_ALIGNED : IMemPool::EMPTY;
+        TMemRegionPtr newRegion = Chunk->AllocMr(GetSize(), flag);
+        auto span = newRegion->UnsafeGetDataMut();
+        ::memcpy(span.GetData(), GetAddr(), GetSize());
+        return newRegion;
     }
 
     TMemRegionSlice::TMemRegionSlice(TIntrusivePtr<TMemRegion> memRegion, uint32_t offset, uint32_t size) noexcept
@@ -164,26 +214,58 @@ namespace NInterconnect::NRdma {
         );
     }
 
-    void* allocateMemory(size_t size, size_t alignment, bool hp) {
+    static void* allocateMemory(size_t size, size_t alignment, bool hp) {
         if (size % alignment != 0) {
             return nullptr;
         }
-        void* buf = std::aligned_alloc(alignment, size);
+
+        void* buf = nullptr;
+
+#if defined(_win_)
+        // Windows: use _aligned_malloc
+        buf = _aligned_malloc(size, alignment);
+        if (!buf) {
+            fprintf(stderr, "Failed to allocate aligned memory on Windows\n");
+            return nullptr;
+        }
+#else
+        // POSIX/C++: std::aligned_alloc (C++17)
+        buf = std::aligned_alloc(alignment, size);
+        if (!buf) {
+            fprintf(stderr, "Failed to allocate aligned memory on Unix\n");
+            return nullptr;
+        }
+#endif
+
         if (hp) {
+#if defined(_linux_)
             if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
                 fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
                     strerror(errno), errno);
             }
+#endif
             for (size_t i = 0; i < size; i += HPageSz) {
                 // We use THP right now. We need to touch each page to promote it to HUGE.
-                ((char*)buf)[i] = 0;
+                static_cast<char*>(buf)[i] = 0;
             }
         }
         return buf;
     }
 
+    static void freeMemory(void* ptr) noexcept {
+        if (!ptr) {
+            return;
+        }
+#if defined(_win_)
+        _aligned_free(ptr);
+#else
+        std::free(ptr);
+#endif
+    }
+
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {
         std::vector<ibv_mr*> res;
+#ifndef MEM_POOL_DISABLE_RDMA_SUPPORT
         res.reserve(ctxs.size());
         for (const auto& [_, ctx]: ctxs) {
             ibv_mr* mr = ibv_reg_mr(
@@ -198,6 +280,15 @@ namespace NInterconnect::NRdma {
             }
             res.push_back(mr);
         }
+#else
+        Y_UNUSED(ctxs);
+        // Just emulate registration if platform is not support rdma code compilation.
+        // Probably ibdrv should be fixed to support compilation on windows 
+        struct ibv_mr* dummy = (struct ibv_mr*)calloc(1, sizeof(struct ibv_mr));
+        dummy->addr = addr;
+        dummy->length = size;
+        res.push_back(dummy);
+#endif
         return res;
     }
 
@@ -255,7 +346,7 @@ namespace NInterconnect::NRdma {
 
             auto mrs = registerMemory(ptr, size, Ctxs);
             if (mrs.empty()) {
-                std::free(ptr);
+                freeMemory(ptr);
                 return nullptr;
             }
 

@@ -12,11 +12,11 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  BRANCH_FOR_PR: update-muted-ya
+  PR_BRANCH_PREFIX: update-muted-ya
   TITLE: "Update muted_ya.txt"
-  REVIEWERS: "['ci']"
+  REVIEWERS: '["ci"]'
   LABELS: "mute-unmute,not-for-changelog,ok-to-test"
-  BUILD_TYPE: relwithdebinfo # Используем только один тип сборки
+  BUILD_TYPE: relwithdebinfo
 
 jobs:
   setup:
@@ -64,11 +64,15 @@ jobs:
       - name: Set environment variables
         run: |
           echo "BASE_BRANCH=${{ matrix.BASE_BRANCH }}" >> $GITHUB_ENV
+          PR_BRANCH="${{ env.PR_BRANCH_PREFIX }}_${{ matrix.BASE_BRANCH }}"
+          echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
 
-      - name: Checkout repository
+      # Всегда checkout main для получения актуальных скриптов
+      - name: Checkout main branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ env.BASE_BRANCH }}
+          ref: main
+          fetch-depth: 0
 
       - name: Install dependencies
         run: |
@@ -79,6 +83,14 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      # Получаем base_muted_ya.txt из целевой ветки
+      - name: Get base muted_ya.txt from target branch
+        run: |
+          echo "Getting base muted_ya.txt from branch: ${{ env.BASE_BRANCH }}"
+          git fetch origin ${{ env.BASE_BRANCH }}:refs/remotes/origin/${{ env.BASE_BRANCH }}
+          git show origin/${{ env.BASE_BRANCH }}:.github/config/muted_ya.txt > base_muted_ya.txt
+          echo "✓ Retrieved base muted_ya.txt from ${{ env.BASE_BRANCH }}"
     
       - name: Collect test history data
         run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
@@ -89,43 +101,17 @@ jobs:
       - name: Update test monitor
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }} --build_type=${{ env.BUILD_TYPE }}
 
-      - name: Update branch for PR
+      - name: Generate new muted_ya.txt
         run: |
-          # Устанавливаем имя ветки PR без суффикса build_type
-          PR_BRANCH="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}"
-          echo "PR_BRANCH=${PR_BRANCH}" >> $GITHUB_ENV
-          
-          git config user.name YDBot
-          git config user.email ydbot@ydb.tech
-
-          # Fetch the latest changes from remote
-          git fetch origin ${PR_BRANCH} || true
-
-          # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
-          if git show-ref --quiet refs/remotes/origin/${PR_BRANCH}; then
-            echo "Branch ${PR_BRANCH} exists."
-            git checkout ${PR_BRANCH}
-          else
-            echo "Branch ${PR_BRANCH} does not exist. Creating based on ${{ env.BASE_BRANCH }}"
-            git checkout -b ${PR_BRANCH}
-          fi
-
-          echo "Resetting ${PR_BRANCH} to match ${{ env.BASE_BRANCH }}..."
-          git reset --hard origin/${{ env.BASE_BRANCH }}
-          echo "✓ Branch ${PR_BRANCH} now exactly matches ${{ env.BASE_BRANCH }}"
-                  
-      - name: Run create_new_muted_ya.py
-        run: |
-          .github/scripts/tests/create_new_muted_ya.py update_muted_ya --branch=${{ env.BASE_BRANCH }}
-
-      - name: Move new_muted_ya.txt to config
-        run: |
-          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya \
+            --branch=${{ env.BASE_BRANCH }} \
+            --muted_ya_file=base_muted_ya.txt
 
       - name: Check if changes exist
         id: changes_check
         run: |
-          if git diff --quiet .github/config/muted_ya.txt; then
+          # Compare base_muted_ya.txt with newly generated file
+          if git diff --no-index --quiet base_muted_ya.txt mute_update/new_muted_ya.txt; then
             echo "No changes detected in muted_ya.txt"
             echo "changes=false" >> $GITHUB_ENV
           else
@@ -133,10 +119,31 @@ jobs:
             echo "changes=true" >> $GITHUB_ENV
           fi
 
+      - name: Setup git config
+        if: env.changes == 'true'
+        run: |
+          git config user.name YDBot
+          git config user.email ydbot@ydb.tech
+
+      - name: Create PR branch and apply changes
+        if: env.changes == 'true'
+        run: |
+          # Создаем PR ветку на основе целевой ветки
+          git checkout -B ${{ env.PR_BRANCH }} origin/${{ env.BASE_BRANCH }}
+          
+          # Копируем новый файл в PR ветку (файл остается в рабочей директории)
+          cp mute_update/new_muted_ya.txt .github/config/muted_ya.txt
+          
+          # Коммитим изменения
+          git add .github/config/muted_ya.txt
+          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
+          
+          echo "✓ PR branch ${{ env.PR_BRANCH }} created with changes"
+
       - name: Collect PR description
         if: env.changes == 'true'
-        id: pr_description
         run: |
+          
           PR_BODY=''
           PR_BODY_FILE="pr_body_content.txt"
           
@@ -156,17 +163,13 @@ jobs:
               PR_BODY+=$(cat mute_update/to_mute_debug.txt)
               PR_BODY+=$'\n```\n\n'
 
-              # Добавляем ссылку на дашборд с mute-кандидатами
               if [ -s mute_update/to_mute.txt ]; then
                   BASE_URL="https://datalens.yandex.cloud/34xnbsom67hcq-ydb-autotests-test-history-link?branch=${{ env.BASE_BRANCH }}"
                   MAX_TESTS=50
                   TEST_COUNT=0
                   FULL_URL="${BASE_URL}"
                   while read -r test_name && [ ${TEST_COUNT} -lt ${MAX_TESTS} ]; do
-                    # Заменяем только первый пробел на слэш для формата suite/test
                     formatted_name=$(echo "${test_name}" | sed 's/ /\//')
-
-                    # URL-кодируем спецсимволы: пробел, слэш, [, ], плюс, минус
                     encoded_name=$(echo "${formatted_name}" \
                       | sed 's/ /%20/g' \
                       | sed 's/\//%2F/g' \
@@ -174,7 +177,6 @@ jobs:
                       | sed 's/\]/%5D/g' \
                       | sed 's/+/%2B/g' \
                       | sed 's/-/%2D/g')
-
                     FULL_URL="${FULL_URL}&full_name=${encoded_name}"
                     TEST_COUNT=$((TEST_COUNT+1))
                   done < mute_update/to_mute.txt
@@ -190,27 +192,19 @@ jobs:
               PR_BODY+=$'\n```\n\n'
           fi
 
-          # Save PR_BODY to the file
           echo "$PR_BODY" > "$PR_BODY_FILE"
-          # Export the path to the file to the GitHub environment
           echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
 
-      - name: Stage changes if any
+      - name: Upload all generated files as artifacts
         if: env.changes == 'true'
-        run: |
-          git add .github/config/muted_ya.txt
+        uses: actions/upload-artifact@v4
+        with:
+          name: muted-tests-all-files-${{ env.BASE_BRANCH }}
+          path: |
+            mute_update/
+          retention-days: 7
 
-      - name: Delete temporary files
-        run: |
-          rm -rf mute_update
-          rm -f dashboard_url.txt
-
-      - name: Commit changes
-        if: env.changes == 'true'
-        run: |
-          git commit -m "Update muted YA file for ${{ env.BASE_BRANCH }}"
-
-      - name: Push changes
+      - name: Push PR branch
         if: env.changes == 'true'
         uses: ad-m/github-push-action@v0.8.0
         with:
@@ -224,50 +218,71 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
+          # Возвращаемся на main для доступа к скриптам
+          git checkout main
+          
           python .github/scripts/create_or_update_pr.py create_or_update \
             --base_branch="${{ env.BASE_BRANCH }}" \
             --branch_for_pr="${{ env.PR_BRANCH }}" \
             --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" \
             --body="${{ env.PR_BODY_PATH }}"
         
-      - name: Comment PR
-        uses: actions/github-script@v7
+      - name: Prepare PR comment
         if: env.changes == 'true'
+        id: comment_pr
+        run: |
+          # Читаем содержимое PR body
+          PR_BODY_CONTENT=$(cat pr_body_content.txt)
+          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          COMPLETE_BODY=$(cat << EOF
+          Collected in workflow [#${{ github.run_number }}](${WORKFLOW_URL}) for ${{ env.BASE_BRANCH }}
+
+          ${PR_BODY_CONTENT}
+          EOF
+          )
+          
+          echo "$COMPLETE_BODY" > pr_comment_final.txt
+          echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT
+
+      - name: Add comment, reviewers and labels
+        if: env.changes == 'true'
+        uses: actions/github-script@v7
+        env:
+          LABELS: ${{ env.LABELS }}
+          REVIEWERS: ${{ env.REVIEWERS }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const fs = require('fs');
-            const path = require('path');
             
-            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
-            const bodyText = fs.readFileSync(filePath, 'utf8');
-            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl}) for ${{ env.BASE_BRANCH }}\n\n${bodyText}`;
-      
-            github.rest.issues.createComment({
+            // Читаем комментарий из файла
+            const commentFile = '${{ steps.comment_pr.outputs.PR_COMMENT_FILE }}';
+            const commentBody = fs.readFileSync(commentFile, 'utf8');
+            
+            // Добавляем комментарий
+            await github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: completeBody
+              body: commentBody
             });
             
+            // Добавляем лейблы
             const labelsToAdd = process.env.LABELS.split(',');
-            github.rest.issues.addLabels({
+            await github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               labels: labelsToAdd
             });
-
-      - name: Add reviewers
-        if: env.changes == 'true'
-        uses: octokit/request-action@v2.x
-        with:
-          route: POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
-          owner: ${{ github.repository_owner }}
-          repo: ${{ github.event.repository.name }}
-          pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
-          team_reviewers: ${{ env.REVIEWERS }}
-          token: ${{ secrets.YDBOT_TOKEN }}
+            
+            // Добавляем ревьюеров
+            const reviewers = JSON.parse(process.env.REVIEWERS);
+            await github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              team_reviewers: reviewers
+            });
           
       - name: Enable auto-merge (squash)
         if: env.changes == 'true'
@@ -277,14 +292,12 @@ jobs:
           script: |
             const pr = ${{ steps.create_or_update_pr.outputs.pr_number }};
             
-            // Получаем ID PR для использования в GraphQL API
             const { data: pullRequest } = await github.rest.pulls.get({
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr
             });
             
-            // Используем GraphQL API для включения auto-merge со squash
             const mutation = `
               mutation EnableAutoMerge {
                 enablePullRequestAutoMerge(input: {
@@ -302,3 +315,4 @@ jobs:
             } catch (error) {
               console.error("Failed to enable auto-merge with squash:", error);
             }
+

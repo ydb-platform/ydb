@@ -4,6 +4,7 @@
 
 #include <yql/essentials/utils/utf8.h>
 #include <yql/essentials/utils/fetch/fetch.h>
+#include <yql/essentials/utils/std_allocator.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -1683,37 +1684,60 @@ TExprNode::TListType Compile(const TAstNode& node, TContext& ctx) {
     return {ctx.ProcessNode(node, ctx.Expr.NewCallable(node.GetPosition(), TString(function), std::move(children)))};
 }
 
+template <typename T>
+using TVectorIAllocator = std::vector<T, TStdIAllocator<T>>;
+
+template <typename K, typename V>
+using TMapIAllocator = std::map<K, V, std::less<K>, TStdIAllocator<std::pair<const K, V>>>;
+
+template <typename K, typename V>
+using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
+
 struct TFrameContext {
+    TFrameContext(IAllocator* allocator)
+        : Nodes(std::less<size_t>(), allocator)
+        , TopoSortedNodes(allocator)
+        , Bindings(0, allocator)
+    {
+    }
+
     size_t Index = 0;
     size_t Parent = 0;
-    std::map<size_t, const TExprNode*> Nodes;
-    std::vector<const TExprNode*> TopoSortedNodes;
-    TNodeMap<TString> Bindings;
+    TMapIAllocator<size_t, const TExprNode*> Nodes;
+    TVectorIAllocator<const TExprNode*> TopoSortedNodes;
+    TUnorderedMapIAllocator<const TExprNode*, TString> Bindings;
 };
 
 struct TVisitNodeContext {
-    explicit TVisitNodeContext(TExprContext& expr)
+    explicit TVisitNodeContext(TExprContext& expr, IAllocator* allocator)
         : Expr(expr)
+        , Allocator(allocator)
+        , FreeArgs(0, allocator)
+        , Frames(allocator)
+        , LambdaFrames(0, allocator)
+        , Parameters(std::less<TStringBuf>(), allocator)
+        , References(0, allocator)
     {
     }
 
     TExprContext& Expr;
+    IAllocator* Allocator;
     size_t Order = 0ULL;
     bool RefAtoms = false;
     bool AllowFreeArgs = false;
     bool NormalizeAtomFlags = false;
-    TNodeMap<size_t> FreeArgs;
+    TUnorderedMapIAllocator<const TExprNode*, size_t> FreeArgs;
     std::unique_ptr<TMemoryPool> Pool;
-    std::vector<TFrameContext> Frames;
+    TVectorIAllocator<TFrameContext> Frames;
     TFrameContext* CurrentFrame = nullptr;
-    TNodeMap<size_t> LambdaFrames;
-    std::map<TStringBuf, std::pair<const TExprNode*, TAstNode*>> Parameters;
+    TUnorderedMapIAllocator<const TExprNode*, size_t> LambdaFrames;
+    TMapIAllocator<TStringBuf, std::pair<const TExprNode*, TAstNode*>> Parameters;
 
     struct TCounters {
         size_t References = 0ULL, Neighbors = 0ULL, Order = 0ULL, Frame = 0ULL;
     };
 
-    TNodeMap<TCounters> References;
+    TUnorderedMapIAllocator<const TExprNode*, TCounters> References;
 
     const TString& FindBinding(const TExprNode* node) const {
         for (const auto* frame = CurrentFrame; frame; frame = frame->Index > 0 ? &Frames[frame->Parent] : nullptr) {
@@ -1793,7 +1817,7 @@ void VisitNode(const TExprNode& node, size_t neighbors, TVisitNodeContext& ctx) 
             if (ctx.LambdaFrames.emplace(&node, index).second) {
                 const auto prevFrameIndex = ctx.CurrentFrame - &ctx.Frames.front();
                 const auto parentIndex = ctx.CurrentFrame->Index;
-                ctx.Frames.emplace_back();
+                ctx.Frames.emplace_back(ctx.Allocator);
                 ctx.CurrentFrame = &ctx.Frames.back();
                 ctx.CurrentFrame->Index = index;
                 ctx.CurrentFrame->Parent = parentIndex;
@@ -2691,12 +2715,12 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& exprContext, c
 #ifdef _DEBUG
     CheckArguments(root);
 #endif
-    TVisitNodeContext ctx(exprContext);
+    TVisitNodeContext ctx(exprContext, settings.Allocator);
     ctx.RefAtoms = settings.RefAtoms;
     ctx.AllowFreeArgs = settings.AllowFreeArgs;
     ctx.NormalizeAtomFlags = settings.NormalizeAtomFlags;
     ctx.Pool = std::make_unique<TMemoryPool>(4096, TMemoryPool::TExpGrow::Instance(), settings.Allocator);
-    ctx.Frames.push_back(TFrameContext());
+    ctx.Frames.push_back(TFrameContext(settings.Allocator));
     ctx.CurrentFrame = &ctx.Frames.front();
     VisitNode(root, 0ULL, ctx);
     ui32 uniqueNum = 0;

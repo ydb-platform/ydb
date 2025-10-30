@@ -113,7 +113,7 @@ private:
 protected:
     virtual void DoModifyPortions(
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add, const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
-    virtual std::shared_ptr<TColumnEngineChanges> DoGetOptimizationTask(
+    virtual std::vector<std::shared_ptr<TColumnEngineChanges>> DoGetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const = 0;
     virtual TOptimizationPriority DoGetUsefulMetric() const = 0;
     virtual void DoActualize(const TInstant currentInstant) = 0;
@@ -251,7 +251,7 @@ public:
         DoModifyPortions(add, remove);
     }
 
-    std::shared_ptr<TColumnEngineChanges> GetOptimizationTask(
+    std::vector<std::shared_ptr<TColumnEngineChanges>> GetOptimizationTasks(
         std::shared_ptr<TGranuleMeta> granule, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) const;
     TOptimizationPriority GetUsefulMetric() const {
         auto result = DoGetUsefulMetric();
@@ -307,7 +307,7 @@ public:
     }
 
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("lc-buckets");
+        auto result = TFactory::MakeHolder("tiling");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

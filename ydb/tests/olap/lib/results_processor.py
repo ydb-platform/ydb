@@ -35,6 +35,7 @@ class ResultsProcessor:
     _run_id: int = None
 
     send_results = external_param_is_true('send-results')
+    ignore_stderr_content = external_param_is_true('ignore_stderr_content')
     _columns_types = (
         ydb.BulkUpsertColumns()
         .add_column('Db', ydb.PrimitiveType.Utf8)
@@ -173,6 +174,7 @@ class ResultsProcessor:
                 info['ci_build_type'] = ci_build_type
             if ci_sanitizer:
                 info['ci_sanitizer'] = ci_sanitizer
+            info['ignore_stderr_content'] = cls.ignore_stderr_content
 
             info['test_tools_version'] = get_self_version()
 

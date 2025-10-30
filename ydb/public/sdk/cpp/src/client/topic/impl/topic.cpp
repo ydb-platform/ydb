@@ -152,6 +152,17 @@ const std::map<std::string, std::string>& TConsumer::GetAttributes() const {
     return Attributes_;
 }
 
+bool TConsumer::GetKeepMessagesOrder() const {
+    return KeepMessagesOrder_;
+}
+TDuration TConsumer::GetDefaultProcessingTimeout() const {
+    return DefaultProcessingTimeout_;
+}
+
+const TDeadLetterPolicy& TConsumer::GetDeadLetterPolicy() const {
+    return DeadLetterPolicy_;
+}
+
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
     return PartitioningSettings_;
 }
@@ -662,6 +673,10 @@ TDeadLetterPolicyCondition::TDeadLetterPolicyCondition(const Ydb::Topic::DeadLet
 {
 }
 
+ui32 TDeadLetterPolicyCondition::GetMaxProcessingAttempts() const {
+    return MaxProcessingAttempts_;
+}
+
 TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
     : Enabled_(proto.enabled())
     , Condition_(proto.condition())
@@ -676,9 +691,33 @@ TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
     }
 }
 
+bool TDeadLetterPolicy::GetEnabled() const {
+    return Enabled_;
+}
+
+const TDeadLetterPolicyCondition& TDeadLetterPolicy::GetCondition() const {
+    return Condition_;
+}
+
+EDeadLetterPolicy TDeadLetterPolicy::GetAction() const {
+    return Action_;
+}
+
+const std::string& TDeadLetterPolicy::GetDeadLetterQueue() const {
+    return DeadLetterQueue_;
+}
+
+template<typename TDeadLetterPolicySettings>
+TDeadLetterPolicyConditionSettings<TDeadLetterPolicySettings>::TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent, const Ydb::Topic::DeadLetterPolicyCondition& proto)
+    : MaxProcessingAttempts_(proto.max_processing_attempts())
+    , Parent_(parent)
+{
+}
+
 template<typename TConsumerSettings>
-TDeadLetterPolicySettings<TConsumerSettings>::TDeadLetterPolicySettings(TConsumerSettings& parent)
-    : Condition_(*this)
+TDeadLetterPolicySettings<TConsumerSettings>::TDeadLetterPolicySettings(TConsumerSettings& parent, const Ydb::Topic::DeadLetterPolicy& proto)
+    : Enabled_(proto.enabled())
+    , Condition_(*this, proto.condition())
     , Parent_(parent)
 {
 }

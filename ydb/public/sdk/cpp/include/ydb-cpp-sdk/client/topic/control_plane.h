@@ -500,6 +500,7 @@ struct TDeadLetterPolicyConditionSettings {
     using TSelf = TDeadLetterPolicyConditionSettings;
 
     TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent) : Parent_(parent) { }
+    TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent, const Ydb::Topic::DeadLetterPolicyCondition&);
 
     FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
 
@@ -514,13 +515,13 @@ struct TDeadLetterPolicySettings {
     using TSelf = TDeadLetterPolicySettings;
     using TCondition = TDeadLetterPolicyConditionSettings<TDeadLetterPolicySettings<TConsumerSettings>>;
 
-    TDeadLetterPolicySettings(TConsumerSettings& parent);
+    TDeadLetterPolicySettings(TConsumerSettings& parent) : Condition_(*this), Parent_(parent) {}
     TDeadLetterPolicySettings(TConsumerSettings& parent, const Ydb::Topic::DeadLetterPolicy&);
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
+    FLUENT_SETTING(TCondition, Condition);
     FLUENT_SETTING_DEFAULT(EDeadLetterPolicy, DeadLetterPolicy, EDeadLetterPolicy::Unspecified);
     FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
-    FLUENT_SETTING(TCondition, Condition);
 
     TSelf& DeleteAction() {
         DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
@@ -545,7 +546,7 @@ struct TAlterDeadLetterPolicySettings {
     using TSelf = TAlterDeadLetterPolicySettings;
     using TCondition = TDeadLetterPolicyConditionSettings<TAlterDeadLetterPolicySettings<TConsumerSettings>>;
 
-    TAlterDeadLetterPolicySettings(TConsumerSettings& parent);
+    TAlterDeadLetterPolicySettings(TConsumerSettings& parent) : Condition_(*this), Parent_(parent) {}
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
     FLUENT_SETTING_DEFAULT(bool, DeadLetterPolicyChanged, false);

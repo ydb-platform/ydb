@@ -1,0 +1,38 @@
+====================Apache-2.0 WITH LLVM-exception====================
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
+// See https://llvm.org/LICENSE.txt for license information.
+
+
+====================Apache-2.0 WITH LLVM-exception====================
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+
+
+====================COPYRIGHT====================
+      // |X| < |C| --> X > -abs(C) and X < abs(C)
+      Constant *PosDivisorC = ConstantInt::get(Ty, C->abs());
+      Constant *NegDivisorC = ConstantInt::get(Ty, -C->abs());
+
+
+====================COPYRIGHT====================
+    // {(a)->(b), (b)->(c), (c)->(d), ...} and the worklist is initially {b, a},
+    // then after merging (a) and (b) together, we need to put (a,b) back in
+    // the worklist so that (c) can get merged in as well resulting in
+    // {(a,b,c) -> d}
+    // We also need to remove the old target (b), from the worklist. We first
+
+
+====================COPYRIGHT====================
+    if (match(BO.getOperand(0), m_APInt(C))) {
+      if (IIQ.hasNoUnsignedWrap(&BO)) {
+        // 'shl nuw C, x' produces [C, C << CLZ(C)]
+        Lower = *C;
+        Upper = Lower.shl(Lower.countl_zero()) + 1;
+
+
+====================COPYRIGHT====================
+    if (match(X, m_APInt(C)) && !C->isMinSignedValue()) {
+      // Is the variable divisor magnitude always greater than the constant
+      // dividend magnitude?
+      // |Y| > |C| --> Y < -abs(C) or Y > abs(C)
+      Constant *PosDividendC = ConstantInt::get(Ty, C->abs());
+      Constant *NegDividendC = ConstantInt::get(Ty, -C->abs());

@@ -8,9 +8,9 @@ PEERDIR(
 
     yql/essentials/core/arrow_kernels/registry
     yql/essentials/core/arrow_kernels/request
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/minikql/computation
-    yql/essentials/minikql/invoke_builtins/llvm16
+    yql/essentials/minikql/invoke_builtins/llvm20
 
 )
 

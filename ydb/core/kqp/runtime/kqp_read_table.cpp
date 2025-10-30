@@ -242,7 +242,7 @@ public:
         const auto valuePtrType = PointerType::getUnqual(valueType);
         const auto valuesPtr = CastInst::Create(Instruction::IntToPtr,
             ConstantInt::get(Type::getInt64Ty(context), uintptr_t(Row.data())),
-            valuePtrType, "values", &ctx.Func->getEntryBlock().back());
+            valuePtrType, "values", --ctx.Func->getEntryBlock().end());
 
         ICodegeneratorInlineWideNode::TGettersList getters(size);
         const auto indexType = Type::getInt32Ty(context);
@@ -257,20 +257,20 @@ public:
         }
 
         const auto fieldsType = ArrayType::get(valuePtrType, size);
-        const auto fields = new AllocaInst(fieldsType, 0U, "fields", &ctx.Func->getEntryBlock().back());
+        const auto fields = new AllocaInst(fieldsType, 0U, "fields", --ctx.Func->getEntryBlock().end());
 
         Value* init = UndefValue::get(fieldsType);
         for (auto i = 0U; i < size; ++i) {
             const auto pointer = GetElementPtrInst::Create(valueType, valuesPtr,
                     {ConstantInt::get(indexType, i)},
                     (TString("ptr_") += ToString(i)).c_str(),
-                    &ctx.Func->getEntryBlock().back());
+                    --ctx.Func->getEntryBlock().end());
 
             init = InsertValueInst::Create(init, pointer, {i}, (TString("insert_") += ToString(i)).c_str(),
-                &ctx.Func->getEntryBlock().back());
+                --ctx.Func->getEntryBlock().end());
         }
 
-        new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
+        new StoreInst(init, fields, --ctx.Func->getEntryBlock().end());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanWideReadTableWrapperBase::DoCalculate>());
@@ -379,7 +379,7 @@ public:
         const auto valuePtrType = PointerType::getUnqual(valueType);
         const auto valuesPtr = CastInst::Create(Instruction::IntToPtr,
             ConstantInt::get(Type::getInt64Ty(context), uintptr_t(Block.data())),
-            valuePtrType, "values", &ctx.Func->getEntryBlock().back());
+            valuePtrType, "values", --ctx.Func->getEntryBlock().end());
 
         ICodegeneratorInlineWideNode::TGettersList getters(size);
         const auto indexType = Type::getInt32Ty(context);
@@ -394,20 +394,20 @@ public:
         }
 
         const auto fieldsType = ArrayType::get(valuePtrType, size);
-        const auto fields = new AllocaInst(fieldsType, 0U, "fields", &ctx.Func->getEntryBlock().back());
+        const auto fields = new AllocaInst(fieldsType, 0U, "fields", --ctx.Func->getEntryBlock().end());
 
         Value* init = UndefValue::get(fieldsType);
         for (auto i = 0U; i < size; ++i) {
             const auto pointer = GetElementPtrInst::Create(valueType, valuesPtr,
                     {ConstantInt::get(indexType, i)},
                     (TString("ptr_") += ToString(i)).c_str(),
-                    &ctx.Func->getEntryBlock().back());
+                    --ctx.Func->getEntryBlock().end());
 
             init = InsertValueInst::Create(init, pointer, {i}, (TString("insert_") += ToString(i)).c_str(),
-                &ctx.Func->getEntryBlock().back());
+                --ctx.Func->getEntryBlock().end());
         }
 
-        new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
+        new StoreInst(init, fields, --ctx.Func->getEntryBlock().end());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TKqpScanBlockReadTableWrapperBase::DoCalculate>());

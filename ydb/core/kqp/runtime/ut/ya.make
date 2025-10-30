@@ -17,11 +17,11 @@ PEERDIR(
     ydb/core/kqp/common
     ydb/core/kqp/ut/common
     ydb/core/testlib/basics/pg
-    yql/essentials/minikql/comp_nodes/llvm16
+    yql/essentials/minikql/comp_nodes/llvm20
     yql/essentials/public/udf/service/exception_policy
     yt/yql/providers/yt/codec/codegen
-    yt/yql/providers/yt/comp_nodes/llvm16
-    yt/yql/providers/yt/comp_nodes/dq/llvm16
+    yt/yql/providers/yt/comp_nodes/llvm20
+    yt/yql/providers/yt/comp_nodes/dq/llvm20
 )
 
 END()

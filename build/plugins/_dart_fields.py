@@ -1255,8 +1255,8 @@ class TestFiles:
         'maps/b2bgeo/mvrp_solver/aws_docker',
     )
 
-    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON macro
-    _TAXI_JSON_PREFIX = 'taxi'
+    # XXX: this is a temporarty fence allowing only taxi to use STYLE_JSON and STYLE_YAML macro
+    _TAXI_PREFIX = 'taxi'
 
     @classmethod
     def value(cls, unit, flat_args, spec_args):
@@ -1384,8 +1384,11 @@ class TestFiles:
             upath = unit.path()[3:]
             lint_name = spec_args['NAME'][0]
 
-            if lint_name == 'clang_format_json' and not upath.startswith(cls._TAXI_JSON_PREFIX):
-                raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
+            if not upath.startswith(cls._TAXI_PREFIX):
+                if lint_name == 'clang_format_json':
+                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_JSON")
+                if lint_name == 'yamlfmt_format_yaml':
+                    raise DartValueError("Presently only projects in taxi/ are allowed with STYLE_YAML")
             resolved_files = []
             for path in files:
                 if path.endswith('ya.make'):

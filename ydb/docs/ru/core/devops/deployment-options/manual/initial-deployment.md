@@ -229,17 +229,11 @@ vdb    252:16   0   186G  0 disk
 
 1. Включите аутентификацию пользователей (опционально).
 
-    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config`.
-
-    {% note warning %}
-
-    Для первоначальной установки кластера обязательно установите параметр `enforce_user_token_requirement` в значение `false`. Включение защищенного режима будет произведено на последующих шагах, после инициализации кластера.
-
-    {% endnote %}
+    Если вы планируете использовать в кластере {{ ydb-short-name }} возможности аутентификации и разграничения доступа пользователей, добавьте секцию `security_config` со следующими параметрами:
 
     ```yaml
     security_config:
-      enforce_user_token_requirement: false
+      enforce_user_token_requirement: true
       monitoring_allowed_sids:
       - "root"
       - "ADMINS"
@@ -252,6 +246,22 @@ vdb    252:16   0   186G  0 disk
       - "root"
       - "ADMINS"
       - "DATABASE-ADMINS"
+      bootstrap_allowed_sids:
+      - "root"
+      - "ADMINS"
+      - "DATABASE-ADMINS"
+    ```
+
+    Добавьте секцию [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) для проверки клиентского сертификата при первичном запуске кластера (bootstrap). Сертификат должен соответствовать группе из `bootstrap_allowed_sids` (пример для группы `ADMINS`):
+
+    ```yaml
+    client_certificate_authorization:
+      request_client_certificate: true
+      client_certificate_definitions:
+      - member_groups: ["ADMINS"]
+        subject_terms:  
+        - short_name: "O"
+          values: ["YDB"]
     ```
 
 При использовании режима шифрования трафика убедитесь в наличии в конфигурационном файле {{ ydb-short-name }} установленных путей к файлам ключей и сертификатов в секциях `interconnect_config` и `grpc_config`:
@@ -366,16 +376,48 @@ ydb admin node config init --config-dir /opt/ydb/cfg --from-config /tmp/config.y
 
 Для инициализации кластера потребуется файл сертификата центра регистрации `ca.crt`, путь к которому должен быть указан при выполнении соответствующих команд. Перед выполнением соответствующих команд скопируйте файл `ca.crt` на сервер, на котором эти команды будут выполняться.
 
-Инициализация кластера всегда производится в режиме с отключенной обязательной проверкой аутентификации. Убедитесь, что в конфигурационном файле установлен параметр `enforce_user_token_requirement: false`, как описано в разделе [«Подготовьте конфигурационные файлы»](#config). Включение обязательной аутентификации выполняется на последующих шагах, после завершения инициализации кластера и создания базы данных.
+Параметры команды инициализации кластера зависят от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
 
-На одном из серверов хранения в составе кластера выполните команды:
+{% list tabs group=authentication %}
 
-```bash
-export LD_LIBRARY_PATH=/opt/ydb/lib
-ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 \
-    admin cluster bootstrap --uuid <строка>
-echo $?
-```
+- Аутентификация включена
+
+    Для первичного поднятия кластера при включённой авторизации необходимо использовать клиентские сертификаты (mTLS). Сертификаты должны соответствовать правилам, установленным в разделе [`client_certificate_authorization`](../../../reference/configuration/client_certificate_authorization.md) конфигурационного файла кластера.
+
+    На одном из серверов хранения в составе кластера выполните команду:
+
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    ydb --ca-file ca.crt \
+        --client-cert-file node.crt \
+        --client-cert-key-file node.key \
+        -e grpcs://<node.ydb.tech>:2135 \
+        admin cluster bootstrap --uuid <строка>
+    echo $?
+    ```
+
+    После инициализации кластера для выполнения дальнейших административных команд необходимо предварительно получить аутентификационный токен.
+
+    При первоначальной установке кластера в нём существует единственная учётная запись `root` с пустым паролем, поэтому команда получения токена выглядит следующим образом:
+
+    ```bash
+    ydb -e grpcs://<node1.ydb.tech>:2135 -d /Root --ca-file ca.crt \
+    --user root --no-password auth get-token --force > token-file
+    ```
+
+- Аутентификация отключена
+
+    На одном из серверов хранения в составе кластера выполните команду:
+
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    ydb --ca-file ca.crt \
+        -e grpcs://<node.ydb.tech>:2135 \
+        admin cluster bootstrap --uuid <строка>
+    echo $?
+    ```
+
+{% endlist %}
 
 При успешном выполнении инициализации кластера выведенный на экран код завершения команды инициализации кластера должен быть нулевым.
 
@@ -387,14 +429,34 @@ echo $?
 
 При создании базы данных устанавливается первоначальное количество используемых групп хранения, определяющее доступную пропускную способность ввода-вывода и максимальную емкость хранения. Количество групп хранения может быть при необходимости увеличено после создания базы данных.
 
-На одном из серверов хранения в составе кластера выполните команды:
+Порядок действий по созданию базы данных зависит от того, включен ли в конфигурационном файле {{ ydb-short-name }} режим аутентификации пользователей.
 
-```bash
-export LD_LIBRARY_PATH=/opt/ydb/lib
-/opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
-    admin database /Root/testdb create ssd:1
-echo $?
-```
+{% list tabs group=authentication %}
+
+- Аутентификация включена
+
+    Необходимо получить аутентификационный токен. Может использоваться файл с токеном аутентификации, полученный при выполнении [инициализации кластера](#initialize-cluster), либо подготовлен новый токен.
+
+    Файл токена необходимо скопировать на один из серверов хранения в составе кластера, а затем на выбранном сервере выполнить команды:
+
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+        admin database /Root/testdb create ssd:1
+    echo $?
+    ```
+- Аутентификация выключена
+
+    На одном из серверов хранения в составе кластера выполните команды:
+
+    ```bash
+    export LD_LIBRARY_PATH=/opt/ydb/lib
+    /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+        admin database /Root/testdb create ssd:1
+    echo $?
+    ```
+
+{% endlist %}
 
 При успешном создании базы данных, выведенный на экран код завершения команды должен быть нулевым.
 
@@ -501,41 +563,6 @@ ydb admin node config init --config-dir /opt/ydb/cfg --seed-node <node.ydb.tech:
 После инициализации кластера и создания базы данных, кластер работает в режиме, разрешающем доступ без аутентификации (`enforce_user_token_requirement: false`). Для производственных инсталляций рекомендуется включить обязательную проверку аутентификации и настроить учетные записи.
 
 При первоначальной установке кластера {{ ydb-short-name }} автоматически создается учетная запись `root` с пустым паролем, а также стандартный набор групп пользователей, описанный в разделе [{#T}](../../../security/builtin-security.md).
-
-### Включение обязательной аутентификации
-
-1. Получите аутентификационный токен для встроенной учетной записи `root`. На данном этапе пароль еще не задан:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node1.ydb.tech>:2135 -d /Root \
-            --user root --no-password auth get-token --force > token-file
-    ```
-
-1. Получите текущую конфигурацию из кластера и сохраните ее в файл `secure_config.yaml`:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file  \
-        admin cluster config fetch > secure_config.yaml
-    ```
-
-   Откройте файл `secure_config.yaml` и измените в нем значение флага `enforce_user_token_requirement` на `true`:
-
-    ```yaml
-    security_config:
-        enforce_user_token_requirement: true
-        ...
-    ```
-
-1. Примените новую конфигурацию в кластер с помощью команды `replace`, используя полученный ранее токен:
-
-    ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2135 --token-file token-file \
-        admin cluster config replace -f secure_config.yaml
-    ```
-
-1. Перезапустите узлы кластера для применения конфигурации.
-
-    Параметр `enforce_user_token_requirement` вступает в силу только после перезапуска узлов. Выполните процедуру [rolling restart](../../../reference/ydbops/rolling-restart-scenario.md) для всех статических узлов кластера.
 
 ### Первоначальная настройка учетных записей
 

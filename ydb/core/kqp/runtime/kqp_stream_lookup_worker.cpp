@@ -470,6 +470,10 @@ private:
             }
         }
 
+        if (Settings.VectorTopK) {
+            *record.MutableVectorTopK() = *Settings.VectorTopK;
+        }
+
         YQL_ENSURE(!ranges.empty());
         if (ranges.front().Point) {
             request->Keys.reserve(ranges.size());
@@ -1252,6 +1256,10 @@ std::unique_ptr<TKqpStreamLookupWorker> CreateStreamLookupWorker(NKikimrKqp::TKq
             typeInfo,
             column.GetTypeInfo().GetPgTypeMod()
         });
+    }
+
+    if (settings.HasVectorTopK()) {
+        preparedSettings.VectorTopK = std::make_unique<NKikimrKqp::TReadVectorTopK>(settings.GetVectorTopK());
     }
 
     switch (settings.GetLookupStrategy()) {

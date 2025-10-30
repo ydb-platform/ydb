@@ -8,6 +8,7 @@
 #include <ydb/core/base/kmeans_clusters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <ydb/library/actors/core/monotonic_provider.h>
 

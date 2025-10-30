@@ -492,6 +492,16 @@ void TKqpTasksGraph::BuildStreamLookupChannels(const TStageInfo& stageInfo, ui32
         settings->SetIsTableImmutable(true);
     }
 
+    if (streamLookup.HasVectorTopK()) {
+        const auto& in = streamLookup.GetVectorTopK();
+        auto& out = *settings->MutableVectorTopK();
+        out.SetColumn(in.GetColumn());
+        *out.MutableSettings() = in.GetSettings();
+        auto target = ExtractPhyValue(stageInfo, in.GetTargetVector(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod());
+        out.SetTargetVector(TString(target.AsStringRef()));
+        out.SetLimit(ExtractPhyValue(stageInfo, in.GetLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod()).Get<ui32>());
+    }
+
     TTransform streamLookupTransform;
     streamLookupTransform.Type = "StreamLookupInputTransformer";
     streamLookupTransform.InputType = streamLookup.GetLookupKeysType();
@@ -2656,7 +2666,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, b
             settings->SetItemsLimit(*GetMeta().MaxBatchSize);
             settings->SetIsBatch(true);
         } else {
-            ui64 itemsLimit = ExtractItemsLimit(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv);
+            ui64 itemsLimit = ExtractPhyValue(stageInfo, source.GetItemsLimit(), TxAlloc->HolderFactory, TxAlloc->TypeEnv, NUdf::TUnboxedValuePod((ui32)0)).Get<ui64>();
             settings->SetItemsLimit(itemsLimit);
         }
 

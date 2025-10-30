@@ -1550,6 +1550,63 @@ private:
         }
     }
 
+    void FillStreamLookupVectorTop(NKqpProto::TKqpPhyVectorTopK& vectorTopK,
+        const TKqpCnStreamLookup& streamLookup, const TKqpStreamLookupSettings& settings) {
+        const auto implTablePath = streamLookup.Table().Path();
+        const auto mainTableFromImpl = TablesData->GetMainTableIfTableIsImplTableOfIndex(Cluster, implTablePath);
+        const auto mainTable = mainTableFromImpl ? mainTableFromImpl : &TablesData->ExistingTable(Cluster, implTablePath);
+
+        const TIndexDescription *indexDesc = nullptr;
+        for (const auto& index: mainTable->Metadata->Indexes) {
+            if (index.Type == TIndexDescription::EType::GlobalSyncVectorKMeansTree &&
+                index.Name == settings.VectorTopIndex) {
+                indexDesc = &index;
+            }
+        }
+        YQL_ENSURE(indexDesc);
+
+        // Index settings
+        auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+        *vectorTopK.MutableSettings() = kmeansDesc.GetSettings().Getsettings();
+
+        // Column index
+        ui32 columnIdx = 0;
+        for (const auto& column: streamLookup.Columns()) {
+            if (column.Value() == settings.VectorTopColumn) {
+                break;
+            }
+            columnIdx++;
+        }
+        YQL_ENSURE(columnIdx < streamLookup.Columns().Size());
+        vectorTopK.SetColumn(columnIdx);
+
+        // Limit - may be a parameter which will be linked later
+        TExprBase expr(settings.VectorTopLimit);
+        if (expr.Maybe<TCoUint32>()) {
+            auto* literal = vectorTopK.MutableLimit()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::Uint32);
+            literal->MutableValue()->SetUint32(FromString<ui32>(expr.Cast<TCoUint32>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableLimit()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
+        }
+
+        // Target vector - may be a parameter which will be linked later
+        expr = TExprBase(settings.VectorTopTarget);
+        if (expr.Maybe<TCoString>()) {
+            auto* literal = vectorTopK.MutableTargetVector()->MutableLiteralValue();
+            literal->MutableType()->SetKind(NKikimrMiniKQL::ETypeKind::Data);
+            literal->MutableType()->MutableData()->SetScheme(NScheme::NTypeIds::String);
+            literal->MutableValue()->SetText(TString(expr.Cast<TCoString>().Literal().Value()));
+        } else if (expr.Maybe<TCoParameter>()) {
+            vectorTopK.MutableTargetVector()->MutableParamValue()->SetParamName(expr.Cast<TCoParameter>().Name().StringValue());
+        } else {
+            YQL_ENSURE(false, "Unexpected ItemsLimit callable " << expr.Ref().Content());
+        }
+    }
+
     void FillConnection(
         const TDqConnection& connection,
         const TMap<ui64, ui32>& stagesMap,
@@ -1747,6 +1804,10 @@ private:
             streamLookupProto.SetKeepRowsOrder(Config->OrderPreservingLookupJoinEnabled());
             if (settings.AllowNullKeysPrefixSize) {
                 streamLookupProto.SetAllowNullKeysPrefixSize(*settings.AllowNullKeysPrefixSize);
+            }
+
+            if (settings.VectorTopColumn) {
+                FillStreamLookupVectorTop(*streamLookupProto.MutableVectorTopK(), streamLookup, settings);
             }
 
             switch (streamLookupProto.GetLookupStrategy()) {

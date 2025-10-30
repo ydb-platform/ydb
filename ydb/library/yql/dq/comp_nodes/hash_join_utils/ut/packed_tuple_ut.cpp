@@ -59,16 +59,20 @@ Y_UNIT_TEST(TestCalculateCRC32Fallback) {
 }
 
 Y_UNIT_TEST(TestCalculateCRC32SSE42) {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     if (NX86::HaveSSE42())
         TestCalculateCRC32_Impl<NSimd::TSimdSSE42Traits>();
     else
+#endif
         CTEST << "Skipped SSE42 test\n";
 }
 
 Y_UNIT_TEST(TestCalculateCRC32AVX2) {
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     if (NX86::HaveAVX2())
         TestCalculateCRC32_Impl<NSimd::TSimdAVX2Traits>();
     else
+#endif
         CTEST << "Skipped AVX2 test\n";
 }
 

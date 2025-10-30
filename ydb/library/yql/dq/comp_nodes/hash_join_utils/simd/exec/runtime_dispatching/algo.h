@@ -1,16 +1,18 @@
 #include "util/system/cpu_id.h"
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_avx2.h>
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_fallback.h>
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_sse42.h>
+#endif
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd_fallback.h>
 #include <vector>
 
 using vl = std::vector<ui64>;
 using vvl = std::vector<std::vector<ui64>>;
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 using AVX2Trait = NSimd::NAVX2::TSimd8<ui64>;
-
 using SSE42Trait = NSimd::NSSE42::TSimd8<ui64>;
-
+#endif
 using FallbackTrait = NSimd::NFallback::FallbackTrait<ui64>;
 
 struct Perfomancer {
@@ -67,18 +69,20 @@ struct Perfomancer {
 
 };
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 template<>
 THolder<Perfomancer::Interface> Perfomancer::Create<AVX2Trait>();
 
 template<>
 THolder<Perfomancer::Interface> Perfomancer::Create<SSE42Trait>();
+#endif
 
 template<>
 THolder<Perfomancer::Interface> Perfomancer::Create<FallbackTrait>();
 
 template <typename TFactory>
 auto ChooseTrait(TFactory& factory) {
-    
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     if (NX86::HaveAVX2()) {
         return factory.template Create<AVX2Trait>();
     
@@ -86,12 +90,14 @@ auto ChooseTrait(TFactory& factory) {
         return factory.template Create<SSE42Trait>();
     
     }
+#endif
     
     return factory.template Create<FallbackTrait>();
 }
 
 //this part of code just to compare times of work
 //we dont need this functions at all
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 template <typename TFactory>
 auto ChooseAVX2Trait(TFactory& factory) {
     return factory.template Create<AVX2Trait>();
@@ -101,6 +107,7 @@ template <typename TFactory>
 auto ChooseSSE42Trait(TFactory& factory) {
     return factory.template Create<SSE42Trait>();
 }
+#endif
 
 template <typename TFactory>
 auto ChooseFallbackTrait(TFactory& factory) {

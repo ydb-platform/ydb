@@ -24,7 +24,7 @@ namespace NPackedTuple {
 namespace {
 
 // Transpose 8x8 bit-matrix packed in ui64 integer
-Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
+[[maybe_unused]] Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     /// fast path
     if (x == ~0ull) {
         return x;
@@ -63,7 +63,7 @@ Y_FORCE_INLINE ui64 transposeBitmatrix(ui64 x) {
     return x;
 }
 
-void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
+[[maybe_unused]] void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
     ui64 x = 0;
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(*src[ind]) << (ind * 8);
@@ -77,7 +77,7 @@ void transposeBitmatrix(ui8 dst[], const ui8 *src[], const size_t row_size) {
     }
 }
 
-void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
+[[maybe_unused]] void transposeBitmatrix(ui8 *dst[], const ui8 src[], const size_t row_size) {
     ui64 x = 0;
     for (size_t ind = 0; ind != 8; ++ind) {
         x |= ui64(src[ind * row_size]) << (ind * 8);
@@ -218,7 +218,7 @@ bool TTupleLayout::KeysLess(const ui8 *lhsRow, const ui8 *lhsOverflow,
 
 THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
-
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
     if (NX86::HaveAVX2())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
@@ -226,6 +226,7 @@ TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
     if (NX86::HaveSSE42())
         return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
             columns);
+#endif
 
     return MakeHolder<TTupleLayoutFallback>(
         columns);
@@ -1548,6 +1549,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
     }
 }
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 template __attribute__((target("avx2"))) void
 TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
@@ -1582,6 +1584,7 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
     TPaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
+#endif
 
 void TTupleLayout::CalculateColumnSizes(
     const ui8 *res, ui32 count,

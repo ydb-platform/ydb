@@ -477,19 +477,29 @@ using TNeumannTableSeq = TNeumannHashTable<true, false>;
 using TNeumannTablePref = TNeumannHashTable<false, true>;
 using TNeumannTableSeqPref = TNeumannHashTable<true, true>;
 
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 using TPageTableSSE = TPageHashTableImpl<NSimd::TSimdSSE42Traits, false>;
 using TPageTableSSEPref = TPageHashTableImpl<NSimd::TSimdSSE42Traits, true>;
 
 using TPageTableAVX2 = TPageHashTableImpl<NSimd::TSimdAVX2Traits, false>;
 using TPageTableAVX2Pref = TPageHashTableImpl<NSimd::TSimdAVX2Traits, true>;
+#endif
+
+using TPageTableFallback = TPageHashTableImpl<NSimd::TSimdFallbackTraits, false>;
+using TPageTableFallbackPref = TPageHashTableImpl<NSimd::TSimdFallbackTraits, true>;
 
 // -----------------------------------------------------------------
 
 template <typename... Args> struct TTablesCase {
     template <size_t Batch> using TBenchmark = TBenchmark<Batch, Args...>;
 };
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
 using TTablesBenchmark =
     TTablesCase<TPageTableSSEPref, TRobinHoodTableSeqPref, TNeumannTablePref>;
+#else
+using TTablesBenchmark =
+    TTablesCase<TPageTableFallbackPref, TRobinHoodTableSeqPref, TNeumannTablePref>;
+#endif
 
 // -----------------------------------------------------------------
 

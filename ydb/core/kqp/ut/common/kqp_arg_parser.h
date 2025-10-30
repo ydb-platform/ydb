@@ -8,6 +8,7 @@
 #include <string>
 #include <type_traits>
 #include <regex>
+#include <stdexcept>
 
 
 namespace NKikimr::NKqp {
@@ -113,6 +114,9 @@ public:
 
     template <typename TValue>
     auto GetArg(std::string key) {
+        if (!HasArg(key)) {
+            throw std::out_of_range("arg not provided: '" + key + "'");
+        }
         return ParseRangedValue<TValue>(Values_[key]);
     }
 

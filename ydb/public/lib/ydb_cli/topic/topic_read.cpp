@@ -210,13 +210,7 @@ namespace NYdb::NConsoleClient {
                 }
             }
 
-            auto partitionEndOffset = ActivePartitionSessions_[sessionId].EndOffset;
-            if (partitionEndOffset.has_value() && message.GetOffset() + 1 == partitionEndOffset) {
-                if (ActivePartitionSessions_[sessionId].ReadingStatus == EReadingStatus::PartitionWithData) {
-                    ActivePartitionSessions_[sessionId].ReadingStatus = EReadingStatus::PartitionWithoutData;
-                    --PartitionsBeingRead_;
-                }
-            }
+            ActivePartitionSessions_[sessionId].LastReadOffset = message.GetOffset();
 
             if (MessagesLeft_ == MessagesLimitUnlimited) {
                 continue;
@@ -232,6 +226,8 @@ namespace NYdb::NConsoleClient {
             defCommit.Commit();
         }
         LastMessageReceivedTs_ = Now();
+
+        event->GetPartitionSession()->RequestStatus();
         return EXIT_SUCCESS;
     }
 
@@ -279,8 +275,9 @@ namespace NYdb::NConsoleClient {
         auto status = ActivePartitionSessions_.find(sessionId);
         EReadingStatus currentPartitionStatus = status->second.ReadingStatus;
         const std::optional<uint64_t> readOffset = GetNextReadOffset(event->GetPartitionSession()->GetPartitionId());
-        ActivePartitionSessions_[sessionId].EndOffset = event->GetCommittedOffset();
-        if (event->GetEndOffset() == event->GetCommittedOffset() || (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
+        if (event->GetEndOffset() == event->GetCommittedOffset() ||
+           (event->GetEndOffset() == *ActivePartitionSessions_[sessionId].LastReadOffset + 1) ||
+           (readOffset.has_value() && readOffset.value() >= event->GetEndOffset())) {
             if (currentPartitionStatus == EReadingStatus::PartitionWithData) {
                 --PartitionsBeingRead_;
             }

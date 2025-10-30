@@ -94,7 +94,7 @@ namespace NYdb::NConsoleClient {
         struct TPartitionSessionInfo {
             NTopic::TPartitionSession::TPtr PartitionSession;
             EReadingStatus ReadingStatus;
-            std::optional<ui64> EndOffset;
+            std::optional<ui64> LastReadOffset;
         };
 
         bool HasSession(ui64 sessionId) const;

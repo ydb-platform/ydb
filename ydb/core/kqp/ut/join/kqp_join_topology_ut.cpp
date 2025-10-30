@@ -243,11 +243,16 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     }
 
     template <auto Lambda>
-    void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config, TArgs::TRangedValue<ui64> numTables, TArgs::TRangedValue<double> sameColumnProbability, uint64_t state = 0) {
+        void BenchmarkShuffleEliminationOnTopologies(TBenchmarkConfig config,
+                                                     TArgs::TRangedValue<double> thetaRanged,
+                                                     TArgs::TRangedValue<double> alphaRanged,
+                                                     TArgs::TRangedValue<ui64> numTablesRanged,
+                                                     uint64_t state = 0) {
+
         TRNG mt = TRNG::Deserialize(state);
 
         mt.reset();
-        TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTables.GetLast());
+        TSchema fullSchema = TSchema::MakeWithEnoughColumns(numTablesRanged.GetLast());
         TString stats = TSchemaStats::MakeRandom(mt, fullSchema, 7, 10).ToJSON();
 
         mt.Restore(state);
@@ -259,18 +264,22 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         auto OS = TUnbufferedFileOutput("results.csv");
         DumpBoxPlotCSVHeader(OS);
 
-        for (ui64 n : numTables) {
-            for (double probability : sameColumnProbability) {
-                Cout << "\n\n";
-                Cout << "================================ REPRODUCE -------------------------------\n";
-                Cout << "KQP_TOPOLOGY='N=" << n << "; P=" << probability << "; seed=" << mt.Serialize() << "'\n";
-                TRelationGraph graph = Lambda(mt, n, probability);
-                auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
-                if (!result) {
-                    goto stop;
-                }
+        for (double alpha : alphaRanged) {
+            for (double theta : thetaRanged) {
+                for (ui64 numTables : numTablesRanged) {
+                    Cout << "\n\n";
+                    Cout << "================================ REPRODUCE -------------------------------\n";
+                    Cout << "KQP_TOPOLOGY='N=" << numTables << "; theta=" << theta << "; alpha=" << alpha << "; seed=" << mt.Serialize() << "'\n";
+                    TRelationGraph graph = Lambda(mt, numTables);
+                    graph.SetupKeysPitmanYor(mt, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                DumpBoxPlotToCSV(OS, n, result->GetStatistics());
+                    auto result = BenchmarkShuffleEliminationOnTopology(config, session, graph);
+                    if (!result) {
+                        goto stop;
+                    }
+
+                    DumpBoxPlotToCSV(OS, numTables, result->GetStatistics());
+                }
             }
         }
     stop:;
@@ -360,8 +369,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         BenchmarkShuffleEliminationOnTopologies<GenerateRandomTree>(
             config,
+            /*theta=*/args.GetArg<double>("theta"),
+            /*alpha=*/args.GetArg<double>("alpha"),
             /*maxNumTables=*/args.GetArg<uint64_t>("N"),
-            /*probabilityStep=*/args.GetArg<double>("P"),
             state
         );
     }

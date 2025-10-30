@@ -280,8 +280,8 @@ if __name__ == "__main__":
             dry_run = True
 
         message = f"""🚨 *Possible OOM*
-During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM *{round(max_agent_ram_with_threshold, 1)}GB*
-{max_agent_ram}GB total
+During [RUN]({get_current_workflow_url()}) max used RAM *{round(max_used_ram, 1)}GB* is greater than agent RAM under threshold *{round(max_agent_ram_with_threshold, 1)}GB*
+{max_agent_ram}GB total available
 Threshold is {args.memory_threshold}%
 
 [Ram usage graph]({args.output_file_url})
@@ -296,5 +296,5 @@ CC {get_alert_logins()}"""
                 bot_token,
                 chat_id,
                 message,
-                thread_id,
-                "MarkdownV2")
+                parse_mode='MarkdownV2',
+                message_thread_id=thread_id)

@@ -105,10 +105,17 @@ std::vector<NKikimr::TSystemThreadsMonitor::TSystemThreadPoolInfo> NKikimr::TSys
                 info.States.emplace_back(c, states[c]);
             }
         }
-        info.MajorPageFaults = double(majorPageFaults) / passedSeconds;
-        info.MinorPageFaults = double(minorPageFaults) / passedSeconds;
-        info.SystemUsage = double(systemTime) / ticks / info.Threads;
-        info.UserUsage = double(userTime) / ticks / info.Threads;
+        if (passedSeconds != 0) {
+            info.MajorPageFaults = double(majorPageFaults) / passedSeconds;
+            info.MinorPageFaults = double(minorPageFaults) / passedSeconds;
+            info.SystemUsage = double(systemTime) / ticks / info.Threads;
+            info.UserUsage = double(userTime) / ticks / info.Threads;
+        } else {
+            info.MajorPageFaults = 0;
+            info.MinorPageFaults = 0;
+            info.SystemUsage = 0;
+            info.UserUsage = 0;
+        }
     }
     UpdateTime = now;
     return result;

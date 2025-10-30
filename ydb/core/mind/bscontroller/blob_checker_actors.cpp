@@ -19,7 +19,7 @@ public:
     {}
 
     void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_WORKER, BSW01, "Bootstrapping BlobScannerWorker",
+        STLOG(PRI_NOTICE, BLOB_CHECKER_WORKER, BSW01, "Bootstrapping BlobCheckerWorker",
                 (GroupId, GroupId));
 
         SendToBSProxy(SelfId(), GroupId, new TEvBlobStorage::TEvAssimilate(
@@ -202,7 +202,7 @@ public:
     }
 
     void Bootstrap() {
-        STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO01, "Bootstrapping BlobScannerOrchestrator");
+        STLOG(PRI_NOTICE, BLOB_CHECKER_ORCHESTRATOR, BSO01, "Bootstrapping BlobCheckerOrchestrator");
         Become(&TThis::StateFunc);
         HandleWakeup();
     }

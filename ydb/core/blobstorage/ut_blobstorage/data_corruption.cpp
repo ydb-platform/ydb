@@ -81,7 +81,7 @@ struct TTestCtx : public TTestCtxBase {
                 }
                 auto* vput = ev->Get<TEvBlobStorage::TEvVPut>();
                 TLogoBlobID partId = LogoBlobIDFromLogoBlobID(vput->Record.GetBlobID());
-                if (PartCorruptionMask & (1 << partId.PartId())) {
+                if (PartCorruptionMask & (1 << (partId.PartId() - 1))) {
                     vput->Record.SetBuffer(MakeData(vput->GetBuffer().size(), 2));
                     NodesWithCorruptedPartsMask |= (1 << (ev->Recipient.NodeId() - 1));
                 }
@@ -123,7 +123,7 @@ struct TTestCtx : public TTestCtxBase {
             TActorId vdiskActorId = GroupInfo->GetActorId(orderNumber);
             const ui32 nodeId = vdiskActorId.NodeId();
             TActorId edge = Env->Runtime->AllocateEdgeActor(nodeId);
-            if ((1 << (nodeId - 1)) & NodesWithCorruptedPartsMask == 0) {
+            if (((1 << (nodeId - 1)) & NodesWithCorruptedPartsMask) == 0) {
                 continue;
             }
             while (true) {

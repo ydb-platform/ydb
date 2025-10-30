@@ -387,7 +387,7 @@ struct TExprContext;
 
 struct TOptimizerSettings {
     ui32 MaxDPhypDPTableSize = 100000;
-    bool ForceShuffleElimination = false;
+    ui32 ShuffleEliminationJoinNumCutoff = 14;
 };
 
 class IOptimizerFactory : private TNonCopyable {

@@ -21,7 +21,7 @@ void TGRpcYdbSchemeService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                 \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                          \
                     new TGrpcRequestOperationCall<Ydb::Scheme::NAME##Request, Ydb::Scheme::NAME##Response>       \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr, AUDIT_MODE}));  \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr, AUDIT_MODE}));  \
             }, &Ydb::Scheme::V1::SchemeService::AsyncService::Request ## NAME,                                   \
             #NAME, logger, getCounterBlock("scheme", #NAME))->Run();
 

@@ -25,7 +25,7 @@ void TGRpcReplicationService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                      \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                               \
                     new TGrpcRequestOperationCall<Replication::REQUEST, Replication::RESPONSE>        \
-                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));   \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(Rps), nullptr}));   \
             }, &Replication::V1::ReplicationService::AsyncService::Request ## NAME,                   \
             #NAME, logger, getCounterBlock("replication", #NAME))->Run();
 

@@ -297,36 +297,43 @@ public:
         return HandleUnit(input, ctx);
     }
 
-    TStatus HandlePath(TExprBase input, TExprContext& ctx) {
-        if (!TYtPathInfo::Validate(input.Ref(), ctx)) {
+    TStatus HandlePath(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        // Compatibility with previous version (different fields).
+        if (TYtPathInfo::RewriteWithQLFilter(input, output, ctx)) {
+            return TStatus::Repeat;
+        }
+
+        if (!TYtPathInfo::Validate(*input, ctx)) {
             return TStatus::Error;
         }
 
         TYtPathInfo pathInfo(input);
         if (pathInfo.Table->Meta && !pathInfo.Table->Meta->DoesExist) {
             if (NYql::HasSetting(pathInfo.Table->Settings.Ref(), EYtSettingType::Anonymous)) {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Anonymous table " << pathInfo.Table->Name.Quote() << " must be materialized. Use COMMIT before reading from it."));
             }
             else {
-                ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder()
                     << "Table " <<  pathInfo.Table->Name.Quote() << " does not exist").SetCode(TIssuesIds::YT_TABLE_NOT_FOUND, TSeverityIds::S_ERROR));
             }
             return IGraphTransformer::TStatus::Error;
         }
 
+        output = input;
+
         const TTypeAnnotationNode* itemType = nullptr;
         TExprNode::TPtr newFields;
-        auto status = pathInfo.GetType(itemType, newFields, ctx, input.Pos());
+        auto status = pathInfo.GetType(itemType, newFields, ctx, input->Pos());
         if (newFields) {
-            input.Ptr()->ChildRef(TYtPath::idx_Columns) = newFields;
+            output->ChildRef(TYtPath::idx_Columns) = newFields;
         }
         if (status.Level != TStatus::Ok) {
             return status;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
-        if (auto columnOrder = State_->Types->LookupColumnOrder(input.Ref().Head())) {
+        output->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+        if (auto columnOrder = State_->Types->LookupColumnOrder(input->Head())) {
             if (pathInfo.Columns) {
                 auto& renames = pathInfo.Columns->GetRenames();
                 if (renames) {
@@ -352,7 +359,7 @@ public:
                 columnOrder->AddColumn(TString(col));
             }
 
-            return State_->Types->SetColumnOrder(input.Ref(), *columnOrder, ctx);
+            return State_->Types->SetColumnOrder(*input, *columnOrder, ctx);
         }
 
         return TStatus::Ok;

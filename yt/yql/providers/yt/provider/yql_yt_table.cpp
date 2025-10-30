@@ -2849,7 +2849,7 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtPath::CallableName()));
         return false;
     }
-    if (!EnsureMinMaxArgsCount(node, 4, 5, ctx)) {
+    if (!EnsureMinMaxArgsCount(node, 5, 6, ctx)) {
         return false;
     }
 
@@ -2882,11 +2882,45 @@ bool TYtPathInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         return false;
     }
 
+    if (!node.Child(TYtPath::idx_QLFilter)->IsCallable(TYtQLFilter::CallableName())
+        && !node.Child(TYtPath::idx_QLFilter)->IsCallable(TCoVoid::CallableName())) {
+
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtPath::idx_QLFilter)->Pos()), TStringBuilder()
+            << "Expected " << TYtQLFilter::CallableName()
+            << " or Void"));
+        return false;
+    }
+
     if (node.ChildrenSize() > TYtPath::idx_AdditionalAttributes && !EnsureAtom(*node.Child(TYtPath::idx_AdditionalAttributes), ctx)) {
         return false;
     }
 
     return true;
+}
+
+bool TYtPathInfo::RewriteWithQLFilter(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    if (!input->IsCallable(TYtPath::CallableName())) {
+        return false;
+    }
+
+    static_assert(TYtPath::idx_QLFilter == 4);
+    static_assert(TYtPath::idx_AdditionalAttributes == 5);
+
+    if (input->ChildrenSize() == TYtPath::idx_QLFilter) {
+        TExprNode::TListType newChildren = input->ChildrenList();
+        newChildren.push_back(ctx.NewCallable(input->Pos(), "Void", {}));
+        output = ctx.ChangeChildren(*input, std::move(newChildren));
+        return true;
+    }
+
+    if (input->ChildrenSize() == TYtPath::idx_AdditionalAttributes && input->Child(TYtPath::idx_QLFilter)->Type() == TExprNode::Atom) {
+        TExprNode::TListType newChildren = input->ChildrenList();
+        newChildren.insert(newChildren.begin() + TYtPath::idx_QLFilter, ctx.NewCallable(input->Pos(), "Void", {}));
+        output = ctx.ChangeChildren(*input, std::move(newChildren));
+        return true;
+    }
+
+    return false;
 }
 
 void TYtPathInfo::Parse(TExprBase node) {
@@ -2906,6 +2940,11 @@ void TYtPathInfo::Parse(TExprBase node) {
     if (path.Stat().Maybe<TYtStat>()) {
         Stat = MakeIntrusive<TYtTableStatInfo>(path.Stat().Ptr());
     }
+
+    if (path.QLFilter().Maybe<TYtQLFilter>()) {
+        QLFilter = path.QLFilter().Ptr();
+    }
+
     if (path.AdditionalAttributes().Maybe<TCoAtom>()) {
         AdditionalAttributes = path.AdditionalAttributes().Cast().Value();
     }
@@ -2928,6 +2967,11 @@ TExprBase TYtPathInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos,
         pathBuilder.Stat(Stat->ToExprNode(ctx, pos));
     } else {
         pathBuilder.Stat<TCoVoid>().Build();
+    }
+    if (QLFilter) {
+        pathBuilder.QLFilter(QLFilter);
+    } else {
+        pathBuilder.QLFilter<TCoVoid>().Build();
     }
     if (AdditionalAttributes) {
         pathBuilder.AdditionalAttributes<TCoAtom>()

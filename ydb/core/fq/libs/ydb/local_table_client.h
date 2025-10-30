@@ -40,7 +40,7 @@ public:
             Retryable, TDuration::MilliSeconds(10), 
             TDuration::MilliSeconds(200),
             settings.MaxTimeout_,
-            settings.MaxRetries_, TDuration::Seconds(1)
+            settings.MaxRetries_, settings.MaxTimeout_
         ))
         , Operation(operation) {
     }

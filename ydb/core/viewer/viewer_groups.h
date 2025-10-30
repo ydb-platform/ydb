@@ -2016,11 +2016,20 @@ public:
             return;
         }
         if (VDiskStateResponse.count(nodeId) == 0) {
-            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvVDiskStateRequest()));
+            auto vdiskRequest = new TEvWhiteboard::TEvVDiskStateRequest();
+            vdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>());
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kQuotaUtilizationFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kFairOccupancyFieldNumber);
+            vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertLevelFieldNumber);
+            VDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, vdiskRequest));
             ++VDiskStateRequestsInFlight;
         }
         if (PDiskStateResponse.count(nodeId) == 0) {
-            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, new TEvWhiteboard::TEvPDiskStateRequest()));
+            auto pdiskRequest = new TEvWhiteboard::TEvPDiskStateRequest();
+            pdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+            pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kOccupancyFieldNumber);
+            PDiskStateResponse.emplace(nodeId, MakeWhiteboardRequest(nodeId, pdiskRequest));
             ++PDiskStateRequestsInFlight;
         }
     }

@@ -6,6 +6,7 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
+using namespace NNodeWhiteboard;
 
 class TPDiskInfo : public TViewerPipeClient {
     enum EEv {
@@ -85,14 +86,23 @@ public:
 
     void SendWhiteboardRequests() {
         TActorId whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(NodeId);
+        auto pdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest();
+        pdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TPDiskStateInfo>());
+        pdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TPDiskStateInfo::kOccupancyFieldNumber);
         WhiteboardPDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateRequest,
+            pdiskRequest,
             IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, // we only need it once because we are sending to the same node
             NodeId);
+        auto vdiskRequest = new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest();
+        vdiskRequest->Record.MutableFieldsRequired()->CopyFrom(GetDefaultWhiteboardFields<NKikimrWhiteboard::TVDiskStateInfo>());
+        vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kQuotaUtilizationFieldNumber);
+        vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kNormalizedOccupancyFieldNumber);
+        vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kFairOccupancyFieldNumber);
+        vdiskRequest->Record.AddFieldsRequired(NKikimrWhiteboard::TVDiskStateInfo::kCapacityAlertLevelFieldNumber);
         WhiteboardVDisk = TBase::MakeRequest<NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateResponse>(
             whiteboardServiceId,
-            new NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateRequest,
+            vdiskRequest,
             0,
             NodeId);
     }

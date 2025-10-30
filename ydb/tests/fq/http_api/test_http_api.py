@@ -133,7 +133,7 @@ class TestHttpApi(TestBase):
                 "issues": {
                     "message": "{ <main>: Warning: Type annotation, code: 1030 subissue: { <main>:1:1: Warning: At function: "
                     "RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: "
-                    "OrderedSqlProject, At function: SqlProjectItem subissue: { <main>:1:28: Warning: At function: + "
+                    "OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda subissue: { <main>:1:28: Warning: At function: + "
                     "subissue: { <main>:1:28: Warning: Integral type implicit bitcast: Uint64 and Int32, code: 1107 } } } }",
                     "details": [
                         {
@@ -143,7 +143,7 @@ class TestHttpApi(TestBase):
                             "issues": [
                                 {
                                     "message": "At function: RemovePrefixMembers, At function: Unordered, At "
-                                    "function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem",
+                                    "function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda",
                                     "severity": "WARNING",
                                     "position": {"column": 1, "row": 1},
                                     "end_position": {"column": 1, "row": 1},

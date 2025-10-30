@@ -259,7 +259,6 @@ if __name__ == "__main__":
 
     ram_usage = parse_ram_usage_file(args.ram_usage_file)
     output_file = args.output_file
-    print(ram_usage)
     # Draw or export fig with RAM usage
     create_simple_interactive_plot(all, ram_usage, output_file)
 

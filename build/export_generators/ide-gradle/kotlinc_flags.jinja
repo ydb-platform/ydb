@@ -12,14 +12,19 @@ tasks.compileKotlin.configure {
 {%      endif -%}
 
 {%-     set all_kotlinc_flags = all_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
-{%-     if all_kotlinc_flags %}
+{%-     if all_kotlinc_flags|length or not(extra_targets|length) %}
 
 tasks.compileTestKotlin.configure {
+{%-         if all_kotlinc_flags|length %}
     compilerOptions {
-{%-         for kotlinc_flag in all_kotlinc_flags|unique %}
+{%-             for kotlinc_flag in all_kotlinc_flags|unique %}
         freeCompilerArgs.add({{ PatchRoots(kotlinc_flag, true) }})
-{%-         endfor %}
+{%-             endfor %}
     }
+{%          endif -%}
+{%-         if not(extra_targets|length) %}
+    exclude("**/*")
+{%          endif -%}
 }
 {%      endif -%}
 

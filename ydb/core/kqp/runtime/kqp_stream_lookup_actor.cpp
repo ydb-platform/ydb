@@ -41,7 +41,7 @@ public:
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
         , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , LookupStrategy(settings.GetLookupStrategy())
-        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TypeEnv, args.HolderFactory, args.InputDesc))
+        , StreamLookupWorker(CreateStreamLookupWorker(std::move(settings), args.TaskId, args.TypeEnv, args.HolderFactory, args.InputDesc))
         , Counters(counters)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {

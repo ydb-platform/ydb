@@ -477,9 +477,12 @@ class YDBWrapper:
             
             self._log("error", f"{operation_type} failed", f"Error: {error}, Duration: {duration:.2f}s")
             
-            # Логируем статистику ошибки
+            # Normalize operation_type for statistics (use "scan_query" for both scan operations)
+            stats_operation_type = "scan_query" if operation_type == "scan_query_with_metadata" else operation_type
+            
+            # Log error statistics
             self._log_statistics(
-                operation_type=operation_type,
+                operation_type=stats_operation_type,
                 query=query or f"{operation_type} operation",
                 duration=duration,
                 status=status,

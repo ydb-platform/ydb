@@ -786,22 +786,53 @@ message MultipleWindowsStat {
     int64 per_day = 3;
 }
 
-message DisabledDeadLetterPolicy {
-}
-
-message DeleteDeadLetterPolicy {
-    // The nuber of attempts to process the message before it is delete.
+message ProcessingAttemptsDeadLetterPolicyCondition {
     uint32 max_processing_attempts = 1;
 }
 
-message MoveDeadLetterPolicy {
-    uint32 max_processing_attempts = 1;
-    // The nuber of attempts to process the message before it is placed in DQL.
-    string dead_letter_queue = 2;
+message AlterProcessingAttemptsDeadLetterPolicyCondition {
+    uint32 set_max_processing_attempts = 1;
+}
+
+message DeleteDeadLetterPolicyAction {
+}
+
+message AlterDeadLetterPolicyAction {
+}
+
+message AlterMoveDeadLetterPolicyAction {
+    string set_dead_letter_queue = 1;
+}
+
+message DeadLetterPolicy {
+    bool enabled = 1;
+
+    oneof condition {
+        ProcessingAttemptsDeadLetterPolicyCondition processing_attempts_condition = 2;
+    }
+
+    oneof action {
+        DeleteDeadLetterPolicyAction delete_action = 3;
+        MoveDeadLetterPolicyAction move_action = 4;
+    }
+}
+
+message AlterDeadLetterPolicy {
+    bool set_enabled = 1;
+
+    oneof condition {
+        AlterProcessingAttemptsDeadLetterPolicyCondition alter_processing_attempts_condition = 2;
+    }
+
+    oneof action {
+        AlterDeleteDeadLetterPolicyAction alter_delete_action = 3;
+        AlterMoveDeadLetterPolicyAction alter_move_action = 4;
+        DeleteDeadLetterPolicyAction set_delete_action = 5;
+        MoveDeadLetterPolicyAction set_move_action = 6;
+    }
 }
 
 message StreamingConsumerType {
-
 }
 
 message SharedConsumerType {
@@ -812,25 +843,7 @@ message SharedConsumerType {
     // it will be returned to the queue and sent for re-processing.
     google.protobuf.Duration default_processing_timeout = 2;
 
-    oneof dead_letter_policy {
-        DisabledDeadLetterPolicy disabled_dead_letter_policy = 3;
-        DeleteDeadLetterPolicy delete_dead_letter_policy = 4;
-        MoveDeadLetterPolicy move_dead_letter_policy = 5;
-    }
-}
-
-message AlterDisabledDeadLetterPolicy {
-}
-
-message AlterDeleteDeadLetterPolicy {
-    // The nuber of attempts to process the message before it is delete.
-    optional uint32 set_max_processing_attempts = 1;
-}
-
-message AlterMoveDeadLetterPolicy {
-    optional uint32 set_max_processing_attempts = 1;
-    // The nuber of attempts to process the message before it is placed in DQL.
-    optional string set_dead_letter_queue = 2;
+    DeadLetterPolicy dead_letter_policy = 3;
 }
 
 message AlterStreamingConsumerType {
@@ -842,14 +855,8 @@ message AlterSharedConsumerType {
     // it will be returned to the queue and sent for re-processing.
     google.protobuf.Duration set_default_processing_timeout = 1;
 
-    oneof dead_letter_policy {
-        AlterDisabledDeadLetterPolicy set_disabled_dead_letter_policy = 2;
-        AlterDeleteDeadLetterPolicy set_delete_dead_letter_policy = 3;
-        AlterMoveDeadLetterPolicy set_move_dead_letter_policy = 4;
-    }
+    AlterDeadLetterPolicy alter_dead_letter_policy = 2;
 }
-
-
 
 // Consumer description.
 message Consumer {

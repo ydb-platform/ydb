@@ -33,18 +33,16 @@ struct ibv_mr {
 #include <mutex>
 #include <thread>
 
-#if defined(_linux_)
-#include <sys/mman.h>
-#include <unistd.h>
-#include <sys/syscall.h>
-#endif
-
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
 
-#if defined(_WIN32)
+#if defined(_win_)
 #include <malloc.h> // _aligned_malloc, _aligned_free
+#else
+#include <sys/mman.h>   // madvise
+#include <unistd.h>
+#include <sys/syscall.h>
 #endif
 
 static constexpr size_t HPageSz = (1 << 21);
@@ -223,34 +221,34 @@ namespace NInterconnect::NRdma {
 
         void* buf = nullptr;
 
-    #if defined(_WIN32)
+#if defined(_win_)
         // Windows: use _aligned_malloc
         buf = _aligned_malloc(size, alignment);
         if (!buf) {
             fprintf(stderr, "Failed to allocate aligned memory on Windows\n");
             return nullptr;
         }
-    #else
+#else
         // POSIX/C++: std::aligned_alloc (C++17)
         buf = std::aligned_alloc(alignment, size);
         if (!buf) {
             fprintf(stderr, "Failed to allocate aligned memory on Unix\n");
             return nullptr;
         }
-    #endif
+#endif
 
         if (hp) {
-    #if defined(_linux_)
+#if defined(_linux_)
             if (madvise(buf, size, MADV_HUGEPAGE) < 0) {
-                fprintf(stderr, "Unable to madvise to use THP: %s (%d)\n", strerror(errno), errno);
+                fprintf(stderr, "Unable to madvice to use THP, %d (%d)",
+                    strerror(errno), errno);
             }
-    #endif
+#endif
             for (size_t i = 0; i < size; i += HPageSz) {
-                // touch pages to promote to huge pages
+                // We use THP right now. We need to touch each page to promote it to HUGE.
                 static_cast<char*>(buf)[i] = 0;
             }
         }
-
         return buf;
     }
 
@@ -258,11 +256,11 @@ namespace NInterconnect::NRdma {
         if (!ptr) {
             return;
         }
-    #if defined(_WIN32)
+#if defined(_win_)
         _aligned_free(ptr);
-    #else
+#else
         std::free(ptr);
-    #endif
+#endif
     }
 
     std::vector<ibv_mr*> registerMemory(void* addr, size_t size, const NInterconnect::NRdma::NLinkMgr::TCtxsMap& ctxs) {

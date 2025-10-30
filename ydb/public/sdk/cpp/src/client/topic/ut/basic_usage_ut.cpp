@@ -120,10 +120,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .KeepMessagesOrder(true)
                 .BeginDeadLetterPolicy()
                     .Enabled(true)
+                    .MoveAction("deadLetterQueue-topic")
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
                     .EndCondition()
-                    .MoveAction("deadLetterQueue-topic")
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
 
@@ -159,12 +159,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .KeepMessagesOrder(true)
                 .BeginDeadLetterPolicy()
                     .Enabled(true)
+                    .DeleteAction()
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
                     .EndCondition()
-                    .DeleteAction()
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
+        Cerr << ">>>>> " << topics.Consumers_[0].BeginDeadLetterPolicy().DeadLetterPolicy_ << Endl;
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -229,10 +230,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .KeepMessagesOrder(true)
                     .BeginDeadLetterPolicy()
                         .Enabled(true)
+                        .MoveAction("deadLetterQueue-topic")
                         .BeginCondition()
                             .MaxProcessingAttempts(11)
                         .EndCondition()
-                        .MoveAction("deadLetterQueue-topic")
                     .EndDeadLetterPolicy()
                 .EndAddConsumer();
 
@@ -265,7 +266,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
-        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
         UNIT_ASSERT_VALUES_EQUAL(c.GetKeepMessagesOrder(), true);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDefaultProcessingTimeout(), TDuration::Seconds(13));

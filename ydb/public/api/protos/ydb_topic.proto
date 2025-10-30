@@ -818,8 +818,9 @@ message DeadLetterPolicy {
     DeadLetterPolicyCondition condition = 2;
 
     oneof action {
-        DeleteDeadLetterPolicyAction delete_action = 3;
-        MoveDeadLetterPolicyAction move_action = 4;
+        google.protobuf.Empty unspecified_action = 3;
+        DeleteDeadLetterPolicyAction delete_action = 4;
+        MoveDeadLetterPolicyAction move_action = 5;
     }
 }
 

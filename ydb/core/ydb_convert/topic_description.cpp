@@ -45,6 +45,10 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
     switch (in.GetType()) {
         case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
             out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_STREAMING);
+            break;
+        }
+        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
+            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
 
             out.set_keep_messages_order(in.GetKeepMessageOrder());
             out.mutable_default_processing_timeout()->set_seconds(in.GetDefaultProcessingTimeoutSeconds());
@@ -60,12 +64,11 @@ bool FillConsumer(Ydb::Topic::Consumer& out, const NKikimrPQ::TPQTabletConfig_TC
                 case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
                     deadLetterPolicy->mutable_delete_action();
                     break;
+                case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                    break;
             }
             break;
         }
-        case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP:
-            out.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
-            break;
     }
 
     return true;

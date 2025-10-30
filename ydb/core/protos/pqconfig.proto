@@ -372,6 +372,7 @@ message TPQTabletConfig {
     }
 
     enum EDeadLetterPolicy {
+        DEAD_LETTER_POLICY_UNSPECIFIED = 0;
         DEAD_LETTER_POLICY_DELETE = 1;
         DEAD_LETTER_POLICY_MOVE = 2;
     }
@@ -390,7 +391,7 @@ message TPQTabletConfig {
         optional EConsumerType Type = 11 [default = CONSUMER_TYPE_STREAMING];
         optional bool KeepMessageOrder = 12 [default = false]; // For MLP consumers
         optional bool DeadLetterPolicyEnabled = 13 [default = false]; // For MLP consumers
-        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_MOVE]; // For MLP consumers
+        optional EDeadLetterPolicy DeadLetterPolicy = 14 [default = DEAD_LETTER_POLICY_UNSPECIFIED]; // For MLP consumers
         optional uint32 MaxProcessingAttempts = 15 [default = 1000]; // For MLP consumers
         optional uint32 DefaultProcessingTimeoutSeconds = 16 [default = 30]; // For MLP consumers
         optional string DeadLetterQueue = 17; // For MLP consumers

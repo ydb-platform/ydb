@@ -513,7 +513,7 @@ private:
 template<typename TConsumerSettings>
 struct TDeadLetterPolicySettings {
     using TSelf = TDeadLetterPolicySettings;
-    using TCondition = TDeadLetterPolicyConditionSettings<TDeadLetterPolicySettings<TConsumerSettings>>;
+    using TCondition = TDeadLetterPolicyConditionSettings<TSelf>;
 
     TDeadLetterPolicySettings(TConsumerSettings& parent) : Condition_(*this), Parent_(parent) {}
     TDeadLetterPolicySettings(TConsumerSettings& parent, const Ydb::Topic::DeadLetterPolicy&);
@@ -655,7 +655,7 @@ struct TConsumerSettings {
 
 private:
     TSettings& Parent_;
-    TDeadLetterPolicySettings<TSelf> DeadLetterPolicySettings_;
+    TDeadLetterPolicy DeadLetterPolicySettings_;
 };
 
 struct TAlterConsumerSettings {

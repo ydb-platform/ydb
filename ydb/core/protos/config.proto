@@ -2726,6 +2726,7 @@ message TMetadataCacheConfig {
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
     optional uint32 DrainTimeoutSeconds = 2;
+    optional uint32 CheckForStopIntervalMilliseconds = 3;
 }
 
 message TBridgeConfig {

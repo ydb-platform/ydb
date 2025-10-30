@@ -1,7 +1,7 @@
 name: Monitoring-queries-executor
 on:
   schedule:
-    - cron: "*/5 * * * *"  # Every 5 min
+    - cron: "*/10 * * * *"  # Every 10 min
   workflow_dispatch:
     inputs:
       commit_sha:
@@ -14,7 +14,7 @@ defaults:
 jobs:
   main:
     name: Execute monitoring queries
-    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    runs-on: ubuntu-latest
     steps:
     - name: Checkout
       uses: actions/checkout@v4

@@ -1306,7 +1306,7 @@ Y_UNIT_TEST(Read_From_Different_Zones_What_Was_Written_With_Gaps)
         tc.Runtime->SetScheduledLimit(100);
 
         // Important client, lifetimeseconds=0 - never delete
-        PQTabletPrepare({.partitions = 1}, {{"user", true}}, tc);
+        PQTabletPrepare({.partitions = 1, .storageLimitBytes = 50_MB}, {{"user", true}}, tc);
 
         TVector<std::pair<ui64, TString>> data;
 

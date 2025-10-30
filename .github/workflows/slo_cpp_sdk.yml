@@ -49,7 +49,7 @@ jobs:
           ./ya make ydb/public/sdk/cpp/tests/slo_workloads/key_value -r
 
       - name: Initialize YDB SLO
-        uses: ydb-platform/ydb-slo-action/init@main
+        uses: ydb-platform/ydb-slo-action/init@0952301743a07bbc690b142bc960098af6d98102
         with:
           github_pull_request_number: ${{ github.event.inputs.github_pull_request_number }}
           github_token: ${{ secrets.GITHUB_TOKEN }}

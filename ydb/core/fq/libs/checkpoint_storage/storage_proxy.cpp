@@ -25,6 +25,8 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
+#include <library/cpp/retry/retry_policy.h>
+
 namespace NFq {
 
 using namespace NActors;
@@ -74,7 +76,7 @@ struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
-        EvInitResult = EvBegin + 10,
+        EvInitResult = EvBegin,
         EvInitialize,
         EvEnd
     };
@@ -93,6 +95,9 @@ struct TEvPrivate {
 };
 
 class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
+private:
+    using IRetryPolicy = IRetryPolicy<>;
+
     TCheckpointStorageSettings Config;
     TString IdsPrefix;
     TExternalStorageSettings StorageConfig;
@@ -102,6 +107,8 @@ class TStorageProxy : public TActorBootstrapped<TStorageProxy> {
     NKikimr::TYdbCredentialsProviderFactory CredentialsProviderFactory;
     NYdb::TDriver Driver;
     const TStorageProxyMetricsPtr Metrics;
+    const IRetryPolicy::TPtr RetryPolicy;
+    IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
 
 public:
     explicit TStorageProxy(
@@ -167,7 +174,13 @@ TStorageProxy::TStorageProxy(
     , StorageConfig(Config.GetExternalStorage())
     , CredentialsProviderFactory(credentialsProviderFactory)
     , Driver(std::move(driver))
-    , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters)) {
+    , Metrics(MakeIntrusive<TStorageProxyMetrics>(counters))
+    , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
+        [](){return ERetryErrorClass::LongRetry;},
+        TDuration::MilliSeconds(100), 
+        TDuration::MilliSeconds(100),
+        TDuration::Seconds(10)
+        )) {
     FillDefaultParameters(Config, StorageConfig);
 }
 
@@ -474,7 +487,13 @@ void TStorageProxy::Handle(TEvPrivate::TEvInitResult::TPtr& ev) {
         LOG_STREAMS_STORAGE_SERVICE_ERROR("Failed to init state storage: " << event->StateIssues.ToOneLineString());
     }
     if (!event->StorageIssues.Empty() || !event->StateIssues.Empty()) {
-        Schedule(TDuration::Seconds(5), new TEvPrivate::TEvInitialize());
+        if (RetryState == nullptr) {
+            RetryState = RetryPolicy->CreateRetryState();
+        }
+        if (auto delay = RetryState->GetNextRetryDelay()) {
+            LOG_STREAMS_STORAGE_SERVICE_INFO("Schedule init retry after " << delay);
+            Schedule(*delay, new TEvPrivate::TEvInitialize());
+        }
         return;
     }
     LOG_STREAMS_STORAGE_SERVICE_INFO("Checkpoint storage and state storage were successfully inited");

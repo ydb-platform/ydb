@@ -558,7 +558,6 @@ TFuture<IStateStorage::TCountStatesResult> TStateStorage::CountStates(
             paramsBuilder->AddParam("$coordinator_generation").Uint64(checkpointId.CoordinatorGeneration).Build();
             paramsBuilder->AddParam("$seq_no").Uint64(checkpointId.SeqNo).Build();
 
-           // auto params = paramsBuilder.Build();
             auto query = Sprintf(R"(
                 --!syntax_v1
                 PRAGMA TablePathPrefix("%s");
@@ -738,16 +737,10 @@ TFuture<TIssues> TStateStorage::DeleteCheckpoints(
         [prefix = YdbConnection->GetTablePathPrefix(), graphId, checkpointUpperBound, thisPtr = TIntrusivePtr(this)] (ISession::TPtr session) {
 
             // publish nodes
-            //NYdb::TParamsBuilder paramsBuilder;
-            
             auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
-
-
             paramsBuilder->AddParam("$graph_id").String(graphId).Build();
             paramsBuilder->AddParam("$coordinator_generation").Uint64(checkpointUpperBound.CoordinatorGeneration).Build();
             paramsBuilder->AddParam("$seq_no").Uint64(checkpointUpperBound.SeqNo).Build();
-
-            //auto params = paramsBuilder.Build();
 
             auto query = Sprintf(R"(
                 --!syntax_v1
@@ -800,7 +793,6 @@ TFuture<TStatus> TStateStorage::SelectRowState(const TContextPtr& context) {
 TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context) {
     auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
 
-    //NYdb::TParamsBuilder paramsBuilder;
     Y_ENSURE(!context->Tasks.empty(), "Tasks is empty");
     auto& taskInfo = context->Tasks[context->CurrentProcessingTaskIndex];
 
@@ -811,8 +803,6 @@ TFuture<TDataQueryResult> TStateStorage::SelectState(const TContextPtr& context)
     paramsBuilder->AddParam("$coordinator_generation").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.CoordinatorGeneration).Build();
     paramsBuilder->AddParam("$seq_no").Uint64(taskInfo.ListOfStatesForReading.front().CheckpointId.SeqNo).Build();
     paramsBuilder->AddParam("$blob_seq_num").Uint64(taskInfo.CurrentProcessingRow).Build();
-
-   // auto params = paramsBuilder.Build();
 
     auto query = Sprintf(R"(
         --!syntax_v1

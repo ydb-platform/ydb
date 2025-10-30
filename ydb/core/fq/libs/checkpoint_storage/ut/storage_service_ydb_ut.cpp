@@ -128,6 +128,18 @@ public:
             } catch (TEmptyEventQueueException&) {
             }
         }
+
+        while (true) {
+            try {
+                auto request = std::make_unique<TEvCheckpointStorage::TEvRegisterCoordinatorRequest>(TCoordinatorId{"test", 777});
+                GetRuntime()->Send(new IEventHandle(NYql::NDq::MakeCheckpointStorageID(), sender, request.release()));
+                const auto event = GetRuntime()->template GrabEdgeEvent<TEvCheckpointStorage::TEvRegisterCoordinatorResponse>(sender, TDuration::Seconds(1));
+                 if (event && event->Get()->Issues.Empty()) {
+                    break;
+                }
+            } catch (TEmptyEventQueueException&) {
+            }
+        }
     }
 
     TTestActorRuntime* GetRuntime() {

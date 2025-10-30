@@ -450,4 +450,72 @@ TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes) {
     return TRelationGraph::FromPrufer(prufer);
 }
 
+void NormalizeProbabilities(std::vector<double>& probabilities) {
+    double sum = std::accumulate(probabilities.begin(), probabilities.end(), 0.0);
+    if (sum > 0.0) {
+        for (double& probability : probabilities) {
+            probability /= sum;
+        }
+    }
+}
+
+std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
+                               int numVertices, int minDegree) {
+    std::random_device randomDevice;
+    std::mt19937 generator(randomDevice());
+    std::discrete_distribution<int> distribution(probabilities.begin(),
+                                                 probabilities.end());
+
+    std::vector<int> degrees(numVertices);
+    for (int i = 0; i < numVertices; i++) {
+        degrees[i] = distribution(generator) + minDegree;
+    }
+    return degrees;
+}
+
+std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean,
+                                          double logStdDev, int minDegree,
+                                          int maxDegree) {
+    if (maxDegree == -1) maxDegree = numVertices - 1;
+
+    std::vector<double> probabilities(maxDegree - minDegree + 1);
+    for (int k = minDegree; k <= maxDegree; k++) {
+        if (k <= 0) {
+            probabilities[k - minDegree] = 0.0;
+            continue;
+        }
+
+        double x = (double)k;
+        double logX = std::log(x);
+        double z = (logX - logMean) / logStdDev;
+
+        // PDF: (1/(x*σ*√(2π))) * exp(-(ln(x)-μ)²/(2σ²))
+        probabilities[k - minDegree] = (1.0 / (x * logStdDev * std::sqrt(2.0 * M_PI))) *
+                                       std::exp(-0.5 * z * z);
+    }
+
+    NormalizeProbabilities(probabilities);
+    return SampleFromPMF(probabilities, numVertices, minDegree);
+}
+
+TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degrees) {
+    TRelationGraph graph(degrees.size());
+
+    double sum = std::accumulate(degrees.begin(), degrees.end(), 0.0);
+    if (sum == 0) {
+        return graph;
+    }
+
+    std::uniform_real_distribution<> distribution(0, 1);
+    for (ui32 i = 0; i < degrees.size(); ++ i) {
+        for (ui32 j = i + 1; j < degrees.size(); ++ j) {
+            if (distribution(mt) < std::min(1.0, degrees[i] * degrees[j] / sum)) {
+                graph.Connect(i, j);
+            }
+        }
+    }
+
+    return graph;
+}
+
 }

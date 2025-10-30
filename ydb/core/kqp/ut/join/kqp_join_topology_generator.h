@@ -137,10 +137,21 @@ private:
 };
 
 
+
+
+void NormalizeProbabilities(std::vector<double>& probabilities);
+
+std::vector<int> SampleFromPMF(const std::vector<double>& probabilities,
+                               int numVertices, int minDegree);
+
+std::vector<int> GenerateLogNormalDegrees(int numVertices, double logMean = 1.0,
+                                          double logStdDev = 0.5, int minDegree = 1,
+                                          int maxDegree = -1);
 TRelationGraph GenerateLine(unsigned numNodes);
 TRelationGraph GenerateStar(unsigned numNodes);
 TRelationGraph GenerateFullyConnected(unsigned numNodes);
 TRelationGraph GenerateRandomTree(TRNG &mt, unsigned numNodes);
 
-} // namespace NKikimr::NKqp
+TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degrees);
 
+} // namespace NKikimr::NKqp

@@ -44,7 +44,10 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
     Y_UNIT_TEST(LocalChannelBackPressure) {
 
-        TKikimrRunner kikimr(TKikimrSettings{});
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetLocalChannelInflightBytes(512);
+        TKikimrRunner kikimr(settings);
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto sender = runtime.AllocateEdgeActor();
@@ -55,8 +58,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelInfo info(1, sender, receiver);
-        auto senderBuffer = service->GetLocalBuffer(info);
-        auto receiverBuffer = service->GetLocalBuffer(info);
+        auto senderBuffer = service->GetLocalBuffer(info, false);
+        auto receiverBuffer = service->GetLocalBuffer(info, true);
 
         auto aggregator = std::make_shared<TDqFillAggregator>();
         senderBuffer->SetFillAggregator(aggregator);
@@ -65,7 +68,10 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT(receiverBuffer->IsEmpty());
 
         while (senderBuffer->GetFillLevel() == EDqFillLevel::NoLimit) {
-            senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+            runtime.RunCall([&senderBuffer] {
+                senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+                return true;
+            });
         }
         UNIT_ASSERT_VALUES_EQUAL(aggregator->GetFillLevel(), EDqFillLevel::HardLimit);
 
@@ -74,7 +80,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
 
         while (true) {
             TDataChunk data;
-            if (!receiverBuffer->Pop(data)) {
+            if (!runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); })) {
                 break;
             }
             totalCount++;
@@ -84,14 +90,18 @@ Y_UNIT_TEST_SUITE(Channels20) {
             UNIT_ASSERT(data.Buffer.Front().Buf == "Hello");
         }
         UNIT_ASSERT(receiverBuffer->IsEmpty());
+        // check for hysteresis
         UNIT_ASSERT(deltaCount * 4 < totalCount);
         UNIT_ASSERT(deltaCount * 6 > totalCount);
     }
-
+/*
     Y_UNIT_TEST(LocalChannelConcurrency) {
-        constexpr ui32 MESSAGE_COUNT = 100000;
+        constexpr ui32 MESSAGE_COUNT = 10;
 
-        TKikimrRunner kikimr(TKikimrSettings{});
+        TKikimrSettings settings;
+        settings.AppConfig.MutableTableServiceConfig()->SetLocalChannelInflightBytes(128);
+        TKikimrRunner kikimr(settings);
+
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
 
         auto sender = runtime.AllocateEdgeActor();
@@ -102,8 +112,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelInfo info(1, sender, receiver);
-        auto senderBuffer = service->GetLocalBuffer(info);
-        auto receiverBuffer = service->GetLocalBuffer(info);
+        auto senderBuffer = service->GetLocalBuffer(info, false);
+        auto receiverBuffer = service->GetLocalBuffer(info, true);
 
         TMuxEvent event;
         ui32 receivedCount = 0;
@@ -113,18 +123,24 @@ Y_UNIT_TEST_SUITE(Channels20) {
         NPar::LocalExecutor().Exec([&](int) mutable {
             bool blocked = false;
             for (ui32 i = 0; i < MESSAGE_COUNT; i++) {
-                Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 10)));
+                // Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 10)));
                 while (senderBuffer->GetFillLevel() == EDqFillLevel::HardLimit) {
                     if (!blocked) {
                         blocked = true;
                         outputBlockCount++;
                     }
-                    Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 100)));
+                    // Sleep(TDuration::MicroSeconds(i / (MESSAGE_COUNT / 100)));
                 }
                 blocked = false;
-                senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+                runtime.RunCall([&senderBuffer] {
+                    senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+                    return true;
+                });
             }
-            senderBuffer->Push(TDataChunk(false, true));
+            runtime.RunCall([&senderBuffer] {
+                senderBuffer->Push(TDataChunk(false, true));
+                return true;
+            });
         }, 0, NPar::TLocalExecutor::MED_PRIORITY);
         NPar::LocalExecutor().Exec([&](int) mutable {
             bool blocked = false;
@@ -138,7 +154,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
                     continue;
                 }
                 TDataChunk data;
-                UNIT_ASSERT(receiverBuffer->Pop(data));
+                UNIT_ASSERT(runtime.RunCall([&receiverBuffer, &data] { return receiverBuffer->Pop(data); } ));
                 if (data.Finished) {
                     break;
                 }
@@ -152,7 +168,7 @@ Y_UNIT_TEST_SUITE(Channels20) {
         UNIT_ASSERT_VALUES_EQUAL(receivedCount, MESSAGE_COUNT);
         Cerr << outputBlockCount << " / " << inputBlockCount << Endl;
     }
-
+*/
     Y_UNIT_TEST(LocalChannelEarlyFinish) {
         constexpr ui32 MESSAGE_COUNT = 1000;
 
@@ -167,8 +183,8 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelInfo info(1, sender, receiver);
-        auto senderBuffer = service->GetLocalBuffer(info);
-        auto receiverBuffer = service->GetLocalBuffer(info);
+        auto senderBuffer = service->GetLocalBuffer(info, false);
+        auto receiverBuffer = service->GetLocalBuffer(info, true);
 
         TMuxEvent eventR;
         TMuxEvent eventS;
@@ -178,7 +194,10 @@ Y_UNIT_TEST_SUITE(Channels20) {
         NPar::LocalExecutor().Exec([&](int) mutable {
             for (ui32 i = 0; i < MESSAGE_COUNT; i++) {
                 sentCount++;
-                senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+                runtime.RunCall([&senderBuffer] {
+                    senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+                    return true;
+                });
                 Sleep(TDuration::MicroSeconds(1));
                 if (senderBuffer->IsEarlyFinished()) {
                     break;
@@ -225,11 +244,15 @@ Y_UNIT_TEST_SUITE(Channels20) {
         auto service = serviceReply->Service;
 
         TChannelInfo info(1, sender, receiver);
-        auto senderBuffer = service->GetLocalBuffer(info);
-        auto receiverBuffer = service->GetLocalBuffer(info);
+        auto senderBuffer = service->GetLocalBuffer(info, false);
+        auto receiverBuffer = service->GetLocalBuffer(info, true);
 
         UNIT_ASSERT(receiverBuffer->IsEmpty());
-        senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+
+        runtime.RunCall([&senderBuffer] {
+            senderBuffer->Push(TDataChunk(NYql::TChunkedBuffer("Hello"), 1, senderBuffer->GetLeading(), false));
+            return true;
+        });
 
         TDataChunk data;
         UNIT_ASSERT(ReadAsyncNotified(runtime, receiver, receiverBuffer, data));

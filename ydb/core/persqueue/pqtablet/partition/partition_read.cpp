@@ -719,13 +719,14 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
 }
 
-void CollectReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                 const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
                                 TBlobKeyTokens* blobKeyTokens,
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
     AFL_ENSURE(rcount && rsize);
+    startOffset = Max(startOffset, zone.StartOffset);
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
                                        maxCount,

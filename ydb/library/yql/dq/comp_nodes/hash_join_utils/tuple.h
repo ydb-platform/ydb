@@ -6,7 +6,7 @@
 
 #include <util/generic/buffer.h>
 
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd/simd.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/simd_platform.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -238,7 +238,7 @@ struct TTupleLayoutFallback : public TTupleLayout {
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
 };
 
-
+#if YDB_HASH_JOIN_SIMD_ENABLED
 template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallback {
 
     explicit TTupleLayoutSIMD(const std::vector<TColumnDesc> &columns);
@@ -287,6 +287,7 @@ template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallbac
     static constexpr std::array<size_t, 4> SIMDTranspositionsColSizes_ = {1, 2,
                                                                           4, 8};
 };
+#endif
 
 bool TupleKeysEqual(const TTupleLayout *layout,
     const ui8 *lhsRow, const ui8 *lhsOverflow,

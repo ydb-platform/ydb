@@ -383,7 +383,9 @@ Y_UNIT_TEST_SUITE(ConfigProto) {
                 for (const auto& [field, paths] : fieldToPaths) {
                     for (const auto& path : paths) {
                         UNIT_ASSERT_C(allowedPaths.contains(path.FieldPath), Sprintf("Adding new required fields in config is not allowed: %s", path.FieldPath.c_str()));
-                        UNIT_ASSERT_C(allowedNumberPaths.contains(path.FieldNumberPath), Sprintf("Adding new required fields in config is not allowed: %s", path.FieldPath.c_str()));
+                        UNIT_ASSERT_C(allowedNumberPaths.contains(path.FieldNumberPath),
+                            Sprintf("Adding new required fields in config is not allowed: %s, field number path is %s", path.FieldPath.c_str(),
+                                (TStringBuilder() << "{" << MakeRangeJoiner(", ", path.FieldNumberPath) << "}").c_str()));
                     }
                 }
             }

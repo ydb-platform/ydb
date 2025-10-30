@@ -78,5 +78,5 @@ public:
     TDuration Periodicity;
 };
 
-}
+} // namespace NBsController
 } // namespace NKikimr

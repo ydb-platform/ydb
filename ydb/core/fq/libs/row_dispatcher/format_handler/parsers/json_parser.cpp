@@ -484,7 +484,7 @@ protected:
             return state.Status;
         }
 
-        ParsingFailedRowCount = state.ErrorsCount;;
+        ParsingFailedRowCount = state.ErrorsCount;
         if (Y_UNLIKELY(!Config.SkipErrors && state.OutputRowId != Buffer.NumberValues)) {
             return TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Failed to parse json messages, expected " << Buffer.NumberValues << " json rows from offset " << Buffer.Offsets.front() << " but got " << state.OutputRowId << " (expected one json row for each offset from topic API in json each row format, maybe initial data was corrupted or messages is not in json format), current data batch: " << TruncateString(std::string_view(values, size)) << ", buffered offsets: " << JoinSeq(' ', GetOffsets()));
         }

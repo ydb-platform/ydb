@@ -59,6 +59,7 @@ protected:
     bool GracefulShutdownSupported = false;
     TDuration MinDelayBeforeShutdown;
     TDuration DrainTimeout;
+    TDuration CheckForStopInterval;
     THolder<NSQS::TAsyncHttpServer> SqsHttp;
 
     THolder<NYdb::TDriver> YdbDriver;

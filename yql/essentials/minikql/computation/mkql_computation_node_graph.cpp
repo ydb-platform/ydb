@@ -855,8 +855,11 @@ public:
     }
 
     void Compile(TString optLLVM, IStatsRegistry* stats) {
-        if (IsPatternCompiled.load())
+        TGuard<TMutex> lock(CompileMutex);
+
+        if (IsPatternCompiled) {
             return;
+        }
 
 #ifndef MKQL_DISABLE_CODEGEN
         if (!Codegen)
@@ -951,29 +954,30 @@ public:
         Y_UNUSED(stats);
 #endif
 
-        IsPatternCompiled.store(true);
+        IsPatternCompiled = true;
     }
 
     bool IsCompiled() const {
-        return IsPatternCompiled.load();
+        TGuard<TMutex> lock(CompileMutex);
+        return IsPatternCompiled;
     }
 
     size_t CompiledCodeSize() const {
+        TGuard<TMutex> lock(CompileMutex);
         return CompileStats.TotalObjectSize;
     }
 
     void RemoveCompiledCode() {
-        IsPatternCompiled.store(false);
+        TGuard<TMutex> lock(CompileMutex);
+
+        IsPatternCompiled = false;
         CompileStats = {};
         Codegen.reset();
     }
 
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) {
-        if (IsPatternCompiled.load()) {
-            return MakeHolder<TComputationGraph>(PatternNodes, compOpts, Codegen);
-        }
-
-        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, nullptr);
+        TGuard<TMutex> lock(CompileMutex);
+        return MakeHolder<TComputationGraph>(PatternNodes, compOpts, IsPatternCompiled ? Codegen : nullptr);
     }
 
     bool GetSuitableForCache() const {
@@ -996,9 +1000,11 @@ private:
 
     TTypeEnvironment* TypeEnv = nullptr;
     TPatternNodes::TPtr PatternNodes;
-    NYql::NCodegen::ICodegen::TSharedPtr Codegen;
-    std::atomic<bool> IsPatternCompiled = false;
-    NYql::NCodegen::TCompileStats CompileStats;
+
+    TMutex CompileMutex;
+    NYql::NCodegen::ICodegen::TSharedPtr Codegen; // protected by CompileMutex
+    bool IsPatternCompiled = false;               // protected by CompileMutex
+    NYql::NCodegen::TCompileStats CompileStats;   // protected by CompileMutex
 };
 
 

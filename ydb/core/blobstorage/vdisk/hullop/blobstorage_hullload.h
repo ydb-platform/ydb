@@ -261,7 +261,7 @@ namespace NKikimr {
             } else {
                 TIdxDiskLinker linker;
                 size_t partSize = data.Size() - sizeof(TIdxDiskLinker);
-                memcpy(&linker, data.DataPtr<const TIdxDiskLinker>(partSize), sizeof(TIdxDiskLinker));
+                memcpy(&linker, data.DataPtr<const char>(partSize, sizeof(TIdxDiskLinker)), sizeof(TIdxDiskLinker));
 
                 // TODO(alexvru, fomichev): this logic seems to work incorrectly -- data must be prepended
                 AppendData(data.DataPtr<const char>(0, partSize), partSize);

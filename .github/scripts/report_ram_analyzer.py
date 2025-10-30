@@ -137,6 +137,8 @@ def create_simple_interactive_plot(processes, ram_usage_with_ts, output_file):
             mode='lines',
             name='RSS, ya make',
             line=dict(shape='hv', width=1, color='rgb(46, 134, 171)'),
+            fill='tozeroy',
+            fillcolor='rgba(46, 134, 171, 0.3)',
             hovertext=hover_texts,
             hoverinfo='text'
         ),

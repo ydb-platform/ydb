@@ -26,3 +26,4 @@ feature_flags:
 | `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
+| `EnableGrpcAudit`                                        | Enabling [audit events](../../security/audit-log.md#grpc-connection) for gRPC connection changes |

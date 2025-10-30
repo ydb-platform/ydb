@@ -8,6 +8,7 @@ import "ydb/core/protos/memory_stats.proto";
 import "ydb/core/protos/bridge.proto";
 import "google/protobuf/descriptor.proto";
 import "ydb/core/protos/tracing.proto";
+import "ydb/core/protos/blobstorage_disk_color.proto";
 
 package NKikimrWhiteboard;
 option java_package = "ru.yandex.kikimr.proto";
@@ -111,6 +112,9 @@ message TNodeStateInfo {
     optional ESessionState SessionState = 16;
     optional bool SameScope = 17; // true if the peer is in the same scope
     optional string PeerBridgePileName = 18;
+    optional double MaxPDiskOccupancy = 19; // across all PDisks on this node
+    optional double MaxVDiskQuotaUtilization = 20; // across all VDisks on this node
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlertLevel = 21; // the highest across all VDisks on this node
 }
 
 message TEvNodeStateRequest {
@@ -150,6 +154,7 @@ message TPDiskStateInfo {
     optional uint64 EnforcedDynamicSlotSize = 23 [(DefaultField) = true];
     optional uint32 NumActiveSlots = 24 [(DefaultField) = true];
     optional uint32 SlotSizeInUnits = 25;
+    optional double Occupancy = 26; // SharedQuota.Used / SharedQuota.HardLimit
 }
 
 message TEvPDiskStateRequest {
@@ -236,6 +241,10 @@ message TVDiskStateInfo {
     optional uint64 WriteThroughput = 23 [(DefaultField) = true];
 
     optional uint32 GroupSizeInUnits = 32;
+    optional double QuotaUtilization = 33; // Owner.Used / (Owner.HardLimit - Owner.LightYellow)
+    optional double NormalizedOccupancy = 34; // max(PDisk.Occupancy, min(VDisk.FairOccupancy, ColorBorder))
+    optional double FairOccupancy = 35; // Owner.Used / Owner.HardLimit
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlertLevel = 36; // discrete representation of NormalizedOccupancy
 }
 
 message TEvVDiskStateRequest {
@@ -272,6 +281,11 @@ message TBSGroupStateInfo {
     optional uint32 GroupSizeInUnits = 24;
     optional uint32 BridgeProxyGroupId = 25; // when running in Bridge mode
     optional uint32 BridgePileId = 26; // also in Bridge mode
+    optional double MaxPDiskOccupancy = 27; // across PDisks hosting VDisks of this group
+    optional double MaxVDiskQuotaUtilization = 28; // across VDisks in this group
+    optional double MaxNormalizedOccupancy = 29; // across VDisks in this group and underlying PDisks
+    optional double MaxVDiskFairOccupancy = 30; // across VDisks in this group
+    optional NKikimrBlobStorage.TPDiskSpaceColor.E CapacityAlertLevel = 31; // the highest across VDisks in this group, represents MaxNormalizedOccupancy
 }
 
 message TEvBSGroupStateRequest {

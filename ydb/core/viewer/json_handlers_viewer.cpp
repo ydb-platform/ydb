@@ -273,12 +273,12 @@ void InitViewerHealthCheckJsonHandler(TJsonHandlers& handlers) {
 }
 
 void InitViewerNodesJsonHandler(TJsonHandlers& handlers) {
-    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 18);
+    handlers.AddHandler("/viewer/nodes", new TJsonHandler<TJsonNodes>(TJsonNodes::GetSwagger()), 19);
 }
 
 void InitViewerGroupsJsonHandler(TJsonHandlers& jsonHandlers) {
-    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
-    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 9);
+    jsonHandlers.AddHandler("/viewer/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
+    jsonHandlers.AddHandler("/storage/groups", new TJsonHandler<TStorageGroups>(TStorageGroups::GetSwagger()), 10);
 }
 
 void InitViewerACLJsonHandler(TJsonHandlers &jsonHandlers) {

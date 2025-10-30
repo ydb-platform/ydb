@@ -1647,6 +1647,11 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
             vdiskMetrics->SetFairOccupancy(fairOccupancy);
             vdiskMetrics->SetSpaceColor(spaceColor);
 
+            vdiskInfo.SetNormalizedOccupancy(normalizedOccupancy);
+            vdiskInfo.SetQuotaUtilization(quotaUtilization);
+            vdiskInfo.SetFairOccupancy(fairOccupancy);
+            vdiskInfo.SetCapacityAlertLevel(spaceColor);
+
             auto *vslotId = vdiskMetrics->MutableVSlotId();
             vslotId->SetNodeId(PCtx->ActorSystem->NodeId);
             vslotId->SetPDiskId(PCtx->PDiskId);
@@ -1678,6 +1683,7 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         }
 
         pDiskMetrics.SetOccupancy(pdiskOccupancy);
+        pdiskState.SetOccupancy(pdiskOccupancy);
     }
 
     PCtx->ActorSystem->Send(whiteboardReport.Sender, reportResult);

@@ -518,4 +518,203 @@ TRelationGraph GenerateRandomChungLuGraph(TRNG &mt, const std::vector<int>& degr
     return graph;
 }
 
+
+void MakeEvenSum(std::vector<int>& degrees) {
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+    if (sum % 2 == 1) {
+        auto minIt = std::min_element(degrees.begin(), degrees.end());
+        ++ *minIt;
+    }
+}
+
+bool SatisfiesErdosGallai(std::vector<int> degrees) {
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+
+    if (sum % 2 != 0) {
+        return false;
+    }
+
+    for (int degree : degrees) {
+        if (degree < 0 || degree >= static_cast<int>(degrees.size())) {
+            return false;
+        }
+    }
+
+    std::sort(degrees.rbegin(), degrees.rend());
+
+    uint64_t sumLeft = 0;
+    for (uint64_t k = 0; k < degrees.size(); ++ k) {
+        sumLeft += degrees[k];
+
+        uint64_t sumRight = k * (k + 1);
+        for (uint64_t i = k + 1; i < degrees.size(); ++ i) {
+            sumRight += std::min<uint64_t>(k + 1, degrees[i]);
+        }
+
+        if (sumLeft > sumRight) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool CanBeConnected(const std::vector<int>& degrees) {
+    int n = degrees.size();
+    if (n <= 1) {
+        return true;
+    }
+
+    int sum = std::accumulate(degrees.begin(), degrees.end(), 0);
+    if (sum < 2 * (n - 1)) {
+        return false;
+    }
+
+    for (int degree : degrees) {
+        if (degree == 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+std::vector<int> MakeGraphicConnected(std::vector<int> degrees) {
+    const i32 MAX_ITERATIONS = 1000;
+
+    for (int& degree : degrees) {
+        if (degree == 0) {
+            degree = 1;
+        }
+    }
+
+    // Cap degrees at n-1
+    for (int& degree : degrees) {
+        degree = std::min<int>(degree, degrees.size() - 1);
+    }
+
+    MakeEvenSum(degrees);
+
+    int iterations = 0;
+    while ((!SatisfiesErdosGallai(degrees) || !CanBeConnected(degrees)) && iterations ++ < MAX_ITERATIONS) {
+        std::sort(degrees.begin(), degrees.end(), std::greater<int>());
+
+        if (!SatisfiesErdosGallai(degrees)) {
+            // Reduce max, increase min (redistribute)
+            if (degrees[0] > degrees[degrees.size() - 1] + 1) {
+                -- degrees[0];
+                ++ degrees[degrees.size() - 1];
+            } else {
+                -- degrees[0];
+            }
+        } else if (!CanBeConnected(degrees)) {
+            // Increase minimum degrees to help connectivity
+            for (int& degree : degrees) {
+                ui32 edges = std::accumulate(degrees.begin(), degrees.end(), 0) / 2;
+                if (degree < 2 && edges + 2 <= degrees.size() * (degrees.size() - 1) / 2) {
+                    ++ degree;
+                }
+            }
+        }
+
+        MakeEvenSum(degrees);
+    }
+
+    return degrees;
+}
+
+TRelationGraph ConstructGraphHavelHakimi(std::vector<int> degrees) {
+    TRelationGraph graph(degrees.size());
+
+    std::vector<std::pair</*degree*/int, /*node*/int>> nodes;
+    for (uint32_t i = 0; i < degrees.size(); ++i) {
+        nodes.push_back({degrees[i], i});
+    }
+
+    while (true) {
+        std::sort(nodes.begin(), nodes.end(), std::greater<std::pair<int, int>>{});
+
+        while (!nodes.empty() && nodes.back().first == 0) {
+            nodes.pop_back();
+        }
+
+        if (nodes.empty()) {
+            break;
+        }
+
+        auto [degree, u] = nodes[0];
+        nodes.erase(nodes.begin());
+
+        if (degree > static_cast<int>(nodes.size())) {
+            break;
+        }
+
+        for (uint32_t i = 0; i < static_cast<uint32_t>(degree); ++ i) {
+            uint32_t v = nodes[i].second;
+            graph.Connect(u, v);
+            -- nodes[i].first;
+        }
+    }
+
+    return graph;
+}
+
+void MCMCRandomize(TRNG &mt, TRelationGraph& graph, int numSwaps) {
+    std::uniform_int_distribution<> nodeDist(0, graph.GetN() - 1);
+    std::uniform_real_distribution<> probDist(0.0, 1.0);
+
+    auto &adjacency = graph.GetAdjacencyList();
+
+    const double TEMP_START = 5.0;
+    const double TEMP_END = 0.1;
+    const double CONNECTIVITY_PENALTY = 20.0;
+    const int MAX_ATTEMPTS = numSwaps * 10;
+
+    int successfulSwaps = 0;
+    int attempt = 0;
+
+    while (attempt < MAX_ATTEMPTS && (successfulSwaps < numSwaps || !graph.IsConnected())) {
+        double progress = std::min(1.0, static_cast<double>(attempt) / MAX_ATTEMPTS);
+        double temperature = TEMP_START * std::pow(TEMP_END / TEMP_START, progress);
+
+        ++ attempt;
+
+        int a = nodeDist(mt);
+        if (adjacency[a].empty()) continue;
+
+        int bIdx = std::uniform_int_distribution<>(0, adjacency[a].size() - 1)(mt);
+        int b = adjacency[a][bIdx].Target;
+
+        int c = nodeDist(mt);
+        if (c == a || c == b || adjacency[c].empty()) continue;
+
+        int dIdx = std::uniform_int_distribution<>(0, adjacency[c].size() - 1)(mt);
+        int d = adjacency[c][dIdx].Target;
+
+        if (d == a || d == b || d == c) continue;
+        if (graph.HasEdge(a, c) || graph.HasEdge(b, d)) continue;
+
+        int oldComponents = graph.NumComponents();
+
+        graph.Disconnect(a, b);
+        graph.Disconnect(c, d);
+        graph.Connect(a, c);
+        graph.Connect(b, d);
+
+        int newComponents = graph.NumComponents();
+        double deltaEnergy = CONNECTIVITY_PENALTY * (newComponents - oldComponents);
+
+        bool accept = probDist(mt) < std::exp(-deltaEnergy / temperature);
+
+        if (accept) {
+            ++ successfulSwaps;
+        } else {
+            graph.Disconnect(a, c);
+            graph.Disconnect(b, d);
+            graph.Connect(a, b);
+            graph.Connect(c, d);
+        }
+    }
+}
+
 }

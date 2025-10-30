@@ -132,14 +132,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
-        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType()->GetType(), EConsumerType::Shared);
-        auto sharedType = dynamic_pointer_cast<const TSharedConsumerType>(c.GetConsumerType());
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDeadLetterPolicy()->GetPolicy(), EDeadLetterPolicy::Move);
-        auto policy = dynamic_pointer_cast<const TMoveDeadLetterPolicy>(sharedType->GetDeadLetterPolicy());
-        UNIT_ASSERT_VALUES_EQUAL(policy->GetMaxProcessingAttempts(), 11);
-        UNIT_ASSERT_VALUES_EQUAL(policy->GetDeadLetterQueue(), "deadLetterQueue-topic");
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Move);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetMoveDeadLetterPolicy()->GetDeadLetterQueue(), "deadLetterQueue-topic");
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DeleteDeadLetterPolicy) {
@@ -167,13 +165,11 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
-        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType()->GetType(), EConsumerType::Shared);
-        auto sharedType = dynamic_pointer_cast<const TSharedConsumerType>(c.GetConsumerType());
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDeadLetterPolicy()->GetPolicy(), EDeadLetterPolicy::Delete);
-        auto policy = dynamic_pointer_cast<const TDeleteDeadLetterPolicy>(sharedType->GetDeadLetterPolicy());
-        UNIT_ASSERT_VALUES_EQUAL(policy->GetMaxProcessingAttempts(), 11);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Delete);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeleteDeadLetterPolicy()->GetMaxProcessingAttempts(), 11);
     }
 
     Y_UNIT_TEST(CreateTopicWithSharedConsumer_DisabledDeadLetterPolicy) {
@@ -200,13 +196,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(d.GetConsumers().size(), 1);
         auto& c = d.GetConsumers()[0];
         UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerName(), "shared_consumer_name");
-        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType()->GetType(), EConsumerType::Shared);
-        auto sharedType = dynamic_pointer_cast<const TSharedConsumerType>(c.GetConsumerType());
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetKeepMessagesOrder(), true);
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
-        UNIT_ASSERT_VALUES_EQUAL(sharedType->GetDeadLetterPolicy()->GetPolicy(), EDeadLetterPolicy::Disabled);
-        auto policy = dynamic_pointer_cast<const TDisabledDeadLetterPolicy>(sharedType->GetDeadLetterPolicy());
-        UNIT_ASSERT(policy);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetConsumerType(), EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDefaultProcessingTimeout(), TDuration::Seconds(7));
+        UNIT_ASSERT_VALUES_EQUAL(c.GetSharedConsumerSettings()->GetDeadLetterPolicy(), EDeadLetterPolicy::Disabled);
     }
 
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {

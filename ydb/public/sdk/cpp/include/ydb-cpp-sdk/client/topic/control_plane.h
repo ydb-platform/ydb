@@ -49,26 +49,9 @@ enum class EDeadLetterPolicy {
     Move = 3,
 };
 
-class TDeadLetterPolicy {
+class TDeleteDeadLetterPolicySettings {
 public:
-virtual ~TDeadLetterPolicy() = default;
-    EDeadLetterPolicy GetPolicy() const;
-
-protected:
-    TDeadLetterPolicy(EDeadLetterPolicy policy);
-
-private:
-    EDeadLetterPolicy Policy_;
-};
-
-class TDisabledDeadLetterPolicy : public TDeadLetterPolicy {
-public:
-    TDisabledDeadLetterPolicy();
-};
-
-class TDeleteDeadLetterPolicy : public TDeadLetterPolicy {
-public:
-    TDeleteDeadLetterPolicy(ui32 maxProcessingAttempts);
+    TDeleteDeadLetterPolicySettings(ui32 maxProcessingAttempts);
 
     ui32 GetMaxProcessingAttempts() const;
 
@@ -76,9 +59,9 @@ private:
     ui32 MaxProcessingAttempts_;
 };
 
-class TMoveDeadLetterPolicy : public TDeadLetterPolicy {
+class TMoveDeadLetterPolicySettings {
 public:
-    TMoveDeadLetterPolicy(ui32 maxProcessingAttempts, const std::string& deadLetterQueue);
+    TMoveDeadLetterPolicySettings(ui32 maxProcessingAttempts, const std::string& deadLetterQueue);
 
     ui32 GetMaxProcessingAttempts() const;
     const std::string& GetDeadLetterQueue() const;
@@ -88,35 +71,30 @@ private:
     std::string DeadLetterQueue_;
 };
 
-class TConsumerType {
+class TStreamingConsumer {
 public:
-    virtual ~TConsumerType() = default;
-    EConsumerType GetType() const;
-
-protected:
-    TConsumerType(EConsumerType type);
-
-private:
-    EConsumerType Type_;
+    TStreamingConsumer();
 };
 
-class TStreamingConsumerType : public TConsumerType {
+class TSharedConsumer {
 public:
-    TStreamingConsumerType();
-};
-
-class TSharedConsumerType : public TConsumerType {
-public:
-    TSharedConsumerType(bool keepMessagesOrder, TDuration defaultProcessingTimeout, std::shared_ptr<TDeadLetterPolicy>&& deadLetterPolicy);
+    TSharedConsumer(bool keepMessagesOrder, TDuration defaultProcessingTimeout,
+        EDeadLetterPolicy deadLetterPolicy,
+        std::shared_ptr<TDeleteDeadLetterPolicySettings>&& deleteDeadLetterPolicySettings,
+        std::shared_ptr<TMoveDeadLetterPolicySettings>&& moveDeadLetterPolicySettings);
 
     bool GetKeepMessagesOrder() const;
     TDuration GetDefaultProcessingTimeout() const;
-    std::shared_ptr<const TDeadLetterPolicy> GetDeadLetterPolicy() const;
+    EDeadLetterPolicy GetDeadLetterPolicy() const;
+    std::shared_ptr<const TDeleteDeadLetterPolicySettings> GetDeleteDeadLetterPolicy() const;
+    std::shared_ptr<const TMoveDeadLetterPolicySettings> GetMoveDeadLetterPolicy() const;
 
 private:
     bool KeepMessagesOrder_;
     TDuration DefaultProcessingTimeout_;
-    std::shared_ptr<TDeadLetterPolicy> DeadLetterPolicy_;
+    EDeadLetterPolicy DeadLetterPolicy_;
+    std::shared_ptr<TDeleteDeadLetterPolicySettings> DeleteDeadLetterPolicySettings_;
+    std::shared_ptr<TMoveDeadLetterPolicySettings> MoveDeadLetterPolicySettings_;
 };
 
 // 0 - unspecified
@@ -131,7 +109,8 @@ public:
     TConsumer(const Ydb::Topic::Consumer&);
 
     const std::string& GetConsumerName() const;
-    std::shared_ptr<const TConsumerType> GetConsumerType() const;
+    EConsumerType GetConsumerType() const;
+    std::shared_ptr<const TSharedConsumer> GetSharedConsumerSettings() const;
     bool GetImportant() const;
     TDuration GetAvailabilityPeriod() const;
     const TInstant& GetReadFrom() const;
@@ -140,7 +119,8 @@ public:
 
 private:
     std::string ConsumerName_;
-    std::shared_ptr<TConsumerType> ConsumerType_;
+    EConsumerType ConsumerType_;
+    std::shared_ptr<const TSharedConsumer> SharedConsumerSettings_;
     bool Important_;
     TDuration AvailabilityPeriod_;
     TInstant ReadFrom_;

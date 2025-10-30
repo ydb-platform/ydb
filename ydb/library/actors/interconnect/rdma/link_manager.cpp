@@ -59,7 +59,6 @@ public:
         } catch (std::exception& ex) {
             return;
         }
-        ScanDevices();
     }
 private:
     TCtxsMap CtxMap;

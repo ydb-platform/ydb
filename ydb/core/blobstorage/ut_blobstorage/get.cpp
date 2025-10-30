@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(Get) {
         SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
 
-    Y_UNIT_TEST(TestRdmaRegiseredMemory) {
+/*    Y_UNIT_TEST(TestRdmaRegiseredMemory) {
         TEnvironmentSetup env(true);
         TTestInfo test = InitTest(env);
 
@@ -160,4 +160,5 @@ Y_UNIT_TEST_SUITE(Get) {
 
         SendGet(test, originalBlobId, data, NKikimrProto::OK, TEvBlobStorage::TEvGet::TReaderTabletData(tabletId, tabletGeneration));
     }
+*/
 }

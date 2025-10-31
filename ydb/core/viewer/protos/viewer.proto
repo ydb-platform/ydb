@@ -484,6 +484,11 @@ message TStorageGroupInfo {
     optional uint64 LatencyPutUserData = 21;
     optional uint64 LatencyGetFast = 22;
     string PileName = 23;
+    optional double MaxPDiskOccupancy = 24;
+    optional double MaxVDiskQuotaUtilization = 25;
+    optional double MaxNormalizedOccupancy = 26;
+    optional double MaxVDiskFairOccupancy = 27;
+    optional string CapacityAlertLevel = 28;
     repeated TStorageVDisk VDisks = 30;
 }
 
@@ -574,6 +579,9 @@ message TNodeInfo {
     optional uint64 PingTimeMinUs = 41;
     optional uint64 PingTimeMaxUs = 42;
     optional uint64 ReversePingTimeUs = 43; // Avg
+    optional double MaxPDiskOccupancy = 44;
+    optional double MaxVDiskQuotaUtilization = 45;
+    optional string CapacityAlertLevel = 46; // the highest across VDisks on this node
     NKikimrWhiteboard.TSystemStateInfo SystemState = 50;
     repeated NKikimrWhiteboard.TPDiskStateInfo PDisks = 51;
     repeated NKikimrWhiteboard.TVDiskStateInfo VDisks = 52;
@@ -885,4 +893,3 @@ message TTopicDataResponse {
     repeated TMessage Messages = 3;
     bool Truncated = 4;
 }
-

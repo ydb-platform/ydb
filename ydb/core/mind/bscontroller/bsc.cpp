@@ -114,6 +114,30 @@ void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageContr
     }
 }
 
+void TBlobStorageController::TGroupInfo::CalculateCapacityMetrics() {
+    CapacityMetrics = TCapacityMetrics(); // Reset to defaults
+
+    for (const auto& vslot : VDisksInGroup) {
+        const auto& vm = vslot->Metrics;
+        if (vm.HasQuotaUtilization()) {
+            CapacityMetrics.MaxVDiskQuotaUtilization = Max(CapacityMetrics.MaxVDiskQuotaUtilization, vm.GetQuotaUtilization());
+        }
+        if (vm.HasNormalizedOccupancy()) {
+            CapacityMetrics.MaxNormalizedOccupancy = Max(CapacityMetrics.MaxNormalizedOccupancy, vm.GetNormalizedOccupancy());
+        }
+        if (vm.HasFairOccupancy()) {
+            CapacityMetrics.MaxVDiskFairOccupancy = Max(CapacityMetrics.MaxVDiskFairOccupancy, vm.GetFairOccupancy());
+        }
+        if (vm.HasSpaceColor()) {
+            CapacityMetrics.CapacityAlertLevel = Max(CapacityMetrics.CapacityAlertLevel, vm.GetSpaceColor());
+        }
+        const auto& pm = vslot->PDisk->Metrics;
+        if (pm.HasOccupancy()) {
+            CapacityMetrics.MaxPDiskOccupancy = Max(CapacityMetrics.MaxPDiskOccupancy, pm.GetOccupancy());
+        }
+    }
+}
+
 bool TBlobStorageController::TGroupInfo::FillInGroupParameters(
         NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params,
         TBlobStorageController *self) const {
@@ -188,14 +212,14 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         if (metrics.HasMaxWriteThroughput()) {
             writeThroughput = Min(writeThroughput.value_or(Max<ui64>()), metrics.GetMaxWriteThroughput() / shareFactor);
         }
-        if (const auto& vm = vslot->Metrics; vm.HasOccupancy()) {
-            occupancy = Max(occupancy.value_or(0), vm.GetOccupancy());
+        if (const auto& vm = vslot->Metrics; vm.HasNormalizedOccupancy()) {
+            occupancy = Max(occupancy.value_or(0), vm.GetNormalizedOccupancy());
         }
 
         const bool hasAllMetrics = metrics.HasMaxIOPS()
             && metrics.HasMaxReadThroughput()
             && metrics.HasMaxWriteThroughput()
-            && vslot->Metrics.HasOccupancy();
+            && vslot->Metrics.HasNormalizedOccupancy();
         if (hasAllMetrics) {
             vdisksWithAllMetrics |= {Topology.get(), vslot->GetShortVDiskId()};
         }

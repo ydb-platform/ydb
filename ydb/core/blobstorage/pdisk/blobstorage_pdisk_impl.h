@@ -296,7 +296,8 @@ public:
     ui32 GetFreeChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetUsedChunks(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
     ui32 GetNumActiveSlots() const;
-    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy = nullptr) const;
+    TStatusFlags GetStatusFlags(TOwner ownerId, const EOwnerGroupType ownerGroupType, double *occupancy = nullptr,
+        double *quotaUtilization = nullptr, double *fairOccupancy = nullptr, double *pdiskOccupancy = nullptr) const;
     TStatusFlags NotEnoughDiskSpaceStatusFlags(ui32 ownerId, const EOwnerGroupType ownerGroupType) const;
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

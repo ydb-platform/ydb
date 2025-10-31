@@ -50,6 +50,11 @@ public:
             {T::BridgeSyncFirstErrorTimestamp::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncFirstErrorTimestampFieldNumber}},
             {T::BridgeSyncErrorCount::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncErrorCountFieldNumber}},
             {T::BridgeSyncRunning::ColumnId, {E::kInfoFieldNumber, V::kBridgeSyncRunningFieldNumber}},
+            {T::MaxPDiskOccupancy::ColumnId, {E::kInfoFieldNumber, V::kMaxPDiskOccupancyFieldNumber}},
+            {T::MaxVDiskQuotaUtilization::ColumnId, {E::kInfoFieldNumber, V::kMaxVDiskQuotaUtilizationFieldNumber}},
+            {T::MaxNormalizedOccupancy::ColumnId, {E::kInfoFieldNumber, V::kMaxNormalizedOccupancyFieldNumber}},
+            {T::MaxVDiskFairOccupancy::ColumnId, {E::kInfoFieldNumber, V::kMaxVDiskFairOccupancyFieldNumber}},
+            {T::CapacityAlertLevel::ColumnId, {E::kInfoFieldNumber, V::kCapacityAlertLevelFieldNumber}},
         };
         return fieldMap;
     }

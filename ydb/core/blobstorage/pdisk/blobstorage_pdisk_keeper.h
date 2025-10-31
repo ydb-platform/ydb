@@ -142,8 +142,9 @@ public:
         ChunkTracker.Release(owner, 1);
     }
 
-    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *occupancy) const {
-        return ChunkTracker.GetSpaceStatusFlags(owner, occupancy);
+    TStatusFlags GetSpaceStatusFlags(TOwner owner, double *normalizedOccupancy,
+            double *quotaUtilization = nullptr, double *fairOccupancy = nullptr, double *pdiskOccupancy = nullptr) const {
+        return ChunkTracker.GetSpaceStatusFlags(owner, normalizedOccupancy, quotaUtilization, fairOccupancy, pdiskOccupancy);
     }
 
     NKikimrBlobStorage::TPDiskSpaceColor::E EstimateSpaceColor(TOwner owner, i64 allocationSize, double *occupancy) const {

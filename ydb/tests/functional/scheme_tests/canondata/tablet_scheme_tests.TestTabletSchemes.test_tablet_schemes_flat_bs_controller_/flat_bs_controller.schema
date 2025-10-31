@@ -12,6 +12,11 @@
                 "ColumnType": "Bool"
             },
             {
+                "ColumnId": 30,
+                "ColumnName": "BlobCheckerPeriodicity",
+                "ColumnType": "Uint64"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -147,6 +152,7 @@
             "0": {
                 "Columns": [
                     29,
+                    30,
                     1,
                     2,
                     4,
@@ -2011,6 +2017,50 @@
                     2,
                     3,
                     4
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 133,
+        "TableName": "BlobCheckerGroupStatus",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "GroupId",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "SerializedStatus",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2
                 ],
                 "RoomID": 0,
                 "Codec": 0,

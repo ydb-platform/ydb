@@ -734,8 +734,6 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
 {
     switch(proto.consumer_type()) {
         case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
-            ConsumerType_ = EConsumerType::Streaming;
-            break;
         case Ydb::Topic::CONSUMER_TYPE_STREAMING:
             ConsumerType_ = EConsumerType::Streaming;
             break;
@@ -796,7 +794,7 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
         }
         case EConsumerType::Streaming:
         case EConsumerType::Unspecified:
-            proto.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_SHARED);
+            proto.set_consumer_type(::Ydb::Topic::CONSUMER_TYPE_STREAMING);
             break;
     }
 }

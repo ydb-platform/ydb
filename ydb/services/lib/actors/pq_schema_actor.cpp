@@ -230,16 +230,38 @@ namespace NKikimr::NGRpcProxy::V1 {
                         return "Cannot alter move action";
                     }
                     if (alterPolicy.alter_move_action().has_set_dead_letter_queue()) {
-                        // TODO check dlq not empty
+                        if (alterPolicy.alter_move_action().set_dead_letter_queue().empty()) {
+                            return "Dead letter queue cannot be empty";
+                        }
                         policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.alter_move_action().set_dead_letter_queue());
                     }
                 } else if (alterPolicy.has_set_move_action()) {
+                    if (alterPolicy.set_move_action().dead_letter_queue().empty()) {
+                        return "Dead letter queue cannot be empty";
+                    }
                     policy->clear_action();
-                    // TODO check dlq not empty
                     policy->mutable_move_action()->set_dead_letter_queue(alterPolicy.set_move_action().dead_letter_queue());
                 } else if (alterPolicy.has_set_delete_action()) {
                     policy->clear_action();
                     policy->mutable_delete_action();
+                }
+            }
+        } else {
+            if (alter.has_set_default_processing_timeout()) {
+                return "Cannot alter default processing timeout for streaming consumer";
+            }
+            if (alter.has_alter_dead_letter_policy()) {
+                auto& alterPolicy = alter.alter_dead_letter_policy();
+                if (alterPolicy.has_set_enabled()) {
+                    return "Cannot alter dead letter policy for streaming consumer";
+                }
+
+                if (alterPolicy.has_alter_condition()) {
+                    return "Cannot alter dead letter policy condition for streaming consumer";
+                }
+
+                if (alterPolicy.has_alter_move_action() || alterPolicy.has_set_move_action() || alterPolicy.has_set_delete_action()) {
+                    return "Cannot alter dead letter policy action for streaming consumer";
                 }
             }
         }
@@ -255,6 +277,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         bool enableTopicDiskSubDomainQuota
     ) {
+        Cerr << (TStringBuilder() << ">>>>> a " << rr.ShortDebugString() << Endl);
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TMsgPqCodes(TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);
@@ -271,6 +294,20 @@ namespace NKikimr::NGRpcProxy::V1 {
             case Ydb::Topic::CONSUMER_TYPE_STREAMING:
             case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING);
+
+                if (rr.has_keep_messages_order()) {
+                    return TMsgPqCodes("cannot set keep messages order for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+                if (rr.has_default_processing_timeout()) {
+                    return TMsgPqCodes("cannot set default processing timeout for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+                if (rr.has_dead_letter_policy()) {
+                    return TMsgPqCodes("cannot set dead letter policy for streaming consumer",
+                        Ydb::PersQueue::ErrorCode::VALIDATION_ERROR);
+                }
+
                 break;
             case Ydb::Topic::CONSUMER_TYPE_SHARED: {
                 consumer->SetType(::NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);

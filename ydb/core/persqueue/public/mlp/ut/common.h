@@ -51,9 +51,8 @@ inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TStrin
     auto client = TTopicClient(driver);
 
     const auto settings = NYdb::NTopic::TCreateTopicSettings()
-            .BeginAddConsumer()
-                .ConsumerName(consumerName)
-                .AddAttribute("_mlp", "1")
+            .BeginAddSharedConsumer(consumerName)
+                .KeepMessagesOrder(false)
             .EndAddConsumer();
     client.CreateTopic(topicName, settings);
 

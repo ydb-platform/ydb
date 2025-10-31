@@ -57,6 +57,7 @@ void TConsumerActor::Bootstrap() {
     Become(&TConsumerActor::StateInit);
 
     // TODO MLP Update consumer config
+    LOG_D("Initializing with consumer config: " << Config.ShortDebugString());
     Storage->SetKeepMessageOrder(Config.GetKeepMessageOrder());
     Storage->SetMaxMessageReceiveCount(Config.GetMaxProcessingAttempts());
 

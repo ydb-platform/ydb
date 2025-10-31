@@ -53,6 +53,13 @@ inline void CreateTopic(std::shared_ptr<TTopicSdkTestSetup>& setup, const TStrin
     const auto settings = NYdb::NTopic::TCreateTopicSettings()
             .BeginAddSharedConsumer(consumerName)
                 .KeepMessagesOrder(false)
+                .BeginDeadLetterPolicy()
+                    .Enable()
+                    .BeginCondition()
+                        .MaxProcessingAttempts(10)
+                    .EndCondition()
+                    .DeleteAction()
+                .EndDeadLetterPolicy()
             .EndAddConsumer();
     client.CreateTopic(topicName, settings);
 

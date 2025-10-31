@@ -258,7 +258,7 @@ runs:
 
           set +e
           YA_MAKE_COMMAD="./ya make ${params[@]}"
-          ./.github/scripts/graph_compare.py --ya-make-command "$YA_MAKE_COMMAD" --result-graph-path graph.json --result-context-path context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
+          ./.github/scripts/graph_compare.py --ya-make-command="$YA_MAKE_COMMAD" --result-graph-path=graph.json --result-context-path=context.json $ORIGINAL_HEAD~1 $ORIGINAL_HEAD |& tee $GRAPH_COMPARE_OUTPUT
           RC=${PIPESTATUS[0]}
           set -e
 

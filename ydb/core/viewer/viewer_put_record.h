@@ -179,7 +179,7 @@ public:
         WriteActorId = ActorContext().RegisterWithSameMailbox(writerActor);
 
         auto writeEvent = FormWriteRequest();
-        WriteResponse = MakeRequest<NPQ::TEvPartitionWriter::TEvWriteResponse>(WriteActorId, std::move(writeEvent).Release());
+        WriteResponse = MakeRequest<NPQ::TEvPartitionWriter::TEvWriteResponse>(WriteActorId, writeEvent.Release());
         RequestDone();
     }
 

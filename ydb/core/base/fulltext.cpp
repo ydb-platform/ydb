@@ -156,7 +156,10 @@ namespace {
             for (size_t start : xrange<size_t>(0, characters.size() - len + 1)) {
                 unsigned char* ptr = (unsigned char*)ngram.data();
                 for (size_t i : xrange(len)) {
-                    WriteUTF8Char(characters[start + i], symbolBytes, ptr);
+                    if (SafeWriteUTF8Char(characters[start + i], symbolBytes, ptr, ngram.end()) != RECODE_OK) {
+                        Y_ASSERT(false); // should fit
+                        return;
+                    }
                     ptr += symbolBytes;
                 }
                 ngrams.emplace_back((const char*)ngram.data(), ptr - ngram.data());

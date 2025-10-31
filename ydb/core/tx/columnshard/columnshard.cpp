@@ -476,18 +476,18 @@ void TColumnShard::SendPeriodicStats(bool withExecutor) {
 
 void TColumnShard::Handle(TEvPrivate::TEvReportBaseStatistics::TPtr& /*ev*/) {
     auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
-    auto scheduleDuration = TDuration::MilliSeconds(statistics.GetReportBaseStatisticsPeriodMs() + RandomNumber<ui32>(JitterIntervalMS * 2) - JitterIntervalMS);
+    auto scheduleDuration = TDuration::MilliSeconds(statistics.GetReportBaseStatisticsPeriodMs() + RandomNumber<ui32>(JitterIntervalMS));
     ActorContext().Schedule(scheduleDuration, new TEvPrivate::TEvReportBaseStatistics);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportBaseStatistics");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportBaseStatistics")("ReportBaseStatisticsPeriodMs", statistics.GetReportBaseStatisticsPeriodMs())("scheduleDuration", scheduleDuration);
     SendPeriodicStats(false);
     return;
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvReportExecutorStatistics::TPtr& /*ev*/) {
     auto statistics = AppDataVerified().ColumnShardConfig.GetStatistics();
-    auto scheduleDuration = TDuration::MilliSeconds(statistics.GetReportExecutorStatisticsPeriodMs() + RandomNumber<ui32>(JitterIntervalMS * 2) - JitterIntervalMS);
+    auto scheduleDuration = TDuration::MilliSeconds(statistics.GetReportExecutorStatisticsPeriodMs() + RandomNumber<ui32>(JitterIntervalMS));
     ActorContext().Schedule(scheduleDuration, new TEvPrivate::TEvReportExecutorStatistics);
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportExecutorStatistics");
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "TEvReportExecutorStatistics")("ReportExecutorStatisticsPeriodMs", statistics.GetReportExecutorStatisticsPeriodMs())("scheduleDuration", scheduleDuration);
     SendPeriodicStats(true);
     return;
 }

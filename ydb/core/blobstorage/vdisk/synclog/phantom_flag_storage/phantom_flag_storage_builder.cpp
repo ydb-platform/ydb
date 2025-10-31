@@ -23,7 +23,7 @@ public:
         , Snapshot(snapshot)
     {}
 
-    void Bootstrap(const TActorContext&) {
+    void Bootstrap() {
         LastLsn = Snapshot->LogStartLsn;
         DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(Snapshot->DiskSnapPtr);
         DiskIt.Seek(LastLsn);
@@ -33,28 +33,33 @@ public:
 
 private:
     void Handle(const NPDisk::TEvChunkReadResult::TPtr& ev) {
-        auto [chunkIdx, idxRec] = DiskIt.Get();
-        const NPDisk::TEvChunkReadResult* msg = ev->Get();
-        const TBufferWithGaps& readData = ev->Get()->Data;
-
-        Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
-                idxRec->OffsetInPages * Snapshot->AppendBlockSize == msg->Offset &&
-                idxRec->PagesNum * Snapshot->AppendBlockSize == readData.Size(),
-            SlCtx->VCtx->VDiskLogPrefix
-            << "Phantom Flag Storage Builder failed to read synclog: chunkIdx# " << chunkIdx
-            << " msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
-            << " appendBlockSize# " << Snapshot->AppendBlockSize << " msgOffset# " << msg->Offset
-            << " PagesNum# " << idxRec->PagesNum << " readDataSize# " << ui32(readData.Size()));
-
-        // process all pages
-        for (ui32 pageIdx = 0; pageIdx < idxRec->PagesNum; pageIdx++) {
-            const TSyncLogPage *page = readData.DataPtr<const TSyncLogPage>(
-                    pageIdx * Snapshot->AppendBlockSize, Snapshot->AppendBlockSize);
-
-            // process one page
-            TSyncLogPageROIterator it(page);
-            for (it.SeekToFirst(); it.Valid(); it.Next()) {
-                ProcessRecord(it.Get());
+        if (ev->Get()->Status == NKikimrProto::OK) {
+            auto [chunkIdx, idxRec] = DiskIt.Get();
+            const NPDisk::TEvChunkReadResult* msg = ev->Get();
+            const TBufferWithGaps& readData = ev->Get()->Data;
+    
+            Y_VERIFY_S(chunkIdx == msg->ChunkIdx &&
+                    idxRec->OffsetInPages * Snapshot->AppendBlockSize == msg->Offset &&
+                    idxRec->PagesNum * Snapshot->AppendBlockSize == readData.Size(),
+                SlCtx->VCtx->VDiskLogPrefix
+                << "Phantom Flag Storage Builder failed to read synclog: chunkIdx# " << chunkIdx
+                << " msgChunkIdx# " << msg->ChunkIdx << " OffsetInPages# " << idxRec->OffsetInPages
+                << " appendBlockSize# " << Snapshot->AppendBlockSize << " msgOffset# " << msg->Offset
+                << " PagesNum# " << idxRec->PagesNum << " readDataSize# " << ui32(readData.Size()));
+    
+            // process all pages
+            for (ui32 pageIdx = 0; pageIdx < idxRec->PagesNum; pageIdx++) {
+                ui32 offset = pageIdx * Snapshot->AppendBlockSize;
+                ui32 len = Snapshot->AppendBlockSize;
+                if (readData.IsReadable(offset, len)) {
+                    const TSyncLogPage *page = readData.DataPtr<const TSyncLogPage>(offset, len);
+        
+                    // process one page
+                    TSyncLogPageROIterator it(page);
+                    for (it.SeekToFirst(); it.Valid(); it.Next()) {
+                        ProcessRecord(it.Get());
+                    }
+                }
             }
         }
 
@@ -76,8 +81,7 @@ private:
     void ProcessRecord(const TRecordHdr* hdr) {
         if (LastLsn < hdr->Lsn && hdr->RecType == TRecordHdr::RecLogoBlob) {
             const TLogoBlobRec* blob = hdr->GetLogoBlob();
-            TIngress::EMode ingressMode = TIngress::IngressMode(SlCtx->VCtx->Top->GType);
-            if (blob->Ingress.GetCollectMode(ingressMode) == ECollectMode::CollectModeDoNotKeep) {
+            if (blob->Ingress.IsDoNotKeep(SlCtx->VCtx->Top->GType)) {
                 AddFlag(*blob);
             }
             LastLsn = hdr->Lsn;

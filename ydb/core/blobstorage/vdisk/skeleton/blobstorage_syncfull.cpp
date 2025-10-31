@@ -120,13 +120,11 @@ namespace NKikimr {
             ui32 result = 0;
             while (it.Valid()) {
                 if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
-                    result |= MsgFullFlag;
-                    break;
+                    return MsgFullFlag;
                 }
 
                 if (timer.Check()) {
-                    result |= LongProcessing;
-                    break;
+                    return LongProcessing;
                 }
 
                 key = it.GetCurKey();
@@ -362,13 +360,11 @@ namespace NKikimr {
             ui32 result = 0;
             for (; PhantomFlagIterator != PhantomFlagStorageSnapshot->Flags.end(); ++PhantomFlagIterator) {
                 if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
-                    result |= MsgFullFlag;
-                    break;
+                    return MsgFullFlag;
                 }
 
                 if (timer.Check()) {
-                    result |= LongProcessing;
-                    break;
+                    return LongProcessing;
                 }
 
                 Serialize(data, *PhantomFlagIterator);

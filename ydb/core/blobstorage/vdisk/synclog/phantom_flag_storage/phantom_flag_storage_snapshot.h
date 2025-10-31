@@ -9,7 +9,6 @@ namespace NSyncLog {
 
 // TODO: include thresholds in snapshot
 struct TPhantomFlagStorageSnapshot {
-public:
     TPhantomFlagStorageSnapshot(const TPhantomFlags& flags);
     TPhantomFlags Flags;
 };

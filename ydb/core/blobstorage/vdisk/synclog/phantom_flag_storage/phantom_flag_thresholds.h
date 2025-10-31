@@ -30,6 +30,7 @@ public:
 
 private:
     using TGenStep = std::pair<ui32, ui32>;
+    static TGenStep MakeGenStep(const TLogoBlobID& blobId);
 
     // auxiliary classes
     class TNeighbourThresholds {

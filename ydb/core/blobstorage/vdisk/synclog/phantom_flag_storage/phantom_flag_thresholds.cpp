@@ -7,6 +7,10 @@ namespace NKikimr {
 namespace NSyncLog {
 
 
+TPhantomFlagThresholds::TGenStep TPhantomFlagThresholds::MakeGenStep(const TLogoBlobID& blobId) {
+    return TGenStep(blobId.Generation(), blobId.Step());
+}
+
 void TPhantomFlagThresholds::TNeighbourThresholds::AddBlob(const TLogoBlobID& blob) {
     TabletThresholds[blob.TabletID()].AddBlob(blob);
 }
@@ -34,7 +38,7 @@ void TPhantomFlagThresholds::TNeighbourThresholds::AddHardBarrier(ui64 tabletId,
 
 void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddBlob(const TLogoBlobID& blob) {
     TGenStep& current = ChannelThresholds[blob.Channel()];
-    current = std::max(current, TGenStep(blob.Generation(), blob.Step()));
+    current = std::max(current, MakeGenStep(blob));
 }
 
 void TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::AddHardBarrier(ui8 channel, TGenStep barrier) {
@@ -53,7 +57,7 @@ bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsBehindTh
     if (it == ChannelThresholds.end()) {
         return false;
     }
-    return it->second >= TGenStep(blob.Generation(), blob.Step());
+    return it->second >= MakeGenStep(blob);
 }
 
 bool TPhantomFlagThresholds::TNeighbourThresholds::TTabletThresholds::IsEmpty() const {

@@ -123,11 +123,7 @@ namespace NKikimr {
 
 
     bool TIngress::IsDoNotKeep(const TBlobStorageGroupType& gtype) const {
-        return GetCollectMode(IngressMode(gtype)) == ECollectMode::CollectModeDoNotKeep;
-    }
-
-    bool TIngress::IsKeep(const TBlobStorageGroupType& gtype) const {
-        return GetCollectMode(IngressMode(gtype)) == ECollectMode::CollectModeKeep;
+        return GetCollectMode(IngressMode(gtype)) & ECollectMode::CollectModeDoNotKeep;
     }
 
     bool TIngress::MustKnowAboutLogoBlob(const TBlobStorageGroupInfo::TTopology *top,

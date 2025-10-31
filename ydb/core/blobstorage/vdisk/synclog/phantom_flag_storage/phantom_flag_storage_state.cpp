@@ -16,10 +16,8 @@ void TPhantomFlagStorageState::Activate() {
 }
 
 void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec) {
-    if (blobRec->Ingress.IsDoNotKeep(GType)) {
-        if (Thresholds.IsBehindThreshold(blobRec->LogoBlobID())) {
-            StoredFlags.push_back(*blobRec);
-        }
+    if (blobRec->Ingress.IsDoNotKeep(GType) && Thresholds.IsBehindThreshold(blobRec->LogoBlobID())) {
+        StoredFlags.push_back(*blobRec);
     }
 }
 

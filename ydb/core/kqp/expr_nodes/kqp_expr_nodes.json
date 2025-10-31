@@ -926,6 +926,14 @@
                 {"Index": 1, "Name": "AggregationTraitsList", "Type": "TKqpOpAggregationTraitsList"},
                 {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"}
             ]
+        },
+        {
+            "Name": "TKqpPgExprSublink",
+            "Base": "TExprBase",
+            "Match" : {"Type": "Callable", "Name": "KqpPgExprSublink"},
+            "Children": [
+                {"Index": 0, "Name": "Expr", "Type": "TExprBase"}
+            ]
         }
     ]
 }

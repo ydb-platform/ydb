@@ -295,6 +295,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
                         }
                     });
 
+                    // FIXME: join on clause may include expressions, we need to handle this case
                     TVector<TInfoUnit> joinKeys;
                     for (const auto &pgResolvedOp : pgResolvedOps) {
                         TVector<TInfoUnit> keys;
@@ -384,6 +385,7 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr &node, TExprContext &ctx, 
             filterExpr = Build<TKqpOpEmptySource>(ctx, node->Pos()).Done().Ptr();
         }
 
+        // FIXME: Group by key can be an expression, we need to handle this case
         TVector<TInfoUnit> groupByKeys;
         auto groupOps = GetSetting(setItem->Tail(), "group_exprs");
         if (groupOps) {
@@ -652,6 +654,30 @@ TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr &node, TExprContext &ctx,
         return node;
     }
 }
+
+TExprNode::TPtr RewritePgSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
+    if (node->Child(0)->Content() != "expr") {
+        return node;
+    }
+
+    // clang-format off
+    return Build<TKqpPgExprSublink>(ctx, node->Pos())
+        .Expr(node->Child(4))
+        .Done().Ptr();
+    // clang-format on
+}
+
+TExprNode::TPtr RemoveRootFromSublink(const TExprNode::TPtr &node, TExprContext &ctx) {
+    auto sublink = TKqpPgExprSublink(node);
+    if (auto root = sublink.Expr().Maybe<TKqpOpRoot>()) {
+        // clang-format off
+        return Build<TKqpPgExprSublink>(ctx, node->Pos())
+            .Expr(root.Cast().Input())
+            .Done().Ptr();
+        // clang-format on
+    }
+    return node;
+}
 } // namespace
 
 namespace NKikimr {
@@ -663,9 +689,26 @@ IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr
 
     auto status = OptimizeExpr(
         output, output,
+        [](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
+            if (node->IsCallable("PgSubLink")) {
+                return RewritePgSublink(node, ctx);
+            } else {
+                return node;
+            }
+        },
+        ctx, settings);
+    
+    if (status != TStatus::Ok) {
+        return status;
+    }
+
+    status = OptimizeExpr(
+        output, output,
         [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
             if (TCoPgSelect::Match(node.Get())) {
                 return RewritePgSelect(node, ctx, TypeCtx);
+            } else if (TKqpPgExprSublink::Match(node.Get())) {
+                return RemoveRootFromSublink(node, ctx);
             } else if (TCoTake::Match(node.Get())) {
                 return PushTakeIntoPlan(node, ctx, TypeCtx);
             } else {
@@ -688,7 +731,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
         [this](const TExprNode::TPtr &node, TExprContext &ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
             if (TKqpOpRoot::Match(node.Get())) {
-                auto root = PlanConverter().ConvertRoot(node);
+                auto root = PlanConverter(TypeCtx, ctx).ConvertRoot(node);
                 root.ComputeParents();
                 return RBO.Optimize(root, ctx);
             } else {

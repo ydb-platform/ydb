@@ -296,7 +296,7 @@ void TWriteSessionImpl::ConnectToPreferredPartitionLocation(const TDuration& del
             context);
     };
 
-    Connections->ScheduleOneTimeTask(std::move(callback), delay);
+    Connections->ScheduleOneTimeTask(std::move(callback), TDeadline::SafeDurationCast(delay));
 }
 
 void TWriteSessionImpl::OnDescribePartition(const TStatus& status, const Ydb::Topic::DescribePartitionResult& proto, const NYdbGrpc::IQueueClientContextPtr& describePartitionContext)

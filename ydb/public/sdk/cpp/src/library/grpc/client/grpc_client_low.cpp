@@ -20,8 +20,7 @@
 
 #include <format>
 
-namespace NYdbGrpc {
-inline namespace Dev {
+namespace NYdbGrpc::inline Dev {
 
 void EnableGRpcTracing() {
     grpc_tracer_set_enabled("tcp", true);
@@ -110,6 +109,29 @@ grpc_socket_mutator_vtable TGRpcKeepAliveSocketMutator::VTable =
         &TGRpcKeepAliveSocketMutator::Mutate2
     };
 #endif
+
+void TGRpcRequestProcessorCommon::ApplyMeta(const TCallMeta& meta) {
+    for (const auto& rec : meta.Aux) {
+        Context.AddMetadata(NYdb::TStringType{rec.first}, NYdb::TStringType{rec.second});
+    }
+    if (meta.CallCredentials) {
+        Context.set_credentials(meta.CallCredentials);
+    }
+    if (const NYdb::TDeadline::Duration* timeout = std::get_if<NYdb::TDeadline::Duration>(&meta.Timeout)) {
+        Context.set_deadline(NYdb::TDeadline::AfterDuration(*timeout));
+    } else if (const NYdb::TDeadline* deadline = std::get_if<NYdb::TDeadline>(&meta.Timeout)) {
+        Context.set_deadline(*deadline);
+    }
+}
+
+void TGRpcRequestProcessorCommon::GetInitialMetadata(std::unordered_multimap<std::string, std::string>* metadata) {
+    for (const auto& [key, value] : Context.GetServerInitialMetadata()) {
+        metadata->emplace(
+            std::string(key.begin(), key.end()),
+            std::string(value.begin(), value.end())
+        );
+    }
+}
 
 TChannelPool::TChannelPool(const TTcpKeepAliveSettings& tcpKeepAliveSettings, const TDuration& expireTime)
     : TcpKeepAliveSettings_(tcpKeepAliveSettings)
@@ -604,5 +626,27 @@ grpc_socket_mutator* NImpl::CreateGRpcKeepAliveSocketMutator(const TTcpKeepAlive
     return nullptr;
 }
 
+gpr_timespec DurationToTimespec(const NYdb::TDeadline::Duration& duration) noexcept {
+    const auto secs = std::chrono::floor<std::chrono::seconds>(duration);
+    if (duration == NYdb::TDeadline::Duration::max() || secs.count() >= gpr_inf_future(GPR_CLOCK_MONOTONIC).tv_sec) {
+        return gpr_inf_future(GPR_TIMESPAN);
+    }
+    if (secs.count() < 0) {
+        return gpr_inf_past(GPR_TIMESPAN);
+    }
+    const auto nsecs = std::chrono::duration_cast<std::chrono::nanoseconds>(duration - secs);
+    Y_ASSERT(0 <= nsecs.count() && nsecs.count() < GPR_NS_PER_SEC);
+    gpr_timespec t;
+    t.tv_sec = static_cast<std::int64_t>(secs.count());
+    t.tv_nsec = static_cast<std::int32_t>(nsecs.count());
+    t.clock_type = GPR_TIMESPAN;
+    return t;
 }
+
+gpr_timespec DeadlineToTimespec(const NYdb::TDeadline& deadline) {
+    gpr_timespec t =
+        DurationToTimespec(deadline.GetTimePoint() != NYdb::TDeadline::TimePoint::max() ? deadline.GetTimePoint() - NYdb::TDeadline::Clock::now() : NYdb::TDeadline::Duration::max());
+    return gpr_convert_clock_type(t, GPR_CLOCK_MONOTONIC);
+}
+
 }

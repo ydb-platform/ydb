@@ -3843,7 +3843,7 @@ public:
             }
         };
         NYdbGrpc::TCallMeta meta;
-        meta.Timeout = Timeout;
+        meta.Timeout = Timeout ? NYdb::TDeadline::SafeDurationCast(Timeout) : NYdb::TDeadline::Duration::max();
         auto service = GRpcClientLow->CreateGRpcServiceConnection<::Ydb::Monitoring::V1::MonitoringService>(config);
         service->DoRequest(request, std::move(responseCb), &Ydb::Monitoring::V1::MonitoringService::Stub::AsyncNodeCheck, meta);
     }

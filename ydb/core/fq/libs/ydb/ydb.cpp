@@ -194,12 +194,14 @@ TExternalStorageSettings::TExternalStorageSettings(const NConfig::TYdbStorageCon
     , UseSsl(config.GetUseSsl())
     , UseLocalMetadataService(config.GetUseLocalMetadataService())
     , IamEndpoint(config.GetIamEndpoint())
-    , ClientTimeout(TDuration::Seconds(config.GetClientTimeoutSec()))
     , OperationTimeout(TDuration::Seconds(config.GetOperationTimeoutSec()))
     , CancelAfter(TDuration::Seconds(config.GetCancelAfterSec()))
 {
     if (config.GetTableClientMaxActiveSessions()) {
         MaxActiveQuerySessions = config.GetTableClientMaxActiveSessions();
+    }
+    if (config.GetClientTimeoutSec()) {
+        ClientTimeout = TDuration::Seconds(config.GetClientTimeoutSec());
     }
 }
 
@@ -213,12 +215,14 @@ TExternalStorageSettings::TExternalStorageSettings(const NKikimrConfig::TStreami
     , UseSsl(config.GetDatabaseConnection().GetUseSsl())
     , UseLocalMetadataService(config.GetDatabaseConnection().GetUseLocalMetadataService())
     , IamEndpoint(config.GetDatabaseConnection().GetIamEndpoint())
-    , ClientTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
     , OperationTimeout(TDuration::Seconds(config.GetQueryTimeoutSec()))
     , CancelAfter(TDuration::Seconds(config.GetQueryTimeoutSec()))
 {
     if (config.GetMaxActiveQuerySessions()) {
         MaxActiveQuerySessions = config.GetMaxActiveQuerySessions();
+    }
+    if (config.GetQueryTimeoutSec()) {
+        ClientTimeout = TDuration::Seconds(config.GetQueryTimeoutSec());
     }
 }
 

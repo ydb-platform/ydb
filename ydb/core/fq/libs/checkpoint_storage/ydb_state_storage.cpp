@@ -699,7 +699,7 @@ TFuture<TStatus> TStateStorage::ListStates(const TContextPtr& context) {
 TExecDataQuerySettings TStateStorage::GetExecDataQuerySettings(ui64 multiplier) {
     return TExecDataQuerySettings()
         .KeepInQueryCache(true)
-        .ClientTimeout(StorageConfig.GetClientTimeout() * multiplier)
+        .ClientTimeout(StorageConfig.GetClientTimeout() == TDuration::Max() ? TDuration::Max() : StorageConfig.GetClientTimeout() * multiplier)
         .OperationTimeout(StorageConfig.GetOperationTimeout() * multiplier)
         .CancelAfter(StorageConfig.GetCancelAfter() * multiplier);
 }

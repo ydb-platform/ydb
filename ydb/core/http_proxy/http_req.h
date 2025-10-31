@@ -130,13 +130,7 @@ private:
     THashMap<TString, THolder<IHttpRequestProcessor>> Name2YmqProcessor;
 };
 
-NActors::IActor* CreateAccessServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
-NActors::IActor* CreateIamTokenServiceActor(const NKikimrConfig::TServerlessProxyConfig& config);
-NActors::IActor* CreateIamAuthActor(const TActorId sender, THttpRequestContext& context, THolder<NKikimr::NSQS::TAwsRequestSignV4>&& signature);
-
-
-} // namespace NKinesis::NHttpProxy
-
+} // namespace NKikimr::NHttpProxy
 
 template <>
 void Out<NKikimr::NHttpProxy::THttpResponseData>(IOutputStream& o, const NKikimr::NHttpProxy::THttpResponseData& p);

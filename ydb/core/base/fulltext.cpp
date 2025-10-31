@@ -136,37 +136,34 @@ namespace {
     }
 
     void BuildNgrams(const TString& token, size_t lengthMin, size_t lengthMax, bool edge, TVector<TString>& ngrams) {
-        TVector<wchar32> characters;
-
-        const unsigned char* ptr = (const unsigned char*)token.data();
-        const unsigned char* end = ptr + token.size();
+        const unsigned char* ngram_begin_ptr = (const unsigned char*)token.data();
+        const unsigned char* end = ngram_begin_ptr + token.size();
         wchar32 symbol;
         size_t symbolBytes;
-        while (ptr < end) {
-            if (SafeReadUTF8Char(symbol, symbolBytes, ptr, end) != RECODE_OK) {
+
+        while (ngram_begin_ptr < end) {
+            const unsigned char* ngram_end_ptr = ngram_begin_ptr;
+            size_t ngram_length = 0;
+            while (ngram_end_ptr < end) {
+                if (SafeReadUTF8Char(symbol, symbolBytes, ngram_end_ptr, end) != RECODE_OK) {
+                    Y_ASSERT(false); // should already be validated during tokenization
+                    return;
+                }
+                ngram_length++;
+                ngram_end_ptr += symbolBytes;
+
+                if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
+                    ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
+                }
+            }
+            if (edge) {
+                break; // only prefixes
+            }
+            if (SafeReadUTF8Char(symbol, symbolBytes, ngram_begin_ptr, end) != RECODE_OK) {
                 Y_ASSERT(false); // should already be validated during tokenization
                 return;
             }
-            characters.push_back(symbol);
-            ptr += symbolBytes;
-        }
-
-        TVector<unsigned char> ngram(token.size());
-        for (size_t len : xrange(lengthMin, Min(lengthMax, characters.size()) + 1)) {
-            for (size_t start : xrange<size_t>(0, characters.size() - len + 1)) {
-                unsigned char* ptr = (unsigned char*)ngram.data();
-                for (size_t i : xrange(len)) {
-                    if (SafeWriteUTF8Char(characters[start + i], symbolBytes, ptr, ngram.end()) != RECODE_OK) {
-                        Y_ASSERT(false); // should fit
-                        return;
-                    }
-                    ptr += symbolBytes;
-                }
-                ngrams.emplace_back((const char*)ngram.data(), ptr - ngram.data());
-                if (edge) {
-                    break; // only prefixes
-                }
-            }
+            ngram_begin_ptr += symbolBytes;
         }
     }
 

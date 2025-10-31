@@ -254,11 +254,11 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_use_filter_ngram(true);
         analyzers.set_filter_ngram_min_length(2);
         analyzers.set_filter_ngram_max_length(3);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "то", "это", "те", "ек", "кс", "ст", "тек", "екс", "кст"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"эт", "это", "то", "те", "тек", "ек", "екс", "кс", "кст", "ст"}));
 
         analyzers.set_filter_ngram_min_length(4);
         analyzers.set_filter_ngram_max_length(10);
-        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{"слов", "лово", "слово"}));
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("слово", analyzers), (TVector<TString>{"слов", "слово", "лово"}));
 
         analyzers.set_filter_ngram_min_length(10);
         analyzers.set_filter_ngram_max_length(10);

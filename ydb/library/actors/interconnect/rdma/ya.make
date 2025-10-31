@@ -35,6 +35,6 @@ RECURSE(
     cq_actor
 )
 
-#RECURSE_FOR_TESTS(
-#    ut
-#)
+RECURSE_FOR_TESTS(
+    ut
+)

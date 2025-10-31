@@ -490,15 +490,6 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 
-                Y_ABORT_UNLESS(PartNo == res.GetPartNo(), "%s",
-                               (TStringBuilder() <<
-                                "\npos=" << pos <<
-                                "\ni=" << i <<
-                                "\nOffset=" << Offset <<
-                                "\nPartNo=" << PartNo <<
-                                "\noffset=" << offset <<
-                                "\npartNo=" << res.GetPartNo()
-                               ).data());
                 AFL_ENSURE(PartNo == res.GetPartNo())("pos", pos)("i", i)("Offset", Offset)("PartNo", PartNo)("offset", offset)("partNo", res.GetPartNo());
 
                 if (userInfo) {
@@ -641,7 +632,10 @@ TReadAnswer TReadInfo::FormAnswer(
 
             AddResultBlob(readResult, writeBlob, Offset);
             if (writeBlob.IsLastPart()) {
+                PartNo = 0;
                 ++Offset;
+            } else {
+                ++PartNo;
             }
             if (updateUsage(writeBlob)) {
                 break;
@@ -649,21 +643,23 @@ TReadAnswer TReadInfo::FormAnswer(
         }
     }
 
-    readAnswer = AddBlobsFromBody(blobs,
-                                  CompactedBlobsCount, blobs.size(),
-                                  userInfo,
-                                  startOffset,
-                                  endOffset,
-                                  sizeLag,
-                                  tablet,
-                                  realReadOffset,
-                                  readResult,
-                                  answer,
-                                  needStop,
-                                  cnt, size, lastBlobSize,
-                                  ctx);
-    if (readAnswer) {
-        return std::move(*readAnswer);
+    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
+        readAnswer = AddBlobsFromBody(blobs,
+                                      CompactedBlobsCount, blobs.size(),
+                                      userInfo,
+                                      startOffset,
+                                      endOffset,
+                                      sizeLag,
+                                      tablet,
+                                      realReadOffset,
+                                      readResult,
+                                      answer,
+                                      needStop,
+                                      cnt, size, lastBlobSize,
+                                      ctx);
+        if (readAnswer) {
+            return std::move(*readAnswer);
+        }
     }
 
     AFL_ENSURE(Offset <= (ui64)Max<i64>())("Offset is too big", Offset);
@@ -702,13 +698,14 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     OnReadRequestFinished(res->Destination, answer.Size, res->User, ctx);
 }
 
-void CollectReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+void CollectReadRequestFromBody(ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                 const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
                                 TBlobKeyTokens* blobKeyTokens,
                                 TPartitionBlobEncoder& zone,
                                 TVector<TRequestedBlob>& result)
 {
     AFL_ENSURE(rcount && rsize);
+    startOffset = Max(startOffset, zone.DataKeysBody.empty() ? zone.StartOffset : zone.DataKeysBody.front().Key.GetOffset());
     auto blobs = zone.GetBlobsFromBody(startOffset,
                                        partNo,
                                        maxCount,
@@ -860,7 +857,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     LOG_D("read cookie " << cookie << " Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
                 << " user " << user
-                << " offset " << read->Offset << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
+                << " offset " << read->Offset << " partno " << read->PartNo << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
                 << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
 
     if (offset == GetEndOffset()) {
@@ -1068,14 +1065,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     GetReadRequestFromCompactedBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
     info.CompactedBlobsCount = blobs.size();
-    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
-                                    &info.BlobKeyTokens, blobs);
-
-    info.Blobs = blobs;
-    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
-
-    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     if (blobs.empty() ||
         ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionBlobEncoder.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
@@ -1086,6 +1075,15 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         );
         info.CachedOffset = insideHeadOffset;
     }
+
+    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
+                                    &info.BlobKeyTokens, blobs);
+
+    info.Blobs = blobs;
+    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
+
+    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
+                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {

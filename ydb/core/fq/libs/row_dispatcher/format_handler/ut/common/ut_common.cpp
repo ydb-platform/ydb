@@ -30,7 +30,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         hFunc(TEvRowDispatcher::TEvPurecalcCompileRequest, Handle)
-        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileRequest)
+        IgnoreFunc(TEvRowDispatcher::TEvPurecalcCompileAbort)
     )
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {

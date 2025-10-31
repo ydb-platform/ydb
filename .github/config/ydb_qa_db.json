@@ -1,20 +1,35 @@
 {
-  "main_database": {
-    "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
-    "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
-    "connection_timeout": 60,
-    "tables": {
-      "test_results": "test_results/test_runs"
-    }
+  "databases": {
+      "main": {
+          "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+          "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+          "connection_timeout": 60,
+          "tables": {
+              "test_results": "test_results/test_runs_column"
+          }
+      },
+      "backup": {
+          "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+          "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+          "connection_timeout": 60,
+          "tables": {
+              "test_results": "test_results/test_runs"
+          }
+      },
+      "statistics": {
+          "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+          "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+          "connection_timeout": 60,
+          "tables": {
+              "query_statistics": "analytics/query_statistics"
+          }
+      }
   },
-  "statistics_database": {
-    "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
-    "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
-    "enabled": true,
-    "tables": {
-      "query_statistics": "analytics/query_statistics"
-    }
+  "variables": {
+      "ydbd_path": "ydb/apps/ydbd/ydbd"
   },
-  "ydbd_path": "ydb/apps/ydbd/ydbd"
+  "flags": {
+      "use_two_databases_upload": false,
+      "enable_statistics": true
+  }
 }
-

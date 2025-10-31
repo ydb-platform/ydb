@@ -141,6 +141,28 @@ runs:
         echo -n "${{ inputs.bazel_remote_password }}" > $BAZEL_REMOTE_PASSWORD_FILE
         echo "BAZEL_REMOTE_PASSWORD_FILE=$BAZEL_REMOTE_PASSWORD_FILE" >> $GITHUB_ENV
 
+    - name: checkout scripts from main
+      shell: bash
+      run: |
+        #скрипты для checkout из main
+          MAIN_SCRIPTS=(
+            ".github/scripts/analytics/upload_tests_results.py"
+            ".github/scripts/analytics/ydb_wrapper.py"
+            ".github/scripts/send_build_stats.py"
+            ".github/scripts/get_build_diff.py"
+            ".github/scripts/get_current_build_size.py"
+            ".github/scripts/get_main_build_size.py"
+          )
+          # Функция checkout
+
+          checkout_scripts_from_main() {
+            local scripts=("$@")
+            for script in "${scripts[@]}"; do
+              git checkout main -- "$script" 2>/dev/null && chmod +x "$script" 2>/dev/null && echo "✅ $script" || echo "✅ $script"
+            done
+          }
+          checkout_scripts_from_main "${MAIN_SCRIPTS[@]}"
+
     - name: ya build and test
       id: build
       shell: bash
@@ -483,21 +505,6 @@ runs:
           fi
 
           # upload tests results to YDB
-          # Конфигурация скриптов для checkout из main
-          MAIN_SCRIPTS=(
-            ".github/scripts/analytics/upload_tests_results.py"
-            ".github/scripts/analytics/ydb_wrapper.py"
-          )
-          # Функция checkout
-
-          checkout_scripts_from_main() {
-            local scripts=("$@")
-            for script in "${scripts[@]}"; do
-              git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script" || echo "⚠️ $script"
-            done
-          }
-          checkout_scripts_from_main "${MAIN_SCRIPTS[@]}"
-
           # TODO: remove/rename TESTMO_RUN_NAME variable
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`

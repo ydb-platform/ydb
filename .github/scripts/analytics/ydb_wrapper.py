@@ -21,7 +21,7 @@ class YDBWrapper:
             # Парсим JSON из ENV
             try:
                 config_dict = json.loads(ydb_qa_config_env)
-                self._load_config_from_dict(config_dict, enable_statistics)
+                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
                 
             except (json.JSONDecodeError, KeyError) as e:
                 raise RuntimeError(f"Invalid YDB_QA_CONFIG format: {e}")
@@ -35,16 +35,13 @@ class YDBWrapper:
             try:
                 with open(config_path, 'r') as f:
                     config_dict = json.load(f)
-                self._load_config_from_dict(config_dict, enable_statistics)
+                enable_statistics = self._load_config_from_dict(config_dict, enable_statistics)
             except FileNotFoundError:
                 raise RuntimeError(f"Config file not found: {config_path}")
             except json.JSONDecodeError as e:
                 raise RuntimeError(f"Invalid JSON config file: {e}")
         
         # Настройки статистики
-        if enable_statistics is None:
-            enable_statistics = os.environ.get("YDB_ENABLE_STATISTICS", "true").lower() in ("true", "1", "yes")
-        
         self._enable_statistics = enable_statistics
         self._cluster_version = None
         self._session_id = str(uuid.uuid4())
@@ -78,27 +75,34 @@ class YDBWrapper:
     
     def _load_config_from_dict(self, config_dict: dict, enable_statistics: bool = None):
         """Загрузка конфигурации из словаря"""
-        # Main database config
-        main_db = config_dict["main_database"]
-        self.database_endpoint = main_db["endpoint"]
-        self.database_path = main_db["path"]
-        self._connection_timeout = main_db.get("connection_timeout", 60)
+        dbs = config_dict["databases"]
+        main = dbs["main"]
+        stats = dbs.get("statistics", {})
+        variables = config_dict.get("variables", {})
+        flags = config_dict.get("flags", {})
         
-        # Сохраняем таблицы из main_database
-        self._main_db_tables = main_db.get("tables", {})
+        # Автоматический маппинг полей
+        config_mapping = {
+            'database_endpoint': main["endpoint"],
+            'database_path': main["path"],
+            '_connection_timeout': main.get("connection_timeout", 60),
+            '_main_db_tables': main.get("tables", {}),
+            'stats_endpoint': stats.get("endpoint", main["endpoint"]),
+            'stats_path': stats.get("path", main["path"]),
+            '_stats_connection_timeout': stats.get("connection_timeout",60),
+            'stats_table': stats.get("tables", {}).get("query_statistics", "analytics/query_statistics"),
+            '_stats_db_tables': stats.get("tables", {}),
+            'ydbd_path': variables.get("ydbd_path", "ydb/apps/ydbd/ydbd")
+        }
         
-        # Statistics database config (может отсутствовать или совпадать с основной БД)
-        stats_db = config_dict.get("statistics_database", {})
-        self.stats_endpoint = stats_db.get("endpoint", self.database_endpoint)
-        self.stats_path = stats_db.get("path", self.database_path)
-        self.stats_table = stats_db.get("tables", {}).get("query_statistics", "analytics/query_statistics")
+        for key, value in config_mapping.items():
+            setattr(self, key, value)
         
-        # Сохраняем таблицы из statistics_database
-        self._stats_db_tables = stats_db.get("tables", {})
+        # Enable statistics из flags (по умолчанию True)
+        if enable_statistics is None:
+            enable_statistics = flags.get("enable_statistics", True)
         
-        # Переопределяем enable_statistics если указано в конфиге
-        if enable_statistics is None and "enabled" in stats_db:
-            enable_statistics = stats_db["enabled"]
+        return enable_statistics
     
     def _get_caller_script_name(self) -> str:
         """Автоматическое определение имени скрипта, вызвавшего YDBWrapper"""
@@ -247,14 +251,14 @@ class YDBWrapper:
             # Настраиваем credentials
             self._setup_credentials()
             
-            # Подключаемся к базе статистики с тем же таймаутом, что и для основной базы
+            # Подключаемся к базе статистики
             driver = ydb.Driver(
                 endpoint=self.stats_endpoint,
                 database=self.stats_path,
                 credentials=ydb.credentials_from_env_variables()
             )
             try:
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
                 tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
                 table_client = ydb.TableClient(driver, tc_settings)
                 scan_query = ydb.ScanQuery("SELECT 1 as test", {})
@@ -328,7 +332,7 @@ class YDBWrapper:
             )
             try:
                 # Подключаемся к базе статистики
-                driver.wait(timeout=self._connection_timeout, fail_fast=True)
+                driver.wait(timeout=self._stats_connection_timeout, fail_fast=True)
                 # Создаем таблицу статистики если не существует
                 self._ensure_stats_table_exists(driver)
                 
@@ -367,7 +371,7 @@ class YDBWrapper:
                 driver.stop()
                 
         except TimeoutError as e:
-            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._connection_timeout}s)")
+            self._log("warning", f"Failed to send statistics: connection timeout (timeout={self._stats_connection_timeout}s)")
             self._stats_available = False
             return False
         except Exception as e:
@@ -716,6 +720,26 @@ class YDBWrapper:
                 table_path=table_path
             )
             raise
+    
+    def execute_dml(self, query: str, parameters: Dict[str, Any] = None, query_name: str = None):
+        """Выполнение DML запроса (INSERT/UPDATE/DELETE) с параметрами
+        
+        Args:
+            query: SQL запрос с DECLARE параметрами
+            parameters: Словарь параметров {$param_name: value}
+            query_name: Имя запроса для логирования
+        """
+        def operation(driver):
+            def callee(session):
+                prepared_query = session.prepare(query)
+                with session.transaction() as tx:
+                    tx.execute(prepared_query, parameters or {}, commit_tx=True)
+                    return 1  # Успешное выполнение
+            
+            with ydb.SessionPool(driver) as pool:
+                return pool.retry_operation_sync(callee)
+        
+        return self._execute_with_logging("dml_query", operation, query, None, query_name)
     
     
     def _get_github_action_info(self) -> dict:

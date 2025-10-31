@@ -1,30 +1,39 @@
 #!/usr/bin/env python3
 
-import configparser
+import json
 import os
 import subprocess
 
 
-dir = os.path.dirname(__file__)
-config = configparser.ConfigParser()
-config_file_path = f"{dir}/../config/ydb_qa_db.ini"
-config.read(config_file_path)
-
-YDBD_PATH = config["YDBD"]["YDBD_PATH"]
+def get_ydbd_path():
+    """Получает ydbd_path из конфига (env или файл)"""
+    # Приоритет 1: YDB_QA_CONFIG из env
+    ydb_qa_config_env = os.environ.get("YDB_QA_CONFIG")
+    if ydb_qa_config_env:
+        config_dict = json.loads(ydb_qa_config_env)
+        return config_dict["variables"]["ydbd_path"]
+    
+    # Приоритет 2: локальный файл
+    dir_path = os.path.dirname(__file__)
+    config_path = f"{dir_path}/../config/ydb_qa_db.json"
+    with open(config_path, 'r') as f:
+        config_dict = json.load(f)
+        return config_dict["variables"]["ydbd_path"]
 
 
 def get_build_size():
-
-    if not os.path.exists(YDBD_PATH):
+    ydbd_path = get_ydbd_path()
+    
+    if not os.path.exists(ydbd_path):
         # can be possible due to incremental builds and ydbd itself is not affected by changes
-        print("Error: {} not exists, skipping".format(YDBD_PATH))
-        return 0
+        print("Error: {} not exists, skipping".format(ydbd_path))
+        return 1
 
     binary_size_bytes = subprocess.check_output(
-        ["bash", "-c", "cat {} | wc -c".format(YDBD_PATH)]
+        ["bash", "-c", "cat {} | wc -c".format(ydbd_path)]
     )
     binary_size_stripped_bytes = subprocess.check_output(
-        ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(YDBD_PATH)]
+        ["bash", "-c", "./ya tool strip {} -o - | wc -c".format(ydbd_path)]
     )
 
     size_stripped_bytes = int(binary_size_stripped_bytes.decode("utf-8"))

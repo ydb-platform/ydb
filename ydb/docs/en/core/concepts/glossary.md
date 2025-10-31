@@ -249,6 +249,14 @@ A **coordination node** is a schema object that allows client applications to cr
 
 A **semaphore** is an object within a [coordination node](#coordination-node) that provides a synchronization mechanism for distributed applications. Semaphores can be persistent or ephemeral and support operations like creation, acquisition, release, and monitoring. Learn more about [semaphores in {{ ydb-short-name }}](./datamodel/coordination-node.md#semaphore).
 
+{% if feature_resource_pool == true and feature_resource_pool_classifier == true %}
+
+**Resource pool** is a schema object that describes the restrictions placed on the resources (CPU, RAM, etc.) available for executing queries in this resource pool. A query is always executed in some resource pool. By default, all queries are executed in a resource pool named `default`, which does not impose any restrictions. More information about using resource pools can be found in the article (link)
+
+**Resource pool classifier** is an object designed to manage the distribution of queries between resource pools(link). It describes the rules by which a pool of resources is selected for each query. These classifiers are global for the entire database(link) and apply to all queries entering it. More information about their use can be found in the article (link)
+
+{% endif %}
+
 ### YQL {#yql}
 
 **YQL ({{ ydb-short-name }} Query Language)** is a high-level language for working with the system. It is a dialect of [ANSI SQL](https://en.wikipedia.org/wiki/SQL). There's a lot of content covering YQL, including a [tutorial](../dev/yql-tutorial/index.md), [reference](../yql/reference/syntax/index.md), and [recipes](../yql/reference/recipes/index.md).

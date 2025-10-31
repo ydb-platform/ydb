@@ -126,9 +126,10 @@ void TWriteOperation::AbortOnExecute(TColumnShard& owner, NTabletFlatExecutor::T
     TBlobGroupSelector dsGroupSelector(owner.Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
 
+    auto abortSnapshot = owner.GetCurrentSnapshotForInternalModification();
     for (auto&& i : InsertWriteIds) {
         owner.MutableIndexAs<NOlap::TColumnEngineForLogs>().MutableGranuleVerified(PathId.InternalPathId).AbortPortionOnExecute(
-            txc, i, owner.GetCurrentSnapshotForInternalModification());
+            txc, i, abortSnapshot);
     }
 }
 

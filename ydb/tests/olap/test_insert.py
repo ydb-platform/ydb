@@ -3,6 +3,7 @@ import os
 import random
 import yatest.common
 import ydb
+import pytest
 
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -305,3 +306,27 @@ class TestInsertStatement(object):
             assert "Conflict with existing key" in ex.message
             # Check that error message doesn't contain "uint8" (bool stored as uint8 internally)
             assert "uint8" not in ex.message, f"Error message should not contain 'uint8', but it does: {ex.message}"
+
+
+    @pytest.mark.parametrize("primitive_type", ["Uint64", "Int32", "Int16", "Uint8"])
+    def test_primitive_pk_error_type(self, primitive_type):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                type {primitive_type} NOT NULL,
+                PRIMARY KEY(type),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (type) VALUES (239);")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (type) VALUES (239);")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            assert primitive_type.lower() in ex.message, f"Error message should contain '{primitive_type.lower()}', but it does: {ex.message}"

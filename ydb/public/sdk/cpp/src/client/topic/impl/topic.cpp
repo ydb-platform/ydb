@@ -680,12 +680,12 @@ TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
     , Condition_(proto.condition())
 {
     if (proto.has_delete_action()) {
-        Action_ = EDeadLetterPolicy::Delete;
+        Action_ = EDeadLetterAction::Delete;
     } else if (proto.has_move_action()) {
-        Action_ = EDeadLetterPolicy::Move;
+        Action_ = EDeadLetterAction::Move;
         DeadLetterQueue_ = proto.move_action().dead_letter_queue();
     } else {
-        Action_ = EDeadLetterPolicy::Unspecified;
+        Action_ = EDeadLetterAction::Unspecified;
     }
 }
 
@@ -697,7 +697,7 @@ const TDeadLetterPolicyCondition& TDeadLetterPolicy::GetCondition() const {
     return Condition_;
 }
 
-EDeadLetterPolicy TDeadLetterPolicy::GetAction() const {
+EDeadLetterAction TDeadLetterPolicy::GetAction() const {
     return Action_;
 }
 
@@ -780,15 +780,15 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                     DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
             }
 
-            switch(DeadLetterPolicy_.DeadLetterPolicy_) {
-                case EDeadLetterPolicy::Move:
+            switch(DeadLetterPolicy_.Action_) {
+                case EDeadLetterAction::Move:
                     proto.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
                         DeadLetterPolicy_.DeadLetterQueue_.value());
                     break;
-                case EDeadLetterPolicy::Delete:
+                case EDeadLetterAction::Delete:
                     proto.mutable_dead_letter_policy()->mutable_delete_action();
                     break;
-                case EDeadLetterPolicy::Unspecified:
+                case EDeadLetterAction::Unspecified:
                     break;
             }
 
@@ -848,9 +848,9 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
             DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
     }
 
-    if (DeadLetterPolicy_.DeadLetterPolicy_) {
-        switch (DeadLetterPolicy_.DeadLetterPolicy_.value()) {
-            case EDeadLetterPolicy::Move:
+    if (DeadLetterPolicy_.Action_) {
+        switch (DeadLetterPolicy_.Action_.value()) {
+            case EDeadLetterAction::Move:
                 if (DeadLetterPolicy_.DeadLetterQueue_) {
                     if (DeadLetterPolicy_.DeadLetterPolicyChanged_) {
                         deadLetterPolicy->mutable_set_move_action()->set_dead_letter_queue(
@@ -861,10 +861,10 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
                     }
                 }
                 break;
-            case EDeadLetterPolicy::Delete:
+            case EDeadLetterAction::Delete:
                 deadLetterPolicy->mutable_set_delete_action();
                 break;
-            case EDeadLetterPolicy::Unspecified:
+            case EDeadLetterAction::Unspecified:
                 break;
         }
     }

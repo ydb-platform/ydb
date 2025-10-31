@@ -42,7 +42,7 @@ enum class EConsumerType {
     Shared = 2,
 };
 
-enum class EDeadLetterPolicy {
+enum class EDeadLetterAction {
     Unspecified = 0,
     Delete = 1,
     Move = 2,
@@ -71,13 +71,13 @@ public:
 
     bool GetEnabled() const;
     const TDeadLetterPolicyCondition& GetCondition() const;
-    EDeadLetterPolicy GetAction() const;
+    EDeadLetterAction GetAction() const;
     const std::string& GetDeadLetterQueue() const;
 
 private:
     bool Enabled_;
     TDeadLetterPolicyCondition Condition_;
-    EDeadLetterPolicy Action_;
+    EDeadLetterAction Action_;
     std::string DeadLetterQueue_;
 
 };
@@ -530,7 +530,7 @@ struct TDeadLetterPolicySettings {
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
     FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
-    FLUENT_SETTING_DEFAULT(EDeadLetterPolicy, DeadLetterPolicy, EDeadLetterPolicy::Unspecified);
+    FLUENT_SETTING_DEFAULT(EDeadLetterAction, Action, EDeadLetterAction::Unspecified);
     FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
 };
 
@@ -559,12 +559,12 @@ struct TDeadLetterPolicyBuilder {
     }
 
     TSelf& DeleteAction() {
-        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Delete;
         return *this;
     }
 
     TSelf& MoveAction(const std::string& deadLetterQueue) {
-        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
         Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
         return *this;
     }
@@ -580,7 +580,7 @@ struct TAlterDeadLetterPolicySettings {
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
     FLUENT_SETTING_DEFAULT(bool, DeadLetterPolicyChanged, false);
-    FLUENT_SETTING_OPTIONAL(EDeadLetterPolicy, DeadLetterPolicy);
+    FLUENT_SETTING_OPTIONAL(EDeadLetterAction, Action);
     FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
     FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
 };
@@ -611,20 +611,20 @@ struct TAlterDeadLetterPolicyBuilder {
 
     TSelf& SetDeleteAction() {
         Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
-        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Delete;
         return *this;
     }
 
     TSelf& AlterMoveAction(const std::string& deadLetterQueue) {
         Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = false;
-        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
         Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
         return *this;
     }
 
     TSelf& SetMoveAction(const std::string& deadLetterQueue) {
         Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
-        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.Action_ = EDeadLetterAction::Move;
         Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
         return *this;
     }

@@ -35,7 +35,7 @@ Y_UNIT_TEST(Empty) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 }
 
@@ -43,7 +43,7 @@ Y_UNIT_TEST(JoinSearch2Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(
@@ -79,7 +79,7 @@ Y_UNIT_TEST(JoinSearch3Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
@@ -128,7 +128,7 @@ Y_UNIT_TEST(JoinSearchYQL19363) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     TString relName1 = "a,b.c";
@@ -237,7 +237,7 @@ Y_UNIT_TEST(JoinSearchYT24403) {
     TMockProviderContextYT24403 pctx;
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, settings, dummyCtx, false));
 
     const TString relName1 = "a";
@@ -378,7 +378,8 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
-        return MakeNativeOptimizerNew(pctx, TOptimizerSettings{.MaxDPHypDPTableSize = 100000}, ctx, false);
+        TOptimizerSettings settings{};
+        return MakeNativeOptimizerNew(pctx, settings, ctx, false);
     };
     _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }

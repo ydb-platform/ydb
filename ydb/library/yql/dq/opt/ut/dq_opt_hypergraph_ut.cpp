@@ -53,7 +53,7 @@ std::shared_ptr<IBaseOptimizerNode> Enumerate(const std::shared_ptr<IBaseOptimiz
     auto ctx = TProviderContext();
     TExprContext dummyCtx;
 
-    TCBOSettings settings{};
+    TOptimizerSettings settings{};
     auto optimizer =
         std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(ctx, settings, dummyCtx, false));
 

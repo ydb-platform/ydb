@@ -10,17 +10,13 @@ ALTER DATABASE path SET (key = value, ...)
 
 ### Параметры
 
-* `path` — путь к базе данных;
-* `key` — имя изменяемой настройки;
+* `path` — путь к базе данных.
+* `key` — имя изменяемой настройки:
+  * `MAX_PATHS` — [максимальное количество путей](../../../../concepts/limits-ydb.md#schema-object) (объектов в схеме) в базе данных.
+  * `MAX_SHARDS` — [максимальное количество таблеток](../../../../concepts/limits-ydb.md#schema-object) в базе данных.
+  * `MAX_CHILDREN_IN_DIR` — [максимальное количество объектов в директории](../../../../concepts/limits-ydb.md#schema-object).
+  * `MAX_SHARDS_IN_PATH` — [максимальное количество таблеток, ассоциированных с одним объектом схемы](../../../../concepts/limits-ydb.md#schema-object). Например, максимальное количество партиций одной таблицы.
 * `value` — значение изменяемой настройки.
-
-Где `key`:
-
-* [Ограничение объектов схемы](../../../../concepts/limits-ydb.md#schema-object):
-  * `MAX_PATHS`.
-  * `MAX_SHARDS`.
-  * `MAX_CHILDREN_IN_DIR`.
-  * `MAX_SHARDS_IN_PATH`.
 
 ## Примеры
 
@@ -28,3 +24,4 @@ ALTER DATABASE path SET (key = value, ...)
 
 ```yql
 ALTER DATABASE `/Root/test` SET (MAX_PATHS = 20000);
+```

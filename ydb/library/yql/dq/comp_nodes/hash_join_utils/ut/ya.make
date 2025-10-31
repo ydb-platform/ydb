@@ -12,6 +12,7 @@ ELSE()
 ENDIF()
 
 
+IF (ARCH_X86_64 AND OS_LINUX)
 SRCS(
     accumulator_ut.cpp
     block_layout_converter_ut.cpp
@@ -34,6 +35,8 @@ CFLAGS(
     -mavx2
     -mprfchw
 )
+
+ENDIF()
 
 YQL_LAST_ABI_VERSION()
 

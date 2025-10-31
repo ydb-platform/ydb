@@ -14,33 +14,25 @@
 
 {% endif %}
 
-    CREATE [TEMP | TEMPORARY] TABLE table_name (
-        column1 type1,
-{% if feature_not_null == true %}        column2 type2 NOT NULL,{% else %}        column2 type2,{% endif %}
-        ...
-        columnN typeN,
-{% if feature_secondary_index == true %}
-        INDEX `<index_name>`
-          [GLOBAL|LOCAL]
-          [UNIQUE]
-          [SYNC|ASYNC]
-          [USING <index_type>]
-          ON ( <index_columns> )
-          [COVER ( <cover_columns> )]
-          [WITH ( <parameter_name> = <parameter_value>[, ...])]
-        ...
-{% endif %}
-{% if feature_map_tables %}
-        PRIMARY KEY ( column, ... ),
-        FAMILY column_family ( family_options, ... )
-{% else %}
-        ...
-{% endif %}
-    )
-{% if feature_map_tables %}
-    WITH ( key = value, ... )
-    [AS SELECT ...]
-{% endif %}
+CREATE [TEMP | TEMPORARY] TABLE [IF NOT EXISTS] table_name (
+	column_name column_type [FAMILY <family_name>] [NOT] NULL [DEFAULT <column_defult_value>],
+    INDEX `<index_name>`
+		GLOBAL
+		[UNIQUE]
+		[SYNC|ASYNC]
+		[USING <index_type>]
+		ON ( <index_columns> )
+			[COVER ( <cover_columns> )]
+			[WITH ( <parameter_name> = <parameter_value>[, ...])]
+	PRIMARY KEY ( <column>[, ...]),
+	PARTITION BY ( <column>[, ...]),
+    FAMILY column_family ( family_options[, ...])
+	CHANGEFEED <name> WITH (<changefeed_option> = <changefeed_value>[, ...])
+)
+[PARTITION BY HASH (column[, ...])]
+[WITH (<setting_name> = <setting_value>[, ...])]
+
+[AS SELECT ...]
 
 {% if oss == true and backend_name == "YDB" %}
 

@@ -984,10 +984,13 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         DoCreateLock(result, opId, workingDirPath, tablePath);
     }
 
-    // Note: For CDC streams on index impl tables, we don't create an AlterTableIndex sub-operation
-    // The index version will be synced directly in TProposeAtTable::HandleReply to avoid
-    // the complexity of managing AlterData for what is essentially just a version sync
-    // (not an actual index schema change)
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+    }
 
     Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
     auto table = context.SS->Tables.at(tablePath.Base()->PathId);

@@ -635,8 +635,13 @@ TVector<ISubOperation::TPtr> CreateAlterCdcStream(TOperationId opId, const TTxTr
         result.push_back(DropLock(NextPartId(opId, result), outTx));
     }
 
-    // Note: For ALTER CDC streams on index impl tables, we don't create an AlterTableIndex sub-operation
-    // The index version sync happens in the CDC stream operation handlers directly
+    if (workingDirPath.IsTableIndex()) {
+        auto outTx = TransactionTemplate(workingDirPath.Parent().PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTableIndex);
+        outTx.MutableAlterTableIndex()->SetName(workingDirPath.LeafName());
+        outTx.MutableAlterTableIndex()->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+
+        result.push_back(CreateAlterTableIndex(NextPartId(opId, result), outTx));
+    }
 
     return result;
 }

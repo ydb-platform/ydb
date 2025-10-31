@@ -24,6 +24,10 @@
 
 namespace NKikimr::NKqp {
 
+    
+
+    /* for ci*/
+    
 Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     TString scriptEmptyVariants = R"(

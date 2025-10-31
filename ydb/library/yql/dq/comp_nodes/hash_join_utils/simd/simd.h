@@ -5,7 +5,7 @@
 
 #include <stdlib.h>
 
-#if defined(__x86_64__)
+#if defined(__x86_64__) && defined(__linux__)
     #define USE_X86_SIMD 1
 #endif
 

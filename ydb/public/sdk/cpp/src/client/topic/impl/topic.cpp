@@ -705,18 +705,14 @@ const std::string& TDeadLetterPolicy::GetDeadLetterQueue() const {
     return DeadLetterQueue_;
 }
 
-template<typename TDeadLetterPolicySettings>
-TDeadLetterPolicyConditionSettings<TDeadLetterPolicySettings>::TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent, const Ydb::Topic::DeadLetterPolicyCondition& proto)
+TDeadLetterPolicyConditionSettings::TDeadLetterPolicyConditionSettings(const Ydb::Topic::DeadLetterPolicyCondition& proto)
     : MaxProcessingAttempts_(proto.max_processing_attempts())
-    , Parent_(parent)
 {
 }
 
-template<typename TConsumerSettings>
-TDeadLetterPolicySettings<TConsumerSettings>::TDeadLetterPolicySettings(TConsumerSettings& parent, const Ydb::Topic::DeadLetterPolicy& proto)
+TDeadLetterPolicySettings::TDeadLetterPolicySettings(const Ydb::Topic::DeadLetterPolicy& proto)
     : Enabled_(proto.enabled())
-    , Condition_(*this, proto.condition())
-    , Parent_(parent)
+    , Condition_(proto.condition())
 {
     if (proto.has_move_action()) {
         DeadLetterQueue_ = proto.move_action().dead_letter_queue();
@@ -732,9 +728,9 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , SupportedCodecs_(DeserializeCodecs(proto.supported_codecs()))
     , KeepMessagesOrder_(proto.keep_messages_order())
     , DefaultProcessingTimeout_(TDuration::Seconds(proto.default_processing_timeout().seconds()))
+    , DeadLetterPolicy_(proto.dead_letter_policy())
     , Attributes_(DeserializeAttributes(proto.attributes()))
     , Parent_(parent)
-    , DeadLetterPolicySettings_(*this, proto.dead_letter_policy())
 {
     switch(proto.consumer_type()) {
         case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
@@ -776,18 +772,18 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
             if (DefaultProcessingTimeout_) {
                 proto.mutable_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
             }
-            if (DeadLetterPolicySettings_.Enabled_) {
-                proto.mutable_dead_letter_policy()->set_enabled(DeadLetterPolicySettings_.Enabled_.value());
+            if (DeadLetterPolicy_.Enabled_) {
+                proto.mutable_dead_letter_policy()->set_enabled(DeadLetterPolicy_.Enabled_.value());
             }
-            if (DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_) {
+            if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
                 proto.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(
-                    DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_.value());
+                    DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
             }
 
-            switch(DeadLetterPolicySettings_.DeadLetterPolicy_) {
+            switch(DeadLetterPolicy_.DeadLetterPolicy_) {
                 case EDeadLetterPolicy::Move:
                     proto.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(
-                        DeadLetterPolicySettings_.DeadLetterQueue_.value());
+                        DeadLetterPolicy_.DeadLetterQueue_.value());
                     break;
                 case EDeadLetterPolicy::Delete:
                     proto.mutable_dead_letter_policy()->mutable_delete_action();
@@ -847,21 +843,21 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
     }
 
     auto* deadLetterPolicy = proto.mutable_alter_dead_letter_policy();
-    if (DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_) {
+    if (DeadLetterPolicy_.Condition_.MaxProcessingAttempts_) {
         deadLetterPolicy->mutable_alter_condition()->set_set_max_processing_attempts(
-            DeadLetterPolicySettings_.Condition_.MaxProcessingAttempts_.value());
+            DeadLetterPolicy_.Condition_.MaxProcessingAttempts_.value());
     }
 
-    if (DeadLetterPolicySettings_.DeadLetterPolicy_) {
-        switch (DeadLetterPolicySettings_.DeadLetterPolicy_.value()) {
+    if (DeadLetterPolicy_.DeadLetterPolicy_) {
+        switch (DeadLetterPolicy_.DeadLetterPolicy_.value()) {
             case EDeadLetterPolicy::Move:
-                if (DeadLetterPolicySettings_.DeadLetterQueue_) {
-                    if (DeadLetterPolicySettings_.DeadLetterPolicyChanged_) {
+                if (DeadLetterPolicy_.DeadLetterQueue_) {
+                    if (DeadLetterPolicy_.DeadLetterPolicyChanged_) {
                         deadLetterPolicy->mutable_set_move_action()->set_dead_letter_queue(
-                            DeadLetterPolicySettings_.DeadLetterQueue_.value());
+                            DeadLetterPolicy_.DeadLetterQueue_.value());
                     } else {
                         deadLetterPolicy->mutable_alter_move_action()->set_set_dead_letter_queue(
-                            DeadLetterPolicySettings_.DeadLetterQueue_.value());
+                            DeadLetterPolicy_.DeadLetterQueue_.value());
                     }
                 }
                 break;

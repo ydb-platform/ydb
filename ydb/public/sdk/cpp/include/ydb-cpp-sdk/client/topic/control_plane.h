@@ -495,101 +495,153 @@ struct TAlterTopicSettings;
 using TAlterConsumerAttributesBuilder = TAlterAttributesBuilderImpl<TAlterConsumerSettings>;
 using TAlterTopicAttributesBuilder = TAlterAttributesBuilderImpl<TAlterTopicSettings>;
 
-template<typename TDeadLetterPolicySettings>
 struct TDeadLetterPolicyConditionSettings {
     using TSelf = TDeadLetterPolicyConditionSettings;
 
-    TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent) : Parent_(parent) { }
-    TDeadLetterPolicyConditionSettings(TDeadLetterPolicySettings& parent, const Ydb::Topic::DeadLetterPolicyCondition&);
+    TDeadLetterPolicyConditionSettings(const Ydb::Topic::DeadLetterPolicyCondition&);
+    TDeadLetterPolicyConditionSettings() = default;
+    TDeadLetterPolicyConditionSettings(const TSelf&) = default;
+    TDeadLetterPolicyConditionSettings(TSelf&&) = default;
+    TSelf& operator=(const TSelf&) = default;
 
     FLUENT_SETTING_OPTIONAL(ui32, MaxProcessingAttempts);
-
-    TDeadLetterPolicySettings& EndCondition() { return Parent_; }
-
-private:
-    TDeadLetterPolicySettings& Parent_;
 };
 
-template<typename TConsumerSettings>
+template<typename TParent>
+struct TDeadLetterPolicyConditionBuilder {
+    TDeadLetterPolicyConditionBuilder(TParent& parent) : Parent_(parent) {};
+
+    TDeadLetterPolicyConditionBuilder& MaxProcessingAttempts(ui32 maxProcessingAttempts) {
+        Parent_.Parent_.DeadLetterPolicy_.Condition_.MaxProcessingAttempts_ = maxProcessingAttempts;
+        return *this;
+    }
+
+    TParent& EndCondition() { return Parent_; }
+
+private:
+    TParent& Parent_;
+};
+
 struct TDeadLetterPolicySettings {
     using TSelf = TDeadLetterPolicySettings;
-    using TCondition = TDeadLetterPolicyConditionSettings<TSelf>;
 
-    TDeadLetterPolicySettings(TConsumerSettings& parent) : Condition_(*this), Parent_(parent) {}
-    TDeadLetterPolicySettings(TConsumerSettings& parent, const Ydb::Topic::DeadLetterPolicy&);
+    TDeadLetterPolicySettings() = default;
+    TDeadLetterPolicySettings(const Ydb::Topic::DeadLetterPolicy&);
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
-    FLUENT_SETTING(TCondition, Condition);
+    FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
     FLUENT_SETTING_DEFAULT(EDeadLetterPolicy, DeadLetterPolicy, EDeadLetterPolicy::Unspecified);
     FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
+};
+
+template<typename TParent>
+struct TDeadLetterPolicyBuilder {
+    using TSelf = TDeadLetterPolicyBuilder;
+    friend struct TDeadLetterPolicyConditionBuilder<TSelf>;
+
+    TDeadLetterPolicyBuilder(TParent& parent) : Parent_(parent) {};
+
+    TSelf& Enable() {
+        return Enabled(true);
+    }
+
+    TSelf& Disable() {
+        return Enabled(false);
+    }
+
+    TSelf& Enabled(bool enabled) {
+        Parent_.DeadLetterPolicy_.Enabled_ = enabled;
+        return *this;
+    }
+
+    TDeadLetterPolicyConditionBuilder<TSelf> BeginCondition() {
+        return TDeadLetterPolicyConditionBuilder<TSelf>(*this);
+    }
 
     TSelf& DeleteAction() {
-        DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
         return *this;
     }
 
     TSelf& MoveAction(const std::string& deadLetterQueue) {
-        DeadLetterPolicy_ = EDeadLetterPolicy::Move;
-        DeadLetterQueue_ = deadLetterQueue;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
         return *this;
     }
 
-    TCondition& BeginCondition() { return Condition_; }
-    TConsumerSettings& EndDeadLetterPolicy() { return Parent_; }
+    TParent& EndDeadLetterPolicy() { return Parent_; }
 
 private:
-    TConsumerSettings& Parent_;
+    TParent& Parent_;
 };
 
-template<typename TConsumerSettings>
 struct TAlterDeadLetterPolicySettings {
     using TSelf = TAlterDeadLetterPolicySettings;
-    using TCondition = TDeadLetterPolicyConditionSettings<TAlterDeadLetterPolicySettings<TConsumerSettings>>;
-
-    TAlterDeadLetterPolicySettings(TConsumerSettings& parent) : Condition_(*this), Parent_(parent) {}
 
     FLUENT_SETTING_OPTIONAL(bool, Enabled);
     FLUENT_SETTING_DEFAULT(bool, DeadLetterPolicyChanged, false);
     FLUENT_SETTING_OPTIONAL(EDeadLetterPolicy, DeadLetterPolicy);
-    FLUENT_SETTING(TCondition, Condition);
+    FLUENT_SETTING(TDeadLetterPolicyConditionSettings, Condition);
     FLUENT_SETTING_OPTIONAL(std::string, DeadLetterQueue);
+};
 
-    TSelf& SetDeleteAction() {
-        DeadLetterPolicyChanged_ = true;
-        DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
+template<typename TParent>
+struct TAlterDeadLetterPolicyBuilder {
+    using TSelf = TAlterDeadLetterPolicyBuilder;
+    friend struct TDeadLetterPolicyConditionBuilder<TSelf>;
+
+    TAlterDeadLetterPolicyBuilder(TParent& parent) : Parent_(parent) {};
+
+    TSelf& Enable() {
+        return Enabled(true);
+    }
+
+    TSelf& Disable() {
+        return Enabled(false);
+    }
+
+    TSelf& Enabled(bool enabled) {
+        Parent_.DeadLetterPolicy_.Enabled_ = enabled;
         return *this;
     }
 
-    TSelf& SetMoveAction(const std::string& deadLetterQueue) {
-        DeadLetterPolicyChanged_ = true;
-        DeadLetterPolicy_ = EDeadLetterPolicy::Move;
-        DeadLetterQueue_ = deadLetterQueue;
+    TDeadLetterPolicyConditionBuilder<TSelf> BeginCondition() {
+        return TDeadLetterPolicyConditionBuilder<TSelf>(*this);
+    }
+
+    TSelf& SetDeleteAction() {
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Delete;
         return *this;
     }
 
     TSelf& AlterMoveAction(const std::string& deadLetterQueue) {
-        DeadLetterPolicyChanged_ = false;
-        DeadLetterPolicy_ = EDeadLetterPolicy::Move;
-        DeadLetterQueue_ = deadLetterQueue;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = false;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
         return *this;
     }
 
-    TCondition& BeginCondition() { return Condition_; }
-    TConsumerSettings& EndDeadLetterPolicy() { return Parent_; }
+    TSelf& SetMoveAction(const std::string& deadLetterQueue) {
+        Parent_.DeadLetterPolicy_.DeadLetterPolicyChanged_ = true;
+        Parent_.DeadLetterPolicy_.DeadLetterPolicy_ = EDeadLetterPolicy::Move;
+        Parent_.DeadLetterPolicy_.DeadLetterQueue_ = deadLetterQueue;
+        return *this;
+    }
+
+    TParent& EndAlterDeadLetterPolicy() { return Parent_; }
 
 private:
-    TConsumerSettings& Parent_;
+    TParent& Parent_;
 };
 
 template<class TSettings>
 struct TConsumerSettings {
     using TSelf = TConsumerSettings;
-    using TDeadLetterPolicy = TDeadLetterPolicySettings<TSelf>;
-
     using TAttributes = std::map<std::string, std::string>;
 
-    TConsumerSettings(TSettings& parent) : Parent_(parent), DeadLetterPolicySettings_(*this) {}
-    TConsumerSettings(TSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent), DeadLetterPolicySettings_(*this) {}
+    TConsumerSettings(TSettings& parent) : Parent_(parent) {}
+    TConsumerSettings(TSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent) {}
     TConsumerSettings(TSettings& parent, const Ydb::Topic::Consumer& proto);
 
     void SerializeTo(Ydb::Topic::Consumer& proto) const;
@@ -604,6 +656,7 @@ struct TConsumerSettings {
 
     FLUENT_SETTING_OPTIONAL(bool, KeepMessagesOrder);
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING(TDeadLetterPolicySettings, DeadLetterPolicy)
 
     FLUENT_SETTING(TAttributes, Attributes);
 
@@ -647,15 +700,14 @@ struct TConsumerSettings {
         return *this;
     }
 
-    TDeadLetterPolicy& BeginDeadLetterPolicy() {
-        return DeadLetterPolicySettings_;
+    TDeadLetterPolicyBuilder<TSelf> BeginDeadLetterPolicy() {
+        return TDeadLetterPolicyBuilder<TSelf>(*this);
     }
 
     TSettings& EndAddConsumer() { return Parent_; };
 
 private:
     TSettings& Parent_;
-    TDeadLetterPolicy DeadLetterPolicySettings_;
 };
 
 struct TAlterConsumerSettings {
@@ -663,8 +715,8 @@ struct TAlterConsumerSettings {
 
     using TAlterAttributes = std::map<std::string, std::string>;
 
-    TAlterConsumerSettings(TAlterTopicSettings& parent): Parent_(parent), DeadLetterPolicySettings_(*this)  {}
-    TAlterConsumerSettings(TAlterTopicSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent), DeadLetterPolicySettings_(*this) {}
+    TAlterConsumerSettings(TAlterTopicSettings& parent): Parent_(parent) {}
+    TAlterConsumerSettings(TAlterTopicSettings& parent, const std::string& name) : ConsumerName_(name), Parent_(parent) {}
 
     void SerializeTo(Ydb::Topic::AlterConsumer& proto) const;
 
@@ -679,6 +731,7 @@ struct TAlterConsumerSettings {
 
     FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Unspecified);
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
+    FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
 
     TAlterConsumerAttributesBuilder BeginAlterAttributes() {
         return TAlterConsumerAttributesBuilder(*this);
@@ -704,15 +757,14 @@ struct TAlterConsumerSettings {
         return *this;
     }
 
-    TAlterDeadLetterPolicySettings<TSelf>& BeginDeadLetterPolicy() {
-        return DeadLetterPolicySettings_;
+    TAlterDeadLetterPolicyBuilder<TSelf> BeginAlterDeadLetterPolicy() {
+        return TAlterDeadLetterPolicyBuilder<TSelf>(*this);
     }
 
     TAlterTopicSettings& EndAlterConsumer() { return Parent_; };
 
 private:
     TAlterTopicSettings& Parent_;
-    TAlterDeadLetterPolicySettings<TSelf> DeadLetterPolicySettings_;
 };
 
 struct TPartitioningSettingsBuilder;

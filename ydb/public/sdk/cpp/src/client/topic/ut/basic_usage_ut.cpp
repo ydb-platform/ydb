@@ -119,7 +119,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .DefaultProcessingTimeout(TDuration::Seconds(7))
                 .KeepMessagesOrder(true)
                 .BeginDeadLetterPolicy()
-                    .Enabled(true)
+                    .Enable()
                     .MoveAction("deadLetterQueue-topic")
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
@@ -165,7 +165,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .EndCondition()
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
-        Cerr << ">>>>> " << topics.Consumers_[0].BeginDeadLetterPolicy().DeadLetterPolicy_ << Endl;
+        Cerr << ">>>>> " << topics.Consumers_[0].DeadLetterPolicy_.DeadLetterPolicy_ << Endl;
 
         auto status = client.CreateTopic("topic_name", topics).GetValueSync();
         UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());
@@ -247,13 +247,13 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                     .ConsumerName("shared_consumer_name")
                     .ConsumerType(EConsumerType::Shared)
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
-                    .BeginDeadLetterPolicy()
+                    .BeginAlterDeadLetterPolicy()
                         .Enabled(true)
                         .AlterMoveAction("deadLetterQueue-topic-new")
                         .BeginCondition()
                             .MaxProcessingAttempts(17)
                         .EndCondition()
-                    .EndDeadLetterPolicy()
+                    .EndAlterDeadLetterPolicy()
                 .EndAlterConsumer();
             auto status = client.AlterTopic("topic_name", topics).GetValueSync();
             UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToOneLineString());

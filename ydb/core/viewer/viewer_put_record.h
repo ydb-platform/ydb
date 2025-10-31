@@ -42,7 +42,8 @@ private:
     TVector<TMetadataItem> Metadata;
     ui64 TabletId;
     TActorId WriteActorId;
-    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> ResultSchemeCache;
+    std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> SchemeCacheResponse;
+    std::optional<TRequestResponse<NPQ::TEvPartitionWriter::TEvWriteResponse>> WriteResponse;
 
 public:
     STATEFN(StateWork) {
@@ -85,7 +86,7 @@ public:
             }
         }
 
-        ResultSchemeCache = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow, 1);
+        SchemeCacheResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, NACLib::EAccessRights::UpdateRow, Cookie);
         TBase::Become(&TThis::StateWork, Timeout, new TEvents::TEvWakeup());
     }
 
@@ -133,13 +134,13 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        if (!ResultSchemeCache->Set(std::move(ev))) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
+        if (!SchemeCacheResponse->Set(std::move(ev))) {
+            return;
         }
-        if (ResultSchemeCache->IsError()) {
-            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + ResultSchemeCache->GetError()));
+        if (SchemeCacheResponse->IsError()) {
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "SchemeCacheNavigate request finished with error: " + SchemeCacheResponse->GetError()));
         }
-        auto navigate = *ResultSchemeCache->Get()->Request;
+        auto navigate = *SchemeCacheResponse->Get()->Request;
         auto& info = navigate.ResultSet.front();
         if (info.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
             return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "TEvNavigateKeySet finished with unsuccessful status. Check if topic exists or if you have UpdateRow access rights."));
@@ -176,23 +177,31 @@ public:
 
         auto* writerActor = CreatePartitionWriter(SelfId(), TabletId, *Partition, opts);
         WriteActorId = ActorContext().RegisterWithSameMailbox(writerActor);
+
         auto writeEvent = FormWriteRequest();
-        Send(WriteActorId, std::move(writeEvent));
+        WriteResponse = MakeRequest<NPQ::TEvPartitionWriter::TEvWriteResponse>(WriteActorId, std::move(writeEvent).Release());
+        RequestDone();
     }
 
     void Handle(NPQ::TEvPartitionWriter::TEvInitResult::TPtr) {
         return;
     }
 
-    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr request) {
-        auto r = request->Get();
+    void Handle(NPQ::TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
+        if (!WriteResponse->Set(std::move(ev))) {
+            return;
+        }
+        if (WriteResponse->IsError()) {
+            return ReplyAndPassAway(TBase::GetHTTPBADREQUEST("text/plain", "Write request finished with error: " + WriteResponse->GetError()));
+        }
+        auto r = WriteResponse->Get();
         const auto& resp = r->Record.GetPartitionResponse();
         auto cookie = resp.GetCookie();
         if (cookie != Cookie) {
             return ReplyAndPassAway(TBase::GetHTTPINTERNALERROR("text/plain", "Cookies mismatch in TEvWriteResponse Handler."));
         }
         if (r->IsSuccess()) {
-            return ReplyAndPassAway(TBase::GetHTTPOK("text/plain", "Recieved response"));
+            RequestDone();
         } else {
             auto error = r->GetError();
             TString reason = r->GetError().Reason;

@@ -841,6 +841,7 @@ public:
             TabletRequests.TabletStates[RootSchemeShardId].Database = DomainPath;
             TabletRequests.TabletStates[RootSchemeShardId].Type = TTabletTypes::SchemeShard;
             DescribeByPath[DomainPath] = RequestDescribe(RootSchemeShardId, DomainPath);
+            DatabaseState[DomainPath].SchemeShardId = RootSchemeShardId;
         }
 
         if (BsControllerId) {
@@ -3412,7 +3413,11 @@ public:
 
     void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
         if (HaveAllBSControllerInfo() && databaseState.StoragePools.empty()) {
-            context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
+            if (TabletRequests.TabletStates[databaseState.SchemeShardId].IsUnresponsive) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::GREY, "Could not get data on storage", ETags::StorageState);
+            } else {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
+            }
         } else {
             if (HaveAllBSControllerInfo()) {
                 for (const ui64 poolId : databaseState.StoragePools) {

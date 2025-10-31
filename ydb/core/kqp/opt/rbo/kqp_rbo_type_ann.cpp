@@ -11,6 +11,8 @@ using namespace NKqp;
 using namespace NYql;
 using namespace NNodes;
 
+THashSet<TString> SupportedAggregationFunctions = {"sum", "min", "max"};
+
 std::pair<TString, const TKikimrTableDescription*> ResolveTable(const TExprNode* kqpTableNode, TExprContext& ctx,
     const TString& cluster, const TKikimrTablesData& tablesData)
 {
@@ -206,7 +208,7 @@ TStatus ComputeTypes(std::shared_ptr<TOpAggregate> aggregate, TRBOContext& ctx) 
     TVector<const TItemExprType*> newItemTypes;
     for (const auto* itemType : structType->GetItems()) {
         if (auto it = aggTraitsMap.find(itemType->GetName()); it != aggTraitsMap.end()) {
-            Y_ENSURE(it->second.second == "sum", "Only sum aggregation function is supported");
+            Y_ENSURE(SupportedAggregationFunctions.count(it->second.second), "Unsupported aggregation function");
             // For count need to update type
             newItemTypes.push_back(ctx.ExprCtx.MakeType<TItemExprType>(it->second.first, itemType->GetItemType()));
         } else {

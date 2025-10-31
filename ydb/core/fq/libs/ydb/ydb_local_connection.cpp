@@ -17,7 +17,7 @@ struct TLocalYdbConnection : public IYdbConnection {
         return TableClient;
     }
     TString GetTablePathPrefix() override {
-        return Db + '/' + TablePathPrefix;
+        return JoinPath({Db, TablePathPrefix});
     }
     TString GetDb() override {
         return Db;

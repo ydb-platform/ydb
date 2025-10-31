@@ -24,7 +24,10 @@ class TestInsertStatement(object):
                 "compaction_enabled": True,
                 "deduplication_enabled": True,
                 "reader_class_name": "SIMPLE",
-            }
+            },
+            extra_feature_flags={
+                "enable_columnshard_bool": True
+            },
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()
@@ -279,3 +282,26 @@ class TestInsertStatement(object):
             assert False, 'Should Fail'
         except ydb.issues.GenericError as ex:
             assert "Failed to convert type" in ex.message
+
+    def test_bool_pk_error_type(self):
+        table_path = self.get_table_path()
+        self.ydb_client.query(
+            f"""
+            CREATE TABLE `{table_path}` (
+                b Bool NOT NULL,
+                PRIMARY KEY(b),
+            )
+            WITH (
+                STORE = COLUMN
+            )
+            """
+        )
+
+        self.ydb_client.query(f"INSERT INTO `{table_path}` (b) VALUES (false);")
+        try:
+            self.ydb_client.query(f"INSERT INTO `{table_path}` (b) VALUES (false);")
+            assert False, 'Should Fail'
+        except ydb.issues.PreconditionFailed as ex:
+            assert "Conflict with existing key" in ex.message
+            # Check that error message doesn't contain "uint8" (bool stored as uint8 internally)
+            assert "uint8" not in ex.message, f"Error message should not contain 'uint8', but it does: {ex.message}"

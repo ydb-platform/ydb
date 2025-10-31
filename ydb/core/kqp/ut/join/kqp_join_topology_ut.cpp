@@ -161,9 +161,9 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
 
         Cout << "--------------------------------------------------------------------------\n";
 
-        results["SE"] = *withShuffleElimination / *withoutShuffleElimination;
+        results["SE-div-CBO"] = *withShuffleElimination / *withoutShuffleElimination;
         if (resultType.contains("0")) {
-            results["SE-0"] = (*withShuffleElimination - *withoutCBO) / (*withoutShuffleElimination - *withoutCBO);
+            results["SE-0-div-CBO-0"] = (*withShuffleElimination - *withoutCBO) / (*withoutShuffleElimination - *withoutCBO);
         }
 
         return results;
@@ -415,7 +415,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
     template <typename TGenerateTopology>
     void RunBenches(TTestContext &ctx, TBenchmarkConfig config, TArgs args, TGenerateTopology generateTopology) {
         std::string header = "N,i,repeat,alpha,theta,sigma,mu,repeats,seed," + BoxPlotCSVHeader() + "\n";
-        std::string headerCummulative = "N,i,alpha,theta,sigma,mu,repeats," + BoxPlotCSVHeader() + "\n";
+        std::string headerCummulative = "N,i,alpha,theta,sigma,mu,gen," + BoxPlotCSVHeader() + "\n";
 
         std::string resultType = "SE";
         if (args.HasArg("result")) {
@@ -431,44 +431,47 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                 for (double sigma : args.GetArgOrDefault<double>("sigma", "0.5")) {
                     for (double mu : args.GetArgOrDefault<double>("mu", "1.0")) {
                         for (ui64 n : args.GetArg<uint64_t>("N")) {
-                            Cout << "\n\n\n";
-                            auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma);
-
                             std::map<std::string, TRunningStatistics<double>> cummulative;
 
-                            ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
-                            for (ui64 i = 0; i < repeats; ++ i) {
-                                Cout << "\n\n";
-                                Cout << "Reproduce: 'N=" << n << "; alpha=" << alpha << "; theta="
-                                     << theta << "; sigma=" << sigma << "; mu=" << mu
-                                     << "; seed=" << ctx.RNG.Serialize() << "'\n";
+                            ui64 generationRepeats = args.GetArgOrDefault<uint64_t>("gen", "1").GetValue();
+                            for (ui64 j = 0; j < generationRepeats; ++ j) {
+                                Cout << "\n\n\n";
+                                auto initialGraph = generateTopology(ctx.RNG, n, mu, sigma);
 
-                                ui64 seed = ctx.RNG.Serialize();
+                                ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
+                                for (ui64 i = 0; i < repeats; ++ i) {
+                                    Cout << "\n\n";
+                                    Cout << "Reproduce: 'N=" << n << "; alpha=" << alpha << "; theta="
+                                            << theta << "; sigma=" << sigma << "; mu=" << mu
+                                            << "; seed=" << ctx.RNG.Serialize() << "'\n";
 
-                                TRelationGraph graph = initialGraph;
-                                if (i != 0) {
-                                    MCMCRandomize(ctx.RNG, graph, mcmcSteps);
-                                }
+                                    ui64 seed = ctx.RNG.Serialize();
 
-                                graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
-
-                                try {
-                                    auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
-                                    if (!result) {
-                                        goto stop;
+                                    TRelationGraph graph = initialGraph;
+                                    if (i != 0) {
+                                        MCMCRandomize(ctx.RNG, graph, mcmcSteps);
                                     }
 
-                                    AccumulateAllStats(cummulative, *result);
+                                    graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                                    std::stringstream params;
-                                    params << n << "," << (globalNum ++) << "," << i
-                                           << "," << alpha << "," << theta << "," << sigma
-                                           << "," << mu << "," << repeats << "," << seed << ",";
+                                    try {
+                                        auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
+                                        if (!result) {
+                                            goto stop;
+                                        }
 
-                                    WriteAllStats(ctx, "", header, params.str(), *result);
-                                } catch (std::exception &exc) {
-                                    Cout << "Skipped run: " << exc.what() << "\n";
-                                    continue;
+                                        AccumulateAllStats(cummulative, *result);
+
+                                        std::stringstream params;
+                                        params << n << "," << (globalNum ++) << "," << i
+                                                << "," << alpha << "," << theta << "," << sigma
+                                                << "," << mu << "," << repeats << "," << seed << ",";
+
+                                        WriteAllStats(ctx, "", header, params.str(), *result);
+                                    } catch (std::exception &exc) {
+                                        Cout << "Skipped run: " << exc.what() << "\n";
+                                        continue;
+                                    }
                                 }
                             }
 
@@ -476,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                             params << n << "," << (cummulativeNum ++)
                                    << "," << alpha << "," << theta
                                    << "," << sigma << "," << mu
-                                   << "," << repeats << ",";
+                                   << "," << generationRepeats << ",";
 
                             WriteAllStats(ctx, "cummulative-", headerCummulative, params.str(), cummulative);
                         }

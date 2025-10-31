@@ -806,13 +806,31 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
         return *this;
     }
 
-    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer() {
+    TConsumerSettings<TCreateTopicSettings>& BeginAddSharedConsumer() {
+        return BeginAddConsumer(EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddStreamingConsumer() {
+        return BeginAddConsumer(EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(EConsumerType consumerType = EConsumerType::Streaming) {
         Consumers_.push_back({*this});
+        Consumers_.back().ConsumerType(consumerType);
         return Consumers_.back();
     }
 
-    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(const std::string& name) {
+    TConsumerSettings<TCreateTopicSettings>& BeginAddSharedConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Shared);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddStreamingConsumer(const std::string& name) {
+        return BeginAddConsumer(name, EConsumerType::Streaming);
+    }
+
+    TConsumerSettings<TCreateTopicSettings>& BeginAddConsumer(const std::string& name, EConsumerType consumerType = EConsumerType::Streaming) {
         Consumers_.push_back({*this, name});
+        Consumers_.back().ConsumerType(consumerType);
         return Consumers_.back();
     }
 

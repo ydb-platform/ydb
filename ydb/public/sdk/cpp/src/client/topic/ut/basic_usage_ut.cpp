@@ -120,10 +120,10 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
                 .KeepMessagesOrder(true)
                 .BeginDeadLetterPolicy()
                     .Enable()
-                    .MoveAction("deadLetterQueue-topic")
                     .BeginCondition()
                         .MaxProcessingAttempts(11)
                     .EndCondition()
+                    .MoveAction("deadLetterQueue-topic")
                 .EndDeadLetterPolicy()
             .EndAddConsumer();
 
@@ -152,9 +152,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         TTopicClient client(setup.MakeDriver());
 
         TCreateTopicSettings topics;
-        topics.BeginAddConsumer()
+        topics.BeginAddSharedConsumer()
                 .ConsumerName("shared_consumer_name")
-                .ConsumerType(EConsumerType::Shared)
                 .DefaultProcessingTimeout(TDuration::Seconds(7))
                 .KeepMessagesOrder(true)
                 .BeginDeadLetterPolicy()

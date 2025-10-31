@@ -71,6 +71,10 @@ inputs:
     type: string
     required: false
     description: "Telegram alert chat"
+  ydb_qa_config:
+    type: string
+    required: false
+    description: "YDB QA configuration (JSON)"
 
 outputs:
   success:
@@ -170,7 +174,7 @@ runs:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
-        YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
+        YDB_QA_CONFIG: ${{ inputs.ydb_qa_config }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py

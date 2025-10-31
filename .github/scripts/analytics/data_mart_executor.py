@@ -121,7 +121,6 @@ def main():
             print("No data to create table from.")
             return
 
-        # Create table if not exists based on sample column types (wrapper добавит database_path автоматически)
         create_table_if_not_exists(
             ydb_wrapper, table_path, column_types, args.store_type,
             args.partition_keys, args.primary_keys, args.ttl_min, args.ttl_key

@@ -654,21 +654,23 @@ TReadAnswer TReadInfo::FormAnswer(
         }
     }
 
-    readAnswer = AddBlobsFromBody(blobs,
-                                  CompactedBlobsCount, blobs.size(),
-                                  userInfo,
-                                  startOffset,
-                                  endOffset,
-                                  sizeLag,
-                                  tablet,
-                                  realReadOffset,
-                                  readResult,
-                                  answer,
-                                  needStop,
-                                  cnt, size, lastBlobSize,
-                                  ctx);
-    if (readAnswer) {
-        return std::move(*readAnswer);
+    if (!needStop && cnt < Count && size < Size) { // body blobs are fully processed and need to take more data
+        readAnswer = AddBlobsFromBody(blobs,
+                                      CompactedBlobsCount, blobs.size(),
+                                      userInfo,
+                                      startOffset,
+                                      endOffset,
+                                      sizeLag,
+                                      tablet,
+                                      realReadOffset,
+                                      readResult,
+                                      answer,
+                                      needStop,
+                                      cnt, size, lastBlobSize,
+                                      ctx);
+        if (readAnswer) {
+            return std::move(*readAnswer);
+        }
     }
 
     AFL_ENSURE(Offset <= (ui64)Max<i64>())("Offset is too big", Offset);
@@ -1082,14 +1084,6 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     GetReadRequestFromCompactedBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
                                     &info.BlobKeyTokens, blobs);
     info.CompactedBlobsCount = blobs.size();
-    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
-                                    &info.BlobKeyTokens, blobs);
-
-    info.Blobs = blobs;
-    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
-
-    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     if (blobs.empty() ||
         ((info.CompactedBlobsCount > 0) && (blobs[info.CompactedBlobsCount - 1].Key == CompactionBlobEncoder.DataKeysBody.back().Key))) { // read from head only when all blobs from body processed
@@ -1100,6 +1094,15 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
         );
         info.CachedOffset = insideHeadOffset;
     }
+
+    GetReadRequestFromFastWriteBody(info.Offset, info.PartNo, info.Count, info.Size, &count, &size, info.LastOffset,
+                                    &info.BlobKeyTokens, blobs);
+
+    info.Blobs = blobs;
+    ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
+
+    LOG_D("read cookie " << cookie << " added " << info.Blobs.size()
+                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
 
     PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {

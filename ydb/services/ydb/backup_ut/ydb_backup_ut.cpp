@@ -3313,6 +3313,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     NKikimrConfig::TAppConfig appConfig;
                     appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
+                    appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     return appConfig;
                 }())
             , Driver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", Server.GetPort())).SetDatabase("/Root"))

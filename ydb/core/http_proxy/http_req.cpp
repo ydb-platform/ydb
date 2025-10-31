@@ -1157,7 +1157,7 @@ namespace NKikimr::NHttpProxy {
                              1, true, true,
                              AddCommonLabels({
                                  {"code", TStringBuilder() << (int)MapToException(status, Method, issueCode).second},
-                                 {"name", "api.http.sqs_topic.response.count"},
+                                 {"name", "api.http.message_queue.response.count"},
                              })});
                 HttpContext.ResponseData.Status = status;
                 HttpContext.ResponseData.ErrorText = errorText;
@@ -1185,7 +1185,7 @@ namespace NKikimr::NHttpProxy {
                 InputCountersReported = true;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{1, true, true,
-                            AddCommonLabels({{"name", "api.http.sqs_topic.request.count"}})
+                            AddCommonLabels({{"name", "api.http.message_queue.request.count"}})
                          });
             }
 
@@ -1210,7 +1210,7 @@ namespace NKikimr::NHttpProxy {
                 TDuration dur = ctx.Now() - StartTime;
                 ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
-                             BuildLabels(Method, HttpContext, "api.http.sqs_topic.response.duration_milliseconds")
+                             BuildLabels(Method, HttpContext, "api.http.message_queue.response.duration_milliseconds")
                         });
             }
 
@@ -1230,7 +1230,7 @@ namespace NKikimr::NHttpProxy {
                                  1, true, true,
                                  AddCommonLabels({
                                      {"code", "200"},
-                                     {"name", "api.http.sqs_topic.response.count"}})});
+                                     {"name", "api.http.message_queue.response.count"}})});
                     ReplyToHttpContext(ctx);
                 } else {
                     auto retryClass =

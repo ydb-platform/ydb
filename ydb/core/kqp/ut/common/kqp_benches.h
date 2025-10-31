@@ -303,6 +303,13 @@ public:
         };
     }
 
+    void AddValues(const TRunningStatistics<TValue>& other) {
+        TRunningStatistics<TValue> values;
+        other.IterateElements([&](TValue value) {
+            AddValue(value);
+        });
+    }
+
     std::vector<TValue> CollectElements() const {
         std::vector<TValue> values;
         IterateElements([&](TValue value) {
@@ -310,6 +317,20 @@ public:
         });
 
         return values;
+    }
+
+    template <typename TCast>
+    TRunningStatistics<TCast> Cast() const {
+        if constexpr (std::is_same_v<TValue, TCast>) {
+            return *this;
+        } else {
+            TRunningStatistics<TCast> stats;
+            IterateElements([&](TValue lhs) {
+                stats.AddValue(static_cast<TCast>(lhs));
+            });
+
+            return stats;
+        }
     }
 
     TRunningStatistics<i64> operator-(TRunningStatistics rhsStats) const {

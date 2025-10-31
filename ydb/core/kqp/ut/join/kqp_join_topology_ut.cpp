@@ -98,42 +98,63 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return stats;
     }
 
+    std::optional<TRunningStatistics<double>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, const TString& query) {
+        Cout << resultType << "\n";
 
-    struct ShuffleEliminationBenchmarkResult {
-        TRunningStatistics<ui64> WithoutCBO;
-        TRunningStatistics<i64> WithShuffleElimination;
-        TRunningStatistics<i64> WithoutShuffleElimination;
-    };
+        std::optional<TRunningStatistics<ui64>> withoutCBO;
+        if (resultType.contains("0")) {
+            Cout << "--------------------------------- W/O CBO --------------------------------\n";
+            withoutCBO = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/0));
+            if (!withoutCBO) {
+                return std::nullopt;
+            }
 
-    std::optional<TRunningStatistics<double>> BenchmarkShuffleElimination(TBenchmarkConfig config, NYdb::NQuery::TSession session, const TString& query) {
-        Cout << "--------------------------------- W/O CBO --------------------------------\n";
-        auto withoutCBO = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/0));
-        if (!withoutCBO) {
-            return std::nullopt;
+            if (resultType == "0") {
+                return withoutCBO->Cast<double>();
+            }
         }
 
-        Cout << "--------------------------------- CBO-SE ---------------------------------\n";
-        auto withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
-        if (!withoutShuffleElimination) {
-            return std::nullopt;
+        std::optional<TRunningStatistics<ui64>> withoutShuffleElimination;
+        if (resultType.contains("CBO")) {
+            Cout << "--------------------------------- CBO-SE ---------------------------------\n";
+            withoutShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/false, /*optLevel=*/2));
+            if (!withoutShuffleElimination) {
+                return std::nullopt;
+            }
+
+            if (resultType == "CBO") {
+                return withoutShuffleElimination->Cast<double>();
+            }
+
+            if (resultType == "CBO-0") {
+                return (*withoutShuffleElimination - *withoutCBO).Cast<double>();
+            }
         }
 
-        Cout << "--------------------------------- CBO+SE ---------------------------------\n";
-        auto withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
-        if (!withShuffleElimination) {
-            return std::nullopt;
+        std::optional<TRunningStatistics<ui64>> withShuffleElimination;
+        if (resultType.contains("SE")) {
+            Cout << "--------------------------------- CBO+SE ---------------------------------\n";
+            withShuffleElimination = BenchmarkExplain(config, session, ConfigureQuery(query, /*enableShuffleElimination=*/true,  /*optLevel=*/2));
+            if (!withShuffleElimination) {
+                return std::nullopt;
+            }
+
+            if (resultType == "SE") {
+                return withShuffleElimination->Cast<double>();
+            }
+
+            if (resultType == "SE-0") {
+                return (*withShuffleElimination - *withoutCBO).Cast<double>();
+            }
         }
 
         Cout << "--------------------------------------------------------------------------\n";
 
-
-        ShuffleEliminationBenchmarkResult result {
-            .WithoutCBO = *withoutCBO,
-            .WithShuffleElimination = *withShuffleElimination - *withoutCBO,
-            .WithoutShuffleElimination = *withoutShuffleElimination - *withoutCBO
-        };
-
-        return result.WithShuffleElimination / result.WithoutShuffleElimination;
+        if (resultType == "SE-0/CBO-0") {
+            return (*withShuffleElimination - *withoutCBO) / (*withoutShuffleElimination - *withoutCBO);
+        } else {
+            return *withShuffleElimination / *withoutShuffleElimination;
+        }
     }
 
     std::unique_ptr<TKikimrRunner> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
@@ -158,7 +179,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         return std::make_unique<TKikimrRunner>(serverSettings);
     }
 
-    std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, TRelationGraph graph) {
+    std::optional<TRunningStatistics<double>> BenchmarkShuffleEliminationOnTopology(TBenchmarkConfig config, NYdb::NQuery::TSession session, std::string resultType, TRelationGraph graph) {
         Cout << "================================= CREATE =================================\n";
         graph.DumpGraph(Cout);
 
@@ -176,7 +197,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
         Cout << "================================= BENCHMARK ==============================\n";
         TString query = graph.MakeQuery();
         Cout << query;
-        auto resultTime = BenchmarkShuffleElimination(config, session, query);
+        auto resultTime = BenchmarkShuffleElimination(config, session, resultType, query);
 
         Cout << "================================= FINALIZE ===============================\n";
         auto deletionQuery = graph.GetSchema().MakeDropQuery();
@@ -342,40 +363,60 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             (*ctx.OS) << "\n";
         }
 
+        std::string resultType = "SE";
+        if (args.HasArg("result")) {
+            resultType = args.GetString("result");
+        }
+
         ui64 mcmcSteps = args.GetArgOrDefault<uint64_t>("mcmcSteps", "100").GetValue();
         for (ui64 n : args.GetArg<uint64_t>("N")) {
             for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
                 for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
                     for (double logStdDev : args.GetArgOrDefault<double>("logStdDev", "0.5")) {
                         for (double logMean : args.GetArgOrDefault<double>("logMean", "1.0")) {
+                            Cout << "\n\n\n";
+                            Cout << "================================= METRICS ================================\n";
                             auto initialDegrees = GenerateLogNormalDegrees(n, logMean, logStdDev);
+                            Cout << "initial degrees: " << joinVector(initialDegrees) << "\n";
+
                             auto fixedDegrees = MakeGraphicConnected(initialDegrees);
+                            Cout << "fixed degrees: " << joinVector(initialDegrees) << "\n";
+
                             auto initialGraph = ConstructGraphHavelHakimi(fixedDegrees);
+
+                            TRunningStatistics<double> cummulative;
 
                             ui64 repeats = args.GetArgOrDefault<uint64_t>("repeats", "1").GetValue();
                             for (ui64 i = 0; i < repeats; ++ i) {
+                                Cout << "\n\n";
                                 Cout << "Reproduce: 'N=" << n << "; alpha=" << alpha << "; theta="
                                      << theta << "; logStdDev=" << logStdDev << "; logMean=" << logMean
                                      << "; seed=" << ctx.RNG.Serialize() << "'\n";
 
-                                ui64 seed = ctx.RNG.Serialize();
+                                // ui64 seed = ctx.RNG.Serialize();
 
                                 TRelationGraph graph = initialGraph;
                                 MCMCRandomize(ctx.RNG, graph, mcmcSteps);
                                 graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                                auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, graph);
-                                if (!result) {
-                                    goto stop;
-                                }
+                                try {
+                                    auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
+                                    if (!result) {
+                                        goto stop;
+                                    }
 
-
-                                if (ctx.OS) {
-                                    (*ctx.OS) << n << "," << alpha << "," << theta << "," << logStdDev
-                                              << "," << logMean << "," << repeats << "," << seed << ",";
-                                    DumpBoxPlotToCSV(*ctx.OS, result->GetStatistics());
-                                    (*ctx.OS) << "\n";
+                                    cummulative.AddValues(*result);
+                                } catch (...) {
+                                    Cout << "skipped\n";
+                                    continue;
                                 }
+                            }
+
+                            if (ctx.OS) {
+                                (*ctx.OS) << n << "," << alpha << "," << theta << "," << logStdDev
+                                          << "," << logMean << "," << repeats << "," << 0 << ",";
+                                DumpBoxPlotToCSV(*ctx.OS, cummulative.GetStatistics());
+                                (*ctx.OS) << "\n";
                             }
                         }
                     }
@@ -393,6 +434,11 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
             (*ctx.OS) << "\n";
         }
 
+        std::string resultType = "SE";
+        if (args.HasArg("result")) {
+            resultType = args.GetString("result");
+        }
+
         for (ui64 n : args.GetArg<uint64_t>("N")) {
             for (double alpha : args.GetArgOrDefault<double>("alpha", "0.5")) {
                 for (double theta : args.GetArgOrDefault<double>("theta", "1.0")) {
@@ -404,7 +450,7 @@ Y_UNIT_TEST_SUITE(KqpJoinTopology) {
                     TRelationGraph graph = TrivialTopology(ctx.RNG, n);
                     graph.SetupKeysPitmanYor(ctx.RNG, TPitmanYorConfig{.Alpha = alpha, .Theta = theta});
 
-                    auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, graph);
+                    auto result = BenchmarkShuffleEliminationOnTopology(config, ctx.Session, resultType, graph);
                     if (!result) {
                         goto stop;
                     }

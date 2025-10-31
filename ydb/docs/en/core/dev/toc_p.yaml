@@ -22,6 +22,13 @@ items:
   href: vector-indexes.md
 - name: Query plans optimization
   href: query-plans-optimization.md
+<<<<<<< HEAD
+=======
+- name: Resource consumption management
+  href: resource-consumption-management.md  
+- name: Query hints
+  href: query-hints.md
+>>>>>>> 2da234665 (YDBDOCS-1394-TRANSLATION (#27515))
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

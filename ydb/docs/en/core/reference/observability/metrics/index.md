@@ -119,3 +119,16 @@ You can analyze a transaction's execution time using a histogram counter. The in
 | `topic.write.uncommitted_messages`<br/>`RATE`, pieces | The number of messages written as part of ongoing transactions.<br/>Labels:<br/>- _topic_ — the name of the topic. |
 | `topic.write.message_size_bytes`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in bytes. It shows the number of messages which size falls within the boundaries of the interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
 | `topic.write.lag_milliseconds`<br/>`HIST_RATE`, pieces | A histogram counter. The intervals are specified in milliseconds. It shows the number of messages where the difference between the write time and the message creation time falls within the specified interval.<br/>Labels:<br/>- _topic_ – the name of the topic. |
+<<<<<<< HEAD
+=======
+
+## Resource pool metrics {#resource_pools}
+
+| Metric name<br/>Type, units of measurement | Description<br/>Tags |
+| ----- | ----- |
+| `kqp.workload_manager.CpuQuotaManager.AverageLoadPercentage`<br/>`RATE`, pieces | Average database load, the `DATABASE_LOAD_CPU_THRESHOLD` works based on this metric. |
+| `kqp.workload_manager.InFlightLimit`<br/>`GAUGE`, pieces | Limit on the number of simultaneously running requests. |
+| `kqp.workload_manager.GlobalInFly`<br/>`GAUGE`, pieces | The current number of simultaneously running requests. Displayed only for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled |
+| `kqp.workload_manager.QueueSizeLimit`<br/>`GAUGE`, pieces | Queue size of pending requests. |
+| `kqp.workload_manager.GlobalDelayedRequests`<br/>`GAUGE`, pieces | The number of requests waiting in the execution queue. Only visible for pools with `CONCURRENT_QUERY_LIMIT` or `DATABASE_LOAD_CPU_THRESHOLD` enabled . |
+>>>>>>> 2da234665 (YDBDOCS-1394-TRANSLATION (#27515))

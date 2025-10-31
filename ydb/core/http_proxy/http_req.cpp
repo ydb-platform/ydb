@@ -1116,9 +1116,13 @@ namespace NKikimr::NHttpProxy {
                 HttpContext.IamToken = ev->Get()->IamToken;
                 HttpContext.SerializedUserToken = ev->Get()->SerializedUserToken;
 
-                if (!HttpContext.Driver) {
-                    TryUpdateDbInfo(ev->Get()->Database, ctx);
+                if (TString databasePath = ev->Get()->Database.Path) {
+                    if (!AssignDatabasePath(ctx, databasePath)) {
+                        return;
+                    }
                 }
+                TryUpdateDbInfo(ev->Get()->Database, ctx);
+
                 SendGrpcRequestNoDriver(ctx);
             }
 
@@ -1235,6 +1239,19 @@ namespace NKikimr::NHttpProxy {
                 return ReplyWithError(ctx, NYdb::EStatus::TIMEOUT, "Request hasn't been completed by deadline");
             }
 
+            // Fill HttpContext.DatabasePath and reply with error is databases missmatch
+            bool AssignDatabasePath(const TActorContext& ctx, const TString& databasePath) {
+                if (HttpContext.DatabasePath.empty()) {
+                    HttpContext.DatabasePath = databasePath;
+                } else {
+                    if (HttpContext.DatabasePath != databasePath) {
+                        ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Queue url database  " + databasePath + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
+                        return false;
+                    }
+                }
+                return true;
+            }
+
         public:
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
@@ -1263,12 +1280,8 @@ namespace NKikimr::NHttpProxy {
                     ConsumerName = parsedQueueUrl->Consumer;
                     IsFifo = parsedQueueUrl->Fifo;
 
-                    if (HttpContext.DatabasePath.empty()) {
-                        HttpContext.DatabasePath = parsedQueueUrl->Database;
-                    } else {
-                        if (HttpContext.DatabasePath != parsedQueueUrl->Database) {
-                            return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Queue url database  " + parsedQueueUrl->Database + " doesn't belong to " + HttpContext.DatabasePath, static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));
-                        }
+                    if (!AssignDatabasePath(ctx, parsedQueueUrl->Database)) {
+                        return;
                     }
                     if (TopicPath.empty()) {
                         return ReplyWithError(ctx, NYdb::EStatus::BAD_REQUEST, "Missing topic path", static_cast<size_t>(NYds::EErrorCodes::INVALID_ARGUMENT));

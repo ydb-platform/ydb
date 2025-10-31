@@ -151,7 +151,6 @@ namespace {
                 }
                 ngram_length++;
                 ngram_end_ptr += symbolBytes;
-
                 if (lengthMin <= ngram_length && ngram_length <= lengthMax) {
                     ngrams.emplace_back((const char*)ngram_begin_ptr, ngram_end_ptr - ngram_begin_ptr);
                 }

@@ -431,7 +431,7 @@ std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSessio
     auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
 
-    return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));
+    return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr | EOpenMode::TEnum::ForAppend | EOpenMode::TEnum::OpenAlways));
 }
 
 NYdb::TAsyncStatus TFileTopicClient::CommitOffset(const TString& path, ui64 partitionId, const TString& consumerName, ui64 offset,

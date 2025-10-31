@@ -1221,10 +1221,6 @@ namespace NKikimr::NHttpProxy {
                                 HttpContext.ContentType == MIME_CBOR);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
-                    /* deprecated metric: */ ctx.Send(MakeMetricsServiceID(),
-                             new TEvServerlessProxy::TEvCounter{1, true, true,
-                                 BuildLabels(Method, HttpContext, "api.http.success_per_second", setStreamPrefix)
-                             });
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,

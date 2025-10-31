@@ -349,28 +349,23 @@ public:
             source.AddRequiredLabelNames(labelAsString);
         }
 
-        auto defaultReplica = (source.GetClusterType() == NSo::NProto::CT_SOLOMON ? "sas" : "cloud-prod-a");
-
         auto& solomonConfig = State_->Configuration;
         auto& sourceSettings = *source.MutableSettings();
 
-        auto metricsQueuePageSize = solomonConfig->MetricsQueuePageSize.Get().OrElse(2000);
-        sourceSettings.insert({"metricsQueuePageSize", ToString(metricsQueuePageSize)});
-
-        auto metricsQueuePrefetchSize = solomonConfig->MetricsQueuePrefetchSize.Get().OrElse(4000);
-        sourceSettings.insert({"metricsQueuePrefetchSize", ToString(metricsQueuePrefetchSize)});
-
-        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(10);
+        auto metricsQueueBatchCountLimit = solomonConfig->MetricsQueueBatchCountLimit.Get().OrElse(500);
         sourceSettings.insert({"metricsQueueBatchCountLimit", ToString(metricsQueueBatchCountLimit)});
 
-        auto solomonClientDefaultReplica = solomonConfig->SolomonClientDefaultReplica.Get().OrElse(defaultReplica);
-        sourceSettings.insert({"solomonClientDefaultReplica", ToString(solomonClientDefaultReplica)});
+        auto enableSolomonClientPostApi = solomonConfig->_EnableSolomonClientPostApi.Get().OrElse(false);
+        sourceSettings.insert({"enableSolomonClientPostApi", ToString(enableSolomonClientPostApi)});
 
         auto computeActorBatchSize = solomonConfig->ComputeActorBatchSize.Get().OrElse(100);
         sourceSettings.insert({"computeActorBatchSize", ToString(computeActorBatchSize)});
 
         auto truePointsFindRange = solomonConfig->_TruePointsFindRange.Get().OrElse(301);
         sourceSettings.insert({"truePointsFindRange", ToString(truePointsFindRange)});
+
+        auto maxListingPageSize = solomonConfig->_MaxListingPageSize.Get().OrElse(20000);
+        sourceSettings.insert({"maxListingPageSize", ToString(maxListingPageSize)});
 
         auto maxApiInflight = solomonConfig->MaxApiInflight.Get().OrElse(40);
         sourceSettings.insert({"maxApiInflight", ToString(maxApiInflight)});

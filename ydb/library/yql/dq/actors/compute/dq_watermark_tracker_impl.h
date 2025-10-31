@@ -13,9 +13,9 @@ namespace NYql::NDq {
 #define WATERMARK_LOG_T(X) do { if constexpr (false) TStringBuilder() << "Watermarks. " << X; } while(false)
 #define WATERMARK_LOG_D(X) do { if constexpr (false) TStringBuilder() << "Watermarks. " << X; } while(false)
 template <typename TInputKey>
-struct TDqWatermarkTracker {
+struct TDqWatermarkTrackerImpl {
 public:
-    explicit TDqWatermarkTracker(const TString& logPrefix)
+    explicit TDqWatermarkTrackerImpl(const TString& logPrefix)
         : LogPrefix_(logPrefix)
     {}
 

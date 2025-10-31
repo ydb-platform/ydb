@@ -20,7 +20,7 @@ namespace NYql::NDq {
 using namespace NActors;
 
 TDqComputeActorWatermarks::TDqComputeActorWatermarks(const TString& logPrefix)
-    : LogPrefix(logPrefix), Tracker(logPrefix) {
+    : LogPrefix(logPrefix), Impl(logPrefix) {
 }
 
 void TDqComputeActorWatermarks::RegisterInputChannel(ui64 inputId, TDuration idleDelay, TInstant systemTime) {
@@ -34,7 +34,7 @@ void TDqComputeActorWatermarks::RegisterAsyncInput(ui64 inputId, TDuration idleD
 void TDqComputeActorWatermarks::RegisterInput(ui64 inputId, bool isChannel, TDuration idleDelay, TInstant systemTime)
 {
     LOG_D("Register " << (isChannel ? "channel" : "async input") << " " << inputId << ", idle delay: " << idleDelay);
-    auto registered = Tracker.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleDelay);
+    auto registered = Impl.RegisterInput(std::make_pair(inputId, isChannel), systemTime, idleDelay);
     if (!registered) {
         LOG_E("Repeated registration " << inputId <<" " << (isChannel ? "channel" : "async input"));
     }
@@ -51,7 +51,7 @@ void TDqComputeActorWatermarks::UnregisterAsyncInput(ui64 inputId) {
 }
 
 void TDqComputeActorWatermarks::UnregisterInput(ui64 inputId, bool isChannel) {
-    auto result = Tracker.UnregisterInput(std::make_pair(inputId, isChannel));
+    auto result = Impl.UnregisterInput(std::make_pair(inputId, isChannel));
     if (!result) {
         LOG_E("Unregistered " << (isChannel ? "input channel" : "async input") << " " << inputId << " was not found");
     }
@@ -70,7 +70,7 @@ bool TDqComputeActorWatermarks::NotifyInputWatermarkReceived(ui64 inputId, bool 
     if (MaxWatermark < watermark) {
         MaxWatermark = watermark;
     }
-    auto [nextWatermark, updated] = Tracker.NotifyNewWatermark(std::make_pair(inputId, isChannel), watermark, systemTime);
+    auto [nextWatermark, updated] = Impl.NotifyNewWatermark(std::make_pair(inputId, isChannel), watermark, systemTime);
     if (nextWatermark) {
         PendingWatermark = nextWatermark;
     }
@@ -99,7 +99,7 @@ bool TDqComputeActorWatermarks::NotifyWatermarkWasSent(TInstant watermark) {
 }
 
 TMaybe<TInstant> TDqComputeActorWatermarks::HandleIdleness(TInstant systemTime) {
-    auto nextWatermark = Tracker.HandleIdleness(systemTime);
+    auto nextWatermark = Impl.HandleIdleness(systemTime);
     if (nextWatermark) {
         PendingWatermark = nextWatermark;
     }
@@ -119,15 +119,15 @@ TMaybe<TInstant> TDqComputeActorWatermarks::GetMaxWatermark() const {
 }
 
 [[nodiscard]] TMaybe<TInstant> TDqComputeActorWatermarks::GetNextIdlenessCheckAt() const {
-    return Tracker.GetNextIdlenessCheckAt();
+    return Impl.GetNextIdlenessCheckAt();
 }
 
 bool TDqComputeActorWatermarks::AddScheduledIdlenessCheck(TInstant notifyTime) {
-    return Tracker.AddScheduledIdlenessCheck(notifyTime);
+    return Impl.AddScheduledIdlenessCheck(notifyTime);
 }
 
 bool TDqComputeActorWatermarks::ProcessIdlenessCheck(TInstant notifyTime) {
-    return Tracker.RemoveExpiredIdlenessChecks(notifyTime);
+    return Impl.RemoveExpiredIdlenessChecks(notifyTime);
 }
 
 void TDqComputeActorWatermarks::PopPendingWatermark() {
@@ -136,7 +136,7 @@ void TDqComputeActorWatermarks::PopPendingWatermark() {
 }
 
 void TDqComputeActorWatermarks::SetLogPrefix(const TString& logPrefix) {
-    Tracker.SetLogPrefix(logPrefix);
+    Impl.SetLogPrefix(logPrefix);
     LogPrefix = logPrefix;
 }
 

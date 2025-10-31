@@ -5,7 +5,7 @@
 #include <util/system/types.h>
 #include <util/string/builder.h>
 #include <util/generic/set.h>
-#include <ydb/library/yql/dq/actors/compute/dq_common_watermark_tracker.h>
+#include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
 namespace NYql::NDq {
 
@@ -22,7 +22,7 @@ public:
         , IdlePartitionsEnabled_(idlePartitionsEnabled)
         , LateArrivalDelay_(lateArrivalDelay)
         , IdleDelay_(idleDelay)
-        , Tracker_(logPrefix)
+        , Impl_(logPrefix)
     {}
 
     [[nodiscard]] TMaybe<TInstant> NotifyNewPartitionTime(
@@ -31,32 +31,32 @@ public:
         TInstant systemTime
     ) {
         const auto watermark = ToDiscreteTime(partitionTime - LateArrivalDelay_);
-        return Tracker_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
+        return Impl_.NotifyNewWatermark(partitionKey, watermark, ToNextDiscreteTime(systemTime)).first;
     }
 
     bool RegisterPartition(const TPartitionKey& partitionKey, TInstant systemTime) {
-        return Tracker_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleDelay_ : TDuration::Max());
+        return Impl_.RegisterInput(partitionKey, ToNextDiscreteTime(systemTime), IdlePartitionsEnabled_ ? IdleDelay_ : TDuration::Max());
     }
 
     [[nodiscard]] TMaybe<TInstant> HandleIdleness(TInstant systemTime) {
-        return Tracker_.HandleIdleness(ToDiscreteTime(systemTime));
+        return Impl_.HandleIdleness(ToDiscreteTime(systemTime));
     }
 
     [[nodiscard]] TMaybe<TInstant> GetNextIdlenessCheckAt(TInstant systemTime) {
-        auto nextCheck = Tracker_.GetNextIdlenessCheckAt();
+        auto nextCheck = Impl_.GetNextIdlenessCheckAt();
         return nextCheck ? TMaybe<TInstant>(ToNextDiscreteTime(Max(*nextCheck, systemTime))) : Nothing();
     }
 
     [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime) {
-        return Tracker_.AddScheduledIdlenessCheck(notifyTime);
+        return Impl_.AddScheduledIdlenessCheck(notifyTime);
     }
 
     bool ProcessIdlenessCheck(TInstant notifyTime) {
-        return Tracker_.RemoveExpiredIdlenessChecks(notifyTime);
+        return Impl_.RemoveExpiredIdlenessChecks(notifyTime);
     }
 
     TMaybe<TDuration> GetWatermarkDiscrepancy() const {
-        return Tracker_.GetWatermarkDiscrepancy();
+        return Impl_.GetWatermarkDiscrepancy();
     }
 
 private:
@@ -74,7 +74,7 @@ private:
     const TDuration LateArrivalDelay_;
     const TDuration IdleDelay_;
 
-    TDqWatermarkTracker<TPartitionKey> Tracker_;
+    TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };
 
 }

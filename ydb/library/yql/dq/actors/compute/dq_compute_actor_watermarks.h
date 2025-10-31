@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/yql/dq/actors/compute/dq_common_watermark_tracker.h>
+#include <ydb/library/yql/dq/actors/compute/dq_watermark_tracker_impl.h>
 
 namespace NYql::NDq {
 
@@ -61,7 +61,7 @@ private:
     TString LogPrefix;
 
     using TInputKey = std::pair<ui64, bool>;
-    TDqWatermarkTracker<TInputKey> Tracker;
+    TDqWatermarkTrackerImpl<TInputKey> Impl;
 
     TMaybe<TInstant> PendingWatermark;
     TMaybe<TInstant> MaxWatermark;

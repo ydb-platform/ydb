@@ -48,12 +48,6 @@ public:
 };
 
 class TDataBuilder {
-public:
-    class IBuffers { // ??
-    public:
-        virtual ~IBuffers() = default;
-    };
-
 private:
     class TStorageAddress {
     private:
@@ -84,14 +78,9 @@ private:
     std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
-    // std::vector<std::shared_ptr<IBuffers>> Buffers; // ??
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings);
-
-    // void StoreBuffer(const std::shared_ptr<IBuffers>& data) {
-    //     Buffers.emplace_back(data); // ??
-    // }
 
     void StartNextRecord() {
         ++CurrentRecordIndex;

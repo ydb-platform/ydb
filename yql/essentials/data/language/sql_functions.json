@@ -420,11 +420,19 @@
     "kind": "Normal"
   },
   {
+    "name": "EmptyDictType",
+    "kind": "Normal"
+  },
+  {
     "name": "EmptyDictTypeHandle",
     "kind": "Normal"
   },
   {
     "name": "EmptyList",
+    "kind": "Normal"
+  },
+  {
+    "name": "EmptyListType",
     "kind": "Normal"
   },
   {
@@ -1033,6 +1041,10 @@
   },
   {
     "name": "NullIf",
+    "kind": "Normal"
+  },
+  {
+    "name": "NullType",
     "kind": "Normal"
   },
   {

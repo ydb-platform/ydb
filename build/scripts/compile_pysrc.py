@@ -17,8 +17,7 @@ def parse_args():
     subparsers = parser.add_subparsers(dest='mode')
 
     parser_py2 = subparsers.add_parser('py2')
-    parser_py2.add_argument('--py_compile', required=True)
-    parser_py2.add_argument('--python', required=True)
+    parser_py2.add_argument('--pycc', required=True)
 
     parser_py3 = subparsers.add_parser('py3')
     parser_py3.add_argument('--pycc', required=True)
@@ -66,7 +65,7 @@ def main():
         pycc_ext = '.yapyc3'
         iterate_resource_params = iterate_py3_resource_params
     else:
-        pycc_cmd = [args.python, args.py_compile]
+        pycc_cmd = [args.pycc]
         pycc_ext = '.yapyc'
         iterate_resource_params = iterate_py2_resource_params
 

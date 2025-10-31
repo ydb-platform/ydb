@@ -158,6 +158,7 @@ public:
     NCommon::TConfSetting<bool, Static> ValidateClusters;
     NCommon::TConfSetting<NSize::TSize, Static> _QueryDumpTableSizeLimit;
     NCommon::TConfSetting<ui32, Static> _QueryDumpTableCountPerClusterLimit;
+    NCommon::TConfSetting<ui32, Static> _QueryDumpFileCountPerOperationLimit;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

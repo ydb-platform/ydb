@@ -5769,7 +5769,7 @@ private:
         YQL_ENSURE(entry->DumpTx);
         for (auto& [srcPath, dstPath] : execCtx->Options_) {
             NYT::TRichYPath srcRichYPath;
-            NYT::IClientBasePtr srcTx;
+            NYT::ITransactionPtr srcTx;
             auto snapshot = entry->Snapshots.FindPtr(std::make_pair(srcPath, 0));
             if (snapshot) {
                 // use table snapshot if present
@@ -5793,6 +5793,9 @@ private:
             ));
             auto srcType = FromString<NYT::ENodeType>(attrs.At("type").AsString());
             attrs.AsMap().erase("type");
+
+            auto userAttrs = GetUserAttributes(srcTx, srcRichYPath.Path_, true);
+            NYT::MergeNodes(attrs, userAttrs);
 
             entry->DumpTx->Create(dstPath, srcType, TCreateOptions().Recursive(true).Attributes(attrs));
             entry->DumpTx->Concatenate(

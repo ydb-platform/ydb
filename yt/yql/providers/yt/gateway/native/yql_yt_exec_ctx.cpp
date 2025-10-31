@@ -157,8 +157,16 @@ TExpressionResorceUsage TExecContextBase::ScanExtraResourceUsageImpl(const TExpr
     return extraUsage;
 }
 
-void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec) const {
+void TExecContextBase::DumpFilesFromJob(const NYT::TNode& opSpec, const TYtSettings::TConstPtr& config) const {
     YQL_ENSURE(Session_->FullCapture_);
+
+    auto fileCountLimit = config->_QueryDumpFileCountPerOperationLimit.Get().GetOrElse(DEFAULT_QUERY_DUMP_FILE_COUNT_PER_OPERATION_LIMIT);
+    if (JobFilesDumpPaths.size() > fileCountLimit) {
+        Session_->FullCapture_->ReportError(
+            yexception() << "file count limit exceeded (" << JobFilesDumpPaths.size() << " > " << fileCountLimit << ")"
+        );
+        return;
+    }
 
     THashMap<TString, TString> snapshots;  // yt job basename -> snapshot node id
     auto handlePaths = [&](const NYT::TNode& filePaths) {

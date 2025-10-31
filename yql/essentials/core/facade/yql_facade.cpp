@@ -203,6 +203,10 @@ void TProgramFactory::SetCredentials(TCredentials::TPtr credentials) {
     Credentials_ = std::move(credentials);
 }
 
+void TProgramFactory::AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider) {
+    RemoteLayersProviders_.emplace(alias, std::move(provider));
+}
+
 void TProgramFactory::SetGatewaysConfig(const TGatewaysConfig* gatewaysConfig) {
     GatewaysConfig_ = gatewaysConfig;
 }
@@ -281,7 +285,7 @@ TProgramPtr TProgramFactory::Create(
                         LangVer_, MaxLangVer_, VolatileResults_, UserDataTable_, Credentials_, moduleResolver, urlListerManager,
                         udfResolver, udfIndex, udfIndexPackageSet, FileStorage_, UrlPreprocessing_,
                         GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, ArrowResolver_, hiddenMode,
-                        qContext, gatewaysForMerge);
+                        qContext, gatewaysForMerge, RemoteLayersProviders_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -314,7 +318,8 @@ TProgram::TProgram(
     const IArrowResolver::TPtr& arrowResolver,
     EHiddenMode hiddenMode,
     const TQContext& qContext,
-    TMaybe<TString> gatewaysForMerge)
+    TMaybe<TString> gatewaysForMerge,
+    THashMap<TString, NLayers::IRemoteLayerProviderPtr> remoteLayersProviders)
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
     , TimeProvider_(timeProvider)
@@ -347,6 +352,7 @@ TProgram::TProgram(
     , HiddenMode_(hiddenMode)
     , QContext_(qContext)
     , GatewaysForMerge_(gatewaysForMerge)
+    , RemoteLayersProviders_(std::move(remoteLayersProviders))
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -552,6 +558,12 @@ bool TProgram::IsFullCaptureReady() const {
         }
     }
     return true;
+}
+
+void TProgram::CommitFullCapture() const {
+    if (IsFullCaptureReady()) {
+        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
+    }
 }
 
 void TProgram::SetParametersYson(const TString& parameters) {
@@ -1860,10 +1872,17 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStrin
     }
 
     if (TypeCtx_->EnableLineage) {
-        writer.OnKeyedItem("CalculateLineage");
+        writer.OnKeyedItem("CorrectLineage");
         writer.OnBeginMap();
-            writer.OnKeyedItem("Correct");
-            writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(TypeCtx_->CorrectLineage);
+        writer.OnEndMap();
+    }
+    if (TypeCtx_->CorrectStandaloneLineage) {
+        writer.OnKeyedItem("CorrectStandaloneLineage");
+        writer.OnBeginMap();
+        writer.OnKeyedItem("count");
+        writer.OnInt64Scalar(*TypeCtx_->CorrectStandaloneLineage);
         writer.OnEndMap();
     }
 
@@ -2006,10 +2025,6 @@ NThreading::TFuture<void> TProgram::CloseLastSession() {
         CloseLastSessionFuture_ = promise.GetFuture();
     }
 
-    if (IsFullCaptureReady()) {
-        QContext_.GetWriter()->Put({FacadeComponent, FullCaptureLabel}, "").GetValueSync();
-    }
-
     TVector<NThreading::TFuture<void>> closeFutures;
     closeFutures.reserve(dataProviders.size());
     for (const auto& dp : dataProviders) {
@@ -2064,6 +2079,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     typeAnnotationContext->FileStorage = FileStorage_;
     typeAnnotationContext->QContext = QContext_;
     typeAnnotationContext->HiddenMode = HiddenMode_;
+    for (auto& [alias, provider] : RemoteLayersProviders_) {
+        typeAnnotationContext->AddRemoteLayersProvider(alias, provider);
+    }
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning

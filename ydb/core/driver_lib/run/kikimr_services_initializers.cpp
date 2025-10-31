@@ -267,12 +267,21 @@
 namespace NKikimr::NKikimrServicesInitializers {
 
 struct TAwsApiGuard {
-    TAwsApiGuard() {
-        InitAwsAPI();
+    const TAwsClientConfig Config;
+
+    TAwsApiGuard(const NKikimrConfig::TAwsClientConfig& config)
+        : Config{
+            .LogConfig{
+                .LogLevel = config.GetLogConfig().GetLogLevel(),
+                .FilenamePrefix = config.GetLogConfig().GetFilenamePrefix(),
+            },
+        }
+    {
+        InitAwsAPI(Config);
     }
 
     ~TAwsApiGuard() {
-        ShutdownAwsAPI();
+        ShutdownAwsAPI(Config);
     }
 };
 
@@ -555,6 +564,14 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
         resolverOptions.MonCounters = GetServiceCounters(counters, "utils")->GetSubgroup("subsystem", "dns_resolver");
         resolverOptions.ForceTcp = nsConfig.GetForceTcp();
         resolverOptions.KeepSocket = nsConfig.GetKeepSocket();
+        switch (nsConfig.GetDnsResolverType()) {
+            case NKikimrConfig::TStaticNameserviceConfig::ARES:
+                resolverOptions.Type = NDnsResolver::EDnsResolverType::Ares;
+                break;
+            case NKikimrConfig::TStaticNameserviceConfig::LIBC:
+                resolverOptions.Type = NDnsResolver::EDnsResolverType::Libc;
+                break;
+        }
         IActor *resolver = NDnsResolver::CreateOnDemandDnsResolver(resolverOptions);
 
         setup->LocalServices.emplace_back(
@@ -3115,8 +3132,7 @@ TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
 
 void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
-    Y_UNUSED(appData);
-    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
+    GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>(appData->AwsClientConfig));
 }
 
 TOverloadManagerInitializer::TOverloadManagerInitializer(const TKikimrRunConfig& runConfig)

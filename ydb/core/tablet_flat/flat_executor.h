@@ -386,8 +386,6 @@ class TExecutor
     // Counts the number of times LeaseDuration was increased
     size_t LeaseDurationIncreases = 0;
 
-    const ui64 MaxTxInFly;
-
     struct TLeaseCommit : public TIntrusiveListItem<TLeaseCommit> {
         using TByEndMap = std::multimap<TMonotonic, TLeaseCommit*>;
 
@@ -502,6 +500,7 @@ class TExecutor
 
     TControlWrapper LogFlushDelayOverrideUsec;
     TControlWrapper MaxCommitRedoMB;
+    TControlWrapper MaxTxInFly;
 
     ui64 Stamp() const noexcept;
     void Registered(TActorSystem*, const TActorId&) override;

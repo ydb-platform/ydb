@@ -3632,6 +3632,13 @@
             "uri": "https://{canondata_backend}/1937150/ec0019724df75083b0e89cab22f57e10ef36744e/resource.tar.gz#test_sql2yql.test_expr-sets_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-singular_types]": [
+        {
+            "checksum": "590d90299a1342a787d83c0fca1c1ea1",
+            "size": 1515,
+            "uri": "https://{canondata_backend}/1925821/2a72f415a33caa31dd646d678e3be51e0cb7b2f0/resource.tar.gz#test_sql2yql.test_expr-singular_types_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-spreadmembers_null]": [
         {
             "checksum": "01e52abc3971138e91babf13e4708564",
@@ -11524,6 +11531,11 @@
     "test_sql_format.test[expr-sets]": [
         {
             "uri": "file://test_sql_format.test_expr-sets_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-singular_types]": [
+        {
+            "uri": "file://test_sql_format.test_expr-singular_types_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-spreadmembers_null]": [

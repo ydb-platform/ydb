@@ -4106,7 +4106,7 @@ void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId,
         storeInfo->ColumnTablesUnderOperation.erase(pathId);
         storeInfo->ColumnTables.erase(pathId);
     }
-    
+
     UpdateDiskSpaceUsage(db, pathId, TPartitionStats(), tableInfo.GetStats().Aggregated, ctx);
 
     db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
@@ -8305,6 +8305,7 @@ void TSchemeShard::ResolveSA() {
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
         auto navigate = std::make_unique<TNavigate>();
+        navigate->DatabaseName = AppData()->DomainsInfo->GetDomain()->Name;
         auto& entry = navigate->ResultSet.emplace_back();
         entry.TableId = TTableId(resourcesDomainId.OwnerId, resourcesDomainId.LocalPathId);
         entry.Operation = TNavigate::EOp::OpPath;

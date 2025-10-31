@@ -14,11 +14,12 @@ def exec(command: str):
     print(f'++ {command}')
     rc = os.system(command)
     if rc != 0:
-        exit(rc)
+        print(f'failed, return code {rc}')
+        exit(1)
 
 
 def log(msg: str):
-    print(f'{msg}\n')
+    print(msg)
 
 
 def do_compare():

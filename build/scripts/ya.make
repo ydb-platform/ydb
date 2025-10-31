@@ -115,7 +115,6 @@ ELSEIF (PYTHON3)
         preprocess.py
         process_command_files.py
         process_whole_archive_option.py
-        py_compile.py
         resolve_java_srcs.py
         retry.py
         retry_cc.py

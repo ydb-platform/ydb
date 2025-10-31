@@ -17,12 +17,12 @@
 // -----------------------------------------------------------------------------
 //
 // This file includes an `y_absl::MockingBitGen` class to use as a mock within the
-// Googletest testing framework. Such a mock is useful to provide deterministic
+// GoogleTest testing framework. Such a mock is useful to provide deterministic
 // values as return values within (otherwise random) Abseil distribution
 // functions. Such determinism within a mock is useful within testing frameworks
 // to test otherwise indeterminate APIs.
 //
-// More information about the Googletest testing framework is available at
+// More information about the GoogleTest testing framework is available at
 // https://github.com/google/googletest
 
 #ifndef Y_ABSL_RANDOM_MOCKING_BIT_GEN_H_
@@ -34,7 +34,6 @@
 #include <utility>
 
 #include "gmock/gmock.h"
-#include "y_absl/base/attributes.h"
 #include "y_absl/base/config.h"
 #include "y_absl/base/internal/fast_type_id.h"
 #include "y_absl/container/flat_hash_map.h"
@@ -52,13 +51,53 @@ namespace random_internal {
 template <typename>
 struct DistributionCaller;
 class MockHelpers;
+}  // namespace random_internal
 
-// Implements MockingBitGen with an option to turn on extra validation.
-template <bool EnableValidation>
-class MockingBitGenImpl {
+// MockingBitGen
+//
+// `y_absl::MockingBitGen` is a mock Uniform Random Bit Generator (URBG) class
+// which can act in place of an `y_absl::BitGen` URBG within tests using the
+// GoogleTest testing framework.
+//
+// Usage:
+//
+// Use an `y_absl::MockingBitGen` along with a mock distribution object (within
+// mock_distributions.h) inside Googletest constructs such as ON_CALL(),
+// EXPECT_TRUE(), etc. to produce deterministic results conforming to the
+// distribution's API contract.
+//
+// Example:
+//
+//  // Mock a call to an `y_absl::Bernoulli` distribution using Googletest
+//   y_absl::MockingBitGen bitgen;
+//
+//   ON_CALL(y_absl::MockBernoulli(), Call(bitgen, 0.5))
+//       .WillByDefault(testing::Return(true));
+//   EXPECT_TRUE(y_absl::Bernoulli(bitgen, 0.5));
+//
+//  // Mock a call to an `y_absl::Uniform` distribution within Googletest
+//  y_absl::MockingBitGen bitgen;
+//
+//   ON_CALL(y_absl::MockUniform<int>(), Call(bitgen, testing::_, testing::_))
+//       .WillByDefault([] (int low, int high) {
+//           return low + (high - low) / 2;
+//       });
+//
+//   EXPECT_EQ(y_absl::Uniform<int>(gen, 0, 10), 5);
+//   EXPECT_EQ(y_absl::Uniform<int>(gen, 30, 40), 35);
+//
+// At this time, only mock distributions supplied within the Abseil random
+// library are officially supported.
+//
+// EXPECT_CALL and ON_CALL need to be made within the same DLL component as
+// the call to y_absl::Uniform and related methods, otherwise mocking will fail
+// since the  underlying implementation creates a type-specific pointer which
+// will be distinct across different DLL boundaries.
+//
+class MockingBitGen {
  public:
-  MockingBitGenImpl() = default;
-  ~MockingBitGenImpl() = default;
+  MockingBitGen() = default;
+  ~MockingBitGen() = default;
 
   // URBG interface
   using result_type = y_absl::BitGen::result_type;
@@ -138,25 +177,23 @@ class MockingBitGenImpl {
             typename ValidatorT>
   auto RegisterMock(SelfT&, base_internal::FastTypeIdType type, ValidatorT)
       -> decltype(GetMockFnType(std::declval<ResultT>(),
-                                std::declval<ArgTupleT>()))& {
-    using ActualValidatorT =
-        std::conditional_t<EnableValidation, ValidatorT, NoOpValidator>;
+                                std::declval<ArgTupleT>())) & {
     using MockFnType = decltype(GetMockFnType(std::declval<ResultT>(),
                                               std::declval<ArgTupleT>()));
 
     using WrappedFnType = y_absl::conditional_t<
-        std::is_same<SelfT, ::testing::NiceMock<MockingBitGenImpl>>::value,
+        std::is_same<SelfT, ::testing::NiceMock<MockingBitGen>>::value,
         ::testing::NiceMock<MockFnType>,
         y_absl::conditional_t<
-            std::is_same<SelfT, ::testing::NaggyMock<MockingBitGenImpl>>::value,
+            std::is_same<SelfT, ::testing::NaggyMock<MockingBitGen>>::value,
             ::testing::NaggyMock<MockFnType>,
             y_absl::conditional_t<
                 std::is_same<SelfT,
-                             ::testing::StrictMock<MockingBitGenImpl>>::value,
+                             ::testing::StrictMock<MockingBitGen>>::value,
                 ::testing::StrictMock<MockFnType>, MockFnType>>>;
 
     using ImplT =
-        FunctionHolderImpl<WrappedFnType, ActualValidatorT, ResultT, ArgTupleT>;
+        FunctionHolderImpl<WrappedFnType, ValidatorT, ResultT, ArgTupleT>;
     auto& mock = mocks_[type];
     if (!mock) {
       mock = y_absl::make_unique<ImplT>();
@@ -195,58 +232,6 @@ class MockingBitGenImpl {
   friend class ::y_absl::random_internal::MockHelpers;  // for RegisterMock,
                                                       // InvokeMock
 };
-
-}  // namespace random_internal
-
-// MockingBitGen
-//
-// `y_absl::MockingBitGen` is a mock Uniform Random Bit Generator (URBG) class
-// which can act in place of an `y_absl::BitGen` URBG within tests using the
-// Googletest testing framework.
-//
-// Usage:
-//
-// Use an `y_absl::MockingBitGen` along with a mock distribution object (within
-// mock_distributions.h) inside Googletest constructs such as ON_CALL(),
-// EXPECT_TRUE(), etc. to produce deterministic results conforming to the
-// distribution's API contract.
-//
-// Example:
-//
-//  // Mock a call to an `y_absl::Bernoulli` distribution using Googletest
-//   y_absl::MockingBitGen bitgen;
-//
-//   ON_CALL(y_absl::MockBernoulli(), Call(bitgen, 0.5))
-//       .WillByDefault(testing::Return(true));
-//   EXPECT_TRUE(y_absl::Bernoulli(bitgen, 0.5));
-//
-//  // Mock a call to an `y_absl::Uniform` distribution within Googletest
-//  y_absl::MockingBitGen bitgen;
-//
-//   ON_CALL(y_absl::MockUniform<int>(), Call(bitgen, testing::_, testing::_))
-//       .WillByDefault([] (int low, int high) {
-//           return low + (high - low) / 2;
-//       });
-//
-//   EXPECT_EQ(y_absl::Uniform<int>(gen, 0, 10), 5);
-//   EXPECT_EQ(y_absl::Uniform<int>(gen, 30, 40), 35);
-//
-// At this time, only mock distributions supplied within the Abseil random
-// library are officially supported.
-//
-// EXPECT_CALL and ON_CALL need to be made within the same DLL component as
-// the call to y_absl::Uniform and related methods, otherwise mocking will fail
-// since the  underlying implementation creates a type-specific pointer which
-// will be distinct across different DLL boundaries.
-//
-using MockingBitGen = random_internal::MockingBitGenImpl<true>;
-
-// UnvalidatedMockingBitGen
-//
-// UnvalidatedMockingBitGen is a variant of MockingBitGen which does no extra
-// validation.
-using UnvalidatedMockingBitGen Y_ABSL_DEPRECATED("Use MockingBitGen instead") =
-    random_internal::MockingBitGenImpl<false>;
 
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

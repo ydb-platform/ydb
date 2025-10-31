@@ -1800,8 +1800,8 @@ TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) 
         return TStatus::Error;
     }
 
-    // Return type: List<String>
-    auto stringType = ctx.MakeType<TDataExprType>(EDataSlot::String);
+    // Return type: List<String or Utf8>
+    auto stringType = ctx.MakeType<TDataExprType>(textDataType->GetSlot());
     auto listType = ctx.MakeType<TListExprType>(stringType);
     node->SetTypeAnn(listType);
     

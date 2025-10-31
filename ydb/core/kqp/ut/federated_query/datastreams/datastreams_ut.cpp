@@ -1077,6 +1077,32 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         }
     }
 
+    Y_UNIT_TEST_F(ExplainReadTopicBasic, TStreamingTestFixture) {
+        const TString sourceName = "sourceName";
+        const TString topicName = "topicName";
+        CreateTopic(topicName);
+
+        CreatePqSourceBasicAuth(sourceName);
+
+        const auto result = GetQueryClient()->ExecuteQuery(fmt::format(
+            "SELECT * FROM `{source}`.`{topic}`",
+            "source"_a=sourceName,
+            "topic"_a=topicName
+        ), TTxControl::NoTx(), TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        const auto& stats = result.GetStats();
+        UNIT_ASSERT(stats);
+
+        const auto& plan = stats->GetPlan();
+        UNIT_ASSERT(plan);
+        UNIT_ASSERT_STRING_CONTAINS(*plan, sourceName);
+
+        const auto& ast = stats->GetAst();
+        UNIT_ASSERT(ast);
+        UNIT_ASSERT_STRING_CONTAINS(*ast, sourceName);
+    }
+
     Y_UNIT_TEST_F(InsertTopicBasic, TStreamingTestFixture) {
         TString sourceName = "sourceName";
         TString inputTopicName = "inputTopicName";

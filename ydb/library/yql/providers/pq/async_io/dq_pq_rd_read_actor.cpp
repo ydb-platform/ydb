@@ -1543,7 +1543,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvNotifyCA::TPtr&) {
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvPartitionIdleness::TPtr& ev) {
-    if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->NotifyTime)) {
+    if (WatermarkTracker->ProcessIdlenessCheck(ev->Get()->NotifyTime)) {
         NotifyCA();
     }
 }

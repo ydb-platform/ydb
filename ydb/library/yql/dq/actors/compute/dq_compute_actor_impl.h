@@ -1602,23 +1602,9 @@ protected:
         InternalError(ev->Get()->StatusCode, ev->Get()->Issues);
     }
 
-    bool HasEarlierChannelIdlenessChecks(TInstant notifyTime) {
-        return !InflyIdlenessChecks.empty() && InflyIdlenessChecks.front() <= notifyTime;
-    }
-
-    bool RemoveExpiredPartitionIdlenessCheck(TInstant notifyTime) {
-        bool removedAny = false;
-        while (HasEarlierChannelIdlenessChecks(notifyTime)) {
-            InflyIdlenessChecks.pop_front();
-            removedAny = true;
-        }
-        return removedAny;
-    }
-
     void HandleCheckIdleness(const TEvPrivate::TEvCheckIdleness::TPtr& ev) {
-        auto now = TInstant::Now();
-        auto checkTime = Max(ev->Get()->CheckTime, now);
-        if (RemoveExpiredPartitionIdlenessCheck(ev->Get()->CheckTime)) {
+        auto checkTime = Max(ev->Get()->CheckTime, TInstant::Now());
+        if (WatermarksTracker.ProcessIdlenessCheck(checkTime)) {
             auto idleWatermark = WatermarksTracker.HandleIdleness(checkTime);
             if (idleWatermark) {
                 CA_LOG_T("Idleness watermark " << idleWatermark);
@@ -1631,9 +1617,8 @@ protected:
     void ScheduleIdlenessCheck() {
         auto checkTime = WatermarksTracker.GetNextIdlenessCheckAt();
         // only schedule new check if nothing scheduled at same or earlier time
-        if (checkTime && !HasEarlierChannelIdlenessChecks(*checkTime)) {
-            CA_LOG_T("Schedule next idleness check from {" << JoinSeq(',', InflyIdlenessChecks) << "} to " << checkTime);
-            InflyIdlenessChecks.emplace_front(*checkTime);
+        if (checkTime && WatermarksTracker.AddScheduledIdlenessCheck(*checkTime)) {
+            CA_LOG_T("Schedule next idleness check from " << checkTime);
             this->Schedule(*checkTime, new TEvPrivate::TEvCheckIdleness(*checkTime));
         }
     }
@@ -2147,7 +2132,6 @@ protected:
     ::NMonitoring::TDynamicCounters::TCounterPtr InputTransformCpuTimeMs;
     THolder<NYql::TCounters> Stat;
     TDuration CpuTimeSpent;
-    std::deque<TInstant> InflyIdlenessChecks;
 };
 
 } // namespace NYql

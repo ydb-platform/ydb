@@ -47,6 +47,8 @@ public:
 
     TMaybe<TInstant> HandleIdleness(TInstant systemTime);
     TMaybe<TInstant> GetNextIdlenessCheckAt() const;
+    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime);
+    [[nodiscard]] bool ProcessIdlenessCheck(TInstant notifyTime);
 
     void SetLogPrefix(const TString& logPrefix);
 

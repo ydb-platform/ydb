@@ -47,6 +47,14 @@ public:
         return nextCheck ? TMaybe<TInstant>(ToNextDiscreteTime(Max(*nextCheck, systemTime))) : Nothing();
     }
 
+    [[nodiscard]] bool AddScheduledIdlenessCheck(TInstant notifyTime) {
+        return Tracker_.AddScheduledIdlenessCheck(notifyTime);
+    }
+
+    bool ProcessIdlenessCheck(TInstant notifyTime) {
+        return Tracker_.RemoveExpiredIdlenessChecks(notifyTime);
+    }
+
     TMaybe<TDuration> GetWatermarkDiscrepancy() const {
         return Tracker_.GetWatermarkDiscrepancy();
     }

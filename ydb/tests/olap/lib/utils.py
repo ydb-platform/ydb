@@ -3,6 +3,7 @@ import os
 import library.python.svn_version as vcs
 
 
+
 def get_external_param(name: str, default):
     try:
         return yatest.common.get_param(name, default=default)

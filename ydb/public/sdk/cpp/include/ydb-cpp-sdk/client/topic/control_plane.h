@@ -729,7 +729,6 @@ struct TAlterConsumerSettings {
 
     FLUENT_SETTING(TAlterAttributes, AlterAttributes);
 
-    FLUENT_SETTING_DEFAULT(EConsumerType, ConsumerType, EConsumerType::Unspecified);
     FLUENT_SETTING_OPTIONAL(TDuration, DefaultProcessingTimeout);
     FLUENT_SETTING(TAlterDeadLetterPolicySettings, DeadLetterPolicy);
 
@@ -749,11 +748,6 @@ struct TAlterConsumerSettings {
 
     TAlterConsumerSettings& SetAvailabilityPeriod(TDuration availabilityPeriod) {
         SetAvailabilityPeriod_ = availabilityPeriod;
-        return *this;
-    }
-
-    TAlterConsumerSettings& StreamingConsumerType() {
-        ConsumerType_ = EConsumerType::Streaming;
         return *this;
     }
 

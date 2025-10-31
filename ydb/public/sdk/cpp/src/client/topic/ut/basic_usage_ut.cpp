@@ -244,7 +244,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             TAlterTopicSettings topics;
             topics.BeginAlterConsumer()
                     .ConsumerName("shared_consumer_name")
-                    .ConsumerType(EConsumerType::Shared)
                     .DefaultProcessingTimeout(TDuration::Seconds(13))
                     .BeginAlterDeadLetterPolicy()
                         .Enabled(true)
@@ -543,7 +542,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetAction(), EDeadLetterAction::Delete);
         UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterPolicy().GetDeadLetterQueue(), "");
     }
-
 
     Y_UNIT_TEST(ReadWithoutConsumerWithRestarts) {
         if (EnableDirectRead) {

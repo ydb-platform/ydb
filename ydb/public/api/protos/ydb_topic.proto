@@ -913,8 +913,6 @@ message AlterConsumer {
         google.protobuf.Empty reset_availability_period = 8;
     }
 
-    optional ConsumerType set_consumer_type = 9;
-
     // The duration of blocking messages for its processing. If the message is not committed during this time,
     // it will be returned to the queue and sent for re-processing.
     google.protobuf.Duration set_default_processing_timeout = 10;

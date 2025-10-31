@@ -827,17 +827,6 @@ void TAlterConsumerSettings::SerializeTo(Ydb::Topic::AlterConsumer& proto) const
         (*proto.mutable_alter_attributes())[pair.first] = pair.second;
     }
 
-    switch (ConsumerType_) {
-        case EConsumerType::Shared:
-            proto.set_set_consumer_type(::Ydb::Topic::ConsumerType::CONSUMER_TYPE_SHARED);
-            break;
-        case EConsumerType::Streaming:
-            proto.set_set_consumer_type(::Ydb::Topic::ConsumerType::CONSUMER_TYPE_STREAMING);
-            break;
-        case EConsumerType::Unspecified:
-            break;
-    }
-
     if (DefaultProcessingTimeout_) {
         proto.mutable_set_default_processing_timeout()->set_seconds(DefaultProcessingTimeout_.value().Seconds());
     }

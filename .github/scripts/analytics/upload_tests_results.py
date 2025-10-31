@@ -68,6 +68,9 @@ def get_table_schema(table_path):
             PRIMARY KEY (run_timestamp, build_type, branch, test_name, suite_folder, status)
         )
         PARTITION BY HASH(run_timestamp, build_type, branch, suite_folder)
+        WITH (
+            STORE = COLUMN
+        );
         """
 
 

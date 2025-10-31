@@ -1753,6 +1753,12 @@ message TImmediateControlsConfig {
             MinValue: 8,
             MaxValue: 4096,
             DefaultValue: 256 }];
+
+        optional uint64 MaxTxInFly = 2 [(ControlOptions) = {
+            Description: "Maximum tx queue size for all tablets",
+            MinValue: 0,
+            MaxValue: 1000000,
+            DefaultValue: 10000 }];
     }
 
     message TDSProxyControls {
@@ -2726,6 +2732,7 @@ message TMetadataCacheConfig {
 message TShutdownConfig {
     optional uint32 MinDelayBeforeShutdownSeconds = 1;
     optional uint32 DrainTimeoutSeconds = 2;
+    optional uint32 CheckForStopIntervalMilliseconds = 3;
 }
 
 message TBridgeConfig {

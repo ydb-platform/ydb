@@ -1,7 +1,6 @@
 #include "link_manager.h"
 #include "ctx.h"
-
-#include <contrib/libs/ibdrv/include/infiniband/verbs.h>
+#include "ctx_impl.h"
 
 #include <util/generic/scope.h>
 #include <util/generic/string.h>
@@ -60,7 +59,6 @@ public:
         } catch (std::exception& ex) {
             return;
         }
-        ScanDevices();
     }
 private:
     TCtxsMap CtxMap;
@@ -123,7 +121,7 @@ private:
         // check for duplicates
         for (size_t i = 0; i < CtxMap.size(); ++i) {
             auto ctx = CtxMap[i].second;
-            ctx->DeviceIndex = i;
+            ctx->Impl->DeviceIndex = i;
 
             if (i > 0) {
                 auto prevCtx = CtxMap[i - 1].second;

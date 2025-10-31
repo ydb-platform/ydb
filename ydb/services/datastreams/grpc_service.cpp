@@ -9,6 +9,7 @@
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/library/cloud_permissions/cloud_permissions.h>
+#include <ydb/library/grpc/server/grpc_method_setup.h>
 
 namespace {
 
@@ -33,59 +34,65 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
 
 namespace NKikimr::NGRpcService {
 
-void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger)
-{
-    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+void TGRpcDataStreamsService::SetupIncomingRequests(NYdbGrpc::TLoggerPtr logger) {
     using std::placeholders::_1;
     using std::placeholders::_2;
+    using namespace Ydb::DataStreams::V1;
+    auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
-#ifdef ADD_REQUEST
-#error ADD_REQUEST macro already defined
+#ifdef SETUP_DS_METHOD
+#error SETUP_DS_METHOD macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB, ATTR, LIMIT_TYPE, AUDIT_MODE) \
-    MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
-        (this, &Service_, CQ_,                                                                                                      \
-            [this](NYdbGrpc::IRequestContextBase *ctx) {                                                                            \
-                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                                    \
-                ActorSystem_->Send(GRpcRequestProxyId_,                                                                             \
-                    new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>        \
-                        (ctx, CB, TRequestAuxSettings{RLSWITCH(LIMIT_TYPE), ATTR, AUDIT_MODE}));                  \
-            }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                            \
-            #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
-    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr, RuTopic, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml))
-    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr, RuTopic, TAuditMode::NonModifying())
-    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(UpdateStreamMode, DoDataStreamsUpdateStreamModeRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr, Off, TAuditMode::NonModifying())
-    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
-    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr, Off, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl))
+#define SETUP_DS_METHOD(methodName, methodCallback, rlMode, requestType, auditMode, customAttributeProcessorCallback) \
+    SETUP_RUNTIME_EVENT_METHOD(methodName,                       \
+        YDB_API_DEFAULT_REQUEST_TYPE(methodName),                \
+        YDB_API_DEFAULT_RESPONSE_TYPE(methodName),               \
+        methodCallback,                                          \
+        rlMode,                                                  \
+        requestType,                                             \
+        YDB_API_DEFAULT_COUNTER_BLOCK(data_streams, methodName), \
+        auditMode,                                               \
+        COMMON,                                                  \
+        ::NKikimr::NGRpcService::TGrpcRequestOperationCall,      \
+        GRpcRequestProxyId_,                                     \
+        CQ_,                                                     \
+        nullptr,                                                 \
+        customAttributeProcessorCallback)
 
-#undef ADD_REQUEST
+    SETUP_DS_METHOD(DescribeStream, DoDataStreamsDescribeStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(CreateStream, DoDataStreamsCreateStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(ListStreams, DoDataStreamsListStreamsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(DeleteStream, DoDataStreamsDeleteStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(ListShards, DoDataStreamsListShardsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(PutRecord, DoDataStreamsPutRecordRequest, RLSWITCH(RuTopic), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), YdsProcessAttr);
+    SETUP_DS_METHOD(PutRecords, DoDataStreamsPutRecordsRequest, RLSWITCH(RuTopic), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), YdsProcessAttr);
+    SETUP_DS_METHOD(GetRecords, DoDataStreamsGetRecordsRequest, RLSWITCH(RuTopic), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(GetShardIterator, DoDataStreamsGetShardIteratorRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(DescribeLimits, DoDataStreamsDescribeLimitsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(UpdateStreamMode, DoDataStreamsUpdateStreamModeRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::NonModifying(), nullptr);
+    SETUP_DS_METHOD(MergeShards, DoDataStreamsMergeShardsRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(SplitShard, DoDataStreamsSplitShardRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(UpdateStream, DoDataStreamsUpdateStreamRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+    SETUP_DS_METHOD(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, RLMODE(Off), UNSPECIFIED, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Ddl), nullptr);
+
+#undef SETUP_DS_METHOD
 }
 
 }

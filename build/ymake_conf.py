@@ -1388,7 +1388,10 @@ class GnuToolchain(Toolchain):
 
     def setup_sdk(self, project, var):
         self.platform_projects.append(project)
-        self.c_flags_platform.append('--sysroot={}'.format(var))
+        if is_positive('MUSL'):
+            self.c_flags_platform.append('--sysroot=/nowhere')
+        else:
+            self.c_flags_platform.append('--sysroot={}'.format(var))
         self.swift_flags_platform += ['-sdk', var]
 
     def setup_xcode_sdk(self, project, var):
@@ -2487,7 +2490,7 @@ class Cuda(object):
 
     def auto_cuda_version(self):
         if self.use_arcadia_cuda.value:
-            return '12.6'
+            return '12.9'
 
         if not self.have_cuda.value:
             return None

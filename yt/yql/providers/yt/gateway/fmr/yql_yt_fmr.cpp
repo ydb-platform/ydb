@@ -55,7 +55,9 @@ public:
         : TYtForwardingGatewayBase(std::move(slave)),
         Coordinator_(coordinator),
         RandomProvider_(settings.RandomProvider),
+        TimeProvider_(settings.TimeProvider),
         TimeToSleepBetweenGetOperationRequests_(settings.TimeToSleepBetweenGetOperationRequests),
+        CoordinatorPingInterval_(settings.CoordinatorPingInterval),
         FmrServices_(fmrServices),
         MkqlCompiler_(MakeIntrusive<NCommon::TMkqlCommonCallableCompiler>()),
         YtJobService_(fmrServices->YtJobService)
@@ -116,11 +118,53 @@ public:
             }
         };
         GetOperationStatusesThread_ = std::thread(getOperationStatusesFunc);
+
+        auto pingGatewaySessionFunc = [this] {
+            YQL_LOG_CTX_ROOT_SCOPE("PingGatewaySession");
+            while (!StopFmrGateway_) {
+                std::unordered_map<TString, NThreading::TFuture<TPingSessionResponse>> pingFutures;
+                with_lock(Mutex_) {
+                    for (const auto& [sessionId, sessionInfo]: Sessions_) {
+                        YQL_CLOG(TRACE, FastMapReduce) << "Pinging gateway session " << sessionId;
+                        try {
+                            auto pingFuture = Coordinator_->PingSession(TPingSessionRequest{.SessionId = sessionId});
+                            pingFutures.emplace(sessionId, pingFuture);
+                        } catch (...) {
+                            YQL_CLOG(ERROR, FastMapReduce) << "Exception while pinging gateway session " << sessionId
+                                << ": " << CurrentExceptionMessage();
+                        }
+                    }
+                }
+                if (!pingFutures.empty()) {
+                    std::vector<NThreading::TFuture<TPingSessionResponse>> futures;
+                    futures.reserve(pingFutures.size());
+                    for (const auto& [sessionId, pingFuture] : pingFutures) {
+                        futures.push_back(pingFuture);
+                    }
+                    NThreading::WaitAll(futures).Wait();
+
+                    for (auto& [sessionId, pingFuture] : pingFutures) {
+                        try {
+                            auto pingResult = pingFuture.GetValue();
+                            if (!pingResult.Success) {
+                                YQL_CLOG(WARN, FastMapReduce) << "Failed to ping gateway session " << sessionId;
+                            }
+                        } catch (...) {
+                            YQL_CLOG(ERROR, FastMapReduce) << "Exception while getting ping result for session " << sessionId
+                                << ": " << CurrentExceptionMessage();
+                        }
+                    }
+                }
+                Sleep(CoordinatorPingInterval_);
+            }
+        };
+        PingSessionThread_ = std::thread(pingGatewaySessionFunc);
     }
 
     ~TFmrYtGateway() {
         StopFmrGateway_ = true;
         GetOperationStatusesThread_.join();
+        PingSessionThread_.join();
     }
 
     TFuture<TRunResult> Run(const TExprNode::TPtr& node, TExprContext& ctx, TRunOptions&& options) final {
@@ -421,7 +465,8 @@ public:
 
             if (!fmrTableIds.empty()) {
                 TDropTablesRequest fmrRequest{
-                    .TableIds = fmrTableIds
+                    .TableIds = fmrTableIds,
+                    .SessionId = sessionId
                 };
                 fmrFuture = Coordinator_->DropTables(fmrRequest);
             }
@@ -584,8 +629,16 @@ public:
             if (Sessions_.contains(sessionId)) {
                 YQL_LOG_CTX_THROW yexception() << "Session already exists: " << sessionId;
             }
+        }
+
+        TOpenSessionRequest openRequest{.SessionId = sessionId};
+        Coordinator_->OpenSession(openRequest).GetValueSync();
+
+        with_lock(Mutex_) {
             Sessions_[sessionId] = MakeIntrusive<TFmrSession>(sessionId, options.UserName(), options.RandomProvider());
         }
+        YQL_CLOG(INFO, FastMapReduce) << "Registered session " << sessionId << " with coordinator";
+
         Slave_->OpenSession(std::move(options));
     }
 
@@ -1058,8 +1111,11 @@ private:
     TMutex Mutex_;
     std::unordered_map<TString, TFmrSession::TPtr> Sessions_;
     const TIntrusivePtr<IRandomProvider> RandomProvider_;
+    const TIntrusivePtr<ITimeProvider> TimeProvider_;
     TDuration TimeToSleepBetweenGetOperationRequests_;
+    TDuration CoordinatorPingInterval_;
     std::thread GetOperationStatusesThread_;
+    std::thread PingSessionThread_;
     std::atomic<bool> StopFmrGateway_;
     TFmrServices::TPtr FmrServices_;
     TConfigClusters::TPtr Clusters_;

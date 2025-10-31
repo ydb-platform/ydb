@@ -207,6 +207,7 @@ struct Schema : NIceDb::Schema {
         struct State                           : Column<18, NScheme::NTypeIds::Utf8> {};
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
         struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
+        struct Occupancy                       : Column<21, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -228,7 +229,8 @@ struct Schema : NIceDb::Schema {
             NumActiveSlots,
             DecommitStatus,
             SlotSizeInUnits,
-            InferPDiskSlotCountFromUnitSize>;
+            InferPDiskSlotCountFromUnitSize,
+            Occupancy>;
     };
 
     struct VSlots : Table<5> {
@@ -247,6 +249,10 @@ struct Schema : NIceDb::Schema {
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State           : Column <18, NScheme::NTypeIds::Utf8> {};
+        struct QuotaUtilization    : Column<19, NScheme::NTypeIds::Double> {};
+        struct NormalizedOccupancy : Column<20, NScheme::NTypeIds::Double> {};
+        struct FairOccupancy       : Column<21, NScheme::NTypeIds::Double> {};
+        struct CapacityAlertLevel  : Column<22, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -264,7 +270,11 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            QuotaUtilization,
+            NormalizedOccupancy,
+            FairOccupancy,
+            CapacityAlertLevel>;
     };
 
     struct Groups : Table<6> {
@@ -295,6 +305,11 @@ struct Schema : NIceDb::Schema {
         struct BridgeSyncFirstErrorTimestamp : Column<27, NScheme::NTypeIds::Uint64> {};
         struct BridgeSyncErrorCount          : Column<28, NScheme::NTypeIds::Uint32> {};
         struct BridgeSyncRunning             : Column<29, NScheme::NTypeIds::Bool> {};
+        struct MaxPDiskOccupancy             : Column<30, NScheme::NTypeIds::Double> {};
+        struct MaxVDiskQuotaUtilization      : Column<31, NScheme::NTypeIds::Double> {};
+        struct MaxNormalizedOccupancy        : Column<32, NScheme::NTypeIds::Double> {};
+        struct MaxVDiskFairOccupancy         : Column<33, NScheme::NTypeIds::Double> {};
+        struct CapacityAlertLevel            : Column<34, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -324,7 +339,12 @@ struct Schema : NIceDb::Schema {
             BridgeSyncLastErrorTimestamp,
             BridgeSyncFirstErrorTimestamp,
             BridgeSyncErrorCount,
-            BridgeSyncRunning>;
+            BridgeSyncRunning,
+            MaxPDiskOccupancy,
+            MaxVDiskQuotaUtilization,
+            MaxNormalizedOccupancy,
+            MaxVDiskFairOccupancy,
+            CapacityAlertLevel>;
     };
 
     struct StoragePools : Table<7> {

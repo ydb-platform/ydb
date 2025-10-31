@@ -181,3 +181,53 @@ message EncryptionSettings {
         bytes key = 1 [(Ydb.sensitive) = true];
     }
 }
+
+/// NFS
+message ExportToNfsSettings {
+    message Item {
+        // Database path to a table to be exported
+        string source_path = 1 [(required) = true];
+
+        /* The tables are exported to one or more files in NFS.
+        The files are saved to the destination_path directory. */
+        string destination_path = 2 [(required) = true];
+    }
+
+    // Base path on mounted NFS where to write export
+    // Example: /mnt/exports
+    string base_path = 1 [(required) = true];
+    
+    // List of items to export
+    repeated Item items = 2;
+    
+    // Optional description
+    string description = 3 [(length).le = 128];
+    
+    // Number of retries for failed operations
+    uint32 number_of_retries = 4;
+    
+    // Codec used to compress data. Codecs are available:
+    // - zstd.
+    // - zstd-N, where N is compression level, e.g. zstd-3.
+    string compression = 5;
+}
+
+message ExportToNfsResult {
+}
+
+message ExportToNfsMetadata {
+    ExportToNfsSettings settings = 1;
+    ExportProgress.Progress progress = 2;
+    repeated ExportItemProgress items_progress = 3;
+}
+
+message ExportToNfsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ExportToNfsSettings settings = 2 [(required) = true];
+}
+
+message ExportToNfsResponse {
+    // operation.result = ExportToNfsResult
+    // operation.metadata = ExportToNfsMetadata
+    Ydb.Operations.Operation operation = 1;
+}

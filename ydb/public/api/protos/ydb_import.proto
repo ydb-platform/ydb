@@ -45,7 +45,8 @@ message ImportFromS3Settings {
             The S3 object name begins with a prefix, followed by:
                 * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
                 * '/scheme.pb' - object with information about scheme, indexes, etc;
-                * '/permissions.pb' - object with information about ACL and owner.
+                * '/permissions.pb' - object with information about ACL and owner;
+                * '/metadata.json' - object with metadata about the backup.
             */
 
             // The S3 object prefix can be either provided explicitly
@@ -118,6 +119,64 @@ message ImportFromS3Request {
 message ImportFromS3Response {
     // operation.result = ImportFromS3Result
     // operation.metadata = ImportFromS3Metadata
+    Ydb.Operations.Operation operation = 1;
+}
+
+/// NFS
+message ImportFromNfsSettings {
+    message Item {
+        /* YDB tables in NFS are stored in a directory structure (see ydb_export.proto).
+           The directory contains:
+             * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+             * '/scheme.pb' - object with information about scheme, indexes, etc;
+             * '/permissions.pb' - object with information about ACL and owner;
+             * '/metadata.json' - object with metadata about the backup.
+           The path in NFS is specified relative to base_path.
+           Example: "my_export/table1"
+        */
+        string source_path = 1 [(required) = true];
+
+        // Database path to a table to import to.
+        string destination_path = 2 [(required) = true];
+    }
+
+    // Base path on mounted NFS where the export is located
+    // Example: /mnt/exports
+    string base_path = 1 [(required) = true];
+
+    repeated Item items = 2; // Empty collection means import of all export objects
+
+    // Optional description
+    string description = 3 [(length).le = 128];
+
+    // Number of retries for failed file operations
+    uint32 number_of_retries = 4;
+
+    // Prevent importing of ACL and owner. If true, objects are created with empty ACL
+    // and their owner will be the user who started the import.
+    bool no_acl = 5;
+
+    // Skip checksum validation during import
+    bool skip_checksum_validation = 6;
+}
+
+message ImportFromNfsResult {
+}
+
+message ImportFromNfsMetadata {
+    ImportFromNfsSettings settings = 1;
+    ImportProgress.Progress progress = 2;
+    repeated ImportItemProgress items_progress = 3;
+}
+
+message ImportFromNfsRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    ImportFromNfsSettings settings = 2 [(required) = true];
+}
+
+message ImportFromNfsResponse {
+    // operation.result = ImportFromNfsResult
+    // operation.metadata = ImportFromNfsMetadata
     Ydb.Operations.Operation operation = 1;
 }
 

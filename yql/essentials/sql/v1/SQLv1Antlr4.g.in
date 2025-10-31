@@ -1036,7 +1036,8 @@ table_hint:
       an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     | (SCHEMA | COLUMNS) EQUALS? type_name_or_bind
     | SCHEMA EQUALS? LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
-    | WATERMARK AS LPAREN expr RPAREN
+    | WATERMARK AS LPAREN expr RPAREN // TODO: remove deprecated
+    | WATERMARK EQUALS expr
 ;
 
 object_ref: (cluster_expr DOT)? id_or_at;
@@ -1852,8 +1853,8 @@ keyword_compat: (
   | VALUES
   | VIEW
   | VIRTUAL
-  | WITH
   | WATERMARK
+  | WITH
   | WRAPPER
 //  | WRITE
   | XOR

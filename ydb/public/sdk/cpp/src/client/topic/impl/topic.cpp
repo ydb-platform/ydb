@@ -97,7 +97,6 @@ TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
     , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
     , DeadLetterPolicy_(consumer.dead_letter_policy())
 {
-    Cerr << (TStringBuilder() << ">>>>> o " << consumer.ShortDebugString() << Endl);
     for (const auto& codec : consumer.supported_codecs().codecs()) {
         SupportedCodecs_.push_back((ECodec)codec);
     }
@@ -680,11 +679,9 @@ TDeadLetterPolicy::TDeadLetterPolicy(const Ydb::Topic::DeadLetterPolicy& proto)
     : Enabled_(proto.enabled())
     , Condition_(proto.condition())
 {
-    Cerr << (TStringBuilder() << ">>>>> d " << proto.ShortDebugString() << Endl);
     if (proto.has_delete_action()) {
         Action_ = EDeadLetterPolicy::Delete;
     } else if (proto.has_move_action()) {
-        Cerr << (TStringBuilder() << ">>>>> dd " << proto.ShortDebugString() << Endl);
         Action_ = EDeadLetterPolicy::Move;
         DeadLetterQueue_ = proto.move_action().dead_letter_queue();
     } else {
@@ -739,7 +736,6 @@ TConsumerSettings<TSettings>::TConsumerSettings(TSettings& parent, const Ydb::To
     , Parent_(parent)
     , DeadLetterPolicySettings_(*this, proto.dead_letter_policy())
 {
-    Cerr << (TStringBuilder() << ">>>>> o " << proto.ShortDebugString() << Endl);
     switch(proto.consumer_type()) {
         case Ydb::Topic::CONSUMER_TYPE_UNSPECIFIED:
             ConsumerType_ = EConsumerType::Streaming;
@@ -797,7 +793,6 @@ void TConsumerSettings<TSettings>::SerializeTo(Ydb::Topic::Consumer& proto) cons
                     proto.mutable_dead_letter_policy()->mutable_delete_action();
                     break;
                 case EDeadLetterPolicy::Unspecified:
-                    proto.mutable_dead_letter_policy()->mutable_unspecified_action();
                     break;
             }
 

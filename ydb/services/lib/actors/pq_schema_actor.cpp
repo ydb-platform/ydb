@@ -254,7 +254,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         const NKikimrPQ::TPQConfig& pqConfig,
         bool enableTopicDiskSubDomainQuota
     ) {
-        Cerr << (TStringBuilder() << ">>>>> " << rr.ShortDebugString() << Endl);
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), pqConfig);
         if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TMsgPqCodes(TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols", Ydb::PersQueue::ErrorCode::INVALID_ARGUMENT);

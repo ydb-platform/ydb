@@ -249,22 +249,28 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         return {};
     }
 
-    auto siblingCellId = attributes.Find<NObjectClient::TCellId>("sibling_servant_cell_id");
-    auto siblingMountRevision = attributes.Find<NHydra::TRevision>("sibling_servant_mount_revision");
-
-    if (!siblingCellId || !siblingMountRevision) {
+    auto redirectionHint = attributes.Find<TTabletRedirectionHint>("redirection_hint");
+    if (!redirectionHint) {
         return {};
     }
 
-    if (auto siblingCellDescriptor = attributes.Find<INodePtr>("sibling_servant_cell_descriptor")) {
-        RegisterCell(std::move(siblingCellDescriptor));
-    } else {
+    if (!redirectionHint->PreviousMountRevision ||
+        !redirectionHint->MountRevision ||
+        !redirectionHint->CellId ||
+        !redirectionHint->CellDescriptor)
+    {
         return {};
     }
+
+    if (tabletInfo->MountRevision != redirectionHint->PreviousMountRevision) {
+        return {};
+    }
+
+    RegisterCell(std::move(redirectionHint->CellDescriptor));
 
     auto newTabletInfo = tabletInfo->Clone();
-    newTabletInfo->CellId = *siblingCellId;
-    newTabletInfo->MountRevision = *siblingMountRevision;
+    newTabletInfo->CellId = redirectionHint->CellId;
+    newTabletInfo->MountRevision = redirectionHint->MountRevision;
 
     auto owners = TabletInfoOwnerCache_.GetOwners(*tabletId);
 
@@ -274,8 +280,8 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         tabletId,
         tabletInfo->CellId,
         tabletInfo->MountRevision,
-        siblingCellId,
-        siblingMountRevision,
+        redirectionHint->CellId,
+        redirectionHint->MountRevision,
         MakeFormattableView(owners, [] (auto* builder, const auto& weakOwner) {
             if (auto owner = weakOwner.Lock()) {
                 builder->AppendString(owner->Path);
@@ -293,13 +299,17 @@ auto TTableMountCacheBase::TryHandleServantNotActiveError(const TError& error)
         auto clone = owner->Clone();
 
         for (auto& tableTabletInfo : clone->Tablets) {
-            if (tableTabletInfo->TabletId == tabletInfo->TabletId) {
+            if (tableTabletInfo->TabletId == tabletInfo->TabletId &&
+                tableTabletInfo->MountRevision == tabletInfo->MountRevision)
+            {
                 tableTabletInfo = newTabletInfo;
             }
         }
 
         for (auto& tableTabletInfo : clone->MountedTablets) {
-            if (tableTabletInfo->TabletId == tabletInfo->TabletId) {
+            if (tableTabletInfo->TabletId == tabletInfo->TabletId &&
+                tableTabletInfo->MountRevision == tabletInfo->MountRevision)
+            {
                 tableTabletInfo = newTabletInfo;
             }
         }

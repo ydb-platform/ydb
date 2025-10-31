@@ -43,17 +43,9 @@ public:
         const auto version = params.GetTableSchemaVersion();
         Y_ENSURE(version);
 
-        Cerr << "CDC_DEBUG: CreateCdcStreamUnit creating CDC stream on table PathId=" << pathId 
-             << " (OwnerId=" << pathId.OwnerId << " LocalPathId=" << pathId.LocalPathId << ")"
-             << " streamPathId=" << streamPathId
-             << " State=" << static_cast<ui32>(streamDesc.GetState())
-             << " Mode=" << static_cast<ui32>(streamDesc.GetMode()) << Endl;
-
         auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
         TDataShardLocksDb locksDb(DataShard, txc);
         DataShard.AddUserTable(pathId, tableInfo, &locksDb);
-        
-        Cerr << "CDC_DEBUG: Added table to TableInfos with " << tableInfo->CdcStreams.size() << " CDC streams" << Endl;
 
         if (tableInfo->NeedSchemaSnapshots()) {
             DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);

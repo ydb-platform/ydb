@@ -4874,7 +4874,7 @@ private:
 IActor* CreateScriptExecutionCreatorActor(TEvKqp::TEvScriptRequest::TPtr&& ev, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, TIntrusivePtr<TKqpCounters> counters, TDuration maxRunTime) {
     TDuration leaseDuration = LEASE_DURATION;
     ui64 seconds = 0;
-    if (TryFromString<ui64>(GetEnv("TEST_LEASE_DURATION_SEC"), seconds) && seconds) {
+    if (TryFromString<ui64>(GetEnv("YDB_TEST_LEASE_DURATION_SEC"), seconds) && seconds) {
         leaseDuration = TDuration::Seconds(seconds);
     }
     return new TCreateScriptExecutionActor(std::move(ev), queryServiceConfig, counters, maxRunTime, leaseDuration);

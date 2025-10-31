@@ -67,7 +67,7 @@ def main():
     print(f"Queries directory: {queries_dir}\n")
     
     # Initialize YDB wrapper with context manager
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

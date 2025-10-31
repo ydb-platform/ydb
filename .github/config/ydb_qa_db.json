@@ -1,0 +1,20 @@
+{
+  "main_database": {
+    "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+    "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+    "connection_timeout": 60,
+    "tables": {
+      "test_results": "test_results/test_runs"
+    }
+  },
+  "statistics_database": {
+    "endpoint": "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+    "path": "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+    "enabled": true,
+    "tables": {
+      "query_statistics": "analytics/query_statistics"
+    }
+  },
+  "ydbd_path": "ydb/apps/ydbd/ydbd"
+}
+

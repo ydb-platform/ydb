@@ -117,10 +117,9 @@ def main():
     """Main function to create the test-to-issue mapping table"""
     print("Starting GitHub issue mapping table creation")
     script_start_time = time.time()
-    script_name = os.path.basename(__file__)
     
     # Initialize YDB wrapper with context manager for automatic cleanup
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:
+    with YDBWrapper() as ydb_wrapper:
         # Check credentials
         if not ydb_wrapper.check_credentials():
             return 1

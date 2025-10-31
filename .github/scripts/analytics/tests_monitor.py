@@ -259,8 +259,7 @@ def main():
     concurrent_mode = args.concurrent_mode
 
     # Initialize YDB wrapper with context manager for automatic cleanup
-    script_name = os.path.basename(__file__)
-    with YDBWrapper(script_name=script_name) as ydb_wrapper:        
+    with YDBWrapper() as ydb_wrapper:        
         if not ydb_wrapper.check_credentials():
             return 1
         

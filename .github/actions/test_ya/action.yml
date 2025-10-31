@@ -148,6 +148,7 @@ runs:
         TELEGRAM_BOT_TOKEN: ${{ inputs.telegram_ydbot_token }}
         GH_ALERTS_TG_LOGINS: ${{ inputs.telegram_alert_logins }}
         GH_ALERTS_TG_CHAT: ${{ inputs.telegram_alert_chat }}
+        YDB_QA_CONFIG: ${{ vars.YDB_QA_CONFIG }}
       run: |
         set -ex
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
@@ -482,6 +483,21 @@ runs:
           fi
 
           # upload tests results to YDB
+          # Конфигурация скриптов для checkout из main
+          MAIN_SCRIPTS=(
+            ".github/scripts/analytics/upload_tests_results.py"
+            ".github/scripts/analytics/ydb_wrapper.py"
+          )
+          # Функция checkout
+
+          checkout_scripts_from_main() {
+            local scripts=("$@")
+            for script in "${scripts[@]}"; do
+              git checkout main -- "$script" 2>/dev/null && chmod +x "$script" && echo "✅ $script" || echo "⚠️ $script"
+            done
+          }
+          checkout_scripts_from_main "${MAIN_SCRIPTS[@]}"
+
           # TODO: remove/rename TESTMO_RUN_NAME variable
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`

@@ -57,10 +57,6 @@ private:
     void UnregisterInput(ui64 inputId, bool isChannel);
     bool NotifyInputWatermarkReceived(ui64 inputId, bool isChannel, TInstant watermark, TInstant systemTime);
 
-    void RecalcPendingWatermark();
-    bool UpdateAndRecalcPendingWatermark(TMaybe<TInstant>& storedWatermark, TInstant watermark);
-    bool MaybePopPendingWatermark();
-
 private:
     TString LogPrefix;
 
